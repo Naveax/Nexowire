@@ -107,3 +107,144 @@ test(
     assert.ok(Array.isArray(firewall.data.rules));
   },
 );
+
+test(
+  'windows registry mutation round-trips and cleans up an isolated HKCU key',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const suffix = Math.random().toString(36).slice(2);
+    const keyPath = `Software\\NexowireTests\\${suffix}`;
+
+    const setResult = (await executeWindowsCapability(
+      'windows.registry.set',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: 'SampleValue',
+        type: 'string',
+        value: 'hello-registry',
+        create_key: true,
+      },
+    )) as {
+      data: {
+        hive: string;
+        path: string;
+        name: string;
+        kind: string;
+        value: string;
+        verified: boolean;
+      };
+    };
+
+    assert.equal(setResult.data.hive, 'HKCU');
+    assert.equal(setResult.data.path, keyPath);
+    assert.equal(setResult.data.name, 'SampleValue');
+    assert.equal(setResult.data.kind, 'String');
+    assert.equal(setResult.data.value, 'hello-registry');
+    assert.equal(setResult.data.verified, true);
+
+    const readResult = (await executeWindowsCapability(
+      'windows.registry.read',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: 'SampleValue',
+        include_subkeys: false,
+      },
+    )) as {
+      data: {
+        values: Array<{ name: string; kind: string; value: string }>;
+      };
+    };
+    assert.equal(readResult.data.values.length, 1);
+    assert.equal(readResult.data.values[0]?.value, 'hello-registry');
+
+    const deleteValue = (await executeWindowsCapability(
+      'windows.registry.delete',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: 'SampleValue',
+      },
+    )) as { data: { deleted: boolean; verified: boolean } };
+    assert.equal(deleteValue.data.deleted, true);
+    assert.equal(deleteValue.data.verified, true);
+
+    const deleteKey = (await executeWindowsCapability(
+      'windows.registry.delete',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        recursive: true,
+      },
+    )) as { data: { deleted: boolean; verified: boolean } };
+    assert.equal(deleteKey.data.deleted, true);
+    assert.equal(deleteKey.data.verified, true);
+  },
+);
+
+test(
+  'windows mutation selectors reject broad or incomplete requests before mutation',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.task.control', {
+          name: '*',
+          path: '\\',
+          action: 'disable',
+        }),
+      /exact task name/,
+    );
+
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.firewall.control', {
+          name: '*',
+          action: 'disable',
+        }),
+      /exact rule name/,
+    );
+
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.firewall.control', {
+          name: 'DefinitelyMissingNexowireRule',
+          action: 'set_action',
+        }),
+      /rule_action is required/,
+    );
+
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.registry.set', {
+          hive: 'HKCU',
+          path: 'Software\\NexowireTests',
+          name: 'BadQword',
+          type: 'qword',
+          value: '9223372036854775808',
+          create_key: true,
+        }),
+      /signed 64-bit range/,
+    );
+
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.task.control', {
+          name: 'DefinitelyMissingNexowireTask',
+          path: '\\',
+          action: 'disable',
+        }),
+      /Expected exactly one scheduled task, found 0/,
+    );
+
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.firewall.control', {
+          name: 'DefinitelyMissingNexowireFirewallRule',
+          action: 'disable',
+        }),
+      /Expected exactly one firewall rule, found 0/,
+    );
+  },
+);

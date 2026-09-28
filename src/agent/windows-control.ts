@@ -57,6 +57,57 @@ const FirewallRulesInputSchema = z.object({
   limit: z.number().int().min(1).max(5000).default(500),
 });
 
+const RegistrySetInputSchema = z.object({
+  hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+  path: z.string().min(1).max(4096),
+  name: z.string().min(1).max(1024),
+  type: z.enum([
+    'string',
+    'expand_string',
+    'dword',
+    'qword',
+    'multi_string',
+    'binary',
+  ]),
+  value: z.union([
+    z.string().max(4_194_304),
+    z.number(),
+    z.array(z.string().max(65_536)).max(4096),
+  ]),
+  create_key: z.boolean().default(false),
+});
+
+const RegistryDeleteInputSchema = z.object({
+  hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+  path: z
+    .string()
+    .min(1)
+    .max(4096)
+    .refine((value) => value.replace(/[\\/]/g, '').trim().length > 0, {
+      message: 'Deleting a registry hive root is not allowed.',
+    }),
+  name: z.string().min(1).max(1024).optional(),
+  recursive: z.boolean().default(false),
+});
+
+const ScheduledTaskControlInputSchema = z.object({
+  name: z.string().min(1).max(512).refine((value) => !/[\*?\[\]]/.test(value), {
+    message: 'Task control requires an exact task name without wildcard characters.',
+  }),
+  path: z.string().min(1).max(2048).default('\\').refine((value) => !/[\*?\[\]]/.test(value), {
+    message: 'Task control requires an exact task path without wildcard characters.',
+  }),
+  action: z.enum(['start', 'stop', 'enable', 'disable']),
+});
+
+const FirewallControlInputSchema = z.object({
+  name: z.string().min(1).max(512).refine((value) => !/[\*?\[\]]/.test(value), {
+    message: 'Firewall control requires an exact rule name without wildcard characters.',
+  }),
+  action: z.enum(['enable', 'disable', 'set_action']),
+  rule_action: z.enum(['allow', 'block']).optional(),
+});
+
 interface PowerShellResult {
   stdout: string;
   stderr: string;
@@ -155,6 +206,53 @@ async function runPowerShellJson<T>(
 function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function validateRegistrySetInput(
+  input: z.infer<typeof RegistrySetInputSchema>,
+): void {
+  switch (input.type) {
+    case 'string':
+    case 'expand_string':
+    case 'binary':
+      if (typeof input.value !== 'string') {
+        throw new Error(`Registry type ${input.type} requires a string value.`);
+      }
+      if (input.type === 'binary' && !/^[A-Za-z0-9+/]*={0,2}$/.test(input.value)) {
+        throw new Error('Binary registry values must be base64 encoded.');
+      }
+      return;
+    case 'multi_string':
+      if (!Array.isArray(input.value)) {
+        throw new Error('Registry type multi_string requires an array of strings.');
+      }
+      return;
+    case 'dword':
+      if (
+        typeof input.value !== 'number' ||
+        !Number.isInteger(input.value) ||
+        input.value < 0 ||
+        input.value > 0xffff_ffff
+      ) {
+        throw new Error('Registry type dword requires an integer from 0 to 4294967295.');
+      }
+      return;
+    case 'qword': {
+      if (typeof input.value === 'number') {
+        if (!Number.isSafeInteger(input.value) || input.value < 0) {
+          throw new Error('Numeric qword values must be non-negative safe integers; use a decimal string for larger values.');
+        }
+        return;
+      }
+      if (typeof input.value !== 'string' || !/^\d+$/.test(input.value)) {
+        throw new Error('Registry type qword requires a non-negative integer or decimal string.');
+      }
+      if (BigInt(input.value) > 9_223_372_036_854_775_807n) {
+        throw new Error('Registry qword values above signed 64-bit range are not supported.');
+      }
+      return;
+    }
+  }
 }
 
 function assertWindows(): void {
@@ -474,6 +572,152 @@ $result = @($items | Sort-Object DisplayName | Select-Object -First ([int]$input
 @($result) | ConvertTo-Json -Depth 6 -Compress
 `;
 
+const registrySetScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$base = switch ([string]$inputData.hive) {
+  'HKCU' { 'Registry::HKEY_CURRENT_USER' }
+  'HKLM' { 'Registry::HKEY_LOCAL_MACHINE' }
+  'HKCR' { 'Registry::HKEY_CLASSES_ROOT' }
+  'HKU'  { 'Registry::HKEY_USERS' }
+  'HKCC' { 'Registry::HKEY_CURRENT_CONFIG' }
+}
+$target = Join-Path $base ([string]$inputData.path)
+if ($inputData.create_key) {
+  New-Item -Path $target -Force -ErrorAction Stop | Out-Null
+} else {
+  Get-Item -LiteralPath $target -ErrorAction Stop | Out-Null
+}
+$kind = switch ([string]$inputData.type) {
+  'string' { [Microsoft.Win32.RegistryValueKind]::String }
+  'expand_string' { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+  'dword' { [Microsoft.Win32.RegistryValueKind]::DWord }
+  'qword' { [Microsoft.Win32.RegistryValueKind]::QWord }
+  'multi_string' { [Microsoft.Win32.RegistryValueKind]::MultiString }
+  'binary' { [Microsoft.Win32.RegistryValueKind]::Binary }
+}
+$value = switch ([string]$inputData.type) {
+  'string' { [string]$inputData.value }
+  'expand_string' { [string]$inputData.value }
+  'dword' { [uint32]$inputData.value }
+  'qword' { [int64]::Parse([string]$inputData.value, [Globalization.CultureInfo]::InvariantCulture) }
+  'multi_string' { [string[]]@($inputData.value) }
+  'binary' { [Convert]::FromBase64String([string]$inputData.value) }
+}
+$propertyType = switch ([string]$inputData.type) {
+  'string' { 'String' }
+  'expand_string' { 'ExpandString' }
+  'dword' { 'DWord' }
+  'qword' { 'QWord' }
+  'multi_string' { 'MultiString' }
+  'binary' { 'Binary' }
+}
+New-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -Value $value -PropertyType $propertyType -Force -ErrorAction Stop | Out-Null
+$verifyItem = Get-Item -LiteralPath $target -ErrorAction Stop
+$storedKind = [string]$verifyItem.GetValueKind([string]$inputData.name)
+$storedValue = $verifyItem.GetValue([string]$inputData.name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+if ($storedValue -is [byte[]]) { $storedValue = [Convert]::ToBase64String($storedValue) }
+[pscustomobject]@{
+  hive = [string]$inputData.hive
+  path = [string]$inputData.path
+  name = [string]$inputData.name
+  kind = $storedKind
+  value = $storedValue
+  verified = $true
+} | ConvertTo-Json -Depth 8 -Compress
+`;
+
+const registryDeleteScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$base = switch ([string]$inputData.hive) {
+  'HKCU' { 'Registry::HKEY_CURRENT_USER' }
+  'HKLM' { 'Registry::HKEY_LOCAL_MACHINE' }
+  'HKCR' { 'Registry::HKEY_CLASSES_ROOT' }
+  'HKU'  { 'Registry::HKEY_USERS' }
+  'HKCC' { 'Registry::HKEY_CURRENT_CONFIG' }
+}
+$target = Join-Path $base ([string]$inputData.path)
+if ($inputData.name) {
+  $item = Get-Item -LiteralPath $target -ErrorAction Stop
+  $existing = @($item.GetValueNames() | Where-Object { $_ -eq [string]$inputData.name })
+  if ($existing.Count -ne 1) { throw 'Registry value was not found.' }
+  Remove-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -ErrorAction Stop
+  $verify = Get-Item -LiteralPath $target -ErrorAction Stop
+  $stillExists = @($verify.GetValueNames() | Where-Object { $_ -eq [string]$inputData.name }).Count -gt 0
+  if ($stillExists) { throw 'Registry value deletion verification failed.' }
+  [pscustomobject]@{ hive = [string]$inputData.hive; path = [string]$inputData.path; name = [string]$inputData.name; deleted = $true; verified = $true } | ConvertTo-Json -Compress
+} else {
+  Get-Item -LiteralPath $target -ErrorAction Stop | Out-Null
+  Remove-Item -LiteralPath $target -Recurse:([bool]$inputData.recursive) -Force -ErrorAction Stop
+  if (Test-Path -LiteralPath $target) { throw 'Registry key deletion verification failed.' }
+  [pscustomobject]@{ hive = [string]$inputData.hive; path = [string]$inputData.path; deleted = $true; verified = $true } | ConvertTo-Json -Compress
+}
+`;
+
+const scheduledTaskControlScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$name = [string]$inputData.name
+$taskPath = [string]$inputData.path
+$matches = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq $name -and $_.TaskPath -eq $taskPath })
+if ($matches.Count -ne 1) { throw ('Expected exactly one scheduled task, found ' + $matches.Count + '.') }
+$task = $matches[0]
+switch ([string]$inputData.action) {
+  'start' { Start-ScheduledTask -TaskName $name -TaskPath $taskPath -ErrorAction Stop }
+  'stop' { Stop-ScheduledTask -TaskName $name -TaskPath $taskPath -ErrorAction Stop }
+  'enable' { Enable-ScheduledTask -TaskName $name -TaskPath $taskPath -ErrorAction Stop | Out-Null }
+  'disable' { Disable-ScheduledTask -TaskName $name -TaskPath $taskPath -ErrorAction Stop | Out-Null }
+}
+$finalMatches = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq $name -and $_.TaskPath -eq $taskPath })
+if ($finalMatches.Count -ne 1) { throw 'Scheduled-task verification failed.' }
+$final = $finalMatches[0]
+if ($inputData.action -eq 'enable' -and [string]$final.State -eq 'Disabled') { throw 'Scheduled-task enable verification failed.' }
+if ($inputData.action -eq 'disable' -and [string]$final.State -ne 'Disabled') { throw 'Scheduled-task disable verification failed.' }
+[pscustomobject]@{
+  name = [string]$final.TaskName
+  path = [string]$final.TaskPath
+  state = [string]$final.State
+  action = [string]$inputData.action
+  verified = $true
+} | ConvertTo-Json -Depth 4 -Compress
+`;
+
+const firewallControlScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$name = [string]$inputData.name
+$matches = @(Get-NetFirewallRule -ErrorAction Stop | Where-Object { $_.Name -eq $name })
+if ($matches.Count -ne 1) { throw ('Expected exactly one firewall rule, found ' + $matches.Count + '.') }
+$rule = $matches[0]
+switch ([string]$inputData.action) {
+  'enable' { Enable-NetFirewallRule -Name $name -ErrorAction Stop | Out-Null }
+  'disable' { Disable-NetFirewallRule -Name $name -ErrorAction Stop | Out-Null }
+  'set_action' {
+    if (-not $inputData.rule_action) { throw 'rule_action is required for set_action.' }
+    $action = if ([string]$inputData.rule_action -eq 'allow') { 'Allow' } else { 'Block' }
+    Set-NetFirewallRule -Name $name -Action $action -ErrorAction Stop | Out-Null
+  }
+}
+$finalMatches = @(Get-NetFirewallRule -ErrorAction Stop | Where-Object { $_.Name -eq $name })
+if ($finalMatches.Count -ne 1) { throw 'Firewall-rule verification failed.' }
+$final = $finalMatches[0]
+if ($inputData.action -eq 'enable' -and [string]$final.Enabled -ne 'True') { throw 'Firewall enable verification failed.' }
+if ($inputData.action -eq 'disable' -and [string]$final.Enabled -ne 'False') { throw 'Firewall disable verification failed.' }
+if ($inputData.action -eq 'set_action') {
+  $wanted = if ([string]$inputData.rule_action -eq 'allow') { 'Allow' } else { 'Block' }
+  if ([string]$final.Action -ne $wanted) { throw 'Firewall action verification failed.' }
+}
+[pscustomobject]@{
+  name = [string]$final.Name
+  displayName = [string]$final.DisplayName
+  enabled = [string]$final.Enabled
+  direction = [string]$final.Direction
+  action = [string]$final.Action
+  verified = $true
+} | ConvertTo-Json -Depth 4 -Compress
+`;
+
 export async function executeWindowsCapability(
   capability: Capability,
   input: unknown,
@@ -557,6 +801,50 @@ export async function executeWindowsCapability(
             await runPowerShellJson<unknown | unknown[]>(firewallRulesScript, parsed, 45_000),
           ),
         },
+      };
+    }
+    case 'windows.registry.set': {
+      const parsed = RegistrySetInputSchema.parse(input);
+      validateRegistrySetInput(parsed);
+      return {
+        data: await runPowerShellJson<Record<string, unknown>>(
+          registrySetScript,
+          parsed,
+          45_000,
+        ),
+      };
+    }
+    case 'windows.registry.delete': {
+      const parsed = RegistryDeleteInputSchema.parse(input);
+      return {
+        data: await runPowerShellJson<Record<string, unknown>>(
+          registryDeleteScript,
+          parsed,
+          45_000,
+        ),
+      };
+    }
+    case 'windows.task.control': {
+      const parsed = ScheduledTaskControlInputSchema.parse(input);
+      return {
+        data: await runPowerShellJson<Record<string, unknown>>(
+          scheduledTaskControlScript,
+          parsed,
+          60_000,
+        ),
+      };
+    }
+    case 'windows.firewall.control': {
+      const parsed = FirewallControlInputSchema.parse(input);
+      if (parsed.action === 'set_action' && !parsed.rule_action) {
+        throw new Error('rule_action is required when action is set_action.');
+      }
+      return {
+        data: await runPowerShellJson<Record<string, unknown>>(
+          firewallControlScript,
+          parsed,
+          60_000,
+        ),
       };
     }
     default:

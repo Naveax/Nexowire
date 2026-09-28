@@ -2,7 +2,7 @@
 name: windows-diagnostics
 description: Diagnose Windows process, service, and network state using structured Nexowire tools before falling back to shell text parsing.
 version: 0.1
-requires: windows.processes, windows.services, windows.network.snapshot, windows.registry.read, windows.tasks, windows.eventlog.query, windows.firewall.rules
+requires: windows.processes, windows.services, windows.network.snapshot, windows.registry.read, windows.tasks, windows.eventlog.query, windows.firewall.rules, windows.registry.set, windows.registry.delete, windows.task.control, windows.firewall.control
 ---
 
 # Windows Diagnostics
@@ -22,3 +22,10 @@ Use this skill for Windows host troubleshooting.
 ## Safety
 
 Service start/stop/restart and startup-type changes can interrupt applications or networking. Apply them only to the explicitly requested service and preserve the verified final state in the task record.
+
+## Mutation rules
+
+- Use mutation tools only with exact names/paths, never wildcard selectors.
+- Registry writes and deletes must be followed by the returned verification result.
+- Task and firewall controls re-read final state; treat a failed verification as an incomplete operation, not success.
+- Prefer read-only diagnosis before mutation.

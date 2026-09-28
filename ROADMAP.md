@@ -24,7 +24,7 @@
 - durable reattachable process I/O and richer event subscriptions
 - [x] structured process/service/network inspection and service control
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
-- registry/task/firewall mutation controls with verification
+- [x] registry value/key, task state, and firewall rule mutation controls with verification
 - registry and environment
 - network diagnostics
 - [x] batch file reads and bounded text search

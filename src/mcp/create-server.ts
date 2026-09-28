@@ -433,6 +433,160 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'windows_registry_set',
+    {
+      title: 'Set Windows registry value',
+      description:
+        'Create or update one exact registry value and verify the stored value type/content.',
+      inputSchema: {
+        ...targetFields,
+        hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+        path: z.string().min(1).max(4096),
+        name: z.string().min(1).max(1024),
+        type: z.enum([
+          'string',
+          'expand_string',
+          'dword',
+          'qword',
+          'multi_string',
+          'binary',
+        ]),
+        value: z.union([
+          z.string().max(4_194_304),
+          z.number(),
+          z.array(z.string().max(65_536)).max(4096),
+        ]),
+        create_key: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hive,
+      path,
+      name,
+      type,
+      value,
+      create_key,
+    }) =>
+      await execute(
+        ctx,
+        'windows.registry.set',
+        {
+          hive,
+          path,
+          name,
+          type,
+          value,
+          ...(create_key !== undefined ? { create_key } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_registry_delete',
+    {
+      title: 'Delete Windows registry value or key',
+      description:
+        'Delete one exact registry value, or delete one non-root key. Recursive key deletion must be explicitly enabled.',
+      inputSchema: {
+        ...targetFields,
+        hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+        path: z.string().min(1).max(4096),
+        name: z.string().min(1).max(1024).optional(),
+        recursive: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hive,
+      path,
+      name,
+      recursive,
+    }) =>
+      await execute(
+        ctx,
+        'windows.registry.delete',
+        {
+          hive,
+          path,
+          ...(name ? { name } : {}),
+          ...(recursive !== undefined ? { recursive } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_task_control',
+    {
+      title: 'Control exact Windows scheduled task',
+      description:
+        'Start, stop, enable, or disable one exact scheduled task, then verify its final state when applicable.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(512),
+        path: z.string().min(1).max(2048).optional(),
+        action: z.enum(['start', 'stop', 'enable', 'disable']),
+      },
+    },
+    async ({ device_id, provider_id, name, path, action }) =>
+      await execute(
+        ctx,
+        'windows.task.control',
+        {
+          name,
+          ...(path ? { path } : {}),
+          action,
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_firewall_control',
+    {
+      title: 'Control exact Windows firewall rule',
+      description:
+        'Enable, disable, or change Allow/Block action for one exact firewall rule and verify final state.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(512),
+        action: z.enum(['enable', 'disable', 'set_action']),
+        rule_action: z.enum(['allow', 'block']).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      action,
+      rule_action,
+    }) =>
+      await execute(
+        ctx,
+        'windows.firewall.control',
+        {
+          name,
+          action,
+          ...(rule_action ? { rule_action } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
   server.registerTool(
     'shell_exec',
     {
