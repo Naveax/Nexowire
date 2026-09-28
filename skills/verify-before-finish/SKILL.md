@@ -7,6 +7,8 @@ requires: machine.snapshot
 
 # Verify Before Finish
 
+When a workspace exposes structured checks, call `workspace.detect` first and prefer `workspace.checks` for the relevant test/build/lint/typecheck commands.
+
 Completion requires evidence.
 
 - code: typecheck/build/tests and Git diff

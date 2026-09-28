@@ -34,8 +34,8 @@
 
 ## v0.3 - Workspace agent
 
-- project detection and targeted repository search
-- build/test adapters
+- [x] project detection and targeted repository search
+- [x] structured build/test/lint/typecheck adapters for detected workspaces
 - persistent task graph
 - parallel independent jobs
 - resumable long-running work

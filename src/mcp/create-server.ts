@@ -1178,6 +1178,73 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'workspace_detect',
+    {
+      title: 'Detect workspace',
+      description:
+        'Detect project types, manifests, package manager, scripts, and available structured checks for a workspace.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+      },
+    },
+    async ({ device_id, provider_id, path }) =>
+      await execute(
+        ctx,
+        'workspace.detect',
+        { path },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'workspace_run_checks',
+    {
+      title: 'Run workspace checks',
+      description:
+        'Run one or more advertised build/test/lint/typecheck checks, optionally in parallel, with bounded output.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        checks: z.array(z.string().min(1).max(128)).min(1).max(8),
+        parallel: z.boolean().optional(),
+        timeout_ms: z.number().int().min(100).max(600_000).optional(),
+        max_output_bytes: z
+          .number()
+          .int()
+          .min(1024)
+          .max(16_777_216)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      path,
+      checks,
+      parallel,
+      timeout_ms,
+      max_output_bytes,
+    }) =>
+      await execute(
+        ctx,
+        'workspace.checks',
+        {
+          path,
+          checks,
+          ...(parallel !== undefined ? { parallel } : {}),
+          ...(timeout_ms ? { timeout_ms } : {}),
+          ...(max_output_bytes ? { max_output_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+        timeout_ms ? timeout_ms + 10_000 : undefined,
+      ),
+  );
+
   server.registerTool(
     'workspace_checkpoint_save',
     {
