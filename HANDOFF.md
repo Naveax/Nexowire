@@ -24,6 +24,9 @@ Implemented:
 - Streamable HTTP MCP and stdio MCP
 - persistent workspace checkpoints
 - lazy skill registry
+- batch file reads and bounded text search
+- operation IDs plus persistent payload-free audit metadata
+- full MCP -> provider -> WebSocket native-agent integration coverage
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -34,13 +37,13 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 
 ## Immediate next work
 
-1. Run and fix the full typecheck/test/build suite on Windows.
-2. Expand the end-to-end suite from WebSocket broker coverage to full MCP -> provider -> native-agent execution.
-3. Add process-session retention/recovery policy and event subscriptions.
-4. Add structured audit events and operation IDs.
-5. Add batch reads/search to reduce AI round trips.
-6. Add structured Windows process/service/network capabilities.
-7. Design production ChatGPT authentication before public deployment.
+1. Keep Windows typecheck/test/build green after each capability slice.
+2. Add process-session retention/recovery policy and event subscriptions.
+3. Add structured Windows process/service/network capabilities.
+4. Add file patch/copy/move/delete and richer search/file metadata primitives.
+5. Add provider health/latency scoring and mutation-aware failover policy.
+6. Design production ChatGPT authentication before public deployment.
+7. Add GUI accessibility/screenshot/browser layers after structured OS control is mature.
 
 ## Known machine note
 

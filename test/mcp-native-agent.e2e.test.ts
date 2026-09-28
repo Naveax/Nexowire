@@ -6,6 +6,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import WebSocket from 'ws';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { AuditLog } from '../src/audit/log.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AgentBroker } from '../src/core/agent-broker.js';
 import { ProviderRegistry } from '../src/core/provider-registry.js';
@@ -25,9 +26,11 @@ test('MCP request reaches a native agent through the provider registry', async (
   const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-mcp-'));
   const providers = new ProviderRegistry();
   providers.register(new AgentProvider(broker));
+  const audit = new AuditLog(path.join(stateDir, 'audit.jsonl'));
 
   const mcp = createNexowireMcpServer({
     providers,
+    audit,
     workspaces: new WorkspaceStore(stateDir),
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
   });
@@ -109,13 +112,31 @@ test('MCP request reaches a native agent through the provider registry', async (
   const structured = result.structuredContent as {
     ok?: boolean;
     data?: { hostname?: string; capability?: string };
-    meta?: { providerId?: string; targetId?: string };
+    meta?: { providerId?: string; targetId?: string; requestId?: string };
   };
   assert.equal(structured.ok, true);
   assert.equal(structured.data?.hostname, 'mcp-e2e-host');
   assert.equal(structured.data?.capability, 'machine.snapshot');
   assert.equal(structured.meta?.providerId, 'native-agent');
   assert.equal(structured.meta?.targetId, 'mcp-device');
+  assert.match(structured.meta?.requestId ?? '', /^[0-9a-f-]{36}$/i);
+
+  const auditResult = await client.callTool({
+    name: 'audit_recent',
+    arguments: { limit: 10 },
+  });
+  assert.ok('structuredContent' in auditResult);
+  const auditContent = auditResult.structuredContent as {
+    events?: Array<{ operationId: string; status: string; capability: string }>;
+  };
+  const operationEvents = (auditContent.events ?? []).filter(
+    (event) => event.operationId === structured.meta?.requestId,
+  );
+  assert.deepEqual(
+    operationEvents.map((event) => event.status).sort(),
+    ['started', 'succeeded'],
+  );
+  assert.ok(operationEvents.every((event) => event.capability === 'machine.snapshot'));
 
   agent.close();
 });

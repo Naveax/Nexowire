@@ -8,8 +8,10 @@ export const CORE_CAPABILITIES = [
   'process.list',
   'wsl.exec',
   'files.read',
+  'files.read_many',
   'files.write',
   'files.list',
+  'search.text',
   'workspace.snapshot',
 ] as const;
 

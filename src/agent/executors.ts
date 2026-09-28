@@ -29,6 +29,27 @@ const FileReadInputSchema = z.object({
   max_bytes: z.number().int().min(1).max(16_777_216).default(2_097_152),
 });
 
+const FileReadManyInputSchema = z.object({
+  paths: z.array(z.string().min(1).max(4096)).min(1).max(64),
+  encoding: z.enum(['utf8', 'base64']).default('utf8'),
+  max_bytes_each: z.number().int().min(1).max(16_777_216).default(2_097_152),
+  max_total_bytes: z.number().int().min(1024).max(67_108_864).default(16_777_216),
+});
+
+const SearchTextInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  query: z.string().min(1).max(2000),
+  regex: z.boolean().default(false),
+  case_sensitive: z.boolean().default(false),
+  max_matches: z.number().int().min(1).max(5000).default(200),
+  max_files: z.number().int().min(1).max(100_000).default(10_000),
+  max_file_bytes: z.number().int().min(1024).max(16_777_216).default(2_097_152),
+  include_hidden: z.boolean().default(false),
+  exclude_dirs: z.array(z.string().min(1).max(255)).max(100).default([
+    '.git', 'node_modules', 'dist', 'build', 'target', '.next', '.venv', 'vendor',
+  ]),
+});
+
 const FileWriteInputSchema = z.object({
   path: z.string().min(1).max(4096),
   content: z.string().max(22_369_624),
@@ -248,6 +269,46 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   };
 }
 
+async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileReadManyInputSchema.parse(input);
+  let totalBytes = 0;
+  let truncated = false;
+  const results: Array<Record<string, unknown>> = [];
+
+  for (const requested of parsed.paths) {
+    try {
+      const target = policy.resolve(requested);
+      const stat = await fs.stat(target);
+      if (!stat.isFile()) throw new Error('Requested path is not a file.');
+      if (stat.size > parsed.max_bytes_each) {
+        throw new Error(`File size ${stat.size} exceeds max_bytes_each ${parsed.max_bytes_each}.`);
+      }
+      if (totalBytes + stat.size > parsed.max_total_bytes) {
+        truncated = true;
+        results.push({ path: target, ok: false, error: 'TOTAL_LIMIT_REACHED', size: stat.size });
+        continue;
+      }
+      const content = await fs.readFile(target);
+      totalBytes += content.byteLength;
+      results.push({
+        path: target,
+        ok: true,
+        size: stat.size,
+        encoding: parsed.encoding,
+        content: parsed.encoding === 'base64' ? content.toString('base64') : content.toString('utf8'),
+      });
+    } catch (error) {
+      results.push({
+        path: requested,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { data: { results, totalBytes, truncated } };
+}
+
 async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileWriteInputSchema.parse(input);
   const target = policy.resolve(parsed.path);
@@ -318,6 +379,102 @@ async function listDirectory(
   };
 }
 
+interface SearchMatch {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+}
+
+async function searchText(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = SearchTextInputSchema.parse(input);
+  const root = policy.resolve(parsed.path);
+  const rootStat = await fs.stat(root);
+  if (!rootStat.isDirectory()) throw new Error('Search path is not a directory.');
+
+  let matcher: RegExp | undefined;
+  if (parsed.regex) {
+    matcher = new RegExp(parsed.query, parsed.case_sensitive ? 'g' : 'gi');
+  }
+  const needle = parsed.case_sensitive ? parsed.query : parsed.query.toLowerCase();
+  const excluded = new Set(parsed.exclude_dirs.map((value) => value.toLowerCase()));
+  const matches: SearchMatch[] = [];
+  let scannedFiles = 0;
+  let skippedFiles = 0;
+  let truncated = false;
+
+  const walk = async (dir: string): Promise<void> => {
+    if (truncated) return;
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (truncated) break;
+      if (!parsed.include_hidden && entry.name.startsWith('.')) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        skippedFiles++;
+        continue;
+      }
+      if (entry.isDirectory()) {
+        if (excluded.has(entry.name.toLowerCase())) continue;
+        await walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (scannedFiles >= parsed.max_files) {
+        truncated = true;
+        break;
+      }
+      scannedFiles++;
+      const stat = await fs.stat(fullPath);
+      if (stat.size > parsed.max_file_bytes) {
+        skippedFiles++;
+        continue;
+      }
+      const buffer = await fs.readFile(fullPath);
+      if (buffer.subarray(0, Math.min(buffer.length, 8192)).includes(0)) {
+        skippedFiles++;
+        continue;
+      }
+      const lines = buffer.toString('utf8').split(/\r?\n/);
+      for (let index = 0; index < lines.length; index++) {
+        const line = lines[index] ?? '';
+        let column = -1;
+        if (matcher) {
+          matcher.lastIndex = 0;
+          const result = matcher.exec(line);
+          column = result?.index ?? -1;
+        } else {
+          const haystack = parsed.case_sensitive ? line : line.toLowerCase();
+          column = haystack.indexOf(needle);
+        }
+        if (column < 0) continue;
+        matches.push({
+          path: path.relative(root, fullPath) || entry.name,
+          line: index + 1,
+          column: column + 1,
+          text: line.length > 2000 ? line.slice(0, 2000) : line,
+        });
+        if (matches.length >= parsed.max_matches) {
+          truncated = true;
+          break;
+        }
+      }
+    }
+  };
+
+  await walk(root);
+  return {
+    data: {
+      root,
+      query: parsed.query,
+      matches,
+      scannedFiles,
+      skippedFiles,
+      truncated,
+    },
+  };
+}
+
 function listWslDistros(): string[] {
   if (process.platform !== 'win32') return [];
   const result = spawnSync('wsl.exe', ['--list', '--quiet'], {
@@ -378,23 +535,32 @@ async function workspaceSnapshot(
     throw new Error(rootResult.stderr.trim() || 'Not a Git workspace.');
   }
 
-  const markers = [
+  const markerNames = [
     'package.json',
     'Cargo.toml',
     'pyproject.toml',
     'requirements.txt',
     'go.mod',
-    '*.sln',
   ];
+  const root = rootResult.stdout.trim();
+  const rootEntries = await fs.readdir(root, { withFileTypes: true });
+  const projectMarkers = markerNames.filter((marker) =>
+    rootEntries.some((entry) => entry.isFile() && entry.name === marker),
+  );
+  projectMarkers.push(
+    ...rootEntries
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.sln'))
+      .map((entry) => entry.name),
+  );
 
   return {
     data: {
       requestedPath: cwd,
-      root: rootResult.stdout.trim(),
+      root,
       branch: headResult.stdout.trim(),
       status: statusResult.stdout.trimEnd(),
       lastCommit: logResult.stdout.trim(),
-      projectMarkers: markers,
+      projectMarkers,
     },
   };
 }
@@ -431,10 +597,14 @@ export async function executeCapability(
       return await executeWsl(input);
     case 'files.read':
       return await readFile(input, policy);
+    case 'files.read_many':
+      return await readManyFiles(input, policy);
     case 'files.write':
       return await writeFile(input, policy);
     case 'files.list':
       return await listDirectory(input, policy);
+    case 'search.text':
+      return await searchText(input, policy);
     case 'machine.snapshot':
       return await machineSnapshot(policy);
     case 'workspace.snapshot':

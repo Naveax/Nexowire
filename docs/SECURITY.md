@@ -10,7 +10,8 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 - Without an agent secret, only loopback agent connections are accepted.
 - Native-agent file operations are restricted to configured roots; the default root is the current user's home directory.
 - File listing does not recurse through symbolic links.
-- Command output, command duration, file sizes, directory depth, and entry counts are bounded.
+- Command output, command duration, file sizes, directory depth, search scope, and entry counts are bounded.
+- Audit records store operation metadata, not command input or file payload content.
 
 ## Important limitation
 

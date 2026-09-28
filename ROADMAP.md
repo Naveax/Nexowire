@@ -10,10 +10,11 @@
 - [x] Persistent workspace checkpoints
 - [x] Lazy skill registry
 - [x] Initial security boundaries
-- [ ] End-to-end hub + agent integration tests
+- [x] End-to-end MCP -> provider -> native-agent integration test
 - [x] Interactive process sessions: start/read/write/stop/list
 - [ ] Durable process-session recovery across agent restart
-- [ ] Structured event/audit stream
+- [x] Operation IDs and persistent audit metadata
+- [ ] Structured event subscriptions
 - [ ] Public deployment authentication
 
 ## v0.2 - Computer control
@@ -22,7 +23,7 @@
 - services and scheduled tasks
 - registry and environment
 - network diagnostics
-- batch file/search operations
+- [x] batch file reads and bounded text search
 - compact system health snapshots
 - richer Windows structured output
 

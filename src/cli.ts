@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig();
-  const runtime = createRuntime(config);
+  const runtime = await createRuntime(config);
 
   if (command === 'stdio') {
     await runStdioServer(runtime.context);

@@ -2,7 +2,7 @@
 name: repo-resume
 description: Resume an existing software workspace from its real current state without redoing completed work.
 version: 0.1
-requires: workspace.snapshot, files.read, shell.exec
+requires: workspace.snapshot, search.text, files.read_many, shell.exec
 ---
 
 # Repo Resume

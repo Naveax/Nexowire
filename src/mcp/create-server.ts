@@ -1,11 +1,15 @@
+import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
+import type { AuditLog } from '../audit/log.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 
 export interface McpContext {
   providers: ProviderRegistry;
+  audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
 }
@@ -46,26 +50,57 @@ async function execute(
   providerId?: string,
   timeoutMs?: number,
 ) {
+  const operationId = randomUUID();
+  const started = performance.now();
+  let targetId: string | undefined;
   try {
-    const targetId = await resolveDevice(ctx.providers, deviceId);
+    targetId = await resolveDevice(ctx.providers, deviceId);
+    await ctx.audit?.write({
+      operationId,
+      status: 'started',
+      capability,
+      targetId,
+      ...(providerId ? { providerId } : {}),
+    });
+
     const result = await ctx.providers.execute(
       {
         targetId,
         capability,
         input,
+        requestId: operationId,
         ...(timeoutMs ? { timeoutMs } : {}),
       },
       providerId,
     );
+
+    await ctx.audit?.write({
+      operationId,
+      status: result.ok ? 'succeeded' : 'failed',
+      capability,
+      targetId,
+      providerId: result.meta.providerId,
+      durationMs: Math.round(performance.now() - started),
+      ...(result.error?.code ? { errorCode: result.error.code } : {}),
+      ...(result.error?.message ? { message: result.error.message } : {}),
+    });
     return toolResult(result, !result.ok);
   } catch (error) {
-    return toolResult(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      true,
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    await ctx.audit?.write({
+      operationId,
+      status: 'failed',
+      capability,
+      ...(targetId ? { targetId } : {}),
+      ...(providerId ? { providerId } : {}),
+      durationMs: Math.round(performance.now() - started),
+      errorCode:
+        typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+          ? error.code
+          : 'EXECUTION_FAILED',
+      message,
+    });
+    return toolResult({ ok: false, operationId, error: message }, true);
   }
 }
 
@@ -302,6 +337,35 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'file_read_many',
+    {
+      title: 'Read multiple files',
+      description:
+        'Read up to 64 files in one remote round trip with per-file and total output limits.',
+      inputSchema: {
+        ...targetFields,
+        paths: z.array(z.string().min(1).max(4096)).min(1).max(64),
+        encoding: z.enum(['utf8', 'base64']).optional(),
+        max_bytes_each: z.number().int().min(1).max(16_777_216).optional(),
+        max_total_bytes: z.number().int().min(1024).max(67_108_864).optional(),
+      },
+    },
+    async ({ device_id, provider_id, paths, encoding, max_bytes_each, max_total_bytes }) =>
+      await execute(
+        ctx,
+        'files.read_many',
+        {
+          paths,
+          ...(encoding ? { encoding } : {}),
+          ...(max_bytes_each ? { max_bytes_each } : {}),
+          ...(max_total_bytes ? { max_total_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
     'file_write',
     {
       title: 'Write file',
@@ -359,6 +423,57 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           path,
           ...(depth ? { depth } : {}),
           ...(max_entries ? { max_entries } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'search_text',
+    {
+      title: 'Search text in files',
+      description:
+        'Search a directory tree for literal text or a regular expression with bounded structured results.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        query: z.string().min(1).max(2000),
+        regex: z.boolean().optional(),
+        case_sensitive: z.boolean().optional(),
+        max_matches: z.number().int().min(1).max(5000).optional(),
+        max_files: z.number().int().min(1).max(100_000).optional(),
+        max_file_bytes: z.number().int().min(1024).max(16_777_216).optional(),
+        include_hidden: z.boolean().optional(),
+        exclude_dirs: z.array(z.string().min(1).max(255)).max(100).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      path,
+      query,
+      regex,
+      case_sensitive,
+      max_matches,
+      max_files,
+      max_file_bytes,
+      include_hidden,
+      exclude_dirs,
+    }) =>
+      await execute(
+        ctx,
+        'search.text',
+        {
+          path,
+          query,
+          ...(regex !== undefined ? { regex } : {}),
+          ...(case_sensitive !== undefined ? { case_sensitive } : {}),
+          ...(max_matches ? { max_matches } : {}),
+          ...(max_files ? { max_files } : {}),
+          ...(max_file_bytes ? { max_file_bytes } : {}),
+          ...(include_hidden !== undefined ? { include_hidden } : {}),
+          ...(exclude_dirs ? { exclude_dirs } : {}),
         },
         device_id,
         provider_id,
@@ -448,6 +563,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       inputSchema: {},
     },
     async () => toolResult({ checkpoints: await ctx.workspaces.list() }),
+  );
+
+  server.registerTool(
+    'audit_recent',
+    {
+      title: 'Recent Nexowire audit events',
+      description:
+        'Read recent operation metadata. Command inputs and file contents are intentionally not logged.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(500).optional(),
+      },
+    },
+    async ({ limit }) =>
+      toolResult({ events: ctx.audit?.list(limit ?? 50) ?? [] }),
   );
 
   server.registerTool(
