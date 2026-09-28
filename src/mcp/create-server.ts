@@ -143,6 +143,109 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'process_start',
+    {
+      title: 'Start process session',
+      description: 'Start a long-running or interactive process and return a reusable session id.',
+      inputSchema: {
+        ...targetFields,
+        command: z.string().min(1).max(200_000),
+        shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
+        cwd: z.string().max(4096).optional(),
+        name: z.string().min(1).max(128).optional(),
+        max_buffer_bytes: z.number().int().min(65_536).max(16_777_216).optional(),
+      },
+    },
+    async ({ device_id, provider_id, command, shell, cwd, name, max_buffer_bytes }) =>
+      await execute(
+        ctx,
+        'process.start',
+        {
+          command,
+          ...(shell ? { shell } : {}),
+          ...(cwd ? { cwd } : {}),
+          ...(name ? { name } : {}),
+          ...(max_buffer_bytes ? { max_buffer_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'process_read',
+    {
+      title: 'Read process session',
+      description: 'Read incremental stdout/stderr events and process state from a running session.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        after_seq: z.number().int().min(0).optional(),
+        max_events: z.number().int().min(1).max(1000).optional(),
+        wait_ms: z.number().int().min(0).max(10_000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, session_id, after_seq, max_events, wait_ms }) =>
+      await execute(
+        ctx,
+        'process.read',
+        {
+          session_id,
+          ...(after_seq !== undefined ? { after_seq } : {}),
+          ...(max_events ? { max_events } : {}),
+          ...(wait_ms !== undefined ? { wait_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        wait_ms ? wait_ms + 5_000 : undefined,
+      ),
+  );
+
+  server.registerTool(
+    'process_write',
+    {
+      title: 'Write process input',
+      description: 'Send input to an interactive process session.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        input: z.string().max(1_048_576),
+        append_newline: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, session_id, input, append_newline }) =>
+      await execute(
+        ctx,
+        'process.write',
+        { session_id, input, ...(append_newline !== undefined ? { append_newline } : {}) },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'process_stop',
+    {
+      title: 'Stop process session',
+      description: 'Terminate a managed process session and its process tree when possible.',
+      inputSchema: { ...targetFields, session_id: z.string().uuid() },
+    },
+    async ({ device_id, provider_id, session_id }) =>
+      await execute(ctx, 'process.stop', { session_id }, device_id, provider_id),
+  );
+
+  server.registerTool(
+    'process_list',
+    {
+      title: 'List process sessions',
+      description: 'List managed long-running and interactive process sessions on a target.',
+      inputSchema: targetFields,
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(ctx, 'process.list', {}, device_id, provider_id),
+  );
+
+  server.registerTool(
     'wsl_exec',
     {
       title: 'Execute in WSL2',

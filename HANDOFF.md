@@ -18,6 +18,7 @@ Implemented:
 - stable native-agent device identity
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
 - WSL2 execution capability
+- interactive process sessions with incremental stdout/stderr, stdin, stop, and list
 - allowlisted file read/write/list
 - machine snapshot and Git workspace snapshot
 - Streamable HTTP MCP and stdio MCP
@@ -34,8 +35,8 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 ## Immediate next work
 
 1. Run and fix the full typecheck/test/build suite on Windows.
-2. Add an end-to-end hub + native-agent integration test.
-3. Add durable process sessions: start, output pagination, input, cancel, status.
+2. Expand the end-to-end suite from WebSocket broker coverage to full MCP -> provider -> native-agent execution.
+3. Add process-session retention/recovery policy and event subscriptions.
 4. Add structured audit events and operation IDs.
 5. Add batch reads/search to reduce AI round trips.
 6. Add structured Windows process/service/network capabilities.

@@ -1,6 +1,11 @@
 export const CORE_CAPABILITIES = [
   'machine.snapshot',
   'shell.exec',
+  'process.start',
+  'process.read',
+  'process.write',
+  'process.stop',
+  'process.list',
   'wsl.exec',
   'files.read',
   'files.write',

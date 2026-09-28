@@ -11,13 +11,14 @@
 - [x] Lazy skill registry
 - [x] Initial security boundaries
 - [ ] End-to-end hub + agent integration tests
-- [ ] Durable process sessions
+- [x] Interactive process sessions: start/read/write/stop/list
+- [ ] Durable process-session recovery across agent restart
 - [ ] Structured event/audit stream
 - [ ] Public deployment authentication
 
 ## v0.2 - Computer control
 
-- process start/read/input/cancel
+- richer process metadata, retention, and recovery policy
 - services and scheduled tasks
 - registry and environment
 - network diagnostics

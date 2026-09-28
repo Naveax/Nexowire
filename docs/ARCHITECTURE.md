@@ -23,6 +23,7 @@ A target can eventually be reachable through more than one provider. The provide
 - outbound native-agent WebSocket transport
 - provider registry with deterministic priority and exception failover
 - PowerShell/cmd/bash shell execution
+- interactive process sessions with incremental output, stdin, stop, and list
 - WSL2 command execution
 - allowlisted file read/write/list
 - machine and Git workspace snapshots
@@ -41,7 +42,7 @@ A target can eventually be reachable through more than one provider. The provide
 ## Next architectural layers
 
 - durable task/job engine with event subscriptions
-- process sessions with start/read/input/cancel
+- process retention/recovery across agent restarts and richer event subscriptions
 - structured Windows service/process/network/registry tools
 - provider adapters for SentinelX and Remote Desktop Commander where supported APIs permit
 - GUI accessibility tree plus screenshot/computer-use fallback

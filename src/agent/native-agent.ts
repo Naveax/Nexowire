@@ -10,6 +10,7 @@ import {
 import { CORE_CAPABILITIES } from '../protocol/capabilities.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
+import { ProcessManager } from './process-manager.js';
 
 interface AgentIdentity {
   id: string;
@@ -46,12 +47,16 @@ export async function runNativeAgent(
   const token = env.NEXOWIRE_AGENT_TOKEN?.trim();
   const name = env.NEXOWIRE_DEVICE_NAME?.trim() || os.hostname();
   const policy = new PathPolicy(parseAllowedRoots(env.NEXOWIRE_ALLOWED_ROOTS));
+  const processes = new ProcessManager();
 
   let stopped = false;
+  let currentSocket: WebSocket | undefined;
   let reconnectDelay = 1_000;
 
   const stop = (): void => {
     stopped = true;
+    currentSocket?.close(1001, 'Agent shutting down');
+    void processes.stopAll();
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
@@ -59,6 +64,7 @@ export async function runNativeAgent(
   while (!stopped) {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     const socket = new WebSocket(hubUrl, headers ? { headers } : undefined);
+    currentSocket = socket;
 
     await new Promise<void>((resolve) => {
       socket.once('open', () => {
@@ -94,6 +100,7 @@ export async function runNativeAgent(
               request.data.capability,
               request.data.input,
               policy,
+              { processes },
             );
             socket.send(
               JSON.stringify({
@@ -120,6 +127,7 @@ export async function runNativeAgent(
       socket.once('error', () => resolve());
     });
 
+    currentSocket = undefined;
     if (stopped) break;
     await new Promise((resolve) => setTimeout(resolve, reconnectDelay));
     reconnectDelay = Math.min(reconnectDelay * 2, 30_000);

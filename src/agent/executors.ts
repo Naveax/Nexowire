@@ -5,6 +5,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
 import { PathPolicy, PathDeniedError } from './path-policy.js';
+import type { ProcessManager } from './process-manager.js';
 
 const ShellExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
@@ -398,14 +399,34 @@ async function workspaceSnapshot(
   };
 }
 
+export interface AgentExecutionContext {
+  processes?: ProcessManager;
+}
+
+function requireProcesses(context: AgentExecutionContext): ProcessManager {
+  if (!context.processes) throw new Error('Process manager is unavailable.');
+  return context.processes;
+}
+
 export async function executeCapability(
   capability: Capability,
   input: unknown,
   policy: PathPolicy,
+  context: AgentExecutionContext = {},
 ): Promise<unknown> {
   switch (capability) {
     case 'shell.exec':
       return await executeShell(input, policy);
+    case 'process.start':
+      return { data: await requireProcesses(context).start(input, policy) };
+    case 'process.read':
+      return { data: await requireProcesses(context).read(input) };
+    case 'process.write':
+      return { data: await requireProcesses(context).write(input) };
+    case 'process.stop':
+      return { data: await requireProcesses(context).stop(input) };
+    case 'process.list':
+      return { data: requireProcesses(context).list() };
     case 'wsl.exec':
       return await executeWsl(input);
     case 'files.read':
@@ -440,6 +461,12 @@ export function normalizeAgentError(error: unknown): {
       code: 'PATH_DENIED',
       message: error.message,
       details: { path: error.requestedPath },
+    };
+  }
+  if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string') {
+    return {
+      code: error.code,
+      message: error instanceof Error ? error.message : String(error),
     };
   }
   return {
