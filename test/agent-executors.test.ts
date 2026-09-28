@@ -150,3 +150,64 @@ test('file patch refuses ambiguous occurrence counts without changing the file',
   );
   assert.equal(await fs.readFile(file, 'utf8'), 'same same');
 });
+
+
+test('file hashes support stale-read detection for conflict-safe patches', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-hash-'));
+  const policy = new PathPolicy([root]);
+  const file = path.join(root, 'value.txt');
+  await fs.writeFile(file, 'alpha beta\n', 'utf8');
+
+  const read = await executeCapability(
+    'files.read',
+    { path: file, include_sha256: true },
+    policy,
+  ) as { data: { content: string; sha256: string } };
+  assert.equal(read.data.content, 'alpha beta\n');
+  assert.match(read.data.sha256, /^[a-f0-9]{64}$/);
+
+  const hash = await executeCapability(
+    'files.hash',
+    { path: file },
+    policy,
+  ) as { data: { sha256: string } };
+  assert.equal(hash.data.sha256, read.data.sha256);
+
+  const batch = await executeCapability(
+    'files.read_many',
+    { paths: [file], include_sha256: true },
+    policy,
+  ) as { data: { results: Array<{ sha256?: string }> } };
+  assert.equal(batch.data.results[0]?.sha256, read.data.sha256);
+
+  const patched = await executeCapability(
+    'files.patch',
+    {
+      path: file,
+      expected_sha256: read.data.sha256,
+      operations: [{ old_text: 'alpha', new_text: 'omega' }],
+    },
+    policy,
+  ) as { data: { originalSha256: string; sha256: string } };
+  assert.equal(patched.data.originalSha256, read.data.sha256);
+  assert.notEqual(patched.data.sha256, read.data.sha256);
+  assert.equal(await fs.readFile(file, 'utf8'), 'omega beta\n');
+
+  await assert.rejects(
+    () =>
+      executeCapability(
+        'files.patch',
+        {
+          path: file,
+          expected_sha256: read.data.sha256,
+          operations: [{ old_text: 'omega', new_text: 'alpha' }],
+        },
+        policy,
+      ),
+    (error: unknown) =>
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'FILE_CONFLICT',
+  );
+  assert.equal(await fs.readFile(file, 'utf8'), 'omega beta\n');
+});

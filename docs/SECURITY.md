@@ -29,3 +29,5 @@ Never automatically replay a mutation merely because the first provider disconne
 `NEXOWIRE_ALLOWED_ROOTS` controls file tools. `*` intentionally disables the filesystem boundary and should only be used when unrestricted user-level file access is desired.
 
 Shell execution can access anything available to the agent's operating-system account. Future policy work will add per-capability scopes and privilege separation.
+
+- Text patching can require an expected SHA-256 revision; stale content raises `FILE_CONFLICT` instead of silently overwriting newer edits.

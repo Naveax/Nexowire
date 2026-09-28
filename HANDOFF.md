@@ -8,12 +8,12 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/windows-mutations`
+Active branch: `feat/conflict-safe-files`
 
 Implemented:
 - TypeScript project and strict type checking
 - normalized provider interfaces
-- deterministic provider registry with failover after provider exceptions
+- provider registry with health/latency ranking, read-only failover, and mutation replay protection
 - native agent protocol over outbound WebSocket
 - stable native-agent device identity
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
@@ -27,6 +27,7 @@ Implemented:
 - lazy skill registry
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
+- SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
 - operation IDs plus persistent payload-free audit metadata
 - full MCP -> provider -> WebSocket native-agent integration coverage
 - structured Windows process/service/network inspection and service control
@@ -46,7 +47,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 1. Keep Windows typecheck/test/build green after each capability slice.
 2. Add fully reattachable durable process I/O and richer event subscriptions; current restart recovery is metadata/state-safe, not pipe reattachment.
 3. Add richer event subscriptions and additional Windows mutation primitives only where final state can be verified safely.
-4. Expand file metadata and conflict-safe patch semantics where useful.
+4. Expand file metadata/streaming only where it materially reduces AI round trips.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Design production ChatGPT authentication before public deployment.
 7. Add GUI accessibility/screenshot/browser layers after structured OS control is mature.

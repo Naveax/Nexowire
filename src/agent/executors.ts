@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,6 +29,7 @@ const FileReadInputSchema = z.object({
   path: z.string().min(1).max(4096),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   max_bytes: z.number().int().min(1).max(16_777_216).default(2_097_152),
+  include_sha256: z.boolean().default(false),
 });
 
 const FileReadManyInputSchema = z.object({
@@ -35,6 +37,7 @@ const FileReadManyInputSchema = z.object({
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   max_bytes_each: z.number().int().min(1).max(16_777_216).default(2_097_152),
   max_total_bytes: z.number().int().min(1024).max(67_108_864).default(16_777_216),
+  include_sha256: z.boolean().default(false),
 });
 
 const SearchTextInputSchema = z.object({
@@ -63,6 +66,11 @@ const FileStatInputSchema = z.object({
   path: z.string().min(1).max(4096),
 });
 
+const FileHashInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  max_bytes: z.number().int().min(1).max(268_435_456).default(67_108_864),
+});
+
 const FileMkdirInputSchema = z.object({
   path: z.string().min(1).max(4096),
   recursive: z.boolean().default(true),
@@ -89,6 +97,7 @@ const FilePatchInputSchema = z.object({
     expected_count: z.number().int().min(1).max(10_000).default(1),
   })).min(1).max(100),
   max_bytes: z.number().int().min(1).max(16_777_216).default(4_194_304),
+  expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
 });
 
 const FileListInputSchema = z.object({
@@ -100,6 +109,31 @@ const FileListInputSchema = z.object({
 const WorkspaceSnapshotInputSchema = z.object({
   path: z.string().min(1).max(4096),
 });
+
+class FileConflictError extends Error {
+  readonly code = 'FILE_CONFLICT';
+
+  constructor(
+    message: string,
+    readonly details: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'FileConflictError';
+  }
+}
+
+function sha256Buffer(content: Uint8Array): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+async function sha256File(target: string, maxBytes?: number): Promise<string> {
+  const stat = await fs.stat(target);
+  if (!stat.isFile()) throw new Error('Hash target is not a file.');
+  if (maxBytes !== undefined && stat.size > maxBytes) {
+    throw new Error(`File size ${stat.size} exceeds hash max_bytes ${maxBytes}.`);
+  }
+  return sha256Buffer(await fs.readFile(target));
+}
 
 interface ProcessResult {
   stdout: string;
@@ -294,6 +328,7 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       path: target,
       size: stat.size,
       encoding: parsed.encoding,
+      ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
       content:
         parsed.encoding === 'base64'
           ? content.toString('base64')
@@ -328,7 +363,11 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
         ok: true,
         size: stat.size,
         encoding: parsed.encoding,
-        content: parsed.encoding === 'base64' ? content.toString('base64') : content.toString('utf8'),
+        ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
+        content:
+          parsed.encoding === 'base64'
+            ? content.toString('base64')
+            : content.toString('utf8'),
       });
     } catch (error) {
       results.push({
@@ -381,6 +420,24 @@ async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
       mode: stat.mode,
       modifiedAt: stat.mtime.toISOString(),
       createdAt: stat.birthtime.toISOString(),
+    },
+  };
+}
+
+async function hashFile(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileHashInputSchema.parse(input);
+  const target = await policy.resolveExisting(parsed.path);
+  const stat = await fs.stat(target);
+  if (!stat.isFile()) throw new Error('Hash target is not a file.');
+  if (stat.size > parsed.max_bytes) {
+    throw new Error(`File size ${stat.size} exceeds hash max_bytes ${parsed.max_bytes}.`);
+  }
+  return {
+    data: {
+      path: target,
+      size: stat.size,
+      sha256: await sha256File(target, parsed.max_bytes),
+      modifiedAt: stat.mtime.toISOString(),
     },
   };
 }
@@ -462,26 +519,66 @@ async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const target = await policy.resolveExisting(parsed.path);
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Patch target is not a file.');
-  if (stat.size > parsed.max_bytes) throw new Error(`Patch target exceeds max_bytes ${parsed.max_bytes}.`);
-  let content = await fs.readFile(target, 'utf8');
+  if (stat.size > parsed.max_bytes) {
+    throw new Error(`Patch target exceeds max_bytes ${parsed.max_bytes}.`);
+  }
 
+  const originalBuffer = await fs.readFile(target);
+  const originalSha256 = sha256Buffer(originalBuffer);
+  if (
+    parsed.expected_sha256 &&
+    parsed.expected_sha256.toLowerCase() !== originalSha256
+  ) {
+    throw new FileConflictError(
+      'Patch target no longer matches expected_sha256.',
+      {
+        path: target,
+        expectedSha256: parsed.expected_sha256.toLowerCase(),
+        actualSha256: originalSha256,
+      },
+    );
+  }
+
+  let content = originalBuffer.toString('utf8');
   const applied: Array<{ index: number; replacements: number }> = [];
   for (let index = 0; index < parsed.operations.length; index++) {
     const operation = parsed.operations[index]!;
     const count = countOccurrences(content, operation.old_text);
     if (count !== operation.expected_count) {
-      throw new Error(
+      throw new FileConflictError(
         `Patch operation ${index + 1} expected ${operation.expected_count} occurrence(s), found ${count}.`,
+        {
+          path: target,
+          operation: index + 1,
+          expectedCount: operation.expected_count,
+          actualCount: count,
+          originalSha256,
+        },
       );
     }
     content = content.split(operation.old_text).join(operation.new_text);
     applied.push({ index, replacements: count });
   }
 
+  const finalBuffer = Buffer.from(content, 'utf8');
+  const finalSha256 = sha256Buffer(finalBuffer);
   const temp = `${target}.nexowire-${process.pid}-${Date.now()}.tmp`;
   try {
-    await fs.writeFile(temp, content, 'utf8');
+    await fs.writeFile(temp, finalBuffer);
     await fs.chmod(temp, stat.mode);
+
+    const beforeCommitSha256 = await sha256File(target, parsed.max_bytes);
+    if (beforeCommitSha256 !== originalSha256) {
+      throw new FileConflictError(
+        'Patch target changed while the patch was being prepared.',
+        {
+          path: target,
+          originalSha256,
+          actualSha256: beforeCommitSha256,
+        },
+      );
+    }
+
     if (process.platform === 'win32') {
       await fs.copyFile(temp, target);
       await fs.rm(temp, { force: true });
@@ -491,7 +588,16 @@ async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   } finally {
     await fs.rm(temp, { force: true }).catch(() => undefined);
   }
-  return { data: { path: target, applied, bytes: Buffer.byteLength(content) } };
+
+  return {
+    data: {
+      path: target,
+      applied,
+      bytes: finalBuffer.byteLength,
+      originalSha256,
+      sha256: finalSha256,
+    },
+  };
 }
 
 interface ListedEntry {
@@ -769,6 +875,8 @@ export async function executeCapability(
       return await writeFile(input, policy);
     case 'files.stat':
       return await statPath(input, policy);
+    case 'files.hash':
+      return await hashFile(input, policy);
     case 'files.mkdir':
       return await makeDirectory(input, policy);
     case 'files.copy':
@@ -824,10 +932,16 @@ export function normalizeAgentError(error: unknown): {
       details: { path: error.requestedPath },
     };
   }
-  if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string') {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) {
     return {
       code: error.code,
       message: error instanceof Error ? error.message : String(error),
+      ...('details' in error ? { details: error.details } : {}),
     };
   }
   return {

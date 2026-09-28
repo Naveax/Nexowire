@@ -15,6 +15,7 @@ Each skill lives at `skills/<name>/SKILL.md`. The MCP server exposes lightweight
 
 - `repo-resume`
 - `fast-repo-inspect`
+- `conflict-safe-edit`
 - `build-and-test`
 - `powershell-expert`
 - `wsl-workflow`
