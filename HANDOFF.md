@@ -29,6 +29,7 @@ Implemented:
 - operation IDs plus persistent payload-free audit metadata
 - full MCP -> provider -> WebSocket native-agent integration coverage
 - structured Windows process/service/network inspection and service control
+- structured Windows registry, scheduled-task, event-log, and firewall queries
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -41,7 +42,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 
 1. Keep Windows typecheck/test/build green after each capability slice.
 2. Add process-session retention/recovery policy and event subscriptions.
-3. Add Windows registry/task-scheduler/event-log/firewall capabilities.
+3. Add verified Windows registry/task/firewall mutation controls and richer event subscriptions.
 4. Expand file metadata and conflict-safe patch semantics where useful.
 5. Add provider health/latency scoring and mutation-aware failover policy.
 6. Design production ChatGPT authentication before public deployment.

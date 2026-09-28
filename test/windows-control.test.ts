@@ -54,3 +54,56 @@ test(
     );
   },
 );
+
+test(
+  'windows registry, tasks, event log, and firewall tools return structured data',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const registry = (await executeWindowsCapability(
+      'windows.registry.read',
+      {
+        hive: 'HKCU',
+        path: 'Software',
+        include_subkeys: true,
+        limit: 10,
+      },
+    )) as {
+      data: {
+        hive: string;
+        path: string;
+        values: unknown[];
+        subkeys: string[];
+      };
+    };
+    assert.equal(registry.data.hive, 'HKCU');
+    assert.equal(registry.data.path, 'Software');
+    assert.ok(Array.isArray(registry.data.values));
+    assert.ok(Array.isArray(registry.data.subkeys));
+
+    const tasks = (await executeWindowsCapability('windows.tasks', {
+      state: 'all',
+      limit: 5,
+    })) as { data: { tasks: unknown[] } };
+    assert.ok(Array.isArray(tasks.data.tasks));
+
+    const events = (await executeWindowsCapability(
+      'windows.eventlog.query',
+      {
+        log_name: 'System',
+        since_minutes: 1440,
+        max_events: 5,
+      },
+    )) as { data: { events: unknown[] } };
+    assert.ok(Array.isArray(events.data.events));
+
+    const firewall = (await executeWindowsCapability(
+      'windows.firewall.rules',
+      {
+        direction: 'all',
+        action: 'all',
+        limit: 5,
+      },
+    )) as { data: { rules: unknown[] } };
+    assert.ok(Array.isArray(firewall.data.rules));
+  },
+);

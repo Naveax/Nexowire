@@ -272,6 +272,167 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'windows_registry_read',
+    {
+      title: 'Read Windows registry',
+      description:
+        'Read values and optional subkey names from one Windows registry key without shell table parsing.',
+      inputSchema: {
+        ...targetFields,
+        hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+        path: z.string().max(4096).optional(),
+        name: z.string().max(1024).optional(),
+        include_subkeys: z.boolean().optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hive,
+      path,
+      name,
+      include_subkeys,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.registry.read',
+        {
+          hive,
+          ...(path !== undefined ? { path } : {}),
+          ...(name !== undefined ? { name } : {}),
+          ...(include_subkeys !== undefined ? { include_subkeys } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'windows_tasks',
+    {
+      title: 'List Windows scheduled tasks',
+      description:
+        'Read structured scheduled-task name, path, state, author, description, and URI.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(512).optional(),
+        path: z.string().min(1).max(2048).optional(),
+        state: z
+          .enum(['all', 'ready', 'running', 'disabled', 'queued', 'unknown'])
+          .optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, name, path, state, limit }) =>
+      await execute(
+        ctx,
+        'windows.tasks',
+        {
+          ...(name ? { name } : {}),
+          ...(path ? { path } : {}),
+          ...(state ? { state } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_eventlog_query',
+    {
+      title: 'Query Windows Event Log',
+      description:
+        'Query recent Windows events by log, provider, level, time window, and maximum result count.',
+      inputSchema: {
+        ...targetFields,
+        log_name: z.string().min(1).max(512).optional(),
+        provider: z.string().min(1).max(512).optional(),
+        level: z
+          .enum([
+            'all',
+            'critical',
+            'error',
+            'warning',
+            'information',
+            'verbose',
+          ])
+          .optional(),
+        since_minutes: z.number().int().min(1).max(43_200).optional(),
+        max_events: z.number().int().min(1).max(2000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      log_name,
+      provider,
+      level,
+      since_minutes,
+      max_events,
+    }) =>
+      await execute(
+        ctx,
+        'windows.eventlog.query',
+        {
+          ...(log_name ? { log_name } : {}),
+          ...(provider ? { provider } : {}),
+          ...(level ? { level } : {}),
+          ...(since_minutes ? { since_minutes } : {}),
+          ...(max_events ? { max_events } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_firewall_rules',
+    {
+      title: 'List Windows firewall rules',
+      description:
+        'Read structured Windows firewall rules with optional name, direction, action, and enabled filters.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(512).optional(),
+        direction: z.enum(['all', 'inbound', 'outbound']).optional(),
+        action: z.enum(['all', 'allow', 'block']).optional(),
+        enabled: z.boolean().optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      direction,
+      action,
+      enabled,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.firewall.rules',
+        {
+          ...(name ? { name } : {}),
+          ...(direction ? { direction } : {}),
+          ...(action ? { action } : {}),
+          ...(enabled !== undefined ? { enabled } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
   server.registerTool(
     'shell_exec',
     {

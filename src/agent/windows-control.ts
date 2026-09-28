@@ -26,6 +26,37 @@ const ServiceControlInputSchema = z.object({
   startup_type: z.enum(['automatic', 'manual', 'disabled']).optional(),
 });
 
+const RegistryReadInputSchema = z.object({
+  hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+  path: z.string().max(4096).default(''),
+  name: z.string().max(1024).optional(),
+  include_subkeys: z.boolean().default(true),
+  limit: z.number().int().min(1).max(5000).default(500),
+});
+
+const ScheduledTaskListInputSchema = z.object({
+  name: z.string().min(1).max(512).optional(),
+  path: z.string().min(1).max(2048).optional(),
+  state: z.enum(['all', 'ready', 'running', 'disabled', 'queued', 'unknown']).default('all'),
+  limit: z.number().int().min(1).max(5000).default(500),
+});
+
+const EventLogQueryInputSchema = z.object({
+  log_name: z.string().min(1).max(512).default('System'),
+  provider: z.string().min(1).max(512).optional(),
+  level: z.enum(['all', 'critical', 'error', 'warning', 'information', 'verbose']).default('all'),
+  since_minutes: z.number().int().min(1).max(43_200).default(60),
+  max_events: z.number().int().min(1).max(2000).default(100),
+});
+
+const FirewallRulesInputSchema = z.object({
+  name: z.string().min(1).max(512).optional(),
+  direction: z.enum(['all', 'inbound', 'outbound']).default('all'),
+  action: z.enum(['all', 'allow', 'block']).default('all'),
+  enabled: z.boolean().optional(),
+  limit: z.number().int().min(1).max(5000).default(500),
+});
+
 interface PowerShellResult {
   stdout: string;
   stderr: string;
@@ -301,6 +332,148 @@ $final = Get-CimInstance Win32_Service -Filter ("Name='" + $name.Replace("'", "'
 } | ConvertTo-Json -Depth 4 -Compress
 `;
 
+const registryReadScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$base = switch ([string]$inputData.hive) {
+  'HKCU' { 'Registry::HKEY_CURRENT_USER' }
+  'HKLM' { 'Registry::HKEY_LOCAL_MACHINE' }
+  'HKCR' { 'Registry::HKEY_CLASSES_ROOT' }
+  'HKU'  { 'Registry::HKEY_USERS' }
+  'HKCC' { 'Registry::HKEY_CURRENT_CONFIG' }
+}
+$target = if ($inputData.path) { Join-Path $base ([string]$inputData.path) } else { $base }
+$item = Get-Item -LiteralPath $target -ErrorAction Stop
+$names = @($item.GetValueNames())
+if ($null -ne $inputData.name) {
+  $names = @($names | Where-Object { $_ -eq [string]$inputData.name })
+}
+$values = @($names | Select-Object -First ([int]$inputData.limit) | ForEach-Object {
+  $valueName = [string]$_
+  $kind = [string]$item.GetValueKind($valueName)
+  $value = $item.GetValue($valueName, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+  if ($value -is [byte[]]) { $value = [Convert]::ToBase64String($value) }
+  [pscustomobject]@{
+    name = $valueName
+    kind = $kind
+    value = $value
+  }
+})
+$subkeys = @()
+if ($inputData.include_subkeys) {
+  $subkeys = @($item.GetSubKeyNames() | Sort-Object | Select-Object -First ([int]$inputData.limit))
+}
+[pscustomobject]@{
+  hive = [string]$inputData.hive
+  path = [string]$inputData.path
+  values = @($values)
+  subkeys = @($subkeys)
+} | ConvertTo-Json -Depth 8 -Compress
+`;
+
+const scheduledTasksScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$items = @(Get-ScheduledTask -ErrorAction Stop)
+if ($inputData.name) {
+  $needle = [string]$inputData.name
+  $items = @($items | Where-Object { $_.TaskName -like $needle -or $_.TaskName -like "*$needle*" })
+}
+if ($inputData.path) {
+  $taskPath = [string]$inputData.path
+  $items = @($items | Where-Object { $_.TaskPath -like $taskPath -or $_.TaskPath -like "*$taskPath*" })
+}
+if ($inputData.state -ne 'all') {
+  $wanted = switch ([string]$inputData.state) {
+    'ready' { 'Ready' }
+    'running' { 'Running' }
+    'disabled' { 'Disabled' }
+    'queued' { 'Queued' }
+    default { 'Unknown' }
+  }
+  $items = @($items | Where-Object { [string]$_.State -eq $wanted })
+}
+$result = @($items | Sort-Object TaskPath, TaskName | Select-Object -First ([int]$inputData.limit) | ForEach-Object {
+  [pscustomobject]@{
+    name = [string]$_.TaskName
+    path = [string]$_.TaskPath
+    state = [string]$_.State
+    author = [string]$_.Author
+    description = [string]$_.Description
+    uri = [string]$_.URI
+  }
+})
+@($result) | ConvertTo-Json -Depth 6 -Compress
+`;
+
+const eventLogQueryScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$filter = @{
+  LogName = [string]$inputData.log_name
+  StartTime = (Get-Date).AddMinutes(-[int]$inputData.since_minutes)
+}
+if ($inputData.provider) { $filter.ProviderName = [string]$inputData.provider }
+if ($inputData.level -ne 'all') {
+  $filter.Level = switch ([string]$inputData.level) {
+    'critical' { 1 }
+    'error' { 2 }
+    'warning' { 3 }
+    'information' { 4 }
+    'verbose' { 5 }
+  }
+}
+$events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents ([int]$inputData.max_events) -ErrorAction SilentlyContinue | ForEach-Object {
+  [pscustomobject]@{
+    id = [int]$_.Id
+    recordId = if ($null -ne $_.RecordId) { [long]$_.RecordId } else { $null }
+    timeCreated = if ($_.TimeCreated) { ([datetime]$_.TimeCreated).ToUniversalTime().ToString('o') } else { $null }
+    level = [string]$_.LevelDisplayName
+    provider = [string]$_.ProviderName
+    logName = [string]$_.LogName
+    machineName = [string]$_.MachineName
+    message = if ($_.Message) { [string]$_.Message } else { $null }
+  }
+})
+@($events) | ConvertTo-Json -Depth 6 -Compress
+`;
+
+const firewallRulesScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$items = @(Get-NetFirewallRule -ErrorAction Stop)
+if ($inputData.name) {
+  $needle = [string]$inputData.name
+  $items = @($items | Where-Object { $_.Name -like $needle -or $_.DisplayName -like "*$needle*" })
+}
+if ($inputData.direction -ne 'all') {
+  $wantedDirection = if ($inputData.direction -eq 'inbound') { 'Inbound' } else { 'Outbound' }
+  $items = @($items | Where-Object { [string]$_.Direction -eq $wantedDirection })
+}
+if ($inputData.action -ne 'all') {
+  $wantedAction = if ($inputData.action -eq 'allow') { 'Allow' } else { 'Block' }
+  $items = @($items | Where-Object { [string]$_.Action -eq $wantedAction })
+}
+if ($null -ne $inputData.enabled) {
+  $wantedEnabled = if ([bool]$inputData.enabled) { 'True' } else { 'False' }
+  $items = @($items | Where-Object { [string]$_.Enabled -eq $wantedEnabled })
+}
+$result = @($items | Sort-Object DisplayName | Select-Object -First ([int]$inputData.limit) | ForEach-Object {
+  [pscustomobject]@{
+    name = [string]$_.Name
+    displayName = [string]$_.DisplayName
+    description = [string]$_.Description
+    enabled = [string]$_.Enabled
+    direction = [string]$_.Direction
+    action = [string]$_.Action
+    profile = [string]$_.Profile
+    status = [string]$_.Status
+    policyStoreSourceType = [string]$_.PolicyStoreSourceType
+  }
+})
+@($result) | ConvertTo-Json -Depth 6 -Compress
+`;
+
 export async function executeWindowsCapability(
   capability: Capability,
   input: unknown,
@@ -345,6 +518,45 @@ export async function executeWindowsCapability(
           parsed,
           60_000,
         ),
+      };
+    }
+    case 'windows.registry.read': {
+      const parsed = RegistryReadInputSchema.parse(input);
+      return {
+        data: await runPowerShellJson<Record<string, unknown>>(
+          registryReadScript,
+          parsed,
+        ),
+      };
+    }
+    case 'windows.tasks': {
+      const parsed = ScheduledTaskListInputSchema.parse(input);
+      return {
+        data: {
+          tasks: asArray(
+            await runPowerShellJson<unknown | unknown[]>(scheduledTasksScript, parsed),
+          ),
+        },
+      };
+    }
+    case 'windows.eventlog.query': {
+      const parsed = EventLogQueryInputSchema.parse(input);
+      return {
+        data: {
+          events: asArray(
+            await runPowerShellJson<unknown | unknown[]>(eventLogQueryScript, parsed, 45_000),
+          ),
+        },
+      };
+    }
+    case 'windows.firewall.rules': {
+      const parsed = FirewallRulesInputSchema.parse(input);
+      return {
+        data: {
+          rules: asArray(
+            await runPowerShellJson<unknown | unknown[]>(firewallRulesScript, parsed, 45_000),
+          ),
+        },
       };
     }
     default:

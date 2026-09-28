@@ -789,6 +789,10 @@ export async function executeCapability(
     case 'windows.services':
     case 'windows.network.snapshot':
     case 'windows.service.control':
+    case 'windows.registry.read':
+    case 'windows.tasks':
+    case 'windows.eventlog.query':
+    case 'windows.firewall.rules':
       return await executeWindowsCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);

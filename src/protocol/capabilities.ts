@@ -23,6 +23,10 @@ export const CORE_CAPABILITIES = [
   'windows.services',
   'windows.network.snapshot',
   'windows.service.control',
+  'windows.registry.read',
+  'windows.tasks',
+  'windows.eventlog.query',
+  'windows.firewall.rules',
 ] as const;
 
 export type CoreCapability = (typeof CORE_CAPABILITIES)[number];
