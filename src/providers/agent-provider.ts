@@ -82,6 +82,14 @@ export class AgentProvider implements Provider {
               ? error.code
               : 'PROVIDER_ERROR',
           message: error instanceof Error ? error.message : String(error),
+          retryable:
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            typeof error.code === 'string' &&
+            ['AGENT_OFFLINE', 'AGENT_TIMEOUT', 'AGENT_DISCONNECTED'].includes(
+              error.code,
+            ),
         },
         meta: {
           providerId: this.id,

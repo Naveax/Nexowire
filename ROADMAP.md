@@ -42,8 +42,8 @@
 
 - SentinelX adapter where supported
 - Remote Desktop Commander adapter where supported
-- provider health/latency scoring
-- mutation-aware failover
+- [x] provider health/latency ranking
+- [x] mutation-aware failover with automatic replay blocked on unknown mutation state
 - operation IDs and idempotency records
 - multi-account provider profiles
 
