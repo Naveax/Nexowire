@@ -137,6 +137,141 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       await execute(ctx, 'machine.snapshot', {}, device_id, provider_id),
   );
 
+
+  server.registerTool(
+    'windows_processes',
+    {
+      title: 'List Windows processes',
+      description:
+        'Read structured Windows process metadata without parsing formatted console tables.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(260).optional(),
+        pid: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(2000).optional(),
+        include_command_line: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      pid,
+      limit,
+      include_command_line,
+    }) =>
+      await execute(
+        ctx,
+        'windows.processes',
+        {
+          ...(name ? { name } : {}),
+          ...(pid !== undefined ? { pid } : {}),
+          ...(limit ? { limit } : {}),
+          ...(include_command_line !== undefined
+            ? { include_command_line }
+            : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'windows_services',
+    {
+      title: 'List Windows services',
+      description:
+        'Read structured Windows service state, startup mode, process id, account, and binary path.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(260).optional(),
+        state: z.enum(['running', 'stopped', 'paused', 'all']).optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, name, state, limit }) =>
+      await execute(
+        ctx,
+        'windows.services',
+        {
+          ...(name ? { name } : {}),
+          ...(state ? { state } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'windows_network_snapshot',
+    {
+      title: 'Windows network snapshot',
+      description:
+        'Read adapters, preferred addresses, DNS servers, default routes, and optionally TCP connections.',
+      inputSchema: {
+        ...targetFields,
+        include_connections: z.boolean().optional(),
+        connection_limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      include_connections,
+      connection_limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.network.snapshot',
+        {
+          ...(include_connections !== undefined
+            ? { include_connections }
+            : {}),
+          ...(connection_limit ? { connection_limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_service_control',
+    {
+      title: 'Control Windows service',
+      description:
+        'Start, stop, restart, or change startup type for one Windows service, then return verified final state.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(260),
+        action: z.enum(['start', 'stop', 'restart', 'set_startup']),
+        startup_type: z
+          .enum(['automatic', 'manual', 'disabled'])
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      action,
+      startup_type,
+    }) =>
+      await execute(
+        ctx,
+        'windows.service.control',
+        {
+          name,
+          action,
+          ...(startup_type ? { startup_type } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
   server.registerTool(
     'shell_exec',
     {

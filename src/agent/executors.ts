@@ -5,6 +5,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
 import { PathPolicy, PathDeniedError } from './path-policy.js';
+import { executeWindowsCapability } from './windows-control.js';
 import type { ProcessManager } from './process-manager.js';
 
 const ShellExecInputSchema = z.object({
@@ -784,6 +785,11 @@ export async function executeCapability(
       return await machineSnapshot(policy);
     case 'workspace.snapshot':
       return await workspaceSnapshot(input, policy);
+    case 'windows.processes':
+    case 'windows.services':
+    case 'windows.network.snapshot':
+    case 'windows.service.control':
+      return await executeWindowsCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }
