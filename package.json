@@ -1,0 +1,35 @@
+{
+  "name": "nexowire",
+  "version": "0.1.0-dev.1",
+  "private": true,
+  "type": "module",
+  "description": "AI-native remote computer control hub for ChatGPT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --import tsx test/**/*.test.ts",
+    "check": "npm run typecheck && npm test",
+    "dev": "tsx src/cli.ts",
+    "dev:http": "tsx src/cli.ts http",
+    "dev:stdio": "tsx src/cli.ts stdio",
+    "dev:agent": "tsx src/cli.ts agent",
+    "start": "node dist/src/cli.js http",
+    "start:agent": "node dist/src/cli.js agent"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "ws": "^8.18.0",
+    "zod": "^4.1.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "@types/express": "^5.0.0"
+  }
+}

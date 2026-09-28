@@ -73,4 +73,12 @@ Do not expose a development instance directly to the public Internet.
 
 ## Development
 
-The repository is being bootstrapped. Build and test commands will be documented once the initial workspace is committed.
+```bash
+npm install
+npm run check
+npm run build
+```
+
+Run the hub with `npm run dev:http` and the native agent with `npm run dev:agent`. The default MCP endpoint is `http://127.0.0.1:43110/mcp`; the default agent WebSocket endpoint is `ws://127.0.0.1:43110/agent`.
+
+The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, bounded text search, operation audit metadata, workspace checkpoints, lazy skills, and provider routing. See `ROADMAP.md` for what is still intentionally unfinished.
