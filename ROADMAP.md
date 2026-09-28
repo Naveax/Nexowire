@@ -28,6 +28,7 @@
 - registry and environment
 - network diagnostics
 - [x] batch file reads and bounded text search
+- [x] SHA-256 file revisions and conflict-safe exact patching
 - compact system health snapshots
 - richer Windows registry/task/firewall mutations and event subscriptions
 

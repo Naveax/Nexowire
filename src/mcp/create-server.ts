@@ -799,9 +799,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         path: z.string().min(1).max(4096),
         encoding: z.enum(['utf8', 'base64']).optional(),
         max_bytes: z.number().int().min(1).max(16_777_216).optional(),
+        include_sha256: z.boolean().optional(),
       },
     },
-    async ({ device_id, provider_id, path, encoding, max_bytes }) =>
+    async ({ device_id, provider_id, path, encoding, max_bytes, include_sha256 }) =>
       await execute(
         ctx,
         'files.read',
@@ -809,6 +810,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           path,
           ...(encoding ? { encoding } : {}),
           ...(max_bytes ? { max_bytes } : {}),
+          ...(include_sha256 !== undefined ? { include_sha256 } : {}),
         },
         device_id,
         provider_id,
@@ -827,9 +829,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         encoding: z.enum(['utf8', 'base64']).optional(),
         max_bytes_each: z.number().int().min(1).max(16_777_216).optional(),
         max_total_bytes: z.number().int().min(1024).max(67_108_864).optional(),
+        include_sha256: z.boolean().optional(),
       },
     },
-    async ({ device_id, provider_id, paths, encoding, max_bytes_each, max_total_bytes }) =>
+    async ({ device_id, provider_id, paths, encoding, max_bytes_each, max_total_bytes, include_sha256 }) =>
       await execute(
         ctx,
         'files.read_many',
@@ -838,6 +841,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(encoding ? { encoding } : {}),
           ...(max_bytes_each ? { max_bytes_each } : {}),
           ...(max_total_bytes ? { max_total_bytes } : {}),
+          ...(include_sha256 !== undefined ? { include_sha256 } : {}),
         },
         device_id,
         provider_id,
@@ -895,6 +899,28 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     },
     async ({ device_id, provider_id, path }) =>
       await execute(ctx, 'files.stat', { path }, device_id, provider_id),
+  );
+
+  server.registerTool(
+    'file_hash',
+    {
+      title: 'Hash file',
+      description:
+        'Compute a SHA-256 digest for one allowed file so later edits can detect stale content.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        max_bytes: z.number().int().min(1).max(268_435_456).optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, max_bytes }) =>
+      await execute(
+        ctx,
+        'files.hash',
+        { path, ...(max_bytes ? { max_bytes } : {}) },
+        device_id,
+        provider_id,
+      ),
   );
 
   server.registerTool(
@@ -1021,7 +1047,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Patch text file',
       description:
-        'Apply exact text replacements atomically. Each operation checks the expected occurrence count before writing.',
+        'Apply exact text replacements with occurrence-count and optional SHA-256 stale-read checks before writing.',
       inputSchema: {
         ...targetFields,
         path: z.string().min(1).max(4096),
@@ -1036,9 +1062,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           .min(1)
           .max(100),
         max_bytes: z.number().int().min(1).max(16_777_216).optional(),
+        expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
       },
     },
-    async ({ device_id, provider_id, path, operations, max_bytes }) =>
+    async ({ device_id, provider_id, path, operations, max_bytes, expected_sha256 }) =>
       await execute(
         ctx,
         'files.patch',
@@ -1046,6 +1073,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           path,
           operations,
           ...(max_bytes ? { max_bytes } : {}),
+          ...(expected_sha256 ? { expected_sha256 } : {}),
         },
         device_id,
         provider_id,
