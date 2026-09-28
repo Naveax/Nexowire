@@ -20,4 +20,4 @@ Future providers implement the same interface without adding duplicate ChatGPT-f
 
 ## Routing
 
-The bootstrap registry sorts by provider priority, target availability, and capability. Later milestones add latency/health scoring, mutation policy, and operation idempotency.
+The registry filters by target/capability, checks provider health before execution, ranks equal-priority candidates by reported latency, and automatically fails over retryable **read-only** operations. Once a mutation has been sent, an ambiguous disconnect or provider exception becomes `MUTATION_STATE_UNKNOWN`; Nexowire deliberately refuses to replay it through another provider until state is verified. Explicit idempotency records remain a later milestone.

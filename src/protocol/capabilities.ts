@@ -46,3 +46,26 @@ export function capabilitiesForPlatform(platform: NodeJS.Platform): string[] {
     return true;
   });
 }
+
+export const READ_ONLY_CAPABILITIES = new Set<string>([
+  'machine.snapshot',
+  'process.read',
+  'process.list',
+  'files.read',
+  'files.read_many',
+  'files.stat',
+  'files.list',
+  'search.text',
+  'workspace.snapshot',
+  'windows.processes',
+  'windows.services',
+  'windows.network.snapshot',
+  'windows.registry.read',
+  'windows.tasks',
+  'windows.eventlog.query',
+  'windows.firewall.rules',
+]);
+
+export function isReadOnlyCapability(capability: string): boolean {
+  return READ_ONLY_CAPABILITIES.has(capability);
+}

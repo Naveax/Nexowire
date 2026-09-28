@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/windows-control`
+Active branch: `feat/provider-safety`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -30,6 +30,7 @@ Implemented:
 - full MCP -> provider -> WebSocket native-agent integration coverage
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
+- provider health checks, equal-priority latency ranking, read-only retry failover, and mutation replay protection
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -44,7 +45,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 2. Add process-session retention/recovery policy and event subscriptions.
 3. Add verified Windows registry/task/firewall mutation controls and richer event subscriptions.
 4. Expand file metadata and conflict-safe patch semantics where useful.
-5. Add provider health/latency scoring and mutation-aware failover policy.
+5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Design production ChatGPT authentication before public deployment.
 7. Add GUI accessibility/screenshot/browser layers after structured OS control is mature.
 

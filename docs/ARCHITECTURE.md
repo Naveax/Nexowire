@@ -21,7 +21,7 @@ A target can eventually be reachable through more than one provider. The provide
 - stateless Streamable HTTP MCP endpoint
 - stdio MCP mode for local development
 - outbound native-agent WebSocket transport
-- provider registry with deterministic priority and exception failover
+- provider registry with priority, health/latency ranking, read-only failover, and mutation replay protection
 - PowerShell/cmd/bash shell execution
 - structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus service control
 - interactive process sessions with incremental output, stdin, stop, and list
