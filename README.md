@@ -81,4 +81,4 @@ npm run build
 
 Run the hub with `npm run dev:http` and the native agent with `npm run dev:agent`. The default MCP endpoint is `http://127.0.0.1:43110/mcp`; the default agent WebSocket endpoint is `ws://127.0.0.1:43110/agent`.
 
-The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, workspace checkpoints, lazy skills, and provider routing. See `ROADMAP.md` for what is still intentionally unfinished.
+The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, workspace detection/checks, workspace checkpoints, lazy skills, and provider routing. See `ROADMAP.md` for what is still intentionally unfinished.

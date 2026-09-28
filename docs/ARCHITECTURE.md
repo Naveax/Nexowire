@@ -29,6 +29,7 @@ A target can eventually be reachable through more than one provider. The provide
 - allowlisted file read/write/list plus batched reads, SHA-256 revision identities, conflict-safe exact patching, and bounded text search
 - machine and Git workspace snapshots
 - persistent workspace checkpoints
+- structured workspace detection and bounded parallel check execution
 - operation IDs and persistent payload-free audit metadata
 - lazy skill discovery
 

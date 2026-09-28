@@ -110,6 +110,23 @@ const WorkspaceSnapshotInputSchema = z.object({
   path: z.string().min(1).max(4096),
 });
 
+const WorkspaceDetectInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+});
+
+const WorkspaceChecksInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  checks: z.array(z.string().min(1).max(128)).min(1).max(8),
+  parallel: z.boolean().default(true),
+  timeout_ms: z.number().int().min(100).max(600_000).default(120_000),
+  max_output_bytes: z
+    .number()
+    .int()
+    .min(1024)
+    .max(16_777_216)
+    .default(2_097_152),
+});
+
 class FileConflictError extends Error {
   readonly code = 'FILE_CONFLICT';
 
@@ -780,6 +797,446 @@ async function machineSnapshot(policy: PathPolicy): Promise<unknown> {
   };
 }
 
+
+interface WorkspaceCheckSpec {
+  id: string;
+  label: string;
+  kind: string;
+  executable: string;
+  args: string[];
+  cwd: string;
+  executableAvailable: boolean;
+}
+
+interface WorkspaceDetection {
+  requestedPath: string;
+  root: string;
+  gitRoot: boolean;
+  kinds: string[];
+  manifests: string[];
+  packageManager?: string;
+  nodeScripts?: string[];
+  checkSpecs: WorkspaceCheckSpec[];
+}
+
+async function resolveWorkspaceRoot(cwd: string): Promise<{
+  root: string;
+  gitRoot: boolean;
+}> {
+  if (!hasExecutable('git')) return { root: cwd, gitRoot: false };
+
+  try {
+    const result = await runProcess(
+      'git',
+      ['-C', cwd, 'rev-parse', '--show-toplevel'],
+      { timeoutMs: 10_000, maxOutputBytes: 131_072 },
+    );
+    if (result.exitCode === 0 && result.stdout.trim()) {
+      return { root: result.stdout.trim(), gitRoot: true };
+    }
+  } catch {
+    // Non-Git workspaces are still valid workspaces.
+  }
+  return { root: cwd, gitRoot: false };
+}
+
+function commandDisplay(executable: string, args: readonly string[]): string {
+  const quote = (value: string): string =>
+    /[\s"]/u.test(value) ? JSON.stringify(value) : value;
+  return [executable, ...args].map(quote).join(' ');
+}
+
+function nodePackageManagerExecutable(manager: string): string {
+  if (
+    process.platform === 'win32' &&
+    ['npm', 'pnpm', 'yarn'].includes(manager)
+  ) {
+    return manager + '.cmd';
+  }
+  return manager;
+}
+
+function pushWorkspaceCheck(
+  checks: WorkspaceCheckSpec[],
+  spec: Omit<WorkspaceCheckSpec, 'executableAvailable'>,
+): void {
+  checks.push({
+    ...spec,
+    executableAvailable: hasExecutable(spec.executable),
+  });
+}
+
+async function detectWorkspaceInternal(
+  input: unknown,
+  policy: PathPolicy,
+): Promise<WorkspaceDetection> {
+  const parsed = WorkspaceDetectInputSchema.parse(input);
+  const requestedPath = await policy.resolveExisting(parsed.path);
+  const requestedStat = await fs.stat(requestedPath);
+  if (!requestedStat.isDirectory()) {
+    throw new Error('Workspace path is not a directory.');
+  }
+
+  const resolved = await resolveWorkspaceRoot(requestedPath);
+  const root = await policy.resolveExisting(resolved.root);
+  const entries = await fs.readdir(root, { withFileTypes: true });
+  const names = new Set(entries.map((entry) => entry.name));
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort();
+  const dirs = new Set(
+    entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
+  );
+
+  const kinds: string[] = [];
+  const manifests: string[] = [];
+  const checkSpecs: WorkspaceCheckSpec[] = [];
+  let packageManager: string | undefined;
+  let nodeScripts: string[] | undefined;
+
+  if (names.has('package.json')) {
+    kinds.push('node');
+    manifests.push('package.json');
+    const raw = await fs.readFile(path.join(root, 'package.json'), 'utf8');
+    const pkg = JSON.parse(raw) as {
+      packageManager?: unknown;
+      scripts?: unknown;
+    };
+
+    if (typeof pkg.packageManager === 'string') {
+      const candidate = pkg.packageManager.split('@')[0]?.trim();
+      if (candidate) packageManager = candidate;
+    }
+    packageManager ??= names.has('bun.lock') || names.has('bun.lockb')
+      ? 'bun'
+      : names.has('pnpm-lock.yaml')
+        ? 'pnpm'
+        : names.has('yarn.lock')
+          ? 'yarn'
+          : 'npm';
+
+    const scripts =
+      typeof pkg.scripts === 'object' && pkg.scripts !== null
+        ? (pkg.scripts as Record<string, unknown>)
+        : {};
+    nodeScripts = Object.entries(scripts)
+      .filter(([, value]) => typeof value === 'string')
+      .map(([name]) => name)
+      .sort();
+
+    const checkNames = [
+      'typecheck',
+      'test',
+      'build',
+      'lint',
+      'check',
+      'format:check',
+      'format-check',
+    ];
+    const managerExecutable = nodePackageManagerExecutable(packageManager);
+    const managerAvailable = hasExecutable(managerExecutable);
+    for (const scriptName of checkNames) {
+      if (typeof scripts[scriptName] !== 'string') continue;
+
+      if (
+        process.platform === 'win32' &&
+        ['npm', 'pnpm', 'yarn'].includes(packageManager)
+      ) {
+        checkSpecs.push({
+          id: 'node:' + scriptName,
+          label: 'Node script ' + scriptName,
+          kind: 'node',
+          executable: process.env.ComSpec || 'cmd.exe',
+          args: [
+            '/D',
+            '/S',
+            '/C',
+            `${managerExecutable} run ${scriptName}`,
+          ],
+          cwd: root,
+          executableAvailable: managerAvailable,
+        });
+        continue;
+      }
+
+      checkSpecs.push({
+        id: 'node:' + scriptName,
+        label: 'Node script ' + scriptName,
+        kind: 'node',
+        executable: managerExecutable,
+        args: ['run', scriptName],
+        cwd: root,
+        executableAvailable: managerAvailable,
+      });
+    }
+  }
+
+  if (names.has('Cargo.toml')) {
+    kinds.push('rust');
+    manifests.push('Cargo.toml');
+    for (const [id, args, label] of [
+      ['rust:check', ['check'], 'Cargo check'],
+      ['rust:test', ['test'], 'Cargo test'],
+      ['rust:build', ['build'], 'Cargo build'],
+    ] as const) {
+      pushWorkspaceCheck(checkSpecs, {
+        id,
+        label,
+        kind: 'rust',
+        executable: process.platform === 'win32' ? 'cargo.exe' : 'cargo',
+        args: [...args],
+        cwd: root,
+      });
+    }
+  }
+
+  if (names.has('go.mod')) {
+    kinds.push('go');
+    manifests.push('go.mod');
+    for (const [id, args, label] of [
+      ['go:test', ['test', './...'], 'Go test'],
+      ['go:vet', ['vet', './...'], 'Go vet'],
+      ['go:build', ['build', './...'], 'Go build'],
+    ] as const) {
+      pushWorkspaceCheck(checkSpecs, {
+        id,
+        label,
+        kind: 'go',
+        executable: process.platform === 'win32' ? 'go.exe' : 'go',
+        args: [...args],
+        cwd: root,
+      });
+    }
+  }
+
+  const solution = files.find((name) => name.toLowerCase().endsWith('.sln'));
+  const csproj = files.find((name) =>
+    name.toLowerCase().endsWith('.csproj'),
+  );
+  if (solution || csproj) {
+    kinds.push('dotnet');
+    if (solution) manifests.push(solution);
+    if (csproj) manifests.push(csproj);
+    const project = solution ?? csproj!;
+    for (const [id, verb, label] of [
+      ['dotnet:build', 'build', '.NET build'],
+      ['dotnet:test', 'test', '.NET test'],
+    ] as const) {
+      pushWorkspaceCheck(checkSpecs, {
+        id,
+        label,
+        kind: 'dotnet',
+        executable: process.platform === 'win32' ? 'dotnet.exe' : 'dotnet',
+        args: [verb, project],
+        cwd: root,
+      });
+    }
+  }
+
+  const pythonMarkers = [
+    'pyproject.toml',
+    'requirements.txt',
+    'setup.py',
+    'setup.cfg',
+  ].filter((name) => names.has(name));
+  if (pythonMarkers.length > 0) {
+    kinds.push('python');
+    manifests.push(...pythonMarkers);
+
+    const hasTests =
+      dirs.has('tests') ||
+      names.has('pytest.ini') ||
+      names.has('tox.ini') ||
+      names.has('pyproject.toml');
+    if (hasTests && hasExecutable('pytest')) {
+      pushWorkspaceCheck(checkSpecs, {
+        id: 'python:pytest',
+        label: 'Pytest',
+        kind: 'python',
+        executable:
+          process.platform === 'win32' ? 'pytest.exe' : 'pytest',
+        args: [],
+        cwd: root,
+      });
+    }
+    if (
+      (names.has('ruff.toml') ||
+        names.has('.ruff.toml') ||
+        names.has('pyproject.toml')) &&
+      hasExecutable('ruff')
+    ) {
+      pushWorkspaceCheck(checkSpecs, {
+        id: 'python:ruff',
+        label: 'Ruff check',
+        kind: 'python',
+        executable: process.platform === 'win32' ? 'ruff.exe' : 'ruff',
+        args: ['check', '.'],
+        cwd: root,
+      });
+    }
+    if (
+      (names.has('mypy.ini') ||
+        names.has('.mypy.ini') ||
+        names.has('pyproject.toml')) &&
+      hasExecutable('mypy')
+    ) {
+      pushWorkspaceCheck(checkSpecs, {
+        id: 'python:mypy',
+        label: 'Mypy',
+        kind: 'python',
+        executable: process.platform === 'win32' ? 'mypy.exe' : 'mypy',
+        args: ['.'],
+        cwd: root,
+      });
+    }
+  }
+
+  if (names.has('CMakeLists.txt')) {
+    kinds.push('cmake');
+    manifests.push('CMakeLists.txt');
+  }
+
+  return {
+    requestedPath,
+    root,
+    gitRoot: resolved.gitRoot,
+    kinds: [...new Set(kinds)],
+    manifests: [...new Set(manifests)],
+    ...(packageManager ? { packageManager } : {}),
+    ...(nodeScripts ? { nodeScripts } : {}),
+    checkSpecs,
+  };
+}
+
+async function workspaceDetect(
+  input: unknown,
+  policy: PathPolicy,
+): Promise<unknown> {
+  const detection = await detectWorkspaceInternal(input, policy);
+  return {
+    data: {
+      requestedPath: detection.requestedPath,
+      root: detection.root,
+      gitRoot: detection.gitRoot,
+      kinds: detection.kinds,
+      manifests: detection.manifests,
+      ...(detection.packageManager
+        ? { packageManager: detection.packageManager }
+        : {}),
+      ...(detection.nodeScripts
+        ? { nodeScripts: detection.nodeScripts }
+        : {}),
+      availableChecks: detection.checkSpecs.map((check) => ({
+        id: check.id,
+        label: check.label,
+        kind: check.kind,
+        command: commandDisplay(check.executable, check.args),
+        executableAvailable: check.executableAvailable,
+      })),
+    },
+  };
+}
+
+async function workspaceChecks(
+  input: unknown,
+  policy: PathPolicy,
+): Promise<unknown> {
+  const parsed = WorkspaceChecksInputSchema.parse(input);
+  const detection = await detectWorkspaceInternal(
+    { path: parsed.path },
+    policy,
+  );
+  const byId = new Map(
+    detection.checkSpecs.map((check) => [check.id, check] as const),
+  );
+
+  const selected = parsed.checks.map((id) => {
+    const check = byId.get(id);
+    if (!check) {
+      throw new Error(
+        `Workspace check "${id}" is not available. Detect the workspace first and choose an advertised check id.`,
+      );
+    }
+    return check;
+  });
+
+  const runOne = async (check: WorkspaceCheckSpec) => {
+    const started = Date.now();
+    if (!check.executableAvailable) {
+      return {
+        id: check.id,
+        label: check.label,
+        kind: check.kind,
+        command: commandDisplay(check.executable, check.args),
+        ok: false,
+        exitCode: null,
+        stdout: '',
+        stderr: '',
+        truncated: false,
+        timedOut: false,
+        durationMs: 0,
+        error: `Executable is not available: ${check.executable}`,
+      };
+    }
+
+    try {
+      const result = await runProcess(check.executable, check.args, {
+        cwd: check.cwd,
+        timeoutMs: parsed.timeout_ms,
+        maxOutputBytes: parsed.max_output_bytes,
+      });
+      return {
+        id: check.id,
+        label: check.label,
+        kind: check.kind,
+        command: commandDisplay(check.executable, check.args),
+        ok: result.exitCode === 0 && !result.timedOut,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        truncated: result.truncated,
+        timedOut: result.timedOut,
+        durationMs: Date.now() - started,
+      };
+    } catch (error) {
+      return {
+        id: check.id,
+        label: check.label,
+        kind: check.kind,
+        command: commandDisplay(check.executable, check.args),
+        ok: false,
+        exitCode: null,
+        stdout: '',
+        stderr: '',
+        truncated: false,
+        timedOut: false,
+        durationMs: Date.now() - started,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
+  const results = parsed.parallel
+    ? await Promise.all(selected.map(runOne))
+    : await (async () => {
+        const output = [];
+        for (const check of selected) output.push(await runOne(check));
+        return output;
+      })();
+
+  return {
+    data: {
+      root: detection.root,
+      parallel: parsed.parallel,
+      ok: results.every((result) => result.ok),
+      passed: results.filter((result) => result.ok).length,
+      failed: results.filter((result) => !result.ok).length,
+      results,
+    },
+  };
+}
+
 async function workspaceSnapshot(
   input: unknown,
   policy: PathPolicy,
@@ -895,6 +1352,10 @@ export async function executeCapability(
       return await machineSnapshot(policy);
     case 'workspace.snapshot':
       return await workspaceSnapshot(input, policy);
+    case 'workspace.detect':
+      return await workspaceDetect(input, policy);
+    case 'workspace.checks':
+      return await workspaceChecks(input, policy);
     case 'windows.processes':
     case 'windows.services':
     case 'windows.network.snapshot':
