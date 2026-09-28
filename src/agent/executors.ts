@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,7 +72,7 @@ function appendLimited(
 }
 
 async function terminateProcessTree(
-  child: ChildProcessWithoutNullStreams,
+  child: ChildProcess,
 ): Promise<void> {
   if (!child.pid) return;
   if (process.platform === 'win32') {

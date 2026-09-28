@@ -1,5 +1,6 @@
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { NextFunction, Request, Response } from 'express';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type { NexowireConfig } from '../config.js';
 import { assertSafeRemoteBinding } from '../config.js';
@@ -19,7 +20,7 @@ export async function runHttpServer(
   assertSafeRemoteBinding(config);
   const app = createMcpExpressApp({ host: config.host });
 
-  app.get('/health', (_req, res) => {
+  app.get('/health', (_req: Request, res: Response) => {
     res.json({
       ok: true,
       service: 'nexowire',
@@ -28,7 +29,7 @@ export async function runHttpServer(
     });
   });
 
-  app.use('/mcp', (req, res, next) => {
+  app.use('/mcp', (req: Request, res: Response, next: NextFunction) => {
     if (
       config.mcpBearerToken &&
       bearer(req.headers.authorization) !== config.mcpBearerToken
@@ -39,7 +40,7 @@ export async function runHttpServer(
     next();
   });
 
-  app.post('/mcp', async (req, res) => {
+  app.post('/mcp', async (req: Request, res: Response) => {
     const mcp = createNexowireMcpServer(context);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -66,11 +67,11 @@ export async function runHttpServer(
     }
   });
 
-  app.get('/mcp', (_req, res) => {
+  app.get('/mcp', (_req: Request, res: Response) => {
     res.status(405).json({ error: 'method_not_allowed' });
   });
 
-  app.delete('/mcp', (_req, res) => {
+  app.delete('/mcp', (_req: Request, res: Response) => {
     res.status(405).json({ error: 'method_not_allowed' });
   });
 
