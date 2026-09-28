@@ -403,6 +403,176 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'file_stat',
+    {
+      title: 'File metadata',
+      description: 'Read metadata for a file, directory, or symlink inside the agent allowlist.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+      },
+    },
+    async ({ device_id, provider_id, path }) =>
+      await execute(ctx, 'files.stat', { path }, device_id, provider_id),
+  );
+
+  server.registerTool(
+    'file_mkdir',
+    {
+      title: 'Create directory',
+      description: 'Create a directory inside the agent allowlist.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        recursive: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, recursive }) =>
+      await execute(
+        ctx,
+        'files.mkdir',
+        { path, ...(recursive !== undefined ? { recursive } : {}) },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_copy',
+    {
+      title: 'Copy file or directory',
+      description: 'Copy a file or directory between allowed paths.',
+      inputSchema: {
+        ...targetFields,
+        source: z.string().min(1).max(4096),
+        destination: z.string().min(1).max(4096),
+        overwrite: z.boolean().optional(),
+        recursive: z.boolean().optional(),
+        create_parents: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      source,
+      destination,
+      overwrite,
+      recursive,
+      create_parents,
+    }) =>
+      await execute(
+        ctx,
+        'files.copy',
+        {
+          source,
+          destination,
+          ...(overwrite !== undefined ? { overwrite } : {}),
+          ...(recursive !== undefined ? { recursive } : {}),
+          ...(create_parents !== undefined ? { create_parents } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_move',
+    {
+      title: 'Move file or directory',
+      description: 'Move or rename a file or directory between allowed paths.',
+      inputSchema: {
+        ...targetFields,
+        source: z.string().min(1).max(4096),
+        destination: z.string().min(1).max(4096),
+        overwrite: z.boolean().optional(),
+        recursive: z.boolean().optional(),
+        create_parents: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      source,
+      destination,
+      overwrite,
+      recursive,
+      create_parents,
+    }) =>
+      await execute(
+        ctx,
+        'files.move',
+        {
+          source,
+          destination,
+          ...(overwrite !== undefined ? { overwrite } : {}),
+          ...(recursive !== undefined ? { recursive } : {}),
+          ...(create_parents !== undefined ? { create_parents } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_delete',
+    {
+      title: 'Delete file or directory',
+      description:
+        'Delete one allowed file or directory. Recursive directory deletion must be explicitly enabled.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        recursive: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, recursive }) =>
+      await execute(
+        ctx,
+        'files.delete',
+        { path, ...(recursive !== undefined ? { recursive } : {}) },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_patch',
+    {
+      title: 'Patch text file',
+      description:
+        'Apply exact text replacements atomically. Each operation checks the expected occurrence count before writing.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        operations: z
+          .array(
+            z.object({
+              old_text: z.string().min(1).max(1_048_576),
+              new_text: z.string().max(1_048_576),
+              expected_count: z.number().int().min(1).max(10_000).optional(),
+            }),
+          )
+          .min(1)
+          .max(100),
+        max_bytes: z.number().int().min(1).max(16_777_216).optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, operations, max_bytes }) =>
+      await execute(
+        ctx,
+        'files.patch',
+        {
+          path,
+          operations,
+          ...(max_bytes ? { max_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
   server.registerTool(
     'file_list',
     {
