@@ -12,6 +12,8 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 - File listing does not recurse through symbolic links.
 - Command output, command duration, file sizes, directory depth, search scope, and entry counts are bounded.
 - Audit records store operation metadata, not command input or file payload content.
+- Process-session persistence stores metadata only; command text, stdin, stdout, and stderr are not persisted.
+- Recovered live PIDs are marked orphaned and are not signaled automatically because PID reuse cannot be verified safely after restart.
 
 ## Important limitation
 

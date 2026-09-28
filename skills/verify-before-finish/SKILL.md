@@ -11,6 +11,7 @@ Completion requires evidence.
 
 - code: typecheck/build/tests and Git diff
 - process: process exists and remains alive long enough to be useful
+- recovered process session: distinguish interactive, exited, lost, and orphaned states
 - service: service reports the intended state
 - file: expected path/content/hash exists
 - network: endpoint or route is reachable

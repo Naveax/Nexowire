@@ -12,14 +12,16 @@
 - [x] Initial security boundaries
 - [x] End-to-end MCP -> provider -> native-agent integration test
 - [x] Interactive process sessions: start/read/write/stop/list
-- [ ] Durable process-session recovery across agent restart
+- [x] Persisted process-session metadata, orphan/lost recovery classification, retention, and prune
+- [ ] Fully reattachable durable process I/O across agent restart
 - [x] Operation IDs and persistent audit metadata
 - [ ] Structured event subscriptions
 - [ ] Public deployment authentication
 
 ## v0.2 - Computer control
 
-- richer process metadata, retention, and recovery policy
+- [x] process metadata retention/recovery policy and explicit prune
+- durable reattachable process I/O and richer event subscriptions
 - [x] structured process/service/network inspection and service control
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
 - registry/task/firewall mutation controls with verification

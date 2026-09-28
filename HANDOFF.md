@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/provider-safety`
+Active branch: `feat/process-resilience`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -19,6 +19,7 @@ Implemented:
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
 - WSL2 execution capability
 - interactive process sessions with incremental stdout/stderr, stdin, stop, and list
+- persisted process-session metadata, retention/prune, and orphan/lost recovery classification without persisting command/output payloads
 - allowlisted file read/write/list
 - machine snapshot and Git workspace snapshot
 - Streamable HTTP MCP and stdio MCP
@@ -42,7 +43,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 ## Immediate next work
 
 1. Keep Windows typecheck/test/build green after each capability slice.
-2. Add process-session retention/recovery policy and event subscriptions.
+2. Add fully reattachable durable process I/O and richer event subscriptions; current restart recovery is metadata/state-safe, not pipe reattachment.
 3. Add verified Windows registry/task/firewall mutation controls and richer event subscriptions.
 4. Expand file metadata and conflict-safe patch semantics where useful.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.

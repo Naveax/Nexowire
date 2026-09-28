@@ -101,6 +101,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   const tools = await client.listTools();
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_snapshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'process_start'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'process_prune'));
   assert.ok(tools.tools.some((tool) => tool.name === 'file_patch'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));

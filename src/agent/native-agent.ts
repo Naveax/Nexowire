@@ -47,7 +47,11 @@ export async function runNativeAgent(
   const token = env.NEXOWIRE_AGENT_TOKEN?.trim();
   const name = env.NEXOWIRE_DEVICE_NAME?.trim() || os.hostname();
   const policy = new PathPolicy(parseAllowedRoots(env.NEXOWIRE_ALLOWED_ROOTS));
-  const processes = new ProcessManager();
+  const processStateFile =
+    env.NEXOWIRE_PROCESS_STATE_FILE?.trim() ||
+    path.join(os.homedir(), '.nexowire', 'process-sessions.json');
+  const processes = new ProcessManager({ stateFile: processStateFile });
+  await processes.initialize();
 
   let stopped = false;
   let currentSocket: WebSocket | undefined;

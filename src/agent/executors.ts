@@ -757,6 +757,8 @@ export async function executeCapability(
       return { data: await requireProcesses(context).stop(input) };
     case 'process.list':
       return { data: requireProcesses(context).list() };
+    case 'process.prune':
+      return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
       return await executeWsl(input);
     case 'files.read':
