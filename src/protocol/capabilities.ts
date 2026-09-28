@@ -6,6 +6,7 @@ export const CORE_CAPABILITIES = [
   'process.write',
   'process.stop',
   'process.list',
+  'process.prune',
   'wsl.exec',
   'files.read',
   'files.read_many',

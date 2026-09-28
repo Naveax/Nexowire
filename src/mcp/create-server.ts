@@ -576,6 +576,35 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       await execute(ctx, 'process.list', {}, device_id, provider_id),
   );
 
+
+  server.registerTool(
+    'process_prune',
+    {
+      title: 'Prune process session history',
+      description:
+        'Remove exited/lost process-session history older than the requested age. Running or orphaned sessions are never pruned.',
+      inputSchema: {
+        ...targetFields,
+        older_than_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(2_592_000_000)
+          .optional(),
+      },
+    },
+    async ({ device_id, provider_id, older_than_ms }) =>
+      await execute(
+        ctx,
+        'process.prune',
+        {
+          ...(older_than_ms !== undefined ? { older_than_ms } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
   server.registerTool(
     'wsl_exec',
     {

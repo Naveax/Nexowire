@@ -24,7 +24,7 @@ A target can eventually be reachable through more than one provider. The provide
 - provider registry with priority, health/latency ranking, read-only failover, and mutation replay protection
 - PowerShell/cmd/bash shell execution
 - structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus service control
-- interactive process sessions with incremental output, stdin, stop, and list
+- interactive process sessions with incremental output, stdin, stop, list, bounded long-poll reads, retained history, and persisted recovery metadata
 - WSL2 command execution
 - allowlisted file read/write/list plus batched reads and bounded text search
 - machine and Git workspace snapshots
@@ -44,7 +44,7 @@ A target can eventually be reachable through more than one provider. The provide
 ## Next architectural layers
 
 - durable task/job engine with event subscriptions
-- process retention/recovery across agent restarts and richer event subscriptions
+- richer event subscriptions beyond bounded process long-poll reads
 - structured Windows service/process/network/registry tools
 - provider adapters for SentinelX and Remote Desktop Commander where supported APIs permit
 - GUI accessibility tree plus screenshot/computer-use fallback
