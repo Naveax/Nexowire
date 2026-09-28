@@ -37,7 +37,8 @@
 - [x] project detection and targeted repository search
 - [x] structured build/test/lint/typecheck adapters for detected workspaces
 - persistent task graph
-- parallel independent jobs
+- [ ] persistent/resumable task graph state across agent restart
+- [x] bounded dependency-aware parallel independent jobs
 - resumable long-running work
 - artifact tracking
 

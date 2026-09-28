@@ -30,6 +30,7 @@ A target can eventually be reachable through more than one provider. The provide
 - machine and Git workspace snapshots
 - persistent workspace checkpoints
 - structured workspace detection and bounded parallel check execution
+- bounded dependency-aware parallel task graphs for heterogeneous shell jobs
 - operation IDs and persistent payload-free audit metadata
 - lazy skill discovery
 

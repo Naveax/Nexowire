@@ -23,6 +23,7 @@ export const CORE_CAPABILITIES = [
   'workspace.snapshot',
   'workspace.detect',
   'workspace.checks',
+  'task.graph.run',
   'windows.processes',
   'windows.services',
   'windows.network.snapshot',

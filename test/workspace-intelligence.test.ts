@@ -47,7 +47,12 @@ test('workspace detection finds Node scripts and structured check ids', async ()
     };
   };
 
-  assert.equal(detected.data.root, root);
+  assert.equal(
+    process.platform === 'win32'
+      ? detected.data.root.toLowerCase()
+      : detected.data.root,
+    process.platform === 'win32' ? root.toLowerCase() : root,
+  );
   assert.equal(detected.data.gitRoot, false);
   assert.deepEqual(detected.data.kinds, ['node']);
   assert.ok(detected.data.manifests.includes('package.json'));

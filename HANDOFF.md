@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/workspace-intelligence`
+Active branch: `feat/task-graph`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -23,6 +23,7 @@ Implemented:
 - allowlisted file read/write/list
 - machine snapshot and Git workspace snapshot
 - structured workspace detection plus bounded parallel build/test/lint/typecheck execution
+- bounded dependency-aware parallel task graphs with failure blocking and total timeout
 - Streamable HTTP MCP and stdio MCP
 - persistent workspace checkpoints
 - lazy skill registry
@@ -48,7 +49,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 1. Keep Windows typecheck/test/build green after each capability slice.
 2. Add fully reattachable durable process I/O and richer event subscriptions; current restart recovery is metadata/state-safe, not pipe reattachment.
 3. Add richer event subscriptions and additional Windows mutation primitives only where final state can be verified safely.
-4. Add persistent task graph / parallel independent-job orchestration on top of process sessions.
+4. Persist/resume task graph state across agent restart; the current graph runner is bounded but one-shot.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Design production ChatGPT authentication before public deployment.
 7. Add GUI accessibility/screenshot/browser layers after structured OS control is mature.
