@@ -86,3 +86,67 @@ test('workspace snapshot reports markers that actually exist', async () => {
   };
   assert.deepEqual(snapshot.data.projectMarkers.sort(), ['demo.sln', 'package.json']);
 });
+
+
+test('file metadata, mkdir, copy, move, patch, and delete work together', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-fileops-'));
+  const policy = new PathPolicy([root]);
+  const source = path.join(root, 'source.txt');
+  const copied = path.join(root, 'nested', 'copied.txt');
+  const moved = path.join(root, 'moved.txt');
+  const dir = path.join(root, 'new-dir');
+
+  await fs.writeFile(source, 'alpha beta alpha\n', 'utf8');
+
+  await executeCapability('files.mkdir', { path: dir }, policy);
+  const dirStat = await executeCapability('files.stat', { path: dir }, policy) as {
+    data: { type: string };
+  };
+  assert.equal(dirStat.data.type, 'directory');
+
+  await executeCapability('files.copy', {
+    source,
+    destination: copied,
+    create_parents: true,
+  }, policy);
+  assert.equal(await fs.readFile(copied, 'utf8'), 'alpha beta alpha\n');
+
+  await executeCapability('files.patch', {
+    path: copied,
+    operations: [
+      { old_text: 'alpha', new_text: 'omega', expected_count: 2 },
+    ],
+  }, policy);
+  assert.equal(await fs.readFile(copied, 'utf8'), 'omega beta omega\n');
+
+  await executeCapability('files.move', {
+    source: copied,
+    destination: moved,
+  }, policy);
+  assert.equal(await fs.readFile(moved, 'utf8'), 'omega beta omega\n');
+  await assert.rejects(() => fs.stat(copied));
+
+  await executeCapability('files.delete', { path: moved }, policy);
+  await assert.rejects(() => fs.stat(moved));
+});
+
+test('file patch refuses ambiguous occurrence counts without changing the file', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-patch-'));
+  const policy = new PathPolicy([root]);
+  const file = path.join(root, 'value.txt');
+  await fs.writeFile(file, 'same same', 'utf8');
+
+  await assert.rejects(
+    () =>
+      executeCapability(
+        'files.patch',
+        {
+          path: file,
+          operations: [{ old_text: 'same', new_text: 'changed' }],
+        },
+        policy,
+      ),
+    /expected 1 occurrence\(s\), found 2/,
+  );
+  assert.equal(await fs.readFile(file, 'utf8'), 'same same');
+});

@@ -20,12 +20,14 @@
 ## v0.2 - Computer control
 
 - richer process metadata, retention, and recovery policy
-- services and scheduled tasks
+- [x] structured process/service/network inspection and service control
+- [x] registry read, scheduled-task list, event-log query, and firewall-rule list
+- registry/task/firewall mutation controls with verification
 - registry and environment
 - network diagnostics
 - [x] batch file reads and bounded text search
 - compact system health snapshots
-- richer Windows structured output
+- richer Windows registry/task/firewall mutations and event subscriptions
 
 ## v0.3 - Workspace agent
 

@@ -137,6 +137,302 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       await execute(ctx, 'machine.snapshot', {}, device_id, provider_id),
   );
 
+
+  server.registerTool(
+    'windows_processes',
+    {
+      title: 'List Windows processes',
+      description:
+        'Read structured Windows process metadata without parsing formatted console tables.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(260).optional(),
+        pid: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(2000).optional(),
+        include_command_line: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      pid,
+      limit,
+      include_command_line,
+    }) =>
+      await execute(
+        ctx,
+        'windows.processes',
+        {
+          ...(name ? { name } : {}),
+          ...(pid !== undefined ? { pid } : {}),
+          ...(limit ? { limit } : {}),
+          ...(include_command_line !== undefined
+            ? { include_command_line }
+            : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'windows_services',
+    {
+      title: 'List Windows services',
+      description:
+        'Read structured Windows service state, startup mode, process id, account, and binary path.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(260).optional(),
+        state: z.enum(['running', 'stopped', 'paused', 'all']).optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, name, state, limit }) =>
+      await execute(
+        ctx,
+        'windows.services',
+        {
+          ...(name ? { name } : {}),
+          ...(state ? { state } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'windows_network_snapshot',
+    {
+      title: 'Windows network snapshot',
+      description:
+        'Read adapters, preferred addresses, DNS servers, default routes, and optionally TCP connections.',
+      inputSchema: {
+        ...targetFields,
+        include_connections: z.boolean().optional(),
+        connection_limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      include_connections,
+      connection_limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.network.snapshot',
+        {
+          ...(include_connections !== undefined
+            ? { include_connections }
+            : {}),
+          ...(connection_limit ? { connection_limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_service_control',
+    {
+      title: 'Control Windows service',
+      description:
+        'Start, stop, restart, or change startup type for one Windows service, then return verified final state.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(260),
+        action: z.enum(['start', 'stop', 'restart', 'set_startup']),
+        startup_type: z
+          .enum(['automatic', 'manual', 'disabled'])
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      action,
+      startup_type,
+    }) =>
+      await execute(
+        ctx,
+        'windows.service.control',
+        {
+          name,
+          action,
+          ...(startup_type ? { startup_type } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+
+  server.registerTool(
+    'windows_registry_read',
+    {
+      title: 'Read Windows registry',
+      description:
+        'Read values and optional subkey names from one Windows registry key without shell table parsing.',
+      inputSchema: {
+        ...targetFields,
+        hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
+        path: z.string().max(4096).optional(),
+        name: z.string().max(1024).optional(),
+        include_subkeys: z.boolean().optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hive,
+      path,
+      name,
+      include_subkeys,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.registry.read',
+        {
+          hive,
+          ...(path !== undefined ? { path } : {}),
+          ...(name !== undefined ? { name } : {}),
+          ...(include_subkeys !== undefined ? { include_subkeys } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'windows_tasks',
+    {
+      title: 'List Windows scheduled tasks',
+      description:
+        'Read structured scheduled-task name, path, state, author, description, and URI.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(512).optional(),
+        path: z.string().min(1).max(2048).optional(),
+        state: z
+          .enum(['all', 'ready', 'running', 'disabled', 'queued', 'unknown'])
+          .optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, name, path, state, limit }) =>
+      await execute(
+        ctx,
+        'windows.tasks',
+        {
+          ...(name ? { name } : {}),
+          ...(path ? { path } : {}),
+          ...(state ? { state } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_eventlog_query',
+    {
+      title: 'Query Windows Event Log',
+      description:
+        'Query recent Windows events by log, provider, level, time window, and maximum result count.',
+      inputSchema: {
+        ...targetFields,
+        log_name: z.string().min(1).max(512).optional(),
+        provider: z.string().min(1).max(512).optional(),
+        level: z
+          .enum([
+            'all',
+            'critical',
+            'error',
+            'warning',
+            'information',
+            'verbose',
+          ])
+          .optional(),
+        since_minutes: z.number().int().min(1).max(43_200).optional(),
+        max_events: z.number().int().min(1).max(2000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      log_name,
+      provider,
+      level,
+      since_minutes,
+      max_events,
+    }) =>
+      await execute(
+        ctx,
+        'windows.eventlog.query',
+        {
+          ...(log_name ? { log_name } : {}),
+          ...(provider ? { provider } : {}),
+          ...(level ? { level } : {}),
+          ...(since_minutes ? { since_minutes } : {}),
+          ...(max_events ? { max_events } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_firewall_rules',
+    {
+      title: 'List Windows firewall rules',
+      description:
+        'Read structured Windows firewall rules with optional name, direction, action, and enabled filters.',
+      inputSchema: {
+        ...targetFields,
+        name: z.string().min(1).max(512).optional(),
+        direction: z.enum(['all', 'inbound', 'outbound']).optional(),
+        action: z.enum(['all', 'allow', 'block']).optional(),
+        enabled: z.boolean().optional(),
+        limit: z.number().int().min(1).max(5000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      name,
+      direction,
+      action,
+      enabled,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.firewall.rules',
+        {
+          ...(name ? { name } : {}),
+          ...(direction ? { direction } : {}),
+          ...(action ? { action } : {}),
+          ...(enabled !== undefined ? { enabled } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
   server.registerTool(
     'shell_exec',
     {
@@ -397,6 +693,176 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(encoding ? { encoding } : {}),
           ...(mode ? { mode } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+
+  server.registerTool(
+    'file_stat',
+    {
+      title: 'File metadata',
+      description: 'Read metadata for a file, directory, or symlink inside the agent allowlist.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+      },
+    },
+    async ({ device_id, provider_id, path }) =>
+      await execute(ctx, 'files.stat', { path }, device_id, provider_id),
+  );
+
+  server.registerTool(
+    'file_mkdir',
+    {
+      title: 'Create directory',
+      description: 'Create a directory inside the agent allowlist.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        recursive: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, recursive }) =>
+      await execute(
+        ctx,
+        'files.mkdir',
+        { path, ...(recursive !== undefined ? { recursive } : {}) },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_copy',
+    {
+      title: 'Copy file or directory',
+      description: 'Copy a file or directory between allowed paths.',
+      inputSchema: {
+        ...targetFields,
+        source: z.string().min(1).max(4096),
+        destination: z.string().min(1).max(4096),
+        overwrite: z.boolean().optional(),
+        recursive: z.boolean().optional(),
+        create_parents: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      source,
+      destination,
+      overwrite,
+      recursive,
+      create_parents,
+    }) =>
+      await execute(
+        ctx,
+        'files.copy',
+        {
+          source,
+          destination,
+          ...(overwrite !== undefined ? { overwrite } : {}),
+          ...(recursive !== undefined ? { recursive } : {}),
+          ...(create_parents !== undefined ? { create_parents } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_move',
+    {
+      title: 'Move file or directory',
+      description: 'Move or rename a file or directory between allowed paths.',
+      inputSchema: {
+        ...targetFields,
+        source: z.string().min(1).max(4096),
+        destination: z.string().min(1).max(4096),
+        overwrite: z.boolean().optional(),
+        recursive: z.boolean().optional(),
+        create_parents: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      source,
+      destination,
+      overwrite,
+      recursive,
+      create_parents,
+    }) =>
+      await execute(
+        ctx,
+        'files.move',
+        {
+          source,
+          destination,
+          ...(overwrite !== undefined ? { overwrite } : {}),
+          ...(recursive !== undefined ? { recursive } : {}),
+          ...(create_parents !== undefined ? { create_parents } : {}),
+        },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_delete',
+    {
+      title: 'Delete file or directory',
+      description:
+        'Delete one allowed file or directory. Recursive directory deletion must be explicitly enabled.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        recursive: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, recursive }) =>
+      await execute(
+        ctx,
+        'files.delete',
+        { path, ...(recursive !== undefined ? { recursive } : {}) },
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'file_patch',
+    {
+      title: 'Patch text file',
+      description:
+        'Apply exact text replacements atomically. Each operation checks the expected occurrence count before writing.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        operations: z
+          .array(
+            z.object({
+              old_text: z.string().min(1).max(1_048_576),
+              new_text: z.string().max(1_048_576),
+              expected_count: z.number().int().min(1).max(10_000).optional(),
+            }),
+          )
+          .min(1)
+          .max(100),
+        max_bytes: z.number().int().min(1).max(16_777_216).optional(),
+      },
+    },
+    async ({ device_id, provider_id, path, operations, max_bytes }) =>
+      await execute(
+        ctx,
+        'files.patch',
+        {
+          path,
+          operations,
+          ...(max_bytes ? { max_bytes } : {}),
         },
         device_id,
         provider_id,

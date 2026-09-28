@@ -5,6 +5,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
 import { PathPolicy, PathDeniedError } from './path-policy.js';
+import { executeWindowsCapability } from './windows-control.js';
 import type { ProcessManager } from './process-manager.js';
 
 const ShellExecInputSchema = z.object({
@@ -56,6 +57,38 @@ const FileWriteInputSchema = z.object({
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   mode: z.enum(['overwrite', 'append']).default('overwrite'),
   create_parents: z.boolean().default(false),
+});
+
+const FileStatInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+});
+
+const FileMkdirInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  recursive: z.boolean().default(true),
+});
+
+const FileTransferInputSchema = z.object({
+  source: z.string().min(1).max(4096),
+  destination: z.string().min(1).max(4096),
+  overwrite: z.boolean().default(false),
+  recursive: z.boolean().default(false),
+  create_parents: z.boolean().default(false),
+});
+
+const FileDeleteInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  recursive: z.boolean().default(false),
+});
+
+const FilePatchInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  operations: z.array(z.object({
+    old_text: z.string().min(1).max(1_048_576),
+    new_text: z.string().max(1_048_576),
+    expected_count: z.number().int().min(1).max(10_000).default(1),
+  })).min(1).max(100),
+  max_bytes: z.number().int().min(1).max(16_777_216).default(4_194_304),
 });
 
 const FileListInputSchema = z.object({
@@ -203,7 +236,7 @@ function shellCommand(
 
 async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = ShellExecInputSchema.parse(input);
-  const cwd = parsed.cwd ? policy.resolve(parsed.cwd) : undefined;
+  const cwd = parsed.cwd ? await policy.resolveExisting(parsed.cwd) : undefined;
   const command = shellCommand(parsed.shell, parsed.command);
   const result = await runProcess(command.executable, command.args, {
     ...(cwd ? { cwd } : {}),
@@ -247,7 +280,7 @@ async function executeWsl(input: unknown): Promise<unknown> {
 
 async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileReadInputSchema.parse(input);
-  const target = policy.resolve(parsed.path);
+  const target = await policy.resolveExisting(parsed.path);
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Requested path is not a file.');
   if (stat.size > parsed.max_bytes) {
@@ -277,7 +310,7 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
 
   for (const requested of parsed.paths) {
     try {
-      const target = policy.resolve(requested);
+      const target = await policy.resolveExisting(requested);
       const stat = await fs.stat(target);
       if (!stat.isFile()) throw new Error('Requested path is not a file.');
       if (stat.size > parsed.max_bytes_each) {
@@ -311,7 +344,7 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
 
 async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileWriteInputSchema.parse(input);
-  const target = policy.resolve(parsed.path);
+  const target = await policy.resolveForCreate(parsed.path);
   if (parsed.create_parents) {
     await fs.mkdir(path.dirname(target), { recursive: true });
   }
@@ -330,6 +363,137 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   return { data: { path: target, bytesWritten: content.byteLength } };
 }
 
+async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileStatInputSchema.parse(input);
+  const target = await policy.resolveExisting(parsed.path);
+  const stat = await fs.lstat(target);
+  return {
+    data: {
+      path: target,
+      type: stat.isSymbolicLink()
+        ? 'symlink'
+        : stat.isDirectory()
+          ? 'directory'
+          : stat.isFile()
+            ? 'file'
+            : 'other',
+      size: stat.size,
+      mode: stat.mode,
+      modifiedAt: stat.mtime.toISOString(),
+      createdAt: stat.birthtime.toISOString(),
+    },
+  };
+}
+
+async function makeDirectory(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileMkdirInputSchema.parse(input);
+  const target = await policy.resolveForCreate(parsed.path);
+  await fs.mkdir(target, { recursive: parsed.recursive });
+  return { data: { path: target, created: true } };
+}
+
+async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileTransferInputSchema.parse(input);
+  const source = await policy.resolveExisting(parsed.source);
+  const destination = await policy.resolveForCreate(parsed.destination);
+  if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.cp(source, destination, {
+    recursive: parsed.recursive,
+    force: parsed.overwrite,
+    errorOnExist: !parsed.overwrite,
+    preserveTimestamps: true,
+  });
+  return { data: { source, destination } };
+}
+
+async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileTransferInputSchema.parse(input);
+  const source = await policy.resolveExisting(parsed.source);
+  const destination = await policy.resolveForCreate(parsed.destination);
+  if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
+
+  if (!parsed.overwrite) {
+    try {
+      await fs.lstat(destination);
+      throw new Error('Destination already exists.');
+    } catch (error) {
+      if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+  } else {
+    await fs.rm(destination, { recursive: true, force: true });
+  }
+
+  try {
+    await fs.rename(source, destination);
+  } catch (error) {
+    if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EXDEV')) throw error;
+    const stat = await fs.lstat(source);
+    await fs.cp(source, destination, { recursive: stat.isDirectory(), preserveTimestamps: true });
+    await fs.rm(source, { recursive: stat.isDirectory(), force: true });
+  }
+  return { data: { source, destination } };
+}
+
+async function deletePath(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FileDeleteInputSchema.parse(input);
+  const target = await policy.resolveExisting(parsed.path);
+  const stat = await fs.lstat(target);
+  if (stat.isDirectory() && !parsed.recursive) {
+    await fs.rmdir(target);
+  } else {
+    await fs.rm(target, { recursive: parsed.recursive, force: false });
+  }
+  return { data: { path: target, deleted: true } };
+}
+
+function countOccurrences(text: string, needle: string): number {
+  let count = 0;
+  let offset = 0;
+  while (true) {
+    const index = text.indexOf(needle, offset);
+    if (index < 0) return count;
+    count++;
+    offset = index + needle.length;
+  }
+}
+
+async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
+  const parsed = FilePatchInputSchema.parse(input);
+  const target = await policy.resolveExisting(parsed.path);
+  const stat = await fs.stat(target);
+  if (!stat.isFile()) throw new Error('Patch target is not a file.');
+  if (stat.size > parsed.max_bytes) throw new Error(`Patch target exceeds max_bytes ${parsed.max_bytes}.`);
+  let content = await fs.readFile(target, 'utf8');
+
+  const applied: Array<{ index: number; replacements: number }> = [];
+  for (let index = 0; index < parsed.operations.length; index++) {
+    const operation = parsed.operations[index]!;
+    const count = countOccurrences(content, operation.old_text);
+    if (count !== operation.expected_count) {
+      throw new Error(
+        `Patch operation ${index + 1} expected ${operation.expected_count} occurrence(s), found ${count}.`,
+      );
+    }
+    content = content.split(operation.old_text).join(operation.new_text);
+    applied.push({ index, replacements: count });
+  }
+
+  const temp = `${target}.nexowire-${process.pid}-${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(temp, content, 'utf8');
+    await fs.chmod(temp, stat.mode);
+    if (process.platform === 'win32') {
+      await fs.copyFile(temp, target);
+      await fs.rm(temp, { force: true });
+    } else {
+      await fs.rename(temp, target);
+    }
+  } finally {
+    await fs.rm(temp, { force: true }).catch(() => undefined);
+  }
+  return { data: { path: target, applied, bytes: Buffer.byteLength(content) } };
+}
+
 interface ListedEntry {
   path: string;
   type: 'file' | 'directory' | 'symlink' | 'other';
@@ -341,7 +505,7 @@ async function listDirectory(
   policy: PathPolicy,
 ): Promise<unknown> {
   const parsed = FileListInputSchema.parse(input);
-  const root = policy.resolve(parsed.path);
+  const root = await policy.resolveExisting(parsed.path);
   const entries: ListedEntry[] = [];
 
   const walk = async (dir: string, remainingDepth: number): Promise<void> => {
@@ -388,7 +552,7 @@ interface SearchMatch {
 
 async function searchText(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = SearchTextInputSchema.parse(input);
-  const root = policy.resolve(parsed.path);
+  const root = await policy.resolveExisting(parsed.path);
   const rootStat = await fs.stat(root);
   if (!rootStat.isDirectory()) throw new Error('Search path is not a directory.');
 
@@ -515,7 +679,7 @@ async function workspaceSnapshot(
   policy: PathPolicy,
 ): Promise<unknown> {
   const parsed = WorkspaceSnapshotInputSchema.parse(input);
-  const cwd = policy.resolve(parsed.path);
+  const cwd = await policy.resolveExisting(parsed.path);
   const [rootResult, statusResult, headResult, logResult] = await Promise.all([
     runProcess('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
       timeoutMs: 10_000,
@@ -601,6 +765,18 @@ export async function executeCapability(
       return await readManyFiles(input, policy);
     case 'files.write':
       return await writeFile(input, policy);
+    case 'files.stat':
+      return await statPath(input, policy);
+    case 'files.mkdir':
+      return await makeDirectory(input, policy);
+    case 'files.copy':
+      return await copyPath(input, policy);
+    case 'files.move':
+      return await movePath(input, policy);
+    case 'files.delete':
+      return await deletePath(input, policy);
+    case 'files.patch':
+      return await patchFile(input, policy);
     case 'files.list':
       return await listDirectory(input, policy);
     case 'search.text':
@@ -609,6 +785,15 @@ export async function executeCapability(
       return await machineSnapshot(policy);
     case 'workspace.snapshot':
       return await workspaceSnapshot(input, policy);
+    case 'windows.processes':
+    case 'windows.services':
+    case 'windows.network.snapshot':
+    case 'windows.service.control':
+    case 'windows.registry.read':
+    case 'windows.tasks':
+    case 'windows.eventlog.query':
+    case 'windows.firewall.rules':
+      return await executeWindowsCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }

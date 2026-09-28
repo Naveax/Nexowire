@@ -7,7 +7,7 @@ import {
   AGENT_PROTOCOL_VERSION,
   HubRequestSchema,
 } from '../protocol/agent.js';
-import { CORE_CAPABILITIES } from '../protocol/capabilities.js';
+import { capabilitiesForPlatform } from '../protocol/capabilities.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
@@ -79,7 +79,7 @@ export async function runNativeAgent(
               platform: process.platform,
               arch: process.arch,
               agentVersion: agentVersion(),
-              capabilities: [...CORE_CAPABILITIES],
+              capabilities: capabilitiesForPlatform(process.platform),
             },
           }),
         );
