@@ -23,7 +23,7 @@ A target can eventually be reachable through more than one provider. The provide
 - outbound native-agent WebSocket transport
 - provider registry with priority, health/latency ranking, read-only failover, and mutation replay protection
 - PowerShell/cmd/bash shell execution
-- structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus service control
+- structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus verified service/registry/task/firewall control
 - interactive process sessions with incremental output, stdin, stop, list, bounded long-poll reads, retained history, and persisted recovery metadata
 - WSL2 command execution
 - allowlisted file read/write/list plus batched reads and bounded text search

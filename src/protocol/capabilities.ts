@@ -28,6 +28,10 @@ export const CORE_CAPABILITIES = [
   'windows.tasks',
   'windows.eventlog.query',
   'windows.firewall.rules',
+  'windows.registry.set',
+  'windows.registry.delete',
+  'windows.task.control',
+  'windows.firewall.control',
 ] as const;
 
 export type CoreCapability = (typeof CORE_CAPABILITIES)[number];
@@ -65,6 +69,10 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'windows.tasks',
   'windows.eventlog.query',
   'windows.firewall.rules',
+  'windows.registry.set',
+  'windows.registry.delete',
+  'windows.task.control',
+  'windows.firewall.control',
 ]);
 
 export function isReadOnlyCapability(capability: string): boolean {

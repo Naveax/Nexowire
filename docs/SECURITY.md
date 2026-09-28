@@ -14,6 +14,7 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 - Audit records store operation metadata, not command input or file payload content.
 - Process-session persistence stores metadata only; command text, stdin, stdout, and stderr are not persisted.
 - Recovered live PIDs are marked orphaned and are not signaled automatically because PID reuse cannot be verified safely after restart.
+- Windows registry/task/firewall mutations require exact selectors; wildcard-style broad mutations are rejected, and the implementation re-reads final state after mutation where applicable.
 
 ## Important limitation
 
