@@ -1670,6 +1670,30 @@ async function runTaskGraph(
           execution.exitCode === 0 && !execution.timedOut
             ? 'succeeded'
             : 'failed';
+
+        if (result.status === 'succeeded' && job.artifacts.length > 0) {
+          const registeredArtifactIds: string[] = [];
+          for (const declaration of job.artifacts) {
+            const record = await artifactStore!.register(
+              {
+                path: declaration.path,
+                ...(declaration.label
+                  ? { label: declaration.label }
+                  : {}),
+                kind: declaration.kind,
+                ...(parsed.graph_id
+                  ? { sourceGraphId: parsed.graph_id }
+                  : {}),
+                sourceJobId: job.id,
+                maxHashBytes: declaration.max_hash_bytes,
+              },
+              policy,
+              cwd ?? process.cwd(),
+            );
+            registeredArtifactIds.push(record.id);
+          }
+          result.artifactIds = registeredArtifactIds;
+        }
       } catch (error) {
         result.status = 'failed';
         result.exitCode = null;
