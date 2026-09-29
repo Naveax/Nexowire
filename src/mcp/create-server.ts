@@ -3013,6 +3013,34 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
                 )
                 .max(31)
                 .optional(),
+              artifacts: z
+                .array(
+                  z.object({
+                    path: z.string().min(1).max(4096),
+                    label: z.string().min(1).max(256).optional(),
+                    kind: z
+                      .enum([
+                        'build',
+                        'test',
+                        'report',
+                        'log',
+                        'package',
+                        'archive',
+                        'image',
+                        'binary',
+                        'other',
+                      ])
+                      .optional(),
+                    max_hash_bytes: z
+                      .number()
+                      .int()
+                      .min(1)
+                      .max(4_294_967_296)
+                      .optional(),
+                  }),
+                )
+                .max(32)
+                .optional(),
               timeout_ms: z
                 .number()
                 .int()
@@ -3165,6 +3193,217 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         30_000,
+      ),
+  );
+
+  server.registerTool(
+    'artifact_register',
+    {
+      title: 'Register artifact',
+      description:
+        'Register one existing allowed file as a durable Nexowire artifact record with size, SHA-256, timestamps, kind, and optional task-graph source metadata. File content is not persisted in the artifact registry.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        label: z.string().min(1).max(256).optional(),
+        kind: z
+          .enum([
+            'build',
+            'test',
+            'report',
+            'log',
+            'package',
+            'archive',
+            'image',
+            'binary',
+            'other',
+          ])
+          .optional(),
+        source_graph_id: z.string().min(1).max(128).optional(),
+        source_job_id: z.string().min(1).max(128).optional(),
+        max_hash_bytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(4_294_967_296)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      path,
+      label,
+      kind,
+      source_graph_id,
+      source_job_id,
+      max_hash_bytes,
+    }) =>
+      await execute(
+        ctx,
+        'artifact.register',
+        {
+          path,
+          ...(label ? { label } : {}),
+          ...(kind ? { kind } : {}),
+          ...(source_graph_id ? { source_graph_id } : {}),
+          ...(source_job_id ? { source_job_id } : {}),
+          ...(max_hash_bytes !== undefined
+            ? { max_hash_bytes }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'artifact_list',
+    {
+      title: 'List artifacts',
+      description:
+        'List payload-free artifact metadata on a target device, optionally filtered by task graph, job, or artifact kind.',
+      inputSchema: {
+        ...targetFields,
+        graph_id: z.string().min(1).max(128).optional(),
+        job_id: z.string().min(1).max(128).optional(),
+        kind: z
+          .enum([
+            'build',
+            'test',
+            'report',
+            'log',
+            'package',
+            'archive',
+            'image',
+            'binary',
+            'other',
+          ])
+          .optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      graph_id,
+      job_id,
+      kind,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'artifact.list',
+        {
+          ...(graph_id ? { graph_id } : {}),
+          ...(job_id ? { job_id } : {}),
+          ...(kind ? { kind } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'artifact_get',
+    {
+      title: 'Get artifact metadata',
+      description:
+        'Read one persisted artifact metadata record by artifact UUID.',
+      inputSchema: {
+        ...targetFields,
+        artifact_id: z.string().uuid(),
+      },
+    },
+    async ({ device_id, provider_id, artifact_id }) =>
+      await execute(
+        ctx,
+        'artifact.get',
+        { artifact_id },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'artifact_verify',
+    {
+      title: 'Verify artifact',
+      description:
+        'Re-hash one tracked artifact file and report whether it still exists and matches the registered SHA-256/size.',
+      inputSchema: {
+        ...targetFields,
+        artifact_id: z.string().uuid(),
+        max_hash_bytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(4_294_967_296)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      artifact_id,
+      max_hash_bytes,
+    }) =>
+      await execute(
+        ctx,
+        'artifact.verify',
+        {
+          artifact_id,
+          ...(max_hash_bytes !== undefined
+            ? { max_hash_bytes }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'artifact_prune',
+    {
+      title: 'Prune artifact metadata',
+      description:
+        'Delete artifact registry metadata by age and/or remove records whose files no longer exist. This never deletes artifact files themselves.',
+      inputSchema: {
+        ...targetFields,
+        older_than_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(31_536_000_000)
+          .optional(),
+        remove_missing: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      older_than_ms,
+      remove_missing,
+    }) =>
+      await execute(
+        ctx,
+        'artifact.prune',
+        {
+          ...(older_than_ms !== undefined
+            ? { older_than_ms }
+            : {}),
+          ...(remove_missing !== undefined
+            ? { remove_missing }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
       ),
   );
 
