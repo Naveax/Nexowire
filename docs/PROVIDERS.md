@@ -1,23 +1,37 @@
-# Provider Model
+# Execution Backend Model
 
-A provider answers two questions: which targets are online with which capabilities, and can it execute one normalized capability request for a target?
+Nexowire keeps a small backend/provider abstraction internally, but the runtime is first-party.
 
-The current `native-agent` provider is the reference implementation.
+A backend answers two questions: which Nexowire targets are online with which capabilities, and can it execute one normalized capability request for a target?
 
-## Planned providers
+## Runtime invariant
+
+The default runtime registers only `native-agent`.
+
+Remote Desktop Commander, SentinelX, Codex, and other third-party computer-control products are not required execution backends. Nexowire implements needed capabilities in its own Hub + Native Agent stack.
+
+## First-party backends
 
 ### Native Agent
-Direct outbound WebSocket agent. This is the provider Nexowire fully controls and can extend with process sessions, GUI control, events, and hardware APIs.
 
-### Remote Desktop Commander
-Adapter when a supported programmatic interface is available. Nexowire must not assume ChatGPT connector authorization can be reused server-to-server.
+The reference and default backend. It uses an outbound Nexowire WebSocket connection and carries shell, filesystem, process, Windows, GUI, WSL2, browser, workspace, and future hardware capabilities.
 
-### SentinelX
-Adapter for supported host capabilities. Provider-specific command formats remain behind the adapter.
+### Direct / Relay
 
-### Local / WSL / SSH
-Future providers implement the same interface without adding duplicate ChatGPT-facing tool names.
+Future Nexowire-owned transports can use the same normalized capability contracts. A direct connection, relay connection, or platform-specific native transport should remain invisible to the ChatGPT-facing tool names.
+
+### Local / WSL / Linux workers
+
+Where useful, Nexowire may expose first-party local or platform workers through the same internal interface. They are implementation details, not separate products or external dependencies.
+
+## Why keep the abstraction?
+
+The registry still provides useful engineering boundaries for multi-device routing, health checks, latency-aware selection, test doubles, direct-vs-relay selection, and safe failure handling.
+
+It is not an invitation to route core functionality through quota-limited third-party services.
 
 ## Routing
 
-The registry filters by target/capability, checks provider health before execution, ranks equal-priority candidates by reported latency, and automatically fails over retryable **read-only** operations. Once a mutation has been sent, an ambiguous disconnect or provider exception becomes `MUTATION_STATE_UNKNOWN`; Nexowire deliberately refuses to replay it through another provider until state is verified. Explicit idempotency records remain a later milestone.
+The registry filters by target/capability, checks backend health before execution, and may rank equivalent first-party paths by latency. Retryable read-only work can fail over between equivalent Nexowire-owned paths.
+
+Once a mutation has been sent, an ambiguous disconnect or backend exception becomes `MUTATION_STATE_UNKNOWN`; Nexowire deliberately refuses to replay it until state is verified or an explicit idempotency rule permits replay.
