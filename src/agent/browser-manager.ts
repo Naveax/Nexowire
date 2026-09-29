@@ -987,9 +987,21 @@ export class BrowserManager {
         target.type === 'page' &&
         typeof target.webSocketDebuggerUrl === 'string',
     );
-    const target = targetId
-      ? pages.find((entry) => entry.id === targetId)
-      : pages[0];
+    let target: CdpTarget | undefined;
+    if (targetId) {
+      target = pages.find((entry) => entry.id === targetId);
+    } else if (pages.length === 1) {
+      target = pages[0];
+    } else if (pages.length > 1) {
+      throw new BrowserControlError(
+        'BROWSER_TARGET_AMBIGUOUS',
+        'Browser session has multiple page targets; target_id is required.',
+        {
+          sessionId,
+          targetIds: pages.map((entry) => entry.id),
+        },
+      );
+    }
 
     if (!target?.webSocketDebuggerUrl) {
       throw new BrowserControlError(
