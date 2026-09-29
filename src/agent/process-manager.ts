@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import type { PathPolicy } from './path-policy.js';
+import {
+  durableProcessRpc,
+  readDurableMeta,
+  removeDurableSessionFiles,
+  startDurableProcess,
+  type DurableProcessSummary,
+} from './durable-process-client.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
 
@@ -12,6 +20,7 @@ const StartSchema = z.object({
   shell: ShellSchema.optional(),
   cwd: z.string().max(4096).optional(),
   name: z.string().min(1).max(128).optional(),
+  durable: z.boolean().default(false),
   max_buffer_bytes: z
     .number()
     .int()
@@ -54,6 +63,8 @@ const PersistedSessionSchema = z.object({
   exitedAt: z.string().datetime().optional(),
   exitCode: z.number().int().nullable(),
   signal: z.string().nullable(),
+  durable: z.boolean().optional(),
+  hostPid: z.number().int().positive().optional(),
   status: z.enum(['running', 'exited', 'orphaned', 'lost']),
 });
 
@@ -85,6 +96,8 @@ interface ManagedSession {
   signal: NodeJS.Signals | null;
   status: SessionStatus;
   recovered: boolean;
+  durable: boolean;
+  hostPid?: number;
   events: ProcessOutputEvent[];
   nextSeq: number;
   bufferedBytes: number;
@@ -104,6 +117,7 @@ export interface ProcessManagerOptions {
   stateFile?: string;
   maxSessions?: number;
   exitedRetentionMs?: number;
+  durableRoot?: string;
   onEvent?: (event: ProcessManagerEvent) => void;
 }
 
@@ -223,10 +237,12 @@ function summarize(session: ManagedSession) {
     ...(session.cwd ? { cwd: session.cwd } : {}),
     status: session.status,
     recovered: session.recovered,
+    durable: session.durable,
+    ...(session.hostPid ? { hostPid: session.hostPid } : {}),
     interactive:
       session.status === 'running' &&
-      session.child !== undefined &&
-      session.child.stdin.writable,
+      (session.durable ||
+        (session.child !== undefined && session.child.stdin.writable)),
     exitCode: session.exitCode,
     signal: session.signal,
     startedAt: session.startedAt,
@@ -243,6 +259,7 @@ export class ProcessManager {
   private readonly stateFile?: string;
   private readonly maxSessions: number;
   private readonly exitedRetentionMs: number;
+  private readonly durableRoot: string;
   private readonly onEvent?: (event: ProcessManagerEvent) => void;
   private persistChain: Promise<void> = Promise.resolve();
 
@@ -251,6 +268,11 @@ export class ProcessManager {
     this.maxSessions = options.maxSessions ?? 128;
     this.exitedRetentionMs =
       options.exitedRetentionMs ?? 24 * 60 * 60 * 1000;
+    this.durableRoot =
+      options.durableRoot ??
+      (this.stateFile
+        ? path.join(path.dirname(this.stateFile), 'process-hosts')
+        : path.join(os.homedir(), '.nexowire', 'process-hosts'));
     this.onEvent = options.onEvent;
   }
 
