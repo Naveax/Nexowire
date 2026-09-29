@@ -76,7 +76,9 @@ async function sha256File(
   const hash = createHash('sha256');
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(target);
-    stream.on('data', (chunk: Buffer) => hash.update(chunk));
+    stream.on('data', (chunk: string | Buffer) => {
+      hash.update(chunk);
+    });
     stream.once('error', reject);
     stream.once('end', resolve);
   });
