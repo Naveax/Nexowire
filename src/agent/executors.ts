@@ -13,6 +13,7 @@ import { captureWindowsScreenshot } from './windows-screenshot.js';
 import { executeWindowsInputCapability } from './windows-input.js';
 import { executeWindowsAccessibilityCapability } from './windows-accessibility.js';
 import { executeWindowsPointerCapability } from './windows-pointer.js';
+import { executeBrowserCapability } from './browser-control.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
@@ -1910,6 +1911,16 @@ export async function executeCapability(
     case 'windows.pointer.click':
     case 'windows.pointer.scroll':
       return await executeWindowsPointerCapability(capability, input);
+    case 'browser.session.start':
+    case 'browser.session.list':
+    case 'browser.session.stop':
+    case 'browser.tabs':
+    case 'browser.navigate':
+    case 'browser.snapshot':
+    case 'browser.click':
+    case 'browser.set_value':
+    case 'browser.screenshot':
+      return await executeBrowserCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }
