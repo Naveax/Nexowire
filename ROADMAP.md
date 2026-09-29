@@ -47,7 +47,7 @@
 - [x] first-party Nexowire native-agent backend as the default runtime
 - [x] provider/backend health and latency ranking kept as an internal routing primitive
 - [x] mutation-aware failover with automatic replay blocked on unknown mutation state
-- [~] multi-device native-agent routing
+- [~] multi-device native-agent routing: persistent directory, aliases, online/offline state, and capability-aware route discovery are implemented; routing policy/groups remain open
 - [x] persistent stable device aliases and alias-based MCP targeting
 - [ ] reconnect/session continuity without third-party control providers
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
@@ -61,7 +61,7 @@
 - [x] bounded Windows UI Automation tree/find plus exact invoke/set-value controls
 - [x] exact-foreground keyboard input and bounded clipboard control
 - [x] first-party Edge/Chrome session, navigation, DOM snapshot/action, and screenshot automation
-- [ ] visual verification
+- [x] exact-element browser visual verification with DOM expectations, hit testing, and cropped PNG evidence
 - [x] exact-HWND raw pointer move/click/scroll only as a fallback
 
 ## v1.0 - ChatGPT-ready remote control

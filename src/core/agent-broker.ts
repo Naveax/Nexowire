@@ -39,9 +39,18 @@ interface StoredBrokerEvent extends BrokerEvent {
   sizeBytes: number;
 }
 
+export interface DeviceStateEvent {
+  type: 'connected' | 'disconnected';
+  device: AgentDevice;
+  at: string;
+}
+
 export interface AgentBrokerOptions {
   maxEvents?: number;
   maxEventBytes?: number;
+  onDeviceState?: (
+    event: DeviceStateEvent,
+  ) => void | Promise<void>;
 }
 
 export interface ReadBrokerEventsInput {
@@ -59,12 +68,16 @@ export class AgentBroker {
   private readonly eventWaiters = new Set<() => void>();
   private readonly maxEvents: number;
   private readonly maxEventBytes: number;
+  private readonly onDeviceState?: (
+    event: DeviceStateEvent,
+  ) => void | Promise<void>;
   private nextEventSeq = 1;
   private eventBytes = 0;
 
   constructor(options: AgentBrokerOptions = {}) {
     this.maxEvents = options.maxEvents ?? 5_000;
     this.maxEventBytes = options.maxEventBytes ?? 8 * 1024 * 1024;
+    this.onDeviceState = options.onDeviceState;
   }
 
   register(socket: WebSocket, hello: AgentHello): void {
@@ -79,6 +92,11 @@ export class AgentBroker {
       socket,
       device: hello.device,
       connectedAt,
+    });
+    this.notifyDeviceState({
+      type: 'connected',
+      device: hello.device,
+      at: connectedAt,
     });
     this.appendEvent(deviceId, {
       eventId: randomUUID(),
@@ -160,6 +178,21 @@ export class AgentBroker {
       result = select();
     }
     return result;
+  }
+
+  private notifyDeviceState(event: DeviceStateEvent): void {
+    if (!this.onDeviceState) return;
+    try {
+      const result = this.onDeviceState(event);
+      if (
+        result &&
+        typeof (result as Promise<void>).catch === 'function'
+      ) {
+        void (result as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      // Device-directory persistence must never break transport control.
+    }
   }
 
   private appendEvent(
@@ -302,9 +335,15 @@ export class AgentBroker {
     if (current?.socket !== socket) return;
 
     this.agents.delete(deviceId);
+    const disconnectedAt = new Date().toISOString();
+    this.notifyDeviceState({
+      type: 'disconnected',
+      device: current.device,
+      at: disconnectedAt,
+    });
     this.appendEvent(deviceId, {
       eventId: randomUUID(),
-      at: new Date().toISOString(),
+      at: disconnectedAt,
       topic: 'agent.disconnected',
       data: { name: current.device.name },
     });

@@ -18,6 +18,7 @@ Implemented:
 - native agent protocol over outbound WebSocket
 - stable native-agent device identity
 - persistent case-normalized device aliases with alias-based MCP routing and offline-target rejection
+- persistent native device directory with last-seen/connect/disconnect history plus capability/platform/name-aware route discovery that fails closed on ambiguity
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
 - WSL2 execution capability
 - interactive process sessions with incremental stdout/stderr, stdin, stop, and list
@@ -70,7 +71,7 @@ The generic backend registry remains because it is useful for Nexowire-owned tra
 3. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
 4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
-6. Finish robust multi-device native-agent routing; persistent aliases are implemented.
+6. Finish multi-device routing policy/groups; persistent directory, aliases, online/offline state, and capability-aware route discovery are implemented.
 7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
 
 ## Known machine note
