@@ -40,6 +40,24 @@ function agentVersion(): string {
   return '0.1.0-dev.1';
 }
 
+export function reconnectWaitMs(
+  baseDelayMs: number,
+  random: () => number = Math.random,
+): number {
+  const boundedBase = Math.min(30_000, Math.max(250, baseDelayMs));
+  const sample = Math.min(1, Math.max(0, random()));
+  const factor = 0.8 + sample * 0.4;
+  return Math.round(boundedBase * factor);
+}
+
+function heartbeatMs(env: NodeJS.ProcessEnv): number {
+  const raw = env.NEXOWIRE_AGENT_HEARTBEAT_MS?.trim();
+  if (!raw) return 30_000;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 30_000;
+  return Math.min(120_000, Math.max(5_000, Math.round(parsed)));
+}
+
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<never> {
@@ -54,6 +72,7 @@ export async function runNativeAgent(
   const taskGraphStateFile =
     env.NEXOWIRE_TASK_GRAPH_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'task-graphs.json');
+  const socketHeartbeatMs = heartbeatMs(env);
 
   let stopped = false;
   let currentSocket: WebSocket | undefined;
@@ -91,8 +110,36 @@ export async function runNativeAgent(
     currentSocket = socket;
 
     await new Promise<void>((resolve) => {
+      let heartbeatTimer: NodeJS.Timeout | undefined;
+      let lastPongAt = Date.now();
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
+        resolve();
+      };
+
       socket.once('open', () => {
         reconnectDelay = 1_000;
+        lastPongAt = Date.now();
+        socket.on('pong', () => {
+          lastPongAt = Date.now();
+        });
+        heartbeatTimer = setInterval(() => {
+          if (Date.now() - lastPongAt > socketHeartbeatMs * 2.5) {
+            socket.terminate();
+            return;
+          }
+          if (socket.readyState !== WebSocket.OPEN) return;
+          try {
+            socket.ping();
+          } catch {
+            socket.terminate();
+          }
+        }, socketHeartbeatMs);
+        heartbeatTimer.unref();
+
         socket.send(
           JSON.stringify({
             type: 'hello',
@@ -147,13 +194,14 @@ export async function runNativeAgent(
         });
       });
 
-      socket.once('close', () => resolve());
-      socket.once('error', () => resolve());
+      socket.once('close', finish);
+      socket.once('error', finish);
     });
 
     currentSocket = undefined;
     if (stopped) break;
-    await new Promise((resolve) => setTimeout(resolve, reconnectDelay));
+    const waitMs = reconnectWaitMs(reconnectDelay);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
     reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
   }
 
