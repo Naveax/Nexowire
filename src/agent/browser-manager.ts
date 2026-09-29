@@ -855,6 +855,355 @@ export class BrowserManager {
     );
   }
 
+  async visualVerify(input: {
+    sessionId: string;
+    targetId?: string;
+    selector: string;
+    expectedText?: string;
+    textMode?: 'contains' | 'exact';
+    expectedVisible?: boolean;
+    expectedEnabled?: boolean;
+    expectedChecked?: boolean;
+    padding?: number;
+    maxBytes?: number;
+  }) {
+    const padding = Math.min(200, Math.max(0, input.padding ?? 16));
+    const maxBytes = Math.min(
+      8_388_608,
+      Math.max(65_536, input.maxBytes ?? 2_097_152),
+    );
+    const selectorJson = JSON.stringify(input.selector);
+    const expectedTextJson =
+      input.expectedText === undefined
+        ? 'undefined'
+        : JSON.stringify(input.expectedText);
+    const expectedVisible =
+      input.expectedVisible === undefined
+        ? 'undefined'
+        : input.expectedVisible
+          ? 'true'
+          : 'false';
+    const expectedEnabled =
+      input.expectedEnabled === undefined
+        ? 'undefined'
+        : input.expectedEnabled
+          ? 'true'
+          : 'false';
+    const expectedChecked =
+      input.expectedChecked === undefined
+        ? 'undefined'
+        : input.expectedChecked
+          ? 'true'
+          : 'false';
+    const textMode = JSON.stringify(input.textMode ?? 'contains');
+
+    return await this.withPage(
+      input.sessionId,
+      input.targetId,
+      async (client, target) => {
+        await client.send('Page.enable');
+
+        const state = await this.evaluate<{
+          ok: boolean;
+          code?: string;
+          count?: number;
+          selector?: string;
+          tag?: string;
+          type?: string | null;
+          role?: string | null;
+          visible?: boolean;
+          enabled?: boolean;
+          checked?: boolean | null;
+          password?: boolean;
+          text?: string;
+          textChars?: number;
+          textTruncated?: boolean;
+          href?: string | null;
+          hittable?: boolean;
+          pageRect?: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+          };
+          viewportRect?: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+          };
+          viewport?: {
+            width: number;
+            height: number;
+            scrollX: number;
+            scrollY: number;
+            devicePixelRatio: number;
+          };
+          expectations?: Array<{
+            name: string;
+            expected: unknown;
+            actual: unknown;
+            passed: boolean;
+          }>;
+          verified?: boolean;
+        }>(
+          client,
+          `(() => {
+            let matches;
+            try {
+              matches = Array.from(document.querySelectorAll(${selectorJson}));
+            } catch {
+              return { ok:false, code:'BROWSER_SELECTOR_INVALID' };
+            }
+            if (matches.length === 0) {
+              return { ok:false, code:'BROWSER_ELEMENT_NOT_FOUND', count:0 };
+            }
+            if (matches.length !== 1) {
+              return {
+                ok:false,
+                code:'BROWSER_ELEMENT_AMBIGUOUS',
+                count:matches.length
+              };
+            }
+
+            const element = matches[0];
+            element.scrollIntoView({
+              block:'center',
+              inline:'center',
+              behavior:'instant'
+            });
+
+            const style = getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            const visible =
+              style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              Number(style.opacity || 1) !== 0 &&
+              rect.width > 0 &&
+              rect.height > 0;
+            const disabled =
+              Boolean(element.disabled) ||
+              element.getAttribute('aria-disabled') === 'true';
+            const enabled = !disabled;
+            const tag = element.tagName.toLowerCase();
+            const type =
+              tag === 'input'
+                ? String(element.getAttribute('type') || 'text').toLowerCase()
+                : null;
+            const password = tag === 'input' && type === 'password';
+            const rawText = String(
+              element.getAttribute('aria-label') ||
+              element.innerText ||
+              element.textContent ||
+              ''
+            );
+            const text = rawText.slice(0, 4096);
+            const x = rect.x + rect.width / 2;
+            const y = rect.y + rect.height / 2;
+            const hit = visible ? document.elementFromPoint(x, y) : null;
+            const hittable =
+              Boolean(hit) &&
+              (hit === element || element.contains(hit));
+            const checked =
+              'checked' in element ? Boolean(element.checked) : null;
+            const expectations = [];
+
+            const expectedText = ${expectedTextJson};
+            if (expectedText !== undefined) {
+              const mode = ${textMode};
+              expectations.push({
+                name:'text',
+                expected: expectedText,
+                actual: text,
+                passed:
+                  mode === 'exact'
+                    ? rawText === expectedText
+                    : rawText.includes(expectedText)
+              });
+            }
+
+            const expectedVisible = ${expectedVisible};
+            if (expectedVisible !== undefined) {
+              expectations.push({
+                name:'visible',
+                expected: expectedVisible,
+                actual: visible,
+                passed: visible === expectedVisible
+              });
+            }
+
+            const expectedEnabled = ${expectedEnabled};
+            if (expectedEnabled !== undefined) {
+              expectations.push({
+                name:'enabled',
+                expected: expectedEnabled,
+                actual: enabled,
+                passed: enabled === expectedEnabled
+              });
+            }
+
+            const expectedChecked = ${expectedChecked};
+            if (expectedChecked !== undefined) {
+              expectations.push({
+                name:'checked',
+                expected: expectedChecked,
+                actual: checked,
+                passed: checked === expectedChecked
+              });
+            }
+
+            const pageX = rect.x + window.scrollX;
+            const pageY = rect.y + window.scrollY;
+            return {
+              ok:true,
+              selector:${selectorJson},
+              tag,
+              type,
+              role:element.getAttribute('role'),
+              visible,
+              enabled,
+              checked,
+              password,
+              text,
+              textChars:rawText.length,
+              textTruncated:rawText.length > 4096,
+              href:tag === 'a' && element.href ? String(element.href) : null,
+              hittable,
+              pageRect:{
+                x:pageX,
+                y:pageY,
+                width:rect.width,
+                height:rect.height
+              },
+              viewportRect:{
+                x:rect.x,
+                y:rect.y,
+                width:rect.width,
+                height:rect.height
+              },
+              viewport:{
+                width:window.innerWidth,
+                height:window.innerHeight,
+                scrollX:window.scrollX,
+                scrollY:window.scrollY,
+                devicePixelRatio:window.devicePixelRatio
+              },
+              expectations,
+              verified:
+                visible &&
+                hittable &&
+                expectations.every((entry) => entry.passed)
+            };
+          })()`,
+          15_000,
+        );
+
+        if (!state.ok || !state.pageRect) {
+          throw new BrowserControlError(
+            state.code ?? 'BROWSER_VISUAL_VERIFY_FAILED',
+            'Browser element could not be isolated for visual verification.',
+            {
+              selector: input.selector,
+              count: state.count,
+            },
+          );
+        }
+
+        const viewport = state.viewport;
+        if (!viewport) {
+          throw new BrowserControlError(
+            'BROWSER_VISUAL_VERIFY_FAILED',
+            'Browser viewport metadata is unavailable.',
+          );
+        }
+
+        const x = Math.max(0, state.pageRect.x - padding);
+        const y = Math.max(0, state.pageRect.y - padding);
+        const maxPageWidth =
+          viewport.scrollX + viewport.width;
+        const maxPageHeight =
+          viewport.scrollY + viewport.height;
+        const width = Math.max(
+          1,
+          Math.min(
+            state.pageRect.width + padding * 2,
+            maxPageWidth - x,
+          ),
+        );
+        const height = Math.max(
+          1,
+          Math.min(
+            state.pageRect.height + padding * 2,
+            maxPageHeight - y,
+          ),
+        );
+
+        const screenshot = await client.send<{ data: string }>(
+          'Page.captureScreenshot',
+          {
+            format: 'png',
+            fromSurface: true,
+            captureBeyondViewport: false,
+            clip: {
+              x,
+              y,
+              width,
+              height,
+              scale: 1,
+            },
+          },
+          15_000,
+        );
+
+        const bytes = Buffer.from(screenshot.data, 'base64');
+        if (bytes.length > maxBytes) {
+          throw new BrowserControlError(
+            'BROWSER_SCREENSHOT_TOO_LARGE',
+            'Browser verification image exceeds max_bytes.',
+            {
+              bytes: bytes.length,
+              maxBytes,
+            },
+          );
+        }
+
+        return {
+          sessionId: input.sessionId,
+          targetId: target.id,
+          selector: input.selector,
+          verified: state.verified ?? false,
+          element: {
+            tag: state.tag,
+            type: state.type,
+            role: state.role,
+            visible: state.visible,
+            enabled: state.enabled,
+            checked: state.checked,
+            password: state.password,
+            text: state.text,
+            textChars: state.textChars,
+            textTruncated: state.textTruncated,
+            href: state.href,
+            hittable: state.hittable,
+            pageRect: state.pageRect,
+            viewportRect: state.viewportRect,
+          },
+          expectations: state.expectations ?? [],
+          screenshot: {
+            mimeType: 'image/png' as const,
+            bytes: bytes.length,
+            ...pngDimensions(bytes),
+            sha256: createHash('sha256')
+              .update(bytes)
+              .digest('hex'),
+            base64: screenshot.data,
+            capturedAt: new Date().toISOString(),
+          },
+        };
+      },
+    );
+  }
+
   async screenshot(input: {
     sessionId: string;
     targetId?: string;
