@@ -119,6 +119,10 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_task_control'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_firewall_control'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_read'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_set'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_delete'));
 
   const result = await client.callTool({
     name: 'machine_snapshot',

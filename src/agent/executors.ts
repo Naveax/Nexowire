@@ -7,6 +7,7 @@ import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
 import { PathPolicy, PathDeniedError } from './path-policy.js';
 import { executeWindowsCapability } from './windows-control.js';
+import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 
@@ -1713,6 +1714,11 @@ export async function executeCapability(
     case 'windows.task.control':
     case 'windows.firewall.control':
       return await executeWindowsCapability(capability, input);
+    case 'windows.environment.list':
+    case 'windows.environment.read':
+    case 'windows.environment.set':
+    case 'windows.environment.delete':
+      return await executeWindowsEnvironmentCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }

@@ -37,3 +37,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Live agent/process events are kept only in a bounded in-memory ring on the hub. They are not written to the audit log or persistent state; stdout/stderr can contain sensitive data and should be treated as transient operational output.
 
 - Network probes are bounded by explicit timeouts. HTTP probes accept only HTTP(S), reject embedded URL credentials, expose only selected response headers, and cap GET body previews.
+
+- Windows environment discovery lists names without values. Selected reads redact sensitive-looking variables by default; user/machine writes are exact-name mutations, verified after write/delete, and remain excluded from read-only failover replay.
