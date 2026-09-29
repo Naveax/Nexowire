@@ -106,6 +106,27 @@ public static class NexowireWindowNative {
 
   [DllImport("user32.dll")]
   [return: MarshalAs(UnmanagedType.Bool)]
+  public static extern bool BringWindowToTop(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr SetActiveWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  public static extern IntPtr SetFocus(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  [return: MarshalAs(UnmanagedType.Bool)]
+  public static extern bool AttachThreadInput(
+    uint idAttach,
+    uint idAttachTo,
+    [MarshalAs(UnmanagedType.Bool)] bool fAttach
+  );
+
+  [DllImport("kernel32.dll")]
+  public static extern uint GetCurrentThreadId();
+
+  [DllImport("user32.dll")]
+  [return: MarshalAs(UnmanagedType.Bool)]
   public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
 }
 "@
@@ -263,6 +284,71 @@ $setResult = [NexowireWindowNative]::SetForegroundWindow($hWnd)
 Start-Sleep -Milliseconds 75
 $foreground = [NexowireWindowNative]::GetForegroundWindow()
 $verified = ($foreground -eq $hWnd)
+$fallbackAttempted = $false
+$bringToTopResult = $false
+$attachedForeground = $false
+$attachedTarget = $false
+
+if (-not $verified) {
+  $fallbackAttempted = $true
+  [uint32]$ignoredPid = 0
+  $currentThread = [NexowireWindowNative]::GetCurrentThreadId()
+  $targetThread = [NexowireWindowNative]::GetWindowThreadProcessId(
+    $hWnd,
+    [ref]$ignoredPid
+  )
+  $foregroundThread = 0
+  if ($foreground -ne [IntPtr]::Zero) {
+    $foregroundThread = [NexowireWindowNative]::GetWindowThreadProcessId(
+      $foreground,
+      [ref]$ignoredPid
+    )
+  }
+
+  try {
+    if (
+      $foregroundThread -ne 0 -and
+      $foregroundThread -ne $currentThread
+    ) {
+      $attachedForeground = [NexowireWindowNative]::AttachThreadInput(
+        $currentThread,
+        $foregroundThread,
+        $true
+      )
+    }
+    if ($targetThread -ne 0 -and $targetThread -ne $currentThread) {
+      $attachedTarget = [NexowireWindowNative]::AttachThreadInput(
+        $currentThread,
+        $targetThread,
+        $true
+      )
+    }
+
+    $bringToTopResult = [NexowireWindowNative]::BringWindowToTop($hWnd)
+    [void][NexowireWindowNative]::SetActiveWindow($hWnd)
+    [void][NexowireWindowNative]::SetFocus($hWnd)
+    $setResult = [NexowireWindowNative]::SetForegroundWindow($hWnd)
+  } finally {
+    if ($attachedTarget) {
+      [void][NexowireWindowNative]::AttachThreadInput(
+        $currentThread,
+        $targetThread,
+        $false
+      )
+    }
+    if ($attachedForeground) {
+      [void][NexowireWindowNative]::AttachThreadInput(
+        $currentThread,
+        $foregroundThread,
+        $false
+      )
+    }
+  }
+
+  Start-Sleep -Milliseconds 100
+  $foreground = [NexowireWindowNative]::GetForegroundWindow()
+  $verified = ($foreground -eq $hWnd)
+}
 
 [pscustomobject]@{
   ok = $verified
@@ -272,6 +358,10 @@ $verified = ($foreground -eq $hWnd)
   restoreAttempted = $restoreAttempted
   restoreResult = $restoreResult
   setForegroundResult = $setResult
+  fallbackAttempted = $fallbackAttempted
+  bringToTopResult = $bringToTopResult
+  attachedForeground = $attachedForeground
+  attachedTarget = $attachedTarget
   verified = $verified
   foregroundHwnd = if ($foreground -eq [IntPtr]::Zero) {
     $null

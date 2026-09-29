@@ -140,6 +140,11 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_window_list'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_window_focus'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_screenshot'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_clipboard_read'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_clipboard_write'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_clipboard_clear'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_keyboard_type'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_keyboard_hotkey'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_eventlog_query'));

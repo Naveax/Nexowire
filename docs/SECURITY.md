@@ -45,3 +45,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Window focus accepts one exact HWND, optionally restores only that window when minimized, and verifies the final foreground HWND. Focus is mutation-classified and is never treated as replay-safe.
 
 - Screenshots are returned inline and are not persisted by the screenshot capability. Capture dimensions and encoded byte size are bounded. The structured MCP metadata omits base64 image data, and service/session-isolated agents fail explicitly when no interactive desktop can be captured. Screenshots may contain sensitive on-screen data, so callers should prefer exact-window scope over full-desktop capture.
+
+- Keyboard injection requires one exact foreground HWND before any Unicode text or hotkey is sent. Clipboard reads are bounded; clipboard write/clear and keyboard actions are mutation-classified and are never replayed after ambiguous transport failure. Clipboard payloads and typed text remain operation inputs, not audit-log payloads.

@@ -56,7 +56,8 @@
 - [x] window enumeration/focus with exact HWND verification
 - [x] bounded inline screenshot capture for desktop and exact HWND rectangles
 - accessibility-tree inspection
-- keyboard/clipboard and browser automation
+- [x] exact-foreground keyboard input and bounded clipboard control
+- browser automation
 - visual verification
 - raw mouse control only as a fallback
 

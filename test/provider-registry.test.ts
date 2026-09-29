@@ -208,6 +208,10 @@ test('mutation capabilities are never classified as read-only', () => {
     'windows.environment.set',
     'windows.environment.delete',
     'windows.window.focus',
+    'windows.clipboard.write',
+    'windows.clipboard.clear',
+    'windows.keyboard.type',
+    'windows.keyboard.hotkey',
   ];
 
   for (const capability of mutations) {
