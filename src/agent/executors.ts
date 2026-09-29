@@ -17,6 +17,7 @@ import { executeBrowserCapability } from './browser-control.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
+import type { ArtifactStore } from './artifact-store.js';
 
 const ShellExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
@@ -196,6 +197,63 @@ const TaskGraphPruneInputSchema = z.object({
     .min(0)
     .max(2_592_000_000)
     .optional(),
+});
+
+const ArtifactKindInputSchema = z.enum([
+  'build',
+  'test',
+  'report',
+  'log',
+  'package',
+  'archive',
+  'image',
+  'binary',
+  'other',
+]);
+
+const ArtifactRegisterInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  label: z.string().min(1).max(256).optional(),
+  kind: ArtifactKindInputSchema.default('other'),
+  source_graph_id: z.string().min(1).max(128).optional(),
+  source_job_id: z.string().min(1).max(128).optional(),
+  max_hash_bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(4_294_967_296)
+    .default(536_870_912),
+});
+
+const ArtifactListInputSchema = z.object({
+  graph_id: z.string().min(1).max(128).optional(),
+  job_id: z.string().min(1).max(128).optional(),
+  kind: ArtifactKindInputSchema.optional(),
+  limit: z.number().int().min(1).max(1000).default(200),
+});
+
+const ArtifactGetInputSchema = z.object({
+  artifact_id: z.string().uuid(),
+});
+
+const ArtifactVerifyInputSchema = z.object({
+  artifact_id: z.string().uuid(),
+  max_hash_bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(4_294_967_296)
+    .default(536_870_912),
+});
+
+const ArtifactPruneInputSchema = z.object({
+  older_than_ms: z
+    .number()
+    .int()
+    .min(0)
+    .max(31_536_000_000)
+    .optional(),
+  remove_missing: z.boolean().default(false),
 });
 
 class FileConflictError extends Error {
@@ -1780,6 +1838,7 @@ async function workspaceSnapshot(
 export interface AgentExecutionContext {
   processes?: ProcessManager;
   taskGraphs?: TaskGraphStore;
+  artifacts?: ArtifactStore;
 }
 
 function requireProcesses(context: AgentExecutionContext): ProcessManager {
@@ -1793,6 +1852,14 @@ function requireTaskGraphs(context: AgentExecutionContext): TaskGraphStore {
   }
   return context.taskGraphs;
 }
+
+function requireArtifacts(context: AgentExecutionContext): ArtifactStore {
+  if (!context.artifacts) {
+    throw new Error('Persistent artifact store is unavailable.');
+  }
+  return context.artifacts;
+}
+
 
 export async function executeCapability(
   capability: Capability,
@@ -1869,6 +1936,65 @@ export async function executeCapability(
           ...(parsed.older_than_ms !== undefined
             ? { olderThanMs: parsed.older_than_ms }
             : {}),
+        }),
+      };
+    }
+    case 'artifact.register': {
+      const parsed = ArtifactRegisterInputSchema.parse(input);
+      return {
+        data: await requireArtifacts(context).register(
+          {
+            path: parsed.path,
+            ...(parsed.label ? { label: parsed.label } : {}),
+            kind: parsed.kind,
+            ...(parsed.source_graph_id
+              ? { sourceGraphId: parsed.source_graph_id }
+              : {}),
+            ...(parsed.source_job_id
+              ? { sourceJobId: parsed.source_job_id }
+              : {}),
+            maxHashBytes: parsed.max_hash_bytes,
+          },
+          policy,
+        ),
+      };
+    }
+    case 'artifact.list': {
+      const parsed = ArtifactListInputSchema.parse(input);
+      return {
+        data: await requireArtifacts(context).list({
+          ...(parsed.graph_id ? { graphId: parsed.graph_id } : {}),
+          ...(parsed.job_id ? { jobId: parsed.job_id } : {}),
+          ...(parsed.kind ? { kind: parsed.kind } : {}),
+          limit: parsed.limit,
+        }),
+      };
+    }
+    case 'artifact.get': {
+      const parsed = ArtifactGetInputSchema.parse(input);
+      return {
+        data: await requireArtifacts(context).get(parsed.artifact_id),
+      };
+    }
+    case 'artifact.verify': {
+      const parsed = ArtifactVerifyInputSchema.parse(input);
+      return {
+        data: await requireArtifacts(context).verify(
+          parsed.artifact_id,
+          policy,
+          parsed.max_hash_bytes,
+        ),
+      };
+    }
+    case 'artifact.prune': {
+      const parsed = ArtifactPruneInputSchema.parse(input);
+      return {
+        data: await requireArtifacts(context).prune({
+          ...(parsed.older_than_ms !== undefined
+            ? { olderThanMs: parsed.older_than_ms }
+            : {}),
+          removeMissing: parsed.remove_missing,
+          policy,
         }),
       };
     }
