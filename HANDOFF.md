@@ -36,6 +36,7 @@ Implemented:
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
 - operation IDs plus persistent payload-free audit metadata
+- persistent payload-free idempotency records for selected replay-safe mutations, with key/fingerprint mismatch rejection and restart-safe unknown-state blocking
 - full MCP -> native-agent integration coverage
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
@@ -67,7 +68,7 @@ The generic backend registry remains because it is useful for Nexowire-owned tra
 2. Extend visual verification beyond browser elements into reusable postcondition/assertion workflows; exact-element browser verification is implemented.
 3. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
 4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
-5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
+5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
 6. Finish robust multi-device native-agent routing; persistent aliases are implemented.
 7. Design production ChatGPT authentication and encrypted credential handling before public deployment.
 
