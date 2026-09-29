@@ -1,6 +1,6 @@
 # Nexowire Architecture
 
-Nexowire is an AI-facing control plane, not a remote-desktop protocol.
+Nexowire is an AI-facing control plane with a first-party remote execution runtime.
 
 ## Data path
 
@@ -8,22 +8,24 @@ Nexowire is an AI-facing control plane, not a remote-desktop protocol.
 ChatGPT
   -> MCP / HTTPS
 Nexowire Hub
-  -> provider registry
   -> capability router
-  -> native agent / future provider adapter
+  -> Nexowire native-agent backend
+  -> outbound Nexowire agent transport
 Target computer
 ```
 
-A target can eventually be reachable through more than one provider. The provider registry normalizes those transports into the same capability model.
+The default runtime registers only the first-party `native-agent` backend. Remote Desktop Commander, SentinelX, Codex, and other third-party computer-control services are not runtime dependencies.
+
+The internal backend/provider interface remains as an architectural seam for Nexowire-owned transports such as direct agent connections, relays, local execution, testing backends, and future platform-specific agents.
 
 ## Current bootstrap
 
 - stateless Streamable HTTP MCP endpoint
 - stdio MCP mode for local development
 - outbound native-agent WebSocket transport
-- provider registry with priority, health/latency ranking, read-only failover, and mutation replay protection
+- internal backend registry with health/latency ranking, read-only failover semantics, and mutation replay protection
 - PowerShell/cmd/bash shell execution
-- structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus verified service/registry/task/firewall control
+- structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus verified mutations where implemented
 - exact Windows process/user/machine environment discovery, selective reads, and verified mutations
 - structured Windows top-level window enumeration and exact HWND foreground focus with verification
 - bounded inline PNG capture for virtual desktop, primary screen, or exact HWND rectangle without changing focus
@@ -45,18 +47,20 @@ A target can eventually be reachable through more than one provider. The provide
 
 ## Design rules
 
-1. Provider-specific details do not leak into the normal ChatGPT tool surface.
-2. Structured APIs beat GUI automation; GUI automation beats raw coordinate control.
-3. Reads can fail over aggressively. Unknown-state mutations require verification before replay.
-4. Long-lived project context belongs in workspace checkpoints, not assumptions.
-5. Tool output is bounded.
-6. The native agent initiates outbound connectivity so target PCs do not need inbound public ports.
+1. Core capabilities must work through Nexowire-owned runtime components.
+2. External computer-control products are never required for normal operation.
+3. Structured APIs beat GUI automation; GUI automation beats raw coordinate control.
+4. Unknown-state mutations require verification before replay.
+5. Long-lived project context belongs in workspace checkpoints, not assumptions.
+6. Tool output is bounded.
+7. The native agent initiates outbound connectivity so target PCs do not need inbound public ports.
+8. Generic backend abstractions may exist internally, but first-party capability ownership is the default.
 
 ## Next architectural layers
 
-- durable process I/O and artifact tracking beyond task-graph job boundaries
-- durable/persisted event history only where there is a concrete operational need; the live feed intentionally remains bounded and in-memory
-- structured Windows service/process/network/registry tools
-- provider adapters for SentinelX and Remote Desktop Commander where supported APIs permit
-- browser automation and visual action verification above the structured GUI/pointer layer
-- production ChatGPT authentication and encrypted credential storage
+- first-party browser automation and visual action verification
+- fully reattachable durable process I/O and artifact tracking beyond task-graph job boundaries
+- robust multi-device native routing and stable aliases
+- optional Nexowire relay/direct transport selection
+- first-party privilege-separated broker/service
+- production ChatGPT authentication, TLS, and encrypted credential storage

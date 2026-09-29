@@ -3,14 +3,14 @@
 ## v0.1 - Control plane bootstrap
 
 - [x] Repository and TypeScript project
-- [x] Provider abstraction and capability routing
+- [x] Capability abstraction and native routing
 - [x] Native outbound agent transport
 - [x] MCP Streamable HTTP and stdio modes
 - [x] Shell, WSL2, file, machine, and workspace primitives
 - [x] Persistent workspace checkpoints
 - [x] Lazy skill registry
 - [x] Initial security boundaries
-- [x] End-to-end MCP -> provider -> native-agent integration test
+- [x] End-to-end MCP -> native-agent integration test
 - [x] Interactive process sessions: start/read/write/stop/list
 - [x] Persisted process-session metadata, orphan/lost recovery classification, retention, and prune
 - [ ] Fully reattachable durable process I/O across agent restart
@@ -42,14 +42,16 @@
 - resumable long-running work beyond task-graph job boundaries
 - artifact tracking
 
-## v0.4 - Provider mesh
+## v0.4 - Native remote runtime
 
-- SentinelX adapter where supported
-- Remote Desktop Commander adapter where supported
-- [x] provider health/latency ranking
+- [x] first-party Nexowire native-agent backend as the default runtime
+- [x] provider/backend health and latency ranking kept as an internal routing primitive
 - [x] mutation-aware failover with automatic replay blocked on unknown mutation state
-- operation IDs and idempotency records
-- multi-account provider profiles
+- [ ] multi-device native-agent routing and stable device aliases
+- [ ] reconnect/session continuity without third-party control providers
+- [ ] operation IDs and idempotency records for selected replay-safe mutations
+- [ ] native relay mode for machines that cannot reach the hub directly
+- [ ] first-party privilege separation and per-capability policy profiles
 
 ## v0.5 - GUI and browser
 
@@ -57,8 +59,8 @@
 - [x] bounded inline screenshot capture for desktop and exact HWND rectangles
 - [x] bounded Windows UI Automation tree/find plus exact invoke/set-value controls
 - [x] exact-foreground keyboard input and bounded clipboard control
-- browser automation
-- visual verification
+- [ ] browser automation
+- [ ] visual verification
 - [x] exact-HWND raw pointer move/click/scroll only as a fallback
 
 ## v1.0 - ChatGPT-ready remote control
@@ -71,3 +73,4 @@
 - dynamic capability exposure
 - mature skill library
 - Windows + WSL2 + Linux support
+- zero required third-party computer-control runtime dependencies
