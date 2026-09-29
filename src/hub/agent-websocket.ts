@@ -1,4 +1,4 @@
-import type { Server as HttpServer, IncomingMessage } from 'node:http';
+import type { Server as HttpServer } from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { AgentBroker } from '../core/agent-broker.js';
 import { AgentHelloSchema } from '../protocol/agent.js';
