@@ -30,8 +30,8 @@ export function attachAgentWebSocketServer(
   options: AgentWebSocketServerOptions = {},
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
-  const heartbeatMs = Math.max(1_000, options.heartbeatMs ?? 30_000);
-  const helloTimeoutMs = Math.max(1_000, options.helloTimeoutMs ?? 5_000);
+  const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
+  const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
   const alive = new WeakSet<WebSocket>();
 
   server.on('upgrade', (request, socket, head) => {
