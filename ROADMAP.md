@@ -36,10 +36,10 @@
 
 - [x] project detection and targeted repository search
 - [x] structured build/test/lint/typecheck adapters for detected workspaces
-- persistent task graph
-- [ ] persistent/resumable task graph state across agent restart
+- [x] persistent task graph metadata and exact-spec resume
+- [x] persistent/resumable task graph metadata across agent restart with explicit unknown-state replay control
 - [x] bounded dependency-aware parallel independent jobs
-- resumable long-running work
+- resumable long-running work beyond task-graph job boundaries
 - artifact tracking
 
 ## v0.4 - Provider mesh

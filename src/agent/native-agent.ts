@@ -11,6 +11,7 @@ import { capabilitiesForPlatform } from '../protocol/capabilities.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
+import { TaskGraphStore } from './task-graph-store.js';
 
 interface AgentIdentity {
   id: string;
@@ -50,6 +51,9 @@ export async function runNativeAgent(
   const processStateFile =
     env.NEXOWIRE_PROCESS_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'process-sessions.json');
+  const taskGraphStateFile =
+    env.NEXOWIRE_TASK_GRAPH_STATE_FILE?.trim() ||
+    path.join(os.homedir(), '.nexowire', 'task-graphs.json');
 
   let stopped = false;
   let currentSocket: WebSocket | undefined;
@@ -69,7 +73,8 @@ export async function runNativeAgent(
     stateFile: processStateFile,
     onEvent: (event) => emitAgentEvent(event.topic, event.data),
   });
-  await processes.initialize();
+  const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
+  await Promise.all([processes.initialize(), taskGraphs.initialize()]);
   let reconnectDelay = 1_000;
 
   const stop = (): void => {
@@ -119,7 +124,7 @@ export async function runNativeAgent(
               request.data.capability,
               request.data.input,
               policy,
-              { processes },
+              { processes, taskGraphs },
             );
             socket.send(
               JSON.stringify({
