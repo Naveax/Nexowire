@@ -2,19 +2,44 @@
 
 **AI-native remote computer control for ChatGPT.**
 
-Nexowire is a provider-independent control layer that gives ChatGPT a structured, resumable way to work with remote computers, terminals, files, processes, GUIs, and project workspaces.
+Nexowire is a self-hosted control plane and native-agent runtime that gives ChatGPT a structured, resumable way to work with computers, terminals, files, processes, GUIs, browsers, and project workspaces.
 
-> Status: early development. The protocol, security model, and provider APIs are still evolving.
+> Status: early development. The protocol, security model, and native transport are still evolving.
+
+## Runtime rule
+
+Nexowire does not depend on Remote Desktop Commander, SentinelX, Codex, or another third-party remote-control service at runtime.
+
+Those products may be useful during development, but the shipped data path is owned by Nexowire:
+
+```text
+ChatGPT
+   |
+   v
+Nexowire MCP / HTTPS
+   |
+   v
+Nexowire Hub
+   |
+   v
+Nexowire Native Agent
+   |
+   v
+Target computer
+```
+
+If a useful capability exists elsewhere, Nexowire implements the capability in its own native layer instead of requiring that service.
 
 ## Goals
 
-- One tool surface across Windows, PowerShell, WSL2, Linux, GUI automation, files, processes, services, networking, and project workspaces.
-- Provider adapters for Remote Desktop Commander, SentinelX, native agents, and future transports.
+- One stable tool surface across Windows, PowerShell, WSL2, Linux, GUI automation, files, processes, services, networking, browsers, and project workspaces.
+- First-party outbound native-agent transport controlled by Nexowire.
 - Persistent workspaces and resumable task state instead of stateless command-by-command control.
-- Capability-based routing and safe provider failover.
+- Capability-based routing across Nexowire-owned execution backends and devices.
 - Fast AI use through batched operations, compact snapshots, dynamic tool exposure, and structured output.
 - Reusable skills for coding, diagnostics, administration, deployment, and recovery.
 - Auditability, cancellation, verification, and explicit handling of destructive operations.
+- No runtime quota or feature dependency on third-party computer-control providers.
 
 ## Architecture
 
@@ -31,16 +56,18 @@ Nexowire Hub
    |-- Workspace state
    |-- Skills
    |-- Shell runtime
-   |-- GUI control
+   |-- GUI / browser control
    |
-   +-- Native Agent
-   +-- Remote Desktop Commander adapter
-   +-- SentinelX adapter
-   +-- PowerShell / WSL2
-   +-- Future providers
+   +-- Nexowire Native Agent
+        |-- Windows / PowerShell
+        |-- WSL2
+        |-- Linux
+        |-- Files / processes / services
+        |-- UIA / screenshots / keyboard / pointer
+        +-- Browser automation
 ```
 
-The key rule is that providers are transport/execution backends, not the product surface. ChatGPT should see one stable Nexowire capability model regardless of how a target machine is reached.
+The provider abstraction remains an internal routing boundary. Runtime registration is first-party: the default runtime registers only the Nexowire native-agent backend. Future backends must be Nexowire-owned transports or explicitly added by the operator.
 
 ## Planned capability groups
 
@@ -48,26 +75,18 @@ The key rule is that providers are transport/execution backends, not the product
 filesystem   search       shell        process
 git          windows      wsl          network
 services     registry     tasks        gui
-browser      workspace    devices      providers
+browser      workspace    devices      runtime
 ```
 
 ## Repository direction
 
-The first milestone establishes:
-
-1. shared protocol types,
-2. provider abstraction and capability registry,
-3. normalized execution results,
-4. workspace snapshots and resumable task checkpoints,
-5. an MCP server for ChatGPT,
-6. a local development provider,
-7. tests for routing, concurrency, validation, and failure handling.
+The first milestones establish shared protocol types, a native execution backend, normalized execution results, workspace snapshots and resumable tasks, the ChatGPT-facing MCP server, multi-device routing, and tests for concurrency, validation, failure handling, and mutation safety.
 
 See `ROADMAP.md` and `HANDOFF.md` as the implementation grows.
 
 ## Security
 
-Nexowire is intended to control real computers. Security is therefore part of the architecture rather than a later toggle. The project will use scoped capabilities, explicit target selection, audit events, credential isolation, safe defaults, and verification around destructive or privileged actions.
+Nexowire is intended to control real computers. Security is therefore part of the architecture rather than a later toggle. The project uses scoped capabilities, explicit target selection, audit events, credential isolation, safe defaults, and verification around destructive or privileged actions.
 
 Do not expose a development instance directly to the public Internet.
 
@@ -81,4 +100,4 @@ npm run build
 
 Run the hub with `npm run dev:http` and the native agent with `npm run dev:agent`. The default MCP endpoint is `http://127.0.0.1:43110/mcp`; the default agent WebSocket endpoint is `ws://127.0.0.1:43110/agent`.
 
-The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, workspace detection/checks, dependency-aware parallel task graphs with exact-spec task-graph resume, a bounded event feed, structured DNS/TCP/HTTP diagnostics, compact machine health, exact Windows environment controls, exact HWND window control, inline Windows screenshots, exact-foreground keyboard input and bounded clipboard control, Windows UI Automation tree/actions, exact-HWND pointer fallback, workspace checkpoints, lazy skills, and provider routing. See `ROADMAP.md` for what is still intentionally unfinished.
+The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, workspace detection/checks, dependency-aware parallel task graphs with exact-spec task-graph resume, a bounded event feed, structured DNS/TCP/HTTP diagnostics, compact machine health, exact Windows environment controls, exact HWND window control, inline Windows screenshots, exact-foreground keyboard input and bounded clipboard control, Windows UI Automation tree/actions, exact-HWND pointer fallback, workspace checkpoints, lazy skills, and native capability routing. See `ROADMAP.md` for what is still intentionally unfinished.
