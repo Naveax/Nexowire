@@ -207,6 +207,7 @@ test('mutation capabilities are never classified as read-only', () => {
     'windows.firewall.control',
     'windows.environment.set',
     'windows.environment.delete',
+    'windows.window.focus',
   ];
 
   for (const capability of mutations) {

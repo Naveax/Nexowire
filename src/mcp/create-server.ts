@@ -287,6 +287,81 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'windows_window_list',
+    {
+      title: 'List Windows top-level windows',
+      description:
+        'Enumerate top-level Windows HWNDs with title, process metadata, visibility, minimized/foreground state, and screen rectangle.',
+      inputSchema: {
+        ...targetFields,
+        include_hidden: z.boolean().optional(),
+        title_contains: z.string().max(1024).optional(),
+        process_id: z.number().int().positive().optional(),
+        limit: z.number().int().min(1).max(2000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      include_hidden,
+      title_contains,
+      process_id,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'windows.window.list',
+        {
+          ...(include_hidden !== undefined ? { include_hidden } : {}),
+          ...(title_contains !== undefined ? { title_contains } : {}),
+          ...(process_id !== undefined ? { process_id } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_window_focus',
+    {
+      title: 'Focus exact Windows window',
+      description:
+        'Bring one exact HWND to the foreground, optionally restoring it first when minimized, and verify the final foreground HWND.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        restore_if_minimized: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      restore_if_minimized,
+    }) =>
+      await execute(
+        ctx,
+        'windows.window.focus',
+        {
+          hwnd,
+          ...(restore_if_minimized !== undefined
+            ? { restore_if_minimized }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
   server.registerTool(
     'windows_processes',
     {
