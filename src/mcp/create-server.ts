@@ -1246,6 +1246,108 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'task_run_graph',
+    {
+      title: 'Run dependency-aware task graph',
+      description:
+        'Run up to 32 shell jobs with explicit dependencies, bounded parallelism, output limits, per-job timeouts, and a total graph timeout.',
+      inputSchema: {
+        ...targetFields,
+        jobs: z
+          .array(
+            z.object({
+              id: z
+                .string()
+                .min(1)
+                .max(128)
+                .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+              command: z.string().min(1).max(200_000),
+              shell: z
+                .enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh'])
+                .optional(),
+              cwd: z.string().max(4096).optional(),
+              depends_on: z
+                .array(
+                  z
+                    .string()
+                    .min(1)
+                    .max(128)
+                    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+                )
+                .max(31)
+                .optional(),
+              timeout_ms: z
+                .number()
+                .int()
+                .min(100)
+                .max(600_000)
+                .optional(),
+              max_output_bytes: z
+                .number()
+                .int()
+                .min(1024)
+                .max(16_777_216)
+                .optional(),
+            }),
+          )
+          .min(1)
+          .max(32),
+        max_parallel: z.number().int().min(1).max(8).optional(),
+        stop_on_failure: z.boolean().optional(),
+        default_timeout_ms: z
+          .number()
+          .int()
+          .min(100)
+          .max(600_000)
+          .optional(),
+        total_timeout_ms: z
+          .number()
+          .int()
+          .min(100)
+          .max(3_600_000)
+          .optional(),
+        default_max_output_bytes: z
+          .number()
+          .int()
+          .min(1024)
+          .max(16_777_216)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      jobs,
+      max_parallel,
+      stop_on_failure,
+      default_timeout_ms,
+      total_timeout_ms,
+      default_max_output_bytes,
+    }) => {
+      const graphTimeout = total_timeout_ms ?? 600_000;
+      return await execute(
+        ctx,
+        'task.graph.run',
+        {
+          jobs,
+          ...(max_parallel !== undefined ? { max_parallel } : {}),
+          ...(stop_on_failure !== undefined ? { stop_on_failure } : {}),
+          ...(default_timeout_ms !== undefined
+            ? { default_timeout_ms }
+            : {}),
+          ...(total_timeout_ms !== undefined ? { total_timeout_ms } : {}),
+          ...(default_max_output_bytes !== undefined
+            ? { default_max_output_bytes }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        graphTimeout + 15_000,
+      );
+    },
+  );
+
+  server.registerTool(
     'workspace_checkpoint_save',
     {
       title: 'Save workspace checkpoint',

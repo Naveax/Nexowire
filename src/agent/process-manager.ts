@@ -386,7 +386,7 @@ export class ProcessManager {
       session.exitCode = code;
       session.signal = signal;
       session.exitedAt = new Date().toISOString();
-      void this.persistState();
+      void this.persistState().catch(() => undefined);
     });
 
     await this.persistState();
@@ -454,6 +454,26 @@ export class ProcessManager {
     return summarize(session);
   }
 
+  private async waitForChildClose(
+    session: ManagedSession,
+    timeoutMs = 2_000,
+  ): Promise<void> {
+    if (!session.child || session.status !== 'running') return;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(finish, timeoutMs);
+      session.child!.once('close', finish);
+      if (session.status !== 'running') finish();
+    });
+  }
+
   async stop(input: unknown) {
     const parsed = SessionSchema.parse(input);
     const session = this.require(parsed.session_id);
@@ -471,13 +491,14 @@ export class ProcessManager {
       session.pid
     ) {
       await killPidTree(session.pid);
+      await this.waitForChildClose(session);
 
       for (let attempt = 0; attempt < 20; attempt++) {
         if (!isPidAlive(session.pid)) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      if (!isPidAlive(session.pid)) {
+      if (!isPidAlive(session.pid) && !session.exitedAt) {
         session.status = 'exited';
         session.exitCode = null;
         session.signal = null;
@@ -535,11 +556,12 @@ export class ProcessManager {
     await Promise.all(
       active.map(async (session) => {
         await killPidTree(session.pid!);
+        await this.waitForChildClose(session);
         for (let attempt = 0; attempt < 20; attempt++) {
           if (!isPidAlive(session.pid!)) break;
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        if (!isPidAlive(session.pid!)) {
+        if (!isPidAlive(session.pid!) && !session.exitedAt) {
           session.status = 'exited';
           session.exitCode = null;
           session.signal = null;

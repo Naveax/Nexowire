@@ -127,6 +127,51 @@ const WorkspaceChecksInputSchema = z.object({
     .default(2_097_152),
 });
 
+const TaskGraphJobIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
+
+const TaskGraphJobSchema = z.object({
+  id: TaskGraphJobIdSchema,
+  command: z.string().min(1).max(200_000),
+  shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
+  cwd: z.string().max(4096).optional(),
+  depends_on: z.array(TaskGraphJobIdSchema).max(31).default([]),
+  timeout_ms: z.number().int().min(100).max(600_000).optional(),
+  max_output_bytes: z
+    .number()
+    .int()
+    .min(1024)
+    .max(16_777_216)
+    .optional(),
+});
+
+const TaskGraphRunInputSchema = z.object({
+  jobs: z.array(TaskGraphJobSchema).min(1).max(32),
+  max_parallel: z.number().int().min(1).max(8).default(4),
+  stop_on_failure: z.boolean().default(false),
+  default_timeout_ms: z
+    .number()
+    .int()
+    .min(100)
+    .max(600_000)
+    .default(120_000),
+  total_timeout_ms: z
+    .number()
+    .int()
+    .min(100)
+    .max(3_600_000)
+    .default(600_000),
+  default_max_output_bytes: z
+    .number()
+    .int()
+    .min(1024)
+    .max(16_777_216)
+    .default(1_048_576),
+});
+
 class FileConflictError extends Error {
   readonly code = 'FILE_CONFLICT';
 
@@ -1237,6 +1282,297 @@ async function workspaceChecks(
   };
 }
 
+
+type TaskGraphStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'blocked';
+
+interface TaskGraphResult {
+  id: string;
+  status: TaskGraphStatus;
+  dependsOn: string[];
+  command: string;
+  shell: string;
+  cwd?: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+  truncated?: boolean;
+  timedOut?: boolean;
+  error?: string;
+  blockedBy?: string[];
+}
+
+function validateTaskGraph(
+  jobs: z.infer<typeof TaskGraphJobSchema>[],
+): void {
+  const ids = new Set<string>();
+  for (const job of jobs) {
+    if (ids.has(job.id)) {
+      throw new Error(`Duplicate task graph job id: ${job.id}`);
+    }
+    ids.add(job.id);
+  }
+
+  for (const job of jobs) {
+    for (const dependency of job.depends_on) {
+      if (dependency === job.id) {
+        throw new Error(`Task graph job "${job.id}" cannot depend on itself.`);
+      }
+      if (!ids.has(dependency)) {
+        throw new Error(
+          `Task graph job "${job.id}" depends on unknown job "${dependency}".`,
+        );
+      }
+    }
+  }
+
+  const indegree = new Map<string, number>();
+  const children = new Map<string, string[]>();
+  for (const job of jobs) {
+    indegree.set(job.id, job.depends_on.length);
+    for (const dependency of job.depends_on) {
+      const bucket = children.get(dependency) ?? [];
+      bucket.push(job.id);
+      children.set(dependency, bucket);
+    }
+  }
+
+  const queue = jobs
+    .filter((job) => (indegree.get(job.id) ?? 0) === 0)
+    .map((job) => job.id);
+  let visited = 0;
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    visited++;
+    for (const child of children.get(id) ?? []) {
+      const next = (indegree.get(child) ?? 0) - 1;
+      indegree.set(child, next);
+      if (next === 0) queue.push(child);
+    }
+  }
+
+  if (visited !== jobs.length) {
+    throw new Error('Task graph contains a dependency cycle.');
+  }
+}
+
+async function runTaskGraph(
+  input: unknown,
+  policy: PathPolicy,
+): Promise<unknown> {
+  const parsed = TaskGraphRunInputSchema.parse(input);
+  validateTaskGraph(parsed.jobs);
+
+  const startedAt = Date.now();
+  const deadline = startedAt + parsed.total_timeout_ms;
+  const results = new Map<string, TaskGraphResult>();
+
+  for (const job of parsed.jobs) {
+    results.set(job.id, {
+      id: job.id,
+      status: 'pending',
+      dependsOn: [...job.depends_on],
+      command: job.command,
+      shell:
+        job.shell ??
+        (process.platform === 'win32'
+          ? hasExecutable('pwsh.exe')
+            ? 'pwsh'
+            : 'powershell'
+          : 'bash'),
+    });
+  }
+
+  const running = new Map<string, Promise<void>>();
+
+  const startJob = (job: z.infer<typeof TaskGraphJobSchema>): void => {
+    const result = results.get(job.id)!;
+    result.status = 'running';
+    result.startedAt = new Date().toISOString();
+    const jobStartedAt = Date.now();
+
+    const promise = (async () => {
+      try {
+        const cwd = job.cwd
+          ? await policy.resolveExisting(job.cwd)
+          : undefined;
+        const resolvedShell = shellCommand(job.shell, job.command);
+        result.shell =
+          job.shell ??
+          (process.platform === 'win32'
+            ? resolvedShell.executable.toLowerCase().includes('pwsh')
+              ? 'pwsh'
+              : resolvedShell.executable.toLowerCase().includes('powershell')
+                ? 'powershell'
+                : resolvedShell.executable
+            : resolvedShell.executable);
+        if (cwd) result.cwd = cwd;
+
+        const remainingMs = Math.max(100, deadline - Date.now());
+        const execution = await runProcess(
+          resolvedShell.executable,
+          resolvedShell.args,
+          {
+            ...(cwd ? { cwd } : {}),
+            timeoutMs: Math.min(
+              job.timeout_ms ?? parsed.default_timeout_ms,
+              remainingMs,
+            ),
+            maxOutputBytes:
+              job.max_output_bytes ?? parsed.default_max_output_bytes,
+          },
+        );
+
+        result.exitCode = execution.exitCode;
+        result.stdout = execution.stdout;
+        result.stderr = execution.stderr;
+        result.truncated = execution.truncated;
+        result.timedOut = execution.timedOut;
+        result.status =
+          execution.exitCode === 0 && !execution.timedOut
+            ? 'succeeded'
+            : 'failed';
+      } catch (error) {
+        result.status = 'failed';
+        result.exitCode = null;
+        result.stdout = '';
+        result.stderr = '';
+        result.truncated = false;
+        result.timedOut = false;
+        result.error =
+          error instanceof Error ? error.message : String(error);
+      } finally {
+        result.completedAt = new Date().toISOString();
+        result.durationMs = Date.now() - jobStartedAt;
+      }
+    })().finally(() => {
+      running.delete(job.id);
+    });
+
+    running.set(job.id, promise);
+  };
+
+  while (true) {
+    let changed = false;
+    const anyFailed = [...results.values()].some(
+      (result) => result.status === 'failed',
+    );
+
+    for (const job of parsed.jobs) {
+      const result = results.get(job.id)!;
+      if (result.status !== 'pending') continue;
+
+      const dependencyResults = job.depends_on.map(
+        (id) => results.get(id)!,
+      );
+      const blockedBy = dependencyResults
+        .filter(
+          (dependency) =>
+            dependency.status === 'failed' ||
+            dependency.status === 'blocked',
+        )
+        .map((dependency) => dependency.id);
+
+      if (blockedBy.length > 0) {
+        result.status = 'blocked';
+        result.blockedBy = blockedBy;
+        result.completedAt = new Date().toISOString();
+        result.durationMs = 0;
+        changed = true;
+        continue;
+      }
+
+      if (parsed.stop_on_failure && anyFailed) {
+        result.status = 'blocked';
+        result.blockedBy = ['stop_on_failure'];
+        result.completedAt = new Date().toISOString();
+        result.durationMs = 0;
+        changed = true;
+      }
+    }
+
+    if (Date.now() >= deadline) {
+      for (const job of parsed.jobs) {
+        const result = results.get(job.id)!;
+        if (result.status !== 'pending') continue;
+        result.status = 'blocked';
+        result.blockedBy = ['graph_timeout'];
+        result.completedAt = new Date().toISOString();
+        result.durationMs = 0;
+        changed = true;
+      }
+    }
+
+    for (const job of parsed.jobs) {
+      if (running.size >= parsed.max_parallel) break;
+      const result = results.get(job.id)!;
+      if (result.status !== 'pending') continue;
+
+      const ready = job.depends_on.every(
+        (dependency) =>
+          results.get(dependency)?.status === 'succeeded',
+      );
+      if (!ready) continue;
+
+      startJob(job);
+      changed = true;
+    }
+
+    const unfinished = [...results.values()].some(
+      (result) =>
+        result.status === 'pending' || result.status === 'running',
+    );
+    if (!unfinished) break;
+
+    if (running.size === 0) {
+      if (!changed) {
+        throw new Error(
+          'Task graph could not make progress despite passing validation.',
+        );
+      }
+      continue;
+    }
+
+    await Promise.race(running.values());
+  }
+
+  const ordered = parsed.jobs.map((job) => results.get(job.id)!);
+  const succeeded = ordered.filter(
+    (result) => result.status === 'succeeded',
+  ).length;
+  const failed = ordered.filter(
+    (result) => result.status === 'failed',
+  ).length;
+  const blocked = ordered.filter(
+    (result) => result.status === 'blocked',
+  ).length;
+
+  return {
+    data: {
+      ok: failed === 0 && blocked === 0,
+      maxParallel: parsed.max_parallel,
+      stopOnFailure: parsed.stop_on_failure,
+      totalTimeoutMs: parsed.total_timeout_ms,
+      durationMs: Date.now() - startedAt,
+      summary: {
+        total: ordered.length,
+        succeeded,
+        failed,
+        blocked,
+      },
+      results: ordered,
+    },
+  };
+}
+
 async function workspaceSnapshot(
   input: unknown,
   policy: PathPolicy,
@@ -1356,6 +1692,8 @@ export async function executeCapability(
       return await workspaceDetect(input, policy);
     case 'workspace.checks':
       return await workspaceChecks(input, policy);
+    case 'task.graph.run':
+      return await runTaskGraph(input, policy);
     case 'windows.processes':
     case 'windows.services':
     case 'windows.network.snapshot':

@@ -31,3 +31,5 @@ Never automatically replay a mutation merely because the first provider disconne
 Shell execution can access anything available to the agent's operating-system account. Future policy work will add per-capability scopes and privilege separation.
 
 - Text patching can require an expected SHA-256 revision; stale content raises `FILE_CONFLICT` instead of silently overwriting newer edits.
+
+- Task graphs cap job count, parallelism, per-job output, per-job timeout, and total graph duration. Dependency failures block downstream jobs instead of launching them anyway.
