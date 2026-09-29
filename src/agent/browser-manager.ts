@@ -18,6 +18,44 @@ export interface BrowserSessionSummary {
   exitCode: number | null;
 }
 
+export interface BrowserTextSnapshot {
+  text: string;
+  chars: number;
+  truncated: boolean;
+}
+
+export interface BrowserElementSnapshot {
+  selector: string;
+  tag: string;
+  type: string | null;
+  role: string | null;
+  name: string | null;
+  text: BrowserTextSnapshot;
+  value: BrowserTextSnapshot | null;
+  password: boolean;
+  disabled: boolean;
+  checked: boolean | null;
+  href: string | null;
+  visible: boolean;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface BrowserPageSnapshot {
+  url: string;
+  title: string;
+  readyState: string;
+  bodyText: BrowserTextSnapshot;
+  elements: BrowserElementSnapshot[];
+  elementsScanned: number;
+  elementsReturned: number;
+  elementsTruncated: boolean;
+}
+
 interface BrowserSession extends BrowserSessionSummary {
   executable: string;
   userDataDir: string;
@@ -606,7 +644,7 @@ export class BrowserManager {
       async (client, target) => ({
         sessionId: input.sessionId,
         targetId: target.id,
-        ...(await this.evaluate<Record<string, unknown>>(
+        ...(await this.evaluate<BrowserPageSnapshot>(
           client,
           expression,
           15_000,
@@ -657,7 +695,13 @@ export class BrowserManager {
                 rect.width <= 0 || rect.height <= 0) {
               return { ok:false, code:'BROWSER_ELEMENT_NOT_INTERACTABLE' };
             }
-            return { ok:true, x:rect.x + rect.width/2, y:rect.y + rect.height/2 };
+            const x = rect.x + rect.width / 2;
+            const y = rect.y + rect.height / 2;
+            const hit = document.elementFromPoint(x, y);
+            if (!hit || (hit !== element && !element.contains(hit))) {
+              return { ok:false, code:'BROWSER_ELEMENT_OCCLUDED' };
+            }
+            return { ok:true, x, y };
           })()`,
           10_000,
         );
@@ -746,11 +790,29 @@ export class BrowserManager {
             const tag = element.tagName.toLowerCase();
             const type = tag === 'input' ? String(element.type || 'text').toLowerCase() : null;
             if (tag === 'input' && type === 'file') return { ok:false, code:'BROWSER_VALUE_UNSUPPORTED' };
-            if (tag === 'input' || tag === 'textarea') {
+            if (tag === 'input') {
+              const setter = Object.getOwnPropertyDescriptor(
+                HTMLInputElement.prototype,
+                'value'
+              )?.set;
+              if (!setter) return { ok:false, code:'BROWSER_VALUE_UNSUPPORTED' };
               element.focus();
-              element.value = requested;
+              setter.call(element, requested);
+            } else if (tag === 'textarea') {
+              const setter = Object.getOwnPropertyDescriptor(
+                HTMLTextAreaElement.prototype,
+                'value'
+              )?.set;
+              if (!setter) return { ok:false, code:'BROWSER_VALUE_UNSUPPORTED' };
+              element.focus();
+              setter.call(element, requested);
             } else if (tag === 'select') {
-              element.value = requested;
+              const setter = Object.getOwnPropertyDescriptor(
+                HTMLSelectElement.prototype,
+                'value'
+              )?.set;
+              if (!setter) return { ok:false, code:'BROWSER_VALUE_UNSUPPORTED' };
+              setter.call(element, requested);
             } else if (element.isContentEditable) {
               element.focus();
               element.textContent = requested;
@@ -925,9 +987,21 @@ export class BrowserManager {
         target.type === 'page' &&
         typeof target.webSocketDebuggerUrl === 'string',
     );
-    const target = targetId
-      ? pages.find((entry) => entry.id === targetId)
-      : pages[0];
+    let target: CdpTarget | undefined;
+    if (targetId) {
+      target = pages.find((entry) => entry.id === targetId);
+    } else if (pages.length === 1) {
+      target = pages[0];
+    } else if (pages.length > 1) {
+      throw new BrowserControlError(
+        'BROWSER_TARGET_AMBIGUOUS',
+        'Browser session has multiple page targets; target_id is required.',
+        {
+          sessionId,
+          targetIds: pages.map((entry) => entry.id),
+        },
+      );
+    }
 
     if (!target?.webSocketDebuggerUrl) {
       throw new BrowserControlError(

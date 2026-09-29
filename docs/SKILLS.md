@@ -33,3 +33,5 @@ Each skill lives at `skills/<name>/SKILL.md`. The MCP server exposes lightweight
 - `remote-recovery`
 
 Later manifests will declare capabilities, mutation level, privilege requirements, platforms, scripts, and references in machine-readable form.
+
+- `browser-control`

@@ -46,6 +46,7 @@ Implemented:
 - bounded clipboard read/write/clear plus exact-foreground Unicode typing/hotkeys; window focus has an attached-thread exact-HWND fallback before verification
 - bounded Windows UI Automation tree/find plus exact unique-selector InvokePattern and verified ValuePattern mutations with password-value suppression
 - exact foreground-HWND pointer position/move/click/scroll with client bounds, occlusion/hit checks, and cursor verification
+- first-party isolated Edge/Chrome CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, and inline screenshots
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -63,7 +64,7 @@ The generic backend registry remains because it is useful for Nexowire-owned tra
 ## Immediate next work
 
 1. Keep Windows typecheck/test/build green after each capability slice.
-2. Finish first-party browser automation and visual verification.
+2. Extend visual verification on top of the now-implemented first-party browser automation.
 3. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
 4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.

@@ -217,6 +217,11 @@ test('mutation capabilities are never classified as read-only', () => {
     'windows.pointer.move',
     'windows.pointer.click',
     'windows.pointer.scroll',
+    'browser.session.start',
+    'browser.session.stop',
+    'browser.navigate',
+    'browser.click',
+    'browser.set_value',
   ];
 
   for (const capability of mutations) {

@@ -259,6 +259,355 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'browser_session_start',
+    {
+      title: 'Start Nexowire browser session',
+      description:
+        'Start an isolated first-party Edge/Chrome session on the target device with loopback-only DevTools control.',
+      inputSchema: {
+        ...targetFields,
+        browser: z.enum(['auto', 'edge', 'chrome']).optional(),
+        headless: z.boolean().optional(),
+        initial_url: z.string().min(1).max(4096).optional(),
+        width: z.number().int().min(320).max(3840).optional(),
+        height: z.number().int().min(240).max(2160).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      browser,
+      headless,
+      initial_url,
+      width,
+      height,
+    }) =>
+      await execute(
+        ctx,
+        'browser.session.start',
+        {
+          ...(browser ? { browser } : {}),
+          ...(headless !== undefined ? { headless } : {}),
+          ...(initial_url ? { initial_url } : {}),
+          ...(width !== undefined ? { width } : {}),
+          ...(height !== undefined ? { height } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_session_list',
+    {
+      title: 'List Nexowire browser sessions',
+      description:
+        'List first-party browser sessions currently owned by the target Nexowire native agent.',
+      inputSchema: targetFields,
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'browser.session.list',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_session_stop',
+    {
+      title: 'Stop Nexowire browser session',
+      description:
+        'Stop one isolated browser session and remove its temporary browser profile when possible.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+      },
+    },
+    async ({ device_id, provider_id, session_id }) =>
+      await execute(
+        ctx,
+        'browser.session.stop',
+        { session_id },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_tabs',
+    {
+      title: 'List browser tabs',
+      description:
+        'List page targets inside one Nexowire-owned browser session.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+      },
+    },
+    async ({ device_id, provider_id, session_id }) =>
+      await execute(
+        ctx,
+        'browser.tabs',
+        { session_id },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_navigate',
+    {
+      title: 'Navigate browser tab',
+      description:
+        'Navigate a Nexowire-owned browser page to an HTTP(S) URL or about:blank and wait for document readiness.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        target_id: z.string().min(1).max(256).optional(),
+        url: z.string().min(1).max(4096),
+        timeout_ms: z.number().int().min(1_000).max(60_000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      session_id,
+      target_id,
+      url,
+      timeout_ms,
+    }) =>
+      await execute(
+        ctx,
+        'browser.navigate',
+        {
+          session_id,
+          ...(target_id ? { target_id } : {}),
+          url,
+          ...(timeout_ms !== undefined ? { timeout_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        timeout_ms ? timeout_ms + 10_000 : 45_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_snapshot',
+    {
+      title: 'Inspect browser page',
+      description:
+        'Read a bounded structured snapshot of page text and interactive DOM elements with stable response-local CSS selectors. Password input values are suppressed.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        target_id: z.string().min(1).max(256).optional(),
+        max_elements: z.number().int().min(1).max(1000).optional(),
+        max_text_chars: z.number().int().min(1).max(100_000).optional(),
+        max_element_text_chars: z.number().int().min(1).max(4096).optional(),
+        include_hidden: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      session_id,
+      target_id,
+      max_elements,
+      max_text_chars,
+      max_element_text_chars,
+      include_hidden,
+    }) =>
+      await execute(
+        ctx,
+        'browser.snapshot',
+        {
+          session_id,
+          ...(target_id ? { target_id } : {}),
+          ...(max_elements !== undefined ? { max_elements } : {}),
+          ...(max_text_chars !== undefined ? { max_text_chars } : {}),
+          ...(max_element_text_chars !== undefined
+            ? { max_element_text_chars }
+            : {}),
+          ...(include_hidden !== undefined ? { include_hidden } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_click',
+    {
+      title: 'Click exact browser element',
+      description:
+        'Click exactly one CSS-selected browser element. Zero, multiple, hidden, disabled, or zero-sized matches fail before input.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        target_id: z.string().min(1).max(256).optional(),
+        selector: z.string().min(1).max(4096),
+        button: z.enum(['left', 'right', 'middle']).optional(),
+        click_count: z.number().int().min(1).max(3).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      session_id,
+      target_id,
+      selector,
+      button,
+      click_count,
+    }) =>
+      await execute(
+        ctx,
+        'browser.click',
+        {
+          session_id,
+          ...(target_id ? { target_id } : {}),
+          selector,
+          ...(button ? { button } : {}),
+          ...(click_count !== undefined ? { click_count } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_set_value',
+    {
+      title: 'Set browser element value',
+      description:
+        'Set and verify the value of exactly one input, textarea, select, or contenteditable element. Submitted values are returned only as length/hash metadata.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        target_id: z.string().min(1).max(256).optional(),
+        selector: z.string().min(1).max(4096),
+        value: z.string().max(20_000),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      session_id,
+      target_id,
+      selector,
+      value,
+    }) =>
+      await execute(
+        ctx,
+        'browser.set_value',
+        {
+          session_id,
+          ...(target_id ? { target_id } : {}),
+          selector,
+          value,
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'browser_screenshot',
+    {
+      title: 'Capture browser page screenshot',
+      description:
+        'Capture the current browser viewport as a bounded PNG and return it as MCP image content with compact metadata.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        target_id: z.string().min(1).max(256).optional(),
+        max_bytes: z
+          .number()
+          .int()
+          .min(65_536)
+          .max(8_388_608)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      session_id,
+      target_id,
+      max_bytes,
+    }) => {
+      const response = await execute(
+        ctx,
+        'browser.screenshot',
+        {
+          session_id,
+          ...(target_id ? { target_id } : {}),
+          ...(max_bytes !== undefined ? { max_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      );
+
+      if ('isError' in response && response.isError) return response;
+
+      const structured = response.structuredContent as Record<string, unknown>;
+      const screenshot =
+        typeof structured.data === 'object' &&
+        structured.data !== null &&
+        !Array.isArray(structured.data)
+          ? (structured.data as Record<string, unknown>)
+          : undefined;
+      const base64 = screenshot?.base64;
+      const mimeType = screenshot?.mimeType;
+
+      if (
+        !screenshot ||
+        typeof base64 !== 'string' ||
+        typeof mimeType !== 'string'
+      ) {
+        return toolResult(
+          {
+            ok: false,
+            error: 'Browser screenshot returned no inline image payload.',
+          },
+          true,
+        );
+      }
+
+      const { base64: _base64, ...metadata } = screenshot;
+      const sanitized = {
+        ...structured,
+        data: metadata,
+      };
+
+      return {
+        content: [
+          {
+            type: 'image' as const,
+            data: base64,
+            mimeType,
+          },
+          {
+            type: 'text' as const,
+            text: JSON.stringify(sanitized, null, 2),
+          },
+        ],
+        structuredContent: sanitized,
+      };
+    },
+  );
+
+  server.registerTool(
     'machine_snapshot',
     {
       title: 'Machine snapshot',

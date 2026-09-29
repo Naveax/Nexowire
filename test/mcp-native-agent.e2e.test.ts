@@ -74,7 +74,7 @@ test('MCP request reaches a native agent through the provider registry', async (
       platform: process.platform,
       arch: process.arch,
       agentVersion: 'integration-test',
-      capabilities: ['machine.snapshot', 'windows.screenshot'],
+      capabilities: ['machine.snapshot', 'windows.screenshot', 'browser.screenshot'],
     },
   }));
 
@@ -105,7 +105,22 @@ test('MCP request reaches a native agent through the provider registry', async (
                 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4wS8AAAAASUVORK5CYII=',
             },
           }
-        : {
+        : request.capability === 'browser.screenshot'
+          ? {
+              data: {
+                sessionId: '11111111-1111-4111-8111-111111111111',
+                targetId: 'page-1',
+                width: 1,
+                height: 1,
+                mimeType: 'image/png',
+                bytes: 68,
+                sha256: '1'.repeat(64),
+                capturedAt: new Date().toISOString(),
+                base64:
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4wS8AAAAASUVORK5CYII=',
+              },
+            }
+          : {
             data: {
               hostname: 'mcp-e2e-host',
               capability: request.capability,
@@ -160,6 +175,15 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_move'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_click'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_scroll'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_session_start'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_session_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_session_stop'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_tabs'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_navigate'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_snapshot'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_click'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_set_value'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_screenshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_eventlog_query'));
@@ -240,6 +264,48 @@ test('MCP request reaches a native agent through the provider registry', async (
   };
   assert.equal('base64' in (screenshotStructured.data ?? {}), false);
   assert.equal(screenshotStructured.data?.mimeType, 'image/png');
+
+  const browserScreenshotResult = await client.callTool({
+    name: 'browser_screenshot',
+    arguments: {
+      device_id: 'mcp-device',
+      session_id: '11111111-1111-4111-8111-111111111111',
+      target_id: 'page-1',
+    },
+  });
+  assert.equal(
+    'isError' in browserScreenshotResult
+      ? browserScreenshotResult.isError
+      : false,
+    false,
+  );
+  const browserScreenshotContent =
+    (browserScreenshotResult.content ?? []) as Array<{
+      type: string;
+      mimeType?: string;
+      data?: string;
+    }>;
+  assert.ok(
+    browserScreenshotContent.some(
+      (part) =>
+        part.type === 'image' &&
+        part.mimeType === 'image/png' &&
+        typeof part.data === 'string' &&
+        part.data.length > 0,
+    ),
+  );
+  const browserScreenshotStructured =
+    browserScreenshotResult.structuredContent as {
+      data?: Record<string, unknown>;
+    };
+  assert.equal(
+    'base64' in (browserScreenshotStructured.data ?? {}),
+    false,
+  );
+  assert.equal(
+    browserScreenshotStructured.data?.mimeType,
+    'image/png',
+  );
 
   const auditResult = await client.callTool({
     name: 'audit_recent',
