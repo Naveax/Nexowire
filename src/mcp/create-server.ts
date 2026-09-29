@@ -314,6 +314,24 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'operations_idempotency_list',
+    {
+      title: 'List idempotency operation records',
+      description:
+        'List recent payload-free idempotency records. Records contain fingerprints and status only, never mutation input or output payloads.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(500).optional(),
+      },
+    },
+    async ({ limit }) =>
+      toolResult({
+        records: ctx.idempotency
+          ? await ctx.idempotency.list(limit ?? 100)
+          : [],
+      }),
+  );
+
+  server.registerTool(
     'devices_list',
     {
       title: 'List Nexowire devices',
@@ -1989,9 +2007,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Set Windows registry value',
       description:
-        'Create or update one exact registry value and verify the stored value type/content.',
+        'Optional idempotency_key prevents duplicate retries. Create or update one exact registry value and verify the stored value type/content.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
         path: z.string().min(1).max(4096),
         name: z.string().min(1).max(1024),
@@ -2020,6 +2039,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       type,
       value,
       create_key,
+      idempotency_key,
     }) =>
       await execute(
         ctx,
@@ -2035,6 +2055,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2043,9 +2064,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Delete Windows registry value or key',
       description:
-        'Delete one exact registry value, or delete one non-root key. Recursive key deletion must be explicitly enabled.',
+        'Optional idempotency_key prevents duplicate retries. Delete one exact registry value, or delete one non-root key. Recursive key deletion must be explicitly enabled.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
         path: z.string().min(1).max(4096),
         name: z.string().min(1).max(1024).optional(),
@@ -2059,6 +2081,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       path,
       name,
       recursive,
+      idempotency_key,
     }) =>
       await execute(
         ctx,
@@ -2072,6 +2095,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2207,15 +2231,17 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Set Windows environment variable',
       description:
-        'Set one exact environment variable in process, user, or machine scope and verify the stored value. User/machine changes apply to newly created processes.',
+        'Optional idempotency_key prevents duplicate retries. Set one exact environment variable in process, user, or machine scope and verify the stored value. User/machine changes apply to newly created processes.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         scope: z.enum(['process', 'user', 'machine']).optional(),
         name: z.string().min(1).max(1024),
         value: z.string().max(32_767),
       },
     },
-    async ({ device_id, provider_id, scope, name, value }) =>
+    async ({ device_id, provider_id, scope, name, value
+      idempotency_key, }) =>
       await execute(
         ctx,
         'windows.environment.set',
@@ -2227,6 +2253,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2235,14 +2262,16 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Delete Windows environment variable',
       description:
-        'Delete one exact environment variable from process, user, or machine scope and verify removal.',
+        'Optional idempotency_key prevents duplicate retries. Delete one exact environment variable from process, user, or machine scope and verify removal.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         scope: z.enum(['process', 'user', 'machine']).optional(),
         name: z.string().min(1).max(1024),
       },
     },
-    async ({ device_id, provider_id, scope, name }) =>
+    async ({ device_id, provider_id, scope, name
+      idempotency_key, }) =>
       await execute(
         ctx,
         'windows.environment.delete',
@@ -2253,6 +2282,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2524,6 +2554,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       description: 'Write or append a file inside the native agent path allowlist.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         path: z.string().min(1).max(4096),
         content: z.string(),
         encoding: z.enum(['utf8', 'base64']).optional(),
@@ -2539,6 +2570,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       encoding,
       mode,
       create_parents,
+      idempotency_key,
     }) =>
       await execute(
         ctx,
@@ -2552,6 +2584,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         },
         device_id,
         provider_id,
+        undefined,
+        idempotency_key,
       ),
   );
 
@@ -2599,17 +2633,21 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       description: 'Create a directory inside the agent allowlist.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         path: z.string().min(1).max(4096),
         recursive: z.boolean().optional(),
       },
     },
-    async ({ device_id, provider_id, path, recursive }) =>
+    async ({ device_id, provider_id, path, recursive
+      idempotency_key, }) =>
       await execute(
         ctx,
         'files.mkdir',
         { path, ...(recursive !== undefined ? { recursive } : {}) },
         device_id,
         provider_id,
+        undefined,
+        idempotency_key,
       ),
   );
 
@@ -2716,9 +2754,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Patch text file',
       description:
-        'Apply exact text replacements with occurrence-count and optional SHA-256 stale-read checks before writing.',
+        'Optional idempotency_key records exact-at-most-once execution. Apply exact text replacements with occurrence-count and optional SHA-256 stale-read checks before writing.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         path: z.string().min(1).max(4096),
         operations: z
           .array(
@@ -2734,7 +2773,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
       },
     },
-    async ({ device_id, provider_id, path, operations, max_bytes, expected_sha256 }) =>
+    async ({ device_id, provider_id, path, operations, max_bytes, expected_sha256
+      idempotency_key, }) =>
       await execute(
         ctx,
         'files.patch',
@@ -2746,6 +2786,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         },
         device_id,
         provider_id,
+        undefined,
+        idempotency_key,
       ),
   );
 
