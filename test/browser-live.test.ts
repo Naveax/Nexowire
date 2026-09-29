@@ -52,9 +52,20 @@ test(
 
     const tabs = await manager.tabs(started.id);
     assert.ok(tabs.tabs.length >= 1);
+    const page = tabs.tabs.find((tab) => tab.url === url) ?? tabs.tabs[0];
+    assert.ok(page);
+
+    const navigated = await manager.navigate({
+      sessionId: started.id,
+      targetId: page.id,
+      url,
+      timeoutMs: 15_000,
+    });
+    assert.equal(navigated.url, url);
 
     const before = await manager.snapshot({
       sessionId: started.id,
+      targetId: page.id,
       maxElements: 50,
       maxTextChars: 5_000,
     });
@@ -71,6 +82,7 @@ test(
 
     const value = await manager.setValue({
       sessionId: started.id,
+      targetId: page.id,
       selector: '#name',
       value: 'Nexowire✓',
     });
@@ -79,6 +91,7 @@ test(
 
     const click = await manager.click({
       sessionId: started.id,
+      targetId: page.id,
       selector: '#go',
     });
     assert.equal(click.verified, true);
@@ -87,6 +100,7 @@ test(
 
     const after = await manager.snapshot({
       sessionId: started.id,
+      targetId: page.id,
       maxElements: 50,
       maxTextChars: 5_000,
     });
@@ -96,6 +110,7 @@ test(
 
     const screenshot = await manager.screenshot({
       sessionId: started.id,
+      targetId: page.id,
       maxBytes: 2_000_000,
     });
     assert.equal(screenshot.mimeType, 'image/png');
