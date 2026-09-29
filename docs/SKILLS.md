@@ -18,6 +18,7 @@ Each skill lives at `skills/<name>/SKILL.md`. The MCP server exposes lightweight
 - `conflict-safe-edit`
 - `parallel-task-graph`
 - `event-driven-control`
+- `network-troubleshoot`
 - `build-and-test`
 - `powershell-expert`
 - `wsl-workflow`

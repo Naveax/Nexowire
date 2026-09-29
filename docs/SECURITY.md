@@ -35,3 +35,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Task graphs cap job count, parallelism, per-job output, per-job timeout, and total graph duration. Dependency failures block downstream jobs instead of launching them anyway.
 
 - Live agent/process events are kept only in a bounded in-memory ring on the hub. They are not written to the audit log or persistent state; stdout/stderr can contain sensitive data and should be treated as transient operational output.
+
+- Network probes are bounded by explicit timeouts. HTTP probes accept only HTTP(S), reject embedded URL credentials, expose only selected response headers, and cap GET body previews.

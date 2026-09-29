@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/event-stream-v2`
+Active branch: `feat/system-control-v2`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -22,6 +22,7 @@ Implemented:
 - persisted process-session metadata, retention/prune, and orphan/lost recovery classification without persisting command/output payloads
 - allowlisted file read/write/list
 - machine snapshot and Git workspace snapshot
+- compact sampled CPU/memory/disk health plus structured DNS/TCP/HTTP probes
 - structured workspace detection plus bounded parallel build/test/lint/typecheck execution
 - bounded dependency-aware parallel task graphs with failure blocking and total timeout
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection

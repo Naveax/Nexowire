@@ -26,10 +26,10 @@
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
 - [x] registry value/key, task state, and firewall rule mutation controls with verification
 - registry and environment
-- network diagnostics
+- [x] structured DNS/TCP/HTTP network diagnostics
 - [x] batch file reads and bounded text search
 - [x] SHA-256 file revisions and conflict-safe exact patching
-- compact system health snapshots
+- [x] compact sampled system health snapshots
 - richer Windows registry/task/firewall mutations where verification remains reliable
 
 ## v0.3 - Workspace agent

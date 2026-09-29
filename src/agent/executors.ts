@@ -7,6 +7,7 @@ import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
 import { PathPolicy, PathDeniedError } from './path-policy.js';
 import { executeWindowsCapability } from './windows-control.js';
+import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 
 const ShellExecInputSchema = z.object({
@@ -1686,6 +1687,11 @@ export async function executeCapability(
       return await searchText(input, policy);
     case 'machine.snapshot':
       return await machineSnapshot(policy);
+    case 'machine.health':
+    case 'network.dns.resolve':
+    case 'network.tcp.probe':
+    case 'network.http.probe':
+      return await executeSystemCapability(capability, input);
     case 'workspace.snapshot':
       return await workspaceSnapshot(input, policy);
     case 'workspace.detect':

@@ -1,5 +1,9 @@
 export const CORE_CAPABILITIES = [
   'machine.snapshot',
+  'machine.health',
+  'network.dns.resolve',
+  'network.tcp.probe',
+  'network.http.probe',
   'shell.exec',
   'process.start',
   'process.read',
@@ -58,6 +62,10 @@ export function capabilitiesForPlatform(platform: NodeJS.Platform): string[] {
 
 export const READ_ONLY_CAPABILITIES = new Set<string>([
   'machine.snapshot',
+  'machine.health',
+  'network.dns.resolve',
+  'network.tcp.probe',
+  'network.http.probe',
   'process.read',
   'process.list',
   'files.read',
