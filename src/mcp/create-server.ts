@@ -6,6 +6,12 @@ import type { AuditLog } from '../audit/log.js';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { DeviceAliasStore } from '../devices/alias-store.js';
+import { idempotencyEligibility } from '../operations/idempotency-policy.js';
+import {
+  IdempotencyStoreError,
+  operationFingerprint,
+  type IdempotencyStore,
+} from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 
@@ -13,6 +19,7 @@ export interface McpContext {
   broker: AgentBroker;
   providers: ProviderRegistry;
   aliases?: DeviceAliasStore;
+  idempotency?: IdempotencyStore;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
@@ -68,12 +75,120 @@ async function execute(
   deviceId?: string,
   providerId?: string,
   timeoutMs?: number,
+  idempotencyKey?: string,
 ) {
-  const operationId = randomUUID();
+  let operationId = randomUUID();
   const started = performance.now();
   let targetId: string | undefined;
+  let idempotencyCreated = false;
+
   try {
     targetId = await resolveDevice(ctx.providers, ctx.aliases, deviceId);
+
+    if (idempotencyKey) {
+      if (!ctx.idempotency) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_UNAVAILABLE',
+          'Idempotency storage is unavailable in this Nexowire runtime.',
+        );
+      }
+
+      const eligibility = idempotencyEligibility(capability, input);
+      if (!eligibility.eligible) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_UNSUPPORTED',
+          eligibility.reason ??
+            'This mutation is not eligible for idempotent execution.',
+          { capability },
+        );
+      }
+
+      const fingerprint = operationFingerprint({
+        targetId,
+        capability,
+        ...(providerId ? { providerId } : {}),
+        payload: input,
+      });
+      const begun = await ctx.idempotency.begin({
+        key: idempotencyKey,
+        fingerprint,
+        capability,
+        targetId,
+      });
+      operationId = begun.record.operationId;
+
+      if (!begun.created) {
+        if (
+          begun.cachedResult &&
+          typeof begun.cachedResult === 'object' &&
+          !Array.isArray(begun.cachedResult) &&
+          'ok' in begun.cachedResult &&
+          typeof begun.cachedResult.ok === 'boolean'
+        ) {
+          const cached = begun.cachedResult as Record<string, unknown> & {
+            ok: boolean;
+          };
+          return toolResult(
+            {
+              ...cached,
+              idempotency: {
+                key: begun.record.key,
+                replayed: true,
+                persistedStatus: begun.record.status,
+                operationId: begun.record.operationId,
+                resultSource: 'memory',
+              },
+            },
+            !cached.ok,
+          );
+        }
+
+        if (begun.record.status === 'succeeded') {
+          return toolResult({
+            ok: true,
+            idempotency: {
+              key: begun.record.key,
+              replayed: true,
+              persistedStatus: begun.record.status,
+              operationId: begun.record.operationId,
+              resultSource: 'record_only',
+              resultUnavailableAfterRestart: true,
+            },
+          });
+        }
+
+        const code =
+          begun.record.status === 'unknown'
+            ? 'IDEMPOTENCY_STATE_UNKNOWN'
+            : begun.record.status === 'in_progress'
+              ? 'IDEMPOTENCY_IN_PROGRESS'
+              : 'IDEMPOTENCY_PREVIOUS_FAILURE';
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code,
+              message:
+                begun.record.status === 'unknown'
+                  ? 'A previous attempt with this idempotency key has unknown final state. Verify target state before choosing a new key.'
+                  : begun.record.status === 'in_progress'
+                    ? 'An operation with this idempotency key is already in progress.'
+                    : 'A previous attempt with this idempotency key failed and will not be replayed automatically.',
+            },
+            idempotency: {
+              key: begun.record.key,
+              replayed: true,
+              persistedStatus: begun.record.status,
+              operationId: begun.record.operationId,
+            },
+          },
+          true,
+        );
+      }
+
+      idempotencyCreated = true;
+    }
+
     await ctx.audit?.write({
       operationId,
       status: 'started',
@@ -93,6 +208,14 @@ async function execute(
       providerId,
     );
 
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
+      await ctx.idempotency.complete(
+        idempotencyKey,
+        result.ok ? 'succeeded' : 'failed',
+        result,
+      );
+    }
+
     await ctx.audit?.write({
       operationId,
       status: result.ok ? 'succeeded' : 'failed',
@@ -103,9 +226,37 @@ async function execute(
       ...(result.error?.code ? { errorCode: result.error.code } : {}),
       ...(result.error?.message ? { message: result.error.message } : {}),
     });
-    return toolResult(result, !result.ok);
+    return toolResult(
+      idempotencyKey
+        ? {
+            ...result,
+            idempotency: {
+              key: idempotencyKey,
+              replayed: false,
+              persistedStatus: result.ok ? 'succeeded' : 'failed',
+              operationId,
+            },
+          }
+        : result,
+      !result.ok,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const errorCode =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : 'EXECUTION_FAILED';
+
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
+      await ctx.idempotency.complete(
+        idempotencyKey,
+        errorCode === 'MUTATION_STATE_UNKNOWN' ? 'unknown' : 'failed',
+      );
+    }
+
     await ctx.audit?.write({
       operationId,
       status: 'failed',
@@ -113,19 +264,47 @@ async function execute(
       ...(targetId ? { targetId } : {}),
       ...(providerId ? { providerId } : {}),
       durationMs: Math.round(performance.now() - started),
-      errorCode:
-        typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
-          ? error.code
-          : 'EXECUTION_FAILED',
+      errorCode,
       message,
     });
-    return toolResult({ ok: false, operationId, error: message }, true);
+    return toolResult(
+      {
+        ok: false,
+        operationId,
+        error: {
+          code: errorCode,
+          message,
+        },
+        ...(idempotencyKey
+          ? {
+              idempotency: {
+                key: idempotencyKey,
+                replayed: false,
+                persistedStatus:
+                  errorCode === 'MUTATION_STATE_UNKNOWN'
+                    ? 'unknown'
+                    : 'failed',
+              },
+            }
+          : {}),
+      },
+      true,
+    );
   }
 }
 
 const targetFields = {
   device_id: z.string().min(1).max(128).optional(),
   provider_id: z.string().min(1).max(128).optional(),
+};
+
+const idempotencyField = {
+  idempotency_key: z
+    .string()
+    .min(1)
+    .max(160)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/)
+    .optional(),
 };
 
 export function createNexowireMcpServer(ctx: McpContext): McpServer {
