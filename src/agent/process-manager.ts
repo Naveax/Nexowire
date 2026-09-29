@@ -799,6 +799,42 @@ export class ProcessManager {
     const parsed = SessionSchema.parse(input);
     const session = this.require(parsed.session_id);
 
+    if (session.durable) {
+      if (
+        session.status === 'orphaned' ||
+        session.status === 'lost'
+      ) {
+        throw new ProcessManagerError(
+          'PROCESS_RECOVERY_VERIFICATION_REQUIRED',
+          'Durable process host is unavailable, so Nexowire will not signal the remaining child PID without a verifiable host identity.',
+        );
+      }
+
+      const before = session.status;
+      const summary = await durableProcessRpc<DurableProcessSummary>(
+        this.durableRoot,
+        session.id,
+        { op: 'stop' },
+        10_000,
+      );
+      this.applyDurableSummary(session, summary);
+      if (before === 'running' && session.status === 'exited') {
+        this.emit({
+          topic: 'process.exited',
+          data: {
+            sessionId: session.id,
+            pid: session.pid,
+            exitCode: session.exitCode,
+            signal: session.signal,
+            exitedAt: session.exitedAt,
+            durable: true,
+          },
+        });
+      }
+      await this.persistState();
+      return summarize(session);
+    }
+
     if (session.status === 'orphaned' && session.recovered) {
       throw new ProcessManagerError(
         'PROCESS_RECOVERY_VERIFICATION_REQUIRED',
@@ -845,8 +881,15 @@ export class ProcessManager {
     const cutoff = Date.now() - olderThanMs;
     let removed = 0;
 
+    for (const session of this.sessions.values()) {
+      if (session.durable) {
+        await this.refreshDurableSession(session).catch(() => undefined);
+      }
+    }
+
     for (const [id, session] of this.sessions) {
       if (
+        session.durable ||
         session.status === 'running' ||
         session.status === 'orphaned'
       ) {
@@ -854,6 +897,20 @@ export class ProcessManager {
       }
       const anchor = session.exitedAt ?? session.startedAt;
       if (Date.parse(anchor) <= cutoff) {
+        if (session.durable) {
+          if (session.status === 'exited') {
+            await durableProcessRpc(
+              this.durableRoot,
+              session.id,
+              { op: 'shutdown' },
+              5_000,
+            ).catch(() => undefined);
+          }
+          await removeDurableSessionFiles(
+            this.durableRoot,
+            session.id,
+          ).catch(() => undefined);
+        }
         this.sessions.delete(id);
         removed++;
       }
@@ -869,6 +926,7 @@ export class ProcessManager {
   async stopAll(): Promise<void> {
     const active = [...this.sessions.values()].filter(
       (session) =>
+        !session.durable &&
         session.status === 'running' &&
         !session.recovered &&
         session.pid,
@@ -935,6 +993,8 @@ export class ProcessManager {
         ...(session.exitedAt ? { exitedAt: session.exitedAt } : {}),
         exitCode: session.exitCode,
         signal: session.signal,
+        durable: session.durable,
+        ...(session.hostPid ? { hostPid: session.hostPid } : {}),
         status: session.status,
       })),
     };
