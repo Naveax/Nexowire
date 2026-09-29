@@ -292,6 +292,76 @@ export class ProcessManager {
     }
   }
 
+  private applyDurableSummary(
+    session: ManagedSession,
+    summary: DurableProcessSummary,
+  ): void {
+    session.pid = summary.pid;
+    session.hostPid = summary.hostPid;
+    session.shell = summary.shell;
+    if (summary.cwd) session.cwd = summary.cwd;
+    session.status = summary.status;
+    session.exitCode = summary.exitCode;
+    session.signal = summary.signal;
+    session.startedAt = summary.startedAt;
+    if (summary.exitedAt) session.exitedAt = summary.exitedAt;
+    session.oldestSeqOverride = summary.oldestSeq;
+    session.latestSeqOverride = summary.latestSeq;
+    session.bufferedEventsOverride = summary.bufferedEvents;
+    session.nextSeq = summary.latestSeq + 1;
+    session.bufferedBytes = summary.bufferedBytes;
+    session.maxBufferBytes = summary.maxBufferBytes;
+  }
+
+  private async refreshDurableSession(
+    session: ManagedSession,
+  ): Promise<void> {
+    if (!session.durable) return;
+
+    try {
+      const summary = await durableProcessRpc<DurableProcessSummary>(
+        this.durableRoot,
+        session.id,
+        { op: 'summary' },
+        5_000,
+      );
+      this.applyDurableSummary(session, summary);
+      return;
+    } catch {
+      const meta = await readDurableMeta(
+        this.durableRoot,
+        session.id,
+      ).catch(() => null);
+
+      if (meta?.status === 'exited') {
+        this.applyDurableSummary(session, meta);
+        return;
+      }
+
+      const hostAlive =
+        (meta?.hostPid ?? session.hostPid)
+          ? isPidAlive((meta?.hostPid ?? session.hostPid)!)
+          : false;
+      if (hostAlive) {
+        throw new ProcessManagerError(
+          'DURABLE_PROCESS_CONTROL_UNAVAILABLE',
+          'Durable process host is alive but its control channel is unavailable.',
+        );
+      }
+
+      const childPid = meta?.pid ?? session.pid;
+      if (childPid && isPidAlive(childPid)) {
+        session.status = 'orphaned';
+        session.pid = childPid;
+        session.exitedAt = undefined;
+        return;
+      }
+
+      session.status = 'lost';
+      session.exitedAt ??= new Date().toISOString();
+    }
+  }
+
   async initialize(): Promise<void> {
     if (!this.stateFile) return;
 
@@ -323,9 +393,46 @@ export class ProcessManager {
         continue;
       }
 
+      const durable = saved.durable ?? false;
       let status: SessionStatus = saved.status;
       let exitedAt = saved.exitedAt;
-      if (saved.status === 'running' || saved.status === 'orphaned') {
+      let pid = saved.pid;
+      let hostPid = saved.hostPid;
+      let durableMeta: DurableProcessSummary | null = null;
+
+      if (durable) {
+        durableMeta = await readDurableMeta(
+          this.durableRoot,
+          saved.id,
+        ).catch(() => null);
+
+        if (durableMeta) {
+          pid = durableMeta.pid;
+          hostPid = durableMeta.hostPid;
+          if (durableMeta.status === 'exited') {
+            status = 'exited';
+            exitedAt = durableMeta.exitedAt;
+          } else if (isPidAlive(durableMeta.hostPid)) {
+            status = 'running';
+            exitedAt = undefined;
+          } else if (durableMeta.pid && isPidAlive(durableMeta.pid)) {
+            status = 'orphaned';
+            exitedAt = undefined;
+          } else {
+            status = 'lost';
+            exitedAt ??= new Date().toISOString();
+          }
+        } else if (pid && isPidAlive(pid)) {
+          status = 'orphaned';
+          exitedAt = undefined;
+        } else {
+          status = 'lost';
+          exitedAt ??= new Date().toISOString();
+        }
+      } else if (
+        saved.status === 'running' ||
+        saved.status === 'orphaned'
+      ) {
         if (saved.pid && isPidAlive(saved.pid)) {
           status = 'orphaned';
         } else {
@@ -334,23 +441,39 @@ export class ProcessManager {
         }
       }
 
-      this.sessions.set(saved.id, {
+      const session: ManagedSession = {
         id: saved.id,
         ...(saved.name ? { name: saved.name } : {}),
-        pid: saved.pid,
-        shell: saved.shell,
-        ...(saved.cwd ? { cwd: saved.cwd } : {}),
-        startedAt: saved.startedAt,
+        pid,
+        shell: durableMeta?.shell ?? saved.shell,
+        ...(durableMeta?.cwd
+          ? { cwd: durableMeta.cwd }
+          : saved.cwd
+            ? { cwd: saved.cwd }
+            : {}),
+        startedAt: durableMeta?.startedAt ?? saved.startedAt,
         ...(exitedAt ? { exitedAt } : {}),
-        exitCode: saved.exitCode,
-        signal: saved.signal as NodeJS.Signals | null,
+        exitCode: durableMeta?.exitCode ?? saved.exitCode,
+        signal:
+          (durableMeta?.signal as NodeJS.Signals | null | undefined) ??
+          (saved.signal as NodeJS.Signals | null),
         status,
         recovered: true,
+        durable,
+        ...(hostPid ? { hostPid } : {}),
         events: [],
-        nextSeq: 1,
-        bufferedBytes: 0,
-        maxBufferBytes: 4_194_304,
-      });
+        nextSeq: durableMeta ? durableMeta.latestSeq + 1 : 1,
+        bufferedBytes: durableMeta?.bufferedBytes ?? 0,
+        maxBufferBytes: durableMeta?.maxBufferBytes ?? 4_194_304,
+        ...(durableMeta
+          ? {
+              oldestSeqOverride: durableMeta.oldestSeq,
+              latestSeqOverride: durableMeta.latestSeq,
+              bufferedEventsOverride: durableMeta.bufferedEvents,
+            }
+          : {}),
+      };
+      this.sessions.set(saved.id, session);
     }
 
     this.pruneExpiredInMemory();
@@ -372,6 +495,60 @@ export class ProcessManager {
       ? await policy.resolveExisting(parsed.cwd)
       : undefined;
     const shell = resolveShell(parsed.shell, parsed.command);
+    const id = randomUUID();
+
+    if (parsed.durable) {
+      const durable = await startDurableProcess({
+        root: this.durableRoot,
+        sessionId: id,
+        executable: shell.executable,
+        args: shell.args,
+        shell: shell.label,
+        ...(cwd ? { cwd } : {}),
+        maxBufferBytes: parsed.max_buffer_bytes,
+      });
+
+      const session: ManagedSession = {
+        id,
+        ...(parsed.name ? { name: parsed.name } : {}),
+        pid: durable.pid,
+        command: parsed.command,
+        shell: durable.shell,
+        ...(cwd ? { cwd } : {}),
+        startedAt: durable.startedAt,
+        ...(durable.exitedAt ? { exitedAt: durable.exitedAt } : {}),
+        exitCode: durable.exitCode,
+        signal: durable.signal,
+        status: durable.status,
+        recovered: false,
+        durable: true,
+        hostPid: durable.hostPid,
+        oldestSeqOverride: durable.oldestSeq,
+        latestSeqOverride: durable.latestSeq,
+        bufferedEventsOverride: durable.bufferedEvents,
+        events: [],
+        nextSeq: durable.latestSeq + 1,
+        bufferedBytes: durable.bufferedBytes,
+        maxBufferBytes: durable.maxBufferBytes,
+      };
+      this.sessions.set(id, session);
+      this.emit({
+        topic: 'process.started',
+        data: {
+          sessionId: session.id,
+          ...(session.name ? { name: session.name } : {}),
+          pid: session.pid,
+          hostPid: session.hostPid,
+          shell: session.shell,
+          ...(session.cwd ? { cwd: session.cwd } : {}),
+          durable: true,
+          startedAt: session.startedAt,
+        },
+      });
+      await this.persistState();
+      return summarize(session);
+    }
+
     const child = spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
       windowsHide: true,
@@ -380,7 +557,6 @@ export class ProcessManager {
       detached: process.platform !== 'win32',
     });
 
-    const id = randomUUID();
     const session: ManagedSession = {
       id,
       ...(parsed.name ? { name: parsed.name } : {}),
@@ -394,6 +570,7 @@ export class ProcessManager {
       signal: null,
       status: 'running',
       recovered: false,
+      durable: false,
       events: [],
       nextSeq: 1,
       bufferedBytes: 0,
@@ -408,6 +585,7 @@ export class ProcessManager {
         pid: session.pid,
         shell: session.shell,
         ...(session.cwd ? { cwd: session.cwd } : {}),
+        durable: false,
         startedAt: session.startedAt,
       },
     });
@@ -478,8 +656,33 @@ export class ProcessManager {
   async read(input: unknown) {
     const parsed = ReadSchema.parse(input);
     const session = this.require(parsed.session_id);
-    const deadline = Date.now() + parsed.wait_ms;
 
+    if (session.durable) {
+      const response = await durableProcessRpc<{
+        session: DurableProcessSummary;
+        events: ProcessOutputEvent[];
+        nextSeq: number;
+      }>(
+        this.durableRoot,
+        session.id,
+        {
+          op: 'read',
+          afterSeq: parsed.after_seq,
+          maxEvents: parsed.max_events,
+          waitMs: parsed.wait_ms,
+        },
+        parsed.wait_ms + 5_000,
+      );
+      this.applyDurableSummary(session, response.session);
+      await this.persistState();
+      return {
+        session: summarize(session),
+        events: response.events,
+        nextSeq: response.nextSeq,
+      };
+    }
+
+    const deadline = Date.now() + parsed.wait_ms;
     let events = session.events
       .filter((event) => event.seq > parsed.after_seq)
       .slice(0, parsed.max_events);
@@ -511,6 +714,33 @@ export class ProcessManager {
     const parsed = WriteSchema.parse(input);
     const session = this.require(parsed.session_id);
 
+    if (session.durable) {
+      const response = await durableProcessRpc<{
+        session: DurableProcessSummary;
+        bytes: number;
+      }>(
+        this.durableRoot,
+        session.id,
+        {
+          op: 'write',
+          input: parsed.input,
+          appendNewline: parsed.append_newline,
+        },
+      );
+      this.applyDurableSummary(session, response.session);
+      this.emit({
+        topic: 'process.input',
+        data: {
+          sessionId: session.id,
+          bytes: response.bytes,
+          appendNewline: parsed.append_newline,
+          durable: true,
+        },
+      });
+      await this.persistState();
+      return summarize(session);
+    }
+
     if (
       session.status !== 'running' ||
       !session.child ||
@@ -521,7 +751,7 @@ export class ProcessManager {
           ? 'PROCESS_SESSION_NOT_REATTACHABLE'
           : 'PROCESS_NOT_RUNNING',
         session.recovered
-          ? 'Recovered process sessions cannot restore stdin/stdout pipes after an agent restart.'
+          ? 'Recovered non-durable process sessions cannot restore stdin/stdout pipes after an agent restart.'
           : 'Process session is not accepting input.',
       );
     }
@@ -539,6 +769,7 @@ export class ProcessManager {
         sessionId: session.id,
         bytes: Buffer.byteLength(value),
         appendNewline: parsed.append_newline,
+        durable: false,
       },
     });
     return summarize(session);
