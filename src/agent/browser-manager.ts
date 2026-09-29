@@ -18,6 +18,44 @@ export interface BrowserSessionSummary {
   exitCode: number | null;
 }
 
+export interface BrowserTextSnapshot {
+  text: string;
+  chars: number;
+  truncated: boolean;
+}
+
+export interface BrowserElementSnapshot {
+  selector: string;
+  tag: string;
+  type: string | null;
+  role: string | null;
+  name: string | null;
+  text: BrowserTextSnapshot;
+  value: BrowserTextSnapshot | null;
+  password: boolean;
+  disabled: boolean;
+  checked: boolean | null;
+  href: string | null;
+  visible: boolean;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface BrowserPageSnapshot {
+  url: string;
+  title: string;
+  readyState: string;
+  bodyText: BrowserTextSnapshot;
+  elements: BrowserElementSnapshot[];
+  elementsScanned: number;
+  elementsReturned: number;
+  elementsTruncated: boolean;
+}
+
 interface BrowserSession extends BrowserSessionSummary {
   executable: string;
   userDataDir: string;
@@ -606,7 +644,7 @@ export class BrowserManager {
       async (client, target) => ({
         sessionId: input.sessionId,
         targetId: target.id,
-        ...(await this.evaluate<Record<string, unknown>>(
+        ...(await this.evaluate<BrowserPageSnapshot>(
           client,
           expression,
           15_000,
