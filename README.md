@@ -90,6 +90,8 @@ Nexowire is intended to control real computers. Security is therefore part of th
 
 Do not expose a development instance directly to the public Internet.
 
+For bootstrap remote deployments, MCP and native-agent bearer credentials support comma-separated rotation sets through `NEXOWIRE_MCP_BEARER_TOKENS` and `NEXOWIRE_AGENT_TOKENS`; singular token variables remain compatible. Matching uses constant-time digest comparison. This is rollover support, not the final production authorization/TLS layer.
+
 ## Development
 
 ```bash
@@ -100,4 +102,4 @@ npm run build
 
 Run the hub with `npm run dev:http` and the native agent with `npm run dev:agent`. The default MCP endpoint is `http://127.0.0.1:43110/mcp`; the default agent WebSocket endpoint is `ws://127.0.0.1:43110/agent`.
 
-The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, explicit payload-free idempotency records for selected replay-safe mutations, workspace detection/checks, dependency-aware parallel task graphs with exact-spec task-graph resume, a bounded event feed, structured DNS/TCP/HTTP diagnostics, compact machine health, exact Windows environment controls, exact HWND window control, inline Windows screenshots, exact-foreground keyboard input and bounded clipboard control, Windows UI Automation tree/actions, exact-HWND pointer fallback, first-party Edge/Chrome CDP automation with exact-element visual verification, workspace checkpoints, persistent device aliases, lazy skills, and native capability routing. See `ROADMAP.md` for what is still intentionally unfinished.
+The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, explicit payload-free idempotency records for selected replay-safe mutations, workspace detection/checks, dependency-aware parallel task graphs with exact-spec task-graph resume, a bounded event feed, structured DNS/TCP/HTTP diagnostics, compact machine health, exact Windows environment controls, exact HWND window control, inline Windows screenshots, exact-foreground keyboard input and bounded clipboard control, Windows UI Automation tree/actions, exact-HWND pointer fallback, first-party Edge/Chrome CDP automation, workspace checkpoints, persistent device aliases, lazy skills, and native capability routing. See `ROADMAP.md` for what is still intentionally unfinished.
