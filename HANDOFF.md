@@ -46,6 +46,7 @@ Implemented:
 - bounded clipboard read/write/clear plus exact-foreground Unicode typing/hotkeys; window focus has an attached-thread exact-HWND fallback before verification
 - bounded Windows UI Automation tree/find plus exact unique-selector InvokePattern and verified ValuePattern mutations with password-value suppression
 - exact foreground-HWND pointer position/move/click/scroll with client bounds, occlusion/hit checks, and cursor verification
+- rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -68,7 +69,7 @@ The generic backend registry remains because it is useful for Nexowire-owned tra
 4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Finish robust multi-device native-agent routing; persistent aliases are implemented.
-7. Design production ChatGPT authentication and encrypted credential handling before public deployment.
+7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
 
 ## Known machine note
 
