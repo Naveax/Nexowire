@@ -29,6 +29,7 @@ A target can eventually be reachable through more than one provider. The provide
 - bounded inline PNG capture for virtual desktop, primary screen, or exact HWND rectangle without changing focus
 - structured Windows clipboard access plus exact-foreground Unicode typing/hotkeys with foreground verification
 - bounded Windows UI Automation tree/search plus exact unique-selector InvokePattern and verified ValuePattern mutations
+- exact-foreground HWND pointer position/move/click/scroll with client-bound and hit-target verification as a final GUI fallback
 - interactive process sessions with incremental output, stdin, stop, list, bounded long-poll reads, retained history, and persisted recovery metadata
 - WSL2 command execution
 - allowlisted file read/write/list plus batched reads, SHA-256 revision identities, conflict-safe exact patching, and bounded text search
@@ -57,5 +58,5 @@ A target can eventually be reachable through more than one provider. The provide
 - durable/persisted event history only where there is a concrete operational need; the live feed intentionally remains bounded and in-memory
 - structured Windows service/process/network/registry tools
 - provider adapters for SentinelX and Remote Desktop Commander where supported APIs permit
-- browser automation, visual action verification, and raw-pointer fallback above the structured GUI layer
+- browser automation and visual action verification above the structured GUI/pointer layer
 - production ChatGPT authentication and encrypted credential storage
