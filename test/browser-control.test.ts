@@ -49,6 +49,14 @@ class FakeBrowserRuntime implements BrowserRuntime {
     return { verified: true };
   }
 
+  async visualVerify(input: unknown) {
+    this.calls.push({ method: 'visualVerify', input });
+    return {
+      verified: true,
+      screenshot: { mimeType: 'image/png', base64: 'AA==' },
+    };
+  }
+
   async screenshot(input: unknown) {
     this.calls.push({ method: 'screenshot', input });
     return { mimeType: 'image/png', base64: 'AA==' };
@@ -99,6 +107,22 @@ test('browser capability dispatcher normalizes inputs', async () => {
     runtime,
   );
 
+  await executeBrowserCapability(
+    'browser.visual.verify',
+    {
+      session_id: sessionId,
+      target_id: 'page-1',
+      selector: '#status',
+      expected_text: 'ready',
+      text_mode: 'exact',
+      expected_visible: true,
+      expected_enabled: true,
+      padding: 24,
+      max_bytes: 500_000,
+    },
+    runtime,
+  );
+
   assert.deepEqual(runtime.calls[0], {
     method: 'start',
     input: {
@@ -137,6 +161,21 @@ test('browser capability dispatcher normalizes inputs', async () => {
       clickCount: 2,
     },
   });
+
+  assert.deepEqual(runtime.calls[4], {
+    method: 'visualVerify',
+    input: {
+      sessionId,
+      targetId: 'page-1',
+      selector: '#status',
+      expectedText: 'ready',
+      textMode: 'exact',
+      expectedVisible: true,
+      expectedEnabled: true,
+      padding: 24,
+      maxBytes: 500_000,
+    },
+  });
 });
 
 test('browser capability dispatcher rejects malformed session IDs and oversized input', async () => {
@@ -172,6 +211,7 @@ test('browser read-only capabilities are failover-safe but mutations are not', (
     'browser.tabs',
     'browser.snapshot',
     'browser.screenshot',
+    'browser.visual.verify',
   ]) {
     assert.equal(isReadOnlyCapability(capability), true, capability);
   }
