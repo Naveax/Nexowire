@@ -5,7 +5,8 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 ## Bootstrap protections
 
 - HTTP binds to `127.0.0.1` by default.
-- A non-loopback bind is rejected unless both MCP and native-agent bearer secrets are configured.
+- A non-loopback bind is rejected unless both MCP and native-agent bearer credentials are configured.
+- Bootstrap bearer authentication accepts bounded rotation sets (`old,current,next`) so credentials can be rolled without an all-at-once outage. Matching hashes candidate/configured tokens and compares digests with constant-time equality rather than using direct string equality.
 - Native agents connect outbound and authenticate to the hub.
 - Without an agent secret, only loopback agent connections are accepted.
 - Native-agent file operations are restricted to configured roots; the default root is the current user's home directory.
@@ -18,7 +19,7 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 
 ## Important limitation
 
-The current bearer-token model is a bootstrap mechanism, not the final public authentication design. A public ChatGPT deployment should use a proper authorization flow, short-lived credentials, secret rotation, and TLS.
+The current bearer-token model is still a bootstrap mechanism, even with rotation support and constant-time matching. A public ChatGPT deployment should use a proper authorization flow, short-lived credentials, encrypted secret storage, revocation, and TLS.
 
 ## Provider failover
 
