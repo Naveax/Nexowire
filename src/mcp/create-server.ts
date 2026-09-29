@@ -6,6 +6,11 @@ import type { AuditLog } from '../audit/log.js';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { DeviceAliasStore } from '../devices/alias-store.js';
+import type { DeviceDirectory } from '../devices/directory.js';
+import {
+  buildDeviceRoutingEntries,
+  filterDeviceRoutes,
+} from '../devices/routing.js';
 import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
   IdempotencyStoreError,
@@ -18,6 +23,7 @@ import type { WorkspaceStore } from '../workspace/store.js';
 export interface McpContext {
   broker: AgentBroker;
   providers: ProviderRegistry;
+  devices?: DeviceDirectory;
   aliases?: DeviceAliasStore;
   idempotency?: IdempotencyStore;
   audit?: AuditLog;
@@ -36,6 +42,25 @@ function toolResult(data: unknown, isError = false) {
     structuredContent: structured,
     ...(isError ? { isError: true } : {}),
   };
+}
+
+async function routingEntries(ctx: McpContext) {
+  const [targets, records, aliasRecords] = await Promise.all([
+    ctx.providers.listTargets(),
+    ctx.devices ? ctx.devices.list() : Promise.resolve([]),
+    ctx.aliases ? ctx.aliases.list() : Promise.resolve([]),
+  ]);
+  const aliasesByDevice = new Map<string, string[]>();
+  for (const record of aliasRecords) {
+    const current = aliasesByDevice.get(record.deviceId) ?? [];
+    current.push(record.alias);
+    aliasesByDevice.set(record.deviceId, current);
+  }
+  return buildDeviceRoutingEntries({
+    records,
+    targets,
+    aliasesByDevice,
+  });
 }
 
 async function resolveDevice(
@@ -336,20 +361,80 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List Nexowire devices',
       description:
-        'List online Nexowire native targets with capabilities and persistent aliases.',
-      inputSchema: {},
+        'List known Nexowire devices with online state, capabilities, aliases, last-seen metadata, and available first-party routes.',
+      inputSchema: {
+        online_only: z.boolean().optional(),
+      },
     },
-    async () => {
-      const targets = await ctx.providers.listTargets();
-      const devices = await Promise.all(
-        targets.map(async (target) => ({
-          ...target,
-          aliases: ctx.aliases
-            ? await ctx.aliases.aliasesForDevice(target.id)
-            : [],
-        })),
-      );
-      return toolResult({ devices });
+    async ({ online_only }) => {
+      const devices = await routingEntries(ctx);
+      return toolResult({
+        devices:
+          online_only === true
+            ? devices.filter((device) => device.online)
+            : devices,
+      });
+    },
+  );
+
+  server.registerTool(
+    'device_route',
+    {
+      title: 'Resolve a Nexowire device route',
+      description:
+        'Filter known devices by exact ID/alias, platform, name/alias substring, and required capabilities. Returns a selected device only when exactly one candidate remains; ambiguity is reported rather than silently choosing a different computer.',
+      inputSchema: {
+        device_id: z.string().min(1).max(128).optional(),
+        platform: z.string().min(1).max(64).optional(),
+        name_contains: z.string().min(1).max(128).optional(),
+        required_capabilities: z
+          .array(z.string().min(1).max(128))
+          .max(64)
+          .optional(),
+        online_only: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      platform,
+      name_contains,
+      required_capabilities,
+      online_only,
+    }) => {
+      const devices = await routingEntries(ctx);
+      let resolvedDeviceId = device_id;
+      if (
+        device_id &&
+        !devices.some((device) => device.id === device_id)
+      ) {
+        resolvedDeviceId =
+          (await ctx.aliases?.resolve(device_id)) ?? device_id;
+      }
+
+      const candidates = filterDeviceRoutes(devices, {
+        ...(resolvedDeviceId
+          ? { deviceId: resolvedDeviceId }
+          : {}),
+        ...(platform ? { platform } : {}),
+        ...(name_contains ? { nameContains: name_contains } : {}),
+        ...(required_capabilities
+          ? { requiredCapabilities: required_capabilities }
+          : {}),
+        onlineOnly: online_only ?? true,
+      });
+
+      return toolResult({
+        selected:
+          candidates.length === 1 ? candidates[0] : null,
+        ambiguous: candidates.length > 1,
+        candidates,
+        ...(device_id && resolvedDeviceId !== device_id
+          ? {
+              requestedAlias: device_id,
+              resolvedDeviceId,
+            }
+          : {}),
+      });
     },
   );
 
