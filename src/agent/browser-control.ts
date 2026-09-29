@@ -57,6 +57,20 @@ const ScreenshotSchema = z.object({
   max_bytes: z.number().int().min(65_536).max(8_388_608).default(4_194_304),
 });
 
+const VisualVerifySchema = z.object({
+  session_id: SessionIdSchema,
+  target_id: TargetIdSchema.optional(),
+  selector: z.string().min(1).max(4096),
+  expected_text: z.string().max(4096).optional(),
+  text_mode: z.enum(['contains', 'exact']).default('contains'),
+  expected_visible: z.boolean().optional(),
+  expected_enabled: z.boolean().optional(),
+  expected_checked: z.boolean().optional(),
+  padding: z.number().int().min(0).max(200).default(16),
+  max_bytes: z.number().int().min(65_536).max(8_388_608).default(2_097_152),
+});
+
+
 export interface BrowserRuntime {
   start(input: {
     browser?: 'auto' | 'edge' | 'chrome';
@@ -94,6 +108,18 @@ export interface BrowserRuntime {
     targetId?: string;
     selector: string;
     value: string;
+  }): Promise<unknown>;
+  visualVerify(input: {
+    sessionId: string;
+    targetId?: string;
+    selector: string;
+    expectedText?: string;
+    textMode?: 'contains' | 'exact';
+    expectedVisible?: boolean;
+    expectedEnabled?: boolean;
+    expectedChecked?: boolean;
+    padding?: number;
+    maxBytes?: number;
   }): Promise<unknown>;
   screenshot(input: {
     sessionId: string;
@@ -176,6 +202,31 @@ export async function executeBrowserCapability(
           ...(parsed.target_id ? { targetId: parsed.target_id } : {}),
           selector: parsed.selector,
           value: parsed.value,
+        }),
+      };
+    }
+    case 'browser.visual.verify': {
+      const parsed = VisualVerifySchema.parse(input);
+      return {
+        data: await runtime.visualVerify({
+          sessionId: parsed.session_id,
+          ...(parsed.target_id ? { targetId: parsed.target_id } : {}),
+          selector: parsed.selector,
+          ...(parsed.expected_text !== undefined
+            ? { expectedText: parsed.expected_text }
+            : {}),
+          textMode: parsed.text_mode,
+          ...(parsed.expected_visible !== undefined
+            ? { expectedVisible: parsed.expected_visible }
+            : {}),
+          ...(parsed.expected_enabled !== undefined
+            ? { expectedEnabled: parsed.expected_enabled }
+            : {}),
+          ...(parsed.expected_checked !== undefined
+            ? { expectedChecked: parsed.expected_checked }
+            : {}),
+          padding: parsed.padding,
+          maxBytes: parsed.max_bytes,
         }),
       };
     }

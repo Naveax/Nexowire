@@ -1920,6 +1920,7 @@ export async function executeCapability(
     case 'browser.click':
     case 'browser.set_value':
     case 'browser.screenshot':
+    case 'browser.visual.verify':
       return await executeBrowserCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
