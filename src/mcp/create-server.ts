@@ -5,12 +5,14 @@ import * as z from 'zod';
 import type { AuditLog } from '../audit/log.js';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
+import type { DeviceAliasStore } from '../devices/alias-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 
 export interface McpContext {
   broker: AgentBroker;
   providers: ProviderRegistry;
+  aliases?: DeviceAliasStore;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
@@ -31,16 +33,31 @@ function toolResult(data: unknown, isError = false) {
 
 async function resolveDevice(
   providers: ProviderRegistry,
+  aliases: DeviceAliasStore | undefined,
   requested?: string,
 ): Promise<string> {
-  if (requested) return requested;
   const targets = (await providers.listTargets()).filter((target) => target.online);
   const uniqueIds = [...new Set(targets.map((target) => target.id))];
+
+  if (requested) {
+    if (uniqueIds.includes(requested)) return requested;
+    const aliased = await aliases?.resolve(requested);
+    if (aliased) {
+      if (!uniqueIds.includes(aliased)) {
+        throw new Error(
+          `Nexowire device alias "${requested}" resolves to offline device "${aliased}".`,
+        );
+      }
+      return aliased;
+    }
+    return requested;
+  }
+
   if (uniqueIds.length === 1 && uniqueIds[0]) return uniqueIds[0];
   throw new Error(
     uniqueIds.length === 0
       ? 'No Nexowire devices are online.'
-      : 'Multiple Nexowire devices are online; device_id is required.',
+      : 'Multiple Nexowire devices are online; device_id or a device alias is required.',
   );
 }
 
@@ -56,7 +73,7 @@ async function execute(
   const started = performance.now();
   let targetId: string | undefined;
   try {
-    targetId = await resolveDevice(ctx.providers, deviceId);
+    targetId = await resolveDevice(ctx.providers, ctx.aliases, deviceId);
     await ctx.audit?.write({
       operationId,
       status: 'started',
@@ -122,10 +139,97 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List Nexowire devices',
       description:
-        'List online targets across Nexowire providers with their capabilities.',
+        'List online Nexowire native targets with capabilities and persistent aliases.',
       inputSchema: {},
     },
-    async () => toolResult({ devices: await ctx.providers.listTargets() }),
+    async () => {
+      const targets = await ctx.providers.listTargets();
+      const devices = await Promise.all(
+        targets.map(async (target) => ({
+          ...target,
+          aliases: ctx.aliases
+            ? await ctx.aliases.aliasesForDevice(target.id)
+            : [],
+        })),
+      );
+      return toolResult({ devices });
+    },
+  );
+
+  server.registerTool(
+    'device_alias_list',
+    {
+      title: 'List device aliases',
+      description:
+        'List persistent Nexowire aliases that map human-friendly names to stable native device IDs.',
+      inputSchema: {},
+    },
+    async () =>
+      toolResult({
+        aliases: ctx.aliases ? await ctx.aliases.list() : [],
+      }),
+  );
+
+  server.registerTool(
+    'device_alias_set',
+    {
+      title: 'Set device alias',
+      description:
+        'Create or replace a persistent alias for one currently online Nexowire native device.',
+      inputSchema: {
+        alias: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+        device_id: z.string().min(1).max(128),
+      },
+    },
+    async ({ alias, device_id }) => {
+      if (!ctx.aliases) {
+        return toolResult(
+          { ok: false, error: 'Device alias storage is unavailable.' },
+          true,
+        );
+      }
+      const targets = await ctx.providers.listTargets();
+      if (!targets.some((target) => target.online && target.id === device_id)) {
+        return toolResult(
+          {
+            ok: false,
+            error: `Cannot alias offline or unknown device "${device_id}".`,
+          },
+          true,
+        );
+      }
+      return toolResult({
+        alias: await ctx.aliases.set(alias, device_id),
+      });
+    },
+  );
+
+  server.registerTool(
+    'device_alias_delete',
+    {
+      title: 'Delete device alias',
+      description: 'Delete one persistent Nexowire device alias.',
+      inputSchema: {
+        alias: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+      },
+    },
+    async ({ alias }) => {
+      if (!ctx.aliases) {
+        return toolResult(
+          { ok: false, error: 'Device alias storage is unavailable.' },
+          true,
+        );
+      }
+      return toolResult(await ctx.aliases.delete(alias));
+    },
   );
 
   server.registerTool(
