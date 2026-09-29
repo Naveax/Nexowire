@@ -10,6 +10,7 @@ import { AuditLog } from '../src/audit/log.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AgentBroker } from '../src/core/agent-broker.js';
 import { ProviderRegistry } from '../src/core/provider-registry.js';
+import { DeviceAliasStore } from '../src/devices/alias-store.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
 import { createNexowireMcpServer } from '../src/mcp/create-server.js';
 import { AgentProvider } from '../src/providers/agent-provider.js';
@@ -27,10 +28,13 @@ test('MCP request reaches a native agent through the provider registry', async (
   const providers = new ProviderRegistry();
   providers.register(new AgentProvider(broker));
   const audit = new AuditLog(path.join(stateDir, 'audit.jsonl'));
+  const aliases = new DeviceAliasStore(stateDir);
+  await aliases.initialize();
 
   const mcp = createNexowireMcpServer({
     broker,
     providers,
+    aliases,
     audit,
     workspaces: new WorkspaceStore(stateDir),
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
@@ -121,6 +125,9 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.equal(broker.has('mcp-device'), true);
 
   const tools = await client.listTools();
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_set'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_delete'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_snapshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_health'));
   assert.ok(tools.tools.some((tool) => tool.name === 'network_dns_resolve'));
@@ -163,6 +170,27 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_delete'));
+
+  const aliasSet = await client.callTool({
+    name: 'device_alias_set',
+    arguments: {
+      alias: 'main-pc',
+      device_id: 'mcp-device',
+    },
+  });
+  assert.equal('isError' in aliasSet ? aliasSet.isError : false, false);
+
+  const aliasResult = await client.callTool({
+    name: 'machine_snapshot',
+    arguments: { device_id: 'MAIN-PC' },
+  });
+  assert.equal('isError' in aliasResult ? aliasResult.isError : false, false);
+  const aliasStructured = aliasResult.structuredContent as {
+    data?: { hostname?: string };
+    meta?: { targetId?: string };
+  };
+  assert.equal(aliasStructured.data?.hostname, 'mcp-e2e-host');
+  assert.equal(aliasStructured.meta?.targetId, 'mcp-device');
 
   const result = await client.callTool({
     name: 'machine_snapshot',
