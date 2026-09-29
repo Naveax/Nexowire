@@ -1,11 +1,14 @@
 import os from 'node:os';
 import path from 'node:path';
+import { parseTokenList } from './security/tokens.js';
 
 export interface NexowireConfig {
   host: string;
   port: number;
   mcpBearerToken?: string;
+  mcpBearerTokens?: string[];
   agentToken?: string;
+  agentTokens?: string[];
   stateDir: string;
   skillsDir: string;
 }
@@ -25,6 +28,20 @@ export function isLoopbackHost(host: string): boolean {
   );
 }
 
+export function mcpAuthTokens(config: NexowireConfig): string[] {
+  return parseTokenList(
+    config.mcpBearerToken,
+    config.mcpBearerTokens?.join(','),
+  );
+}
+
+export function agentAuthTokens(config: NexowireConfig): string[] {
+  return parseTokenList(
+    config.agentToken,
+    config.agentTokens?.join(','),
+  );
+}
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
@@ -39,14 +56,31 @@ export function loadConfig(
     optional(env.NEXOWIRE_STATE_DIR) ??
     path.join(os.homedir(), '.nexowire', 'hub');
 
+  const legacyMcpToken = optional(env.NEXOWIRE_MCP_BEARER_TOKEN);
+  const legacyAgentToken = optional(env.NEXOWIRE_AGENT_TOKEN);
+  const mcpBearerTokens = parseTokenList(
+    legacyMcpToken,
+    env.NEXOWIRE_MCP_BEARER_TOKENS,
+  );
+  const agentTokens = parseTokenList(
+    legacyAgentToken,
+    env.NEXOWIRE_AGENT_TOKENS,
+  );
+
   return {
     host: optional(env.NEXOWIRE_HTTP_HOST) ?? '127.0.0.1',
     port,
-    ...(optional(env.NEXOWIRE_MCP_BEARER_TOKEN)
-      ? { mcpBearerToken: optional(env.NEXOWIRE_MCP_BEARER_TOKEN) }
+    ...(legacyMcpToken
+      ? { mcpBearerToken: legacyMcpToken }
       : {}),
-    ...(optional(env.NEXOWIRE_AGENT_TOKEN)
-      ? { agentToken: optional(env.NEXOWIRE_AGENT_TOKEN) }
+    ...(mcpBearerTokens.length > 0
+      ? { mcpBearerTokens }
+      : {}),
+    ...(legacyAgentToken
+      ? { agentToken: legacyAgentToken }
+      : {}),
+    ...(agentTokens.length > 0
+      ? { agentTokens }
       : {}),
     stateDir,
     skillsDir: path.join(cwd, 'skills'),
@@ -56,9 +90,12 @@ export function loadConfig(
 export function assertSafeRemoteBinding(config: NexowireConfig): void {
   if (isLoopbackHost(config.host)) return;
 
-  if (!config.mcpBearerToken || !config.agentToken) {
+  if (
+    mcpAuthTokens(config).length === 0 ||
+    agentAuthTokens(config).length === 0
+  ) {
     throw new Error(
-      'Refusing non-loopback bind without both NEXOWIRE_MCP_BEARER_TOKEN and NEXOWIRE_AGENT_TOKEN.',
+      'Refusing non-loopback bind without configured MCP and native-agent bearer credentials.',
     );
   }
 }
