@@ -11,6 +11,7 @@ import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { executeWindowsWindowCapability } from './windows-window-control.js';
 import { captureWindowsScreenshot } from './windows-screenshot.js';
 import { executeWindowsInputCapability } from './windows-input.js';
+import { executeWindowsAccessibilityCapability } from './windows-accessibility.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
@@ -1898,6 +1899,11 @@ export async function executeCapability(
     case 'windows.keyboard.type':
     case 'windows.keyboard.hotkey':
       return await executeWindowsInputCapability(capability, input);
+    case 'windows.accessibility.tree':
+    case 'windows.accessibility.find':
+    case 'windows.accessibility.invoke':
+    case 'windows.accessibility.set_value':
+      return await executeWindowsAccessibilityCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }

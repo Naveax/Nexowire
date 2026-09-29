@@ -594,6 +594,183 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'windows_accessibility_tree',
+    {
+      title: 'Inspect Windows accessibility tree',
+      description:
+        'Inspect a bounded UI Automation tree for one exact HWND. Returns names, automation IDs, control types, bounds, states, supported patterns, and optional non-password ValuePattern text.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        max_depth: z.number().int().min(0).max(16).optional(),
+        max_nodes: z.number().int().min(1).max(2000).optional(),
+        include_offscreen: z.boolean().optional(),
+        include_values: z.boolean().optional(),
+        max_value_chars: z.number().int().min(1).max(8192).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      max_depth,
+      max_nodes,
+      include_offscreen,
+      include_values,
+      max_value_chars,
+    }) =>
+      await execute(
+        ctx,
+        'windows.accessibility.tree',
+        {
+          hwnd,
+          ...(max_depth !== undefined ? { max_depth } : {}),
+          ...(max_nodes !== undefined ? { max_nodes } : {}),
+          ...(include_offscreen !== undefined
+            ? { include_offscreen }
+            : {}),
+          ...(include_values !== undefined ? { include_values } : {}),
+          ...(max_value_chars !== undefined
+            ? { max_value_chars }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_accessibility_find',
+    {
+      title: 'Find Windows accessibility elements',
+      description:
+        'Search one HWND accessibility tree by name fragment, exact automation ID, class name, or control type. At least one selector is required.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        name_contains: z.string().min(1).max(1024).optional(),
+        automation_id: z.string().min(1).max(1024).optional(),
+        class_name: z.string().min(1).max(1024).optional(),
+        control_type: z.string().min(1).max(128).optional(),
+        max_results: z.number().int().min(1).max(100).optional(),
+        include_offscreen: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      name_contains,
+      automation_id,
+      class_name,
+      control_type,
+      max_results,
+      include_offscreen,
+    }) =>
+      await execute(
+        ctx,
+        'windows.accessibility.find',
+        {
+          hwnd,
+          ...(name_contains !== undefined ? { name_contains } : {}),
+          ...(automation_id !== undefined ? { automation_id } : {}),
+          ...(class_name !== undefined ? { class_name } : {}),
+          ...(control_type !== undefined ? { control_type } : {}),
+          ...(max_results !== undefined ? { max_results } : {}),
+          ...(include_offscreen !== undefined
+            ? { include_offscreen }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  const accessibilitySelectorSchema = z
+    .object({
+      automation_id: z.string().min(1).max(1024).optional(),
+      name: z.string().min(1).max(1024).optional(),
+      class_name: z.string().min(1).max(1024).optional(),
+      control_type: z.string().min(1).max(128).optional(),
+    })
+    .refine(
+      (value) =>
+        value.automation_id !== undefined ||
+        value.name !== undefined ||
+        value.class_name !== undefined ||
+        value.control_type !== undefined,
+      {
+        message: 'At least one exact accessibility selector is required.',
+      },
+    );
+
+  server.registerTool(
+    'windows_accessibility_invoke',
+    {
+      title: 'Invoke exact Windows accessibility element',
+      description:
+        'Invoke exactly one uniquely matched UI Automation element inside an exact HWND. Ambiguous selectors fail before any action.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        selector: accessibilitySelectorSchema,
+      },
+    },
+    async ({ device_id, provider_id, hwnd, selector }) =>
+      await execute(
+        ctx,
+        'windows.accessibility.invoke',
+        { hwnd, selector },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_accessibility_set_value',
+    {
+      title: 'Set exact Windows accessibility value',
+      description:
+        'Set ValuePattern on exactly one uniquely matched UI Automation element inside an exact HWND and verify the final value. The value itself is not echoed back.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        selector: accessibilitySelectorSchema,
+        value: z.string().max(20_000),
+      },
+    },
+    async ({ device_id, provider_id, hwnd, selector, value }) =>
+      await execute(
+        ctx,
+        'windows.accessibility.set_value',
+        { hwnd, selector, value },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
   server.registerTool(
     'windows_processes',
     {

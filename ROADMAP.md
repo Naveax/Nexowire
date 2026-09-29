@@ -55,7 +55,7 @@
 
 - [x] window enumeration/focus with exact HWND verification
 - [x] bounded inline screenshot capture for desktop and exact HWND rectangles
-- accessibility-tree inspection
+- [x] bounded Windows UI Automation tree/find plus exact invoke/set-value controls
 - [x] exact-foreground keyboard input and bounded clipboard control
 - browser automation
 - visual verification

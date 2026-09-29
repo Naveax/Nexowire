@@ -27,6 +27,7 @@ Each skill lives at `skills/<name>/SKILL.md`. The MCP server exposes lightweight
 - `windows-window-control`
 - `windows-screenshot`
 - `windows-input-control`
+- `windows-accessibility`
 - `verify-before-finish`
 - `remote-recovery`
 
