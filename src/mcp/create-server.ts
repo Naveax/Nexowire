@@ -736,6 +736,125 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'windows_environment_list',
+    {
+      title: 'List Windows environment variable names',
+      description:
+        'List exact environment variable names from process, user, or machine scope without returning their values.',
+      inputSchema: {
+        ...targetFields,
+        scope: z.enum(['process', 'user', 'machine']).optional(),
+        prefix: z.string().max(1024).optional(),
+        limit: z.number().int().min(1).max(2048).optional(),
+      },
+    },
+    async ({ device_id, provider_id, scope, prefix, limit }) =>
+      await execute(
+        ctx,
+        'windows.environment.list',
+        {
+          ...(scope ? { scope } : {}),
+          ...(prefix !== undefined ? { prefix } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_environment_read',
+    {
+      title: 'Read selected Windows environment variables',
+      description:
+        'Read exact environment variable names from process, user, or machine scope. Sensitive-looking names are redacted unless explicitly requested.',
+      inputSchema: {
+        ...targetFields,
+        scope: z.enum(['process', 'user', 'machine']).optional(),
+        names: z.array(z.string().min(1).max(1024)).min(1).max(64),
+        reveal_sensitive: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      scope,
+      names,
+      reveal_sensitive,
+    }) =>
+      await execute(
+        ctx,
+        'windows.environment.read',
+        {
+          ...(scope ? { scope } : {}),
+          names,
+          ...(reveal_sensitive !== undefined
+            ? { reveal_sensitive }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_environment_set',
+    {
+      title: 'Set Windows environment variable',
+      description:
+        'Set one exact environment variable in process, user, or machine scope and verify the stored value. User/machine changes apply to newly created processes.',
+      inputSchema: {
+        ...targetFields,
+        scope: z.enum(['process', 'user', 'machine']).optional(),
+        name: z.string().min(1).max(1024),
+        value: z.string().max(32_767),
+      },
+    },
+    async ({ device_id, provider_id, scope, name, value }) =>
+      await execute(
+        ctx,
+        'windows.environment.set',
+        {
+          ...(scope ? { scope } : {}),
+          name,
+          value,
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_environment_delete',
+    {
+      title: 'Delete Windows environment variable',
+      description:
+        'Delete one exact environment variable from process, user, or machine scope and verify removal.',
+      inputSchema: {
+        ...targetFields,
+        scope: z.enum(['process', 'user', 'machine']).optional(),
+        name: z.string().min(1).max(1024),
+      },
+    },
+    async ({ device_id, provider_id, scope, name }) =>
+      await execute(
+        ctx,
+        'windows.environment.delete',
+        {
+          ...(scope ? { scope } : {}),
+          name,
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
   server.registerTool(
     'shell_exec',
     {

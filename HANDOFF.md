@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/system-control-v2`
+Active branch: `feat/environment-control-v2`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -37,6 +37,7 @@ Implemented:
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
 - verified exact Windows registry/task/firewall mutation controls
+- exact Windows environment name discovery, selective redacted reads, and verified process/user/machine set/delete
 - provider health checks, equal-priority latency ranking, read-only retry failover, and mutation replay protection
 - initial security/docs/tests/CI
 

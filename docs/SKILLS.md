@@ -23,6 +23,7 @@ Each skill lives at `skills/<name>/SKILL.md`. The MCP server exposes lightweight
 - `powershell-expert`
 - `wsl-workflow`
 - `windows-diagnostics`
+- `windows-environment`
 - `verify-before-finish`
 - `remote-recovery`
 
