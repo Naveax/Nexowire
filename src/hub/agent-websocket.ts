@@ -2,12 +2,7 @@ import type { Server as HttpServer, IncomingMessage } from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { AgentBroker } from '../core/agent-broker.js';
 import { AgentHelloSchema } from '../protocol/agent.js';
-
-function bearerFrom(request: IncomingMessage): string | undefined {
-  const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return undefined;
-  return header.slice('Bearer '.length).trim();
-}
+import { matchesBearerHeader, parseTokenList } from '../security/tokens.js';
 
 function isLoopbackAddress(address: string | undefined): boolean {
   if (!address) return false;
@@ -26,21 +21,28 @@ export interface AgentWebSocketServerOptions {
 export function attachAgentWebSocketServer(
   server: HttpServer,
   broker: AgentBroker,
-  agentToken?: string,
+  agentTokens?: string | readonly string[],
   options: AgentWebSocketServerOptions = {},
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
   const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
   const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
   const alive = new WeakSet<WebSocket>();
+  const configuredAgentTokens = Array.isArray(agentTokens)
+    ? parseTokenList(agentTokens.join(','))
+    : parseTokenList(agentTokens);
 
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (url.pathname !== '/agent') return;
 
-    const authenticated = agentToken
-      ? bearerFrom(request) === agentToken
-      : isLoopbackAddress(request.socket.remoteAddress);
+    const authenticated =
+      configuredAgentTokens.length > 0
+        ? matchesBearerHeader(
+            request.headers.authorization,
+            configuredAgentTokens,
+          )
+        : isLoopbackAddress(request.socket.remoteAddress);
 
     if (!authenticated) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
