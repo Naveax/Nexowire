@@ -28,9 +28,10 @@ export function attachAgentWebSocketServer(
   const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
   const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
   const alive = new WeakSet<WebSocket>();
-  const configuredAgentTokens = Array.isArray(agentTokens)
-    ? parseTokenList(agentTokens.join(','))
-    : parseTokenList(agentTokens);
+  const configuredAgentTokens =
+    typeof agentTokens === 'string'
+      ? parseTokenList(agentTokens)
+      : parseTokenList(...(agentTokens ?? []));
 
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
