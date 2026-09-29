@@ -2240,8 +2240,14 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         value: z.string().max(32_767),
       },
     },
-    async ({ device_id, provider_id, scope, name, value
-      idempotency_key, }) =>
+    async ({
+      device_id,
+      provider_id,
+      scope,
+      name,
+      value,
+      idempotency_key,
+    }) =>
       await execute(
         ctx,
         'windows.environment.set',
@@ -2270,8 +2276,13 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         name: z.string().min(1).max(1024),
       },
     },
-    async ({ device_id, provider_id, scope, name
-      idempotency_key, }) =>
+    async ({
+      device_id,
+      provider_id,
+      scope,
+      name,
+      idempotency_key,
+    }) =>
       await execute(
         ctx,
         'windows.environment.delete',
@@ -2638,8 +2649,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         recursive: z.boolean().optional(),
       },
     },
-    async ({ device_id, provider_id, path, recursive
-      idempotency_key, }) =>
+    async ({ device_id, provider_id, path, recursive, idempotency_key }) =>
       await execute(
         ctx,
         'files.mkdir',
@@ -2773,8 +2783,15 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
       },
     },
-    async ({ device_id, provider_id, path, operations, max_bytes, expected_sha256
-      idempotency_key, }) =>
+    async ({
+      device_id,
+      provider_id,
+      path,
+      operations,
+      max_bytes,
+      expected_sha256,
+      idempotency_key,
+    }) =>
       await execute(
         ctx,
         'files.patch',
