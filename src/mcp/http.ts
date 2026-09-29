@@ -3,14 +3,14 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { NextFunction, Request, Response } from 'express';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type { NexowireConfig } from '../config.js';
-import { assertSafeRemoteBinding } from '../config.js';
+import {
+  agentAuthTokens,
+  assertSafeRemoteBinding,
+  mcpAuthTokens,
+} from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
+import { matchesBearerHeader } from '../security/tokens.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
-
-function bearer(header: string | undefined): string | undefined {
-  if (!header?.startsWith('Bearer ')) return undefined;
-  return header.slice('Bearer '.length).trim();
-}
 
 export async function runHttpServer(
   config: NexowireConfig,
@@ -29,10 +29,11 @@ export async function runHttpServer(
     });
   });
 
+  const mcpTokens = mcpAuthTokens(config);
   app.use('/mcp', (req: Request, res: Response, next: NextFunction) => {
     if (
-      config.mcpBearerToken &&
-      bearer(req.headers.authorization) !== config.mcpBearerToken
+      mcpTokens.length > 0 &&
+      !matchesBearerHeader(req.headers.authorization, mcpTokens)
     ) {
       res.status(401).json({ error: 'unauthorized' });
       return;
@@ -84,7 +85,7 @@ export async function runHttpServer(
   const wss = attachAgentWebSocketServer(
     httpServer,
     broker,
-    config.agentToken,
+    agentAuthTokens(config),
   );
 
   const shutdown = async (): Promise<void> => {
