@@ -2121,17 +2121,28 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'process_start',
     {
       title: 'Start process session',
-      description: 'Start a long-running or interactive process and return a reusable session id.',
+      description:
+        'Start a long-running or interactive process and return a reusable session id. durable=true moves pipe ownership into a first-party detached host so stdin/stdout can be reattached after native-agent restart.',
       inputSchema: {
         ...targetFields,
         command: z.string().min(1).max(200_000),
         shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
         cwd: z.string().max(4096).optional(),
         name: z.string().min(1).max(128).optional(),
+        durable: z.boolean().optional(),
         max_buffer_bytes: z.number().int().min(65_536).max(16_777_216).optional(),
       },
     },
-    async ({ device_id, provider_id, command, shell, cwd, name, max_buffer_bytes }) =>
+    async ({
+      device_id,
+      provider_id,
+      command,
+      shell,
+      cwd,
+      name,
+      durable,
+      max_buffer_bytes,
+    }) =>
       await execute(
         ctx,
         'process.start',
@@ -2140,6 +2151,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(shell ? { shell } : {}),
           ...(cwd ? { cwd } : {}),
           ...(name ? { name } : {}),
+          ...(durable !== undefined ? { durable } : {}),
           ...(max_buffer_bytes ? { max_buffer_bytes } : {}),
         },
         device_id,
