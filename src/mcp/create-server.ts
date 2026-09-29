@@ -3,11 +3,13 @@ import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
 import type { AuditLog } from '../audit/log.js';
+import type { AgentBroker } from '../core/agent-broker.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 
 export interface McpContext {
+  broker: AgentBroker;
   providers: ProviderRegistry;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
@@ -124,6 +126,32 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       inputSchema: {},
     },
     async () => toolResult({ devices: await ctx.providers.listTargets() }),
+  );
+
+  server.registerTool(
+    'events_read',
+    {
+      title: 'Read Nexowire events',
+      description:
+        'Read bounded agent/process events by cursor. Supports topic/device filters and long-poll waits up to 10 seconds so clients can avoid tight polling loops.',
+      inputSchema: {
+        device_id: z.string().min(1).max(128).optional(),
+        topics: z.array(z.string().min(1).max(128)).min(1).max(32).optional(),
+        after_seq: z.number().int().min(0).optional(),
+        max_events: z.number().int().min(1).max(1000).optional(),
+        wait_ms: z.number().int().min(0).max(10_000).optional(),
+      },
+    },
+    async ({ device_id, topics, after_seq, max_events, wait_ms }) =>
+      toolResult(
+        await ctx.broker.readEvents({
+          ...(device_id ? { deviceId: device_id } : {}),
+          ...(topics ? { topics } : {}),
+          ...(after_seq !== undefined ? { afterSeq: after_seq } : {}),
+          ...(max_events !== undefined ? { maxEvents: max_events } : {}),
+          ...(wait_ms !== undefined ? { waitMs: wait_ms } : {}),
+        }),
+      ),
   );
 
   server.registerTool(

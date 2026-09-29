@@ -8,7 +8,7 @@ import { AGENT_PROTOCOL_VERSION } from '../src/protocol/agent.js';
 
 test('hub sends a capability request through a real WebSocket agent', async (t) => {
   const http = createServer();
-  const broker = new AgentBroker();
+  const broker = new AgentBroker({ maxEvents: 3, maxEventBytes: 1_048_576 });
   const wss = attachAgentWebSocketServer(http, broker, 'test-agent-token');
   await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
@@ -51,5 +51,58 @@ test('hub sends a capability request through a real WebSocket agent', async (t) 
   assert.equal(broker.has('device-e2e'), true);
   const result = await broker.request('device-e2e', 'machine.snapshot', {}, 2_000);
   assert.deepEqual(result, { data: { hostname: 'e2e-host' } });
+
+  socket.send(JSON.stringify({
+    type: 'event',
+    eventId: '11111111-1111-4111-8111-111111111111',
+    at: new Date().toISOString(),
+    topic: 'test.signal',
+    data: { value: 42 },
+  }));
+  const eventFeed = await broker.readEvents({
+    deviceId: 'device-e2e',
+    topics: ['test.signal'],
+    afterSeq: 0,
+    waitMs: 1_000,
+  });
+  assert.equal(eventFeed.events.length, 1);
+  assert.equal(eventFeed.events[0]?.deviceId, 'device-e2e');
+  assert.equal(eventFeed.events[0]?.topic, 'test.signal');
+  assert.deepEqual(eventFeed.events[0]?.data, { value: 42 });
+
+  const waiting = broker.readEvents({
+    deviceId: 'device-e2e',
+    topics: ['test.long-poll'],
+    afterSeq: eventFeed.nextSeq,
+    waitMs: 1_000,
+  });
+  setTimeout(() => {
+    socket.send(JSON.stringify({
+      type: 'event',
+      eventId: '22222222-2222-4222-8222-222222222222',
+      at: new Date().toISOString(),
+      topic: 'test.long-poll',
+      data: { awake: true },
+    }));
+  }, 30);
+  const longPollFeed = await waiting;
+  assert.equal(longPollFeed.events.length, 1);
+  assert.equal(longPollFeed.events[0]?.topic, 'test.long-poll');
+
+  socket.send(JSON.stringify({
+    type: 'event',
+    eventId: '44444444-4444-4444-8444-444444444444',
+    at: new Date().toISOString(),
+    topic: 'test.trim',
+    data: { trimmed: true },
+  }));
+  const trimFeed = await broker.readEvents({
+    topics: ['test.trim'],
+    afterSeq: 0,
+    waitMs: 1_000,
+  });
+  assert.equal(trimFeed.events.length, 1);
+  assert.equal(trimFeed.cursorExpired, true);
+  assert.ok(trimFeed.oldestSeq > 1);
   socket.close();
 });

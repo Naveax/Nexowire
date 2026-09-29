@@ -91,10 +91,20 @@ interface ManagedSession {
   maxBufferBytes: number;
 }
 
+export interface ProcessManagerEvent {
+  topic:
+    | 'process.started'
+    | 'process.output'
+    | 'process.exited'
+    | 'process.input';
+  data: Record<string, unknown>;
+}
+
 export interface ProcessManagerOptions {
   stateFile?: string;
   maxSessions?: number;
   exitedRetentionMs?: number;
+  onEvent?: (event: ProcessManagerEvent) => void;
 }
 
 export class ProcessManagerError extends Error {
@@ -233,6 +243,7 @@ export class ProcessManager {
   private readonly stateFile?: string;
   private readonly maxSessions: number;
   private readonly exitedRetentionMs: number;
+  private readonly onEvent?: (event: ProcessManagerEvent) => void;
   private persistChain: Promise<void> = Promise.resolve();
 
   constructor(options: ProcessManagerOptions = {}) {
@@ -240,6 +251,15 @@ export class ProcessManager {
     this.maxSessions = options.maxSessions ?? 128;
     this.exitedRetentionMs =
       options.exitedRetentionMs ?? 24 * 60 * 60 * 1000;
+    this.onEvent = options.onEvent;
+  }
+
+  private emit(event: ProcessManagerEvent): void {
+    try {
+      this.onEvent?.(event);
+    } catch {
+      // Event delivery must never interfere with process control.
+    }
   }
 
   async initialize(): Promise<void> {
@@ -350,6 +370,17 @@ export class ProcessManager {
       maxBufferBytes: parsed.max_buffer_bytes,
     };
     this.sessions.set(id, session);
+    this.emit({
+      topic: 'process.started',
+      data: {
+        sessionId: session.id,
+        ...(session.name ? { name: session.name } : {}),
+        pid: session.pid,
+        shell: session.shell,
+        ...(session.cwd ? { cwd: session.cwd } : {}),
+        startedAt: session.startedAt,
+      },
+    });
 
     const append = (
       stream: 'stdout' | 'stderr',
@@ -357,13 +388,24 @@ export class ProcessManager {
     ): void => {
       const text = chunk.toString('utf8');
       const bytes = Buffer.byteLength(text);
-      session.events.push({
+      const event = {
         seq: session.nextSeq++,
         stream,
         text,
         at: new Date().toISOString(),
-      });
+      } as const;
+      session.events.push(event);
       session.bufferedBytes += bytes;
+      this.emit({
+        topic: 'process.output',
+        data: {
+          sessionId: session.id,
+          seq: event.seq,
+          stream: event.stream,
+          text: event.text,
+          at: event.at,
+        },
+      });
 
       while (
         session.bufferedBytes > session.maxBufferBytes &&
@@ -386,6 +428,16 @@ export class ProcessManager {
       session.exitCode = code;
       session.signal = signal;
       session.exitedAt = new Date().toISOString();
+      this.emit({
+        topic: 'process.exited',
+        data: {
+          sessionId: session.id,
+          pid: session.pid,
+          exitCode: session.exitCode,
+          signal: session.signal,
+          exitedAt: session.exitedAt,
+        },
+      });
       void this.persistState().catch(() => undefined);
     });
 
@@ -451,6 +503,14 @@ export class ProcessManager {
         error ? reject(error) : resolve(),
       ),
     );
+    this.emit({
+      topic: 'process.input',
+      data: {
+        sessionId: session.id,
+        bytes: Buffer.byteLength(value),
+        appendNewline: parsed.append_newline,
+      },
+    });
     return summarize(session);
   }
 

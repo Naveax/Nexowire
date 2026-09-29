@@ -29,6 +29,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   const audit = new AuditLog(path.join(stateDir, 'audit.jsonl'));
 
   const mcp = createNexowireMcpServer({
+    broker,
     providers,
     audit,
     workspaces: new WorkspaceStore(stateDir),
@@ -100,6 +101,7 @@ test('MCP request reaches a native agent through the provider registry', async (
 
   const tools = await client.listTools();
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_snapshot'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'events_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'process_start'));
   assert.ok(tools.tools.some((tool) => tool.name === 'process_prune'));
   assert.ok(tools.tools.some((tool) => tool.name === 'file_patch'));

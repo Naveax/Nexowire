@@ -38,7 +38,16 @@ export const AgentResponseSchema = z.object({
     .optional(),
 });
 
+export const AgentEventSchema = z.object({
+  type: z.literal('event'),
+  eventId: z.string().uuid(),
+  at: z.string().datetime(),
+  topic: z.string().min(1).max(128),
+  data: z.unknown(),
+});
+
 export type AgentDevice = z.infer<typeof AgentDeviceSchema>;
 export type AgentHello = z.infer<typeof AgentHelloSchema>;
 export type HubRequest = z.infer<typeof HubRequestSchema>;
 export type AgentResponse = z.infer<typeof AgentResponseSchema>;
+export type AgentEvent = z.infer<typeof AgentEventSchema>;

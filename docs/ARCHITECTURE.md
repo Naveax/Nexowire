@@ -31,6 +31,7 @@ A target can eventually be reachable through more than one provider. The provide
 - persistent workspace checkpoints
 - structured workspace detection and bounded parallel check execution
 - bounded dependency-aware parallel task graphs for heterogeneous shell jobs
+- bounded in-memory agent/process event feed with cursor-based long polling, topic/device filters, and cursor-expiry detection
 - operation IDs and persistent payload-free audit metadata
 - lazy skill discovery
 
@@ -46,7 +47,7 @@ A target can eventually be reachable through more than one provider. The provide
 ## Next architectural layers
 
 - durable task/job engine with event subscriptions
-- richer event subscriptions beyond bounded process long-poll reads
+- durable/persisted event history only where there is a concrete operational need; the live feed intentionally remains bounded and in-memory
 - structured Windows service/process/network/registry tools
 - provider adapters for SentinelX and Remote Desktop Commander where supported APIs permit
 - GUI accessibility tree plus screenshot/computer-use fallback
