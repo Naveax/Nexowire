@@ -11,6 +11,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { AgentBroker } from '../src/core/agent-broker.js';
 import { ProviderRegistry } from '../src/core/provider-registry.js';
 import { DeviceAliasStore } from '../src/devices/alias-store.js';
+import { IdempotencyStore } from '../src/operations/idempotency-store.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
 import { createNexowireMcpServer } from '../src/mcp/create-server.js';
 import { AgentProvider } from '../src/providers/agent-provider.js';
@@ -29,12 +30,14 @@ test('MCP request reaches a native agent through the provider registry', async (
   providers.register(new AgentProvider(broker));
   const audit = new AuditLog(path.join(stateDir, 'audit.jsonl'));
   const aliases = new DeviceAliasStore(stateDir);
-  await aliases.initialize();
+  const idempotency = new IdempotencyStore(stateDir);
+  await Promise.all([aliases.initialize(), idempotency.initialize()]);
 
   const mcp = createNexowireMcpServer({
     broker,
     providers,
     aliases,
+    idempotency,
     audit,
     workspaces: new WorkspaceStore(stateDir),
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
@@ -74,10 +77,11 @@ test('MCP request reaches a native agent through the provider registry', async (
       platform: process.platform,
       arch: process.arch,
       agentVersion: 'integration-test',
-      capabilities: ['machine.snapshot', 'windows.screenshot', 'browser.screenshot', 'browser.visual.verify'],
+      capabilities: ['machine.snapshot', 'files.write', 'windows.screenshot', 'browser.screenshot', 'browser.visual.verify'],
     },
   }));
 
+  let filesWriteRequests = 0;
   agent.on('message', (raw) => {
     const request = JSON.parse(raw.toString()) as {
       type: string;
@@ -85,6 +89,7 @@ test('MCP request reaches a native agent through the provider registry', async (
       capability: string;
     };
     if (request.type !== 'request') return;
+    if (request.capability === 'files.write') filesWriteRequests++;
     const data =
       request.capability === 'windows.screenshot'
         ? {
@@ -173,6 +178,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.equal(broker.has('mcp-device'), true);
 
   const tools = await client.listTools();
+  assert.ok(tools.tools.some((tool) => tool.name === 'operations_idempotency_list'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_list'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_delete'));
@@ -228,6 +234,108 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_environment_delete'));
+
+  const firstIdempotentWrite = await client.callTool({
+    name: 'file_write',
+    arguments: {
+      device_id: 'mcp-device',
+      path: 'idempotent.txt',
+      content: 'hello',
+      mode: 'overwrite',
+      idempotency_key: 'write-idempotency-1',
+    },
+  });
+  assert.equal(
+    'isError' in firstIdempotentWrite
+      ? firstIdempotentWrite.isError
+      : false,
+    false,
+  );
+  assert.equal(filesWriteRequests, 1);
+
+  const replayedIdempotentWrite = await client.callTool({
+    name: 'file_write',
+    arguments: {
+      device_id: 'mcp-device',
+      path: 'idempotent.txt',
+      content: 'hello',
+      mode: 'overwrite',
+      idempotency_key: 'write-idempotency-1',
+    },
+  });
+  assert.equal(
+    'isError' in replayedIdempotentWrite
+      ? replayedIdempotentWrite.isError
+      : false,
+    false,
+  );
+  assert.equal(filesWriteRequests, 1);
+  const replayedWriteStructured =
+    replayedIdempotentWrite.structuredContent as {
+      idempotency?: {
+        replayed?: boolean;
+        resultSource?: string;
+      };
+    };
+  assert.equal(replayedWriteStructured.idempotency?.replayed, true);
+  assert.equal(
+    replayedWriteStructured.idempotency?.resultSource,
+    'memory',
+  );
+
+  const reusedKeyDifferentPayload = await client.callTool({
+    name: 'file_write',
+    arguments: {
+      device_id: 'mcp-device',
+      path: 'idempotent.txt',
+      content: 'different',
+      mode: 'overwrite',
+      idempotency_key: 'write-idempotency-1',
+    },
+  });
+  assert.equal(
+    'isError' in reusedKeyDifferentPayload
+      ? reusedKeyDifferentPayload.isError
+      : false,
+    true,
+  );
+  assert.equal(filesWriteRequests, 1);
+
+  const unsafeAppendIdempotency = await client.callTool({
+    name: 'file_write',
+    arguments: {
+      device_id: 'mcp-device',
+      path: 'append.txt',
+      content: 'x',
+      mode: 'append',
+      idempotency_key: 'append-idempotency-1',
+    },
+  });
+  assert.equal(
+    'isError' in unsafeAppendIdempotency
+      ? unsafeAppendIdempotency.isError
+      : false,
+    true,
+  );
+  assert.equal(filesWriteRequests, 1);
+
+  const operationRecords = await client.callTool({
+    name: 'operations_idempotency_list',
+    arguments: { limit: 10 },
+  });
+  const operationRecordsStructured =
+    operationRecords.structuredContent as {
+      records?: Array<{
+        key?: string;
+        status?: string;
+        fingerprint?: string;
+      }>;
+    };
+  const writeRecord = operationRecordsStructured.records?.find(
+    (record) => record.key === 'write-idempotency-1',
+  );
+  assert.equal(writeRecord?.status, 'succeeded');
+  assert.match(writeRecord?.fingerprint ?? '', /^[a-f0-9]{64}$/);
 
   const aliasSet = await client.callTool({
     name: 'device_alias_set',

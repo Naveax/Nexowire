@@ -6,6 +6,12 @@ import type { AuditLog } from '../audit/log.js';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { DeviceAliasStore } from '../devices/alias-store.js';
+import { idempotencyEligibility } from '../operations/idempotency-policy.js';
+import {
+  IdempotencyStoreError,
+  operationFingerprint,
+  type IdempotencyStore,
+} from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 
@@ -13,6 +19,7 @@ export interface McpContext {
   broker: AgentBroker;
   providers: ProviderRegistry;
   aliases?: DeviceAliasStore;
+  idempotency?: IdempotencyStore;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
@@ -68,12 +75,120 @@ async function execute(
   deviceId?: string,
   providerId?: string,
   timeoutMs?: number,
+  idempotencyKey?: string,
 ) {
-  const operationId = randomUUID();
+  let operationId: string = randomUUID();
   const started = performance.now();
   let targetId: string | undefined;
+  let idempotencyCreated = false;
+
   try {
     targetId = await resolveDevice(ctx.providers, ctx.aliases, deviceId);
+
+    if (idempotencyKey) {
+      if (!ctx.idempotency) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_UNAVAILABLE',
+          'Idempotency storage is unavailable in this Nexowire runtime.',
+        );
+      }
+
+      const eligibility = idempotencyEligibility(capability, input);
+      if (!eligibility.eligible) {
+        throw new IdempotencyStoreError(
+          'IDEMPOTENCY_UNSUPPORTED',
+          eligibility.reason ??
+            'This mutation is not eligible for idempotent execution.',
+          { capability },
+        );
+      }
+
+      const fingerprint = operationFingerprint({
+        targetId,
+        capability,
+        ...(providerId ? { providerId } : {}),
+        payload: input,
+      });
+      const begun = await ctx.idempotency.begin({
+        key: idempotencyKey,
+        fingerprint,
+        capability,
+        targetId,
+      });
+      operationId = begun.record.operationId;
+
+      if (!begun.created) {
+        if (
+          begun.cachedResult &&
+          typeof begun.cachedResult === 'object' &&
+          !Array.isArray(begun.cachedResult) &&
+          'ok' in begun.cachedResult &&
+          typeof begun.cachedResult.ok === 'boolean'
+        ) {
+          const cached = begun.cachedResult as Record<string, unknown> & {
+            ok: boolean;
+          };
+          return toolResult(
+            {
+              ...cached,
+              idempotency: {
+                key: begun.record.key,
+                replayed: true,
+                persistedStatus: begun.record.status,
+                operationId: begun.record.operationId,
+                resultSource: 'memory',
+              },
+            },
+            !cached.ok,
+          );
+        }
+
+        if (begun.record.status === 'succeeded') {
+          return toolResult({
+            ok: true,
+            idempotency: {
+              key: begun.record.key,
+              replayed: true,
+              persistedStatus: begun.record.status,
+              operationId: begun.record.operationId,
+              resultSource: 'record_only',
+              resultUnavailableAfterRestart: true,
+            },
+          });
+        }
+
+        const code =
+          begun.record.status === 'unknown'
+            ? 'IDEMPOTENCY_STATE_UNKNOWN'
+            : begun.record.status === 'in_progress'
+              ? 'IDEMPOTENCY_IN_PROGRESS'
+              : 'IDEMPOTENCY_PREVIOUS_FAILURE';
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code,
+              message:
+                begun.record.status === 'unknown'
+                  ? 'A previous attempt with this idempotency key has unknown final state. Verify target state before choosing a new key.'
+                  : begun.record.status === 'in_progress'
+                    ? 'An operation with this idempotency key is already in progress.'
+                    : 'A previous attempt with this idempotency key failed and will not be replayed automatically.',
+            },
+            idempotency: {
+              key: begun.record.key,
+              replayed: true,
+              persistedStatus: begun.record.status,
+              operationId: begun.record.operationId,
+            },
+          },
+          true,
+        );
+      }
+
+      idempotencyCreated = true;
+    }
+
     await ctx.audit?.write({
       operationId,
       status: 'started',
@@ -93,6 +208,14 @@ async function execute(
       providerId,
     );
 
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
+      await ctx.idempotency.complete(
+        idempotencyKey,
+        result.ok ? 'succeeded' : 'failed',
+        result,
+      );
+    }
+
     await ctx.audit?.write({
       operationId,
       status: result.ok ? 'succeeded' : 'failed',
@@ -103,9 +226,37 @@ async function execute(
       ...(result.error?.code ? { errorCode: result.error.code } : {}),
       ...(result.error?.message ? { message: result.error.message } : {}),
     });
-    return toolResult(result, !result.ok);
+    return toolResult(
+      idempotencyKey
+        ? {
+            ...result,
+            idempotency: {
+              key: idempotencyKey,
+              replayed: false,
+              persistedStatus: result.ok ? 'succeeded' : 'failed',
+              operationId,
+            },
+          }
+        : result,
+      !result.ok,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const errorCode =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : 'EXECUTION_FAILED';
+
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
+      await ctx.idempotency.complete(
+        idempotencyKey,
+        errorCode === 'MUTATION_STATE_UNKNOWN' ? 'unknown' : 'failed',
+      );
+    }
+
     await ctx.audit?.write({
       operationId,
       status: 'failed',
@@ -113,13 +264,32 @@ async function execute(
       ...(targetId ? { targetId } : {}),
       ...(providerId ? { providerId } : {}),
       durationMs: Math.round(performance.now() - started),
-      errorCode:
-        typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
-          ? error.code
-          : 'EXECUTION_FAILED',
+      errorCode,
       message,
     });
-    return toolResult({ ok: false, operationId, error: message }, true);
+    return toolResult(
+      {
+        ok: false,
+        operationId,
+        error: {
+          code: errorCode,
+          message,
+        },
+        ...(idempotencyKey
+          ? {
+              idempotency: {
+                key: idempotencyKey,
+                replayed: false,
+                persistedStatus:
+                  errorCode === 'MUTATION_STATE_UNKNOWN'
+                    ? 'unknown'
+                    : 'failed',
+              },
+            }
+          : {}),
+      },
+      true,
+    );
   }
 }
 
@@ -128,10 +298,37 @@ const targetFields = {
   provider_id: z.string().min(1).max(128).optional(),
 };
 
+const idempotencyField = {
+  idempotency_key: z
+    .string()
+    .min(1)
+    .max(160)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/)
+    .optional(),
+};
+
 export function createNexowireMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer(
     { name: 'nexowire', version: '0.1.0-dev.1' },
     { capabilities: { logging: {} } },
+  );
+
+  server.registerTool(
+    'operations_idempotency_list',
+    {
+      title: 'List idempotency operation records',
+      description:
+        'List recent payload-free idempotency records. Records contain fingerprints and status only, never mutation input or output payloads.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(500).optional(),
+      },
+    },
+    async ({ limit }) =>
+      toolResult({
+        records: ctx.idempotency
+          ? await ctx.idempotency.list(limit ?? 100)
+          : [],
+      }),
   );
 
   server.registerTool(
@@ -1810,9 +2007,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Set Windows registry value',
       description:
-        'Create or update one exact registry value and verify the stored value type/content.',
+        'Optional idempotency_key prevents duplicate retries. Create or update one exact registry value and verify the stored value type/content.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
         path: z.string().min(1).max(4096),
         name: z.string().min(1).max(1024),
@@ -1841,6 +2039,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       type,
       value,
       create_key,
+      idempotency_key,
     }) =>
       await execute(
         ctx,
@@ -1856,6 +2055,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -1864,9 +2064,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Delete Windows registry value or key',
       description:
-        'Delete one exact registry value, or delete one non-root key. Recursive key deletion must be explicitly enabled.',
+        'Optional idempotency_key prevents duplicate retries. Delete one exact registry value, or delete one non-root key. Recursive key deletion must be explicitly enabled.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
         path: z.string().min(1).max(4096),
         name: z.string().min(1).max(1024).optional(),
@@ -1880,6 +2081,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       path,
       name,
       recursive,
+      idempotency_key,
     }) =>
       await execute(
         ctx,
@@ -1893,6 +2095,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2028,15 +2231,23 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Set Windows environment variable',
       description:
-        'Set one exact environment variable in process, user, or machine scope and verify the stored value. User/machine changes apply to newly created processes.',
+        'Optional idempotency_key prevents duplicate retries. Set one exact environment variable in process, user, or machine scope and verify the stored value. User/machine changes apply to newly created processes.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         scope: z.enum(['process', 'user', 'machine']).optional(),
         name: z.string().min(1).max(1024),
         value: z.string().max(32_767),
       },
     },
-    async ({ device_id, provider_id, scope, name, value }) =>
+    async ({
+      device_id,
+      provider_id,
+      scope,
+      name,
+      value,
+      idempotency_key,
+    }) =>
       await execute(
         ctx,
         'windows.environment.set',
@@ -2048,6 +2259,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2056,14 +2268,21 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Delete Windows environment variable',
       description:
-        'Delete one exact environment variable from process, user, or machine scope and verify removal.',
+        'Optional idempotency_key prevents duplicate retries. Delete one exact environment variable from process, user, or machine scope and verify removal.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         scope: z.enum(['process', 'user', 'machine']).optional(),
         name: z.string().min(1).max(1024),
       },
     },
-    async ({ device_id, provider_id, scope, name }) =>
+    async ({
+      device_id,
+      provider_id,
+      scope,
+      name,
+      idempotency_key,
+    }) =>
       await execute(
         ctx,
         'windows.environment.delete',
@@ -2074,6 +2293,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         45_000,
+        idempotency_key,
       ),
   );
 
@@ -2345,6 +2565,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       description: 'Write or append a file inside the native agent path allowlist.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         path: z.string().min(1).max(4096),
         content: z.string(),
         encoding: z.enum(['utf8', 'base64']).optional(),
@@ -2360,6 +2581,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       encoding,
       mode,
       create_parents,
+      idempotency_key,
     }) =>
       await execute(
         ctx,
@@ -2373,6 +2595,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         },
         device_id,
         provider_id,
+        undefined,
+        idempotency_key,
       ),
   );
 
@@ -2420,17 +2644,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       description: 'Create a directory inside the agent allowlist.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         path: z.string().min(1).max(4096),
         recursive: z.boolean().optional(),
       },
     },
-    async ({ device_id, provider_id, path, recursive }) =>
+    async ({ device_id, provider_id, path, recursive, idempotency_key }) =>
       await execute(
         ctx,
         'files.mkdir',
         { path, ...(recursive !== undefined ? { recursive } : {}) },
         device_id,
         provider_id,
+        undefined,
+        idempotency_key,
       ),
   );
 
@@ -2537,9 +2764,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Patch text file',
       description:
-        'Apply exact text replacements with occurrence-count and optional SHA-256 stale-read checks before writing.',
+        'Optional idempotency_key records exact-at-most-once execution. Apply exact text replacements with occurrence-count and optional SHA-256 stale-read checks before writing.',
       inputSchema: {
         ...targetFields,
+        ...idempotencyField,
         path: z.string().min(1).max(4096),
         operations: z
           .array(
@@ -2555,7 +2783,15 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
       },
     },
-    async ({ device_id, provider_id, path, operations, max_bytes, expected_sha256 }) =>
+    async ({
+      device_id,
+      provider_id,
+      path,
+      operations,
+      max_bytes,
+      expected_sha256,
+      idempotency_key,
+    }) =>
       await execute(
         ctx,
         'files.patch',
@@ -2567,6 +2803,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         },
         device_id,
         provider_id,
+        undefined,
+        idempotency_key,
       ),
   );
 
