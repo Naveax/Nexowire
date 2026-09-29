@@ -60,9 +60,22 @@ export const CORE_CAPABILITIES = [
   'windows.accessibility.invoke',
   'windows.accessibility.set_value',
   'windows.pointer.position',
+  'browser.session.list',
+  'browser.tabs',
+  'browser.snapshot',
+  'browser.screenshot',
   'windows.pointer.move',
   'windows.pointer.click',
   'windows.pointer.scroll',
+  'browser.session.start',
+  'browser.session.list',
+  'browser.session.stop',
+  'browser.tabs',
+  'browser.navigate',
+  'browser.snapshot',
+  'browser.click',
+  'browser.set_value',
+  'browser.screenshot',
 ] as const;
 
 export type CoreCapability = (typeof CORE_CAPABILITIES)[number];
