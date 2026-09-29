@@ -90,6 +90,8 @@ Nexowire is intended to control real computers. Security is therefore part of th
 
 Do not expose a development instance directly to the public Internet.
 
+For bootstrap remote deployments, MCP and native-agent bearer credentials support comma-separated rotation sets through `NEXOWIRE_MCP_BEARER_TOKENS` and `NEXOWIRE_AGENT_TOKENS`; singular token variables remain compatible. Matching uses constant-time digest comparison. This is rollover support, not the final production authorization/TLS layer.
+
 ## Development
 
 ```bash
