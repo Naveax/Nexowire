@@ -10,6 +10,7 @@ import { executeWindowsCapability } from './windows-control.js';
 import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
+import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
 
 const ShellExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
@@ -151,6 +152,10 @@ const TaskGraphJobSchema = z.object({
 });
 
 const TaskGraphRunInputSchema = z.object({
+  graph_id: TaskGraphJobIdSchema.optional(),
+  resume: z.boolean().default(false),
+  retry_failed: z.boolean().default(false),
+  retry_unknown: z.boolean().default(false),
   jobs: z.array(TaskGraphJobSchema).min(1).max(32),
   max_parallel: z.number().int().min(1).max(8).default(4),
   stop_on_failure: z.boolean().default(false),
@@ -172,6 +177,19 @@ const TaskGraphRunInputSchema = z.object({
     .min(1024)
     .max(16_777_216)
     .default(1_048_576),
+});
+
+const TaskGraphGetInputSchema = z.object({
+  graph_id: TaskGraphJobIdSchema,
+});
+
+const TaskGraphPruneInputSchema = z.object({
+  older_than_ms: z
+    .number()
+    .int()
+    .min(0)
+    .max(2_592_000_000)
+    .optional(),
 });
 
 class FileConflictError extends Error {
@@ -1290,7 +1308,8 @@ type TaskGraphStatus =
   | 'running'
   | 'succeeded'
   | 'failed'
-  | 'blocked';
+  | 'blocked'
+  | 'unknown';
 
 interface TaskGraphResult {
   id: string;
@@ -1309,6 +1328,8 @@ interface TaskGraphResult {
   timedOut?: boolean;
   error?: string;
   blockedBy?: string[];
+  attempts?: number;
+  reused?: boolean;
 }
 
 function validateTaskGraph(
@@ -1369,18 +1390,59 @@ function validateTaskGraph(
 async function runTaskGraph(
   input: unknown,
   policy: PathPolicy,
+  store?: TaskGraphStore,
 ): Promise<unknown> {
   const parsed = TaskGraphRunInputSchema.parse(input);
   validateTaskGraph(parsed.jobs);
+
+  if (parsed.resume && !parsed.graph_id) {
+    throw new Error('resume=true requires graph_id.');
+  }
+  if ((parsed.retry_failed || parsed.retry_unknown) && !parsed.resume) {
+    throw new Error('retry_failed/retry_unknown require resume=true.');
+  }
+  if (parsed.graph_id && !store) {
+    throw new Error('Persistent task graph store is unavailable.');
+  }
+
+  const specHash = sha256Buffer(
+    Buffer.from(
+      JSON.stringify({
+        jobs: parsed.jobs,
+        max_parallel: parsed.max_parallel,
+        stop_on_failure: parsed.stop_on_failure,
+        default_timeout_ms: parsed.default_timeout_ms,
+        total_timeout_ms: parsed.total_timeout_ms,
+        default_max_output_bytes: parsed.default_max_output_bytes,
+      }),
+      'utf8',
+    ),
+  );
+
+  let checkpoint: TaskGraphCheckpoint | undefined;
+  if (parsed.graph_id) {
+    checkpoint = await store!.prepare({
+      id: parsed.graph_id,
+      specHash,
+      jobs: parsed.jobs.map((job) => ({
+        id: job.id,
+        dependsOn: [...job.depends_on],
+      })),
+      resume: parsed.resume,
+      retryFailed: parsed.retry_failed,
+      retryUnknown: parsed.retry_unknown,
+    });
+  }
 
   const startedAt = Date.now();
   const deadline = startedAt + parsed.total_timeout_ms;
   const results = new Map<string, TaskGraphResult>();
 
   for (const job of parsed.jobs) {
+    const saved = checkpoint?.jobs.find((entry) => entry.id === job.id);
     results.set(job.id, {
       id: job.id,
-      status: 'pending',
+      status: saved?.status ?? 'pending',
       dependsOn: [...job.depends_on],
       command: job.command,
       shell:
@@ -1390,18 +1452,77 @@ async function runTaskGraph(
             ? 'pwsh'
             : 'powershell'
           : 'bash'),
+      ...(saved?.startedAt ? { startedAt: saved.startedAt } : {}),
+      ...(saved?.completedAt ? { completedAt: saved.completedAt } : {}),
+      ...(saved?.exitCode !== undefined ? { exitCode: saved.exitCode } : {}),
+      ...(saved?.timedOut !== undefined ? { timedOut: saved.timedOut } : {}),
+      ...(saved?.blockedBy ? { blockedBy: [...saved.blockedBy] } : {}),
+      ...(saved ? { attempts: saved.attempts } : { attempts: 0 }),
+      ...(saved && saved.status !== 'pending' ? { reused: true } : {}),
     });
   }
+
+  const persistGraph = async (
+    forcedStatus?: TaskGraphCheckpoint['status'],
+  ): Promise<void> => {
+    if (!parsed.graph_id || !store || !checkpoint) return;
+
+    const ordered = parsed.jobs.map((job) => results.get(job.id)!);
+    const unknown = ordered.some((result) => result.status === 'unknown');
+    const running = ordered.some((result) => result.status === 'running');
+    const failed = ordered.some((result) => result.status === 'failed');
+    const blocked = ordered.some((result) => result.status === 'blocked');
+    const status: TaskGraphCheckpoint['status'] =
+      forcedStatus ??
+      (unknown
+        ? 'interrupted'
+        : running
+          ? 'running'
+          : failed
+            ? 'failed'
+            : blocked
+              ? 'blocked'
+              : 'succeeded');
+
+    checkpoint = {
+      ...checkpoint,
+      status,
+      updatedAt: new Date().toISOString(),
+      jobs: ordered.map((result) => ({
+        id: result.id,
+        status: result.status,
+        dependsOn: [...result.dependsOn],
+        attempts: result.attempts ?? 0,
+        ...(result.startedAt ? { startedAt: result.startedAt } : {}),
+        ...(result.completedAt ? { completedAt: result.completedAt } : {}),
+        ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+        ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
+        ...(result.blockedBy ? { blockedBy: [...result.blockedBy] } : {}),
+      })),
+    };
+    await store.save(checkpoint);
+  };
 
   const running = new Map<string, Promise<void>>();
 
   const startJob = (job: z.infer<typeof TaskGraphJobSchema>): void => {
     const result = results.get(job.id)!;
     result.status = 'running';
+    result.reused = false;
+    result.attempts = (result.attempts ?? 0) + 1;
     result.startedAt = new Date().toISOString();
+    delete result.completedAt;
+    delete result.blockedBy;
+    delete result.error;
+    delete result.exitCode;
+    delete result.stdout;
+    delete result.stderr;
+    delete result.timedOut;
+    delete result.truncated;
     const jobStartedAt = Date.now();
 
     const promise = (async () => {
+      await persistGraph('running');
       try {
         const cwd = job.cwd
           ? await policy.resolveExisting(job.cwd)
@@ -1454,6 +1575,7 @@ async function runTaskGraph(
       } finally {
         result.completedAt = new Date().toISOString();
         result.durationMs = Date.now() - jobStartedAt;
+        await persistGraph();
       }
     })().finally(() => {
       running.delete(job.id);
@@ -1479,7 +1601,8 @@ async function runTaskGraph(
         .filter(
           (dependency) =>
             dependency.status === 'failed' ||
-            dependency.status === 'blocked',
+            dependency.status === 'blocked' ||
+            dependency.status === 'unknown',
         )
         .map((dependency) => dependency.id);
 
@@ -1512,6 +1635,8 @@ async function runTaskGraph(
         changed = true;
       }
     }
+
+    if (changed) await persistGraph();
 
     for (const job of parsed.jobs) {
       if (running.size >= parsed.max_parallel) break;
@@ -1556,10 +1681,25 @@ async function runTaskGraph(
   const blocked = ordered.filter(
     (result) => result.status === 'blocked',
   ).length;
+  const unknown = ordered.filter(
+    (result) => result.status === 'unknown',
+  ).length;
+
+  await persistGraph(
+    unknown > 0
+      ? 'interrupted'
+      : failed > 0
+        ? 'failed'
+        : blocked > 0
+          ? 'blocked'
+          : 'succeeded',
+  );
 
   return {
     data: {
-      ok: failed === 0 && blocked === 0,
+      ...(parsed.graph_id ? { graphId: parsed.graph_id, specHash } : {}),
+      resumed: parsed.resume,
+      ok: failed === 0 && blocked === 0 && unknown === 0,
       maxParallel: parsed.max_parallel,
       stopOnFailure: parsed.stop_on_failure,
       totalTimeoutMs: parsed.total_timeout_ms,
@@ -1569,6 +1709,7 @@ async function runTaskGraph(
         succeeded,
         failed,
         blocked,
+        ...(unknown > 0 ? { unknown } : {}),
       },
       results: ordered,
     },
@@ -1632,11 +1773,19 @@ async function workspaceSnapshot(
 
 export interface AgentExecutionContext {
   processes?: ProcessManager;
+  taskGraphs?: TaskGraphStore;
 }
 
 function requireProcesses(context: AgentExecutionContext): ProcessManager {
   if (!context.processes) throw new Error('Process manager is unavailable.');
   return context.processes;
+}
+
+function requireTaskGraphs(context: AgentExecutionContext): TaskGraphStore {
+  if (!context.taskGraphs) {
+    throw new Error('Persistent task graph store is unavailable.');
+  }
+  return context.taskGraphs;
 }
 
 export async function executeCapability(
@@ -1700,7 +1849,23 @@ export async function executeCapability(
     case 'workspace.checks':
       return await workspaceChecks(input, policy);
     case 'task.graph.run':
-      return await runTaskGraph(input, policy);
+      return await runTaskGraph(input, policy, context.taskGraphs);
+    case 'task.graph.list':
+      return { data: requireTaskGraphs(context).list() };
+    case 'task.graph.get': {
+      const parsed = TaskGraphGetInputSchema.parse(input);
+      return { data: requireTaskGraphs(context).get(parsed.graph_id) };
+    }
+    case 'task.graph.prune': {
+      const parsed = TaskGraphPruneInputSchema.parse(input);
+      return {
+        data: await requireTaskGraphs(context).prune({
+          ...(parsed.older_than_ms !== undefined
+            ? { olderThanMs: parsed.older_than_ms }
+            : {}),
+        }),
+      };
+    }
     case 'windows.processes':
     case 'windows.services':
     case 'windows.network.snapshot':

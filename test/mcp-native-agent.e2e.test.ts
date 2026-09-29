@@ -113,6 +113,9 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'workspace_detect'));
   assert.ok(tools.tools.some((tool) => tool.name === 'workspace_run_checks'));
   assert.ok(tools.tools.some((tool) => tool.name === 'task_run_graph'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'task_graph_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'task_graph_get'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'task_graph_prune'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_eventlog_query'));

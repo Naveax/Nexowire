@@ -1521,6 +1521,15 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'Run up to 32 shell jobs with explicit dependencies, bounded parallelism, output limits, per-job timeouts, and a total graph timeout.',
       inputSchema: {
         ...targetFields,
+        graph_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+          .optional(),
+        resume: z.boolean().optional(),
+        retry_failed: z.boolean().optional(),
+        retry_unknown: z.boolean().optional(),
         jobs: z
           .array(
             z.object({
@@ -1585,6 +1594,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     async ({
       device_id,
       provider_id,
+      graph_id,
+      resume,
+      retry_failed,
+      retry_unknown,
       jobs,
       max_parallel,
       stop_on_failure,
@@ -1597,6 +1610,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         ctx,
         'task.graph.run',
         {
+          ...(graph_id ? { graph_id } : {}),
+          ...(resume !== undefined ? { resume } : {}),
+          ...(retry_failed !== undefined ? { retry_failed } : {}),
+          ...(retry_unknown !== undefined ? { retry_unknown } : {}),
           jobs,
           ...(max_parallel !== undefined ? { max_parallel } : {}),
           ...(stop_on_failure !== undefined ? { stop_on_failure } : {}),
@@ -1613,6 +1630,82 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         graphTimeout + 15_000,
       );
     },
+  );
+
+  server.registerTool(
+    'task_graph_list',
+    {
+      title: 'List persisted task graphs',
+      description:
+        'List persisted task-graph metadata and job states. Command text and output are not persisted.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'task.graph.list',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'task_graph_get',
+    {
+      title: 'Get persisted task graph',
+      description:
+        'Read one persisted task graph by graph_id, including resumable state and unknown-state jobs after restart.',
+      inputSchema: {
+        ...targetFields,
+        graph_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+      },
+    },
+    async ({ device_id, provider_id, graph_id }) =>
+      await execute(
+        ctx,
+        'task.graph.get',
+        { graph_id },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'task_graph_prune',
+    {
+      title: 'Prune persisted task graphs',
+      description:
+        'Delete completed/interrupted persisted task-graph metadata older than a requested age. Running graphs are never pruned.',
+      inputSchema: {
+        ...targetFields,
+        older_than_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(2_592_000_000)
+          .optional(),
+      },
+    },
+    async ({ device_id, provider_id, older_than_ms }) =>
+      await execute(
+        ctx,
+        'task.graph.prune',
+        {
+          ...(older_than_ms !== undefined ? { older_than_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
   );
 
   server.registerTool(

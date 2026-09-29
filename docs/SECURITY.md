@@ -39,3 +39,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Network probes are bounded by explicit timeouts. HTTP probes accept only HTTP(S), reject embedded URL credentials, expose only selected response headers, and cap GET body previews.
 
 - Windows environment discovery lists names without values. Selected reads redact sensitive-looking variables by default; user/machine writes are exact-name mutations, verified after write/delete, and remain excluded from read-only failover replay.
+
+- Persisted task graphs store only graph/job metadata, dependency structure, attempt counters, timestamps, exit/timing state, and a SHA-256 specification fingerprint. Command text, cwd, stdout, and stderr are not persisted. A job that was running across agent restart is marked `unknown` and is never replayed unless the caller explicitly sets `retry_unknown: true`.

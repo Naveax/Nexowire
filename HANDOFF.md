@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/environment-control-v2`
+Active branch: `feat/durable-jobs-v2`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -25,6 +25,7 @@ Implemented:
 - compact sampled CPU/memory/disk health plus structured DNS/TCP/HTTP probes
 - structured workspace detection plus bounded parallel build/test/lint/typecheck execution
 - bounded dependency-aware parallel task graphs with failure blocking and total timeout
+- persisted payload-free task-graph checkpoints with exact-spec resume, succeeded-job reuse, unknown-state recovery, and explicit retry controls
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
 - persistent workspace checkpoints
@@ -52,7 +53,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 1. Keep Windows typecheck/test/build green after each capability slice.
 2. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
 3. Add additional Windows mutation primitives only where final state can be verified safely.
-4. Persist/resume task graph state across agent restart; the current graph runner is bounded but one-shot.
+4. Extend durable execution beyond task-graph job boundaries: durable process I/O and artifact tracking remain open.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Design production ChatGPT authentication before public deployment.
 7. Add GUI accessibility/screenshot/browser layers after structured OS control is mature.
