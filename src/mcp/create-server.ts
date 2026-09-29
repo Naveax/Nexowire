@@ -521,6 +521,131 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'browser_visual_verify',
+    {
+      title: 'Visually verify browser element',
+      description:
+        'Isolate exactly one CSS-selected element, verify bounded DOM-backed expectations and hit-target visibility, and return a tightly cropped PNG for model-level visual inspection.',
+      inputSchema: {
+        ...targetFields,
+        session_id: z.string().uuid(),
+        target_id: z.string().min(1).max(256).optional(),
+        selector: z.string().min(1).max(4096),
+        expected_text: z.string().max(4096).optional(),
+        text_mode: z.enum(['contains', 'exact']).optional(),
+        expected_visible: z.boolean().optional(),
+        expected_enabled: z.boolean().optional(),
+        expected_checked: z.boolean().optional(),
+        padding: z.number().int().min(0).max(200).optional(),
+        max_bytes: z
+          .number()
+          .int()
+          .min(65_536)
+          .max(8_388_608)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      session_id,
+      target_id,
+      selector,
+      expected_text,
+      text_mode,
+      expected_visible,
+      expected_enabled,
+      expected_checked,
+      padding,
+      max_bytes,
+    }) => {
+      const response = await execute(
+        ctx,
+        'browser.visual.verify',
+        {
+          session_id,
+          ...(target_id ? { target_id } : {}),
+          selector,
+          ...(expected_text !== undefined ? { expected_text } : {}),
+          ...(text_mode ? { text_mode } : {}),
+          ...(expected_visible !== undefined
+            ? { expected_visible }
+            : {}),
+          ...(expected_enabled !== undefined
+            ? { expected_enabled }
+            : {}),
+          ...(expected_checked !== undefined
+            ? { expected_checked }
+            : {}),
+          ...(padding !== undefined ? { padding } : {}),
+          ...(max_bytes !== undefined ? { max_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      );
+
+      if ('isError' in response && response.isError) return response;
+
+      const structured = response.structuredContent as Record<string, unknown>;
+      const data =
+        typeof structured.data === 'object' &&
+        structured.data !== null &&
+        !Array.isArray(structured.data)
+          ? (structured.data as Record<string, unknown>)
+          : undefined;
+      const screenshot =
+        typeof data?.screenshot === 'object' &&
+        data.screenshot !== null &&
+        !Array.isArray(data.screenshot)
+          ? (data.screenshot as Record<string, unknown>)
+          : undefined;
+      const base64 = screenshot?.base64;
+      const mimeType = screenshot?.mimeType;
+
+      if (
+        !data ||
+        !screenshot ||
+        typeof base64 !== 'string' ||
+        typeof mimeType !== 'string'
+      ) {
+        return toolResult(
+          {
+            ok: false,
+            error:
+              'Browser visual verification returned no inline image payload.',
+          },
+          true,
+        );
+      }
+
+      const { base64: _base64, ...screenshotMetadata } = screenshot;
+      const sanitized = {
+        ...structured,
+        data: {
+          ...data,
+          screenshot: screenshotMetadata,
+        },
+      };
+
+      return {
+        content: [
+          {
+            type: 'image' as const,
+            data: base64,
+            mimeType,
+          },
+          {
+            type: 'text' as const,
+            text: JSON.stringify(sanitized, null, 2),
+          },
+        ],
+        structuredContent: sanitized,
+      };
+    },
+  );
+
+  server.registerTool(
     'browser_screenshot',
     {
       title: 'Capture browser page screenshot',

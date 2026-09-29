@@ -74,7 +74,7 @@ test('MCP request reaches a native agent through the provider registry', async (
       platform: process.platform,
       arch: process.arch,
       agentVersion: 'integration-test',
-      capabilities: ['machine.snapshot', 'windows.screenshot', 'browser.screenshot'],
+      capabilities: ['machine.snapshot', 'windows.screenshot', 'browser.screenshot', 'browser.visual.verify'],
     },
   }));
 
@@ -120,7 +120,40 @@ test('MCP request reaches a native agent through the provider registry', async (
                   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4wS8AAAAASUVORK5CYII=',
               },
             }
-          : {
+          : request.capability === 'browser.visual.verify'
+            ? {
+                data: {
+                  sessionId: '11111111-1111-4111-8111-111111111111',
+                  targetId: 'page-1',
+                  selector: '#status',
+                  verified: true,
+                  element: {
+                    tag: 'div',
+                    visible: true,
+                    enabled: true,
+                    hittable: true,
+                  },
+                  expectations: [
+                    {
+                      name: 'text',
+                      expected: 'ready',
+                      actual: 'ready',
+                      passed: true,
+                    },
+                  ],
+                  screenshot: {
+                    width: 1,
+                    height: 1,
+                    mimeType: 'image/png',
+                    bytes: 68,
+                    sha256: '2'.repeat(64),
+                    capturedAt: new Date().toISOString(),
+                    base64:
+                      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4wS8AAAAASUVORK5CYII=',
+                  },
+                },
+              }
+            : {
             data: {
               hostname: 'mcp-e2e-host',
               capability: request.capability,
@@ -184,6 +217,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'browser_click'));
   assert.ok(tools.tools.some((tool) => tool.name === 'browser_set_value'));
   assert.ok(tools.tools.some((tool) => tool.name === 'browser_screenshot'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'browser_visual_verify'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_eventlog_query'));
@@ -304,6 +338,55 @@ test('MCP request reaches a native agent through the provider registry', async (
   );
   assert.equal(
     browserScreenshotStructured.data?.mimeType,
+    'image/png',
+  );
+
+  const visualVerifyResult = await client.callTool({
+    name: 'browser_visual_verify',
+    arguments: {
+      device_id: 'mcp-device',
+      session_id: '11111111-1111-4111-8111-111111111111',
+      target_id: 'page-1',
+      selector: '#status',
+      expected_text: 'ready',
+      text_mode: 'exact',
+    },
+  });
+  assert.equal(
+    'isError' in visualVerifyResult
+      ? visualVerifyResult.isError
+      : false,
+    false,
+  );
+  const visualVerifyContent =
+    (visualVerifyResult.content ?? []) as Array<{
+      type: string;
+      mimeType?: string;
+      data?: string;
+    }>;
+  assert.ok(
+    visualVerifyContent.some(
+      (part) =>
+        part.type === 'image' &&
+        part.mimeType === 'image/png' &&
+        typeof part.data === 'string' &&
+        part.data.length > 0,
+    ),
+  );
+  const visualVerifyStructured =
+    visualVerifyResult.structuredContent as {
+      data?: {
+        verified?: boolean;
+        screenshot?: Record<string, unknown>;
+      };
+    };
+  assert.equal(visualVerifyStructured.data?.verified, true);
+  assert.equal(
+    'base64' in (visualVerifyStructured.data?.screenshot ?? {}),
+    false,
+  );
+  assert.equal(
+    visualVerifyStructured.data?.screenshot?.mimeType,
     'image/png',
   );
 

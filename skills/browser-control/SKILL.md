@@ -2,7 +2,7 @@
 name: browser-control
 description: Use Nexowire-owned Edge/Chrome sessions through direct CDP for structured navigation, page inspection, exact selector actions, and visual verification.
 version: 0.1
-requires: browser.session.start, browser.session.list, browser.session.stop, browser.tabs, browser.navigate, browser.snapshot, browser.click, browser.set_value, browser.screenshot
+requires: browser.session.start, browser.session.list, browser.session.stop, browser.tabs, browser.navigate, browser.snapshot, browser.click, browser.set_value, browser.screenshot, browser.visual.verify
 ---
 
 # Browser Control
@@ -18,8 +18,9 @@ Use Nexowire browser tools for web work instead of raw desktop clicks whenever t
 5. Prefer the exact response-local CSS selectors returned by the snapshot.
 6. Use `browser_set_value` for inputs, textareas, selects, and contenteditable elements.
 7. Use `browser_click` only when the selector resolves to exactly one visible, enabled, hittable element.
-8. Capture `browser_screenshot` when pixels matter or to visually verify an important result.
-9. Stop sessions when the task is complete.
+8. Use `browser_visual_verify` after important actions when one exact element can prove the postcondition. It combines DOM-backed expectations, hit testing, and a cropped PNG for model inspection.
+9. Use `browser_screenshot` only when the full viewport matters.
+10. Stop sessions when the task is complete.
 
 ## Runtime
 
@@ -36,6 +37,7 @@ Use Nexowire browser tools for web work instead of raw desktop clicks whenever t
 - Selector actions fail closed on zero or multiple matches.
 - Clicks verify the target center is actually hit by the selected element rather than an overlay.
 - Set-value responses return length/hash metadata rather than echoing the submitted value.
+- Visual verification fails closed on missing/ambiguous selectors, requires the element to be visible and hittable, bounds crop size, and returns explicit expectation pass/fail metadata.
 - Browser mutations are not automatically replayed after ambiguous transport failure.
 
 ## Fallback order
