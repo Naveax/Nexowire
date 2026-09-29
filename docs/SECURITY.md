@@ -5,7 +5,8 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 ## Bootstrap protections
 
 - HTTP binds to `127.0.0.1` by default.
-- A non-loopback bind is rejected unless both MCP and native-agent bearer secrets are configured.
+- A non-loopback bind is rejected unless both MCP and native-agent bearer credentials are configured.
+- Bootstrap bearer authentication accepts bounded rotation sets (`old,current,next`) so credentials can be rolled without an all-at-once outage. Matching hashes candidate/configured tokens and compares digests with constant-time equality instead of direct string equality.
 - Native agents connect outbound and authenticate to the hub.
 - Without an agent secret, only loopback agent connections are accepted.
 - Native-agent file operations are restricted to configured roots; the default root is the current user's home directory.
@@ -18,7 +19,7 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 
 ## Important limitation
 
-The current bearer-token model is a bootstrap mechanism, not the final public authentication design. A public ChatGPT deployment should use a proper authorization flow, short-lived credentials, secret rotation, and TLS.
+The current bearer-token model is still a bootstrap mechanism, even with rotation support and constant-time matching. A public ChatGPT deployment should use a proper authorization flow, short-lived credentials, encrypted secret storage, revocation, and TLS.
 
 ## Provider failover
 
@@ -52,7 +53,7 @@ Shell execution can access anything available to the agent's operating-system ac
 
 - Raw pointer mutations are restricted to client coordinates inside one exact foreground HWND. Nexowire verifies the point currently hits the same top-level window before input and verifies cursor placement after movement. Global arbitrary screen-coordinate mutation is intentionally not exposed. Pointer move/click/scroll are mutation-classified and not replay-safe.
 
-- Browser sessions use isolated temporary profiles and loopback-only DevTools endpoints. Navigation is limited to HTTP(S) and `about:blank`; page snapshots are bounded and suppress password values. DOM actions require exact unique selectors, browser clicks verify the target point is not occluded, and browser mutations are never auto-replayed after ambiguous transport failure. Visual verification isolates one exact selector, checks visibility/hit-target state plus bounded explicit expectations, captures only a padded element crop, and strips inline base64 from structured MCP metadata.
+- Browser sessions use isolated temporary profiles and loopback-only DevTools endpoints. Navigation is limited to HTTP(S) and `about:blank`; page snapshots are bounded and suppress password values. DOM actions require exact unique selectors, browser clicks verify the target point is not occluded, and browser mutations are never auto-replayed after ambiguous transport failure.
 
 
 - Idempotency records persist only operation key, SHA-256 fingerprint, operation ID, capability, target, timestamps, and final status. Mutation inputs and provider outputs are never persisted. Reusing a key for a different fingerprint is rejected. An in-progress record found after hub restart is converted to `unknown`, and Nexowire will not replay it automatically. In-memory confirmed results may be reused during the same hub lifetime.
