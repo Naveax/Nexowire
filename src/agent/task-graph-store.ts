@@ -29,6 +29,7 @@ const PersistedJobSchema = z.object({
   exitCode: z.number().int().nullable().optional(),
   timedOut: z.boolean().optional(),
   blockedBy: z.array(z.string().min(1).max(128)).optional(),
+  artifactIds: z.array(z.string().uuid()).max(32).optional(),
 });
 
 const PersistedGraphSchema = z.object({
@@ -59,6 +60,7 @@ export interface TaskGraphCheckpointJob {
   exitCode?: number | null;
   timedOut?: boolean;
   blockedBy?: string[];
+  artifactIds?: string[];
 }
 
 export interface TaskGraphCheckpoint {
@@ -94,6 +96,7 @@ function cloneGraph(graph: TaskGraphCheckpoint): TaskGraphCheckpoint {
       ...job,
       dependsOn: [...job.dependsOn],
       ...(job.blockedBy ? { blockedBy: [...job.blockedBy] } : {}),
+      ...(job.artifactIds ? { artifactIds: [...job.artifactIds] } : {}),
     })),
   };
 }
@@ -139,6 +142,7 @@ export class TaskGraphStore {
             delete job.exitCode;
             delete job.timedOut;
             delete job.blockedBy;
+        delete job.artifactIds;
           }
         }
         changed = true;
