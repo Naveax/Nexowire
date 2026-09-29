@@ -18,12 +18,21 @@ function isLoopbackAddress(address: string | undefined): boolean {
   );
 }
 
+export interface AgentWebSocketServerOptions {
+  heartbeatMs?: number;
+  helloTimeoutMs?: number;
+}
+
 export function attachAgentWebSocketServer(
   server: HttpServer,
   broker: AgentBroker,
   agentToken?: string,
+  options: AgentWebSocketServerOptions = {},
 ): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
+  const heartbeatMs = Math.max(250, options.heartbeatMs ?? 30_000);
+  const helloTimeoutMs = Math.max(250, options.helloTimeoutMs ?? 5_000);
+  const alive = new WeakSet<WebSocket>();
 
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
@@ -45,9 +54,12 @@ export function attachAgentWebSocketServer(
   });
 
   wss.on('connection', (socket: WebSocket) => {
+    alive.add(socket);
+    socket.on('pong', () => alive.add(socket));
+
     const timer = setTimeout(() => {
       socket.close(1008, 'Agent hello timeout');
-    }, 5_000);
+    }, helloTimeoutMs);
 
     socket.once('message', (raw) => {
       clearTimeout(timer);
@@ -67,6 +79,26 @@ export function attachAgentWebSocketServer(
 
       broker.register(socket, hello.data);
     });
+  });
+
+  const heartbeat = setInterval(() => {
+    for (const socket of wss.clients) {
+      if (!alive.has(socket)) {
+        socket.terminate();
+        continue;
+      }
+      alive.delete(socket);
+      try {
+        socket.ping();
+      } catch {
+        socket.terminate();
+      }
+    }
+  }, heartbeatMs);
+  heartbeat.unref();
+
+  wss.once('close', () => {
+    clearInterval(heartbeat);
   });
 
   return wss;
