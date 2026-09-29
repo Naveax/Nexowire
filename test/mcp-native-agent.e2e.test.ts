@@ -351,7 +351,7 @@ test('MCP request reaches a native agent through the provider registry', async (
     name: 'device_route',
     arguments: {
       device_id: 'MAIN-PC',
-      required_capabilities: ['browser.snapshot'],
+      required_capabilities: ['browser.screenshot'],
     },
   });
   assert.equal(
