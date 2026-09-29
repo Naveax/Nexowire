@@ -58,3 +58,5 @@ Shell execution can access anything available to the agent's operating-system ac
 
 - Idempotency records persist only operation key, SHA-256 fingerprint, operation ID, capability, target, timestamps, and final status. Mutation inputs and provider outputs are never persisted. Reusing a key for a different fingerprint is rejected. An in-progress record found after hub restart is converted to `unknown`, and Nexowire will not replay it automatically. In-memory confirmed results may be reused during the same hub lifetime.
 - Explicit idempotency keys are accepted only for a narrow replay-safe allowlist: overwrite file writes (never append), mkdir, exact file patch, exact registry set/delete, and exact Windows environment set/delete. Unsupported mutations fail closed instead of pretending that "probably idempotent" is a security model.
+
+- Device history stores only native-agent identity/capability metadata and connection timestamps. Route discovery never silently chooses between multiple matching computers: it returns ambiguity and requires explicit narrowing/selection.
