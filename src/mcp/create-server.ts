@@ -77,7 +77,7 @@ async function execute(
   timeoutMs?: number,
   idempotencyKey?: string,
 ) {
-  let operationId = randomUUID();
+  let operationId: string = randomUUID();
   const started = performance.now();
   let targetId: string | undefined;
   let idempotencyCreated = false;
