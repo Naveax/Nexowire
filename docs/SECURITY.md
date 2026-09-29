@@ -51,3 +51,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Windows UI Automation tree/find calls are bounded read-only inspection. Value text is opt-in and bounded, password elements never expose ValuePattern text, and action selectors must resolve to exactly one element. Invoke/set-value are mutation-classified and never replayed automatically after ambiguous transport failure.
 
 - Raw pointer mutations are restricted to client coordinates inside one exact foreground HWND. Nexowire verifies the point currently hits the same top-level window before input and verifies cursor placement after movement. Global arbitrary screen-coordinate mutation is intentionally not exposed. Pointer move/click/scroll are mutation-classified and not replay-safe.
+
+- Browser sessions use isolated temporary profiles and loopback-only DevTools endpoints. Navigation is limited to HTTP(S) and `about:blank`; page snapshots are bounded and suppress password values. DOM actions require exact unique selectors, browser clicks verify the target point is not occluded, and browser mutations are never auto-replayed after ambiguous transport failure.
