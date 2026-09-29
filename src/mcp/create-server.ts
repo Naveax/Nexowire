@@ -464,6 +464,136 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     },
   );
 
+
+  server.registerTool(
+    'windows_clipboard_read',
+    {
+      title: 'Read Windows clipboard text',
+      description:
+        'Read bounded Unicode text from the Windows clipboard. The result includes length, truncation, and SHA-256 metadata.',
+      inputSchema: {
+        ...targetFields,
+        max_chars: z.number().int().min(1).max(100_000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, max_chars }) =>
+      await execute(
+        ctx,
+        'windows.clipboard.read',
+        {
+          ...(max_chars !== undefined ? { max_chars } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_clipboard_write',
+    {
+      title: 'Write Windows clipboard text',
+      description:
+        'Replace the Windows clipboard with exact Unicode text and verify the stored value.',
+      inputSchema: {
+        ...targetFields,
+        text: z.string().min(1).max(100_000),
+      },
+    },
+    async ({ device_id, provider_id, text }) =>
+      await execute(
+        ctx,
+        'windows.clipboard.write',
+        { text },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_clipboard_clear',
+    {
+      title: 'Clear Windows clipboard',
+      description:
+        'Clear clipboard contents and verify that Unicode text is no longer available.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.clipboard.clear',
+        {},
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_keyboard_type',
+    {
+      title: 'Type Unicode text into exact foreground HWND',
+      description:
+        'Inject Unicode keyboard text only when the supplied HWND is already the current foreground window. Nexowire refuses to retarget input implicitly.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        text: z.string().min(1).max(20_000),
+        interval_ms: z.number().int().min(0).max(100).optional(),
+      },
+    },
+    async ({ device_id, provider_id, hwnd, text, interval_ms }) =>
+      await execute(
+        ctx,
+        'windows.keyboard.type',
+        {
+          hwnd,
+          text,
+          ...(interval_ms !== undefined ? { interval_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        Math.max(
+          45_000,
+          text.length * (interval_ms ?? 0) + 15_000,
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'windows_keyboard_hotkey',
+    {
+      title: 'Send hotkey to exact foreground HWND',
+      description:
+        'Send a bounded keyboard chord only when the supplied HWND is already foreground. Supports modifiers, navigation keys, A-Z, 0-9, and F1-F24.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        keys: z.array(z.string().min(1).max(32)).min(1).max(8),
+      },
+    },
+    async ({ device_id, provider_id, hwnd, keys }) =>
+      await execute(
+        ctx,
+        'windows.keyboard.hotkey',
+        { hwnd, keys },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
   server.registerTool(
     'windows_processes',
     {

@@ -10,6 +10,7 @@ import { executeWindowsCapability } from './windows-control.js';
 import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { executeWindowsWindowCapability } from './windows-window-control.js';
 import { captureWindowsScreenshot } from './windows-screenshot.js';
+import { executeWindowsInputCapability } from './windows-input.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
@@ -1891,6 +1892,12 @@ export async function executeCapability(
       return await executeWindowsWindowCapability(capability, input);
     case 'windows.screenshot':
       return await captureWindowsScreenshot(input);
+    case 'windows.clipboard.read':
+    case 'windows.clipboard.write':
+    case 'windows.clipboard.clear':
+    case 'windows.keyboard.type':
+    case 'windows.keyboard.hotkey':
+      return await executeWindowsInputCapability(capability, input);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }

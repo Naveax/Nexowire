@@ -27,6 +27,7 @@ A target can eventually be reachable through more than one provider. The provide
 - exact Windows process/user/machine environment discovery, selective reads, and verified mutations
 - structured Windows top-level window enumeration and exact HWND foreground focus with verification
 - bounded inline PNG capture for virtual desktop, primary screen, or exact HWND rectangle without changing focus
+- structured Windows clipboard access plus exact-foreground Unicode typing/hotkeys with foreground verification
 - interactive process sessions with incremental output, stdin, stop, list, bounded long-poll reads, retained history, and persisted recovery metadata
 - WSL2 command execution
 - allowlisted file read/write/list plus batched reads, SHA-256 revision identities, conflict-safe exact patching, and bounded text search
