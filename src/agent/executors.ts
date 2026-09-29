@@ -143,12 +143,37 @@ const TaskGraphJobIdSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
 
+const TaskArtifactDeclarationSchema = z.object({
+  path: z.string().min(1).max(4096),
+  label: z.string().min(1).max(256).optional(),
+  kind: z
+    .enum([
+      'build',
+      'test',
+      'report',
+      'log',
+      'package',
+      'archive',
+      'image',
+      'binary',
+      'other',
+    ])
+    .default('other'),
+  max_hash_bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(4_294_967_296)
+    .default(536_870_912),
+});
+
 const TaskGraphJobSchema = z.object({
   id: TaskGraphJobIdSchema,
   command: z.string().min(1).max(200_000),
   shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
   cwd: z.string().max(4096).optional(),
   depends_on: z.array(TaskGraphJobIdSchema).max(31).default([]),
+  artifacts: z.array(TaskArtifactDeclarationSchema).max(32).default([]),
   timeout_ms: z.number().int().min(100).max(600_000).optional(),
   max_output_bytes: z
     .number()
@@ -1394,6 +1419,7 @@ interface TaskGraphResult {
   blockedBy?: string[];
   attempts?: number;
   reused?: boolean;
+  artifactIds?: string[];
 }
 
 function validateTaskGraph(
@@ -1455,6 +1481,7 @@ async function runTaskGraph(
   input: unknown,
   policy: PathPolicy,
   store?: TaskGraphStore,
+  artifactStore?: ArtifactStore,
 ): Promise<unknown> {
   const parsed = TaskGraphRunInputSchema.parse(input);
   validateTaskGraph(parsed.jobs);
@@ -1467,6 +1494,15 @@ async function runTaskGraph(
   }
   if (parsed.graph_id && !store) {
     throw new Error('Persistent task graph store is unavailable.');
+  }
+
+  if (
+    parsed.jobs.some((job) => job.artifacts.length > 0) &&
+    !artifactStore
+  ) {
+    throw new Error(
+      'Task graph artifact declarations require the persistent artifact store.',
+    );
   }
 
   const specHash = sha256Buffer(
@@ -1521,6 +1557,9 @@ async function runTaskGraph(
       ...(saved?.exitCode !== undefined ? { exitCode: saved.exitCode } : {}),
       ...(saved?.timedOut !== undefined ? { timedOut: saved.timedOut } : {}),
       ...(saved?.blockedBy ? { blockedBy: [...saved.blockedBy] } : {}),
+      ...(saved?.artifactIds
+        ? { artifactIds: [...saved.artifactIds] }
+        : {}),
       ...(saved ? { attempts: saved.attempts } : { attempts: 0 }),
       ...(saved && saved.status !== 'pending' ? { reused: true } : {}),
     });
@@ -1562,6 +1601,9 @@ async function runTaskGraph(
         ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
         ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
         ...(result.blockedBy ? { blockedBy: [...result.blockedBy] } : {}),
+        ...(result.artifactIds
+          ? { artifactIds: [...result.artifactIds] }
+          : {}),
       })),
     };
     await store.save(checkpoint);
@@ -1583,6 +1625,7 @@ async function runTaskGraph(
     delete result.stderr;
     delete result.timedOut;
     delete result.truncated;
+    delete result.artifactIds;
     const jobStartedAt = Date.now();
 
     const promise = (async () => {
@@ -1922,7 +1965,12 @@ export async function executeCapability(
     case 'workspace.checks':
       return await workspaceChecks(input, policy);
     case 'task.graph.run':
-      return await runTaskGraph(input, policy, context.taskGraphs);
+      return await runTaskGraph(
+        input,
+        policy,
+        context.taskGraphs,
+        context.artifacts,
+      );
     case 'task.graph.list':
       return { data: requireTaskGraphs(context).list() };
     case 'task.graph.get': {
