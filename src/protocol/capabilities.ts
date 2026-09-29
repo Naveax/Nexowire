@@ -55,6 +55,10 @@ export const CORE_CAPABILITIES = [
   'windows.clipboard.clear',
   'windows.keyboard.type',
   'windows.keyboard.hotkey',
+  'windows.accessibility.tree',
+  'windows.accessibility.find',
+  'windows.accessibility.invoke',
+  'windows.accessibility.set_value',
 ] as const;
 
 export type CoreCapability = (typeof CORE_CAPABILITIES)[number];
@@ -105,6 +109,8 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'windows.window.list',
   'windows.screenshot',
   'windows.clipboard.read',
+  'windows.accessibility.tree',
+  'windows.accessibility.find',
 ]);
 
 export function isReadOnlyCapability(capability: string): boolean {
