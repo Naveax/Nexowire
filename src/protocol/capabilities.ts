@@ -49,6 +49,7 @@ export const CORE_CAPABILITIES = [
   'windows.environment.delete',
   'windows.window.list',
   'windows.window.focus',
+  'windows.screenshot',
 ] as const;
 
 export type CoreCapability = (typeof CORE_CAPABILITIES)[number];
@@ -97,6 +98,7 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'windows.environment.list',
   'windows.environment.read',
   'windows.window.list',
+  'windows.screenshot',
 ]);
 
 export function isReadOnlyCapability(capability: string): boolean {

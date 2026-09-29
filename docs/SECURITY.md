@@ -43,3 +43,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Persisted task graphs store only graph/job metadata, dependency structure, attempt counters, timestamps, exit/timing state, and a SHA-256 specification fingerprint. Command text, cwd, stdout, and stderr are not persisted. A job that was running across agent restart is marked `unknown` and is never replayed unless the caller explicitly sets `retry_unknown: true`.
 
 - Window focus accepts one exact HWND, optionally restores only that window when minimized, and verifies the final foreground HWND. Focus is mutation-classified and is never treated as replay-safe.
+
+- Screenshots are returned inline and are not persisted by the screenshot capability. Capture dimensions and encoded byte size are bounded. The structured MCP metadata omits base64 image data, and service/session-isolated agents fail explicitly when no interactive desktop can be captured. Screenshots may contain sensitive on-screen data, so callers should prefer exact-window scope over full-desktop capture.

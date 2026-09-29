@@ -26,6 +26,7 @@ A target can eventually be reachable through more than one provider. The provide
 - structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus verified service/registry/task/firewall control
 - exact Windows process/user/machine environment discovery, selective reads, and verified mutations
 - structured Windows top-level window enumeration and exact HWND foreground focus with verification
+- bounded inline PNG capture for virtual desktop, primary screen, or exact HWND rectangle without changing focus
 - interactive process sessions with incremental output, stdin, stop, list, bounded long-poll reads, retained history, and persisted recovery metadata
 - WSL2 command execution
 - allowlisted file read/write/list plus batched reads, SHA-256 revision identities, conflict-safe exact patching, and bounded text search
