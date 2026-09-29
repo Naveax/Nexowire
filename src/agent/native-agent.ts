@@ -12,6 +12,7 @@ import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
 import { TaskGraphStore } from './task-graph-store.js';
+import { ArtifactStore } from './artifact-store.js';
 
 interface AgentIdentity {
   id: string;
@@ -72,6 +73,9 @@ export async function runNativeAgent(
   const taskGraphStateFile =
     env.NEXOWIRE_TASK_GRAPH_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'task-graphs.json');
+  const artifactStateFile =
+    env.NEXOWIRE_ARTIFACT_STATE_FILE?.trim() ||
+    path.join(os.homedir(), '.nexowire', 'artifacts.json');
   const socketHeartbeatMs = heartbeatMs(env);
 
   let stopped = false;
@@ -93,7 +97,12 @@ export async function runNativeAgent(
     onEvent: (event) => emitAgentEvent(event.topic, event.data),
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
-  await Promise.all([processes.initialize(), taskGraphs.initialize()]);
+  const artifacts = new ArtifactStore({ stateFile: artifactStateFile });
+  await Promise.all([
+    processes.initialize(),
+    taskGraphs.initialize(),
+    artifacts.initialize(),
+  ]);
   let reconnectDelay = 1_000;
 
   const stop = (): void => {
@@ -171,7 +180,7 @@ export async function runNativeAgent(
               request.data.capability,
               request.data.input,
               policy,
-              { processes, taskGraphs },
+              { processes, taskGraphs, artifacts },
             );
             socket.send(
               JSON.stringify({
