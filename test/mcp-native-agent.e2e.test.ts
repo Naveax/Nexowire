@@ -182,6 +182,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_list'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_delete'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_route'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_snapshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_health'));
   assert.ok(tools.tools.some((tool) => tool.name === 'network_dns_resolve'));
@@ -345,6 +346,34 @@ test('MCP request reaches a native agent through the provider registry', async (
     },
   });
   assert.equal('isError' in aliasSet ? aliasSet.isError : false, false);
+
+  const routeResult = await client.callTool({
+    name: 'device_route',
+    arguments: {
+      device_id: 'MAIN-PC',
+      required_capabilities: ['browser.snapshot'],
+    },
+  });
+  assert.equal(
+    'isError' in routeResult ? routeResult.isError : false,
+    false,
+  );
+  const routeStructured = routeResult.structuredContent as {
+    selected?: {
+      id?: string;
+      online?: boolean;
+      aliases?: string[];
+    } | null;
+    ambiguous?: boolean;
+    requestedAlias?: string;
+    resolvedDeviceId?: string;
+  };
+  assert.equal(routeStructured.selected?.id, 'mcp-device');
+  assert.equal(routeStructured.selected?.online, true);
+  assert.deepEqual(routeStructured.selected?.aliases, ['main-pc']);
+  assert.equal(routeStructured.ambiguous, false);
+  assert.equal(routeStructured.requestedAlias, 'MAIN-PC');
+  assert.equal(routeStructured.resolvedDeviceId, 'mcp-device');
 
   const aliasResult = await client.callTool({
     name: 'machine_snapshot',
