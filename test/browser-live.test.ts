@@ -108,6 +108,26 @@ test(
       after.bodyText.text.includes('clicked:Nexowire✓'),
     );
 
+    const visual = await manager.visualVerify({
+      sessionId: started.id,
+      targetId: page.id,
+      selector: '#status',
+      expectedText: 'clicked:Nexowire✓',
+      textMode: 'exact',
+      expectedVisible: true,
+      expectedEnabled: true,
+      padding: 12,
+      maxBytes: 1_000_000,
+    });
+    assert.equal(visual.verified, true);
+    assert.equal(visual.element.visible, true);
+    assert.equal(visual.element.hittable, true);
+    assert.ok(visual.screenshot.bytes > 100);
+    assert.ok(visual.screenshot.width > 0);
+    assert.ok(visual.screenshot.height > 0);
+    assert.match(visual.screenshot.sha256, /^[a-f0-9]{64}$/);
+    assert.ok(visual.screenshot.base64.length > 100);
+
     const screenshot = await manager.screenshot({
       sessionId: started.id,
       targetId: page.id,
