@@ -149,6 +149,10 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_accessibility_find'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_accessibility_invoke'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_accessibility_set_value'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_position'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_move'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_click'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'windows_pointer_scroll'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_eventlog_query'));

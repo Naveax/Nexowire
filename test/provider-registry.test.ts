@@ -214,6 +214,9 @@ test('mutation capabilities are never classified as read-only', () => {
     'windows.keyboard.hotkey',
     'windows.accessibility.invoke',
     'windows.accessibility.set_value',
+    'windows.pointer.move',
+    'windows.pointer.click',
+    'windows.pointer.scroll',
   ];
 
   for (const capability of mutations) {

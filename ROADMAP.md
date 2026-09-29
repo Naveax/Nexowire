@@ -59,7 +59,7 @@
 - [x] exact-foreground keyboard input and bounded clipboard control
 - browser automation
 - visual verification
-- raw mouse control only as a fallback
+- [x] exact-HWND raw pointer move/click/scroll only as a fallback
 
 ## v1.0 - ChatGPT-ready remote control
 

@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/windows-accessibility-v2`
+Active branch: `feat/windows-pointer-v2`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -43,6 +43,7 @@ Implemented:
 - bounded inline PNG capture for virtual desktop, primary screen, and exact HWND rectangles with SHA-256 metadata
 - bounded clipboard read/write/clear plus exact-foreground Unicode typing/hotkeys; window focus now has an attached-thread exact-HWND fallback before verification
 - bounded Windows UI Automation tree/find plus exact unique-selector InvokePattern and verified ValuePattern mutations with password-value suppression
+- exact foreground-HWND pointer position/move/click/scroll with client bounds, occlusion/hit checks, and cursor verification
 - provider health checks, equal-priority latency ranking, read-only retry failover, and mutation replay protection
 - initial security/docs/tests/CI
 
@@ -60,7 +61,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 4. Extend durable execution beyond task-graph job boundaries: durable process I/O and artifact tracking remain open.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Design production ChatGPT authentication before public deployment.
-7. Add browser automation, visual action verification, and raw mouse fallback on top of the now-available window/screenshot/keyboard/UIA primitives.
+7. Add browser automation and visual action verification on top of the now-available window/screenshot/keyboard/UIA/pointer primitives.
 
 ## Known machine note
 

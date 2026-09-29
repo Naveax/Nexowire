@@ -771,6 +771,166 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  const pointerPointFields = {
+    hwnd: z
+      .string()
+      .min(1)
+      .max(32)
+      .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+    coordinate_mode: z
+      .enum(['client_pixels', 'normalized'])
+      .optional(),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  };
+
+  server.registerTool(
+    'windows_pointer_position',
+    {
+      title: 'Read Windows pointer position',
+      description:
+        'Read the current screen cursor position and optionally resolve it into one exact HWND client coordinate system.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/)
+          .optional(),
+      },
+    },
+    async ({ device_id, provider_id, hwnd }) =>
+      await execute(
+        ctx,
+        'windows.pointer.position',
+        {
+          ...(hwnd ? { hwnd } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_pointer_move',
+    {
+      title: 'Move pointer inside exact Windows HWND',
+      description:
+        'Move the cursor to a bounded client point inside one exact foreground HWND. The point must currently hit that same top-level window.',
+      inputSchema: {
+        ...targetFields,
+        ...pointerPointFields,
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      coordinate_mode,
+      x,
+      y,
+    }) =>
+      await execute(
+        ctx,
+        'windows.pointer.move',
+        {
+          hwnd,
+          ...(coordinate_mode ? { coordinate_mode } : {}),
+          x,
+          y,
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_pointer_click',
+    {
+      title: 'Click inside exact Windows HWND',
+      description:
+        'Move to and click a bounded client point inside one exact foreground HWND. Occluded points and wrong foreground targets fail closed before input.',
+      inputSchema: {
+        ...targetFields,
+        ...pointerPointFields,
+        button: z.enum(['left', 'right', 'middle']).optional(),
+        count: z.number().int().min(1).max(3).optional(),
+        interval_ms: z.number().int().min(20).max(1000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      coordinate_mode,
+      x,
+      y,
+      button,
+      count,
+      interval_ms,
+    }) =>
+      await execute(
+        ctx,
+        'windows.pointer.click',
+        {
+          hwnd,
+          ...(coordinate_mode ? { coordinate_mode } : {}),
+          x,
+          y,
+          ...(button ? { button } : {}),
+          ...(count !== undefined ? { count } : {}),
+          ...(interval_ms !== undefined ? { interval_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_pointer_scroll',
+    {
+      title: 'Scroll inside exact Windows HWND',
+      description:
+        'Move to a bounded client point inside one exact foreground HWND and inject a vertical or horizontal wheel delta.',
+      inputSchema: {
+        ...targetFields,
+        ...pointerPointFields,
+        delta: z.number().int().min(-12_000).max(12_000),
+        horizontal: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      coordinate_mode,
+      x,
+      y,
+      delta,
+      horizontal,
+    }) =>
+      await execute(
+        ctx,
+        'windows.pointer.scroll',
+        {
+          hwnd,
+          ...(coordinate_mode ? { coordinate_mode } : {}),
+          x,
+          y,
+          delta,
+          ...(horizontal !== undefined ? { horizontal } : {}),
+        },
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
   server.registerTool(
     'windows_processes',
     {
