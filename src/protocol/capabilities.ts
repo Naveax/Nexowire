@@ -60,10 +60,6 @@ export const CORE_CAPABILITIES = [
   'windows.accessibility.invoke',
   'windows.accessibility.set_value',
   'windows.pointer.position',
-  'browser.session.list',
-  'browser.tabs',
-  'browser.snapshot',
-  'browser.screenshot',
   'windows.pointer.move',
   'windows.pointer.click',
   'windows.pointer.scroll',
@@ -129,6 +125,10 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'windows.accessibility.tree',
   'windows.accessibility.find',
   'windows.pointer.position',
+  'browser.session.list',
+  'browser.tabs',
+  'browser.snapshot',
+  'browser.screenshot',
 ]);
 
 export function isReadOnlyCapability(capability: string): boolean {
