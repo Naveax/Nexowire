@@ -61,7 +61,7 @@
 - [x] bounded Windows UI Automation tree/find plus exact invoke/set-value controls
 - [x] exact-foreground keyboard input and bounded clipboard control
 - [x] first-party Edge/Chrome session, navigation, DOM snapshot/action, and screenshot automation
-- [ ] visual verification
+- [x] exact-element visual verification with DOM expectations, hit testing, and cropped PNG evidence
 - [x] exact-HWND raw pointer move/click/scroll only as a fallback
 
 ## v1.0 - ChatGPT-ready remote control
