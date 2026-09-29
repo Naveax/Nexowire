@@ -17,6 +17,7 @@ export async function createRuntime(config: NexowireConfig) {
   return {
     broker,
     context: {
+      broker,
       providers,
       audit,
       workspaces: new WorkspaceStore(config.stateDir),

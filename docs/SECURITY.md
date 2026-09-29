@@ -33,3 +33,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Text patching can require an expected SHA-256 revision; stale content raises `FILE_CONFLICT` instead of silently overwriting newer edits.
 
 - Task graphs cap job count, parallelism, per-job output, per-job timeout, and total graph duration. Dependency failures block downstream jobs instead of launching them anyway.
+
+- Live agent/process events are kept only in a bounded in-memory ring on the hub. They are not written to the audit log or persistent state; stdout/stderr can contain sensitive data and should be treated as transient operational output.

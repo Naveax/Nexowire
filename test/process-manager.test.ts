@@ -177,3 +177,44 @@ test('process history can be explicitly pruned', async () => {
 
   await fs.rm(root, { recursive: true, force: true });
 });
+
+
+test('process manager emits bounded process events without command payloads', async () => {
+  const policy = new PathPolicy(['*']);
+  const emitted: Array<{ topic: string; data: Record<string, unknown> }> = [];
+  const manager = new ProcessManager({
+    onEvent: (event) => emitted.push(event),
+  });
+
+  const started = await manager.start(
+    {
+      command: `node -e "console.log('event-output')"`,
+      name: 'event-test',
+    },
+    policy,
+  );
+
+  let afterSeq = 0;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const read = await manager.read({
+      session_id: started.sessionId,
+      after_seq: afterSeq,
+      wait_ms: 250,
+    });
+    afterSeq = read.nextSeq;
+    if (read.session.status === 'exited') break;
+  }
+
+  assert.ok(emitted.some((event) => event.topic === 'process.started'));
+  assert.ok(
+    emitted.some(
+      (event) =>
+        event.topic === 'process.output' &&
+        /event-output/.test(String(event.data.text ?? '')),
+    ),
+  );
+  assert.ok(emitted.some((event) => event.topic === 'process.exited'));
+  const startedEvent = emitted.find((event) => event.topic === 'process.started');
+  assert.ok(startedEvent);
+  assert.equal('command' in startedEvent.data, false);
+});

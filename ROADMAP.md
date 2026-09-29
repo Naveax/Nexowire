@@ -15,13 +15,13 @@
 - [x] Persisted process-session metadata, orphan/lost recovery classification, retention, and prune
 - [ ] Fully reattachable durable process I/O across agent restart
 - [x] Operation IDs and persistent audit metadata
-- [ ] Structured event subscriptions
+- [x] Structured bounded event feed with cursor-based long polling
 - [ ] Public deployment authentication
 
 ## v0.2 - Computer control
 
 - [x] process metadata retention/recovery policy and explicit prune
-- durable reattachable process I/O and richer event subscriptions
+- durable reattachable process I/O; live event feed is implemented
 - [x] structured process/service/network inspection and service control
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
 - [x] registry value/key, task state, and firewall rule mutation controls with verification
@@ -30,7 +30,7 @@
 - [x] batch file reads and bounded text search
 - [x] SHA-256 file revisions and conflict-safe exact patching
 - compact system health snapshots
-- richer Windows registry/task/firewall mutations and event subscriptions
+- richer Windows registry/task/firewall mutations where verification remains reliable
 
 ## v0.3 - Workspace agent
 

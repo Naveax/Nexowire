@@ -50,11 +50,26 @@ export async function runNativeAgent(
   const processStateFile =
     env.NEXOWIRE_PROCESS_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'process-sessions.json');
-  const processes = new ProcessManager({ stateFile: processStateFile });
-  await processes.initialize();
 
   let stopped = false;
   let currentSocket: WebSocket | undefined;
+  const emitAgentEvent = (topic: string, data: unknown): void => {
+    if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+    currentSocket.send(
+      JSON.stringify({
+        type: 'event',
+        eventId: randomUUID(),
+        at: new Date().toISOString(),
+        topic,
+        data,
+      }),
+    );
+  };
+  const processes = new ProcessManager({
+    stateFile: processStateFile,
+    onEvent: (event) => emitAgentEvent(event.topic, event.data),
+  });
+  await processes.initialize();
   let reconnectDelay = 1_000;
 
   const stop = (): void => {
