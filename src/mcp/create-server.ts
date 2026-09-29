@@ -166,6 +166,127 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
 
+
+  server.registerTool(
+    'machine_health',
+    {
+      title: 'Machine health',
+      description:
+        'Get a compact sampled CPU, memory, uptime, and home-filesystem health snapshot from a target computer.',
+      inputSchema: {
+        ...targetFields,
+        sample_ms: z.number().int().min(100).max(2_000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, sample_ms }) =>
+      await execute(
+        ctx,
+        'machine.health',
+        {
+          ...(sample_ms !== undefined ? { sample_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        sample_ms ? sample_ms + 10_000 : undefined,
+      ),
+  );
+
+  server.registerTool(
+    'network_dns_resolve',
+    {
+      title: 'Resolve DNS',
+      description:
+        'Resolve a hostname on the target computer and return structured address records plus lookup timing.',
+      inputSchema: {
+        ...targetFields,
+        host: z.string().min(1).max(253),
+        family: z.enum(['any', 'ipv4', 'ipv6']).optional(),
+      },
+    },
+    async ({ device_id, provider_id, host, family }) =>
+      await execute(
+        ctx,
+        'network.dns.resolve',
+        {
+          host,
+          ...(family ? { family } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'network_tcp_probe',
+    {
+      title: 'Probe TCP endpoint',
+      description:
+        'Test TCP reachability from the target computer with bounded timeout and structured local/remote socket metadata.',
+      inputSchema: {
+        ...targetFields,
+        host: z.string().min(1).max(253),
+        port: z.number().int().min(1).max(65_535),
+        family: z.enum(['any', 'ipv4', 'ipv6']).optional(),
+        timeout_ms: z.number().int().min(100).max(30_000).optional(),
+      },
+    },
+    async ({ device_id, provider_id, host, port, family, timeout_ms }) =>
+      await execute(
+        ctx,
+        'network.tcp.probe',
+        {
+          host,
+          port,
+          ...(family ? { family } : {}),
+          ...(timeout_ms !== undefined ? { timeout_ms } : {}),
+        },
+        device_id,
+        provider_id,
+        timeout_ms ? timeout_ms + 5_000 : undefined,
+      ),
+  );
+
+  server.registerTool(
+    'network_http_probe',
+    {
+      title: 'Probe HTTP endpoint',
+      description:
+        'Probe an HTTP(S) URL from the target computer with bounded timeout, optional redirect following, and an optional bounded GET body preview.',
+      inputSchema: {
+        ...targetFields,
+        url: z.string().url().max(8_192),
+        method: z.enum(['HEAD', 'GET']).optional(),
+        timeout_ms: z.number().int().min(100).max(30_000).optional(),
+        follow_redirects: z.boolean().optional(),
+        max_body_bytes: z.number().int().min(0).max(1_048_576).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      url,
+      method,
+      timeout_ms,
+      follow_redirects,
+      max_body_bytes,
+    }) =>
+      await execute(
+        ctx,
+        'network.http.probe',
+        {
+          url,
+          ...(method ? { method } : {}),
+          ...(timeout_ms !== undefined ? { timeout_ms } : {}),
+          ...(follow_redirects !== undefined ? { follow_redirects } : {}),
+          ...(max_body_bytes !== undefined ? { max_body_bytes } : {}),
+        },
+        device_id,
+        provider_id,
+        timeout_ms ? timeout_ms + 5_000 : undefined,
+      ),
+  );
+
   server.registerTool(
     'windows_processes',
     {
