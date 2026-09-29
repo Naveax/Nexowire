@@ -75,10 +75,6 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'windows.tasks',
   'windows.eventlog.query',
   'windows.firewall.rules',
-  'windows.registry.set',
-  'windows.registry.delete',
-  'windows.task.control',
-  'windows.firewall.control',
 ]);
 
 export function isReadOnlyCapability(capability: string): boolean {

@@ -7,6 +7,7 @@ import type {
 } from '../src/protocol/provider.js';
 import type { ExecutionResult } from '../src/protocol/result.js';
 import { NexowireError } from '../src/core/errors.js';
+import { isReadOnlyCapability } from '../src/protocol/capabilities.js';
 import { ProviderRegistry } from '../src/core/provider-registry.js';
 
 type Behavior = 'ok' | 'throw' | 'retryable';
@@ -180,4 +181,36 @@ test('registry never auto-replays mutation after retryable transport failure', a
   );
   assert.equal(primary.calls, 1);
   assert.equal(secondary.calls, 0);
+});
+
+
+test('mutation capabilities are never classified as read-only', () => {
+  const mutations = [
+    'shell.exec',
+    'process.start',
+    'process.write',
+    'process.stop',
+    'process.prune',
+    'files.write',
+    'files.mkdir',
+    'files.copy',
+    'files.move',
+    'files.delete',
+    'files.patch',
+    'workspace.checks',
+    'task.graph.run',
+    'windows.service.control',
+    'windows.registry.set',
+    'windows.registry.delete',
+    'windows.task.control',
+    'windows.firewall.control',
+  ];
+
+  for (const capability of mutations) {
+    assert.equal(
+      isReadOnlyCapability(capability),
+      false,
+      capability + ' must not be auto-replayed as a read-only operation',
+    );
+  }
 });
