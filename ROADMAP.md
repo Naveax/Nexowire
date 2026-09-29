@@ -50,7 +50,7 @@
 - [~] multi-device native-agent routing
 - [x] persistent stable device aliases and alias-based MCP targeting
 - [ ] reconnect/session continuity without third-party control providers
-- [ ] operation IDs and idempotency records for selected replay-safe mutations
+- [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
 - [ ] native relay mode for machines that cannot reach the hub directly
 - [ ] first-party privilege separation and per-capability policy profiles
 
