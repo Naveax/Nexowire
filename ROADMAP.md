@@ -16,7 +16,7 @@
 - [ ] Fully reattachable durable process I/O across agent restart
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
-- [ ] Public deployment authentication
+- [~] Public deployment authentication: bootstrap bearer rotation is implemented; production authorization/TLS remains open
 
 ## v0.2 - Computer control
 
@@ -61,12 +61,12 @@
 - [x] bounded Windows UI Automation tree/find plus exact invoke/set-value controls
 - [x] exact-foreground keyboard input and bounded clipboard control
 - [x] first-party Edge/Chrome session, navigation, DOM snapshot/action, and screenshot automation
-- [x] exact-element visual verification with DOM expectations, hit testing, and cropped PNG evidence
+- [ ] visual verification
 - [x] exact-HWND raw pointer move/click/scroll only as a fallback
 
 ## v1.0 - ChatGPT-ready remote control
 
-- production authentication and TLS
+- production authorization, TLS, revocation, and encrypted credential storage
 - encrypted secrets and policy profiles
 - audit/history
 - stable MCP surface

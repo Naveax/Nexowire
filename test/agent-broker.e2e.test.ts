@@ -9,7 +9,10 @@ import { AGENT_PROTOCOL_VERSION } from '../src/protocol/agent.js';
 test('hub sends a capability request through a real WebSocket agent', async (t) => {
   const http = createServer();
   const broker = new AgentBroker({ maxEvents: 3, maxEventBytes: 1_048_576 });
-  const wss = attachAgentWebSocketServer(http, broker, 'test-agent-token');
+  const wss = attachAgentWebSocketServer(http, broker, [
+    'old-agent-token',
+    'current-agent-token',
+  ]);
   await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     for (const client of wss.clients) client.close();
@@ -18,7 +21,7 @@ test('hub sends a capability request through a real WebSocket agent', async (t) 
   const address = http.address();
   assert.ok(address && typeof address === 'object');
   const socket = new WebSocket(`ws://127.0.0.1:${address.port}/agent`, {
-    headers: { Authorization: 'Bearer test-agent-token' },
+    headers: { Authorization: 'Bearer current-agent-token' },
   });
   await new Promise<void>((resolve, reject) => {
     socket.once('open', resolve);

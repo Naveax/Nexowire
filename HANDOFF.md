@@ -47,11 +47,12 @@ Implemented:
 - bounded Windows UI Automation tree/find plus exact unique-selector InvokePattern and verified ValuePattern mutations with password-value suppression
 - exact foreground-HWND pointer position/move/click/scroll with client bounds, occlusion/hit checks, and cursor verification
 - first-party isolated Edge/Chrome CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, inline screenshots, and exact-element visual verification with cropped PNG evidence
+- rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - initial security/docs/tests/CI
 
 ## Current security behavior
 
-Hub default: `127.0.0.1:43110`. Non-loopback binding is refused unless both `NEXOWIRE_MCP_BEARER_TOKEN` and `NEXOWIRE_AGENT_TOKEN` are configured.
+Hub default: `127.0.0.1:43110`. Non-loopback binding is refused unless MCP and native-agent bearer credentials are configured; singular tokens and comma-separated rotation sets are supported.
 
 Native-agent file tools default to the current user's home directory. `NEXOWIRE_ALLOWED_ROOTS=*` intentionally grants unrestricted user-level filesystem paths.
 
@@ -69,7 +70,7 @@ The generic backend registry remains because it is useful for Nexowire-owned tra
 4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Finish robust multi-device native-agent routing; persistent aliases are implemented.
-7. Design production ChatGPT authentication and encrypted credential handling before public deployment.
+7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
 
 ## Known machine note
 
