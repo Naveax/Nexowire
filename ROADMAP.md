@@ -53,7 +53,7 @@
 
 ## v0.5 - GUI and browser
 
-- window enumeration/focus
+- [x] window enumeration/focus with exact HWND verification
 - screenshot capture
 - accessibility-tree inspection
 - keyboard/clipboard and browser automation
