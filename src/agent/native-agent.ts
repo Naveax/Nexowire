@@ -47,7 +47,7 @@ export function reconnectWaitMs(
   const boundedBase = Math.min(30_000, Math.max(250, baseDelayMs));
   const sample = Math.min(1, Math.max(0, random()));
   const factor = 0.8 + sample * 0.4;
-  return Math.round(boundedBase * factor);
+  return Math.min(30_000, Math.max(250, Math.round(boundedBase * factor)));
 }
 
 function heartbeatMs(env: NodeJS.ProcessEnv): number {
