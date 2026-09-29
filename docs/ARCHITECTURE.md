@@ -24,6 +24,7 @@ The internal backend/provider interface remains as an architectural seam for Nex
 - stdio MCP mode for local development
 - outbound native-agent WebSocket transport
 - persistent device aliases resolved to stable native IDs before execution
+- persistent native device directory plus capability-aware, ambiguity-safe route discovery across multiple connected machines
 - internal backend registry with health/latency ranking, read-only failover semantics, and mutation replay protection
 - PowerShell/cmd/bash shell execution
 - structured Windows process, service, network, registry, scheduled-task, event-log, and firewall inspection plus verified mutations where implemented
