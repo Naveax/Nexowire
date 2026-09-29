@@ -98,6 +98,9 @@ interface ManagedSession {
   recovered: boolean;
   durable: boolean;
   hostPid?: number;
+  oldestSeqOverride?: number;
+  latestSeqOverride?: number;
+  bufferedEventsOverride?: number;
   events: ProcessOutputEvent[];
   nextSeq: number;
   bufferedBytes: number;
@@ -247,9 +250,14 @@ function summarize(session: ManagedSession) {
     signal: session.signal,
     startedAt: session.startedAt,
     ...(session.exitedAt ? { exitedAt: session.exitedAt } : {}),
-    oldestSeq: session.events[0]?.seq ?? session.nextSeq,
-    latestSeq: session.nextSeq - 1,
-    bufferedEvents: session.events.length,
+    oldestSeq:
+      session.oldestSeqOverride ??
+      session.events[0]?.seq ??
+      session.nextSeq,
+    latestSeq:
+      session.latestSeqOverride ?? session.nextSeq - 1,
+    bufferedEvents:
+      session.bufferedEventsOverride ?? session.events.length,
     bufferedBytes: session.bufferedBytes,
   };
 }
