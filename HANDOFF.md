@@ -17,6 +17,7 @@ Implemented:
 - internal capability registry with health/latency ranking, read-only failover semantics, and mutation replay protection
 - native agent protocol over outbound WebSocket
 - stable native-agent device identity
+- persistent case-normalized device aliases with alias-based MCP routing and offline-target rejection
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
 - WSL2 execution capability
 - interactive process sessions with incremental stdout/stderr, stdin, stop, and list
@@ -66,7 +67,7 @@ The generic backend registry remains because it is useful for Nexowire-owned tra
 3. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
 4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
-6. Add robust multi-device native-agent routing and device aliases.
+6. Finish robust multi-device native-agent routing; persistent aliases are implemented.
 7. Design production ChatGPT authentication and encrypted credential handling before public deployment.
 
 ## Known machine note
