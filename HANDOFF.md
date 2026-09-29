@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system broader than Remote Des
 
 ## Repository state
 
-Active branch: `feat/windows-window-control-v2`
+Active branch: `feat/windows-screenshot-v2`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -40,6 +40,7 @@ Implemented:
 - verified exact Windows registry/task/firewall mutation controls
 - exact Windows environment name discovery, selective redacted reads, and verified process/user/machine set/delete
 - structured top-level Windows window enumeration plus exact HWND focus with foreground verification
+- bounded inline PNG capture for virtual desktop, primary screen, and exact HWND rectangles with SHA-256 metadata
 - provider health checks, equal-priority latency ranking, read-only retry failover, and mutation replay protection
 - initial security/docs/tests/CI
 
@@ -57,7 +58,7 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 4. Extend durable execution beyond task-graph job boundaries: durable process I/O and artifact tracking remain open.
 5. Add explicit idempotency keys/operation records for selected replay-safe mutations.
 6. Design production ChatGPT authentication before public deployment.
-7. Add GUI accessibility/screenshot/browser layers after structured OS control is mature.
+7. Add GUI accessibility, keyboard/clipboard, browser automation, and visual action verification on top of the now-available window/screenshot primitives.
 
 ## Known machine note
 

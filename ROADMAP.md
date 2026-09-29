@@ -54,7 +54,7 @@
 ## v0.5 - GUI and browser
 
 - [x] window enumeration/focus with exact HWND verification
-- screenshot capture
+- [x] bounded inline screenshot capture for desktop and exact HWND rectangles
 - accessibility-tree inspection
 - keyboard/clipboard and browser automation
 - visual verification
