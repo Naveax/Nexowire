@@ -470,9 +470,62 @@ export class ProcessManager {
         continue;
       }
 
+      const durable = saved.durable ?? false;
       let status: SessionStatus = saved.status;
       let exitedAt = saved.exitedAt;
-      if (saved.status === 'running' || saved.status === 'orphaned') {
+      let pid = saved.pid;
+      let exitCode = saved.exitCode;
+      let signal = saved.signal as NodeJS.Signals | null;
+      let workerPid = saved.workerPid ?? null;
+      let events: ProcessOutputEvent[] = [];
+      let nextSeq = 1;
+      let maxBufferBytes = 4_194_304;
+
+      if (durable && saved.workerDir) {
+        try {
+          const workerStatus = await readJsonIfExists(
+            path.join(saved.workerDir, 'status.json'),
+            WorkerStatusSchema,
+          );
+          events = await readWorkerEvents(saved.workerDir);
+          nextSeq =
+            Math.max(
+              workerStatus?.nextSeq ?? 1,
+              (events.at(-1)?.seq ?? 0) + 1,
+            );
+          maxBufferBytes =
+            workerStatus?.maxBufferBytes ?? maxBufferBytes;
+
+          if (workerStatus) {
+            workerPid = workerStatus.workerPid;
+            pid = workerStatus.childPid;
+            exitCode = workerStatus.exitCode;
+            signal = workerStatus.signal as NodeJS.Signals | null;
+            if (
+              workerStatus.status === 'running' &&
+              isPidAlive(workerStatus.workerPid)
+            ) {
+              status = 'running';
+              exitedAt = undefined;
+            } else if (workerStatus.status === 'exited') {
+              status = 'exited';
+              exitedAt = workerStatus.exitedAt ?? exitedAt;
+            } else {
+              status = 'lost';
+              exitedAt ??= new Date().toISOString();
+            }
+          } else {
+            status = 'lost';
+            exitedAt ??= new Date().toISOString();
+          }
+        } catch {
+          status = 'lost';
+          exitedAt ??= new Date().toISOString();
+        }
+      } else if (
+        saved.status === 'running' ||
+        saved.status === 'orphaned'
+      ) {
         if (saved.pid && isPidAlive(saved.pid)) {
           status = 'orphaned';
         } else {
@@ -484,19 +537,25 @@ export class ProcessManager {
       this.sessions.set(saved.id, {
         id: saved.id,
         ...(saved.name ? { name: saved.name } : {}),
-        pid: saved.pid,
+        pid,
         shell: saved.shell,
         ...(saved.cwd ? { cwd: saved.cwd } : {}),
         startedAt: saved.startedAt,
         ...(exitedAt ? { exitedAt } : {}),
-        exitCode: saved.exitCode,
-        signal: saved.signal as NodeJS.Signals | null,
+        exitCode,
+        signal,
         status,
         recovered: true,
-        events: [],
-        nextSeq: 1,
-        bufferedBytes: 0,
-        maxBufferBytes: 4_194_304,
+        durable,
+        ...(saved.workerDir ? { workerDir: saved.workerDir } : {}),
+        ...(workerPid !== undefined ? { workerPid } : {}),
+        events,
+        nextSeq,
+        bufferedBytes: events.reduce(
+          (total, event) => total + Buffer.byteLength(event.text),
+          0,
+        ),
+        maxBufferBytes,
       });
     }
 
