@@ -1,6 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import * as z from 'zod';
 import type { PathPolicy } from './path-policy.js';
@@ -12,6 +13,7 @@ const StartSchema = z.object({
   shell: ShellSchema.optional(),
   cwd: z.string().max(4096).optional(),
   name: z.string().min(1).max(128).optional(),
+  durable: z.boolean().default(false),
   max_buffer_bytes: z
     .number()
     .int()
@@ -55,6 +57,9 @@ const PersistedSessionSchema = z.object({
   exitCode: z.number().int().nullable(),
   signal: z.string().nullable(),
   status: z.enum(['running', 'exited', 'orphaned', 'lost']),
+  durable: z.boolean().optional(),
+  workerDir: z.string().max(4096).optional(),
+  workerPid: z.number().int().positive().nullable().optional(),
 });
 
 const PersistedStateSchema = z.object({
@@ -85,6 +90,9 @@ interface ManagedSession {
   signal: NodeJS.Signals | null;
   status: SessionStatus;
   recovered: boolean;
+  durable: boolean;
+  workerDir?: string;
+  workerPid?: number | null;
   events: ProcessOutputEvent[];
   nextSeq: number;
   bufferedBytes: number;
@@ -105,6 +113,9 @@ export interface ProcessManagerOptions {
   maxSessions?: number;
   exitedRetentionMs?: number;
   onEvent?: (event: ProcessManagerEvent) => void;
+  workerRoot?: string;
+  workerEntrypoint?: string;
+  workerExecArgv?: string[];
 }
 
 export class ProcessManagerError extends Error {
@@ -244,6 +255,9 @@ export class ProcessManager {
   private readonly maxSessions: number;
   private readonly exitedRetentionMs: number;
   private readonly onEvent?: (event: ProcessManagerEvent) => void;
+  private readonly workerRoot?: string;
+  private readonly workerEntrypoint?: string;
+  private readonly workerExecArgv: string[];
   private persistChain: Promise<void> = Promise.resolve();
 
   constructor(options: ProcessManagerOptions = {}) {
@@ -252,6 +266,9 @@ export class ProcessManager {
     this.exitedRetentionMs =
       options.exitedRetentionMs ?? 24 * 60 * 60 * 1000;
     this.onEvent = options.onEvent;
+    this.workerRoot = options.workerRoot;
+    this.workerEntrypoint = options.workerEntrypoint;
+    this.workerExecArgv = options.workerExecArgv ?? process.execArgv;
   }
 
   private emit(event: ProcessManagerEvent): void {
