@@ -18,6 +18,8 @@ import { executePostconditions } from './postconditions.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
+import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
+import { privilegeRequirement } from '../security/privilege.js';
 
 const ShellExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
@@ -1843,6 +1845,8 @@ async function workspaceSnapshot(
 export interface AgentExecutionContext {
   processes?: ProcessManager;
   taskGraphs?: TaskGraphStore;
+  privilegeMode?: 'direct' | 'broker';
+  privilegedBroker?: PrivilegedBrokerClient;
 }
 
 function requireProcesses(context: AgentExecutionContext): ProcessManager {
@@ -1863,6 +1867,23 @@ export async function executeCapability(
   policy: PathPolicy,
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
+  if (
+    context.privilegeMode === 'broker' &&
+    privilegeRequirement(capability, input) === 'elevated'
+  ) {
+    if (!context.privilegedBroker) {
+      const error = new Error(
+        'Elevated capability requires the Nexowire privileged broker.',
+      ) as Error & { code?: string; details?: unknown };
+      error.code = 'PRIVILEGED_BROKER_REQUIRED';
+      error.details = { capability };
+      throw error;
+    }
+    return await context.privilegedBroker.execute(
+      capability,
+      input,
+    );
+  }
   switch (capability) {
     case 'shell.exec':
       return await executeShell(input, policy);
