@@ -36,6 +36,7 @@ Use this exact order:
 Implemented on main as of the latest repository state:
 
 - first-party native-agent WebSocket transport with heartbeat/reconnect hardening
+- first-party relay server/client with authenticated hub/agent routes, optional TLS, multiplexed virtual agent sockets, and compatibility with prioritized agent endpoint failover
 - process-instance-aware reconnect continuity: same-process request-ID resumption with native dedupe cache, read-only replay after process restart, and fail-closed mutation boundaries
 - normalized provider/backend registry used only as an internal Nexowire routing seam
 - stable native device identity, persistent aliases/groups, device history, capability-aware route discovery, deterministic named routing policies, and per-device capability allow/deny policies
@@ -56,7 +57,7 @@ Implemented on main as of the latest repository state:
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
 1. durable long-running work/artifact workflows beyond current process/task-graph primitives
-2. optional first-party relay/direct transport selection
+2. first-party relay/direct transport is implemented; continue privilege separation and production authorization hardening
 3. first-party privilege separation; per-device capability policy profiles are implemented
 4. production authorization/TLS/revocation/encrypted secret storage
 5. extend postconditions only into deterministic additional OS/application domains
