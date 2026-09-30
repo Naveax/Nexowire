@@ -225,6 +225,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'browser_set_value'));
   assert.ok(tools.tools.some((tool) => tool.name === 'browser_screenshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'browser_visual_verify'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'verify_assertions'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_processes'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_registry_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'windows_eventlog_query'));
