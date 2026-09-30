@@ -62,9 +62,9 @@
     },
     {
       "id": "linux-wsl-coverage",
-      "status": "open",
+      "status": "partial",
       "priority": 8,
-      "summary": "Real Linux/WSL distro integration coverage"
+      "summary": "Real Linux native-agent outbound transport/core capability integration runs in Ubuntu CI; real WSL2 distro integration remains open"
     },
     {
       "id": "audit-history",
@@ -92,12 +92,12 @@
     "Do not infer completion from chat history; inspect main and CI."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "64e238cc43a1fd1f6e4d356b2d755e0fc6233b90",
+  "lastVerifiedMain": "729c6e54d9464d071ba11308eeaa528a34676f56",
   "activeWork": [
     {
-      "id": "audit-history-v2",
-      "branch": "feat/audit-history-v2",
-      "summary": "Bounded persistent audit history query and MCP surface"
+      "id": "linux-native-agent-live-v2",
+      "branch": "test/linux-native-agent-live-v2",
+      "summary": "Real Ubuntu CI coverage for outbound native agent and core shell/file/process capabilities"
     }
   ]
 }
