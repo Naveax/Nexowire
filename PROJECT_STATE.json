@@ -65,6 +65,12 @@
       "status": "open",
       "priority": 8,
       "summary": "Real Linux/WSL distro integration coverage"
+    },
+    {
+      "id": "relay-transport",
+      "status": "done",
+      "priority": 5.5,
+      "summary": "First-party relay server/client with authenticated hub/agent routes, optional TLS, virtual agent multiplexing, and agent endpoint-priority integration"
     }
   ],
   "standardVerification": [
@@ -88,6 +94,11 @@
   "lastStateSync": "2026-09-30",
   "lastVerifiedMain": "67580ce31a13c08bbab0958d4a80071d2732fbbe",
   "activeWork": [
+    {
+      "id": "first-party-relay-v1",
+      "branch": "feat/first-party-relay-v1",
+      "summary": "Authenticated first-party relay server/client with multiplexed virtual agent sockets"
+    },
     {
       "id": "hub-tls-v2",
       "branch": "feat/hub-tls-v2",
