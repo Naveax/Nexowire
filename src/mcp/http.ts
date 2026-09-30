@@ -85,11 +85,23 @@ export async function runHttpServer(
       });
       return;
     }
+    const onlineTargets = (
+      await context.providers.listTargets()
+    ).filter((target) => target.online);
+    const availableCapabilities = [
+      ...new Set(
+        onlineTargets.flatMap(
+          (target) => target.capabilities,
+        ),
+      ),
+    ].sort();
+
     const mcp = createNexowireMcpServer({
       ...context,
       ...(authorization
         ? { toolAuthorization: authorization }
         : {}),
+      availableCapabilities,
     });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
