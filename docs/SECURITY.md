@@ -63,3 +63,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Device history stores only native-agent identity/capability metadata and connection timestamps. Route discovery never silently chooses between multiple matching computers: it returns ambiguity and requires explicit narrowing/selection.
 
 - On Windows, broker privilege mode can bootstrap without a plaintext broker token in environment/config. The standard native agent and elevated broker use the same random token stored only as Windows DPAPI CurrentUser ciphertext. An explicit broker token still overrides this for controlled deployments. DPAPI binds decryption to the same Windows user context, so the elevated broker should run elevated as that user rather than as an unrelated service account.
+
+- The Windows privileged-broker scheduled-task installer must itself run elevated, registers the task for the same interactive user with `RunLevel Highest`, and refuses installation when plaintext broker-token environment variables are present. The generated launcher persists only non-secret broker metadata and references the DPAPI ciphertext file.
