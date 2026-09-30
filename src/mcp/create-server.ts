@@ -679,6 +679,111 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+  const postconditionBase = {
+    id: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  };
+
+  const postconditionAssertionSchema = z.discriminatedUnion('kind', [
+    z.object({
+      ...postconditionBase,
+      kind: z.literal('file.exists'),
+      path: z.string().min(1).max(4096),
+      expected: z.boolean().optional(),
+    }),
+    z.object({
+      ...postconditionBase,
+      kind: z.literal('file.sha256'),
+      path: z.string().min(1).max(4096),
+      expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
+      max_bytes: z
+        .number()
+        .int()
+        .min(1)
+        .max(268_435_456)
+        .optional(),
+    }),
+    z.object({
+      ...postconditionBase,
+      kind: z.literal('file.text_contains'),
+      path: z.string().min(1).max(4096),
+      needle: z.string().min(1).max(16_384),
+      expected: z.boolean().optional(),
+      max_bytes: z
+        .number()
+        .int()
+        .min(1)
+        .max(16_777_216)
+        .optional(),
+    }),
+    z.object({
+      ...postconditionBase,
+      kind: z.literal('process.pid_alive'),
+      pid: z.number().int().positive(),
+      expected: z.boolean().optional(),
+    }),
+    z.object({
+      ...postconditionBase,
+      kind: z.literal('tcp.open'),
+      host: z.string().min(1).max(255),
+      port: z.number().int().min(1).max(65_535),
+      expected: z.boolean().optional(),
+      timeout_ms: z.number().int().min(100).max(30_000).optional(),
+    }),
+    z.object({
+      ...postconditionBase,
+      kind: z.literal('http.status'),
+      url: z.string().url().max(4096),
+      expected_status: z
+        .array(z.number().int().min(100).max(599))
+        .min(1)
+        .max(32),
+      timeout_ms: z.number().int().min(100).max(30_000).optional(),
+    }),
+  ]);
+
+  server.registerTool(
+    'verify_assertions',
+    {
+      title: 'Verify postconditions',
+      description:
+        'Run bounded read-only postcondition assertions over files, process liveness, TCP endpoints, and HTTP status without echoing matched secret text.',
+      inputSchema: {
+        ...targetFields,
+        assertions: z
+          .array(postconditionAssertionSchema)
+          .min(1)
+          .max(32),
+        max_parallel: z.number().int().min(1).max(8).optional(),
+        stop_on_failure: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      assertions,
+      max_parallel,
+      stop_on_failure,
+    }) =>
+      await execute(
+        ctx,
+        'verify.assertions',
+        {
+          assertions,
+          ...(max_parallel !== undefined ? { max_parallel } : {}),
+          ...(stop_on_failure !== undefined
+            ? { stop_on_failure }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
   server.registerTool(
     'browser_session_start',
     {
