@@ -180,6 +180,7 @@ export class RelayHubClient {
       });
       this.outer = socket;
 
+      let consumePromise: Promise<void> | undefined;
       const opened = await new Promise<boolean>((resolve) => {
         let settled = false;
         const finish = (value: boolean): void => {
@@ -188,14 +189,17 @@ export class RelayHubClient {
           resolve(value);
         };
 
-        socket.once('open', () => finish(true));
+        socket.once('open', () => {
+          consumePromise = this.consume(socket);
+          finish(true);
+        });
         socket.once('error', () => finish(false));
         socket.once('close', () => finish(false));
       });
 
       if (opened) {
         backoffMs = this.reconnectMinMs;
-        await this.consume(socket);
+        await consumePromise;
       }
 
       if (this.outer === socket) this.outer = undefined;
