@@ -45,6 +45,7 @@ Implemented:
 - operation IDs plus persistent payload-free audit metadata
 - persistent payload-free idempotency records for selected replay-safe mutations, with key/fingerprint mismatch rejection and restart-safe unknown-state blocking
 - full MCP -> native-agent integration coverage
+- real Linux native-agent outbound transport integration in Ubuntu CI covering capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
 - verified exact Windows registry/task/firewall mutation controls
@@ -99,7 +100,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Known machine note
 
-WSL2 execution is implemented. A real Linux-distro integration test still requires a distro on whichever Windows test machine is used.
+WSL2 execution is implemented. Real Linux native-agent integration runs in Ubuntu CI. A real WSL2-distro integration test still requires a distro on whichever Windows test machine is used.
 
 ## Architecture rule
 
