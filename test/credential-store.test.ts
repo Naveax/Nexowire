@@ -178,3 +178,64 @@ test('authorization accepts static rotation tokens or active stored credentials'
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('MCP credentials can persist bounded tool allowlists without plaintext token storage', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-credentials-tool-scope-'),
+  );
+
+  try {
+    const store = new CredentialStore(root);
+    await store.initialize();
+
+    const issued = await store.issue('mcp', {
+      name: 'limited-chatgpt',
+      allowedTools: [
+        'machine_*',
+        'files_read',
+        'machine_*',
+      ],
+    });
+
+    assert.deepEqual(issued.credential.allowedTools, [
+      'machine_*',
+      'files_read',
+    ]);
+
+    const authenticated = store.authenticate(
+      'mcp',
+      issued.token,
+    );
+    assert.deepEqual(authenticated?.allowedTools, [
+      'machine_*',
+      'files_read',
+    ]);
+
+    const raw = await fs.readFile(
+      path.join(root, 'credentials.json'),
+      'utf8',
+    );
+    assert.equal(raw.includes(issued.token), false);
+    assert.ok(raw.includes('machine_*'));
+    assert.ok(raw.includes('files_read'));
+
+    const reloaded = new CredentialStore(root);
+    await reloaded.initialize();
+    assert.deepEqual(
+      reloaded.authenticate('mcp', issued.token)?.allowedTools,
+      ['machine_*', 'files_read'],
+    );
+
+    await assert.rejects(
+      () =>
+        store.issue('agent', {
+          allowedTools: ['machine_*'],
+        }),
+      (error: unknown) =>
+        error instanceof CredentialStoreError &&
+        error.code === 'CREDENTIAL_TOOL_SCOPE_UNSUPPORTED',
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
