@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { AgentBroker } from '../core/agent-broker.js';
+import type { AgentSocketLike } from '../core/agent-socket.js';
 import { AgentHelloSchema } from '../protocol/agent.js';
 import { matchesBearerHeader, parseTokenList } from '../security/tokens.js';
 
@@ -11,6 +12,38 @@ function isLoopbackAddress(address: string | undefined): boolean {
     address === '::1' ||
     address === '::ffff:127.0.0.1'
   );
+}
+
+export function acceptAgentSocket(
+  socket: AgentSocketLike,
+  broker: AgentBroker,
+  helloTimeoutMs = 5_000,
+): void {
+  const timer = setTimeout(() => {
+    socket.close(1008, 'Agent hello timeout');
+  }, Math.max(250, helloTimeoutMs));
+
+  socket.once('message', (raw) => {
+    clearTimeout(timer);
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(String(raw));
+    } catch {
+      socket.close(1008, 'Invalid JSON');
+      return;
+    }
+
+    const hello = AgentHelloSchema.safeParse(decoded);
+    if (!hello.success) {
+      socket.close(1008, 'Invalid agent hello');
+      return;
+    }
+
+    broker.register(socket, hello.data);
+  });
+
+  socket.once('close', () => clearTimeout(timer));
+  socket.once('error', () => clearTimeout(timer));
 }
 
 export interface AgentWebSocketServerOptions {
@@ -59,29 +92,11 @@ export function attachAgentWebSocketServer(
   wss.on('connection', (socket: WebSocket) => {
     alive.add(socket);
     socket.on('pong', () => alive.add(socket));
-
-    const timer = setTimeout(() => {
-      socket.close(1008, 'Agent hello timeout');
-    }, helloTimeoutMs);
-
-    socket.once('message', (raw) => {
-      clearTimeout(timer);
-      let decoded: unknown;
-      try {
-        decoded = JSON.parse(raw.toString());
-      } catch {
-        socket.close(1008, 'Invalid JSON');
-        return;
-      }
-
-      const hello = AgentHelloSchema.safeParse(decoded);
-      if (!hello.success) {
-        socket.close(1008, 'Invalid agent hello');
-        return;
-      }
-
-      broker.register(socket, hello.data);
-    });
+    acceptAgentSocket(
+      socket as unknown as AgentSocketLike,
+      broker,
+      helloTimeoutMs,
+    );
   });
 
   const heartbeat = setInterval(() => {
