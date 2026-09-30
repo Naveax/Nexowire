@@ -12,6 +12,8 @@ export interface NexowireConfig {
   tlsCertFile?: string;
   tlsKeyFile?: string;
   allowInsecureRemote?: boolean;
+  relayUrl?: string;
+  relayToken?: string;
   stateDir: string;
   skillsDir: string;
 }
@@ -88,6 +90,14 @@ export function loadConfig(
     );
   }
 
+  const relayUrl = optional(env.NEXOWIRE_RELAY_URL);
+  const relayToken = optional(env.NEXOWIRE_RELAY_TOKEN);
+  if (Boolean(relayUrl) !== Boolean(relayToken)) {
+    throw new Error(
+      'NEXOWIRE_RELAY_URL and NEXOWIRE_RELAY_TOKEN must be configured together.',
+    );
+  }
+
   return {
     host: optional(env.NEXOWIRE_HTTP_HOST) ?? '127.0.0.1',
     port,
@@ -108,6 +118,8 @@ export function loadConfig(
     ...(envFlag(env.NEXOWIRE_ALLOW_INSECURE_REMOTE)
       ? { allowInsecureRemote: true }
       : {}),
+    ...(relayUrl ? { relayUrl } : {}),
+    ...(relayToken ? { relayToken } : {}),
     stateDir,
     skillsDir: path.join(cwd, 'skills'),
   };
