@@ -185,6 +185,160 @@ function resolveShell(
   return { executable: selected, args: ['-lc', command], label: selected };
 }
 
+const WorkerControlSchema = z.object({
+  version: z.literal(1),
+  sessionId: z.string().uuid(),
+  port: z.number().int().min(1).max(65_535),
+  token: z.string().min(32).max(256),
+  workerPid: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+});
+
+const WorkerStatusSchema = z.object({
+  version: z.literal(1),
+  sessionId: z.string().uuid(),
+  workerPid: z.number().int().positive(),
+  childPid: z.number().int().positive().nullable(),
+  status: z.enum(['starting', 'running', 'exited']),
+  startedAt: z.string().datetime(),
+  exitedAt: z.string().datetime().optional(),
+  exitCode: z.number().int().nullable(),
+  signal: z.string().nullable(),
+  nextSeq: z.number().int().min(1),
+  maxBufferBytes: z.number().int().min(65_536).max(16_777_216),
+});
+
+const WorkerEventSchema = z.object({
+  seq: z.number().int().min(1),
+  stream: z.enum(['stdout', 'stderr']),
+  text: z.string(),
+  at: z.string().datetime(),
+});
+
+type WorkerControl = z.infer<typeof WorkerControlSchema>;
+type WorkerStatus = z.infer<typeof WorkerStatusSchema>;
+
+async function readJsonIfExists<T>(
+  file: string,
+  schema: z.ZodType<T>,
+): Promise<T | undefined> {
+  try {
+    return schema.parse(JSON.parse(await fs.readFile(file, 'utf8')));
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function readWorkerEvents(
+  workerDir: string,
+): Promise<ProcessOutputEvent[]> {
+  const file = path.join(workerDir, 'events.jsonl');
+  let raw: string;
+  try {
+    raw = await fs.readFile(file, 'utf8');
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return [];
+    }
+    throw error;
+  }
+
+  const events: ProcessOutputEvent[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      events.push(WorkerEventSchema.parse(JSON.parse(line)));
+    } catch {
+      // Ignore a partially-written trailing line and any corrupt event.
+    }
+  }
+  return events.sort((a, b) => a.seq - b.seq);
+}
+
+async function sendWorkerControl(
+  control: WorkerControl,
+  payload: Record<string, unknown>,
+  timeoutMs = 5_000,
+): Promise<Record<string, unknown>> {
+  return await new Promise<Record<string, unknown>>((resolve, reject) => {
+    const socket = net.createConnection({
+      host: '127.0.0.1',
+      port: control.port,
+    });
+    let buffer = '';
+    let settled = false;
+    const finish = (
+      error?: Error,
+      result?: Record<string, unknown>,
+    ): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (error) reject(error);
+      else resolve(result ?? {});
+    };
+    const timer = setTimeout(
+      () =>
+        finish(
+          new ProcessManagerError(
+            'PROCESS_WORKER_TIMEOUT',
+            'Durable process worker did not respond in time.',
+          ),
+        ),
+      timeoutMs,
+    );
+
+    socket.setEncoding('utf8');
+    socket.once('error', (error) => finish(error));
+    socket.once('connect', () => {
+      socket.write(
+        JSON.stringify({
+          ...payload,
+          token: control.token,
+        }) + '\n',
+      );
+    });
+    socket.on('data', (chunk: string) => {
+      buffer += chunk;
+      const newline = buffer.indexOf('\n');
+      if (newline < 0) return;
+      try {
+        const decoded = JSON.parse(
+          buffer.slice(0, newline),
+        ) as Record<string, unknown>;
+        if (decoded.ok !== true) {
+          finish(
+            new ProcessManagerError(
+              String(decoded.error ?? 'PROCESS_WORKER_ERROR'),
+              'Durable process worker rejected the control request.',
+            ),
+          );
+          return;
+        }
+        finish(undefined, decoded);
+      } catch (error) {
+        finish(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
+    });
+  });
+}
+
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
