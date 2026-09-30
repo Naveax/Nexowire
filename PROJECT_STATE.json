@@ -44,9 +44,9 @@
     },
     {
       "id": "privilege-separation",
-      "status": "partial",
+      "status": "done",
       "priority": 5,
-      "summary": "Per-device capability policies plus a separate elevated Windows broker are implemented; default broker authentication uses a DPAPI CurrentUser-protected random secret. Hardened broker lifecycle/service installation remains open."
+      "summary": "Per-device capability policies, a separate elevated Windows broker, DPAPI CurrentUser-protected broker authentication, and install/status/start/stop/uninstall scheduled-task lifecycle are implemented."
     },
     {
       "id": "production-auth",
