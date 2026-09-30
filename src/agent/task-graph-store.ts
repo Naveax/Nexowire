@@ -19,6 +19,14 @@ const GraphStatusSchema = z.enum([
   'interrupted',
 ]);
 
+const PersistedArtifactSchema = z.object({
+  requestedPath: z.string().min(1).max(4096),
+  path: z.string().min(1).max(4096),
+  size: z.number().int().min(0),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  modifiedAt: z.string().datetime(),
+});
+
 const PersistedJobSchema = z.object({
   id: z.string().min(1).max(128),
   status: JobStatusSchema,
@@ -29,6 +37,7 @@ const PersistedJobSchema = z.object({
   exitCode: z.number().int().nullable().optional(),
   timedOut: z.boolean().optional(),
   blockedBy: z.array(z.string().min(1).max(128)).optional(),
+  artifacts: z.array(PersistedArtifactSchema).max(32).optional(),
 });
 
 const PersistedGraphSchema = z.object({
@@ -59,6 +68,13 @@ export interface TaskGraphCheckpointJob {
   exitCode?: number | null;
   timedOut?: boolean;
   blockedBy?: string[];
+  artifacts?: Array<{
+    requestedPath: string;
+    path: string;
+    size: number;
+    sha256: string;
+    modifiedAt: string;
+  }>;
 }
 
 export interface TaskGraphCheckpoint {
@@ -94,6 +110,11 @@ function cloneGraph(graph: TaskGraphCheckpoint): TaskGraphCheckpoint {
       ...job,
       dependsOn: [...job.dependsOn],
       ...(job.blockedBy ? { blockedBy: [...job.blockedBy] } : {}),
+      ...(job.artifacts
+        ? {
+            artifacts: job.artifacts.map((artifact) => ({ ...artifact })),
+          }
+        : {}),
     })),
   };
 }
@@ -233,6 +254,7 @@ export class TaskGraphStore {
         delete job.exitCode;
         delete job.timedOut;
         delete job.blockedBy;
+        delete job.artifacts;
       }
     }
 
