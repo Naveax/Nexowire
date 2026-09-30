@@ -144,7 +144,7 @@ export async function startRelayServer(
   );
   const heartbeatMs = Math.min(
     120_000,
-    Math.max(1_000, options.heartbeatMs ?? 30_000),
+    Math.max(250, options.heartbeatMs ?? 30_000),
   );
   const hubTokens = normalizedTokenList(options.hubTokens);
   const agentTokens = normalizedTokenList(options.agentTokens);
