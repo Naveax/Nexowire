@@ -44,9 +44,9 @@
     },
     {
       "id": "privilege-separation",
-      "status": "open",
+      "status": "partial",
       "priority": 5,
-      "summary": "First-party privileged broker remains open; per-device capability policy profiles are actively being implemented"
+      "summary": "Persistent per-device capability allow/deny profiles are implemented; privileged broker/service separation remains open"
     },
     {
       "id": "production-auth",
@@ -86,13 +86,6 @@
     "Do not infer completion from chat history; inspect main and CI."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "f7e38ce9d3ee7b272c62da33ca6fb1fc9a6a0214",
-  "activeWork": [
-    {
-      "branch": "feat/capability-policy-profiles-v1",
-      "pullRequest": 35,
-      "status": "ci_pending",
-      "summary": "Persistent per-device allow/deny capability profiles enforced before native execution"
-    }
-  ]
+  "lastVerifiedMain": "96fb824833bf0cd67959e39070ec755c863596f1",
+  "activeWork": []
 }
