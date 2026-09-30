@@ -25,11 +25,33 @@ const IdSchema = z
   .max(64)
   .regex(/^[A-Za-z0-9_-]+$/);
 
+const StableDeviceIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128);
+
+const RoutingPolicyNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
+  .transform((value) => value.toLowerCase());
+
+
 const RecordSchema = z.object({
   id: IdSchema,
   scope: CredentialScopeSchema,
   name: z.string().min(1).max(128).optional(),
   allowedTools: z.array(ToolPatternSchema).min(1).max(256).optional(),
+  allowedDeviceIds: z.array(StableDeviceIdSchema).min(1).max(256).optional(),
+  allowedRoutingPolicies: z
+    .array(RoutingPolicyNameSchema)
+    .min(1)
+    .max(128)
+    .optional(),
+  administrative: z.boolean().optional(),
   tokenHash: z.string().regex(/^[a-f0-9]{64}$/),
   createdAt: z.string().datetime(),
   expiresAt: z.string().datetime().optional(),
@@ -48,6 +70,9 @@ export interface CredentialMetadata {
   scope: CredentialScope;
   name?: string;
   allowedTools?: string[];
+  allowedDeviceIds?: string[];
+  allowedRoutingPolicies?: string[];
+  administrative?: boolean;
   createdAt: string;
   expiresAt?: string;
   revokedAt?: string;
@@ -74,6 +99,13 @@ function metadata(record: StoredCredential): CredentialMetadata {
     scope: record.scope,
     ...(record.name ? { name: record.name } : {}),
     ...(record.allowedTools ? { allowedTools: [...record.allowedTools] } : {}),
+    ...(record.allowedDeviceIds
+      ? { allowedDeviceIds: [...record.allowedDeviceIds] }
+      : {}),
+    ...(record.allowedRoutingPolicies
+      ? { allowedRoutingPolicies: [...record.allowedRoutingPolicies] }
+      : {}),
+    administrative: record.administrative === true,
     createdAt: record.createdAt,
     ...(record.expiresAt ? { expiresAt: record.expiresAt } : {}),
     ...(record.revokedAt ? { revokedAt: record.revokedAt } : {}),
@@ -213,6 +245,9 @@ export class CredentialStore {
       name?: string;
       ttlMs?: number;
       allowedTools?: string[];
+      allowedDeviceIds?: string[];
+      allowedRoutingPolicies?: string[];
+      administrative?: boolean;
     } = {},
   ): Promise<{
     credential: CredentialMetadata;
@@ -235,6 +270,59 @@ export class CredentialStore {
       throw new CredentialStoreError(
         'CREDENTIAL_TTL_INVALID',
         'Credential ttlMs must be between 1 second and 365 days.',
+      );
+    }
+
+    let allowedDeviceIds: string[] | undefined;
+    if (input.allowedDeviceIds !== undefined) {
+      if (scope !== 'mcp') {
+        throw new CredentialStoreError(
+          'CREDENTIAL_TARGET_SCOPE_UNSUPPORTED',
+          'Device restrictions are supported only for MCP credentials.',
+        );
+      }
+      allowedDeviceIds = [
+        ...new Set(
+          input.allowedDeviceIds.map((value) =>
+            StableDeviceIdSchema.parse(value),
+          ),
+        ),
+      ].sort();
+      if (allowedDeviceIds.length === 0) {
+        throw new CredentialStoreError(
+          'CREDENTIAL_TARGET_SCOPE_EMPTY',
+          'allowedDeviceIds must contain at least one stable device ID.',
+        );
+      }
+    }
+
+    let allowedRoutingPolicies: string[] | undefined;
+    if (input.allowedRoutingPolicies !== undefined) {
+      if (scope !== 'mcp') {
+        throw new CredentialStoreError(
+          'CREDENTIAL_TARGET_SCOPE_UNSUPPORTED',
+          'Routing-policy restrictions are supported only for MCP credentials.',
+        );
+      }
+      allowedRoutingPolicies = [
+        ...new Set(
+          input.allowedRoutingPolicies.map((value) =>
+            RoutingPolicyNameSchema.parse(value),
+          ),
+        ),
+      ].sort();
+      if (allowedRoutingPolicies.length === 0) {
+        throw new CredentialStoreError(
+          'CREDENTIAL_TARGET_SCOPE_EMPTY',
+          'allowedRoutingPolicies must contain at least one routing policy name.',
+        );
+      }
+    }
+
+    if (input.administrative === true && scope !== 'mcp') {
+      throw new CredentialStoreError(
+        'CREDENTIAL_ADMIN_SCOPE_UNSUPPORTED',
+        'Administrative authorization is supported only for MCP credentials.',
       );
     }
 
@@ -264,6 +352,9 @@ export class CredentialStore {
       scope,
       ...(name ? { name } : {}),
       ...(allowedTools ? { allowedTools } : {}),
+      ...(allowedDeviceIds ? { allowedDeviceIds } : {}),
+      ...(allowedRoutingPolicies ? { allowedRoutingPolicies } : {}),
+      administrative: input.administrative === true,
       tokenHash: hashToken(token).toString('hex'),
       createdAt: new Date(now).toISOString(),
       ...(input.ttlMs !== undefined

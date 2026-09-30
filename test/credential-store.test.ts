@@ -239,3 +239,111 @@ test('MCP credentials can persist bounded tool allowlists without plaintext toke
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('MCP credentials persist deterministic device, route, and administrative scopes', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-credentials-target-scope-'),
+  );
+
+  try {
+    const store = new CredentialStore(root);
+    await store.initialize();
+
+    const issued = await store.issue('mcp', {
+      name: 'scoped-chatgpt',
+      allowedTools: ['machine_*', 'device_route*'],
+      allowedDeviceIds: [
+        'desktop-b',
+        'desktop-a',
+        'desktop-a',
+      ],
+      allowedRoutingPolicies: [
+        'Linux-Route',
+        'linux-route',
+        'Build.Route',
+      ],
+      administrative: true,
+    });
+
+    assert.deepEqual(issued.credential.allowedDeviceIds, [
+      'desktop-a',
+      'desktop-b',
+    ]);
+    assert.deepEqual(
+      issued.credential.allowedRoutingPolicies,
+      ['build.route', 'linux-route'],
+    );
+    assert.equal(issued.credential.administrative, true);
+
+    const raw = await fs.readFile(
+      path.join(root, 'credentials.json'),
+      'utf8',
+    );
+    assert.equal(raw.includes(issued.token), false);
+    assert.ok(raw.includes('"desktop-a"'));
+    assert.ok(raw.includes('"linux-route"'));
+    assert.ok(raw.includes('"administrative": true'));
+
+    const reloaded = new CredentialStore(root);
+    await reloaded.initialize();
+    const authenticated = reloaded.authenticate(
+      'mcp',
+      issued.token,
+    );
+    assert.deepEqual(authenticated?.allowedDeviceIds, [
+      'desktop-a',
+      'desktop-b',
+    ]);
+    assert.deepEqual(
+      authenticated?.allowedRoutingPolicies,
+      ['build.route', 'linux-route'],
+    );
+    assert.equal(authenticated?.administrative, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('agent credentials reject MCP-only target and administrative scopes', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-credentials-target-reject-'),
+  );
+
+  try {
+    const store = new CredentialStore(root);
+    await store.initialize();
+
+    await assert.rejects(
+      () =>
+        store.issue('agent', {
+          allowedDeviceIds: ['desktop'],
+        }),
+      (error: unknown) =>
+        error instanceof CredentialStoreError &&
+        error.code === 'CREDENTIAL_TARGET_SCOPE_UNSUPPORTED',
+    );
+
+    await assert.rejects(
+      () =>
+        store.issue('agent', {
+          allowedRoutingPolicies: ['main-route'],
+        }),
+      (error: unknown) =>
+        error instanceof CredentialStoreError &&
+        error.code === 'CREDENTIAL_TARGET_SCOPE_UNSUPPORTED',
+    );
+
+    await assert.rejects(
+      () =>
+        store.issue('agent', {
+          administrative: true,
+        }),
+      (error: unknown) =>
+        error instanceof CredentialStoreError &&
+        error.code === 'CREDENTIAL_ADMIN_SCOPE_UNSUPPORTED',
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

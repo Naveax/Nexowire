@@ -60,10 +60,8 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
-1. add online-device/capability-aware schema filtering; authorization-aware tools/list filtering is implemented
-2. extend stored credential authorization into deterministic device/route constraints and harden administrative authorization
-3. continue deployment-grade production identity, revocation policy, and protected secret handling; TLS, rotation, TTL/revocation, and hash-only credential storage already exist
-4. extend durable long-running work/artifact workflows beyond current reattachable process and task-graph primitives
+1. continue deployment-grade production identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit stored admin grants, and dynamic tool discovery are implemented
+2. extend durable long-running work/artifact workflows beyond current reattachable process and task-graph primitives
 5. extend idempotency/postconditions only where replay and verification semantics are provably safe
 6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented
 

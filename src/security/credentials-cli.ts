@@ -7,7 +7,7 @@ import {
 
 function usage(): never {
   throw new Error(
-    'Usage: nexowire credentials list [mcp|agent] | issue <mcp|agent> [name] [ttl_seconds] [--allow-tool <pattern>]... | revoke <id>',
+    'Usage: nexowire credentials list [mcp|agent] | issue <mcp|agent> [name] [ttl_seconds] [--allow-tool <pattern>]... [--allow-device <stable-id>]... [--allow-route <policy>]... [--admin] | revoke <id>',
   );
 }
 
@@ -18,9 +18,15 @@ function parseIssueOptions(
   name?: string;
   ttlMs?: number;
   allowedTools?: string[];
+  allowedDeviceIds?: string[];
+  allowedRoutingPolicies?: string[];
+  administrative?: boolean;
 } {
   const positional: string[] = [];
   const allowedTools: string[] = [];
+  const allowedDeviceIds: string[] = [];
+  const allowedRoutingPolicies: string[] = [];
+  let administrative = false;
 
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
@@ -40,6 +46,49 @@ function parseIssueOptions(
         throw new Error('--allow-tool requires a pattern.');
       }
       allowedTools.push(value);
+      continue;
+    }
+
+    if (arg === '--allow-device') {
+      const value = args[index + 1]?.trim();
+      if (!value || value.startsWith('--')) {
+        throw new Error('--allow-device requires a stable device ID.');
+      }
+      allowedDeviceIds.push(value);
+      index++;
+      continue;
+    }
+
+    if (arg.startsWith('--allow-device=')) {
+      const value = arg.slice('--allow-device='.length).trim();
+      if (!value) {
+        throw new Error('--allow-device requires a stable device ID.');
+      }
+      allowedDeviceIds.push(value);
+      continue;
+    }
+
+    if (arg === '--allow-route') {
+      const value = args[index + 1]?.trim();
+      if (!value || value.startsWith('--')) {
+        throw new Error('--allow-route requires a routing policy name.');
+      }
+      allowedRoutingPolicies.push(value);
+      index++;
+      continue;
+    }
+
+    if (arg.startsWith('--allow-route=')) {
+      const value = arg.slice('--allow-route='.length).trim();
+      if (!value) {
+        throw new Error('--allow-route requires a routing policy name.');
+      }
+      allowedRoutingPolicies.push(value);
+      continue;
+    }
+
+    if (arg === '--admin') {
+      administrative = true;
       continue;
     }
 
@@ -68,9 +117,15 @@ function parseIssueOptions(
     ttlMs = seconds * 1000;
   }
 
-  if (scope !== 'mcp' && allowedTools.length > 0) {
+  if (
+    scope !== 'mcp' &&
+    (allowedTools.length > 0 ||
+      allowedDeviceIds.length > 0 ||
+      allowedRoutingPolicies.length > 0 ||
+      administrative)
+  ) {
     throw new Error(
-      '--allow-tool is supported only for MCP credentials.',
+      '--allow-tool, --allow-device, --allow-route, and --admin are supported only for MCP credentials.',
     );
   }
 
@@ -78,6 +133,11 @@ function parseIssueOptions(
     ...(name ? { name } : {}),
     ...(ttlMs !== undefined ? { ttlMs } : {}),
     ...(allowedTools.length > 0 ? { allowedTools } : {}),
+    ...(allowedDeviceIds.length > 0 ? { allowedDeviceIds } : {}),
+    ...(allowedRoutingPolicies.length > 0
+      ? { allowedRoutingPolicies }
+      : {}),
+    ...(administrative ? { administrative: true } : {}),
   };
 }
 

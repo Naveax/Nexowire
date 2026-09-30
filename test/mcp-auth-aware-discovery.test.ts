@@ -80,7 +80,7 @@ test('restricted stored MCP credentials only discover authorized tools', async (
   );
 });
 
-test('static and unscoped stored credentials retain the full MCP surface', async () => {
+test('static credentials retain admin tools while stored credentials require explicit admin scope', async () => {
   const staticTools = await listedTools({
     kind: 'static',
     scope: 'mcp',
@@ -94,17 +94,46 @@ test('static and unscoped stored credentials retain the full MCP surface', async
       createdAt: '2026-09-30T12:00:00.000Z',
     },
   });
+  const adminTools = await listedTools({
+    kind: 'stored',
+    scope: 'mcp',
+    credential: {
+      id: 'credentialadmin',
+      scope: 'mcp',
+      createdAt: '2026-09-30T12:00:00.000Z',
+      administrative: true,
+    },
+  });
 
-  for (const required of [
-    'policy_profile_list',
-    'device_alias_set',
+  for (const regular of [
     'machine_snapshot',
     'file_write',
     'browser_session_start',
+    'devices_list',
+    'device_route',
   ]) {
-    assert.ok(staticTools.includes(required), required);
-    assert.ok(storedTools.includes(required), required);
+    assert.ok(staticTools.includes(regular), regular);
+    assert.ok(storedTools.includes(regular), regular);
+    assert.ok(adminTools.includes(regular), regular);
   }
 
-  assert.deepEqual(storedTools, staticTools);
+  for (const administrative of [
+    'policy_profile_list',
+    'device_alias_set',
+    'device_group_delete',
+    'device_route_policy_set',
+    'operations_idempotency_list',
+    'events_read',
+    'audit_query',
+  ]) {
+    assert.ok(staticTools.includes(administrative), administrative);
+    assert.equal(
+      storedTools.includes(administrative),
+      false,
+      administrative,
+    );
+    assert.ok(adminTools.includes(administrative), administrative);
+  }
+
+  assert.deepEqual(adminTools, staticTools);
 });

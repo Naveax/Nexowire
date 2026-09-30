@@ -92,6 +92,8 @@ Do not expose a development instance directly to the public Internet.
 
 For bootstrap remote deployments, MCP and native-agent bearer credentials support comma-separated rotation sets through `NEXOWIRE_MCP_BEARER_TOKENS` and `NEXOWIRE_AGENT_TOKENS`; singular token variables remain compatible. Matching uses constant-time digest comparison. Non-loopback exposure additionally requires direct TLS (`NEXOWIRE_TLS_CERT_FILE` + `NEXOWIRE_TLS_KEY_FILE`) unless the operator explicitly enables the trusted-private-network plaintext override. This is still bootstrap auth, not the final production authorization/revocation layer.
 
+Stored MCP credentials can also be constrained to tool patterns, stable device IDs, and deterministic named routing policies. Sensitive hub administration tools require an explicit `--admin` grant on stored credentials; static operator bearer tokens and unauthenticated loopback development keep the operator surface. Example: `nexowire credentials issue mcp chatgpt 86400 --allow-tool machine_* --allow-device <stable-device-id>` or use `--allow-route <policy>` for a deterministic route grant.
+
 ## Development
 
 ```bash

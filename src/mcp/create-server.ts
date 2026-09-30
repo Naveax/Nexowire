@@ -13,6 +13,7 @@ import {
   buildDeviceRoutingEntries,
   filterDeviceRoutes,
   selectDeviceRoute,
+  type DeviceRoutingEntry,
 } from '../devices/routing.js';
 import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
@@ -26,6 +27,12 @@ import type { CapabilityPolicyStore } from '../security/capability-policy.js';
 import type { CredentialStore } from '../security/credential-store.js';
 import type { BearerAuthorization } from '../security/auth.js';
 import { isMcpToolAuthorized } from '../security/tool-authorization.js';
+import {
+  authorizedRoutingPolicyNames,
+  directlyAuthorizedDeviceIds,
+  hasMcpTargetRestrictions,
+  isRoutingPolicyAuthorized,
+} from '../security/target-authorization.js';
 import { isMcpToolAvailableForCapabilities } from './tool-capabilities.js';
 
 export interface McpContext {
@@ -53,8 +60,7 @@ function applyToolRegistrationFilters(
   },
 ): void {
   const authorizationRestricted =
-    input.authorization?.kind === 'stored' &&
-    input.authorization.credential.allowedTools !== undefined;
+    input.authorization?.kind === 'stored';
   const capabilityRestricted =
     input.availableCapabilities !== undefined;
 
@@ -111,7 +117,9 @@ function toolResult(data: unknown, isError = false) {
   };
 }
 
-async function routingEntries(ctx: McpContext) {
+async function allRoutingEntries(
+  ctx: McpContext,
+): Promise<DeviceRoutingEntry[]> {
   const [targets, records, aliasRecords] = await Promise.all([
     ctx.providers.listTargets(),
     ctx.devices ? ctx.devices.list() : Promise.resolve([]),
@@ -130,33 +138,116 @@ async function routingEntries(ctx: McpContext) {
   });
 }
 
-async function resolveDevice(
-  providers: ProviderRegistry,
-  aliases: DeviceAliasStore | undefined,
-  requested?: string,
-): Promise<string> {
-  const targets = (await providers.listTargets()).filter((target) => target.online);
-  const uniqueIds = [...new Set(targets.map((target) => target.id))];
+async function routingPolicyTargetId(
+  ctx: McpContext,
+  devices: readonly DeviceRoutingEntry[],
+  name: string,
+): Promise<string | undefined> {
+  const policy = await ctx.routingPolicies?.get(name);
+  if (!policy) return undefined;
 
-  if (requested) {
-    if (uniqueIds.includes(requested)) return requested;
-    const aliased = await aliases?.resolve(requested);
-    if (aliased) {
-      if (!uniqueIds.includes(aliased)) {
-        throw new Error(
-          `Nexowire device alias "${requested}" resolves to offline device "${aliased}".`,
-        );
-      }
-      return aliased;
-    }
-    return requested;
+  let candidates = filterDeviceRoutes(devices, {
+    ...(policy.platform ? { platform: policy.platform } : {}),
+    ...(policy.nameContains
+      ? { nameContains: policy.nameContains }
+      : {}),
+    ...(policy.requiredCapabilities.length > 0
+      ? { requiredCapabilities: policy.requiredCapabilities }
+      : {}),
+    onlineOnly: policy.onlineOnly,
+  });
+
+  if (policy.group) {
+    const group = await ctx.groups?.get(policy.group);
+    if (!group) return undefined;
+    const members = new Set(group.deviceIds);
+    candidates = candidates.filter((device) =>
+      members.has(device.id),
+    );
   }
 
-  if (uniqueIds.length === 1 && uniqueIds[0]) return uniqueIds[0];
+  return selectDeviceRoute(candidates, {
+    selection: policy.selection,
+    priorityDeviceIds: policy.priorityDeviceIds,
+  }).selected?.id;
+}
+
+async function authorizedTargetIds(
+  ctx: McpContext,
+  devices: readonly DeviceRoutingEntry[],
+): Promise<Set<string> | undefined> {
+  if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+    return undefined;
+  }
+
+  const allowed = new Set<string>(
+    directlyAuthorizedDeviceIds(ctx.toolAuthorization),
+  );
+  for (const routeName of authorizedRoutingPolicyNames(
+    ctx.toolAuthorization,
+  )) {
+    const selected = await routingPolicyTargetId(
+      ctx,
+      devices,
+      routeName,
+    );
+    if (selected) allowed.add(selected);
+  }
+  return allowed;
+}
+
+async function routingEntries(
+  ctx: McpContext,
+): Promise<DeviceRoutingEntry[]> {
+  const devices = await allRoutingEntries(ctx);
+  const allowed = await authorizedTargetIds(ctx, devices);
+  return allowed
+    ? devices.filter((device) => allowed.has(device.id))
+    : devices;
+}
+
+class McpTargetAuthorizationError extends Error {
+  readonly code = 'MCP_TARGET_NOT_AUTHORIZED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'McpTargetAuthorizationError';
+  }
+}
+
+async function resolveDevice(
+  ctx: McpContext,
+  requested?: string,
+): Promise<string> {
+  const devices = await routingEntries(ctx);
+  const onlineIds = new Set(
+    devices.filter((device) => device.online).map((device) => device.id),
+  );
+
+  if (requested) {
+    if (onlineIds.has(requested)) return requested;
+
+    const aliased = await ctx.aliases?.resolve(requested);
+    if (aliased && onlineIds.has(aliased)) return aliased;
+
+    throw new McpTargetAuthorizationError(
+      'Requested Nexowire device is offline, unknown, or outside this credential scope.',
+    );
+  }
+
+  const ids = [...onlineIds];
+  if (ids.length === 1 && ids[0]) return ids[0];
+
+  if (ids.length === 0) {
+    throw new McpTargetAuthorizationError(
+      hasMcpTargetRestrictions(ctx.toolAuthorization)
+        ? 'No online Nexowire device is available inside this credential scope.'
+        : 'No Nexowire devices are online.',
+    );
+  }
+
   throw new Error(
-    uniqueIds.length === 0
-      ? 'No Nexowire devices are online.'
-      : 'Multiple Nexowire devices are online; device_id or a device alias is required.',
+    'Multiple Nexowire devices are available; device_id or a device alias is required.',
   );
 }
 
@@ -175,7 +266,7 @@ async function execute(
   let idempotencyCreated = false;
 
   try {
-    targetId = await resolveDevice(ctx.providers, ctx.aliases, deviceId);
+    targetId = await resolveDevice(ctx, deviceId);
     await ctx.policies?.assertAllowed(targetId, capability);
 
     if (idempotencyKey) {
@@ -559,7 +650,21 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           true,
         );
       }
+      const routes = await routingEntries(ctx);
       const deviceId = (await ctx.aliases?.resolve(device)) ?? device;
+      if (!routes.some((entry) => entry.id === deviceId)) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'MCP_TARGET_NOT_AUTHORIZED',
+              message:
+                'Requested Nexowire device is unknown or outside this credential scope.',
+            },
+          },
+          true,
+        );
+      }
       return toolResult(await ctx.policies.unbind(deviceId));
     },
   );
@@ -583,7 +688,21 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           policyStorage: false,
         });
       }
+      const routes = await routingEntries(ctx);
       const deviceId = (await ctx.aliases?.resolve(device)) ?? device;
+      if (!routes.some((entry) => entry.id === deviceId)) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'MCP_TARGET_NOT_AUTHORIZED',
+              message:
+                'Requested Nexowire device is unknown or outside this credential scope.',
+            },
+          },
+          true,
+        );
+      }
       return toolResult({
         deviceId,
         capability,
@@ -713,7 +832,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         ...(groupRecord
           ? {
               requestedGroup: groupRecord.name,
-              groupDeviceIds: groupRecord.deviceIds,
+              groupDeviceIds: groupRecord.deviceIds.filter((deviceId) =>
+                devices.some((device) => device.id === deviceId),
+              ),
             }
           : {}),
         ...(device_id && resolvedDeviceId !== device_id
@@ -734,12 +855,31 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'List persistent deterministic multi-device routing policies.',
       inputSchema: {},
     },
-    async () =>
-      toolResult({
-        policies: ctx.routingPolicies
-          ? await ctx.routingPolicies.list()
-          : [],
-      }),
+    async () => {
+      const policies = ctx.routingPolicies
+        ? await ctx.routingPolicies.list()
+        : [];
+      if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        return toolResult({ policies });
+      }
+
+      const allowedNames = new Set(
+        authorizedRoutingPolicyNames(ctx.toolAuthorization),
+      );
+      const visibleIds = new Set(
+        (await routingEntries(ctx)).map((device) => device.id),
+      );
+      return toolResult({
+        policies: policies
+          .filter((policy) => allowedNames.has(policy.name))
+          .map((policy) => ({
+            ...policy,
+            priorityDeviceIds: policy.priorityDeviceIds.filter(
+              (deviceId) => visibleIds.has(deviceId),
+            ),
+          })),
+      });
+    },
   );
 
   server.registerTool(
@@ -787,6 +927,22 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       if (!ctx.routingPolicies) {
         return toolResult(
           { ok: false, error: 'Routing policy storage is unavailable.' },
+          true,
+        );
+      }
+
+      if (
+        !isRoutingPolicyAuthorized(ctx.toolAuthorization, name)
+      ) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'MCP_ROUTE_NOT_AUTHORIZED',
+              message:
+                'Requested routing policy is outside this credential scope.',
+            },
+          },
           true,
         );
       }
@@ -875,6 +1031,21 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           true,
         );
       }
+      if (
+        !isRoutingPolicyAuthorized(ctx.toolAuthorization, name)
+      ) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'MCP_ROUTE_NOT_AUTHORIZED',
+              message:
+                'Requested routing policy is outside this credential scope.',
+            },
+          },
+          true,
+        );
+      }
       return toolResult(await ctx.routingPolicies.delete(name));
     },
   );
@@ -897,6 +1068,22 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       if (!ctx.routingPolicies) {
         return toolResult(
           { ok: false, error: 'Routing policy storage is unavailable.' },
+          true,
+        );
+      }
+
+      if (
+        !isRoutingPolicyAuthorized(ctx.toolAuthorization, name)
+      ) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'MCP_ROUTE_NOT_AUTHORIZED',
+              message:
+                'Requested routing policy is outside this credential scope.',
+            },
+          },
           true,
         );
       }
@@ -945,8 +1132,13 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             true,
           );
         }
-        groupDeviceIds = [...group.deviceIds];
-        const members = new Set(group.deviceIds);
+        const visibleIds = new Set(
+          devices.map((device) => device.id),
+        );
+        groupDeviceIds = group.deviceIds.filter((deviceId) =>
+          visibleIds.has(deviceId),
+        );
+        const members = new Set(groupDeviceIds);
         candidates = candidates.filter((device) => members.has(device.id));
       }
 
@@ -955,8 +1147,18 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         priorityDeviceIds: policy.priorityDeviceIds,
       });
 
+      const visibleIds = new Set(
+        devices.map((device) => device.id),
+      );
       return toolResult({
-        policy,
+        policy: hasMcpTargetRestrictions(ctx.toolAuthorization)
+          ? {
+              ...policy,
+              priorityDeviceIds: policy.priorityDeviceIds.filter(
+                (deviceId) => visibleIds.has(deviceId),
+              ),
+            }
+          : policy,
         selected: selection.selected,
         ambiguous: selection.ambiguous,
         candidates,
@@ -974,10 +1176,25 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'List persistent Nexowire device groups. Groups contain stable device IDs and can include currently offline known devices.',
       inputSchema: {},
     },
-    async () =>
-      toolResult({
-        groups: ctx.groups ? await ctx.groups.list() : [],
-      }),
+    async () => {
+      const groups = ctx.groups ? await ctx.groups.list() : [];
+      if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        return toolResult({ groups });
+      }
+      const visible = new Set(
+        (await routingEntries(ctx)).map((device) => device.id),
+      );
+      return toolResult({
+        groups: groups
+          .map((group) => ({
+            ...group,
+            deviceIds: group.deviceIds.filter((deviceId) =>
+              visible.has(deviceId),
+            ),
+          }))
+          .filter((group) => group.deviceIds.length > 0),
+      });
+    },
   );
 
   server.registerTool(
@@ -1065,6 +1282,28 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           true,
         );
       }
+      if (hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        const group = await ctx.groups.get(name);
+        const visibleIds = new Set(
+          (await routingEntries(ctx)).map((device) => device.id),
+        );
+        if (
+          group &&
+          group.deviceIds.some((deviceId) => !visibleIds.has(deviceId))
+        ) {
+          return toolResult(
+            {
+              ok: false,
+              error: {
+                code: 'MCP_TARGET_NOT_AUTHORIZED',
+                message:
+                  'Requested device group contains targets outside this credential scope.',
+              },
+            },
+            true,
+          );
+        }
+      }
       return toolResult(await ctx.groups.delete(name));
     },
   );
@@ -1077,10 +1316,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'List persistent Nexowire aliases that map human-friendly names to stable native device IDs.',
       inputSchema: {},
     },
-    async () =>
-      toolResult({
-        aliases: ctx.aliases ? await ctx.aliases.list() : [],
-      }),
+    async () => {
+      const aliases = ctx.aliases ? await ctx.aliases.list() : [];
+      if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        return toolResult({ aliases });
+      }
+      const visible = new Set(
+        (await routingEntries(ctx)).map((device) => device.id),
+      );
+      return toolResult({
+        aliases: aliases.filter((alias) =>
+          visible.has(alias.deviceId),
+        ),
+      });
+    },
   );
 
   server.registerTool(
@@ -1105,12 +1354,16 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           true,
         );
       }
-      const targets = await ctx.providers.listTargets();
+      const targets = await routingEntries(ctx);
       if (!targets.some((target) => target.online && target.id === device_id)) {
         return toolResult(
           {
             ok: false,
-            error: `Cannot alias offline or unknown device "${device_id}".`,
+            error: {
+              code: 'MCP_TARGET_NOT_AUTHORIZED',
+              message:
+                'Cannot alias an offline, unknown, or out-of-scope device.',
+            },
           },
           true,
         );
@@ -1140,6 +1393,27 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           { ok: false, error: 'Device alias storage is unavailable.' },
           true,
         );
+      }
+      if (hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        const record = (await ctx.aliases.list()).find(
+          (entry) => entry.alias === alias.toLowerCase(),
+        );
+        const visible = new Set(
+          (await routingEntries(ctx)).map((device) => device.id),
+        );
+        if (record && !visible.has(record.deviceId)) {
+          return toolResult(
+            {
+              ok: false,
+              error: {
+                code: 'MCP_TARGET_NOT_AUTHORIZED',
+                message:
+                  'Requested alias belongs to a device outside this credential scope.',
+              },
+            },
+            true,
+          );
+        }
       }
       return toolResult(await ctx.aliases.delete(alias));
     },

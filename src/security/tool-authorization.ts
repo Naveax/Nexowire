@@ -1,6 +1,25 @@
 import * as z from 'zod';
 import type { BearerAuthorization } from './auth.js';
 
+export const ADMIN_MCP_TOOLS = new Set<string>([
+  'policy_profile_list',
+  'policy_profile_set',
+  'policy_profile_delete',
+  'policy_device_bind',
+  'policy_device_unbind',
+  'policy_device_check',
+  'device_route_policy_set',
+  'device_route_policy_delete',
+  'device_group_set',
+  'device_group_delete',
+  'device_alias_set',
+  'device_alias_delete',
+  'operations_idempotency_list',
+  'events_read',
+  'audit_recent',
+  'audit_query',
+]);
+
 export const ToolPatternSchema = z
   .string()
   .min(1)
@@ -38,6 +57,13 @@ export function isMcpToolAuthorized(
 ): boolean {
   if (!authorization || authorization.kind === 'static') {
     return true;
+  }
+
+  if (
+    ADMIN_MCP_TOOLS.has(toolName) &&
+    authorization.credential.administrative !== true
+  ) {
+    return false;
   }
 
   const patterns = authorization.credential.allowedTools;
