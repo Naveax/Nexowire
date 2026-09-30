@@ -100,18 +100,23 @@ function attachHeartbeat(
   heartbeatMs: number,
 ): () => void {
   const alive = new WeakSet<WebSocket>();
-  const mark = (socket: WebSocket): void => {
-    alive.add(socket);
-    socket.on('pong', () => alive.add(socket));
-  };
+  const tracked = new WeakSet<WebSocket>();
 
   const timer = setInterval(() => {
     for (const socket of sockets()) {
       if (socket.readyState !== WebSocket.OPEN) continue;
+
+      if (!tracked.has(socket)) {
+        tracked.add(socket);
+        alive.add(socket);
+        socket.on('pong', () => alive.add(socket));
+      }
+
       if (!alive.has(socket)) {
         socket.terminate();
         continue;
       }
+
       alive.delete(socket);
       try {
         socket.ping();
