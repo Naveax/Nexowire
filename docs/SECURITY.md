@@ -61,3 +61,13 @@ Shell execution can access anything available to the agent's operating-system ac
 - Explicit idempotency keys are accepted only for a narrow replay-safe allowlist: overwrite file writes (never append), mkdir, exact file patch, exact registry set/delete, and exact Windows environment set/delete. Unsupported mutations fail closed instead of pretending that "probably idempotent" is a security model.
 
 - Device history stores only native-agent identity/capability metadata and connection timestamps. Route discovery never silently chooses between multiple matching computers: it returns ambiguity and requires explicit narrowing/selection.
+
+
+## Relay security
+
+- Relay Hub and Agent routes use separate bearer-token sets.
+- Non-loopback relay exposure refuses plaintext by default; configure relay TLS certificate/key files or explicitly opt into the trusted-private-network override.
+- Only one Hub control connection is accepted by one relay instance at a time.
+- Agent connections are accepted only while an authenticated Hub route is online.
+- Relay payload size is bounded and malformed relay-control messages fail closed.
+- The relay executes no computer-control capabilities; it only forwards opaque agent-protocol JSON between authenticated routes.
