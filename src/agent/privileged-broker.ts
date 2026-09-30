@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { spawnSync } from 'node:child_process';
 import { matchesBearerHeader, parseTokenList } from '../security/tokens.js';
 import {
   isPrivilegedBrokerCapability,
@@ -13,6 +14,39 @@ export interface PrivilegedBrokerServerOptions {
   port?: number;
   tokens: readonly string[];
   maxBodyBytes?: number;
+  requireElevation?: boolean;
+  execute?: (
+    capability: string,
+    input: unknown,
+  ) => Promise<unknown>;
+}
+
+export function isWindowsProcessElevated(): boolean {
+  if (process.platform !== 'win32') return false;
+  const command =
+    '[Security.Principal.WindowsPrincipal]' +
+    '[Security.Principal.WindowsIdentity]::GetCurrent()' +
+    ' | ForEach-Object { $_.IsInRole(' +
+    '[Security.Principal.WindowsBuiltInRole]::Administrator) }';
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      command,
+    ],
+    {
+      windowsHide: true,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    },
+  );
+  return (
+    result.status === 0 &&
+    result.stdout.trim().toLowerCase() === 'true'
+  );
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -54,6 +88,14 @@ export async function startPrivilegedBroker(
   if (process.platform !== 'win32') {
     throw new Error(
       'The current privileged broker supports Windows only.',
+    );
+  }
+  if (
+    options.requireElevation !== false &&
+    !isWindowsProcessElevated()
+  ) {
+    throw new Error(
+      'Privileged broker must run from an elevated Windows process.',
     );
   }
 
@@ -159,15 +201,26 @@ export async function startPrivilegedBroker(
         return;
       }
 
-      const data = capability.startsWith('windows.environment.')
-        ? await executeWindowsEnvironmentCapability(
-            capability,
-            decoded.input,
-          )
-        : await executeWindowsCapability(
-            capability,
-            decoded.input,
-          );
+      const execute =
+        options.execute ??
+        (async (
+          requestedCapability: string,
+          requestedInput: unknown,
+        ) =>
+          requestedCapability.startsWith('windows.environment.')
+            ? await executeWindowsEnvironmentCapability(
+                requestedCapability,
+                requestedInput,
+              )
+            : await executeWindowsCapability(
+                requestedCapability,
+                requestedInput,
+              ));
+
+      const data = await execute(
+        capability,
+        decoded.input,
+      );
 
       response.writeHead(200, {
         'content-type': 'application/json',
