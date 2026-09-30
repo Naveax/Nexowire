@@ -5,6 +5,8 @@ import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
+import { loadRelayConfig } from './relay/config.js';
+import { runRelayServer } from './relay/server.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -14,6 +16,7 @@ Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent   Start the native computer agent
+  nexowire relay   Start a first-party native-agent relay
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -31,6 +34,11 @@ async function main(): Promise<void> {
 
   if (command === 'agent') {
     await runNativeAgent();
+    return;
+  }
+
+  if (command === 'relay') {
+    await runRelayServer(loadRelayConfig());
     return;
   }
 
