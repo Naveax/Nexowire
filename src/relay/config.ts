@@ -99,6 +99,12 @@ export function loadRelayConfig(
     );
   }
 
+  const upstreamAgentToken = resolveSingleSecret(
+    env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
+    env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
+    'relay upstream agent token',
+  );
+
   return {
     host: optional(env.NEXOWIRE_RELAY_HOST) ?? '127.0.0.1',
     port: parsePort(env.NEXOWIRE_RELAY_PORT ?? '43111'),
@@ -115,19 +121,7 @@ export function loadRelayConfig(
         'relay inbound agent token list',
       ),
     ),
-    ...(resolveSingleSecret(
-      env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
-      env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
-      'relay upstream agent token',
-    )
-      ? {
-          upstreamAgentToken: resolveSingleSecret(
-            env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
-            env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
-            'relay upstream agent token',
-          ),
-        }
-      : {}),
+    ...(upstreamAgentToken ? { upstreamAgentToken } : {}),
     ...(tlsCertFile ? { tlsCertFile } : {}),
     ...(tlsKeyFile ? { tlsKeyFile } : {}),
     ...(envFlag(env.NEXOWIRE_RELAY_ALLOW_INSECURE_REMOTE)
