@@ -188,3 +188,17 @@ test('relay rejects wrong hub credentials', async (t) => {
 
   assert.equal(statusCode, 401);
 });
+
+
+test('relay refuses plaintext public binding by default', async () => {
+  await assert.rejects(
+    () =>
+      startRelayServer({
+        host: '0.0.0.0',
+        port: 0,
+        hubTokens: ['hub-secret'],
+        agentTokens: ['agent-secret'],
+      }),
+    /Refusing non-loopback relay plaintext transport/,
+  );
+});
