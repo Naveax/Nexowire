@@ -100,6 +100,7 @@ export class CredentialStore {
   private readonly records = new Map<string, StoredCredential>();
   private loaded = false;
   private lastMtimeMs = -1;
+  private lastSize = -1;
   private writeChain: Promise<void> = Promise.resolve();
   private readonly now: () => number;
 
@@ -348,9 +349,10 @@ export class CredentialStore {
       for (const record of decoded.credentials) {
         this.records.set(record.id, record);
       }
-      this.lastMtimeMs = (
-        await fs.stat(this.file)
-      ).mtimeMs;
+      const stat = await fs.stat(this.file);
+      this.lastMtimeMs = stat.mtimeMs;
+      this.lastSize = stat.size;
+      this.lastSize = stat.size;
     } catch (error) {
       if (
         typeof error === 'object' &&
@@ -360,6 +362,7 @@ export class CredentialStore {
       ) {
         this.records.clear();
         this.lastMtimeMs = -1;
+        this.lastSize = -1;
         return;
       }
       throw error;
@@ -370,7 +373,12 @@ export class CredentialStore {
     if (!this.loaded) return;
     try {
       const stat = statSync(this.file);
-      if (stat.mtimeMs === this.lastMtimeMs) return;
+      if (
+        stat.mtimeMs === this.lastMtimeMs &&
+        stat.size === this.lastSize
+      ) {
+        return;
+      }
       const decoded = StateSchema.parse(
         JSON.parse(readFileSync(this.file, 'utf8')),
       );
@@ -423,6 +431,8 @@ export class CredentialStore {
     } catch {
       // Windows ACLs are managed by the account/service boundary.
     }
-    this.lastMtimeMs = (await fs.stat(this.file)).mtimeMs;
+    const stat = await fs.stat(this.file);
+    this.lastMtimeMs = stat.mtimeMs;
+    this.lastSize = stat.size;
   }
 }
