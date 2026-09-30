@@ -13,7 +13,11 @@ import {
   mcpAuthTokens,
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
-import { authorizeBearer } from '../security/auth.js';
+import {
+  resolveBearerAuthorization,
+  type BearerAuthorization,
+} from '../security/auth.js';
+import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 
 export async function runHttpServer(
@@ -44,22 +48,43 @@ export async function runHttpServer(
     const authRequired =
       mcpTokens.length > 0 ||
       context.credentials?.hasConfigured('mcp') === true;
-    if (
-      authRequired &&
-      !authorizeBearer(
-        req.headers.authorization,
-        'mcp',
-        mcpTokens,
-        context.credentials,
-      )
-    ) {
+
+    if (!authRequired) {
+      next();
+      return;
+    }
+
+    const authorization = resolveBearerAuthorization(
+      req.headers.authorization,
+      'mcp',
+      mcpTokens,
+      context.credentials,
+    );
+    if (!authorization) {
       res.status(401).json({ error: 'unauthorized' });
       return;
     }
+
+    res.locals.nexowireAuthorization =
+      authorization satisfies BearerAuthorization;
     next();
   });
 
   app.post('/mcp', async (req: Request, res: Response) => {
+    const authorization = res.locals
+      .nexowireAuthorization as BearerAuthorization | undefined;
+    const deniedTools = deniedMcpToolNames(
+      req.body,
+      authorization,
+    );
+    if (deniedTools.length > 0) {
+      res.status(403).json({
+        error: 'forbidden',
+        code: 'MCP_TOOL_NOT_AUTHORIZED',
+        denied_tools: [...new Set(deniedTools)],
+      });
+      return;
+    }
     const mcp = createNexowireMcpServer(context);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
