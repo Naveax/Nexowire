@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "project": "Nexowire",
+  "canonicalRepository": "Naveax/Nexowire",
+  "canonicalBranch": "main",
+  "runtimeOwnership": "first-party-only",
+  "continuationFiles": [
+    "docs/CONTINUATION.md",
+    "HANDOFF.md",
+    "ROADMAP.md",
+    "PROJECT_STATE.json"
+  ],
+  "invariants": [
+    "No required SentinelX/Desktop Commander/Codex runtime dependency",
+    "Native agent uses outbound Nexowire-owned transport",
+    "Ambiguous mutations are not blindly replayed",
+    "Bounded structured output by default",
+    "GitHub main and tests override stale handoff prose"
+  ],
+  "priorities": [
+    {
+      "id": "durable-process-io",
+      "status": "open",
+      "priority": 1,
+      "summary": "Fully reattachable durable process stdin/stdout/stderr across native-agent restart"
+    },
+    {
+      "id": "task-artifacts",
+      "status": "in_progress",
+      "priority": 2,
+      "summary": "Persist artifact metadata/hashes for long-running/task-graph work without persisting arbitrary payloads"
+    },
+    {
+      "id": "device-routing-groups",
+      "status": "in_progress",
+      "priority": 3,
+      "summary": "Add persistent device groups/routing policy while failing closed on ambiguity"
+    },
+    {
+      "id": "session-continuity",
+      "status": "open",
+      "priority": 4,
+      "summary": "Reconnect/session continuity and first-party relay/direct routing"
+    },
+    {
+      "id": "privilege-separation",
+      "status": "open",
+      "priority": 5,
+      "summary": "First-party privileged broker and per-capability policy profiles"
+    },
+    {
+      "id": "production-auth",
+      "status": "open",
+      "priority": 6,
+      "summary": "Production authorization, TLS, revocation, encrypted secret storage"
+    },
+    {
+      "id": "postconditions",
+      "status": "open",
+      "priority": 7,
+      "summary": "Reusable postcondition/assertion workflows above browser-specific visual verification"
+    },
+    {
+      "id": "linux-wsl-coverage",
+      "status": "open",
+      "priority": 8,
+      "summary": "Real Linux/WSL distro integration coverage"
+    }
+  ],
+  "standardVerification": [
+    "npm ci",
+    "npm run typecheck",
+    "npm test",
+    "npm run build"
+  ],
+  "hotFiles": [
+    "src/agent/executors.ts",
+    "src/protocol/capabilities.ts",
+    "src/mcp/create-server.ts",
+    "HANDOFF.md",
+    "ROADMAP.md"
+  ],
+  "notes": [
+    "Use independent branches/worktrees for parallel slices.",
+    "Update this file after major merges that materially change remaining work.",
+    "Do not infer completion from chat history; inspect main and CI."
+  ]
+}
