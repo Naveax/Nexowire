@@ -35,6 +35,7 @@ Implemented:
 - structured workspace detection plus bounded parallel build/test/lint/typecheck execution
 - bounded dependency-aware parallel task graphs with failure blocking and total timeout
 - persisted payload-free task-graph checkpoints with exact-spec resume, succeeded-job reuse, unknown-state recovery, explicit retry controls, and verified artifact metadata (path/size/SHA-256/mtime) without artifact contents
+- bounded task artifact lifecycle tools to list persisted metadata and re-stat/re-hash outputs after restart or later mutation, with changed/missing/unverified/error states and bounded hashing
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
 - persistent workspace checkpoints
@@ -100,7 +101,7 @@ The repository is the source of truth. If this file disagrees with current code/
 ## Immediate next work
 
 1. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
-2. Extend durable execution/artifact workflows beyond current reattachable process sessions and task-graph artifact metadata.
+2. Extend higher-level durable execution workflows beyond current reattachable process sessions, resumable task graphs, and artifact lifecycle primitives.
 3. Continue deployment-grade identity/secret handling and stronger operator/admin authorization; tool/device/route scopes, explicit stored admin grants, revocation/TTL, rotation, and TLS are implemented.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
 6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests; both core paths are implemented.
