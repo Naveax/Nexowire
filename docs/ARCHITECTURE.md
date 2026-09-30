@@ -67,3 +67,24 @@ The internal backend/provider interface remains as an architectural seam for Nex
 - optional Nexowire relay/direct transport selection
 - first-party privilege-separated broker/service
 - production ChatGPT authentication, TLS, and encrypted credential storage
+
+
+## First-party relay mode
+
+For deployments where the Hub and target machines cannot connect directly through NAT/firewalls, Nexowire can insert its own relay service without changing the ChatGPT-facing MCP surface.
+
+```text
+ChatGPT -> Nexowire Hub
+               |
+               | outbound authenticated WSS
+               v
+          Nexowire Relay
+               ^
+               | outbound authenticated WSS
+               |
+        Nexowire Native Agent
+```
+
+The relay does not execute capabilities and does not interpret agent payloads. It multiplexes authenticated agent WebSocket streams onto one Hub relay connection. The Hub reconstructs transport-neutral virtual agent sockets and registers them in the same `AgentBroker` used by direct connections.
+
+If the relay Hub route disappears, relay-connected agents are closed so their existing reconnect/endpoint-selection logic can retry another direct or relay endpoint.
