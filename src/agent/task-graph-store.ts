@@ -87,6 +87,19 @@ export interface TaskGraphCheckpoint {
   jobs: TaskGraphCheckpointJob[];
 }
 
+export interface TaskArtifactRecord {
+  graphId: string;
+  graphStatus: PersistedTaskGraphStatus;
+  graphUpdatedAt: string;
+  jobId: string;
+  jobStatus: PersistedTaskJobStatus;
+  requestedPath: string;
+  path: string;
+  size: number;
+  sha256: string;
+  modifiedAt: string;
+}
+
 export class TaskGraphStoreError extends Error {
   constructor(
     public readonly code: string,
@@ -288,6 +301,38 @@ export class TaskGraphStore {
     return [...this.graphs.values()]
       .map(cloneGraph)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  listArtifacts(input: {
+    graphId?: string;
+    jobId?: string;
+    limit?: number;
+  } = {}): TaskArtifactRecord[] {
+    this.pruneExpiredInMemory();
+    const limit = Math.min(1000, Math.max(1, input.limit ?? 200));
+    const records: TaskArtifactRecord[] = [];
+
+    const graphs = [...this.graphs.values()].sort(
+      (a, b) => b.updatedAt.localeCompare(a.updatedAt),
+    );
+    for (const graph of graphs) {
+      if (input.graphId && graph.id !== input.graphId) continue;
+      for (const job of graph.jobs) {
+        if (input.jobId && job.id !== input.jobId) continue;
+        for (const artifact of job.artifacts ?? []) {
+          records.push({
+            graphId: graph.id,
+            graphStatus: graph.status,
+            graphUpdatedAt: graph.updatedAt,
+            jobId: job.id,
+            jobStatus: job.status,
+            ...artifact,
+          });
+          if (records.length >= limit) return records;
+        }
+      }
+    }
+    return records;
   }
 
   async prune(input: { olderThanMs?: number } = {}) {
