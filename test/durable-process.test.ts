@@ -129,12 +129,14 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
     });
 
     let finalStatus = 'running';
+    let finalCursor = after.nextSeq;
     for (let attempt = 0; attempt < 80; attempt++) {
       const read = await second.read({
         session_id: started.sessionId,
-        after_seq: after.nextSeq,
+        after_seq: finalCursor,
         wait_ms: 100,
       });
+      finalCursor = read.nextSeq;
       finalStatus = read.session.status;
       if (finalStatus !== 'running') break;
     }
