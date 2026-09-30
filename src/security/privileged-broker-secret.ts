@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import type { FileHandle } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -16,7 +17,6 @@ const SecretFileSchema = z.object({
 
 export interface PrivilegedBrokerSecretOptions {
   file?: string;
-  now?: () => number;
 }
 
 export function defaultPrivilegedBrokerSecretFile(): string {
@@ -35,7 +35,7 @@ async function readSecret(file: string): Promise<string> {
   return await unprotectWindowsUserSecret(parsed.ciphertext);
 }
 
-async function acquireLock(lockFile: string): Promise<fs.FileHandle> {
+async function acquireLock(lockFile: string): Promise<FileHandle> {
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
       return await fs.open(lockFile, 'wx', 0o600);
