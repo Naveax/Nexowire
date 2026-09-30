@@ -67,12 +67,12 @@
 
 ## v1.0 - ChatGPT-ready remote control
 
-- [~] production authorization: revocable/expiring hash-only credentials, MCP tool allowlists, bearer rotation, and TLS are implemented; device/route scoping plus hardened admin authorization remain
-- encrypted secrets and hardened administrative authorization for policy profiles
+- [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored-credential admin grants, bearer rotation, and TLS are implemented; deployment-grade identity, secret handling, and stronger operator/admin identity remain
+- deployment-grade identity, encrypted secret handling, and stronger operator/admin authorization
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - stable MCP surface
 - [x] multi-device routing
-- [~] dynamic capability exposure: credential-scoped tools/list filtering and call-time authorization are implemented; online-device capability filtering remains open
+- [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
 - mature skill library
 - [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
 - zero required third-party computer-control runtime dependencies
