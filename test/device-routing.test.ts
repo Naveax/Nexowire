@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildDeviceRoutingEntries,
   filterDeviceRoutes,
+  selectDeviceRoute,
 } from '../src/devices/routing.js';
 import type { DeviceRecord } from '../src/devices/directory.js';
 
@@ -125,4 +126,52 @@ test('route filtering never silently selects a different machine', () => {
     }),
     [],
   );
+});
+
+
+test('explicit priority route selection is deterministic and unique-only fails closed', () => {
+  const devices = buildDeviceRoutingEntries({
+    records,
+    targets: [
+      {
+        id: 'desktop',
+        name: 'Desktop',
+        providerId: 'native-agent',
+        platform: 'win32',
+        online: true,
+        capabilities: ['shell.exec'],
+      },
+      {
+        id: 'laptop',
+        name: 'Laptop',
+        providerId: 'native-agent',
+        platform: 'linux',
+        online: true,
+        capabilities: ['shell.exec'],
+      },
+    ],
+  });
+
+  const unique = selectDeviceRoute(devices, {
+    selection: 'unique_only',
+  });
+  assert.equal(unique.selected, null);
+  assert.equal(unique.ambiguous, true);
+  assert.equal(unique.reason, 'ambiguous_candidates');
+
+  const priority = selectDeviceRoute(devices, {
+    selection: 'priority',
+    priorityDeviceIds: ['missing', 'laptop', 'desktop'],
+  });
+  assert.equal(priority.selected?.id, 'laptop');
+  assert.equal(priority.ambiguous, false);
+  assert.equal(priority.reason, 'explicit_priority_match');
+
+  const none = selectDeviceRoute(devices, {
+    selection: 'priority',
+    priorityDeviceIds: ['missing'],
+  });
+  assert.equal(none.selected, null);
+  assert.equal(none.ambiguous, false);
+  assert.equal(none.reason, 'no_candidate');
 });
