@@ -4011,6 +4011,64 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'audit_query',
+    {
+      title: 'Query persistent Nexowire audit history',
+      description:
+        'Query a bounded tail window of the persistent payload-free audit log with exact metadata filters. Command inputs, secrets, and file contents are not logged.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(500).optional(),
+        capability: z.string().min(1).max(256).optional(),
+        status: z.enum(['started', 'succeeded', 'failed']).optional(),
+        target_id: z.string().min(1).max(128).optional(),
+        provider_id: z.string().min(1).max(128).optional(),
+        operation_id: z.string().min(1).max(128).optional(),
+        from_at: z.string().datetime().optional(),
+        to_at: z.string().datetime().optional(),
+        max_scan_bytes: z
+          .number()
+          .int()
+          .min(65_536)
+          .max(33_554_432)
+          .optional(),
+      },
+    },
+    async ({
+      limit,
+      capability,
+      status,
+      target_id,
+      provider_id,
+      operation_id,
+      from_at,
+      to_at,
+      max_scan_bytes,
+    }) =>
+      toolResult(
+        ctx.audit
+          ? await ctx.audit.query({
+              ...(limit !== undefined ? { limit } : {}),
+              ...(capability ? { capability } : {}),
+              ...(status ? { status } : {}),
+              ...(target_id ? { targetId: target_id } : {}),
+              ...(provider_id ? { providerId: provider_id } : {}),
+              ...(operation_id ? { operationId: operation_id } : {}),
+              ...(from_at ? { fromAt: from_at } : {}),
+              ...(to_at ? { toAt: to_at } : {}),
+              ...(max_scan_bytes !== undefined
+                ? { maxScanBytes: max_scan_bytes }
+                : {}),
+            })
+          : {
+              events: [],
+              scannedBytes: 0,
+              fileBytes: 0,
+              truncatedByScanLimit: false,
+            },
+      ),
+  );
+
+  server.registerTool(
     'skills_list',
     {
       title: 'List Nexowire skills',
