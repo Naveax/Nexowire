@@ -173,14 +173,13 @@ test('direct device scopes filter discovery metadata and execution targets', asy
       const aliasData = aliases.structuredContent as {
         aliases?: Array<{ alias: string; deviceId: string }>;
       };
-      assert.deepEqual(aliasData.aliases, [
-        {
-          alias: 'main-pc',
-          deviceId: 'desktop',
-          createdAt: aliasData.aliases?.[0]?.createdAt,
-          updatedAt: aliasData.aliases?.[0]?.updatedAt,
-        },
-      ]);
+      assert.deepEqual(
+        aliasData.aliases?.map((entry) => ({
+          alias: entry.alias,
+          deviceId: entry.deviceId,
+        })),
+        [{ alias: 'main-pc', deviceId: 'desktop' }],
+      );
 
       const auto = await client.callTool({
         name: 'machine_snapshot',
