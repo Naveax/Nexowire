@@ -32,9 +32,9 @@
     },
     {
       "id": "device-routing-groups",
-      "status": "partial",
+      "status": "done",
       "priority": 3,
-      "summary": "Persistent device groups and fail-closed group filtering are implemented; richer routing policy remains open"
+      "summary": "Persistent aliases, groups, capability-aware discovery, and named deterministic route policies with unique-only or explicit stable-device priority selection are implemented"
     },
     {
       "id": "session-continuity",
@@ -86,6 +86,12 @@
     "Do not infer completion from chat history; inspect main and CI."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "96fb824833bf0cd67959e39070ec755c863596f1",
-  "activeWork": []
+  "lastVerifiedMain": "193873c47722d53b1640fbb6747761b03a5c6e69",
+  "activeWork": [
+    {
+      "id": "native-session-continuity-v1",
+      "branch": "feat/native-session-continuity-v1",
+      "summary": "Same-agent reconnect continuity with stable request IDs and mutation-safe instance boundaries"
+    }
+  ]
 }
