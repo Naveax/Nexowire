@@ -17,7 +17,9 @@
     "dev:stdio": "tsx src/cli.ts stdio",
     "dev:agent": "tsx src/cli.ts agent",
     "start": "node dist/src/cli.js http",
-    "start:agent": "node dist/src/cli.js agent"
+    "start:agent": "node dist/src/cli.js agent",
+    "dev:privileged-broker": "tsx src/cli.ts privileged-broker",
+    "start:privileged-broker": "node dist/src/cli.js privileged-broker"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
