@@ -134,7 +134,7 @@ export class AgentBroker {
     });
 
     socket.on('message', (raw) =>
-      this.handleMessage(deviceId, hello.instanceId, raw.toString()),
+      this.handleMessage(deviceId, hello.instanceId, String(raw)),
     );
     socket.on('close', () => this.handleDisconnect(deviceId, socket));
     socket.on('error', () => this.handleDisconnect(deviceId, socket));
