@@ -8,6 +8,7 @@ import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { DeviceAliasStore } from '../devices/alias-store.js';
 import type { DeviceDirectory } from '../devices/directory.js';
 import type { DeviceGroupStore } from '../devices/group-store.js';
+import type { DeviceRoutingPolicyStore } from '../devices/routing-policy-store.js';
 import {
   buildDeviceRoutingEntries,
   filterDeviceRoutes,
@@ -28,6 +29,7 @@ export interface McpContext {
   devices?: DeviceDirectory;
   aliases?: DeviceAliasStore;
   groups?: DeviceGroupStore;
+  routingPolicies?: DeviceRoutingPolicyStore;
   idempotency?: IdempotencyStore;
   policies?: CapabilityPolicyStore;
   audit?: AuditLog;
@@ -651,6 +653,266 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
               resolvedDeviceId,
             }
           : {}),
+      });
+    },
+  );
+
+  server.registerTool(
+    'device_route_policy_list',
+    {
+      title: 'List device routing policies',
+      description:
+        'List persistent deterministic multi-device routing policies.',
+      inputSchema: {},
+    },
+    async () =>
+      toolResult({
+        policies: ctx.routingPolicies
+          ? await ctx.routingPolicies.list()
+          : [],
+      }),
+  );
+
+  server.registerTool(
+    'device_route_policy_set',
+    {
+      title: 'Set device routing policy',
+      description:
+        'Create or replace a named routing policy. unique_only fails closed on multiple candidates; priority uses an explicit ordered stable-device list.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+        selection: z.enum(['unique_only', 'priority']).optional(),
+        group: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
+          .optional(),
+        platform: z.string().min(1).max(64).optional(),
+        name_contains: z.string().min(1).max(128).optional(),
+        required_capabilities: z
+          .array(z.string().min(1).max(128))
+          .max(64)
+          .optional(),
+        priority_devices: z
+          .array(z.string().min(1).max(128))
+          .max(256)
+          .optional(),
+        online_only: z.boolean().optional(),
+      },
+    },
+    async ({
+      name,
+      selection,
+      group,
+      platform,
+      name_contains,
+      required_capabilities,
+      priority_devices,
+      online_only,
+    }) => {
+      if (!ctx.routingPolicies) {
+        return toolResult(
+          { ok: false, error: 'Routing policy storage is unavailable.' },
+          true,
+        );
+      }
+
+      if (group && !(await ctx.groups?.get(group))) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'DEVICE_GROUP_NOT_FOUND',
+              message: `Unknown Nexowire device group: ${group}`,
+            },
+          },
+          true,
+        );
+      }
+
+      const known = await routingEntries(ctx);
+      const knownIds = new Set(known.map((device) => device.id));
+      const resolvedPriority: string[] = [];
+      const unknown: string[] = [];
+
+      for (const requested of priority_devices ?? []) {
+        if (knownIds.has(requested)) {
+          resolvedPriority.push(requested);
+          continue;
+        }
+        const aliased = await ctx.aliases?.resolve(requested);
+        if (aliased && knownIds.has(aliased)) {
+          resolvedPriority.push(aliased);
+          continue;
+        }
+        unknown.push(requested);
+      }
+
+      if (unknown.length > 0) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'ROUTING_POLICY_UNKNOWN_TARGET',
+              message:
+                'One or more priority targets are not known Nexowire devices or aliases.',
+              unknown,
+            },
+          },
+          true,
+        );
+      }
+
+      return toolResult({
+        policy: await ctx.routingPolicies.set(name, {
+          ...(selection ? { selection } : {}),
+          ...(group ? { group } : {}),
+          ...(platform ? { platform } : {}),
+          ...(name_contains ? { nameContains: name_contains } : {}),
+          ...(required_capabilities
+            ? { requiredCapabilities: required_capabilities }
+            : {}),
+          ...(priority_devices
+            ? { priorityDeviceIds: resolvedPriority }
+            : {}),
+          ...(online_only !== undefined ? { onlineOnly: online_only } : {}),
+        }),
+      });
+    },
+  );
+
+  server.registerTool(
+    'device_route_policy_delete',
+    {
+      title: 'Delete device routing policy',
+      description: 'Delete one persistent named routing policy.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+      },
+    },
+    async ({ name }) => {
+      if (!ctx.routingPolicies) {
+        return toolResult(
+          { ok: false, error: 'Routing policy storage is unavailable.' },
+          true,
+        );
+      }
+      return toolResult(await ctx.routingPolicies.delete(name));
+    },
+  );
+
+  server.registerTool(
+    'device_route_policy_resolve',
+    {
+      title: 'Resolve named device routing policy',
+      description:
+        'Resolve a deterministic named routing policy against current known/online devices. unique_only never guesses; priority selects only from its explicit ordered stable-device list.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+      },
+    },
+    async ({ name }) => {
+      if (!ctx.routingPolicies) {
+        return toolResult(
+          { ok: false, error: 'Routing policy storage is unavailable.' },
+          true,
+        );
+      }
+
+      const policy = await ctx.routingPolicies.get(name);
+      if (!policy) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'ROUTING_POLICY_NOT_FOUND',
+              message: `Unknown Nexowire routing policy: ${name}`,
+            },
+          },
+          true,
+        );
+      }
+
+      const devices = await routingEntries(ctx);
+      let candidates = filterDeviceRoutes(devices, {
+        ...(policy.platform ? { platform: policy.platform } : {}),
+        ...(policy.nameContains
+          ? { nameContains: policy.nameContains }
+          : {}),
+        ...(policy.requiredCapabilities.length > 0
+          ? { requiredCapabilities: policy.requiredCapabilities }
+          : {}),
+        onlineOnly: policy.onlineOnly,
+      });
+
+      let groupDeviceIds: string[] | undefined;
+      if (policy.group) {
+        const group = await ctx.groups?.get(policy.group);
+        if (!group) {
+          return toolResult(
+            {
+              ok: false,
+              error: {
+                code: 'ROUTING_POLICY_GROUP_MISSING',
+                message:
+                  'Routing policy references a device group that no longer exists.',
+                policy: policy.name,
+                group: policy.group,
+              },
+            },
+            true,
+          );
+        }
+        groupDeviceIds = [...group.deviceIds];
+        const members = new Set(group.deviceIds);
+        candidates = candidates.filter((device) => members.has(device.id));
+      }
+
+      let selected = null;
+      let ambiguous = false;
+
+      if (policy.selection === 'unique_only') {
+        selected = candidates.length === 1 ? candidates[0] : null;
+        ambiguous = candidates.length > 1;
+      } else {
+        const byId = new Map(
+          candidates.map((candidate) => [candidate.id, candidate]),
+        );
+        for (const deviceId of policy.priorityDeviceIds) {
+          const candidate = byId.get(deviceId);
+          if (!candidate) continue;
+          selected = candidate;
+          break;
+        }
+      }
+
+      return toolResult({
+        policy,
+        selected,
+        ambiguous,
+        candidates,
+        ...(groupDeviceIds ? { groupDeviceIds } : {}),
+        reason:
+          selected !== null
+            ? policy.selection === 'priority'
+              ? 'explicit_priority_match'
+              : 'unique_candidate'
+            : ambiguous
+              ? 'ambiguous_candidates'
+              : 'no_candidate',
       });
     },
   );
