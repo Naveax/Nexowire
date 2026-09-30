@@ -148,7 +148,7 @@ async function runPowerShellJson<T>(
   });
 }
 
-function launcherContent(
+export function buildPrivilegedBrokerLauncher(
   options: PrivilegedBrokerTaskOptions,
 ): string {
   const env = options.env ?? process.env;
@@ -300,7 +300,7 @@ export async function installPrivilegedBrokerTask(
   });
   await fs.writeFile(
     launcher,
-    launcherContent(options),
+    buildPrivilegedBrokerLauncher(options),
     {
       encoding: 'utf8',
       mode: 0o600,
