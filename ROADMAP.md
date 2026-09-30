@@ -41,6 +41,7 @@
 - [x] bounded dependency-aware parallel independent jobs
 - resumable long-running work beyond task-graph job boundaries
 - [x] verified task-graph artifact metadata tracking with SHA-256 and no persisted artifact contents
+- [x] bounded artifact lifecycle inspection/re-verification with changed/missing detection and MCP exposure
 
 ## v0.4 - Native remote runtime
 
