@@ -24,7 +24,7 @@ test('first-party relay tunnels native agent traffic into AgentBroker', async (t
     port: 0,
     hubTokens: ['hub-secret'],
     agentTokens: ['agent-secret'],
-    heartbeatMs: 1_000,
+    heartbeatMs: 250,
   });
   const broker = new AgentBroker({ reconnectGraceMs: 250 });
   const hub = new RelayHubClient({
@@ -94,6 +94,8 @@ test('first-party relay tunnels native agent traffic into AgentBroker', async (t
   });
 
   await waitFor(() => broker.has('relay-device'));
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  assert.equal(broker.has('relay-device'), true);
 
   const result = (await broker.request(
     'relay-device',
