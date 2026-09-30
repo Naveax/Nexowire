@@ -47,7 +47,7 @@
 - [x] first-party Nexowire native-agent backend as the default runtime
 - [x] provider/backend health and latency ranking kept as an internal routing primitive
 - [x] mutation-aware failover with automatic replay blocked on unknown mutation state
-- [~] multi-device native-agent routing: persistent directory, aliases, groups, online/offline state, and capability-aware route discovery are implemented; richer routing policy remains open
+- [x] multi-device native-agent routing with persistent directory, aliases, groups, online/offline state, capability-aware discovery, and deterministic named route policies
 - [x] persistent stable device aliases and alias-based MCP targeting
 - [ ] reconnect/session continuity without third-party control providers
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
