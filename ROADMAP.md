@@ -74,5 +74,5 @@
 - multi-device routing
 - dynamic capability exposure
 - mature skill library
-- Windows + WSL2 + Linux support
+- [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
 - zero required third-party computer-control runtime dependencies
