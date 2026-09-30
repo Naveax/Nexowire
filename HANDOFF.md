@@ -57,6 +57,7 @@ Implemented:
 - first-party isolated Edge/Chrome CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, inline screenshots, and exact-element visual verification with cropped PNG evidence
 - reusable bounded read-only postcondition assertions for file existence/hash/text presence, PID liveness, TCP reachability, and HTTP status
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
+- direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -94,7 +95,7 @@ The repository is the source of truth. If this file disagrees with current code/
 4. Extend durable execution/artifact workflows beyond current durable process sessions and task-graph artifact metadata.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
 6. Continue first-party privilege separation and first-party relay/direct transport work. Reconnect/session continuity and deterministic named multi-device route selection are implemented.
-7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
+7. Design production ChatGPT authorization/revocation/encrypted credential handling; rotating bearer sets and direct TLS now cover bootstrap transport/auth hardening.
 
 ## Known machine note
 
