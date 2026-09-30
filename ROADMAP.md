@@ -51,7 +51,7 @@
 - [x] persistent stable device aliases and alias-based MCP targeting
 - [x] reconnect/session continuity without third-party control providers, with process-instance-aware request resumption and mutation-safe restart boundaries
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
-- [ ] native relay mode for machines that cannot reach the hub directly
+- [x] first-party native relay mode with authenticated hub/agent routes, direct TLS support, and agent endpoint-priority integration
 - [~] first-party privilege separation remains open; persistent per-device capability allow/deny profiles are implemented
 
 ## v0.5 - GUI and browser
