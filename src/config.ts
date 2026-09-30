@@ -117,12 +117,20 @@ export function hasDirectTls(config: NexowireConfig): boolean {
   return Boolean(config.tlsCertFile && config.tlsKeyFile);
 }
 
-export function assertSafeRemoteBinding(config: NexowireConfig): void {
+export interface RuntimeAuthAvailability {
+  mcp?: boolean;
+  agent?: boolean;
+}
+
+export function assertSafeRemoteBinding(
+  config: NexowireConfig,
+  availability: RuntimeAuthAvailability = {},
+): void {
   if (isLoopbackHost(config.host)) return;
 
   if (
-    mcpAuthTokens(config).length === 0 ||
-    agentAuthTokens(config).length === 0
+    (mcpAuthTokens(config).length === 0 && !availability.mcp) ||
+    (agentAuthTokens(config).length === 0 && !availability.agent)
   ) {
     throw new Error(
       'Refusing non-loopback bind without configured MCP and native-agent bearer credentials.',
