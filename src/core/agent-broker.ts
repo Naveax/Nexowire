@@ -273,7 +273,7 @@ export class AgentBroker {
     capability: string,
     input: unknown,
     timeoutMs = 60_000,
-    requestId = randomUUID(),
+    requestId: string = randomUUID(),
   ): Promise<unknown> {
     const connection = this.agents.get(deviceId);
     if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
