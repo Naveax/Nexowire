@@ -38,9 +38,9 @@
     },
     {
       "id": "session-continuity",
-      "status": "open",
+      "status": "done",
       "priority": 4,
-      "summary": "Reconnect/session continuity and first-party relay/direct routing"
+      "summary": "Native protocol v2 identifies process instances; same-process reconnects resume exact request IDs through bounded dedupe cache, read-only work may resume after process restart, and pending mutations fail unknown instead of replaying across instance change"
     },
     {
       "id": "privilege-separation",
@@ -86,12 +86,12 @@
     "Do not infer completion from chat history; inspect main and CI."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "193873c47722d53b1640fbb6747761b03a5c6e69",
+  "lastVerifiedMain": "705cf9e30401b5c5bb3fd84eaf3bd4c859e39e5a",
   "activeWork": [
     {
-      "id": "native-session-continuity-v1",
-      "branch": "feat/native-session-continuity-v1",
-      "summary": "Same-agent reconnect continuity with stable request IDs and mutation-safe instance boundaries"
+      "id": "hub-tls-v1",
+      "branch": "feat/hub-tls-v1",
+      "summary": "Direct HTTPS/WSS listener and default refusal of plaintext non-loopback hub exposure"
     }
   ]
 }
