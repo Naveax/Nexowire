@@ -49,7 +49,7 @@
 - [x] mutation-aware failover with automatic replay blocked on unknown mutation state
 - [x] multi-device native-agent routing with persistent directory, aliases, groups, online/offline state, capability-aware discovery, and deterministic named route policies
 - [x] persistent stable device aliases and alias-based MCP targeting
-- [ ] reconnect/session continuity without third-party control providers
+- [x] reconnect/session continuity without third-party control providers, with process-instance-aware request resumption and mutation-safe restart boundaries
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
 - [ ] native relay mode for machines that cannot reach the hub directly
 - [~] first-party privilege separation remains open; persistent per-device capability allow/deny profiles are implemented
