@@ -368,3 +368,49 @@ test('task artifact list and verify are read-only capabilities', () => {
   assert.equal(isReadOnlyCapability('task.artifact.list'), true);
   assert.equal(isReadOnlyCapability('task.artifact.verify'), true);
 });
+
+
+test('artifact lifecycle rejects unknown graph filters instead of returning a misleading empty result', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-task-artifact-unknown-'),
+  );
+  const policy = new PathPolicy([root]);
+  const store = new TaskGraphStore({
+    stateFile: path.join(root, 'task-graphs.json'),
+  });
+  await store.initialize();
+
+  try {
+    await assert.rejects(
+      () =>
+        executeCapability(
+          'task.artifact.list',
+          { graph_id: 'does-not-exist' },
+          policy,
+          { taskGraphs: store },
+        ),
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'TASK_GRAPH_NOT_FOUND',
+    );
+
+    await assert.rejects(
+      () =>
+        executeCapability(
+          'task.artifact.verify',
+          { graph_id: 'does-not-exist' },
+          policy,
+          { taskGraphs: store },
+        ),
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'TASK_GRAPH_NOT_FOUND',
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
