@@ -88,6 +88,23 @@ export class AuditLog {
       64 * 1024,
       Math.min(input.maxScanBytes ?? 4 * 1024 * 1024, 32 * 1024 * 1024),
     );
+    const fromMs =
+      input.fromAt === undefined ? undefined : Date.parse(input.fromAt);
+    const toMs =
+      input.toAt === undefined ? undefined : Date.parse(input.toAt);
+    if (fromMs !== undefined && Number.isNaN(fromMs)) {
+      throw new Error('Invalid audit fromAt timestamp.');
+    }
+    if (toMs !== undefined && Number.isNaN(toMs)) {
+      throw new Error('Invalid audit toAt timestamp.');
+    }
+    if (
+      fromMs !== undefined &&
+      toMs !== undefined &&
+      fromMs > toMs
+    ) {
+      throw new Error('Audit fromAt must not be after toAt.');
+    }
 
     let handle;
     try {
@@ -123,17 +140,6 @@ export class AuditLog {
       if (start > 0) {
         const firstNewline = raw.indexOf('\n');
         raw = firstNewline >= 0 ? raw.slice(firstNewline + 1) : '';
-      }
-
-      const fromMs =
-        input.fromAt === undefined ? undefined : Date.parse(input.fromAt);
-      const toMs =
-        input.toAt === undefined ? undefined : Date.parse(input.toAt);
-      if (fromMs !== undefined && Number.isNaN(fromMs)) {
-        throw new Error('Invalid audit fromAt timestamp.');
-      }
-      if (toMs !== undefined && Number.isNaN(toMs)) {
-        throw new Error('Invalid audit toAt timestamp.');
       }
 
       const events: AuditEvent[] = [];
