@@ -72,7 +72,7 @@
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - stable MCP surface
 - [x] multi-device routing
-- [~] dynamic capability exposure: credential-scoped tool discovery is active work; online-device capability filtering remains open
+- [~] dynamic capability exposure: credential-scoped tools/list filtering and call-time authorization are implemented; online-device capability filtering remains open
 - mature skill library
 - [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
 - zero required third-party computer-control runtime dependencies
