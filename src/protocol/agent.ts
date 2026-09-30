@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-export const AGENT_PROTOCOL_VERSION = 1;
+export const AGENT_PROTOCOL_VERSION = 2;
 
 export const AgentDeviceSchema = z.object({
   id: z.string().min(1).max(128),
@@ -14,6 +14,7 @@ export const AgentDeviceSchema = z.object({
 export const AgentHelloSchema = z.object({
   type: z.literal('hello'),
   protocolVersion: z.literal(AGENT_PROTOCOL_VERSION),
+  instanceId: z.string().uuid(),
   device: AgentDeviceSchema,
 });
 

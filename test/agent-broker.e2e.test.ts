@@ -30,6 +30,7 @@ test('hub sends a capability request through a real WebSocket agent', async (t) 
   socket.send(JSON.stringify({
     type: 'hello',
     protocolVersion: AGENT_PROTOCOL_VERSION,
+    instanceId: '11111111-1111-4111-8111-111111111111',
     device: {
       id: 'device-e2e',
       name: 'E2E Device',

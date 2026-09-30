@@ -78,6 +78,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   agent.send(JSON.stringify({
     type: 'hello',
     protocolVersion: AGENT_PROTOCOL_VERSION,
+    instanceId: '33333333-3333-4333-8333-333333333333',
     device: {
       id: 'mcp-device',
       name: 'MCP Integration Device',
