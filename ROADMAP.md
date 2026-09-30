@@ -51,7 +51,7 @@
 - [x] persistent stable device aliases and alias-based MCP targeting
 - [x] reconnect/session continuity without third-party control providers, with process-instance-aware request resumption and mutation-safe restart boundaries
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
-- [ ] native relay mode for machines that cannot reach the hub directly
+- [x] first-party native relay mode with direct/relay endpoint fallback and real native-agent relay CI
 - [x] first-party privilege separation with elevated Windows broker routing, DPAPI-protected same-user secret bootstrap, and highest-privilege per-user scheduled-task lifecycle
 
 ## v0.5 - GUI and browser
@@ -67,12 +67,12 @@
 
 ## v1.0 - ChatGPT-ready remote control
 
-- production authorization, revocation, and encrypted credential storage
+- [~] production authorization: revocable/expiring hash-only credentials, MCP tool allowlists, bearer rotation, and TLS are implemented; device/route scoping plus hardened admin authorization remain
 - encrypted secrets and hardened administrative authorization for policy profiles
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - stable MCP surface
-- multi-device routing
-- dynamic capability exposure
+- [x] multi-device routing
+- [~] dynamic capability exposure: credential-scoped tool discovery is active work; online-device capability filtering remains open
 - mature skill library
 - [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
 - zero required third-party computer-control runtime dependencies
