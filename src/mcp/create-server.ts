@@ -26,6 +26,7 @@ import type { CapabilityPolicyStore } from '../security/capability-policy.js';
 import type { CredentialStore } from '../security/credential-store.js';
 import type { BearerAuthorization } from '../security/auth.js';
 import { isMcpToolAuthorized } from '../security/tool-authorization.js';
+import { isMcpToolAvailableForCapabilities } from './tool-capabilities.js';
 
 export interface McpContext {
   broker: AgentBroker;
@@ -38,22 +39,33 @@ export interface McpContext {
   policies?: CapabilityPolicyStore;
   credentials?: CredentialStore;
   toolAuthorization?: BearerAuthorization;
+  availableCapabilities?: readonly string[];
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
 }
 
-function applyToolRegistrationAuthorization(
+function applyToolRegistrationFilters(
   server: McpServer,
-  authorization: BearerAuthorization | undefined,
+  input: {
+    authorization?: BearerAuthorization;
+    availableCapabilities?: readonly string[];
+  },
 ): void {
-  if (
-    !authorization ||
-    authorization.kind === 'static' ||
-    authorization.credential.allowedTools === undefined
-  ) {
+  const authorizationRestricted =
+    input.authorization?.kind === 'stored' &&
+    input.authorization.credential.allowedTools !== undefined;
+  const capabilityRestricted =
+    input.availableCapabilities !== undefined;
+
+  if (!authorizationRestricted && !capabilityRestricted) {
     return;
   }
+
+  const availableCapabilities =
+    input.availableCapabilities === undefined
+      ? undefined
+      : new Set(input.availableCapabilities);
 
   const originalRegisterTool = server.registerTool.bind(server);
   type RegisteredToolHandle = {
@@ -66,10 +78,20 @@ function applyToolRegistrationAuthorization(
   server.registerTool = ((...args: unknown[]) => {
     const name = typeof args[0] === 'string' ? args[0] : '';
     const registered = untypedRegister(...args);
-    if (
-      name &&
-      !isMcpToolAuthorized(authorization, name)
-    ) {
+    if (!name) return registered;
+
+    const authorized = isMcpToolAuthorized(
+      input.authorization,
+      name,
+    );
+    const capabilityAvailable =
+      availableCapabilities === undefined ||
+      isMcpToolAvailableForCapabilities(
+        name,
+        availableCapabilities,
+      );
+
+    if (!authorized || !capabilityAvailable) {
       registered.disable();
     }
     return registered;
@@ -383,10 +405,14 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     { name: 'nexowire', version: '0.1.0-dev.1' },
     { capabilities: { logging: {} } },
   );
-  applyToolRegistrationAuthorization(
-    server,
-    ctx.toolAuthorization,
-  );
+  applyToolRegistrationFilters(server, {
+    ...(ctx.toolAuthorization
+      ? { authorization: ctx.toolAuthorization }
+      : {}),
+    ...(ctx.availableCapabilities !== undefined
+      ? { availableCapabilities: ctx.availableCapabilities }
+      : {}),
+  });
 
   server.registerTool(
     'policy_profile_list',

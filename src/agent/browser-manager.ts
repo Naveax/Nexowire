@@ -1290,39 +1290,92 @@ export class BrowserManager {
   private async targets(
     session: BrowserSession,
   ): Promise<CdpTarget[]> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5_000);
-    try {
-      const response = await fetch(
-        'http://127.0.0.1:' + session.port + '/json/list',
-        { signal: controller.signal },
-      );
-      if (!response.ok) {
-        throw new BrowserControlError(
-          'BROWSER_DEVTOOLS_HTTP_ERROR',
-          'Browser DevTools target listing failed.',
-          { status: response.status },
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5_000);
+
+      try {
+        const response = await fetch(
+          'http://127.0.0.1:' + session.port + '/json/list',
+          { signal: controller.signal },
         );
-      }
-      const decoded = (await response.json()) as unknown;
-      if (!Array.isArray(decoded)) {
-        throw new BrowserControlError(
-          'BROWSER_DEVTOOLS_INVALID_RESPONSE',
-          'Browser DevTools returned an invalid target list.',
+        if (!response.ok) {
+          throw new BrowserControlError(
+            'BROWSER_DEVTOOLS_HTTP_ERROR',
+            'Browser DevTools target listing failed.',
+            { status: response.status, attempt },
+          );
+        }
+        const decoded = (await response.json()) as unknown;
+        if (!Array.isArray(decoded)) {
+          throw new BrowserControlError(
+            'BROWSER_DEVTOOLS_INVALID_RESPONSE',
+            'Browser DevTools returned an invalid target list.',
+          );
+        }
+        return decoded.filter(
+          (entry): entry is CdpTarget =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            typeof (entry as CdpTarget).id === 'string' &&
+            typeof (entry as CdpTarget).type === 'string' &&
+            typeof (entry as CdpTarget).title === 'string' &&
+            typeof (entry as CdpTarget).url === 'string',
         );
+      } catch (error) {
+        lastError = error;
+
+        if (
+          error instanceof BrowserControlError &&
+          error.code === 'BROWSER_DEVTOOLS_INVALID_RESPONSE'
+        ) {
+          throw error;
+        }
+
+        if (!isAlive(session.process)) {
+          throw new BrowserControlError(
+            'BROWSER_SESSION_EXITED',
+            'Browser exited while reading DevTools targets.',
+            {
+              sessionId: session.id,
+              exitCode: session.process.exitCode,
+              stderr: session.stderr.slice(-2000),
+            },
+          );
+        }
+
+        if (attempt < 3) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, attempt * 150),
+          );
+        }
+      } finally {
+        clearTimeout(timer);
       }
-      return decoded.filter(
-        (entry): entry is CdpTarget =>
-          typeof entry === 'object' &&
-          entry !== null &&
-          typeof (entry as CdpTarget).id === 'string' &&
-          typeof (entry as CdpTarget).type === 'string' &&
-          typeof (entry as CdpTarget).title === 'string' &&
-          typeof (entry as CdpTarget).url === 'string',
-      );
-    } finally {
-      clearTimeout(timer);
     }
+
+    const aborted =
+      lastError instanceof Error &&
+      lastError.name === 'AbortError';
+    throw new BrowserControlError(
+      aborted
+        ? 'BROWSER_DEVTOOLS_TIMEOUT'
+        : 'BROWSER_DEVTOOLS_UNAVAILABLE',
+      aborted
+        ? 'Timed out reading Browser DevTools targets after retries.'
+        : 'Browser DevTools target listing remained unavailable after retries.',
+      {
+        sessionId: session.id,
+        ...(lastError instanceof Error
+          ? {
+              causeName: lastError.name,
+              causeMessage: lastError.message,
+            }
+          : {}),
+      },
+    );
   }
 
   private async withPage<T>(

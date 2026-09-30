@@ -19,6 +19,7 @@ import {
 } from '../security/auth.js';
 import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
+import { onlineCapabilityUnion } from './tool-capabilities.js';
 
 export async function runHttpServer(
   config: NexowireConfig,
@@ -85,11 +86,16 @@ export async function runHttpServer(
       });
       return;
     }
+    const availableCapabilities = onlineCapabilityUnion(
+      await context.providers.listTargets(),
+    );
+
     const mcp = createNexowireMcpServer({
       ...context,
       ...(authorization
         ? { toolAuthorization: authorization }
         : {}),
+      availableCapabilities,
     });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
