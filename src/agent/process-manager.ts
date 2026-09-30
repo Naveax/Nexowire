@@ -558,6 +558,13 @@ export class ProcessManager {
         ),
         maxBufferBytes,
       });
+      const recoveredSession = this.sessions.get(saved.id);
+      if (
+        recoveredSession?.durable &&
+        recoveredSession.status === 'running'
+      ) {
+        this.startDurableMonitor(recoveredSession);
+      }
     }
 
     this.pruneExpiredInMemory();
@@ -873,6 +880,11 @@ export class ProcessManager {
     const cwd = parsed.cwd
       ? await policy.resolveExisting(parsed.cwd)
       : undefined;
+
+    if (parsed.durable) {
+      return await this.startDurable(parsed, cwd);
+    }
+
     const shell = resolveShell(parsed.shell, parsed.command);
     const child = spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
@@ -896,6 +908,7 @@ export class ProcessManager {
       signal: null,
       status: 'running',
       recovered: false,
+      durable: false,
       events: [],
       nextSeq: 1,
       bufferedBytes: 0,
