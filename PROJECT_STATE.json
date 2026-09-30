@@ -64,7 +64,7 @@
       "id": "dynamic-tool-exposure",
       "status": "partial",
       "priority": 8,
-      "summary": "Credential-aware MCP tool discovery is active work on feat/auth-aware-tool-discovery; online-device/capability-aware schema filtering remains open"
+      "summary": "Stored MCP credential allowlists now hide unauthorized schemas from tools/list as well as blocking calls; online-device/capability-aware schema filtering remains open"
     },
     {
       "id": "postconditions",
@@ -120,18 +120,12 @@
     "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "fec341b1abe3823064dc70ce96ccc1d775b9c801",
+  "lastVerifiedMain": "e0c3ad2affc42893bf0e79d1961e2a8682e00623",
   "activeWork": [
-    {
-      "id": "auth-aware-tool-discovery",
-      "branch": "feat/auth-aware-tool-discovery",
-      "pr": 58,
-      "summary": "Hide unauthorized MCP tools from tools/list while retaining call-time 403 enforcement; CI rerun pending after correcting MCP file tool-name assertions"
-    },
     {
       "id": "continuation-state-sync",
       "branch": "chore/sync-continuation-state-20260930",
-      "summary": "Synchronize ROADMAP, HANDOFF, PROJECT_STATE, and CONTINUATION with relay/auth/privilege work merged on main"
+      "summary": "Synchronize ROADMAP, HANDOFF, PROJECT_STATE, and CONTINUATION with relay/auth/privilege/discovery work merged on main"
     }
   ]
 }
