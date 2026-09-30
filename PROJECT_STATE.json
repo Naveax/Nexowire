@@ -20,9 +20,9 @@
   "priorities": [
     {
       "id": "durable-process-io",
-      "status": "open",
+      "status": "done",
       "priority": 1,
-      "summary": "Fully reattachable durable process stdin/stdout/stderr across native-agent restart"
+      "summary": "Opt-in sidecar-owned durable process stdin/stdout/stderr reattaches across native-agent restart; bounded output spool and Windows/Linux CI coverage"
     },
     {
       "id": "task-artifacts",
@@ -46,7 +46,7 @@
       "id": "privilege-separation",
       "status": "open",
       "priority": 5,
-      "summary": "First-party privileged broker and per-capability policy profiles"
+      "summary": "First-party privileged broker remains open; per-device capability policy profiles are actively being implemented"
     },
     {
       "id": "production-auth",
@@ -56,9 +56,9 @@
     },
     {
       "id": "postconditions",
-      "status": "open",
+      "status": "done",
       "priority": 7,
-      "summary": "Reusable postcondition/assertion workflows above browser-specific visual verification"
+      "summary": "Reusable bounded read-only file/process/TCP/HTTP postcondition assertion workflows are implemented"
     },
     {
       "id": "linux-wsl-coverage",
@@ -86,5 +86,13 @@
     "Do not infer completion from chat history; inspect main and CI."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "ec52a6c6d0a4250467e225e2e6d0fe8c3b8a0eec"
+  "lastVerifiedMain": "f7e38ce9d3ee7b272c62da33ca6fb1fc9a6a0214",
+  "activeWork": [
+    {
+      "branch": "feat/capability-policy-profiles-v1",
+      "pullRequest": 35,
+      "status": "ci_pending",
+      "summary": "Persistent per-device allow/deny capability profiles enforced before native execution"
+    }
+  ]
 }
