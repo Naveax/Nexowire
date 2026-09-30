@@ -65,6 +65,12 @@
       "status": "open",
       "priority": 8,
       "summary": "Real Linux/WSL distro integration coverage"
+    },
+    {
+      "id": "audit-history",
+      "status": "done",
+      "priority": 9,
+      "summary": "Bounded persistent payload-free audit history query with capability/status/target/provider/operation/time filters"
     }
   ],
   "standardVerification": [
@@ -88,6 +94,11 @@
   "lastStateSync": "2026-09-30",
   "lastVerifiedMain": "705cf9e30401b5c5bb3fd84eaf3bd4c859e39e5a",
   "activeWork": [
+    {
+      "id": "audit-history-v1",
+      "branch": "feat/audit-history-v1",
+      "summary": "Bounded persistent audit history query and MCP surface"
+    },
     {
       "id": "hub-tls-v1",
       "branch": "feat/hub-tls-v1",
