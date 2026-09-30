@@ -37,7 +37,7 @@ Implemented on main as of the latest repository state:
 
 - first-party native-agent WebSocket transport with heartbeat/reconnect hardening
 - normalized provider/backend registry used only as an internal Nexowire routing seam
-- stable native device identity, persistent aliases/groups, device history, capability-aware route discovery, and per-device capability allow/deny policies
+- stable native device identity, persistent aliases/groups, device history, capability-aware route discovery, deterministic named routing policies, and per-device capability allow/deny policies
 - operation IDs, audit metadata, mutation replay protection, selected idempotency records
 - shell, WSL2, files, search, volatile + durable reattachable process sessions, machine/workspace snapshots
 - persistent task-graph checkpoints and bounded parallel dependency execution
@@ -55,12 +55,11 @@ Implemented on main as of the latest repository state:
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
 1. durable long-running work/artifact workflows beyond current process/task-graph primitives
-2. richer multi-device routing policy above aliases/groups/capability discovery
-3. reconnect/session continuity and optional first-party relay transport
-4. first-party privilege separation; per-device capability policy profiles are implemented
-5. production authorization/TLS/revocation/encrypted secret storage
-6. extend postconditions only into deterministic additional OS/application domains
-7. stronger Linux/WSL integration coverage
+2. reconnect/session continuity and optional first-party relay transport
+3. first-party privilege separation; per-device capability policy profiles are implemented
+4. production authorization/TLS/revocation/encrypted secret storage
+5. extend postconditions only into deterministic additional OS/application domains
+6. stronger Linux/WSL integration coverage
 
 ## Branch and merge discipline
 
