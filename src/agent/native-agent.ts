@@ -55,6 +55,120 @@ export function reconnectWaitMs(
   return Math.min(30_000, Math.max(250, Math.round(boundedBase * factor)));
 }
 
+export function parseHubEndpoints(
+  env: NodeJS.ProcessEnv,
+): string[] {
+  const raw: string[] = [];
+  const primary = env.NEXOWIRE_HUB_WS_URL?.trim();
+  if (primary) raw.push(primary);
+
+  for (const part of env.NEXOWIRE_HUB_WS_URLS?.split(',') ?? []) {
+    const value = part.trim();
+    if (value) raw.push(value);
+  }
+
+  if (raw.length === 0) {
+    raw.push('ws://127.0.0.1:43110/agent');
+  }
+
+  const seen = new Set<string>();
+  const endpoints: string[] = [];
+  for (const value of raw) {
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new Error(
+        `Invalid Nexowire hub WebSocket URL: ${value}`,
+      );
+    }
+
+    if (!['ws:', 'wss:'].includes(parsed.protocol)) {
+      throw new Error(
+        `Nexowire hub endpoints must use ws:// or wss://: ${value}`,
+      );
+    }
+    if (parsed.username || parsed.password) {
+      throw new Error(
+        'Nexowire hub endpoint URLs must not embed credentials.',
+      );
+    }
+    if (parsed.hash) {
+      throw new Error(
+        'Nexowire hub endpoint URLs must not contain fragments.',
+      );
+    }
+
+    const normalized = parsed.toString();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    endpoints.push(normalized);
+  }
+
+  return endpoints;
+}
+
+export interface NextHubAttempt {
+  endpointIndex: number;
+  waitMs: number;
+  nextBackoffMs: number;
+  stableConnection: boolean;
+}
+
+export function planNextHubAttempt(input: {
+  currentIndex: number;
+  endpointCount: number;
+  backoffMs: number;
+  connectedMs: number;
+  random?: () => number;
+}): NextHubAttempt {
+  if (!Number.isInteger(input.endpointCount) || input.endpointCount < 1) {
+    throw new Error('Hub endpoint count must be at least one.');
+  }
+  if (
+    !Number.isInteger(input.currentIndex) ||
+    input.currentIndex < 0 ||
+    input.currentIndex >= input.endpointCount
+  ) {
+    throw new Error('Current hub endpoint index is out of range.');
+  }
+
+  const stableConnection = input.connectedMs >= 10_000;
+  if (stableConnection) {
+    return {
+      endpointIndex: 0,
+      waitMs: reconnectWaitMs(1_000, input.random),
+      nextBackoffMs: 1_000,
+      stableConnection: true,
+    };
+  }
+
+  const endpointIndex =
+    (input.currentIndex + 1) % input.endpointCount;
+  if (endpointIndex !== 0) {
+    return {
+      endpointIndex,
+      waitMs: 250,
+      nextBackoffMs: Math.min(
+        30_000,
+        Math.max(1_000, input.backoffMs),
+      ),
+      stableConnection: false,
+    };
+  }
+
+  const backoffMs = Math.min(
+    30_000,
+    Math.max(1_000, input.backoffMs),
+  );
+  return {
+    endpointIndex,
+    waitMs: reconnectWaitMs(backoffMs, input.random),
+    nextBackoffMs: Math.min(backoffMs * 2, 30_000),
+    stableConnection: false,
+  };
+}
+
 function heartbeatMs(env: NodeJS.ProcessEnv): number {
   const raw = env.NEXOWIRE_AGENT_HEARTBEAT_MS?.trim();
   if (!raw) return 30_000;
@@ -68,7 +182,7 @@ export async function runNativeAgent(
 ): Promise<never> {
   const identity = await loadIdentity();
   const instanceId = randomUUID();
-  const hubUrl = env.NEXOWIRE_HUB_WS_URL?.trim() || 'ws://127.0.0.1:43110/agent';
+  const hubEndpoints = parseHubEndpoints(env);
   const token = env.NEXOWIRE_AGENT_TOKEN?.trim();
   const name = env.NEXOWIRE_DEVICE_NAME?.trim() || os.hostname();
   const policy = new PathPolicy(parseAllowedRoots(env.NEXOWIRE_ALLOWED_ROOTS));
@@ -107,6 +221,7 @@ export async function runNativeAgent(
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
   await Promise.all([processes.initialize(), taskGraphs.initialize()]);
   let reconnectDelay = 1_000;
+  let endpointIndex = 0;
 
   const stop = (): void => {
     stopped = true;
@@ -117,9 +232,11 @@ export async function runNativeAgent(
   process.once('SIGTERM', stop);
 
   while (!stopped) {
+    const hubUrl = hubEndpoints[endpointIndex]!;
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     const socket = new WebSocket(hubUrl, headers ? { headers } : undefined);
     currentSocket = socket;
+    let openedAt: number | undefined;
 
     await new Promise<void>((resolve) => {
       let heartbeatTimer: NodeJS.Timeout | undefined;
@@ -133,7 +250,7 @@ export async function runNativeAgent(
       };
 
       socket.once('open', () => {
-        reconnectDelay = 1_000;
+        openedAt = Date.now();
         lastPongAt = Date.now();
         socket.on('pong', () => {
           lastPongAt = Date.now();
@@ -233,9 +350,20 @@ export async function runNativeAgent(
 
     currentSocket = undefined;
     if (stopped) break;
-    const waitMs = reconnectWaitMs(reconnectDelay);
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-    reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
+
+    const connectedMs =
+      openedAt === undefined ? 0 : Date.now() - openedAt;
+    const plan = planNextHubAttempt({
+      currentIndex: endpointIndex,
+      endpointCount: hubEndpoints.length,
+      backoffMs: reconnectDelay,
+      connectedMs,
+    });
+    endpointIndex = plan.endpointIndex;
+    reconnectDelay = plan.nextBackoffMs;
+    await new Promise((resolve) =>
+      setTimeout(resolve, plan.waitMs),
+    );
   }
 
   process.exit(0);
