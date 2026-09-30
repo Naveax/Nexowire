@@ -103,3 +103,16 @@ npm run build
 Run the hub with `npm run dev:http` and the native agent with `npm run dev:agent`. The default loopback MCP endpoint is `http://127.0.0.1:43110/mcp`; the default agent WebSocket endpoint is `ws://127.0.0.1:43110/agent`. With direct TLS configured, the same listener serves `https://.../mcp` and `wss://.../agent`.
 
 The current bootstrap already supports shell execution, WSL2 execution, allowlisted file access, machine/workspace snapshots, interactive process sessions, batched reads, SHA-256 conflict-safe patching, bounded text search, operation audit metadata, explicit payload-free idempotency records for selected replay-safe mutations, workspace detection/checks, dependency-aware parallel task graphs with exact-spec task-graph resume, a bounded event feed, structured DNS/TCP/HTTP diagnostics, compact machine health, exact Windows environment controls, exact HWND window control, inline Windows screenshots, exact-foreground keyboard input and bounded clipboard control, Windows UI Automation tree/actions, exact-HWND pointer fallback, first-party Edge/Chrome CDP automation, workspace checkpoints, persistent device aliases/history with capability-aware route discovery, lazy skills, and native capability routing. See `ROADMAP.md` for what is still intentionally unfinished.
+
+
+## First-party relay
+
+Run the public relay with:
+
+```bash
+npm run dev:relay
+```
+
+The relay exposes `/relay/hub` for the Hub's outbound control connection and `/relay/agent` for native agents. Hub and agents authenticate independently with `NEXOWIRE_RELAY_HUB_TOKEN` and `NEXOWIRE_RELAY_AGENT_TOKEN`. Non-loopback relay exposure requires TLS by default.
+
+On the Hub, set `NEXOWIRE_RELAY_URL=wss://relay.example/relay/hub` and `NEXOWIRE_RELAY_TOKEN=<hub-token>`. On an agent, add the relay agent endpoint to `NEXOWIRE_HUB_WS_URLS`; the agent's normal `NEXOWIRE_AGENT_TOKEN` must be accepted by the relay's agent-token set. Direct and relay endpoints can therefore be prioritized by the existing endpoint-selection logic.
