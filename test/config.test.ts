@@ -134,3 +134,36 @@ test('insecure remote override accepts common boolean spellings', () => {
     assert.equal(config.allowInsecureRemote, true);
   }
 });
+
+
+test('relay URL and token must be configured together', () => {
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_RELAY_URL: 'wss://relay.example/relay/hub',
+      },
+      process.cwd(),
+    ),
+  );
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_RELAY_TOKEN: 'relay-secret',
+      },
+      process.cwd(),
+    ),
+  );
+
+  const config = loadConfig(
+    {
+      NEXOWIRE_RELAY_URL: 'wss://relay.example/relay/hub',
+      NEXOWIRE_RELAY_TOKEN: 'relay-secret',
+    },
+    process.cwd(),
+  );
+  assert.equal(
+    config.relayUrl,
+    'wss://relay.example/relay/hub',
+  );
+  assert.equal(config.relayToken, 'relay-secret');
+});
