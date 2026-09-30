@@ -13,6 +13,7 @@ import {
   buildDeviceRoutingEntries,
   filterDeviceRoutes,
   selectDeviceRoute,
+  type DeviceRoutingEntry,
 } from '../devices/routing.js';
 import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
@@ -26,6 +27,12 @@ import type { CapabilityPolicyStore } from '../security/capability-policy.js';
 import type { CredentialStore } from '../security/credential-store.js';
 import type { BearerAuthorization } from '../security/auth.js';
 import { isMcpToolAuthorized } from '../security/tool-authorization.js';
+import {
+  authorizedRoutingPolicyNames,
+  directlyAuthorizedDeviceIds,
+  hasMcpTargetRestrictions,
+  isRoutingPolicyAuthorized,
+} from '../security/target-authorization.js';
 import { isMcpToolAvailableForCapabilities } from './tool-capabilities.js';
 
 export interface McpContext {
@@ -111,7 +118,9 @@ function toolResult(data: unknown, isError = false) {
   };
 }
 
-async function routingEntries(ctx: McpContext) {
+async function allRoutingEntries(
+  ctx: McpContext,
+): Promise<DeviceRoutingEntry[]> {
   const [targets, records, aliasRecords] = await Promise.all([
     ctx.providers.listTargets(),
     ctx.devices ? ctx.devices.list() : Promise.resolve([]),
@@ -130,33 +139,116 @@ async function routingEntries(ctx: McpContext) {
   });
 }
 
-async function resolveDevice(
-  providers: ProviderRegistry,
-  aliases: DeviceAliasStore | undefined,
-  requested?: string,
-): Promise<string> {
-  const targets = (await providers.listTargets()).filter((target) => target.online);
-  const uniqueIds = [...new Set(targets.map((target) => target.id))];
+async function routingPolicyTargetId(
+  ctx: McpContext,
+  devices: readonly DeviceRoutingEntry[],
+  name: string,
+): Promise<string | undefined> {
+  const policy = await ctx.routingPolicies?.get(name);
+  if (!policy) return undefined;
 
-  if (requested) {
-    if (uniqueIds.includes(requested)) return requested;
-    const aliased = await aliases?.resolve(requested);
-    if (aliased) {
-      if (!uniqueIds.includes(aliased)) {
-        throw new Error(
-          `Nexowire device alias "${requested}" resolves to offline device "${aliased}".`,
-        );
-      }
-      return aliased;
-    }
-    return requested;
+  let candidates = filterDeviceRoutes(devices, {
+    ...(policy.platform ? { platform: policy.platform } : {}),
+    ...(policy.nameContains
+      ? { nameContains: policy.nameContains }
+      : {}),
+    ...(policy.requiredCapabilities.length > 0
+      ? { requiredCapabilities: policy.requiredCapabilities }
+      : {}),
+    onlineOnly: policy.onlineOnly,
+  });
+
+  if (policy.group) {
+    const group = await ctx.groups?.get(policy.group);
+    if (!group) return undefined;
+    const members = new Set(group.deviceIds);
+    candidates = candidates.filter((device) =>
+      members.has(device.id),
+    );
   }
 
-  if (uniqueIds.length === 1 && uniqueIds[0]) return uniqueIds[0];
+  return selectDeviceRoute(candidates, {
+    selection: policy.selection,
+    priorityDeviceIds: policy.priorityDeviceIds,
+  }).selected?.id;
+}
+
+async function authorizedTargetIds(
+  ctx: McpContext,
+  devices: readonly DeviceRoutingEntry[],
+): Promise<Set<string> | undefined> {
+  if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+    return undefined;
+  }
+
+  const allowed = new Set<string>(
+    directlyAuthorizedDeviceIds(ctx.toolAuthorization),
+  );
+  for (const routeName of authorizedRoutingPolicyNames(
+    ctx.toolAuthorization,
+  )) {
+    const selected = await routingPolicyTargetId(
+      ctx,
+      devices,
+      routeName,
+    );
+    if (selected) allowed.add(selected);
+  }
+  return allowed;
+}
+
+async function routingEntries(
+  ctx: McpContext,
+): Promise<DeviceRoutingEntry[]> {
+  const devices = await allRoutingEntries(ctx);
+  const allowed = await authorizedTargetIds(ctx, devices);
+  return allowed
+    ? devices.filter((device) => allowed.has(device.id))
+    : devices;
+}
+
+class McpTargetAuthorizationError extends Error {
+  readonly code = 'MCP_TARGET_NOT_AUTHORIZED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'McpTargetAuthorizationError';
+  }
+}
+
+async function resolveDevice(
+  ctx: McpContext,
+  requested?: string,
+): Promise<string> {
+  const devices = await routingEntries(ctx);
+  const onlineIds = new Set(
+    devices.filter((device) => device.online).map((device) => device.id),
+  );
+
+  if (requested) {
+    if (onlineIds.has(requested)) return requested;
+
+    const aliased = await ctx.aliases?.resolve(requested);
+    if (aliased && onlineIds.has(aliased)) return aliased;
+
+    throw new McpTargetAuthorizationError(
+      'Requested Nexowire device is offline, unknown, or outside this credential scope.',
+    );
+  }
+
+  const ids = [...onlineIds];
+  if (ids.length === 1 && ids[0]) return ids[0];
+
+  if (ids.length === 0) {
+    throw new McpTargetAuthorizationError(
+      hasMcpTargetRestrictions(ctx.toolAuthorization)
+        ? 'No online Nexowire device is available inside this credential scope.'
+        : 'No Nexowire devices are online.',
+    );
+  }
+
   throw new Error(
-    uniqueIds.length === 0
-      ? 'No Nexowire devices are online.'
-      : 'Multiple Nexowire devices are online; device_id or a device alias is required.',
+    'Multiple Nexowire devices are available; device_id or a device alias is required.',
   );
 }
 
@@ -175,7 +267,7 @@ async function execute(
   let idempotencyCreated = false;
 
   try {
-    targetId = await resolveDevice(ctx.providers, ctx.aliases, deviceId);
+    targetId = await resolveDevice(ctx, deviceId);
     await ctx.policies?.assertAllowed(targetId, capability);
 
     if (idempotencyKey) {
