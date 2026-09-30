@@ -19,6 +19,7 @@ Implemented:
 - stable native-agent device identity
 - persistent case-normalized device aliases with alias-based MCP routing and offline-target rejection
 - persistent native device directory with last-seen/connect/disconnect history plus capability/platform/name-aware route discovery that fails closed on ambiguity
+- persistent device groups with ID/alias resolution and fail-closed group route filtering
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
 - WSL2 execution capability
 - interactive process sessions with incremental stdout/stderr, stdin, stop, and list
@@ -28,7 +29,7 @@ Implemented:
 - compact sampled CPU/memory/disk health plus structured DNS/TCP/HTTP probes
 - structured workspace detection plus bounded parallel build/test/lint/typecheck execution
 - bounded dependency-aware parallel task graphs with failure blocking and total timeout
-- persisted payload-free task-graph checkpoints with exact-spec resume, succeeded-job reuse, unknown-state recovery, and explicit retry controls
+- persisted payload-free task-graph checkpoints with exact-spec resume, succeeded-job reuse, unknown-state recovery, explicit retry controls, and verified artifact metadata (path/size/SHA-256/mtime) without artifact contents
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
 - persistent workspace checkpoints
@@ -84,9 +85,9 @@ The repository is the source of truth. If this file disagrees with current code/
 1. Keep Windows typecheck/test/build green after each capability slice.
 2. Extend visual verification beyond browser elements into reusable postcondition/assertion workflows; exact-element browser verification is implemented.
 3. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
-4. Extend durable execution beyond task-graph job boundaries with artifact tracking.
+4. Extend durable execution beyond task-graph job boundaries; task-graph artifact metadata tracking is implemented.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
-6. Finish multi-device routing policy/groups; persistent directory, aliases, online/offline state, and capability-aware route discovery are implemented.
+6. Finish richer multi-device routing policy; persistent directory, aliases, groups, online/offline state, and capability-aware route discovery are implemented.
 7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
 
 ## Known machine note
