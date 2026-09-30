@@ -40,14 +40,14 @@
 - [x] persistent/resumable task graph metadata across agent restart with explicit unknown-state replay control
 - [x] bounded dependency-aware parallel independent jobs
 - resumable long-running work beyond task-graph job boundaries
-- artifact tracking
+- [x] verified task-graph artifact metadata tracking with SHA-256 and no persisted artifact contents
 
 ## v0.4 - Native remote runtime
 
 - [x] first-party Nexowire native-agent backend as the default runtime
 - [x] provider/backend health and latency ranking kept as an internal routing primitive
 - [x] mutation-aware failover with automatic replay blocked on unknown mutation state
-- [~] multi-device native-agent routing: persistent directory, aliases, online/offline state, and capability-aware route discovery are implemented; routing policy/groups remain open
+- [~] multi-device native-agent routing: persistent directory, aliases, groups, online/offline state, and capability-aware route discovery are implemented; richer routing policy remains open
 - [x] persistent stable device aliases and alias-based MCP targeting
 - [ ] reconnect/session continuity without third-party control providers
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
