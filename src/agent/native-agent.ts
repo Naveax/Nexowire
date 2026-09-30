@@ -19,6 +19,7 @@ import {
 } from './request-cache.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
+import { resolveSingleSecret } from '../security/secret-files.js';
 
 interface AgentIdentity {
   id: string;
@@ -45,6 +46,16 @@ async function loadIdentity(): Promise<AgentIdentity> {
 
 function agentVersion(): string {
   return '0.1.0-dev.1';
+}
+
+export function agentTokenFromEnv(
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  return resolveSingleSecret(
+    env.NEXOWIRE_AGENT_TOKEN,
+    env.NEXOWIRE_AGENT_TOKEN_FILE,
+    'native-agent bearer token',
+  );
 }
 
 export function reconnectWaitMs(
@@ -219,7 +230,7 @@ export async function runNativeAgent(
   const identity = await loadIdentity();
   const instanceId = randomUUID();
   const hubEndpoints = parseHubEndpoints(env);
-  const token = env.NEXOWIRE_AGENT_TOKEN?.trim();
+  const token = agentTokenFromEnv(env);
   const name = env.NEXOWIRE_DEVICE_NAME?.trim() || os.hostname();
   const policy = new PathPolicy(parseAllowedRoots(env.NEXOWIRE_ALLOWED_ROOTS));
   const processStateFile =
