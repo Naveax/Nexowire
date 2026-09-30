@@ -11,6 +11,10 @@ import {
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
+import {
+  normalizeToolPatterns,
+  ToolPatternSchema,
+} from './tool-authorization.js';
 
 export const CredentialScopeSchema = z.enum(['mcp', 'agent']);
 export type CredentialScope = z.infer<typeof CredentialScopeSchema>;
@@ -25,6 +29,7 @@ const RecordSchema = z.object({
   id: IdSchema,
   scope: CredentialScopeSchema,
   name: z.string().min(1).max(128).optional(),
+  allowedTools: z.array(ToolPatternSchema).min(1).max(256).optional(),
   tokenHash: z.string().regex(/^[a-f0-9]{64}$/),
   createdAt: z.string().datetime(),
   expiresAt: z.string().datetime().optional(),
@@ -42,6 +47,7 @@ export interface CredentialMetadata {
   id: string;
   scope: CredentialScope;
   name?: string;
+  allowedTools?: string[];
   createdAt: string;
   expiresAt?: string;
   revokedAt?: string;
@@ -67,6 +73,7 @@ function metadata(record: StoredCredential): CredentialMetadata {
     id: record.id,
     scope: record.scope,
     ...(record.name ? { name: record.name } : {}),
+    ...(record.allowedTools ? { allowedTools: [...record.allowedTools] } : {}),
     createdAt: record.createdAt,
     ...(record.expiresAt ? { expiresAt: record.expiresAt } : {}),
     ...(record.revokedAt ? { revokedAt: record.revokedAt } : {}),
@@ -165,12 +172,15 @@ export class CredentialStore {
     );
   }
 
-  verify(scope: CredentialScope, token: string | undefined): boolean {
-    if (!token) return false;
+  authenticate(
+    scope: CredentialScope,
+    token: string | undefined,
+  ): CredentialMetadata | undefined {
+    if (!token) return undefined;
     this.refreshIfChangedSync();
 
     const parsed = parseToken(token);
-    if (!parsed || parsed.scope !== scope) return false;
+    if (!parsed || parsed.scope !== scope) return undefined;
     const record = this.records.get(parsed.id);
     if (
       !record ||
@@ -179,15 +189,22 @@ export class CredentialStore {
       (record.expiresAt &&
         Date.parse(record.expiresAt) <= this.now())
     ) {
-      return false;
+      return undefined;
     }
 
     const candidate = hashToken(token);
     const expected = Buffer.from(record.tokenHash, 'hex');
-    return (
-      candidate.length === expected.length &&
-      timingSafeEqual(candidate, expected)
-    );
+    if (
+      candidate.length !== expected.length ||
+      !timingSafeEqual(candidate, expected)
+    ) {
+      return undefined;
+    }
+    return metadata(record);
+  }
+
+  verify(scope: CredentialScope, token: string | undefined): boolean {
+    return this.authenticate(scope, token) !== undefined;
   }
 
   async issue(
@@ -195,6 +212,7 @@ export class CredentialStore {
     input: {
       name?: string;
       ttlMs?: number;
+      allowedTools?: string[];
     } = {},
   ): Promise<{
     credential: CredentialMetadata;
@@ -220,6 +238,23 @@ export class CredentialStore {
       );
     }
 
+    let allowedTools: string[] | undefined;
+    if (input.allowedTools !== undefined) {
+      if (scope !== 'mcp') {
+        throw new CredentialStoreError(
+          'CREDENTIAL_TOOL_SCOPE_UNSUPPORTED',
+          'Tool restrictions are supported only for MCP credentials.',
+        );
+      }
+      allowedTools = normalizeToolPatterns(input.allowedTools);
+      if (allowedTools.length === 0) {
+        throw new CredentialStoreError(
+          'CREDENTIAL_TOOL_SCOPE_EMPTY',
+          'allowedTools must contain at least one tool pattern.',
+        );
+      }
+    }
+
     const id = randomBytes(12).toString('base64url');
     const secret = randomBytes(32).toString('base64url');
     const token = `nwx1.${scope}.${id}.${secret}`;
@@ -228,6 +263,7 @@ export class CredentialStore {
       id,
       scope,
       ...(name ? { name } : {}),
+      ...(allowedTools ? { allowedTools } : {}),
       tokenHash: hashToken(token).toString('hex'),
       createdAt: new Date(now).toISOString(),
       ...(input.ttlMs !== undefined
