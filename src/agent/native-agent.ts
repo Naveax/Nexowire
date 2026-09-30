@@ -6,12 +6,17 @@ import WebSocket from 'ws';
 import {
   AGENT_PROTOCOL_VERSION,
   HubRequestSchema,
+  type AgentResponse,
 } from '../protocol/agent.js';
 import { capabilitiesForPlatform } from '../protocol/capabilities.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
 import { TaskGraphStore } from './task-graph-store.js';
+import {
+  AgentRequestCache,
+  fingerprintAgentRequest,
+} from './request-cache.js';
 
 interface AgentIdentity {
   id: string;
@@ -62,6 +67,7 @@ export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<never> {
   const identity = await loadIdentity();
+  const instanceId = randomUUID();
   const hubUrl = env.NEXOWIRE_HUB_WS_URL?.trim() || 'ws://127.0.0.1:43110/agent';
   const token = env.NEXOWIRE_AGENT_TOKEN?.trim();
   const name = env.NEXOWIRE_DEVICE_NAME?.trim() || os.hostname();
@@ -73,6 +79,7 @@ export async function runNativeAgent(
     env.NEXOWIRE_TASK_GRAPH_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'task-graphs.json');
   const socketHeartbeatMs = heartbeatMs(env);
+  const requestCache = new AgentRequestCache<AgentResponse>();
 
   let stopped = false;
   let currentSocket: WebSocket | undefined;
@@ -149,6 +156,7 @@ export async function runNativeAgent(
           JSON.stringify({
             type: 'hello',
             protocolVersion: AGENT_PROTOCOL_VERSION,
+            instanceId,
             device: {
               id: identity.id,
               name,
@@ -171,30 +179,50 @@ export async function runNativeAgent(
           const request = HubRequestSchema.safeParse(decoded);
           if (!request.success) return;
 
+          let response: AgentResponse;
           try {
-            const data = await executeCapability(
+            const fingerprint = fingerprintAgentRequest(
               request.data.capability,
               request.data.input,
-              policy,
-              { processes, taskGraphs },
             );
-            socket.send(
-              JSON.stringify({
-                type: 'response',
-                requestId: request.data.requestId,
-                ok: true,
-                data,
-              }),
+            response = await requestCache.run(
+              request.data.requestId,
+              fingerprint,
+              async () => {
+                try {
+                  const data = await executeCapability(
+                    request.data.capability,
+                    request.data.input,
+                    policy,
+                    { processes, taskGraphs },
+                  );
+                  return {
+                    type: 'response' as const,
+                    requestId: request.data.requestId,
+                    ok: true,
+                    data,
+                  };
+                } catch (error) {
+                  return {
+                    type: 'response' as const,
+                    requestId: request.data.requestId,
+                    ok: false,
+                    error: normalizeAgentError(error),
+                  };
+                }
+              },
             );
           } catch (error) {
-            socket.send(
-              JSON.stringify({
-                type: 'response',
-                requestId: request.data.requestId,
-                ok: false,
-                error: normalizeAgentError(error),
-              }),
-            );
+            response = {
+              type: 'response',
+              requestId: request.data.requestId,
+              ok: false,
+              error: normalizeAgentError(error),
+            };
+          }
+
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(response));
           }
         });
       });
