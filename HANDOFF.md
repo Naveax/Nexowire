@@ -43,6 +43,7 @@ Implemented:
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
 - operation IDs plus persistent payload-free audit metadata
+- bounded persistent audit-history queries with exact metadata/time filters and bounded tail scans
 - persistent payload-free idempotency records for selected replay-safe mutations, with key/fingerprint mismatch rejection and restart-safe unknown-state blocking
 - full MCP -> native-agent integration coverage
 - structured Windows process/service/network inspection and service control
@@ -95,6 +96,7 @@ The repository is the source of truth. If this file disagrees with current code/
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
 6. Continue first-party privilege separation and first-party relay/direct transport work. Reconnect/session continuity and deterministic named multi-device route selection are implemented.
 7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
+8. Extend audit retention/export only if operational need justifies it; bounded persistent history query is implemented.
 
 ## Known machine note
 
