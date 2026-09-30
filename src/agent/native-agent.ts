@@ -18,6 +18,7 @@ import {
   fingerprintAgentRequest,
 } from './request-cache.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
+import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 
 interface AgentIdentity {
   id: string;
@@ -182,19 +183,24 @@ function privilegeMode(
   );
 }
 
-function privilegedBrokerFromEnv(
+async function privilegedBrokerFromEnv(
   env: NodeJS.ProcessEnv,
   mode: 'direct' | 'broker',
-): PrivilegedBrokerClient | undefined {
+): Promise<PrivilegedBrokerClient | undefined> {
   if (mode !== 'broker') return undefined;
 
-  const url = env.NEXOWIRE_PRIVILEGED_BROKER_URL?.trim();
-  const token = env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN?.trim();
-  if (!url || !token) {
-    throw new Error(
-      'Broker privilege mode requires NEXOWIRE_PRIVILEGED_BROKER_URL and NEXOWIRE_PRIVILEGED_BROKER_TOKEN.',
-    );
-  }
+  const url =
+    env.NEXOWIRE_PRIVILEGED_BROKER_URL?.trim() ||
+    'http://127.0.0.1:43112';
+  const token =
+    env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN?.trim() ||
+    (await loadOrCreatePrivilegedBrokerToken({
+      ...(env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim()
+        ? {
+            file: env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE.trim(),
+          }
+        : {}),
+    }));
 
   return new PrivilegedBrokerClient({ url, token });
 }
@@ -224,7 +230,7 @@ export async function runNativeAgent(
     path.join(os.homedir(), '.nexowire', 'task-graphs.json');
   const socketHeartbeatMs = heartbeatMs(env);
   const activePrivilegeMode = privilegeMode(env);
-  const privilegedBroker = privilegedBrokerFromEnv(
+  const privilegedBroker = await privilegedBrokerFromEnv(
     env,
     activePrivilegeMode,
   );
