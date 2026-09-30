@@ -62,9 +62,9 @@
     },
     {
       "id": "linux-wsl-coverage",
-      "status": "open",
+      "status": "partial",
       "priority": 8,
-      "summary": "Real Linux/WSL distro integration coverage"
+      "summary": "Real Linux native-agent outbound transport/core capability integration runs in Ubuntu CI; real WSL2 distro integration remains open"
     }
   ],
   "standardVerification": [
@@ -88,6 +88,11 @@
   "lastStateSync": "2026-09-30",
   "lastVerifiedMain": "67580ce31a13c08bbab0958d4a80071d2732fbbe",
   "activeWork": [
+    {
+      "id": "linux-native-agent-live",
+      "branch": "test/linux-native-agent-live",
+      "summary": "Real Ubuntu CI coverage for outbound native agent and core shell/file/process capabilities"
+    },
     {
       "id": "hub-tls-v2",
       "branch": "feat/hub-tls-v2",
