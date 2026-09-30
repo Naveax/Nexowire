@@ -7,6 +7,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { executePostconditions } from '../src/agent/postconditions.js';
 import { PathPolicy } from '../src/agent/path-policy.js';
+import { isReadOnlyCapability } from '../src/protocol/capabilities.js';
 
 test('postconditions verify files without echoing searched text', async () => {
   const root = await fs.mkdtemp(
@@ -169,4 +170,8 @@ test('stop_on_failure marks untouched assertions as skipped', async () => {
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+test('postcondition capability is read-only for failover purposes', () => {
+  assert.equal(isReadOnlyCapability('verify.assertions'), true);
 });
