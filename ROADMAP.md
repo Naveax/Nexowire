@@ -16,7 +16,7 @@
 - [x] Opt-in fully reattachable durable process I/O across native-agent restart
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
-- [~] Public deployment authentication: bootstrap bearer rotation is implemented; production authorization/TLS remains open
+- [~] Public deployment security: bootstrap bearer rotation and direct TLS are implemented; production authorization/revocation/encrypted secret storage remain open
 
 ## v0.2 - Computer control
 
@@ -67,7 +67,7 @@
 
 ## v1.0 - ChatGPT-ready remote control
 
-- production authorization, TLS, revocation, and encrypted credential storage
+- production authorization, revocation, and encrypted credential storage
 - encrypted secrets and hardened administrative authorization for policy profiles
 - audit/history
 - stable MCP surface
