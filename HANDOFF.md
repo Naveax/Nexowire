@@ -20,9 +20,11 @@ Implemented:
 - persistent case-normalized device aliases with alias-based MCP routing and offline-target rejection
 - persistent native device directory with last-seen/connect/disconnect history plus capability/platform/name-aware route discovery that fails closed on ambiguity
 - persistent device groups with ID/alias resolution and fail-closed group route filtering
+- persistent per-device capability allow/deny policy profiles enforced before provider/native execution
 - shell execution for pwsh / Windows PowerShell / cmd / bash / sh
 - WSL2 execution capability
 - interactive process sessions with incremental stdout/stderr, stdin, stop, and list
+- opt-in durable process sidecar sessions with bounded local output spool and stdin/stdout/stderr reattachment across native-agent restart
 - persisted process-session metadata, retention/prune, and orphan/lost recovery classification without persisting command/output payloads
 - allowlisted file read/write/list
 - machine snapshot and Git workspace snapshot
@@ -50,6 +52,7 @@ Implemented:
 - bounded Windows UI Automation tree/find plus exact unique-selector InvokePattern and verified ValuePattern mutations with password-value suppression
 - exact foreground-HWND pointer position/move/click/scroll with client bounds, occlusion/hit checks, and cursor verification
 - first-party isolated Edge/Chrome CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, inline screenshots, and exact-element visual verification with cropped PNG evidence
+- reusable bounded read-only postcondition assertions for file existence/hash/text presence, PID liveness, TCP reachability, and HTTP status
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - initial security/docs/tests/CI
 
@@ -83,11 +86,11 @@ The repository is the source of truth. If this file disagrees with current code/
 ## Immediate next work
 
 1. Keep Windows typecheck/test/build green after each capability slice.
-2. Extend visual verification beyond browser elements into reusable postcondition/assertion workflows; exact-element browser verification is implemented.
-3. Add fully reattachable durable process I/O; current restart recovery is metadata/state-safe, not pipe reattachment.
-4. Extend durable execution beyond task-graph job boundaries; task-graph artifact metadata tracking is implemented.
+2. Extend reusable postconditions into additional verified OS/application domains only where semantics remain deterministic; core file/process/TCP/HTTP assertions are implemented.
+3. Harden durable process sidecar security/retention as needed; reattachable stdin/stdout/stderr across native-agent restart is implemented.
+4. Extend durable execution/artifact workflows beyond current durable process sessions and task-graph artifact metadata.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
-6. Finish richer multi-device routing policy; persistent directory, aliases, groups, online/offline state, and capability-aware route discovery are implemented.
+6. Finish richer multi-device route-selection policy and first-party privilege separation; persistent directory, aliases, groups, per-device capability policies, online/offline state, and capability-aware route discovery are implemented.
 7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
 
 ## Known machine note
@@ -97,3 +100,4 @@ WSL2 execution is implemented. A real Linux-distro integration test still requir
 ## Architecture rule
 
 Nexowire owns the ChatGPT-facing interface, hub, transport, and native execution agent. Implement capabilities directly rather than introducing a mandatory dependency on another remote-control product.
+

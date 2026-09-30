@@ -13,7 +13,7 @@
 - [x] End-to-end MCP -> native-agent integration test
 - [x] Interactive process sessions: start/read/write/stop/list
 - [x] Persisted process-session metadata, orphan/lost recovery classification, retention, and prune
-- [ ] Fully reattachable durable process I/O across agent restart
+- [x] Opt-in fully reattachable durable process I/O across native-agent restart
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
 - [~] Public deployment authentication: bootstrap bearer rotation is implemented; production authorization/TLS remains open
@@ -21,7 +21,7 @@
 ## v0.2 - Computer control
 
 - [x] process metadata retention/recovery policy and explicit prune
-- durable reattachable process I/O; live event feed is implemented
+- [x] durable reattachable process I/O with bounded sidecar output spool; live event feed is implemented
 - [x] structured process/service/network inspection and service control
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
 - [x] registry value/key, task state, and firewall rule mutation controls with verification
@@ -52,7 +52,7 @@
 - [ ] reconnect/session continuity without third-party control providers
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
 - [ ] native relay mode for machines that cannot reach the hub directly
-- [ ] first-party privilege separation and per-capability policy profiles
+- [~] first-party privilege separation remains open; persistent per-device capability allow/deny profiles are implemented
 
 ## v0.5 - GUI and browser
 
@@ -63,11 +63,12 @@
 - [x] first-party Edge/Chrome session, navigation, DOM snapshot/action, and screenshot automation
 - [x] exact-element browser visual verification with DOM expectations, hit testing, and cropped PNG evidence
 - [x] exact-HWND raw pointer move/click/scroll only as a fallback
+- [x] reusable bounded postcondition assertions for files, PID liveness, TCP, and HTTP status
 
 ## v1.0 - ChatGPT-ready remote control
 
 - production authorization, TLS, revocation, and encrypted credential storage
-- encrypted secrets and policy profiles
+- encrypted secrets and hardened administrative authorization for policy profiles
 - audit/history
 - stable MCP surface
 - multi-device routing

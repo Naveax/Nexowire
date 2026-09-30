@@ -37,15 +37,16 @@ Implemented on main as of the latest repository state:
 
 - first-party native-agent WebSocket transport with heartbeat/reconnect hardening
 - normalized provider/backend registry used only as an internal Nexowire routing seam
-- stable native device identity, persistent aliases, device history, capability-aware route discovery
+- stable native device identity, persistent aliases/groups, device history, capability-aware route discovery, and per-device capability allow/deny policies
 - operation IDs, audit metadata, mutation replay protection, selected idempotency records
-- shell, WSL2, files, search, process sessions, machine/workspace snapshots
+- shell, WSL2, files, search, volatile + durable reattachable process sessions, machine/workspace snapshots
 - persistent task-graph checkpoints and bounded parallel dependency execution
 - event feed
 - structured Windows process/service/network/registry/task/eventlog/firewall/environment controls
 - exact HWND windows, screenshots, clipboard, keyboard, UI Automation, pointer fallback
 - first-party isolated Edge/Chrome CDP automation
 - exact-element browser visual verification with cropped PNG evidence
+- reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
 - lazy skills and MCP HTTP/stdio surfaces
 
@@ -53,14 +54,13 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
-1. fully reattachable durable process I/O across native-agent restart
-2. durable long-running work/artifact tracking beyond task-graph job metadata
-3. richer multi-device routing policy/groups
-4. reconnect/session continuity and optional first-party relay transport
-5. first-party privilege separation and per-capability policy profiles
-6. production authorization/TLS/revocation/encrypted secret storage
-7. reusable postcondition/assertion workflows above browser-only visual verification
-8. stronger Linux/WSL integration coverage
+1. durable long-running work/artifact workflows beyond current process/task-graph primitives
+2. richer multi-device routing policy above aliases/groups/capability discovery
+3. reconnect/session continuity and optional first-party relay transport
+4. first-party privilege separation; per-device capability policy profiles are implemented
+5. production authorization/TLS/revocation/encrypted secret storage
+6. extend postconditions only into deterministic additional OS/application domains
+7. stronger Linux/WSL integration coverage
 
 ## Branch and merge discipline
 
