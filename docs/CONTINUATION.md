@@ -50,7 +50,7 @@ Implemented on main as of the latest repository state:
 - exact-element browser visual verification with cropped PNG evidence
 - reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
-- revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credentials may carry explicit tool allowlists enforced before execution
+- revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credential allowlists filter both tool discovery and call-time execution
 - direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
 - lazy skills and MCP HTTP/stdio surfaces
@@ -60,7 +60,7 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
-1. finish authorization-aware MCP tool discovery, then add online-device/capability-aware schema filtering
+1. add online-device/capability-aware schema filtering; authorization-aware tools/list filtering is implemented
 2. extend stored credential authorization into deterministic device/route constraints and harden administrative authorization
 3. continue deployment-grade production identity, revocation policy, and protected secret handling; TLS, rotation, TTL/revocation, and hash-only credential storage already exist
 4. extend durable long-running work/artifact workflows beyond current reattachable process and task-graph primitives
