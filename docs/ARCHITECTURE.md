@@ -44,6 +44,7 @@ The internal backend/provider interface remains as an architectural seam for Nex
 - structured workspace detection and bounded parallel check execution
 - bounded dependency-aware parallel task graphs for heterogeneous shell jobs
 - payload-free persisted task-graph checkpoints keyed by graph ID and exact specification hash; completed jobs are reusable and in-flight jobs become explicit unknown state after restart
+- persisted artifact path/size/SHA-256/mtime metadata plus bounded read-only list/re-verification; artifact bytes are not copied into durable state
 - bounded in-memory agent/process event feed with cursor-based long polling, topic/device filters, and cursor-expiry detection
 - operation IDs and persistent payload-free audit metadata
 - lazy skill discovery
@@ -62,7 +63,7 @@ The internal backend/provider interface remains as an architectural seam for Nex
 ## Next architectural layers
 
 - first-party browser automation and visual action verification
-- fully reattachable durable process I/O and artifact tracking beyond task-graph job boundaries
+- higher-level resumable workflow orchestration above durable process sessions, task graphs, and artifact verification
 - robust multi-device native routing and stable aliases
 - optional Nexowire relay/direct transport selection
 - first-party privilege-separated broker/service

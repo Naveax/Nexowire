@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { createReadStream, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -159,6 +159,12 @@ const TaskGraphJobSchema = z.object({
     .max(16_777_216)
     .optional(),
   artifacts: z.array(z.string().min(1).max(4096)).max(32).default([]),
+  artifact_max_bytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(1_073_741_824)
+    .default(268_435_456),
 });
 
 const TaskGraphRunInputSchema = z.object({
@@ -202,6 +208,24 @@ const TaskGraphPruneInputSchema = z.object({
     .optional(),
 });
 
+const TaskArtifactListInputSchema = z.object({
+  graph_id: TaskGraphJobIdSchema.optional(),
+  job_id: TaskGraphJobIdSchema.optional(),
+  limit: z.number().int().min(1).max(1000).default(200),
+});
+
+const TaskArtifactVerifyInputSchema = z.object({
+  graph_id: TaskGraphJobIdSchema,
+  job_id: TaskGraphJobIdSchema.optional(),
+  limit: z.number().int().min(1).max(1000).default(200),
+  max_bytes_each: z
+    .number()
+    .int()
+    .min(1)
+    .max(1_073_741_824)
+    .default(268_435_456),
+});
+
 class FileConflictError extends Error {
   readonly code = 'FILE_CONFLICT';
 
@@ -224,7 +248,16 @@ async function sha256File(target: string, maxBytes?: number): Promise<string> {
   if (maxBytes !== undefined && stat.size > maxBytes) {
     throw new Error(`File size ${stat.size} exceeds hash max_bytes ${maxBytes}.`);
   }
-  return sha256Buffer(await fs.readFile(target));
+
+  return await new Promise<string>((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(target);
+    stream.on('data', (chunk: string | Buffer) => {
+      hash.update(chunk);
+    });
+    stream.once('error', reject);
+    stream.once('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 interface ProcessResult {
@@ -1352,6 +1385,7 @@ interface TaskGraphResult {
 async function collectTaskArtifacts(
   requestedPaths: readonly string[],
   policy: PathPolicy,
+  maxBytes: number,
   cwd?: string,
 ): Promise<Array<{
   requestedPath: string;
@@ -1377,11 +1411,126 @@ async function collectTaskArtifacts(
       requestedPath,
       path: resolved,
       size: stat.size,
-      sha256: await sha256File(resolved),
+      sha256: await sha256File(resolved, maxBytes),
       modifiedAt: stat.mtime.toISOString(),
     });
   }
   return artifacts;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
+async function verifyTaskArtifacts(
+  input: unknown,
+  policy: PathPolicy,
+  store: TaskGraphStore,
+): Promise<unknown> {
+  const parsed = TaskArtifactVerifyInputSchema.parse(input);
+  const artifacts = store.listArtifacts({
+    graphId: parsed.graph_id,
+    ...(parsed.job_id ? { jobId: parsed.job_id } : {}),
+    limit: parsed.limit,
+  });
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const artifact of artifacts) {
+    try {
+      const resolved = await policy.resolveExisting(artifact.path);
+      const stat = await fs.stat(resolved);
+      if (!stat.isFile()) {
+        results.push({
+          ...artifact,
+          status: 'error',
+          verified: false,
+          error: {
+            code: 'ARTIFACT_NOT_FILE',
+            message: 'Persisted artifact path is no longer a file.',
+          },
+        });
+        continue;
+      }
+
+      if (stat.size > parsed.max_bytes_each) {
+        results.push({
+          ...artifact,
+          status:
+            stat.size !== artifact.size ? 'changed' : 'unverified',
+          verified: false,
+          actual: {
+            path: resolved,
+            size: stat.size,
+            modifiedAt: stat.mtime.toISOString(),
+          },
+          error: {
+            code: 'ARTIFACT_VERIFY_LIMIT',
+            message:
+              'Current artifact exceeds max_bytes_each and was not re-hashed.',
+            maxBytesEach: parsed.max_bytes_each,
+          },
+        });
+        continue;
+      }
+
+      const actualSha256 = await sha256File(
+        resolved,
+        parsed.max_bytes_each,
+      );
+      const verified =
+        stat.size === artifact.size &&
+        actualSha256 === artifact.sha256;
+
+      results.push({
+        ...artifact,
+        status: verified ? 'verified' : 'changed',
+        verified,
+        actual: {
+          path: resolved,
+          size: stat.size,
+          sha256: actualSha256,
+          modifiedAt: stat.mtime.toISOString(),
+        },
+      });
+    } catch (error) {
+      const code = errorCode(error);
+      results.push({
+        ...artifact,
+        status: code === 'ENOENT' ? 'missing' : 'error',
+        verified: false,
+        error: {
+          code: code ?? 'ARTIFACT_VERIFY_ERROR',
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  const count = (status: string) =>
+    results.filter((entry) => entry.status === status).length;
+
+  return {
+    data: {
+      graphId: parsed.graph_id,
+      ...(parsed.job_id ? { jobId: parsed.job_id } : {}),
+      maxBytesEach: parsed.max_bytes_each,
+      artifacts: results,
+      summary: {
+        total: results.length,
+        verified: count('verified'),
+        changed: count('changed'),
+        missing: count('missing'),
+        unverified: count('unverified'),
+        errors: count('error'),
+      },
+      ok: results.every((entry) => entry.verified === true),
+    },
+  };
 }
 
 function validateTaskGraph(
@@ -1631,6 +1780,7 @@ async function runTaskGraph(
           result.artifacts = await collectTaskArtifacts(
             job.artifacts,
             policy,
+            job.artifact_max_bytes,
             cwd,
           );
         }
@@ -1946,6 +2096,24 @@ export async function executeCapability(
       const parsed = TaskGraphGetInputSchema.parse(input);
       return { data: requireTaskGraphs(context).get(parsed.graph_id) };
     }
+    case 'task.artifact.list': {
+      const parsed = TaskArtifactListInputSchema.parse(input);
+      return {
+        data: {
+          artifacts: requireTaskGraphs(context).listArtifacts({
+            ...(parsed.graph_id ? { graphId: parsed.graph_id } : {}),
+            ...(parsed.job_id ? { jobId: parsed.job_id } : {}),
+            limit: parsed.limit,
+          }),
+        },
+      };
+    }
+    case 'task.artifact.verify':
+      return await verifyTaskArtifacts(
+        input,
+        policy,
+        requireTaskGraphs(context),
+      );
     case 'task.graph.prune': {
       const parsed = TaskGraphPruneInputSchema.parse(input);
       return {

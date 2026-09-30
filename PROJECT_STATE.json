@@ -28,7 +28,7 @@
       "id": "task-artifacts",
       "status": "done",
       "priority": 2,
-      "summary": "Verified task-graph artifact metadata/hashes persist in checkpoints without artifact contents"
+      "summary": "Task-graph artifact metadata/hashes persist without contents; bounded list and re-verification primitives detect verified/changed/missing/unverified/error states"
     },
     {
       "id": "device-routing",
@@ -88,7 +88,7 @@
       "id": "durable-workflows",
       "status": "partial",
       "priority": 12,
-      "summary": "Durable process sessions and task-graph artifact metadata are implemented; higher-level resumable long-running workflows and artifact lifecycle remain"
+      "summary": "Durable process sessions, resumable task graphs, and bounded artifact list/re-verification are implemented; higher-level resumable long-running workflow orchestration and artifact lifecycle policies remain"
     },
     {
       "id": "stable-mcp-surface",
@@ -120,12 +120,12 @@
     "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "dcd189d37da059609f576b4d147dc89b2421c64d",
+  "lastVerifiedMain": "d5de5143c284fe9ead93b2f483745b838cce72f7",
   "activeWork": [
     {
-      "id": "mcp-target-admin-scopes",
-      "branch": "feat/mcp-target-admin-scopes-v1",
-      "summary": "Add stable-device/deterministic-route MCP credential scopes and explicit stored-credential administrative authorization"
+      "id": "task-artifact-lifecycle",
+      "branch": "feat/task-artifact-lifecycle-v1",
+      "summary": "Add bounded persisted artifact listing and re-verification plus MCP/skill integration"
     }
   ]
 }

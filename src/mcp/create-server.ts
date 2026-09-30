@@ -4131,6 +4131,16 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
                 .min(1024)
                 .max(16_777_216)
                 .optional(),
+              artifacts: z
+                .array(z.string().min(1).max(4096))
+                .max(32)
+                .optional(),
+              artifact_max_bytes: z
+                .number()
+                .int()
+                .min(1)
+                .max(1_073_741_824)
+                .optional(),
             }),
           )
           .min(1)
@@ -4242,6 +4252,103 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         device_id,
         provider_id,
         30_000,
+      ),
+  );
+
+  server.registerTool(
+    'task_artifact_list',
+    {
+      title: 'List persisted task artifacts',
+      description:
+        'List bounded persisted task-graph artifact metadata including graph/job state, path, size, SHA-256, and mtime. Artifact contents are never returned.',
+      inputSchema: {
+        ...targetFields,
+        graph_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+          .optional(),
+        job_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+          .optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      graph_id,
+      job_id,
+      limit,
+    }) =>
+      await execute(
+        ctx,
+        'task.artifact.list',
+        {
+          ...(graph_id ? { graph_id } : {}),
+          ...(job_id ? { job_id } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'task_artifact_verify',
+    {
+      title: 'Verify persisted task artifacts',
+      description:
+        'Re-stat and re-hash persisted artifacts for one task graph through the native file policy. Reports verified, changed, missing, unverified-too-large, or error without returning artifact contents.',
+      inputSchema: {
+        ...targetFields,
+        graph_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+        job_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+          .optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+        max_bytes_each: z
+          .number()
+          .int()
+          .min(1)
+          .max(1_073_741_824)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      graph_id,
+      job_id,
+      limit,
+      max_bytes_each,
+    }) =>
+      await execute(
+        ctx,
+        'task.artifact.verify',
+        {
+          graph_id,
+          ...(job_id ? { job_id } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+          ...(max_bytes_each !== undefined
+            ? { max_bytes_each }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
       ),
   );
 

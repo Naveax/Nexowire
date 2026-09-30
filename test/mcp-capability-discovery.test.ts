@@ -176,3 +176,63 @@ test('every capability-backed MCP registration is represented in the discovery m
     [...observed.keys()].sort(),
   );
 });
+
+
+test('task artifact MCP schemas stay wired to the native artifact lifecycle', async () => {
+  const stateDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-artifact-schema-'),
+  );
+  const mcp = createNexowireMcpServer({
+    broker: new AgentBroker(),
+    providers: new ProviderRegistry(),
+    workspaces: new WorkspaceStore(stateDir),
+    skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
+  });
+  const client = new Client({
+    name: 'artifact-schema-test',
+    version: '1.0.0',
+  });
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+
+  try {
+    await Promise.all([
+      mcp.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+    const listed = await client.listTools();
+
+    for (const name of [
+      'task_artifact_list',
+      'task_artifact_verify',
+    ]) {
+      assert.ok(
+        listed.tools.some((tool) => tool.name === name),
+        name,
+      );
+    }
+
+    const runGraph = listed.tools.find(
+      (tool) => tool.name === 'task_run_graph',
+    );
+    assert.ok(runGraph);
+
+    const schema = runGraph.inputSchema as {
+      properties?: {
+        jobs?: {
+          items?: {
+            properties?: Record<string, unknown>;
+          };
+        };
+      };
+    };
+    const jobProperties =
+      schema.properties?.jobs?.items?.properties ?? {};
+    assert.ok('artifacts' in jobProperties);
+    assert.ok('artifact_max_bytes' in jobProperties);
+  } finally {
+    await client.close();
+    await mcp.close();
+    await fs.rm(stateDir, { recursive: true, force: true });
+  }
+});
