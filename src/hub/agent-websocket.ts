@@ -42,7 +42,7 @@ export function attachAgentWebSocketServer(
 
     const authRequired =
       configuredAgentTokens.length > 0 ||
-      options.credentialStore?.hasUsable('agent') === true;
+      options.credentialStore?.hasConfigured('agent') === true;
     const authenticated = authRequired
       ? authorizeBearer(
           request.headers.authorization,
