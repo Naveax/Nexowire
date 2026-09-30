@@ -12,6 +12,7 @@ import type { DeviceRoutingPolicyStore } from '../devices/routing-policy-store.j
 import {
   buildDeviceRoutingEntries,
   filterDeviceRoutes,
+  selectDeviceRoute,
 } from '../devices/routing.js';
 import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
@@ -881,38 +882,18 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         candidates = candidates.filter((device) => members.has(device.id));
       }
 
-      let selected = null;
-      let ambiguous = false;
-
-      if (policy.selection === 'unique_only') {
-        selected = candidates.length === 1 ? candidates[0] : null;
-        ambiguous = candidates.length > 1;
-      } else {
-        const byId = new Map(
-          candidates.map((candidate) => [candidate.id, candidate]),
-        );
-        for (const deviceId of policy.priorityDeviceIds) {
-          const candidate = byId.get(deviceId);
-          if (!candidate) continue;
-          selected = candidate;
-          break;
-        }
-      }
+      const selection = selectDeviceRoute(candidates, {
+        selection: policy.selection,
+        priorityDeviceIds: policy.priorityDeviceIds,
+      });
 
       return toolResult({
         policy,
-        selected,
-        ambiguous,
+        selected: selection.selected,
+        ambiguous: selection.ambiguous,
         candidates,
         ...(groupDeviceIds ? { groupDeviceIds } : {}),
-        reason:
-          selected !== null
-            ? policy.selection === 'priority'
-              ? 'explicit_priority_match'
-              : 'unique_candidate'
-            : ambiguous
-              ? 'ambiguous_candidates'
-              : 'no_candidate',
+        reason: selection.reason,
       });
     },
   );
