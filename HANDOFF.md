@@ -62,6 +62,7 @@ Implemented:
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - first-party relay server with inbound/upstream authentication, bounded backpressure/heartbeats, ordered agent endpoint fallback, and real native-agent relay CI coverage
 - revocable/expiring hash-only stored MCP/native-agent credentials plus optional MCP tool allowlists enforced before tool execution
+- stored MCP credential allowlists now filter both `tools/list` discovery and call-time execution, so restricted credentials do not receive unauthorized tool schemas
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
 - initial security/docs/tests/CI
@@ -96,7 +97,7 @@ The repository is the source of truth. If this file disagrees with current code/
 ## Immediate next work
 
 1. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
-2. Merge/finish auth-aware MCP tool discovery so restricted stored credentials do not receive schemas for unauthorized tools.
+2. Add online-device/capability-aware MCP schema filtering; credential-aware tools/list filtering is implemented.
 3. Extend credential authorization to deterministic device/route constraints and harden administrative authorization without weakening local/operator workflows.
 4. Extend durable execution/artifact workflows beyond current reattachable process sessions and task-graph artifact metadata.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
