@@ -7,6 +7,8 @@ import { NexowireError } from '../src/core/errors.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
 import { AGENT_PROTOCOL_VERSION } from '../src/protocol/agent.js';
 
+const queuedMessages = new WeakMap<WebSocket, unknown[]>();
+
 interface HubFixture {
   http: Server;
   broker: AgentBroker;
@@ -63,6 +65,15 @@ async function connectAgent(
     socket.once('open', resolve);
     socket.once('error', reject);
   });
+  const queue: unknown[] = [];
+  queuedMessages.set(socket, queue);
+  socket.on('message', (raw) => {
+    try {
+      queue.push(JSON.parse(raw.toString()));
+    } catch {
+      // Ignore malformed test traffic.
+    }
+  });
   socket.send(
     JSON.stringify({
       type: 'hello',
@@ -91,16 +102,20 @@ async function nextRequest(socket: WebSocket): Promise<{
   capability: string;
   input: unknown;
 }> {
-  return await new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error('Timed out waiting for hub request.')),
-      1_500,
-    );
-    socket.once('message', (raw) => {
-      clearTimeout(timer);
-      resolve(JSON.parse(raw.toString()));
-    });
-  });
+  const deadline = Date.now() + 1_500;
+  while (Date.now() < deadline) {
+    const queue = queuedMessages.get(socket);
+    const next = queue?.shift();
+    if (next) {
+      return next as {
+        requestId: string;
+        capability: string;
+        input: unknown;
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for hub request.');
 }
 
 async function waitOffline(
@@ -213,12 +228,8 @@ test('new native-agent process instance never replays a pending mutation', async
       result.error.code === 'AGENT_INSTANCE_CHANGED',
   );
 
-  let replayed = false;
-  second.once('message', () => {
-    replayed = true;
-  });
   await new Promise((resolve) => setTimeout(resolve, 150));
-  assert.equal(replayed, false);
+  assert.equal(queuedMessages.get(second)?.length ?? 0, 0);
 });
 
 test('read-only request can resume after a native-agent process restart', async (t) => {
