@@ -101,3 +101,18 @@ export function isMcpToolAvailableForCapabilities(
       : new Set(capabilities);
   return available.has(required);
 }
+
+export function onlineCapabilityUnion(
+  targets: readonly {
+    online: boolean;
+    capabilities: readonly string[];
+  }[],
+): string[] {
+  return [
+    ...new Set(
+      targets
+        .filter((target) => target.online)
+        .flatMap((target) => target.capabilities),
+    ),
+  ].sort();
+}
