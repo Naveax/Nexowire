@@ -387,6 +387,12 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'Filter known devices by exact ID/alias, platform, name/alias substring, and required capabilities. Returns a selected device only when exactly one candidate remains; ambiguity is reported rather than silently choosing a different computer.',
       inputSchema: {
         device_id: z.string().min(1).max(128).optional(),
+        group: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
+          .optional(),
         platform: z.string().min(1).max(64).optional(),
         name_contains: z.string().min(1).max(128).optional(),
         required_capabilities: z
@@ -398,6 +404,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     },
     async ({
       device_id,
+      group,
       platform,
       name_contains,
       required_capabilities,
@@ -413,7 +420,23 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           (await ctx.aliases?.resolve(device_id)) ?? device_id;
       }
 
-      const candidates = filterDeviceRoutes(devices, {
+      const groupRecord = group
+        ? await ctx.groups?.get(group)
+        : undefined;
+      if (group && !groupRecord) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'DEVICE_GROUP_NOT_FOUND',
+              message: `Unknown Nexowire device group: ${group}`,
+            },
+          },
+          true,
+        );
+      }
+
+      let candidates = filterDeviceRoutes(devices, {
         ...(resolvedDeviceId
           ? { deviceId: resolvedDeviceId }
           : {}),
@@ -425,11 +448,22 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         onlineOnly: online_only ?? true,
       });
 
+      if (groupRecord) {
+        const members = new Set(groupRecord.deviceIds);
+        candidates = candidates.filter((device) => members.has(device.id));
+      }
+
       return toolResult({
         selected:
           candidates.length === 1 ? candidates[0] : null,
         ambiguous: candidates.length > 1,
         candidates,
+        ...(groupRecord
+          ? {
+              requestedGroup: groupRecord.name,
+              groupDeviceIds: groupRecord.deviceIds,
+            }
+          : {}),
         ...(device_id && resolvedDeviceId !== device_id
           ? {
               requestedAlias: device_id,
@@ -437,6 +471,109 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             }
           : {}),
       });
+    },
+  );
+
+  server.registerTool(
+    'device_group_list',
+    {
+      title: 'List device groups',
+      description:
+        'List persistent Nexowire device groups. Groups contain stable device IDs and can include currently offline known devices.',
+      inputSchema: {},
+    },
+    async () =>
+      toolResult({
+        groups: ctx.groups ? await ctx.groups.list() : [],
+      }),
+  );
+
+  server.registerTool(
+    'device_group_set',
+    {
+      title: 'Set device group',
+      description:
+        'Create or replace a persistent device group from known device IDs or aliases. Unknown targets fail closed.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+        devices: z
+          .array(z.string().min(1).max(128))
+          .min(1)
+          .max(256),
+      },
+    },
+    async ({ name, devices: requestedDevices }) => {
+      if (!ctx.groups) {
+        return toolResult(
+          { ok: false, error: 'Device group storage is unavailable.' },
+          true,
+        );
+      }
+
+      const known = await routingEntries(ctx);
+      const knownIds = new Set(known.map((device) => device.id));
+      const resolved: string[] = [];
+      const unknown: string[] = [];
+
+      for (const requested of requestedDevices) {
+        if (knownIds.has(requested)) {
+          resolved.push(requested);
+          continue;
+        }
+        const aliased = await ctx.aliases?.resolve(requested);
+        if (aliased && knownIds.has(aliased)) {
+          resolved.push(aliased);
+          continue;
+        }
+        unknown.push(requested);
+      }
+
+      if (unknown.length > 0) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'DEVICE_GROUP_UNKNOWN_TARGET',
+              message:
+                'One or more group members are not known Nexowire devices or aliases.',
+              unknown,
+            },
+          },
+          true,
+        );
+      }
+
+      return toolResult({
+        group: await ctx.groups.set(name, resolved),
+      });
+    },
+  );
+
+  server.registerTool(
+    'device_group_delete',
+    {
+      title: 'Delete device group',
+      description: 'Delete one persistent Nexowire device group.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+      },
+    },
+    async ({ name }) => {
+      if (!ctx.groups) {
+        return toolResult(
+          { ok: false, error: 'Device group storage is unavailable.' },
+          true,
+        );
+      }
+      return toolResult(await ctx.groups.delete(name));
     },
   );
 
