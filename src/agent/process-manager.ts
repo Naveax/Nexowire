@@ -1234,21 +1234,39 @@ export class ProcessManager {
 
   async stopAll(): Promise<void> {
     const active = [...this.sessions.values()].filter(
-      (session) =>
-        session.status === 'running' &&
-        !session.recovered &&
-        session.pid,
+      (session) => session.status === 'running',
     );
 
     await Promise.all(
       active.map(async (session) => {
-        await killPidTree(session.pid!);
+        if (session.durable) {
+          try {
+            await this.workerControl(session, {
+              type: 'stop',
+              commandId: randomUUID(),
+            });
+          } catch {
+            // Continue with status refresh below.
+          }
+          for (let attempt = 0; attempt < 100; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            await this.refreshDurableSession(session, false).catch(
+              () => undefined,
+            );
+            if (session.status !== 'running') break;
+          }
+          this.stopDurableMonitor(session.id);
+          return;
+        }
+
+        if (session.recovered || !session.pid) return;
+        await killPidTree(session.pid);
         await this.waitForChildClose(session);
         for (let attempt = 0; attempt < 20; attempt++) {
-          if (!isPidAlive(session.pid!)) break;
+          if (!isPidAlive(session.pid)) break;
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        if (!isPidAlive(session.pid!) && !session.exitedAt) {
+        if (!isPidAlive(session.pid) && !session.exitedAt) {
           session.status = 'exited';
           session.exitCode = null;
           session.signal = null;
@@ -1282,6 +1300,13 @@ export class ProcessManager {
       const anchor = session.exitedAt ?? session.startedAt;
       if (Date.parse(anchor) <= cutoff) {
         this.sessions.delete(id);
+        this.stopDurableMonitor(id);
+        if (session.durable && session.workerDir) {
+          void fs.rm(session.workerDir, {
+            recursive: true,
+            force: true,
+          }).catch(() => undefined);
+        }
       }
     }
   }
