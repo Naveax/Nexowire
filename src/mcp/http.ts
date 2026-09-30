@@ -43,7 +43,7 @@ export async function runHttpServer(
   app.use('/mcp', (req: Request, res: Response, next: NextFunction) => {
     const authRequired =
       mcpTokens.length > 0 ||
-      context.credentials?.hasUsable('mcp') === true;
+      context.credentials?.hasConfigured('mcp') === true;
     if (
       authRequired &&
       !authorizeBearer(
