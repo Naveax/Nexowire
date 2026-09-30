@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
+import { runPrivilegedBroker } from './agent/privileged-broker.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -14,6 +15,7 @@ Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent   Start the native computer agent
+  nexowire privileged-broker  Start the local elevated Windows broker
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -31,6 +33,11 @@ async function main(): Promise<void> {
 
   if (command === 'agent') {
     await runNativeAgent();
+    return;
+  }
+
+  if (command === 'privileged-broker') {
+    await runPrivilegedBroker();
     return;
   }
 
