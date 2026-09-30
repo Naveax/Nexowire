@@ -859,19 +859,25 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       const policies = ctx.routingPolicies
         ? await ctx.routingPolicies.list()
         : [];
-      const allowedNames = hasMcpTargetRestrictions(
-        ctx.toolAuthorization,
-      )
-        ? new Set(
-            authorizedRoutingPolicyNames(ctx.toolAuthorization),
-          )
-        : undefined;
+      if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        return toolResult({ policies });
+      }
+
+      const allowedNames = new Set(
+        authorizedRoutingPolicyNames(ctx.toolAuthorization),
+      );
+      const visibleIds = new Set(
+        (await routingEntries(ctx)).map((device) => device.id),
+      );
       return toolResult({
-        policies: allowedNames
-          ? policies.filter((policy) =>
-              allowedNames.has(policy.name),
-            )
-          : policies,
+        policies: policies
+          .filter((policy) => allowedNames.has(policy.name))
+          .map((policy) => ({
+            ...policy,
+            priorityDeviceIds: policy.priorityDeviceIds.filter(
+              (deviceId) => visibleIds.has(deviceId),
+            ),
+          })),
       });
     },
   );
@@ -1141,8 +1147,18 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         priorityDeviceIds: policy.priorityDeviceIds,
       });
 
+      const visibleIds = new Set(
+        devices.map((device) => device.id),
+      );
       return toolResult({
-        policy,
+        policy: hasMcpTargetRestrictions(ctx.toolAuthorization)
+          ? {
+              ...policy,
+              priorityDeviceIds: policy.priorityDeviceIds.filter(
+                (deviceId) => visibleIds.has(deviceId),
+              ),
+            }
+          : policy,
         selected: selection.selected,
         ambiguous: selection.ambiguous,
         candidates,
@@ -1265,6 +1281,28 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           { ok: false, error: 'Device group storage is unavailable.' },
           true,
         );
+      }
+      if (hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        const group = await ctx.groups.get(name);
+        const visibleIds = new Set(
+          (await routingEntries(ctx)).map((device) => device.id),
+        );
+        if (
+          group &&
+          group.deviceIds.some((deviceId) => !visibleIds.has(deviceId))
+        ) {
+          return toolResult(
+            {
+              ok: false,
+              error: {
+                code: 'MCP_TARGET_NOT_AUTHORIZED',
+                message:
+                  'Requested device group contains targets outside this credential scope.',
+              },
+            },
+            true,
+          );
+        }
       }
       return toolResult(await ctx.groups.delete(name));
     },
