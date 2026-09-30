@@ -58,15 +58,15 @@ test('restricted stored MCP credentials only discover authorized tools', async (
       id: 'credential1234',
       scope: 'mcp',
       createdAt: '2026-09-30T12:00:00.000Z',
-      allowedTools: ['machine_*', 'files_read'],
+      allowedTools: ['machine_*', 'file_read'],
     },
   });
 
   assert.ok(tools.includes('machine_snapshot'));
   assert.ok(tools.includes('machine_health'));
-  assert.ok(tools.includes('files_read'));
+  assert.ok(tools.includes('file_read'));
 
-  assert.equal(tools.includes('files_write'), false);
+  assert.equal(tools.includes('file_write'), false);
   assert.equal(tools.includes('policy_profile_list'), false);
   assert.equal(tools.includes('device_alias_set'), false);
   assert.equal(tools.includes('browser_session_start'), false);
@@ -75,7 +75,7 @@ test('restricted stored MCP credentials only discover authorized tools', async (
     tools.every(
       (name) =>
         name.startsWith('machine_') ||
-        name === 'files_read',
+        name === 'file_read',
     ),
   );
 });
@@ -99,7 +99,7 @@ test('static and unscoped stored credentials retain the full MCP surface', async
     'policy_profile_list',
     'device_alias_set',
     'machine_snapshot',
-    'files_write',
+    'file_write',
     'browser_session_start',
   ]) {
     assert.ok(staticTools.includes(required), required);
