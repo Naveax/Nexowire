@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { createReadStream, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -248,7 +248,14 @@ async function sha256File(target: string, maxBytes?: number): Promise<string> {
   if (maxBytes !== undefined && stat.size > maxBytes) {
     throw new Error(`File size ${stat.size} exceeds hash max_bytes ${maxBytes}.`);
   }
-  return sha256Buffer(await fs.readFile(target));
+
+  return await new Promise<string>((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(target);
+    stream.on('data', (chunk: Buffer) => hash.update(chunk));
+    stream.once('error', reject);
+    stream.once('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 interface ProcessResult {
