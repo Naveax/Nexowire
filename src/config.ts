@@ -9,6 +9,9 @@ export interface NexowireConfig {
   mcpBearerTokens?: string[];
   agentToken?: string;
   agentTokens?: string[];
+  tlsCertFile?: string;
+  tlsKeyFile?: string;
+  allowInsecureRemote?: boolean;
   stateDir: string;
   skillsDir: string;
 }
@@ -16,6 +19,16 @@ export interface NexowireConfig {
 function optional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function envFlag(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return (
+    normalized === '1' ||
+    normalized === 'true' ||
+    normalized === 'yes' ||
+    normalized === 'on'
+  );
 }
 
 export function isLoopbackHost(host: string): boolean {
@@ -67,6 +80,14 @@ export function loadConfig(
     env.NEXOWIRE_AGENT_TOKENS,
   );
 
+  const tlsCertFile = optional(env.NEXOWIRE_TLS_CERT_FILE);
+  const tlsKeyFile = optional(env.NEXOWIRE_TLS_KEY_FILE);
+  if (Boolean(tlsCertFile) !== Boolean(tlsKeyFile)) {
+    throw new Error(
+      'NEXOWIRE_TLS_CERT_FILE and NEXOWIRE_TLS_KEY_FILE must be configured together.',
+    );
+  }
+
   return {
     host: optional(env.NEXOWIRE_HTTP_HOST) ?? '127.0.0.1',
     port,
@@ -82,9 +103,18 @@ export function loadConfig(
     ...(agentTokens.length > 0
       ? { agentTokens }
       : {}),
+    ...(tlsCertFile ? { tlsCertFile } : {}),
+    ...(tlsKeyFile ? { tlsKeyFile } : {}),
+    ...(envFlag(env.NEXOWIRE_ALLOW_INSECURE_REMOTE)
+      ? { allowInsecureRemote: true }
+      : {}),
     stateDir,
     skillsDir: path.join(cwd, 'skills'),
   };
+}
+
+export function hasDirectTls(config: NexowireConfig): boolean {
+  return Boolean(config.tlsCertFile && config.tlsKeyFile);
 }
 
 export function assertSafeRemoteBinding(config: NexowireConfig): void {
@@ -96,6 +126,12 @@ export function assertSafeRemoteBinding(config: NexowireConfig): void {
   ) {
     throw new Error(
       'Refusing non-loopback bind without configured MCP and native-agent bearer credentials.',
+    );
+  }
+
+  if (!hasDirectTls(config) && !config.allowInsecureRemote) {
+    throw new Error(
+      'Refusing non-loopback plaintext transport. Configure NEXOWIRE_TLS_CERT_FILE and NEXOWIRE_TLS_KEY_FILE, bind loopback behind a TLS reverse proxy, or explicitly set NEXOWIRE_ALLOW_INSECURE_REMOTE=1 for a trusted private network.',
     );
   }
 }

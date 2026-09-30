@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { NextFunction, Request, Response } from 'express';
@@ -6,6 +9,7 @@ import type { NexowireConfig } from '../config.js';
 import {
   agentAuthTokens,
   assertSafeRemoteBinding,
+  hasDirectTls,
   mcpAuthTokens,
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
@@ -19,11 +23,14 @@ export async function runHttpServer(
 ): Promise<void> {
   assertSafeRemoteBinding(config);
   const app = createMcpExpressApp({ host: config.host });
+  const tlsEnabled = hasDirectTls(config);
+  const scheme = tlsEnabled ? 'https' : 'http';
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
       ok: true,
       service: 'nexowire',
+      transport: scheme,
       agents: broker.list().length,
       time: new Date().toISOString(),
     });
@@ -76,9 +83,20 @@ export async function runHttpServer(
     res.status(405).json({ error: 'method_not_allowed' });
   });
 
-  const httpServer = app.listen(config.port, config.host, () => {
+  const httpServer = tlsEnabled
+    ? createHttpsServer(
+        {
+          cert: await readFile(config.tlsCertFile!),
+          key: await readFile(config.tlsKeyFile!),
+          minVersion: 'TLSv1.2',
+        },
+        app,
+      )
+    : createHttpServer(app);
+
+  httpServer.listen(config.port, config.host, () => {
     process.stderr.write(
-      `Nexowire hub listening on http://${config.host}:${config.port}/mcp\n`,
+      `Nexowire hub listening on ${scheme}://${config.host}:${config.port}/mcp\n`,
     );
   });
 

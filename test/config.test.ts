@@ -9,10 +9,37 @@ test('loopback host detection accepts local forms', () => {
   assert.equal(isLoopbackHost('0.0.0.0'), false);
 });
 
-test('remote bind requires both MCP and agent credentials', () => {
-  const base = loadConfig({ NEXOWIRE_HTTP_HOST: '0.0.0.0', NEXOWIRE_HTTP_PORT: '43110' }, process.cwd());
+test('remote bind requires credentials and encrypted transport by default', () => {
+  const base = loadConfig(
+    {
+      NEXOWIRE_HTTP_HOST: '0.0.0.0',
+      NEXOWIRE_HTTP_PORT: '43110',
+    },
+    process.cwd(),
+  );
   assert.throws(() => assertSafeRemoteBinding(base));
-  assert.doesNotThrow(() => assertSafeRemoteBinding({ ...base, mcpBearerToken: 'mcp-secret', agentToken: 'agent-secret' }));
+
+  const authenticated = {
+    ...base,
+    mcpBearerToken: 'mcp-secret',
+    agentToken: 'agent-secret',
+  };
+  assert.throws(() => assertSafeRemoteBinding(authenticated));
+
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding({
+      ...authenticated,
+      tlsCertFile: 'cert.pem',
+      tlsKeyFile: 'key.pem',
+    }),
+  );
+
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding({
+      ...authenticated,
+      allowInsecureRemote: true,
+    }),
+  );
 });
 
 test('token lists merge legacy/current credentials for rotation', () => {
@@ -38,7 +65,14 @@ test('token lists merge legacy/current credentials for rotation', () => {
     'old-agent',
     'next-agent',
   ]);
-  assert.doesNotThrow(() => assertSafeRemoteBinding(config));
+  assert.throws(() => assertSafeRemoteBinding(config));
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding({
+      ...config,
+      tlsCertFile: 'cert.pem',
+      tlsKeyFile: 'key.pem',
+    }),
+  );
 });
 
 test('remote bind accepts token sets even without legacy singular fields', () => {
@@ -51,5 +85,52 @@ test('remote bind accepts token sets even without legacy singular fields', () =>
     },
     process.cwd(),
   );
-  assert.doesNotThrow(() => assertSafeRemoteBinding(config));
+  assert.throws(() => assertSafeRemoteBinding(config));
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding({
+      ...config,
+      allowInsecureRemote: true,
+    }),
+  );
+});
+
+test('TLS certificate and key paths must be configured together', () => {
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_TLS_CERT_FILE: 'cert.pem',
+      },
+      process.cwd(),
+    ),
+  );
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_TLS_KEY_FILE: 'key.pem',
+      },
+      process.cwd(),
+    ),
+  );
+
+  const config = loadConfig(
+    {
+      NEXOWIRE_TLS_CERT_FILE: 'cert.pem',
+      NEXOWIRE_TLS_KEY_FILE: 'key.pem',
+    },
+    process.cwd(),
+  );
+  assert.equal(config.tlsCertFile, 'cert.pem');
+  assert.equal(config.tlsKeyFile, 'key.pem');
+});
+
+test('insecure remote override accepts common boolean spellings', () => {
+  for (const value of ['1', 'true', 'yes', 'on']) {
+    const config = loadConfig(
+      {
+        NEXOWIRE_ALLOW_INSECURE_REMOTE: value,
+      },
+      process.cwd(),
+    );
+    assert.equal(config.allowInsecureRemote, true);
+  }
 });
