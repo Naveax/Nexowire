@@ -168,6 +168,7 @@ export async function runProcessWorker(
   let bufferedBytes = 0;
   let nextSeq = 1;
   let persistChain: Promise<void> = Promise.resolve();
+  let eventChain: Promise<void> = Promise.resolve();
   let child: ChildProcessWithoutNullStreams | undefined;
   const processedCommands = new Set<string>();
   const startedAt = new Date().toISOString();
@@ -206,37 +207,40 @@ export async function runProcessWorker(
     stream: 'stdout' | 'stderr',
     chunk: Buffer,
   ): Promise<void> => {
-    const event: WorkerEvent = {
-      seq: nextSeq++,
-      stream,
-      text: chunk.toString('utf8'),
-      at: new Date().toISOString(),
-    };
-    events.push(event);
-    bufferedBytes += Buffer.byteLength(event.text);
+    eventChain = eventChain.catch(() => undefined).then(async () => {
+      const event: WorkerEvent = {
+        seq: nextSeq++,
+        stream,
+        text: chunk.toString('utf8'),
+        at: new Date().toISOString(),
+      };
+      events.push(event);
+      bufferedBytes += Buffer.byteLength(event.text);
 
-    let trimmed = false;
-    while (
-      bufferedBytes > init.maxBufferBytes &&
-      events.length > 1
-    ) {
-      const removed = events.shift();
-      if (removed) {
-        bufferedBytes -= Buffer.byteLength(removed.text);
-        trimmed = true;
+      let trimmed = false;
+      while (
+        bufferedBytes > init.maxBufferBytes &&
+        events.length > 1
+      ) {
+        const removed = events.shift();
+        if (removed) {
+          bufferedBytes -= Buffer.byteLength(removed.text);
+          trimmed = true;
+        }
       }
-    }
 
-    if (trimmed) {
-      await rewriteEvents();
-    } else {
-      await fs.appendFile(
-        eventsFile,
-        JSON.stringify(event) + '\n',
-        { encoding: 'utf8', mode: 0o600 },
-      );
-    }
-    await persistStatus();
+      if (trimmed) {
+        await rewriteEvents();
+      } else {
+        await fs.appendFile(
+          eventsFile,
+          JSON.stringify(event) + '\n',
+          { encoding: 'utf8', mode: 0o600 },
+        );
+      }
+      await persistStatus();
+    });
+    await eventChain;
   };
 
   const server = net.createServer((socket) => {
@@ -389,6 +393,7 @@ export async function runProcessWorker(
 
   await new Promise<void>((resolve) => {
     child!.once('close', async (code, signal) => {
+      await eventChain.catch(() => undefined);
       status = {
         ...status,
         status: 'exited',
