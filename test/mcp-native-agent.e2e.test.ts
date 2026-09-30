@@ -196,6 +196,10 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_delete'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_route'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_set'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_delete'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_resolve'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_snapshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_health'));
   assert.ok(tools.tools.some((tool) => tool.name === 'network_dns_resolve'));

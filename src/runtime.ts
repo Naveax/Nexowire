@@ -6,6 +6,7 @@ import { ProviderRegistry } from './core/provider-registry.js';
 import { DeviceAliasStore } from './devices/alias-store.js';
 import { DeviceDirectory } from './devices/directory.js';
 import { DeviceGroupStore } from './devices/group-store.js';
+import { DeviceRoutingPolicyStore } from './devices/routing-policy-store.js';
 import { IdempotencyStore } from './operations/idempotency-store.js';
 import { CapabilityPolicyStore } from './security/capability-policy.js';
 import { AgentProvider } from './providers/agent-provider.js';
@@ -31,12 +32,14 @@ export async function createRuntime(config: NexowireConfig) {
   const audit = new AuditLog(path.join(config.stateDir, 'audit.jsonl'));
   const aliases = new DeviceAliasStore(config.stateDir);
   const groups = new DeviceGroupStore(config.stateDir);
+  const routingPolicies = new DeviceRoutingPolicyStore(config.stateDir);
   const idempotency = new IdempotencyStore(config.stateDir);
   const policies = new CapabilityPolicyStore(config.stateDir);
   await Promise.all([
     audit.loadRecent(),
     aliases.initialize(),
     groups.initialize(),
+    routingPolicies.initialize(),
     idempotency.initialize(),
     policies.initialize(),
   ]);
@@ -49,6 +52,7 @@ export async function createRuntime(config: NexowireConfig) {
       devices,
       aliases,
       groups,
+      routingPolicies,
       idempotency,
       policies,
       audit,
