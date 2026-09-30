@@ -72,7 +72,7 @@ export interface CredentialMetadata {
   allowedTools?: string[];
   allowedDeviceIds?: string[];
   allowedRoutingPolicies?: string[];
-  administrative: boolean;
+  administrative?: boolean;
   createdAt: string;
   expiresAt?: string;
   revokedAt?: string;
