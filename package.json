@@ -19,7 +19,9 @@
     "start": "node dist/src/cli.js http",
     "start:agent": "node dist/src/cli.js agent",
     "dev:relay": "tsx src/cli.ts relay",
-    "start:relay": "node dist/src/cli.js relay"
+    "start:relay": "node dist/src/cli.js relay",
+    "dev:privileged-broker": "tsx src/cli.ts privileged-broker",
+    "start:privileged-broker": "node dist/src/cli.js privileged-broker"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
