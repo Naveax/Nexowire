@@ -155,6 +155,7 @@ const TaskGraphJobSchema = z.object({
     .min(1024)
     .max(16_777_216)
     .optional(),
+  artifacts: z.array(z.string().min(1).max(4096)).max(32).default([]),
 });
 
 const TaskGraphRunInputSchema = z.object({
@@ -1336,6 +1337,48 @@ interface TaskGraphResult {
   blockedBy?: string[];
   attempts?: number;
   reused?: boolean;
+  artifacts?: Array<{
+    requestedPath: string;
+    path: string;
+    size: number;
+    sha256: string;
+    modifiedAt: string;
+  }>;
+}
+
+async function collectTaskArtifacts(
+  requestedPaths: readonly string[],
+  policy: PathPolicy,
+  cwd?: string,
+): Promise<Array<{
+  requestedPath: string;
+  path: string;
+  size: number;
+  sha256: string;
+  modifiedAt: string;
+}>> {
+  const artifacts = [];
+  for (const requestedPath of requestedPaths) {
+    const candidate =
+      path.isAbsolute(requestedPath) || !cwd
+        ? requestedPath
+        : path.join(cwd, requestedPath);
+    const resolved = await policy.resolveExisting(candidate);
+    const stat = await fs.stat(resolved);
+    if (!stat.isFile()) {
+      throw new Error(
+        `Task artifact is not a file: ${requestedPath}`,
+      );
+    }
+    artifacts.push({
+      requestedPath,
+      path: resolved,
+      size: stat.size,
+      sha256: await sha256File(resolved),
+      modifiedAt: stat.mtime.toISOString(),
+    });
+  }
+  return artifacts;
 }
 
 function validateTaskGraph(
@@ -1463,6 +1506,11 @@ async function runTaskGraph(
       ...(saved?.exitCode !== undefined ? { exitCode: saved.exitCode } : {}),
       ...(saved?.timedOut !== undefined ? { timedOut: saved.timedOut } : {}),
       ...(saved?.blockedBy ? { blockedBy: [...saved.blockedBy] } : {}),
+      ...(saved?.artifacts
+        ? {
+            artifacts: saved.artifacts.map((artifact) => ({ ...artifact })),
+          }
+        : {}),
       ...(saved ? { attempts: saved.attempts } : { attempts: 0 }),
       ...(saved && saved.status !== 'pending' ? { reused: true } : {}),
     });
@@ -1504,6 +1552,11 @@ async function runTaskGraph(
         ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
         ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
         ...(result.blockedBy ? { blockedBy: [...result.blockedBy] } : {}),
+        ...(result.artifacts
+          ? {
+              artifacts: result.artifacts.map((artifact) => ({ ...artifact })),
+            }
+          : {}),
       })),
     };
     await store.save(checkpoint);
@@ -1525,6 +1578,7 @@ async function runTaskGraph(
     delete result.stderr;
     delete result.timedOut;
     delete result.truncated;
+    delete result.artifacts;
     const jobStartedAt = Date.now();
 
     const promise = (async () => {
@@ -1569,6 +1623,14 @@ async function runTaskGraph(
           execution.exitCode === 0 && !execution.timedOut
             ? 'succeeded'
             : 'failed';
+
+        if (result.status === 'succeeded' && job.artifacts.length > 0) {
+          result.artifacts = await collectTaskArtifacts(
+            job.artifacts,
+            policy,
+            cwd,
+          );
+        }
       } catch (error) {
         result.status = 'failed';
         result.exitCode = null;
