@@ -90,6 +90,11 @@ export async function runNativeAgent(
   };
   const processes = new ProcessManager({
     stateFile: processStateFile,
+    workerRoot:
+      env.NEXOWIRE_PROCESS_WORKER_ROOT?.trim() ||
+      path.join(os.homedir(), '.nexowire', 'process-workers'),
+    workerEntrypoint: process.argv[1],
+    workerExecArgv: process.execArgv,
     onEvent: (event) => emitAgentEvent(event.topic, event.data),
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
@@ -99,7 +104,7 @@ export async function runNativeAgent(
   const stop = (): void => {
     stopped = true;
     currentSocket?.close(1001, 'Agent shutting down');
-    void processes.stopAll();
+    void processes.shutdown();
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
