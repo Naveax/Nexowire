@@ -52,7 +52,7 @@
 - [x] reconnect/session continuity without third-party control providers, with process-instance-aware request resumption and mutation-safe restart boundaries
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
 - [ ] native relay mode for machines that cannot reach the hub directly
-- [~] first-party privilege separation: elevated Windows broker routing and DPAPI-protected same-user broker secret are implemented; hardened broker lifecycle/service installation remains open
+- [x] first-party privilege separation with elevated Windows broker routing, DPAPI-protected same-user secret bootstrap, and highest-privilege per-user scheduled-task lifecycle
 
 ## v0.5 - GUI and browser
 
