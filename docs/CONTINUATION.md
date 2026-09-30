@@ -50,6 +50,7 @@ Implemented on main as of the latest repository state:
 - reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
 - lazy skills and MCP HTTP/stdio surfaces
+- real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
 
 ## Important unfinished slices
 
@@ -60,7 +61,7 @@ The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broa
 3. first-party privilege separation; per-device capability policy profiles are implemented
 4. production authorization/TLS/revocation/encrypted secret storage
 5. extend postconditions only into deterministic additional OS/application domains
-6. stronger Linux/WSL integration coverage
+6. real WSL2-distro integration coverage; native Linux outbound-agent coverage is implemented
 
 ## Branch and merge discipline
 
