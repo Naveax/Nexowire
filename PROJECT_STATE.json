@@ -31,10 +31,10 @@
       "summary": "Verified task-graph artifact metadata/hashes persist in checkpoints without artifact contents"
     },
     {
-      "id": "device-routing-groups",
+      "id": "device-routing",
       "status": "done",
       "priority": 3,
-      "summary": "Persistent aliases, groups, capability-aware discovery, and named deterministic route policies with unique-only or explicit stable-device priority selection are implemented"
+      "summary": "Persistent device directory, aliases, groups, capability-aware discovery, deterministic named route policies, and multi-device routing are implemented"
     },
     {
       "id": "session-continuity",
@@ -43,34 +43,58 @@
       "summary": "Native protocol v2 identifies process instances; same-process reconnects resume exact request IDs through bounded dedupe cache, read-only work may resume after process restart, and pending mutations fail unknown instead of replaying across instance change"
     },
     {
-      "id": "privilege-separation",
+      "id": "relay-routing",
       "status": "done",
       "priority": 5,
-      "summary": "Per-device capability policies, a separate elevated Windows broker, DPAPI CurrentUser-protected broker authentication, and install/status/start/stop/uninstall scheduled-task lifecycle are implemented."
+      "summary": "First-party relay server, ordered direct/relay endpoint fallback, inbound/upstream authentication, bounded forwarding/backpressure/heartbeats, and real native-agent relay CI are implemented"
+    },
+    {
+      "id": "privilege-separation",
+      "status": "done",
+      "priority": 6,
+      "summary": "Per-device capability policies, a separate elevated Windows broker, DPAPI CurrentUser-protected broker authentication, and highest-privilege per-user scheduled-task lifecycle are implemented"
     },
     {
       "id": "production-auth",
       "status": "partial",
-      "priority": 6,
-      "summary": "Bootstrap bearer rotation and direct TLS are implemented; production authorization, revocation, and encrypted secret storage remain open"
+      "priority": 7,
+      "summary": "Direct TLS, rotating bootstrap bearer credentials, revocable/expiring hash-only stored credentials, and optional MCP tool allowlists are implemented; device/route credential scopes, hardened administrative authorization, and deployment-grade identity/secret handling remain"
+    },
+    {
+      "id": "dynamic-tool-exposure",
+      "status": "partial",
+      "priority": 8,
+      "summary": "Credential-aware MCP tool discovery is active work on feat/auth-aware-tool-discovery; online-device/capability-aware schema filtering remains open"
     },
     {
       "id": "postconditions",
       "status": "done",
-      "priority": 7,
+      "priority": 9,
       "summary": "Reusable bounded read-only file/process/TCP/HTTP postcondition assertion workflows are implemented"
     },
     {
       "id": "linux-wsl-coverage",
       "status": "partial",
-      "priority": 8,
-      "summary": "Real Linux native-agent outbound transport/core capability integration runs in Ubuntu CI; real WSL2 distro integration remains open"
+      "priority": 10,
+      "summary": "Real Linux native-agent outbound transport/core capability and real relay fallback integration run in Ubuntu CI; real WSL2 distro integration remains open"
     },
     {
       "id": "audit-history",
       "status": "done",
-      "priority": 9,
+      "priority": 11,
       "summary": "Bounded persistent payload-free audit history query with capability/status/target/provider/operation/time filters"
+    },
+    {
+      "id": "durable-workflows",
+      "status": "partial",
+      "priority": 12,
+      "summary": "Durable process sessions and task-graph artifact metadata are implemented; higher-level resumable long-running workflows and artifact lifecycle remain"
+    },
+    {
+      "id": "stable-mcp-surface",
+      "status": "partial",
+      "priority": 13,
+      "summary": "Broad first-party MCP surface is implemented; authorization-aware and online-capability-aware exposure is still being hardened before declaring the surface stable"
     }
   ],
   "standardVerification": [
@@ -83,21 +107,31 @@
     "src/agent/executors.ts",
     "src/protocol/capabilities.ts",
     "src/mcp/create-server.ts",
+    "src/mcp/http.ts",
+    "src/security/credential-store.ts",
     "HANDOFF.md",
     "ROADMAP.md"
   ],
   "notes": [
     "Use independent branches/worktrees for parallel slices.",
     "Update this file after major merges that materially change remaining work.",
-    "Do not infer completion from chat history; inspect main and CI."
+    "Do not infer completion from chat history; inspect main and CI.",
+    "The first-party relay path is verified with a real native agent in Ubuntu CI.",
+    "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "729c6e54d9464d071ba11308eeaa528a34676f56",
+  "lastVerifiedMain": "fec341b1abe3823064dc70ce96ccc1d775b9c801",
   "activeWork": [
     {
-      "id": "linux-native-agent-live-v2",
-      "branch": "test/linux-native-agent-live-v2",
-      "summary": "Real Ubuntu CI coverage for outbound native agent and core shell/file/process capabilities"
+      "id": "auth-aware-tool-discovery",
+      "branch": "feat/auth-aware-tool-discovery",
+      "pr": 58,
+      "summary": "Hide unauthorized MCP tools from tools/list while retaining call-time 403 enforcement; CI rerun pending after correcting MCP file tool-name assertions"
+    },
+    {
+      "id": "continuation-state-sync",
+      "branch": "chore/sync-continuation-state-20260930",
+      "summary": "Synchronize ROADMAP, HANDOFF, PROJECT_STATE, and CONTINUATION with relay/auth/privilege work merged on main"
     }
   ]
 }
