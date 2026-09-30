@@ -1,6 +1,6 @@
 # Nexowire Handoff
 
-Updated: 2026-09-29
+Updated: 2026-09-30
 
 ## Goal
 
@@ -8,7 +8,7 @@ Build a ChatGPT plugin/MCP-style computer-control system whose runtime is fully 
 
 ## Repository state
 
-Active branch: `refactor/native-only-runtime`
+Canonical branch: `main`
 
 Implemented:
 - TypeScript project and strict type checking
@@ -63,6 +63,21 @@ Native-agent file tools default to the current user's home directory. `NEXOWIRE_
 The default Nexowire runtime registers only the first-party `native-agent` backend. Third-party computer-control providers are not part of the product runtime and must not be required for any core capability.
 
 The generic backend registry remains because it is useful for Nexowire-owned transports, multiple device paths, relay/direct routing, tests, and future first-party backends. It is not a plan to depend on external quota-limited services.
+
+## Resume protocol
+
+A new chat should not depend on conversation memory. Start from GitHub:
+
+1. Open `docs/CONTINUATION.md`.
+2. Read `HANDOFF.md` and `ROADMAP.md`.
+3. Read `PROJECT_STATE.json` for machine-readable priorities/invariants.
+4. Inspect current `main` HEAD and open PRs before editing.
+5. Prefer a fresh feature branch per independent slice; parallel slices are encouraged when they do not edit the same hot files.
+6. Run the smallest focused tests first, then `npm run check` and `npm run build` before merge when practical.
+7. After every merged capability slice, update HANDOFF/ROADMAP/PROJECT_STATE if the remaining-work picture changed.
+8. Never assume Desktop Commander or SentinelX is part of the Nexowire runtime. They are development access tools only when temporarily needed.
+
+The repository is the source of truth. If this file disagrees with current code/CI, trust current `main`, tests, and the latest merged commits, then repair the handoff files.
 
 ## Immediate next work
 
