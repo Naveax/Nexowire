@@ -8,21 +8,29 @@ import {
   type AgentHello,
 } from '../protocol/agent.js';
 import { NexowireError } from './errors.js';
+import { isReadOnlyCapability } from '../protocol/capabilities.js';
 
 interface AgentConnection {
   socket: WebSocket;
   device: AgentDevice;
+  instanceId: string;
   connectedAt: string;
 }
 
 interface PendingRequest {
+  requestId: string;
   deviceId: string;
+  capability: string;
+  input: unknown;
+  sentInstanceId: string;
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
   timer: NodeJS.Timeout;
+  reconnectTimer?: NodeJS.Timeout;
 }
 
 export interface ConnectedAgent extends AgentDevice {
+  instanceId: string;
   connectedAt: string;
 }
 
@@ -48,6 +56,7 @@ export interface DeviceStateEvent {
 export interface AgentBrokerOptions {
   maxEvents?: number;
   maxEventBytes?: number;
+  reconnectGraceMs?: number;
   onDeviceState?: (
     event: DeviceStateEvent,
   ) => void | Promise<void>;
@@ -68,6 +77,7 @@ export class AgentBroker {
   private readonly eventWaiters = new Set<() => void>();
   private readonly maxEvents: number;
   private readonly maxEventBytes: number;
+  private readonly reconnectGraceMs: number;
   private readonly onDeviceState?: (
     event: DeviceStateEvent,
   ) => void | Promise<void>;
@@ -77,6 +87,10 @@ export class AgentBroker {
   constructor(options: AgentBrokerOptions = {}) {
     this.maxEvents = options.maxEvents ?? 5_000;
     this.maxEventBytes = options.maxEventBytes ?? 8 * 1024 * 1024;
+    this.reconnectGraceMs = Math.min(
+      30_000,
+      Math.max(250, options.reconnectGraceMs ?? 5_000),
+    );
     this.onDeviceState = options.onDeviceState;
   }
 
@@ -88,11 +102,14 @@ export class AgentBroker {
     }
 
     const connectedAt = new Date().toISOString();
-    this.agents.set(deviceId, {
+    const connection: AgentConnection = {
       socket,
       device: hello.device,
+      instanceId: hello.instanceId,
       connectedAt,
-    });
+    };
+    this.agents.set(deviceId, connection);
+    const continuity = this.resumePending(deviceId, connection);
     this.notifyDeviceState({
       type: 'connected',
       device: hello.device,
@@ -107,17 +124,26 @@ export class AgentBroker {
         platform: hello.device.platform,
         arch: hello.device.arch,
         agentVersion: hello.device.agentVersion,
+        instanceId: hello.instanceId,
+        resumedRequests: continuity.resumed,
+        rejectedRequests: continuity.rejected,
       },
     });
 
-    socket.on('message', (raw) => this.handleMessage(deviceId, raw.toString()));
+    socket.on('message', (raw) =>
+      this.handleMessage(deviceId, hello.instanceId, raw.toString()),
+    );
     socket.on('close', () => this.handleDisconnect(deviceId, socket));
     socket.on('error', () => this.handleDisconnect(deviceId, socket));
   }
 
   list(): ConnectedAgent[] {
     return [...this.agents.values()]
-      .map(({ device, connectedAt }) => ({ ...device, connectedAt }))
+      .map(({ device, instanceId, connectedAt }) => ({
+        ...device,
+        instanceId,
+        connectedAt,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   }
 
@@ -247,6 +273,7 @@ export class AgentBroker {
     capability: string,
     input: unknown,
     timeoutMs = 60_000,
+    requestId = randomUUID(),
   ): Promise<unknown> {
     const connection = this.agents.get(deviceId);
     if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
@@ -256,11 +283,17 @@ export class AgentBroker {
       );
     }
 
-    const requestId = randomUUID();
+    if (this.pending.has(requestId)) {
+      throw new NexowireError(
+        'AGENT_REQUEST_EXISTS',
+        `Agent request "${requestId}" is already pending.`,
+      );
+    }
+
     return await new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(requestId);
-        reject(
+        this.rejectPending(
+          requestId,
           new NexowireError(
             'AGENT_TIMEOUT',
             `Agent request timed out after ${timeoutMs}ms.`,
@@ -268,31 +301,31 @@ export class AgentBroker {
         );
       }, timeoutMs);
 
-      this.pending.set(requestId, {
+      const pending: PendingRequest = {
+        requestId,
         deviceId,
+        capability,
+        input,
+        sentInstanceId: connection.instanceId,
         resolve,
         reject,
         timer,
-      });
+      };
+      this.pending.set(requestId, pending);
 
       try {
-        connection.socket.send(
-          JSON.stringify({
-            type: 'request',
-            requestId,
-            capability,
-            input,
-          }),
-        );
+        this.sendPending(connection, pending);
       } catch (error) {
-        clearTimeout(timer);
-        this.pending.delete(requestId);
-        reject(error);
+        this.rejectPending(requestId, error);
       }
     });
   }
 
-  private handleMessage(deviceId: string, raw: string): void {
+  private handleMessage(
+    deviceId: string,
+    instanceId: string,
+    raw: string,
+  ): void {
     let decoded: unknown;
     try {
       decoded = JSON.parse(raw);
@@ -312,9 +345,14 @@ export class AgentBroker {
 
     const pending = this.pending.get(parsed.data.requestId);
     if (!pending || pending.deviceId !== deviceId) return;
+    if (
+      pending.sentInstanceId !== instanceId &&
+      !isReadOnlyCapability(pending.capability)
+    ) {
+      return;
+    }
 
-    clearTimeout(pending.timer);
-    this.pending.delete(parsed.data.requestId);
+    this.finishPending(parsed.data.requestId);
 
     if (parsed.data.ok) {
       pending.resolve(parsed.data.data);
@@ -347,16 +385,106 @@ export class AgentBroker {
       topic: 'agent.disconnected',
       data: { name: current.device.name },
     });
-    for (const [requestId, pending] of this.pending) {
-      if (pending.deviceId !== deviceId) continue;
-      clearTimeout(pending.timer);
-      pending.reject(
-        new NexowireError(
-          'AGENT_DISCONNECTED',
-          `Agent "${deviceId}" disconnected during an operation.`,
-        ),
-      );
-      this.pending.delete(requestId);
+    for (const pending of this.pending.values()) {
+      if (pending.deviceId !== deviceId || pending.reconnectTimer) continue;
+      pending.reconnectTimer = setTimeout(() => {
+        this.rejectPending(
+          pending.requestId,
+          new NexowireError(
+            'AGENT_RECONNECT_TIMEOUT',
+            `Agent "${deviceId}" did not reconnect within ${this.reconnectGraceMs}ms while an operation was pending.`,
+            {
+              deviceId,
+              capability: pending.capability,
+              sentInstanceId: pending.sentInstanceId,
+            },
+          ),
+        );
+      }, this.reconnectGraceMs);
     }
+  }
+
+  private resumePending(
+    deviceId: string,
+    connection: AgentConnection,
+  ): { resumed: number; rejected: number } {
+    let resumed = 0;
+    let rejected = 0;
+
+    for (const pending of [...this.pending.values()]) {
+      if (pending.deviceId !== deviceId) continue;
+
+      const sameInstance =
+        pending.sentInstanceId === connection.instanceId;
+      if (!sameInstance && !isReadOnlyCapability(pending.capability)) {
+        this.rejectPending(
+          pending.requestId,
+          new NexowireError(
+            'AGENT_INSTANCE_CHANGED',
+            `Agent "${deviceId}" restarted while mutation "${pending.capability}" had unknown final state.`,
+            {
+              deviceId,
+              capability: pending.capability,
+              previousInstanceId: pending.sentInstanceId,
+              currentInstanceId: connection.instanceId,
+            },
+          ),
+        );
+        rejected++;
+        continue;
+      }
+
+      if (pending.reconnectTimer) {
+        clearTimeout(pending.reconnectTimer);
+        pending.reconnectTimer = undefined;
+      }
+      pending.sentInstanceId = connection.instanceId;
+
+      try {
+        this.sendPending(connection, pending);
+        resumed++;
+      } catch (error) {
+        this.rejectPending(pending.requestId, error);
+        rejected++;
+      }
+    }
+
+    return { resumed, rejected };
+  }
+
+  private sendPending(
+    connection: AgentConnection,
+    pending: PendingRequest,
+  ): void {
+    if (connection.socket.readyState !== WebSocket.OPEN) {
+      throw new NexowireError(
+        'AGENT_OFFLINE',
+        `Native agent "${pending.deviceId}" is not connected.`,
+      );
+    }
+
+    connection.socket.send(
+      JSON.stringify({
+        type: 'request',
+        requestId: pending.requestId,
+        capability: pending.capability,
+        input: pending.input,
+      }),
+    );
+  }
+
+  private finishPending(requestId: string): PendingRequest | undefined {
+    const pending = this.pending.get(requestId);
+    if (!pending) return undefined;
+    clearTimeout(pending.timer);
+    if (pending.reconnectTimer) clearTimeout(pending.reconnectTimer);
+    this.pending.delete(requestId);
+    return pending;
+  }
+
+  private rejectPending(requestId: string, error: unknown): void {
+    const pending = this.finishPending(requestId);
+    if (!pending) return;
+    pending.reject(error);
   }
 }
