@@ -16,6 +16,8 @@ Implemented:
 - first-party `native-agent` backend registered by the runtime
 - internal capability registry with health/latency ranking, read-only failover semantics, and mutation replay protection
 - native agent protocol over outbound WebSocket
+- native protocol v2 process-instance identity plus bounded request deduplication for reconnect-safe same-process request continuity
+- pending same-process requests resume with the exact operation/request ID; read-only requests may resume after agent process restart, while mutations fail unknown instead of being replayed
 - stable native-agent device identity
 - persistent case-normalized device aliases with alias-based MCP routing and offline-target rejection
 - persistent native device directory with last-seen/connect/disconnect history plus capability/platform/name-aware route discovery that fails closed on ambiguity
@@ -91,7 +93,7 @@ The repository is the source of truth. If this file disagrees with current code/
 3. Harden durable process sidecar security/retention as needed; reattachable stdin/stdout/stderr across native-agent restart is implemented.
 4. Extend durable execution/artifact workflows beyond current durable process sessions and task-graph artifact metadata.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
-6. Continue first-party privilege separation and reconnect/session continuity. Deterministic named multi-device route-selection policy is implemented on top of directory, aliases, groups, capability filters, and explicit priority lists.
+6. Continue first-party privilege separation and first-party relay/direct transport work. Reconnect/session continuity and deterministic named multi-device route selection are implemented.
 7. Design production ChatGPT authorization/TLS/encrypted credential handling; rotating bearer sets now cover bootstrap credential rollover only.
 
 ## Known machine note
