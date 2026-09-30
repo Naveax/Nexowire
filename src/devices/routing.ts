@@ -143,3 +143,57 @@ export function filterDeviceRoutes(
     );
   });
 }
+
+
+export function selectDeviceRoute(
+  candidates: readonly DeviceRoutingEntry[],
+  input: {
+    selection: 'unique_only' | 'priority';
+    priorityDeviceIds?: readonly string[];
+  },
+): {
+  selected: DeviceRoutingEntry | null;
+  ambiguous: boolean;
+  reason:
+    | 'unique_candidate'
+    | 'explicit_priority_match'
+    | 'ambiguous_candidates'
+    | 'no_candidate';
+} {
+  if (input.selection === 'unique_only') {
+    if (candidates.length === 1) {
+      return {
+        selected: candidates[0] ?? null,
+        ambiguous: false,
+        reason: 'unique_candidate',
+      };
+    }
+    return {
+      selected: null,
+      ambiguous: candidates.length > 1,
+      reason:
+        candidates.length > 1
+          ? 'ambiguous_candidates'
+          : 'no_candidate',
+    };
+  }
+
+  const byId = new Map(
+    candidates.map((candidate) => [candidate.id, candidate]),
+  );
+  for (const deviceId of input.priorityDeviceIds ?? []) {
+    const candidate = byId.get(deviceId);
+    if (!candidate) continue;
+    return {
+      selected: candidate,
+      ambiguous: false,
+      reason: 'explicit_priority_match',
+    };
+  }
+
+  return {
+    selected: null,
+    ambiguous: false,
+    reason: 'no_candidate',
+  };
+}
