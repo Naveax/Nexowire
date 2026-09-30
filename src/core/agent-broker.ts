@@ -434,6 +434,23 @@ export class AgentBroker {
         continue;
       }
 
+      if (!connection.device.capabilities.includes(pending.capability)) {
+        this.rejectPending(
+          pending.requestId,
+          new NexowireError(
+            'AGENT_CAPABILITY_CHANGED',
+            `Agent "${deviceId}" reconnected without pending capability "${pending.capability}".`,
+            {
+              deviceId,
+              capability: pending.capability,
+              currentInstanceId: connection.instanceId,
+            },
+          ),
+        );
+        rejected++;
+        continue;
+      }
+
       if (pending.reconnectTimer) {
         clearTimeout(pending.reconnectTimer);
         pending.reconnectTimer = undefined;
