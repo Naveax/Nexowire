@@ -61,3 +61,5 @@ Shell execution can access anything available to the agent's operating-system ac
 - Explicit idempotency keys are accepted only for a narrow replay-safe allowlist: overwrite file writes (never append), mkdir, exact file patch, exact registry set/delete, and exact Windows environment set/delete. Unsupported mutations fail closed instead of pretending that "probably idempotent" is a security model.
 
 - Device history stores only native-agent identity/capability metadata and connection timestamps. Route discovery never silently chooses between multiple matching computers: it returns ambiguity and requires explicit narrowing/selection.
+
+- On Windows, broker privilege mode can bootstrap without a plaintext broker token in environment/config. The standard native agent and elevated broker use the same random token stored only as Windows DPAPI CurrentUser ciphertext. An explicit broker token still overrides this for controlled deployments. DPAPI binds decryption to the same Windows user context, so the elevated broker should run elevated as that user rather than as an unrelated service account.

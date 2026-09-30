@@ -8,6 +8,7 @@ import {
 import { executeWindowsCapability } from './windows-control.js';
 import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { normalizeAgentError } from './executors.js';
+import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 
 export interface PrivilegedBrokerServerOptions {
   host?: string;
@@ -275,10 +276,21 @@ export async function startPrivilegedBroker(
 export async function runPrivilegedBroker(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<never> {
-  const tokens = parseTokenList(
+  let tokens = parseTokenList(
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN,
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKENS,
   );
+  if (tokens.length === 0) {
+    tokens = [
+      await loadOrCreatePrivilegedBrokerToken({
+        ...(env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim()
+          ? {
+              file: env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE.trim(),
+            }
+          : {}),
+      }),
+    ];
+  }
   const port = Number.parseInt(
     env.NEXOWIRE_PRIVILEGED_BROKER_PORT ?? '43112',
     10,
