@@ -14,6 +14,7 @@ import { executeWindowsInputCapability } from './windows-input.js';
 import { executeWindowsAccessibilityCapability } from './windows-accessibility.js';
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeBrowserCapability } from './browser-control.js';
+import { executePostconditions } from './postconditions.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
@@ -1984,6 +1985,8 @@ export async function executeCapability(
     case 'browser.screenshot':
     case 'browser.visual.verify':
       return await executeBrowserCapability(capability, input);
+    case 'verify.assertions':
+      return await executePostconditions(input, policy);
     default:
       throw new Error(`Unsupported capability: ${capability}`);
   }
