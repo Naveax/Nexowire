@@ -88,9 +88,14 @@ export class AgentProvider implements Provider {
             error !== null &&
             'code' in error &&
             typeof error.code === 'string' &&
-            ['AGENT_OFFLINE', 'AGENT_TIMEOUT', 'AGENT_DISCONNECTED'].includes(
-              error.code,
-            ),
+            [
+              'AGENT_OFFLINE',
+              'AGENT_TIMEOUT',
+              'AGENT_DISCONNECTED',
+              'AGENT_RECONNECT_TIMEOUT',
+              'AGENT_INSTANCE_CHANGED',
+              'AGENT_CAPABILITY_CHANGED',
+            ].includes(error.code),
         },
         meta: {
           providerId: this.id,
