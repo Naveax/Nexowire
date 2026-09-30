@@ -58,13 +58,13 @@
       "id": "production-auth",
       "status": "partial",
       "priority": 7,
-      "summary": "Direct TLS, rotating bootstrap bearer credentials, revocable/expiring hash-only stored credentials, and optional MCP tool allowlists are implemented; device/route credential scopes, hardened administrative authorization, and deployment-grade identity/secret handling remain"
+      "summary": "Direct TLS, rotating bootstrap bearer credentials, revocable/expiring hash-only stored credentials, MCP tool/device/deterministic-route scopes, and explicit stored-credential admin grants are implemented; deployment-grade identity, protected secret handling, and stronger operator/admin identity remain"
     },
     {
       "id": "dynamic-tool-exposure",
-      "status": "partial",
+      "status": "done",
       "priority": 8,
-      "summary": "Stored MCP credential allowlists now hide unauthorized schemas from tools/list as well as blocking calls; online-device/capability-aware schema filtering remains open"
+      "summary": "Stored credential authorization filters tools/list and calls, and HTTP MCP discovery also filters native-backed schemas by the union of capabilities advertised by online Nexowire agents"
     },
     {
       "id": "postconditions",
@@ -94,7 +94,7 @@
       "id": "stable-mcp-surface",
       "status": "partial",
       "priority": 13,
-      "summary": "Broad first-party MCP surface is implemented; authorization-aware and online-capability-aware exposure is still being hardened before declaring the surface stable"
+      "summary": "Broad first-party MCP surface plus credential-aware and online-capability-aware discovery are implemented; remaining stabilization is mainly deployment-grade authorization/identity and long-running workflow maturity"
     }
   ],
   "standardVerification": [
@@ -119,13 +119,13 @@
     "The first-party relay path is verified with a real native agent in Ubuntu CI.",
     "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation."
   ],
-  "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "e0c3ad2affc42893bf0e79d1961e2a8682e00623",
+  "lastStateSync": "2026-10-01",
+  "lastVerifiedMain": "dcd189d37da059609f576b4d147dc89b2421c64d",
   "activeWork": [
     {
-      "id": "continuation-state-sync",
-      "branch": "chore/sync-continuation-state-20260930",
-      "summary": "Synchronize ROADMAP, HANDOFF, PROJECT_STATE, and CONTINUATION with relay/auth/privilege/discovery work merged on main"
+      "id": "mcp-target-admin-scopes",
+      "branch": "feat/mcp-target-admin-scopes-v1",
+      "summary": "Add stable-device/deterministic-route MCP credential scopes and explicit stored-credential administrative authorization"
     }
   ]
 }
