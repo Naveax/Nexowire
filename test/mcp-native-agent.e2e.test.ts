@@ -201,6 +201,7 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_set'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_delete'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_route_policy_resolve'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'audit_query'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_snapshot'));
   assert.ok(tools.tools.some((tool) => tool.name === 'machine_health'));
   assert.ok(tools.tools.some((tool) => tool.name === 'network_dns_resolve'));
@@ -544,6 +545,37 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.equal(
     visualVerifyStructured.data?.screenshot?.mimeType,
     'image/png',
+  );
+
+  const auditQueryResult = await client.callTool({
+    name: 'audit_query',
+    arguments: {
+      operation_id: structured.meta?.requestId,
+      capability: 'machine.snapshot',
+      limit: 10,
+    },
+  });
+  assert.equal(
+    'isError' in auditQueryResult ? auditQueryResult.isError : false,
+    false,
+  );
+  const auditQueryStructured =
+    auditQueryResult.structuredContent as {
+      events?: Array<{
+        operationId?: string;
+        status?: string;
+        capability?: string;
+      }>;
+      scannedBytes?: number;
+      fileBytes?: number;
+    };
+  assert.ok((auditQueryStructured.events?.length ?? 0) >= 2);
+  assert.ok(
+    auditQueryStructured.events?.every(
+      (event) =>
+        event.operationId === structured.meta?.requestId &&
+        event.capability === 'machine.snapshot',
+    ),
   );
 
   const auditResult = await client.callTool({
