@@ -73,6 +73,7 @@ export const CORE_CAPABILITIES = [
   'browser.set_value',
   'browser.screenshot',
   'browser.visual.verify',
+  'verify.assertions',
 ] as const;
 
 export type CoreCapability = (typeof CORE_CAPABILITIES)[number];
@@ -131,6 +132,7 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'browser.snapshot',
   'browser.screenshot',
   'browser.visual.verify',
+  'verify.assertions',
 ]);
 
 export function isReadOnlyCapability(capability: string): boolean {
