@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import WebSocket from 'ws';
 import {
   AgentEventSchema,
   AgentResponseSchema,
@@ -9,9 +8,13 @@ import {
 } from '../protocol/agent.js';
 import { NexowireError } from './errors.js';
 import { isReadOnlyCapability } from '../protocol/capabilities.js';
+import {
+  AGENT_SOCKET_OPEN,
+  type AgentSocketLike,
+} from './agent-socket.js';
 
 interface AgentConnection {
-  socket: WebSocket;
+  socket: AgentSocketLike;
   device: AgentDevice;
   instanceId: string;
   connectedAt: string;
@@ -94,7 +97,7 @@ export class AgentBroker {
     this.onDeviceState = options.onDeviceState;
   }
 
-  register(socket: WebSocket, hello: AgentHello): void {
+  register(socket: AgentSocketLike, hello: AgentHello): void {
     const deviceId = hello.device.id;
     const existing = this.agents.get(deviceId);
     if (existing && existing.socket !== socket) {
@@ -149,7 +152,7 @@ export class AgentBroker {
 
   has(deviceId: string): boolean {
     const connection = this.agents.get(deviceId);
-    return connection?.socket.readyState === WebSocket.OPEN;
+    return connection?.socket.readyState === AGENT_SOCKET_OPEN;
   }
 
   async readEvents(input: ReadBrokerEventsInput = {}) {
@@ -276,7 +279,7 @@ export class AgentBroker {
     requestId: string = randomUUID(),
   ): Promise<unknown> {
     const connection = this.agents.get(deviceId);
-    if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
+    if (!connection || connection.socket.readyState !== AGENT_SOCKET_OPEN) {
       throw new NexowireError(
         'AGENT_OFFLINE',
         `Native agent "${deviceId}" is not connected.`,
@@ -368,7 +371,7 @@ export class AgentBroker {
     );
   }
 
-  private handleDisconnect(deviceId: string, socket: WebSocket): void {
+  private handleDisconnect(deviceId: string, socket: AgentSocketLike): void {
     const current = this.agents.get(deviceId);
     if (current?.socket !== socket) return;
 
@@ -473,7 +476,7 @@ export class AgentBroker {
     connection: AgentConnection,
     pending: PendingRequest,
   ): void {
-    if (connection.socket.readyState !== WebSocket.OPEN) {
+    if (connection.socket.readyState !== AGENT_SOCKET_OPEN) {
       throw new NexowireError(
         'AGENT_OFFLINE',
         `Native agent "${pending.deviceId}" is not connected.`,
