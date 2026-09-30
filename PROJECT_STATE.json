@@ -50,9 +50,9 @@
     },
     {
       "id": "production-auth",
-      "status": "open",
+      "status": "partial",
       "priority": 6,
-      "summary": "Production authorization, TLS, revocation, encrypted secret storage"
+      "summary": "Bootstrap bearer rotation and direct TLS are implemented; production authorization, revocation, and encrypted secret storage remain open"
     },
     {
       "id": "postconditions",
@@ -86,12 +86,12 @@
     "Do not infer completion from chat history; inspect main and CI."
   ],
   "lastStateSync": "2026-09-30",
-  "lastVerifiedMain": "705cf9e30401b5c5bb3fd84eaf3bd4c859e39e5a",
+  "lastVerifiedMain": "67580ce31a13c08bbab0958d4a80071d2732fbbe",
   "activeWork": [
     {
-      "id": "hub-tls-v1",
-      "branch": "feat/hub-tls-v1",
-      "summary": "Direct HTTPS/WSS listener and default refusal of plaintext non-loopback hub exposure"
+      "id": "hub-tls-v2",
+      "branch": "feat/hub-tls-v2",
+      "summary": "Direct HTTPS/WSS listener and default refusal of plaintext non-loopback exposure"
     }
   ]
 }
