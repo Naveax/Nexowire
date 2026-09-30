@@ -134,3 +134,28 @@ test('insecure remote override accepts common boolean spellings', () => {
     assert.equal(config.allowInsecureRemote, true);
   }
 });
+
+test('persisted auth availability can satisfy remote credential requirement', () => {
+  const config = loadConfig(
+    {
+      NEXOWIRE_HTTP_HOST: '0.0.0.0',
+      NEXOWIRE_HTTP_PORT: '43110',
+      NEXOWIRE_ALLOW_INSECURE_REMOTE: '1',
+    },
+    process.cwd(),
+  );
+
+  assert.throws(() => assertSafeRemoteBinding(config));
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding(config, {
+      mcp: true,
+      agent: true,
+    }),
+  );
+  assert.throws(() =>
+    assertSafeRemoteBinding(config, {
+      mcp: true,
+      agent: false,
+    }),
+  );
+});

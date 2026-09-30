@@ -23,6 +23,7 @@ import {
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 import type { CapabilityPolicyStore } from '../security/capability-policy.js';
+import type { CredentialStore } from '../security/credential-store.js';
 
 export interface McpContext {
   broker: AgentBroker;
@@ -33,6 +34,7 @@ export interface McpContext {
   routingPolicies?: DeviceRoutingPolicyStore;
   idempotency?: IdempotencyStore;
   policies?: CapabilityPolicyStore;
+  credentials?: CredentialStore;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;

@@ -13,7 +13,7 @@ import {
   mcpAuthTokens,
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
-import { matchesBearerHeader } from '../security/tokens.js';
+import { authorizeBearer } from '../security/auth.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 
 export async function runHttpServer(
@@ -21,7 +21,10 @@ export async function runHttpServer(
   broker: AgentBroker,
   context: McpContext,
 ): Promise<void> {
-  assertSafeRemoteBinding(config);
+  assertSafeRemoteBinding(config, {
+    mcp: context.credentials?.hasUsable('mcp') ?? false,
+    agent: context.credentials?.hasUsable('agent') ?? false,
+  });
   const app = createMcpExpressApp({ host: config.host });
   const tlsEnabled = hasDirectTls(config);
   const scheme = tlsEnabled ? 'https' : 'http';
@@ -38,9 +41,17 @@ export async function runHttpServer(
 
   const mcpTokens = mcpAuthTokens(config);
   app.use('/mcp', (req: Request, res: Response, next: NextFunction) => {
+    const authRequired =
+      mcpTokens.length > 0 ||
+      context.credentials?.hasConfigured('mcp') === true;
     if (
-      mcpTokens.length > 0 &&
-      !matchesBearerHeader(req.headers.authorization, mcpTokens)
+      authRequired &&
+      !authorizeBearer(
+        req.headers.authorization,
+        'mcp',
+        mcpTokens,
+        context.credentials,
+      )
     ) {
       res.status(401).json({ error: 'unauthorized' });
       return;
@@ -104,6 +115,9 @@ export async function runHttpServer(
     httpServer,
     broker,
     agentAuthTokens(config),
+    {
+      credentialStore: context.credentials,
+    },
   );
 
   const shutdown = async (): Promise<void> => {
