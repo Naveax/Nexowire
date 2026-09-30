@@ -46,7 +46,7 @@
       "id": "privilege-separation",
       "status": "partial",
       "priority": 5,
-      "summary": "Persistent per-device capability allow/deny profiles are implemented; privileged broker/service separation remains open"
+      "summary": "Per-device capability policies plus a separate elevated Windows broker are implemented; default broker authentication uses a DPAPI CurrentUser-protected random secret. Hardened broker lifecycle/service installation remains open."
     },
     {
       "id": "production-auth",
