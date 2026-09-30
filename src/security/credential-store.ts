@@ -146,6 +146,13 @@ export class CredentialStore {
       );
   }
 
+  hasConfigured(scope: CredentialScope): boolean {
+    this.refreshIfChangedSync();
+    return [...this.records.values()].some(
+      (record) => record.scope === scope,
+    );
+  }
+
   hasUsable(scope: CredentialScope): boolean {
     this.refreshIfChangedSync();
     const now = this.now();
@@ -352,7 +359,6 @@ export class CredentialStore {
       const stat = await fs.stat(this.file);
       this.lastMtimeMs = stat.mtimeMs;
       this.lastSize = stat.size;
-      this.lastSize = stat.size;
     } catch (error) {
       if (
         typeof error === 'object' &&
@@ -387,6 +393,7 @@ export class CredentialStore {
         this.records.set(record.id, record);
       }
       this.lastMtimeMs = stat.mtimeMs;
+      this.lastSize = stat.size;
     } catch (error) {
       if (
         typeof error === 'object' &&
@@ -397,6 +404,7 @@ export class CredentialStore {
         if (!existsSync(this.file)) {
           this.records.clear();
           this.lastMtimeMs = -1;
+          this.lastSize = -1;
         }
         return;
       }
