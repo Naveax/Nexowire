@@ -2,7 +2,9 @@ import type { Server as HttpServer } from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { AgentBroker } from '../core/agent-broker.js';
 import { AgentHelloSchema } from '../protocol/agent.js';
-import { matchesBearerHeader, parseTokenList } from '../security/tokens.js';
+import { parseTokenList } from '../security/tokens.js';
+import { authorizeBearer } from '../security/auth.js';
+import type { CredentialStore } from '../security/credential-store.js';
 
 function isLoopbackAddress(address: string | undefined): boolean {
   if (!address) return false;
@@ -16,6 +18,7 @@ function isLoopbackAddress(address: string | undefined): boolean {
 export interface AgentWebSocketServerOptions {
   heartbeatMs?: number;
   helloTimeoutMs?: number;
+  credentialStore?: CredentialStore;
 }
 
 export function attachAgentWebSocketServer(
@@ -37,13 +40,17 @@ export function attachAgentWebSocketServer(
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (url.pathname !== '/agent') return;
 
-    const authenticated =
-      configuredAgentTokens.length > 0
-        ? matchesBearerHeader(
-            request.headers.authorization,
-            configuredAgentTokens,
-          )
-        : isLoopbackAddress(request.socket.remoteAddress);
+    const authRequired =
+      configuredAgentTokens.length > 0 ||
+      options.credentialStore?.hasUsable('agent') === true;
+    const authenticated = authRequired
+      ? authorizeBearer(
+          request.headers.authorization,
+          'agent',
+          configuredAgentTokens,
+          options.credentialStore,
+        )
+      : isLoopbackAddress(request.socket.remoteAddress);
 
     if (!authenticated) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
