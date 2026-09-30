@@ -85,7 +85,12 @@ export async function runHttpServer(
       });
       return;
     }
-    const mcp = createNexowireMcpServer(context);
+    const mcp = createNexowireMcpServer({
+      ...context,
+      ...(authorization
+        ? { toolAuthorization: authorization }
+        : {}),
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });

@@ -24,6 +24,8 @@ import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 import type { CapabilityPolicyStore } from '../security/capability-policy.js';
 import type { CredentialStore } from '../security/credential-store.js';
+import type { BearerAuthorization } from '../security/auth.js';
+import { isMcpToolAuthorized } from '../security/tool-authorization.js';
 
 export interface McpContext {
   broker: AgentBroker;
@@ -35,9 +37,43 @@ export interface McpContext {
   idempotency?: IdempotencyStore;
   policies?: CapabilityPolicyStore;
   credentials?: CredentialStore;
+  toolAuthorization?: BearerAuthorization;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
+}
+
+function applyToolRegistrationAuthorization(
+  server: McpServer,
+  authorization: BearerAuthorization | undefined,
+): void {
+  if (
+    !authorization ||
+    authorization.kind === 'static' ||
+    authorization.credential.allowedTools === undefined
+  ) {
+    return;
+  }
+
+  const originalRegisterTool = server.registerTool.bind(server);
+  type RegisteredToolHandle = {
+    disable(): void;
+  };
+  const untypedRegister = originalRegisterTool as unknown as (
+    ...args: unknown[]
+  ) => RegisteredToolHandle;
+
+  server.registerTool = ((...args: unknown[]) => {
+    const name = typeof args[0] === 'string' ? args[0] : '';
+    const registered = untypedRegister(...args);
+    if (
+      name &&
+      !isMcpToolAuthorized(authorization, name)
+    ) {
+      registered.disable();
+    }
+    return registered;
+  }) as typeof server.registerTool;
 }
 
 function toolResult(data: unknown, isError = false) {
@@ -346,6 +382,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer(
     { name: 'nexowire', version: '0.1.0-dev.1' },
     { capabilities: { logging: {} } },
+  );
+  applyToolRegistrationAuthorization(
+    server,
+    ctx.toolAuthorization,
   );
 
   server.registerTool(
