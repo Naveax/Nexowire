@@ -2,6 +2,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost } from '../config.js';
 import { parseTokenList } from '../security/tokens.js';
+import {
+  optionalSecretFile,
+  optionalSecretListFile,
+  resolveSingleSecret,
+} from '../security/secret-files.js';
 
 export interface NexowireRelayConfig {
   host: string;
@@ -100,12 +105,26 @@ export function loadRelayConfig(
     upstreamWsUrl: parsed.toString(),
     inboundAgentTokens: parseTokenList(
       env.NEXOWIRE_RELAY_AGENT_TOKEN,
+      optionalSecretFile(
+        env.NEXOWIRE_RELAY_AGENT_TOKEN_FILE,
+        'relay inbound agent token',
+      ),
       env.NEXOWIRE_RELAY_AGENT_TOKENS,
+      optionalSecretListFile(
+        env.NEXOWIRE_RELAY_AGENT_TOKENS_FILE,
+        'relay inbound agent token list',
+      ),
     ),
-    ...(optional(env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN)
+    ...(resolveSingleSecret(
+      env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
+      env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
+      'relay upstream agent token',
+    )
       ? {
-          upstreamAgentToken: optional(
+          upstreamAgentToken: resolveSingleSecret(
             env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
+            env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
+            'relay upstream agent token',
           ),
         }
       : {}),
