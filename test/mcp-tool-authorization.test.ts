@@ -134,3 +134,63 @@ test('tool-call request inspection handles single and batched JSON-RPC requests'
     ['files_write'],
   );
 });
+
+
+test('unscoped stored credentials require explicit admin authorization for sensitive hub tools', () => {
+  const nonAdmin: BearerAuthorization = {
+    kind: 'stored',
+    scope: 'mcp',
+    credential: {
+      id: 'credential9999',
+      scope: 'mcp',
+      createdAt: '2026-09-30T12:00:00.000Z',
+    },
+  };
+  const admin: BearerAuthorization = {
+    kind: 'stored',
+    scope: 'mcp',
+    credential: {
+      id: 'credentialadmin',
+      scope: 'mcp',
+      createdAt: '2026-09-30T12:00:00.000Z',
+      administrative: true,
+    },
+  };
+
+  for (const tool of [
+    'policy_profile_list',
+    'policy_profile_set',
+    'device_alias_set',
+    'device_group_delete',
+    'device_route_policy_set',
+    'operations_idempotency_list',
+    'events_read',
+    'audit_query',
+  ]) {
+    assert.equal(
+      isMcpToolAuthorized(nonAdmin, tool),
+      false,
+      tool,
+    );
+    assert.equal(
+      isMcpToolAuthorized(admin, tool),
+      true,
+      tool,
+    );
+  }
+
+  for (const tool of [
+    'devices_list',
+    'device_route',
+    'device_route_policy_list',
+    'device_route_policy_resolve',
+    'machine_snapshot',
+    'file_read',
+  ]) {
+    assert.equal(
+      isMcpToolAuthorized(nonAdmin, tool),
+      true,
+      tool,
+    );
+  }
+});
