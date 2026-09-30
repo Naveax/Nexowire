@@ -22,7 +22,10 @@ import {
   type IdempotencyStore,
 } from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
-import type { WorkspaceStore } from '../workspace/store.js';
+import {
+  WorkspaceCheckpointConflictError,
+  type WorkspaceStore,
+} from '../workspace/store.js';
 import type { CapabilityPolicyStore } from '../security/capability-policy.js';
 import type { CredentialStore } from '../security/credential-store.js';
 import type { BearerAuthorization } from '../security/auth.js';
@@ -248,6 +251,28 @@ async function resolveDevice(
 
   throw new Error(
     'Multiple Nexowire devices are available; device_id or a device alias is required.',
+  );
+}
+
+async function authorizeWorkspaceDevice(
+  ctx: McpContext,
+  requested: string,
+): Promise<string> {
+  if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+    return requested;
+  }
+
+  const devices = await routingEntries(ctx);
+  const visibleIds = new Set(
+    devices.map((device) => device.id),
+  );
+  if (visibleIds.has(requested)) return requested;
+
+  const aliased = await ctx.aliases?.resolve(requested);
+  if (aliased && visibleIds.has(aliased)) return aliased;
+
+  throw new McpTargetAuthorizationError(
+    'Requested workspace device is unknown or outside this credential scope.',
   );
 }
 
@@ -4386,63 +4411,168 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Save workspace checkpoint',
       description:
-        'Persist what was completed, what remains, and the last commands so work can resume later.',
+        'Persist a revision-safe structured workspace checkpoint with progress, blockers, durable task/process references, and artifact metadata references so work can resume later without overwriting a newer checkpoint.',
       inputSchema: {
         device_id: z.string().min(1).max(128),
         workspace_id: z.string().min(1).max(256),
+        expected_revision: z.number().int().min(0).optional(),
+        status: z
+          .enum(['active', 'blocked', 'completed', 'abandoned'])
+          .optional(),
         cwd: z.string().max(4096).optional(),
         summary: z.string().max(20_000),
         completed: z.array(z.string().max(4096)).max(200).optional(),
         remaining: z.array(z.string().max(4096)).max(200).optional(),
+        blockers: z.array(z.string().max(4096)).max(100).optional(),
         last_commands: z.array(z.string().max(8192)).max(100).optional(),
+        task_graph_ids: z
+          .array(z.string().min(1).max(128))
+          .max(100)
+          .optional(),
+        process_session_ids: z
+          .array(z.string().min(1).max(128))
+          .max(100)
+          .optional(),
+        artifact_refs: z
+          .array(
+            z.object({
+              graph_id: z.string().min(1).max(128),
+              job_id: z.string().min(1).max(128).optional(),
+              requested_path: z.string().min(1).max(4096).optional(),
+              sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+            }),
+          )
+          .max(200)
+          .optional(),
       },
     },
     async ({
       device_id,
       workspace_id,
+      expected_revision,
+      status,
       cwd,
       summary,
       completed,
       remaining,
+      blockers,
       last_commands,
-    }) =>
-      toolResult(
-        await ctx.workspaces.save({
-          deviceId: device_id,
-          workspaceId: workspace_id,
-          ...(cwd ? { cwd } : {}),
-          summary,
-          completed: completed ?? [],
-          remaining: remaining ?? [],
-          lastCommands: last_commands ?? [],
-        }),
-      ),
+      task_graph_ids,
+      process_session_ids,
+      artifact_refs,
+    }) => {
+      try {
+        const deviceId = await authorizeWorkspaceDevice(
+          ctx,
+          device_id,
+        );
+        return toolResult(
+          await ctx.workspaces.save({
+            deviceId,
+            workspaceId: workspace_id,
+            ...(expected_revision !== undefined
+              ? { expectedRevision: expected_revision }
+              : {}),
+            ...(status ? { status } : {}),
+            ...(cwd !== undefined ? { cwd } : {}),
+            summary,
+            ...(completed !== undefined ? { completed } : {}),
+            ...(remaining !== undefined ? { remaining } : {}),
+            ...(blockers !== undefined ? { blockers } : {}),
+            ...(last_commands !== undefined
+              ? { lastCommands: last_commands }
+              : {}),
+            ...(task_graph_ids !== undefined
+              ? { taskGraphIds: task_graph_ids }
+              : {}),
+            ...(process_session_ids !== undefined
+              ? { processSessionIds: process_session_ids }
+              : {}),
+            ...(artifact_refs !== undefined
+              ? {
+                  artifactRefs: artifact_refs.map((artifact) => ({
+                    graphId: artifact.graph_id,
+                    ...(artifact.job_id
+                      ? { jobId: artifact.job_id }
+                      : {}),
+                    ...(artifact.requested_path
+                      ? { requestedPath: artifact.requested_path }
+                      : {}),
+                    ...(artifact.sha256
+                      ? { sha256: artifact.sha256 }
+                      : {}),
+                  })),
+                }
+              : {}),
+          }),
+        );
+      } catch (error) {
+        if (error instanceof WorkspaceCheckpointConflictError) {
+          return toolResult(
+            {
+              ok: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                details: error.details,
+              },
+            },
+            true,
+          );
+        }
+        throw error;
+      }
+    },
   );
 
   server.registerTool(
     'workspace_checkpoint_get',
     {
       title: 'Load workspace checkpoint',
-      description: 'Load the latest persisted state for a project workspace.',
+      description:
+        'Load the latest revision-safe persisted state for one project workspace.',
       inputSchema: {
         device_id: z.string().min(1).max(128),
         workspace_id: z.string().min(1).max(256),
       },
     },
-    async ({ device_id, workspace_id }) =>
-      toolResult({
-        checkpoint: await ctx.workspaces.get(device_id, workspace_id),
-      }),
+    async ({ device_id, workspace_id }) => {
+      const deviceId = await authorizeWorkspaceDevice(
+        ctx,
+        device_id,
+      );
+      return toolResult({
+        checkpoint: await ctx.workspaces.get(
+          deviceId,
+          workspace_id,
+        ),
+      });
+    },
   );
 
   server.registerTool(
     'workspace_checkpoint_list',
     {
       title: 'List workspace checkpoints',
-      description: 'List resumable Nexowire workspace checkpoints.',
+      description:
+        'List resumable Nexowire workspace checkpoints. Target-scoped credentials see only checkpoints for authorized devices.',
       inputSchema: {},
     },
-    async () => toolResult({ checkpoints: await ctx.workspaces.list() }),
+    async () => {
+      const checkpoints = await ctx.workspaces.list();
+      if (!hasMcpTargetRestrictions(ctx.toolAuthorization)) {
+        return toolResult({ checkpoints });
+      }
+
+      const visibleIds = new Set(
+        (await routingEntries(ctx)).map((device) => device.id),
+      );
+      return toolResult({
+        checkpoints: checkpoints.filter((checkpoint) =>
+          visibleIds.has(checkpoint.deviceId),
+        ),
+      });
+    },
   );
 
   server.registerTool(
