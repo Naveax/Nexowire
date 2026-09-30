@@ -39,6 +39,7 @@ Implemented on main as of the latest repository state:
 - process-instance-aware reconnect continuity: same-process request-ID resumption with native dedupe cache, read-only replay after process restart, and fail-closed mutation boundaries
 - normalized provider/backend registry used only as an internal Nexowire routing seam
 - stable native device identity, persistent aliases/groups, device history, capability-aware route discovery, deterministic named routing policies, and per-device capability allow/deny policies
+- first-party relay server plus ordered direct/relay native-agent endpoint fallback, verified with a real relayed native agent in Ubuntu CI
 - operation IDs, audit metadata, bounded persistent audit-history queries, mutation replay protection, selected idempotency records
 - shell, WSL2, files, search, volatile + durable reattachable process sessions, machine/workspace snapshots
 - persistent task-graph checkpoints and bounded parallel dependency execution
@@ -49,6 +50,9 @@ Implemented on main as of the latest repository state:
 - exact-element browser visual verification with cropped PNG evidence
 - reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
+- revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credential allowlists filter both tool discovery and call-time execution
+- direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
+- elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
 - lazy skills and MCP HTTP/stdio surfaces
 - real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
 
@@ -56,12 +60,12 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
-1. durable long-running work/artifact workflows beyond current process/task-graph primitives
-2. optional first-party relay/direct transport selection
-3. first-party privilege separation; per-device capability policy profiles are implemented
-4. production authorization/TLS/revocation/encrypted secret storage
-5. extend postconditions only into deterministic additional OS/application domains
-6. real WSL2-distro integration coverage; native Linux outbound-agent coverage is implemented
+1. add online-device/capability-aware schema filtering; authorization-aware tools/list filtering is implemented
+2. extend stored credential authorization into deterministic device/route constraints and harden administrative authorization
+3. continue deployment-grade production identity, revocation policy, and protected secret handling; TLS, rotation, TTL/revocation, and hash-only credential storage already exist
+4. extend durable long-running work/artifact workflows beyond current reattachable process and task-graph primitives
+5. extend idempotency/postconditions only where replay and verification semantics are provably safe
+6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented
 
 ## Branch and merge discipline
 
