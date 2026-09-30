@@ -169,6 +169,35 @@ export function planNextHubAttempt(input: {
   };
 }
 
+function privilegeMode(
+  env: NodeJS.ProcessEnv,
+): 'direct' | 'broker' {
+  const raw =
+    env.NEXOWIRE_PRIVILEGE_MODE?.trim().toLowerCase() ??
+    'direct';
+  if (raw === 'direct' || raw === 'broker') return raw;
+  throw new Error(
+    'NEXOWIRE_PRIVILEGE_MODE must be direct or broker.',
+  );
+}
+
+function privilegedBrokerFromEnv(
+  env: NodeJS.ProcessEnv,
+  mode: 'direct' | 'broker',
+): PrivilegedBrokerClient | undefined {
+  if (mode !== 'broker') return undefined;
+
+  const url = env.NEXOWIRE_PRIVILEGED_BROKER_URL?.trim();
+  const token = env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN?.trim();
+  if (!url || !token) {
+    throw new Error(
+      'Broker privilege mode requires NEXOWIRE_PRIVILEGED_BROKER_URL and NEXOWIRE_PRIVILEGED_BROKER_TOKEN.',
+    );
+  }
+
+  return new PrivilegedBrokerClient({ url, token });
+}
+
 function heartbeatMs(env: NodeJS.ProcessEnv): number {
   const raw = env.NEXOWIRE_AGENT_HEARTBEAT_MS?.trim();
   if (!raw) return 30_000;
@@ -193,6 +222,11 @@ export async function runNativeAgent(
     env.NEXOWIRE_TASK_GRAPH_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'task-graphs.json');
   const socketHeartbeatMs = heartbeatMs(env);
+  const activePrivilegeMode = privilegeMode(env);
+  const privilegedBroker = privilegedBrokerFromEnv(
+    env,
+    activePrivilegeMode,
+  );
   const requestCache = new AgentRequestCache<AgentResponse>();
 
   let stopped = false;
@@ -311,7 +345,14 @@ export async function runNativeAgent(
                     request.data.capability,
                     request.data.input,
                     policy,
-                    { processes, taskGraphs },
+                    {
+                      processes,
+                      taskGraphs,
+                      privilegeMode: activePrivilegeMode,
+                      ...(privilegedBroker
+                        ? { privilegedBroker }
+                        : {}),
+                    },
                   );
                   return {
                     type: 'response' as const,
