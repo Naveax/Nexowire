@@ -252,7 +252,9 @@ async function sha256File(target: string, maxBytes?: number): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const hash = createHash('sha256');
     const stream = createReadStream(target);
-    stream.on('data', (chunk: Buffer) => hash.update(chunk));
+    stream.on('data', (chunk: string | Buffer) => {
+      hash.update(chunk);
+    });
     stream.once('error', reject);
     stream.once('end', () => resolve(hash.digest('hex')));
   });
