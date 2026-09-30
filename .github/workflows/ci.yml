@@ -55,3 +55,6 @@ jobs:
       - run: node --test --import tsx test/linux-native-agent-live.test.ts
         env:
           NEXOWIRE_LIVE_LINUX_AGENT_TEST: "1"
+      - run: node --test --import tsx test/relay-native-agent-live.test.ts
+        env:
+          NEXOWIRE_LIVE_RELAY_AGENT_TEST: "1"
