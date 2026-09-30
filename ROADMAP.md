@@ -69,7 +69,7 @@
 
 - production authorization, TLS, revocation, and encrypted credential storage
 - encrypted secrets and hardened administrative authorization for policy profiles
-- audit/history
+- [x] bounded persistent audit/history query with payload-free metadata filters
 - stable MCP surface
 - multi-device routing
 - dynamic capability exposure
