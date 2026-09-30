@@ -9,6 +9,7 @@ import {
   type Server as HttpsServer,
 } from 'node:https';
 import type { AddressInfo } from 'node:net';
+import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 import { isLoopbackHost } from '../config.js';
 import {
@@ -73,21 +74,21 @@ function assertRelaySecurity(options: RelayServerOptions): void {
   }
 }
 
-function unauthorized(socket: import('node:net').Socket): void {
+function unauthorized(socket: Duplex): void {
   socket.write(
     'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n',
   );
   socket.destroy();
 }
 
-function unavailable(socket: import('node:net').Socket): void {
+function unavailable(socket: Duplex): void {
   socket.write(
     'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n',
   );
   socket.destroy();
 }
 
-function conflict(socket: import('node:net').Socket): void {
+function conflict(socket: Duplex): void {
   socket.write(
     'HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n',
   );
@@ -522,5 +523,5 @@ export async function runRelayServer(
   process.once('SIGINT', () => void stop());
   process.once('SIGTERM', () => void stop());
 
-  await new Promise<never>(() => undefined);
+  return await new Promise<never>(() => undefined);
 }
