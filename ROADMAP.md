@@ -52,7 +52,7 @@
 - [ ] reconnect/session continuity without third-party control providers
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
 - [ ] native relay mode for machines that cannot reach the hub directly
-- [ ] first-party privilege separation and per-capability policy profiles
+- [~] first-party privilege separation remains open; persistent per-device capability allow/deny profiles are implemented
 
 ## v0.5 - GUI and browser
 
@@ -68,7 +68,7 @@
 ## v1.0 - ChatGPT-ready remote control
 
 - production authorization, TLS, revocation, and encrypted credential storage
-- encrypted secrets and policy profiles
+- encrypted secrets and hardened administrative authorization for policy profiles
 - audit/history
 - stable MCP surface
 - multi-device routing
