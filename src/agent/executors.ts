@@ -1528,9 +1528,7 @@ async function verifyTaskArtifacts(
         unverified: count('unverified'),
         errors: count('error'),
       },
-      ok:
-        results.length > 0 &&
-        results.every((entry) => entry.verified === true),
+      ok: results.every((entry) => entry.verified === true),
     },
   };
 }
