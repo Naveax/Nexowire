@@ -155,3 +155,22 @@ export function optionalSecretListFile(
     ? readSecretListFile(file, label, options)
     : undefined;
 }
+
+export function resolveSingleSecret(
+  inlineValue: string | undefined,
+  fileInput: string | undefined,
+  label: string,
+): string | undefined {
+  const inline = inlineValue?.trim() || undefined;
+  const fromFile = optionalSecretFile(fileInput, label);
+
+  if (inline && fromFile && inline !== fromFile) {
+    throw new SecretFileError(
+      'SECRET_SOURCE_CONFLICT',
+      label +
+        ' is configured through both an inline value and a secret file with different contents.',
+    );
+  }
+
+  return inline ?? fromFile;
+}
