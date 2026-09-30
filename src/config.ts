@@ -1,6 +1,10 @@
 import os from 'node:os';
 import path from 'node:path';
 import { parseTokenList } from './security/tokens.js';
+import {
+  optionalSecretFile,
+  optionalSecretListFile,
+} from './security/secret-files.js';
 
 export interface NexowireConfig {
   host: string;
@@ -69,16 +73,36 @@ export function loadConfig(
     optional(env.NEXOWIRE_STATE_DIR) ??
     path.join(os.homedir(), '.nexowire', 'hub');
 
-  const legacyMcpToken = optional(env.NEXOWIRE_MCP_BEARER_TOKEN);
-  const legacyAgentToken = optional(env.NEXOWIRE_AGENT_TOKEN);
+  const inlineMcpToken = optional(env.NEXOWIRE_MCP_BEARER_TOKEN);
+  const fileMcpToken = optionalSecretFile(
+    env.NEXOWIRE_MCP_BEARER_TOKEN_FILE,
+    'MCP bearer token',
+  );
+  const inlineAgentToken = optional(env.NEXOWIRE_AGENT_TOKEN);
+  const fileAgentToken = optionalSecretFile(
+    env.NEXOWIRE_AGENT_TOKEN_FILE,
+    'native-agent bearer token',
+  );
   const mcpBearerTokens = parseTokenList(
-    legacyMcpToken,
+    inlineMcpToken,
+    fileMcpToken,
     env.NEXOWIRE_MCP_BEARER_TOKENS,
+    optionalSecretListFile(
+      env.NEXOWIRE_MCP_BEARER_TOKENS_FILE,
+      'MCP bearer token list',
+    ),
   );
   const agentTokens = parseTokenList(
-    legacyAgentToken,
+    inlineAgentToken,
+    fileAgentToken,
     env.NEXOWIRE_AGENT_TOKENS,
+    optionalSecretListFile(
+      env.NEXOWIRE_AGENT_TOKENS_FILE,
+      'native-agent bearer token list',
+    ),
   );
+  const legacyMcpToken = inlineMcpToken ?? fileMcpToken;
+  const legacyAgentToken = inlineAgentToken ?? fileAgentToken;
 
   const tlsCertFile = optional(env.NEXOWIRE_TLS_CERT_FILE);
   const tlsKeyFile = optional(env.NEXOWIRE_TLS_KEY_FILE);

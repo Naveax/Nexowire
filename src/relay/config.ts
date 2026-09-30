@@ -2,6 +2,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { isLoopbackHost } from '../config.js';
 import { parseTokenList } from '../security/tokens.js';
+import {
+  optionalSecretFile,
+  optionalSecretListFile,
+  resolveSingleSecret,
+} from '../security/secret-files.js';
 
 export interface NexowireRelayConfig {
   host: string;
@@ -94,21 +99,29 @@ export function loadRelayConfig(
     );
   }
 
+  const upstreamAgentToken = resolveSingleSecret(
+    env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
+    env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
+    'relay upstream agent token',
+  );
+
   return {
     host: optional(env.NEXOWIRE_RELAY_HOST) ?? '127.0.0.1',
     port: parsePort(env.NEXOWIRE_RELAY_PORT ?? '43111'),
     upstreamWsUrl: parsed.toString(),
     inboundAgentTokens: parseTokenList(
       env.NEXOWIRE_RELAY_AGENT_TOKEN,
+      optionalSecretFile(
+        env.NEXOWIRE_RELAY_AGENT_TOKEN_FILE,
+        'relay inbound agent token',
+      ),
       env.NEXOWIRE_RELAY_AGENT_TOKENS,
+      optionalSecretListFile(
+        env.NEXOWIRE_RELAY_AGENT_TOKENS_FILE,
+        'relay inbound agent token list',
+      ),
     ),
-    ...(optional(env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN)
-      ? {
-          upstreamAgentToken: optional(
-            env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
-          ),
-        }
-      : {}),
+    ...(upstreamAgentToken ? { upstreamAgentToken } : {}),
     ...(tlsCertFile ? { tlsCertFile } : {}),
     ...(tlsKeyFile ? { tlsKeyFile } : {}),
     ...(envFlag(env.NEXOWIRE_RELAY_ALLOW_INSECURE_REMOTE)
