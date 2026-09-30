@@ -993,6 +993,9 @@ export class ProcessManager {
   async read(input: unknown) {
     const parsed = ReadSchema.parse(input);
     const session = this.require(parsed.session_id);
+    if (session.durable) {
+      await this.refreshDurableSession(session);
+    }
     const deadline = Date.now() + parsed.wait_ms;
 
     let events = session.events
@@ -1010,6 +1013,9 @@ export class ProcessManager {
           Math.min(50, Math.max(1, deadline - Date.now())),
         ),
       );
+      if (session.durable) {
+        await this.refreshDurableSession(session);
+      }
       events = session.events
         .filter((event) => event.seq > parsed.after_seq)
         .slice(0, parsed.max_events);
@@ -1025,6 +1031,34 @@ export class ProcessManager {
   async write(input: unknown) {
     const parsed = WriteSchema.parse(input);
     const session = this.require(parsed.session_id);
+
+    if (session.durable) {
+      await this.refreshDurableSession(session);
+      if (session.status !== 'running') {
+        throw new ProcessManagerError(
+          'PROCESS_NOT_RUNNING',
+          'Durable process session is not accepting input.',
+        );
+      }
+      const value =
+        parsed.input + (parsed.append_newline ? '\n' : '');
+      await this.workerControl(session, {
+        type: 'write',
+        input: parsed.input,
+        appendNewline: parsed.append_newline,
+        commandId: randomUUID(),
+      });
+      this.emit({
+        topic: 'process.input',
+        data: {
+          sessionId: session.id,
+          bytes: Buffer.byteLength(value),
+          appendNewline: parsed.append_newline,
+          durable: true,
+        },
+      });
+      return summarize(session);
+    }
 
     if (
       session.status !== 'running' ||
@@ -1083,6 +1117,24 @@ export class ProcessManager {
     const parsed = SessionSchema.parse(input);
     const session = this.require(parsed.session_id);
 
+    if (session.durable) {
+      await this.refreshDurableSession(session);
+      if (session.status === 'running') {
+        await this.workerControl(session, {
+          type: 'stop',
+          commandId: randomUUID(),
+        });
+        for (let attempt = 0; attempt < 100; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          await this.refreshDurableSession(session);
+          if (session.status !== 'running') break;
+        }
+      }
+      this.stopDurableMonitor(session.id);
+      await this.persistState();
+      return summarize(session);
+    }
+
     if (session.status === 'orphaned' && session.recovered) {
       throw new ProcessManagerError(
         'PROCESS_RECOVERY_VERIFICATION_REQUIRED',
@@ -1139,6 +1191,13 @@ export class ProcessManager {
       const anchor = session.exitedAt ?? session.startedAt;
       if (Date.parse(anchor) <= cutoff) {
         this.sessions.delete(id);
+        this.stopDurableMonitor(id);
+        if (session.durable && session.workerDir) {
+          await fs.rm(session.workerDir, {
+            recursive: true,
+            force: true,
+          });
+        }
         removed++;
       }
     }
@@ -1148,6 +1207,29 @@ export class ProcessManager {
       removed,
       remaining: this.sessions.size,
     };
+  }
+
+  async shutdown(): Promise<void> {
+    for (const timer of this.durableMonitors.values()) {
+      clearInterval(timer);
+    }
+    this.durableMonitors.clear();
+
+    const volatile = [...this.sessions.values()].filter(
+      (session) =>
+        !session.durable &&
+        session.status === 'running' &&
+        !session.recovered &&
+        session.pid,
+    );
+
+    await Promise.all(
+      volatile.map(async (session) => {
+        await killPidTree(session.pid!);
+        await this.waitForChildClose(session);
+      }),
+    );
+    await this.persistState();
   }
 
   async stopAll(): Promise<void> {
@@ -1220,6 +1302,11 @@ export class ProcessManager {
         exitCode: session.exitCode,
         signal: session.signal,
         status: session.status,
+        durable: session.durable,
+        ...(session.workerDir ? { workerDir: session.workerDir } : {}),
+        ...(session.workerPid !== undefined
+          ? { workerPid: session.workerPid }
+          : {}),
       })),
     };
 
