@@ -61,6 +61,7 @@ Implemented:
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
+- privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -97,7 +98,7 @@ The repository is the source of truth. If this file disagrees with current code/
 3. Harden durable process sidecar security/retention as needed; reattachable stdin/stdout/stderr across native-agent restart is implemented.
 4. Extend durable execution/artifact workflows beyond current durable process sessions and task-graph artifact metadata.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
-6. Continue privileged-broker lifecycle/service hardening; elevated routing exists and its default shared secret is DPAPI-protected. First-party relay/direct transport code also exists and should be kept covered by CI.
+6. Privilege separation now has broker routing, DPAPI secret bootstrap, and per-user elevated scheduled-task lifecycle. Keep hardening operational recovery/health checks only if real deployment testing exposes gaps. First-party relay/direct transport code also exists and should be kept covered by CI.
 7. Design production ChatGPT authorization/revocation/encrypted credential handling; rotating bearer sets and direct TLS now cover bootstrap transport/auth hardening.
 8. Extend audit retention/export only if operational need justifies it; bounded persistent history query is implemented.
 

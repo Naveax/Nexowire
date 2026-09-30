@@ -8,6 +8,7 @@ import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
 import { runRelayServer } from './relay/server.js';
 import { runPrivilegedBroker } from './agent/privileged-broker.js';
+import { runPrivilegedBrokerLifecycleCommand } from './agent/privileged-broker-lifecycle.js';
 import { runCredentialCommand } from './security/credentials-cli.js';
 
 function printHelp(): void {
@@ -19,8 +20,7 @@ Usage:
   nexowire stdio   Start an MCP server over stdio
   nexowire agent   Start the native computer agent
   nexowire relay   Start a first-party native-agent relay
-  nexowire privileged-broker  Start the local elevated Windows broker
-  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
+  nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -47,7 +47,14 @@ async function main(): Promise<void> {
   }
 
   if (command === 'privileged-broker') {
-    await runPrivilegedBroker();
+    const action = process.argv[3] ?? 'run';
+    if (action === 'run') {
+      await runPrivilegedBroker();
+    } else {
+      await runPrivilegedBrokerLifecycleCommand(
+        process.argv.slice(3),
+      );
+    }
     return;
   }
 
