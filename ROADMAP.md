@@ -13,7 +13,7 @@
 - [x] End-to-end MCP -> native-agent integration test
 - [x] Interactive process sessions: start/read/write/stop/list
 - [x] Persisted process-session metadata, orphan/lost recovery classification, retention, and prune
-- [ ] Fully reattachable durable process I/O across agent restart
+- [x] Opt-in fully reattachable durable process I/O across native-agent restart
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
 - [~] Public deployment authentication: bootstrap bearer rotation is implemented; production authorization/TLS remains open
@@ -21,7 +21,7 @@
 ## v0.2 - Computer control
 
 - [x] process metadata retention/recovery policy and explicit prune
-- durable reattachable process I/O; live event feed is implemented
+- [x] durable reattachable process I/O with bounded sidecar output spool; live event feed is implemented
 - [x] structured process/service/network inspection and service control
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
 - [x] registry value/key, task state, and firewall rule mutation controls with verification
@@ -63,6 +63,7 @@
 - [x] first-party Edge/Chrome session, navigation, DOM snapshot/action, and screenshot automation
 - [x] exact-element browser visual verification with DOM expectations, hit testing, and cropped PNG evidence
 - [x] exact-HWND raw pointer move/click/scroll only as a fallback
+- [x] reusable bounded postcondition assertions for files, PID liveness, TCP, and HTTP status
 
 ## v1.0 - ChatGPT-ready remote control
 
