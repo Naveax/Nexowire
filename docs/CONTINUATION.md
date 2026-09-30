@@ -39,7 +39,7 @@ Implemented on main as of the latest repository state:
 - process-instance-aware reconnect continuity: same-process request-ID resumption with native dedupe cache, read-only replay after process restart, and fail-closed mutation boundaries
 - normalized provider/backend registry used only as an internal Nexowire routing seam
 - stable native device identity, persistent aliases/groups, device history, capability-aware route discovery, deterministic named routing policies, and per-device capability allow/deny policies
-- operation IDs, audit metadata, mutation replay protection, selected idempotency records
+- operation IDs, audit metadata, bounded persistent audit-history queries, mutation replay protection, selected idempotency records
 - shell, WSL2, files, search, volatile + durable reattachable process sessions, machine/workspace snapshots
 - persistent task-graph checkpoints and bounded parallel dependency execution
 - event feed
