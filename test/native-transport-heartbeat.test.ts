@@ -53,6 +53,7 @@ test('hub heartbeat keeps responsive native agents registered', async (t) => {
     JSON.stringify({
       type: 'hello',
       protocolVersion: AGENT_PROTOCOL_VERSION,
+      instanceId: '22222222-2222-4222-8222-222222222222',
       device: {
         id: 'heartbeat-device',
         name: 'Heartbeat Device',
