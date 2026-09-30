@@ -16,6 +16,7 @@ Implemented:
 - first-party `native-agent` backend registered by the runtime
 - internal capability registry with health/latency ranking, read-only failover semantics, and mutation replay protection
 - native agent protocol over outbound WebSocket
+- first-party authenticated WebSocket relay service with separate hub/agent credentials, optional TLS, hub-side outbound relay client, multiplexed virtual agent sockets, and compatibility with agent endpoint-priority failover
 - native protocol v2 process-instance identity plus bounded request deduplication for reconnect-safe same-process request continuity
 - pending same-process requests resume with the exact operation/request ID; read-only requests may resume after agent process restart, while mutations fail unknown instead of being replayed
 - stable native-agent device identity
@@ -94,7 +95,7 @@ The repository is the source of truth. If this file disagrees with current code/
 3. Harden durable process sidecar security/retention as needed; reattachable stdin/stdout/stderr across native-agent restart is implemented.
 4. Extend durable execution/artifact workflows beyond current durable process sessions and task-graph artifact metadata.
 5. Extend idempotency coverage only where replay semantics are provably safe; selected mutation keys/records are implemented.
-6. Continue first-party privilege separation and first-party relay/direct transport work. Reconnect/session continuity and deterministic named multi-device route selection are implemented.
+6. Continue first-party privilege separation. Direct + first-party relay transport, prioritized endpoint selection, reconnect/session continuity, and deterministic named multi-device routing are implemented.
 7. Design production ChatGPT authorization/revocation/encrypted credential handling; rotating bearer sets and direct TLS now cover bootstrap transport/auth hardening.
 
 ## Known machine note
