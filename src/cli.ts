@@ -7,6 +7,7 @@ import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
 import { runRelayServer } from './relay/server.js';
+import { runCredentialCommand } from './security/credentials-cli.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -17,6 +18,7 @@ Usage:
   nexowire stdio   Start an MCP server over stdio
   nexowire agent   Start the native computer agent
   nexowire relay   Start a first-party native-agent relay
+  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -39,6 +41,14 @@ async function main(): Promise<void> {
 
   if (command === 'relay') {
     await runRelayServer(loadRelayConfig());
+    return;
+  }
+
+  if (command === 'credentials') {
+    await runCredentialCommand(
+      loadConfig(),
+      process.argv.slice(3),
+    );
     return;
   }
 
