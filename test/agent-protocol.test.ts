@@ -4,8 +4,9 @@ import { AGENT_PROTOCOL_VERSION, AgentEventSchema, AgentHelloSchema, HubRequestS
 import { capabilitiesForPlatform } from '../src/protocol/capabilities.js';
 
 test('agent hello validates protocol and capabilities', () => {
-  const parsed = AgentHelloSchema.parse({ type: 'hello', protocolVersion: AGENT_PROTOCOL_VERSION, device: { id: 'abc', name: 'workstation', platform: 'win32', arch: 'x64', agentVersion: '0.1.0', capabilities: ['shell.exec'] } });
+  const parsed = AgentHelloSchema.parse({ type: 'hello', protocolVersion: AGENT_PROTOCOL_VERSION, instanceId: '11111111-1111-4111-8111-111111111111', device: { id: 'abc', name: 'workstation', platform: 'win32', arch: 'x64', agentVersion: '0.1.0', capabilities: ['shell.exec'] } });
   assert.equal(parsed.device.id, 'abc');
+  assert.equal(parsed.instanceId, '11111111-1111-4111-8111-111111111111');
 });
 
 test('hub request requires UUID request id', () => {
