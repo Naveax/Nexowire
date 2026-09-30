@@ -388,10 +388,16 @@ function summarize(session: ManagedSession) {
     ...(session.cwd ? { cwd: session.cwd } : {}),
     status: session.status,
     recovered: session.recovered,
+    durable: session.durable,
+    reattachable:
+      session.durable &&
+      session.status === 'running' &&
+      Boolean(session.workerPid && isPidAlive(session.workerPid)),
     interactive:
       session.status === 'running' &&
-      session.child !== undefined &&
-      session.child.stdin.writable,
+      (session.durable
+        ? Boolean(session.workerPid && isPidAlive(session.workerPid))
+        : session.child !== undefined && session.child.stdin.writable),
     exitCode: session.exitCode,
     signal: session.signal,
     startedAt: session.startedAt,
