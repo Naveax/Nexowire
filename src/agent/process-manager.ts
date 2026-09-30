@@ -419,6 +419,7 @@ export class ProcessManager {
   private readonly workerEntrypoint?: string;
   private readonly workerExecArgv: string[];
   private persistChain: Promise<void> = Promise.resolve();
+  private readonly durableMonitors = new Map<string, NodeJS.Timeout>();
 
   constructor(options: ProcessManagerOptions = {}) {
     this.stateFile = options.stateFile;
@@ -561,6 +562,301 @@ export class ProcessManager {
 
     this.pruneExpiredInMemory();
     await this.persistState();
+  }
+
+  private async refreshDurableSession(
+    session: ManagedSession,
+    emitEvents = true,
+  ): Promise<void> {
+    if (!session.durable || !session.workerDir) return;
+
+    const previousLatest = session.events.at(-1)?.seq ?? 0;
+    const previousStatus = session.status;
+    const [workerStatus, events] = await Promise.all([
+      readJsonIfExists(
+        path.join(session.workerDir, 'status.json'),
+        WorkerStatusSchema,
+      ),
+      readWorkerEvents(session.workerDir),
+    ]);
+
+    if (!workerStatus) {
+      if (session.status === 'running') {
+        session.status = 'lost';
+        session.exitedAt ??= new Date().toISOString();
+      }
+      return;
+    }
+
+    session.workerPid = workerStatus.workerPid;
+    session.pid = workerStatus.childPid;
+    session.exitCode = workerStatus.exitCode;
+    session.signal = workerStatus.signal as NodeJS.Signals | null;
+    session.nextSeq = Math.max(
+      workerStatus.nextSeq,
+      (events.at(-1)?.seq ?? 0) + 1,
+    );
+    session.maxBufferBytes = workerStatus.maxBufferBytes;
+    session.events = events;
+    session.bufferedBytes = events.reduce(
+      (total, event) => total + Buffer.byteLength(event.text),
+      0,
+    );
+
+    if (
+      workerStatus.status === 'running' &&
+      isPidAlive(workerStatus.workerPid)
+    ) {
+      session.status = 'running';
+      delete session.exitedAt;
+    } else if (workerStatus.status === 'exited') {
+      session.status = 'exited';
+      session.exitedAt =
+        workerStatus.exitedAt ?? session.exitedAt ?? new Date().toISOString();
+    } else if (!isPidAlive(workerStatus.workerPid)) {
+      session.status = 'lost';
+      session.exitedAt ??= new Date().toISOString();
+    }
+
+    if (emitEvents) {
+      for (const event of events) {
+        if (event.seq <= previousLatest) continue;
+        this.emit({
+          topic: 'process.output',
+          data: {
+            sessionId: session.id,
+            seq: event.seq,
+            stream: event.stream,
+            text: event.text,
+            at: event.at,
+          },
+        });
+      }
+
+      if (
+        previousStatus === 'running' &&
+        session.status !== 'running'
+      ) {
+        this.emit({
+          topic: 'process.exited',
+          data: {
+            sessionId: session.id,
+            pid: session.pid,
+            exitCode: session.exitCode,
+            signal: session.signal,
+            exitedAt: session.exitedAt,
+          },
+        });
+      }
+    }
+  }
+
+  private startDurableMonitor(session: ManagedSession): void {
+    if (!session.durable || session.status !== 'running') return;
+    if (this.durableMonitors.has(session.id)) return;
+
+    let refreshing = false;
+    const timer = setInterval(() => {
+      if (refreshing) return;
+      refreshing = true;
+      void this.refreshDurableSession(session)
+        .then(async () => {
+          if (session.status !== 'running') {
+            this.stopDurableMonitor(session.id);
+            await this.persistState();
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          refreshing = false;
+        });
+    }, 100);
+    timer.unref();
+    this.durableMonitors.set(session.id, timer);
+  }
+
+  private stopDurableMonitor(sessionId: string): void {
+    const timer = this.durableMonitors.get(sessionId);
+    if (timer) clearInterval(timer);
+    this.durableMonitors.delete(sessionId);
+  }
+
+  private async workerControl(
+    session: ManagedSession,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (!session.workerDir) {
+      throw new ProcessManagerError(
+        'PROCESS_SESSION_NOT_REATTACHABLE',
+        'Durable process session has no worker directory.',
+      );
+    }
+    const control = await readJsonIfExists(
+      path.join(session.workerDir, 'control.json'),
+      WorkerControlSchema,
+    );
+    if (!control) {
+      throw new ProcessManagerError(
+        'PROCESS_SESSION_NOT_REATTACHABLE',
+        'Durable process worker control metadata is unavailable.',
+      );
+    }
+    if (!isPidAlive(control.workerPid)) {
+      throw new ProcessManagerError(
+        'PROCESS_SESSION_NOT_REATTACHABLE',
+        'Durable process worker is not running.',
+      );
+    }
+    return await sendWorkerControl(control, payload);
+  }
+
+  private async startDurable(
+    parsed: z.infer<typeof StartSchema>,
+    cwd: string | undefined,
+  ) {
+    if (!this.workerRoot || !this.workerEntrypoint) {
+      throw new ProcessManagerError(
+        'PROCESS_DURABLE_UNAVAILABLE',
+        'Durable process sessions require workerRoot and workerEntrypoint.',
+      );
+    }
+
+    const id = randomUUID();
+    const workerDir = path.join(this.workerRoot, id);
+    await fs.mkdir(workerDir, { recursive: true, mode: 0o700 });
+
+    const token = randomBytes(32).toString('hex');
+    const shell = resolveShell(parsed.shell, parsed.command);
+    const worker = spawn(
+      process.execPath,
+      [
+        ...this.workerExecArgv,
+        this.workerEntrypoint,
+        'process-worker',
+        workerDir,
+      ],
+      {
+        windowsHide: true,
+        detached: true,
+        stdio: ['pipe', 'ignore', 'ignore'],
+        env: process.env,
+      },
+    );
+
+    const initPayload = {
+      sessionId: id,
+      command: parsed.command,
+      ...(parsed.shell ? { shell: parsed.shell } : {}),
+      ...(cwd ? { cwd } : {}),
+      maxBufferBytes: parsed.max_buffer_bytes,
+      token,
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      worker.stdin.end(JSON.stringify(initPayload), (error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+
+    const deadline = Date.now() + 10_000;
+    let control: WorkerControl | undefined;
+    let workerStatus: WorkerStatus | undefined;
+
+    while (Date.now() < deadline) {
+      if (worker.exitCode !== null) {
+        throw new ProcessManagerError(
+          'PROCESS_WORKER_START_FAILED',
+          `Durable process worker exited with code ${worker.exitCode} before becoming ready.`,
+        );
+      }
+
+      try {
+        [control, workerStatus] = await Promise.all([
+          readJsonIfExists(
+            path.join(workerDir, 'control.json'),
+            WorkerControlSchema,
+          ),
+          readJsonIfExists(
+            path.join(workerDir, 'status.json'),
+            WorkerStatusSchema,
+          ),
+        ]);
+      } catch {
+        control = undefined;
+        workerStatus = undefined;
+      }
+
+      if (
+        control &&
+        workerStatus &&
+        workerStatus.status !== 'starting'
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    if (!control || !workerStatus) {
+      try {
+        process.kill(worker.pid!, 'SIGTERM');
+      } catch {
+        // Best effort worker cleanup.
+      }
+      throw new ProcessManagerError(
+        'PROCESS_WORKER_START_TIMEOUT',
+        'Durable process worker did not publish ready state.',
+      );
+    }
+
+    worker.unref();
+    const events = await readWorkerEvents(workerDir);
+    const session: ManagedSession = {
+      id,
+      ...(parsed.name ? { name: parsed.name } : {}),
+      pid: workerStatus.childPid,
+      command: parsed.command,
+      shell: shell.label,
+      ...(cwd ? { cwd } : {}),
+      startedAt: workerStatus.startedAt,
+      ...(workerStatus.exitedAt
+        ? { exitedAt: workerStatus.exitedAt }
+        : {}),
+      exitCode: workerStatus.exitCode,
+      signal: workerStatus.signal as NodeJS.Signals | null,
+      status:
+        workerStatus.status === 'exited' ? 'exited' : 'running',
+      recovered: false,
+      durable: true,
+      workerDir,
+      workerPid: control.workerPid,
+      events,
+      nextSeq: Math.max(
+        workerStatus.nextSeq,
+        (events.at(-1)?.seq ?? 0) + 1,
+      ),
+      bufferedBytes: events.reduce(
+        (total, event) => total + Buffer.byteLength(event.text),
+        0,
+      ),
+      maxBufferBytes: workerStatus.maxBufferBytes,
+    };
+
+    this.sessions.set(id, session);
+    this.emit({
+      topic: 'process.started',
+      data: {
+        sessionId: session.id,
+        ...(session.name ? { name: session.name } : {}),
+        pid: session.pid,
+        shell: session.shell,
+        ...(session.cwd ? { cwd: session.cwd } : {}),
+        startedAt: session.startedAt,
+        durable: true,
+      },
+    });
+    this.startDurableMonitor(session);
+    await this.persistState();
+    return summarize(session);
   }
 
   async start(input: unknown, policy: PathPolicy) {
