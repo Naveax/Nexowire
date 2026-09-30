@@ -7,6 +7,7 @@ import type { AgentBroker } from '../core/agent-broker.js';
 import type { ProviderRegistry } from '../core/provider-registry.js';
 import type { DeviceAliasStore } from '../devices/alias-store.js';
 import type { DeviceDirectory } from '../devices/directory.js';
+import type { DeviceGroupStore } from '../devices/group-store.js';
 import {
   buildDeviceRoutingEntries,
   filterDeviceRoutes,
@@ -25,6 +26,7 @@ export interface McpContext {
   providers: ProviderRegistry;
   devices?: DeviceDirectory;
   aliases?: DeviceAliasStore;
+  groups?: DeviceGroupStore;
   idempotency?: IdempotencyStore;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
