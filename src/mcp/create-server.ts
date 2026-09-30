@@ -60,8 +60,7 @@ function applyToolRegistrationFilters(
   },
 ): void {
   const authorizationRestricted =
-    input.authorization?.kind === 'stored' &&
-    input.authorization.credential.allowedTools !== undefined;
+    input.authorization?.kind === 'stored';
   const capabilityRestricted =
     input.availableCapabilities !== undefined;
 
@@ -833,7 +832,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         ...(groupRecord
           ? {
               requestedGroup: groupRecord.name,
-              groupDeviceIds: groupRecord.deviceIds,
+              groupDeviceIds: groupRecord.deviceIds.filter((deviceId) =>
+                devices.some((device) => device.id === deviceId),
+              ),
             }
           : {}),
         ...(device_id && resolvedDeviceId !== device_id
@@ -1125,8 +1126,13 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             true,
           );
         }
-        groupDeviceIds = [...group.deviceIds];
-        const members = new Set(group.deviceIds);
+        const visibleIds = new Set(
+          devices.map((device) => device.id),
+        );
+        groupDeviceIds = group.deviceIds.filter((deviceId) =>
+          visibleIds.has(deviceId),
+        );
+        const members = new Set(groupDeviceIds);
         candidates = candidates.filter((device) => members.has(device.id));
       }
 
