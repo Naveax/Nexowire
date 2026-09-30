@@ -17,6 +17,7 @@ import {
   AgentRequestCache,
   fingerprintAgentRequest,
 } from './request-cache.js';
+import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 
 interface AgentIdentity {
   id: string;
