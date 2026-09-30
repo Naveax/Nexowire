@@ -172,16 +172,14 @@ test('first-party relay forwards native-agent protocol bidirectionally', async (
     5_000,
   )) as {
     data?: {
-      data?: {
-        via?: string;
-        capability?: string;
-      };
+      via?: string;
+      capability?: string;
     };
   };
 
-  assert.equal(response.data?.data?.via, 'relay');
+  assert.equal(response.data?.via, 'relay');
   assert.equal(
-    response.data?.data?.capability,
+    response.data?.capability,
     'machine.snapshot',
   );
 });
