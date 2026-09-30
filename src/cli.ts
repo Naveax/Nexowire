@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runNativeAgent } from './agent/native-agent.js';
+import { runProcessWorker } from './agent/process-worker.js';
 import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
 import { runStdioServer } from './mcp/stdio.js';
@@ -30,6 +31,15 @@ async function main(): Promise<void> {
 
   if (command === 'agent') {
     await runNativeAgent();
+    return;
+  }
+
+  if (command === 'process-worker') {
+    const sessionDir = process.argv[3];
+    if (!sessionDir) {
+      throw new Error('process-worker requires a session directory.');
+    }
+    await runProcessWorker(sessionDir);
     return;
   }
 
