@@ -20,6 +20,7 @@ import {
 } from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { WorkspaceStore } from '../workspace/store.js';
+import type { CapabilityPolicyStore } from '../security/capability-policy.js';
 
 export interface McpContext {
   broker: AgentBroker;
@@ -28,6 +29,7 @@ export interface McpContext {
   aliases?: DeviceAliasStore;
   groups?: DeviceGroupStore;
   idempotency?: IdempotencyStore;
+  policies?: CapabilityPolicyStore;
   audit?: AuditLog;
   workspaces: WorkspaceStore;
   skills: SkillRegistry;
@@ -111,6 +113,7 @@ async function execute(
 
   try {
     targetId = await resolveDevice(ctx.providers, ctx.aliases, deviceId);
+    await ctx.policies?.assertAllowed(targetId, capability);
 
     if (idempotencyKey) {
       if (!ctx.idempotency) {
@@ -338,6 +341,184 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer(
     { name: 'nexowire', version: '0.1.0-dev.1' },
     { capabilities: { logging: {} } },
+  );
+
+  server.registerTool(
+    'policy_profile_list',
+    {
+      title: 'List capability policy profiles',
+      description:
+        'List persistent per-device capability policy profiles. Deny patterns override allow patterns.',
+      inputSchema: {},
+    },
+    async () =>
+      toolResult({
+        profiles: ctx.policies
+          ? await ctx.policies.listProfiles()
+          : [],
+        bindings: ctx.policies
+          ? await ctx.policies.listBindings()
+          : [],
+      }),
+  );
+
+  server.registerTool(
+    'policy_profile_set',
+    {
+      title: 'Set capability policy profile',
+      description:
+        'Create or replace a persistent capability allow/deny profile. Patterns may be exact, prefix wildcards such as windows.*, or *.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+        allow: z.array(z.string().min(1).max(128)).min(1).max(256),
+        deny: z.array(z.string().min(1).max(128)).max(256).optional(),
+      },
+    },
+    async ({ name, allow, deny }) => {
+      if (!ctx.policies) {
+        return toolResult(
+          { ok: false, error: 'Capability policy storage is unavailable.' },
+          true,
+        );
+      }
+      return toolResult({
+        profile: await ctx.policies.setProfile(name, {
+          allow,
+          ...(deny ? { deny } : {}),
+        }),
+      });
+    },
+  );
+
+  server.registerTool(
+    'policy_profile_delete',
+    {
+      title: 'Delete capability policy profile',
+      description:
+        'Delete one capability policy profile and remove any device bindings that reference it.',
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+      },
+    },
+    async ({ name }) => {
+      if (!ctx.policies) {
+        return toolResult(
+          { ok: false, error: 'Capability policy storage is unavailable.' },
+          true,
+        );
+      }
+      return toolResult(await ctx.policies.deleteProfile(name));
+    },
+  );
+
+  server.registerTool(
+    'policy_device_bind',
+    {
+      title: 'Bind device capability policy',
+      description:
+        'Bind one known Nexowire device ID or alias to a capability policy profile.',
+      inputSchema: {
+        device: z.string().min(1).max(128),
+        profile: z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+      },
+    },
+    async ({ device, profile }) => {
+      if (!ctx.policies) {
+        return toolResult(
+          { ok: false, error: 'Capability policy storage is unavailable.' },
+          true,
+        );
+      }
+
+      const routes = await routingEntries(ctx);
+      let deviceId = device;
+      if (!routes.some((entry) => entry.id === deviceId)) {
+        deviceId = (await ctx.aliases?.resolve(device)) ?? device;
+      }
+      if (!routes.some((entry) => entry.id === deviceId)) {
+        return toolResult(
+          {
+            ok: false,
+            error: {
+              code: 'POLICY_DEVICE_NOT_FOUND',
+              message:
+                'Capability policy bindings require a known Nexowire device ID or alias.',
+              requested: device,
+            },
+          },
+          true,
+        );
+      }
+
+      return toolResult({
+        binding: await ctx.policies.bind(deviceId, profile),
+        ...(deviceId !== device
+          ? { requestedAlias: device, resolvedDeviceId: deviceId }
+          : {}),
+      });
+    },
+  );
+
+  server.registerTool(
+    'policy_device_unbind',
+    {
+      title: 'Unbind device capability policy',
+      description:
+        'Remove a device capability policy binding. The device returns to the runtime default policy.',
+      inputSchema: {
+        device: z.string().min(1).max(128),
+      },
+    },
+    async ({ device }) => {
+      if (!ctx.policies) {
+        return toolResult(
+          { ok: false, error: 'Capability policy storage is unavailable.' },
+          true,
+        );
+      }
+      const deviceId = (await ctx.aliases?.resolve(device)) ?? device;
+      return toolResult(await ctx.policies.unbind(deviceId));
+    },
+  );
+
+  server.registerTool(
+    'policy_device_check',
+    {
+      title: 'Check device capability policy',
+      description:
+        'Evaluate whether one capability would be allowed for a device without executing it.',
+      inputSchema: {
+        device: z.string().min(1).max(128),
+        capability: z.string().min(1).max(128),
+      },
+    },
+    async ({ device, capability }) => {
+      if (!ctx.policies) {
+        return toolResult({
+          allowed: true,
+          bound: false,
+          policyStorage: false,
+        });
+      }
+      const deviceId = (await ctx.aliases?.resolve(device)) ?? device;
+      return toolResult({
+        deviceId,
+        capability,
+        ...(await ctx.policies.decision(deviceId, capability)),
+      });
+    },
   );
 
   server.registerTool(

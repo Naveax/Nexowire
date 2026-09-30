@@ -7,6 +7,7 @@ import { DeviceAliasStore } from './devices/alias-store.js';
 import { DeviceDirectory } from './devices/directory.js';
 import { DeviceGroupStore } from './devices/group-store.js';
 import { IdempotencyStore } from './operations/idempotency-store.js';
+import { CapabilityPolicyStore } from './security/capability-policy.js';
 import { AgentProvider } from './providers/agent-provider.js';
 import { SkillRegistry } from './skills/registry.js';
 import { WorkspaceStore } from './workspace/store.js';
@@ -31,11 +32,13 @@ export async function createRuntime(config: NexowireConfig) {
   const aliases = new DeviceAliasStore(config.stateDir);
   const groups = new DeviceGroupStore(config.stateDir);
   const idempotency = new IdempotencyStore(config.stateDir);
+  const policies = new CapabilityPolicyStore(config.stateDir);
   await Promise.all([
     audit.loadRecent(),
     aliases.initialize(),
     groups.initialize(),
     idempotency.initialize(),
+    policies.initialize(),
   ]);
 
   return {
@@ -47,6 +50,7 @@ export async function createRuntime(config: NexowireConfig) {
       aliases,
       groups,
       idempotency,
+      policies,
       audit,
       workspaces: new WorkspaceStore(config.stateDir),
       skills: new SkillRegistry(config.skillsDir),

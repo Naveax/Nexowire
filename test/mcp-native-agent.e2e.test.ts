@@ -12,6 +12,7 @@ import { AgentBroker } from '../src/core/agent-broker.js';
 import { ProviderRegistry } from '../src/core/provider-registry.js';
 import { DeviceAliasStore } from '../src/devices/alias-store.js';
 import { IdempotencyStore } from '../src/operations/idempotency-store.js';
+import { CapabilityPolicyStore } from '../src/security/capability-policy.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
 import { createNexowireMcpServer } from '../src/mcp/create-server.js';
 import { AgentProvider } from '../src/providers/agent-provider.js';
@@ -31,13 +32,19 @@ test('MCP request reaches a native agent through the provider registry', async (
   const audit = new AuditLog(path.join(stateDir, 'audit.jsonl'));
   const aliases = new DeviceAliasStore(stateDir);
   const idempotency = new IdempotencyStore(stateDir);
-  await Promise.all([aliases.initialize(), idempotency.initialize()]);
+  const policies = new CapabilityPolicyStore(stateDir);
+  await Promise.all([
+    aliases.initialize(),
+    idempotency.initialize(),
+    policies.initialize(),
+  ]);
 
   const mcp = createNexowireMcpServer({
     broker,
     providers,
     aliases,
     idempotency,
+    policies,
     audit,
     workspaces: new WorkspaceStore(stateDir),
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
@@ -178,6 +185,12 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.equal(broker.has('mcp-device'), true);
 
   const tools = await client.listTools();
+  assert.ok(tools.tools.some((tool) => tool.name === 'policy_profile_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'policy_profile_set'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'policy_profile_delete'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'policy_device_bind'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'policy_device_unbind'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'policy_device_check'));
   assert.ok(tools.tools.some((tool) => tool.name === 'operations_idempotency_list'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_list'));
   assert.ok(tools.tools.some((tool) => tool.name === 'device_alias_set'));
@@ -544,6 +557,60 @@ test('MCP request reaches a native agent through the provider registry', async (
     ['started', 'succeeded'],
   );
   assert.ok(operationEvents.every((event) => event.capability === 'machine.snapshot'));
+
+  const policyProfile = await client.callTool({
+    name: 'policy_profile_set',
+    arguments: {
+      name: 'snapshot-denied',
+      allow: ['*'],
+      deny: ['machine.snapshot'],
+    },
+  });
+  assert.equal(
+    'isError' in policyProfile ? policyProfile.isError : false,
+    false,
+  );
+
+  const policyBinding = await client.callTool({
+    name: 'policy_device_bind',
+    arguments: {
+      device: 'MAIN-PC',
+      profile: 'snapshot-denied',
+    },
+  });
+  assert.equal(
+    'isError' in policyBinding ? policyBinding.isError : false,
+    false,
+  );
+
+  const policyCheck = await client.callTool({
+    name: 'policy_device_check',
+    arguments: {
+      device: 'mcp-device',
+      capability: 'machine.snapshot',
+    },
+  });
+  const policyCheckStructured = policyCheck.structuredContent as {
+    allowed?: boolean;
+    bound?: boolean;
+    profile?: string;
+  };
+  assert.equal(policyCheckStructured.allowed, false);
+  assert.equal(policyCheckStructured.bound, true);
+  assert.equal(policyCheckStructured.profile, 'snapshot-denied');
+
+  const deniedByPolicy = await client.callTool({
+    name: 'machine_snapshot',
+    arguments: { device_id: 'mcp-device' },
+  });
+  assert.equal(
+    'isError' in deniedByPolicy ? deniedByPolicy.isError : false,
+    true,
+  );
+  const deniedStructured = deniedByPolicy.structuredContent as {
+    error?: { code?: string };
+  };
+  assert.equal(deniedStructured.error?.code, 'CAPABILITY_DENIED');
 
   agent.close();
 });
