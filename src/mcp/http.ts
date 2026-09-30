@@ -13,6 +13,7 @@ import {
   mcpAuthTokens,
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
+import { RelayHubClient } from '../hub/relay-client.js';
 import { matchesBearerHeader } from '../security/tokens.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 
@@ -106,7 +107,18 @@ export async function runHttpServer(
     agentAuthTokens(config),
   );
 
+  const relay =
+    config.relayUrl && config.relayToken
+      ? new RelayHubClient({
+          url: config.relayUrl,
+          token: config.relayToken,
+          broker,
+        })
+      : undefined;
+  relay?.start();
+
   const shutdown = async (): Promise<void> => {
+    await relay?.stop();
     for (const client of wss.clients) client.close(1001, 'Server shutting down');
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   };
