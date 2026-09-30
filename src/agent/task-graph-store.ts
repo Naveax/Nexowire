@@ -309,6 +309,13 @@ export class TaskGraphStore {
     limit?: number;
   } = {}): TaskArtifactRecord[] {
     this.pruneExpiredInMemory();
+    if (input.graphId && !this.graphs.has(input.graphId)) {
+      throw new TaskGraphStoreError(
+        'TASK_GRAPH_NOT_FOUND',
+        'Unknown persisted task graph: ' + input.graphId,
+        { graphId: input.graphId },
+      );
+    }
     const limit = Math.min(1000, Math.max(1, input.limit ?? 200));
     const records: TaskArtifactRecord[] = [];
 
