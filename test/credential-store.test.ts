@@ -53,6 +53,8 @@ test('credential store persists only hashes and supports live revocation refresh
 
     await writer.revoke(issued.credential.id);
     assert.equal(reader.verify('mcp', issued.token), false);
+    assert.equal(reader.hasConfigured('mcp'), true);
+    assert.equal(reader.hasUsable('mcp'), false);
 
     const all = reader.list({ includeRevoked: true });
     assert.equal(all[0]?.revokedAt !== undefined, true);
