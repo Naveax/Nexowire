@@ -8,6 +8,8 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 - A non-loopback bind is rejected unless both MCP and native-agent bearer credentials are configured.
 - Non-loopback plaintext transport is also rejected by default. Direct TLS is enabled with `NEXOWIRE_TLS_CERT_FILE` + `NEXOWIRE_TLS_KEY_FILE` and uses TLS 1.2 or newer. `NEXOWIRE_ALLOW_INSECURE_REMOTE=1` is an explicit trusted-private-network escape hatch, not a production setting.
 - Bootstrap bearer authentication accepts bounded rotation sets (`old,current,next`) so credentials can be rolled without an all-at-once outage. Matching hashes candidate/configured tokens and compares digests with constant-time equality instead of direct string equality.
+- Stored MCP credentials may restrict tool names, stable device IDs, and deterministic named routing policies. Route grants authorize only the policy's current deterministic selected target; ambiguous or missing routes grant no target access.
+- Stored MCP credentials are non-administrative by default. Policy mutation, alias/group mutation, audit/event/global idempotency inspection, and related sensitive hub tools require an explicit administrative grant. Static operator credentials and local unauthenticated loopback operation retain the administrative surface.
 - Native agents connect outbound and authenticate to the hub.
 - Without an agent secret, only loopback agent connections are accepted.
 - Native-agent file operations are restricted to configured roots; the default root is the current user's home directory.
