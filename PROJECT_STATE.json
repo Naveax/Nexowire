@@ -26,15 +26,15 @@
     },
     {
       "id": "task-artifacts",
-      "status": "in_progress",
+      "status": "done",
       "priority": 2,
-      "summary": "Persist artifact metadata/hashes for long-running/task-graph work without persisting arbitrary payloads"
+      "summary": "Verified task-graph artifact metadata/hashes persist in checkpoints without artifact contents"
     },
     {
       "id": "device-routing-groups",
-      "status": "in_progress",
+      "status": "partial",
       "priority": 3,
-      "summary": "Add persistent device groups/routing policy while failing closed on ambiguity"
+      "summary": "Persistent device groups and fail-closed group filtering are implemented; richer routing policy remains open"
     },
     {
       "id": "session-continuity",
@@ -84,5 +84,7 @@
     "Use independent branches/worktrees for parallel slices.",
     "Update this file after major merges that materially change remaining work.",
     "Do not infer completion from chat history; inspect main and CI."
-  ]
+  ],
+  "lastStateSync": "2026-09-30",
+  "lastVerifiedMain": "ec52a6c6d0a4250467e225e2e6d0fe8c3b8a0eec"
 }
