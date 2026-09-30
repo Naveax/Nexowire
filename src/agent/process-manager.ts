@@ -760,9 +760,15 @@ export class ProcessManager {
     };
 
     await new Promise<void>((resolve, reject) => {
-      worker.stdin.end(JSON.stringify(initPayload), (error) =>
-        error ? reject(error) : resolve(),
-      );
+      const fail = (error: Error): void => {
+        worker.stdin.off('error', fail);
+        reject(error);
+      };
+      worker.stdin.once('error', fail);
+      worker.stdin.end(JSON.stringify(initPayload), () => {
+        worker.stdin.off('error', fail);
+        resolve();
+      });
     });
 
     const deadline = Date.now() + 10_000;
@@ -770,13 +776,6 @@ export class ProcessManager {
     let workerStatus: WorkerStatus | undefined;
 
     while (Date.now() < deadline) {
-      if (worker.exitCode !== null) {
-        throw new ProcessManagerError(
-          'PROCESS_WORKER_START_FAILED',
-          `Durable process worker exited with code ${worker.exitCode} before becoming ready.`,
-        );
-      }
-
       try {
         [control, workerStatus] = await Promise.all([
           readJsonIfExists(
@@ -799,6 +798,12 @@ export class ProcessManager {
         workerStatus.status !== 'starting'
       ) {
         break;
+      }
+      if (worker.exitCode !== null) {
+        throw new ProcessManagerError(
+          'PROCESS_WORKER_START_FAILED',
+          `Durable process worker exited with code ${worker.exitCode} before publishing usable state.`,
+        );
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
