@@ -174,10 +174,37 @@ test(
       {
         log_name: 'System',
         since_minutes: 1440,
-        max_events: 5,
+        max_events: 20,
+        max_message_chars: 64,
+        max_total_message_chars: 128,
       },
-    )) as { data: { events: unknown[] } };
+    )) as {
+      data: {
+        events: Array<{
+          level?: string | null;
+          provider?: string | null;
+          logName?: string | null;
+          machineName?: string | null;
+          message?: string | null;
+          messageTruncated?: boolean;
+        }>;
+      };
+      truncated: boolean;
+    };
     assert.ok(Array.isArray(events.data.events));
+    assert.ok(events.data.events.length <= 20);
+    assert.equal(typeof events.truncated, 'boolean');
+    let totalMessageChars = 0;
+    for (const event of events.data.events) {
+      assert.ok((event.level?.length ?? 0) <= 64);
+      assert.ok((event.provider?.length ?? 0) <= 512);
+      assert.ok((event.logName?.length ?? 0) <= 512);
+      assert.ok((event.machineName?.length ?? 0) <= 512);
+      assert.ok((event.message?.length ?? 0) <= 64);
+      assert.equal(typeof event.messageTruncated, 'boolean');
+      totalMessageChars += event.message?.length ?? 0;
+    }
+    assert.ok(totalMessageChars <= 128);
 
     const firewall = (await executeWindowsCapability(
       'windows.firewall.rules',
