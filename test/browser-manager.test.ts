@@ -154,7 +154,7 @@ test('browser executable detection searches Linux PATH and macOS user Applicatio
         platform: 'darwin',
         env: {
           NEXOWIRE_EDGE_PATH: '',
-          NEXOWIRE_CHROME_PATH: '',
+          NEXOWIRE_CHROME_PATH: macChrome,
           PATH: '',
         },
         homeDir: root,
