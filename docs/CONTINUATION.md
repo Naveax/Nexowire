@@ -96,9 +96,9 @@ Before and after publication:
 4. add executable/environment capability probes only after reproducing a static-advertisement mismatch
 5. keep npm publication disabled for the initial self-hosted v1.0.0 release unless package policy is explicitly changed later
 
-GitHub v1.0.0 publication has explicit owner authorization. The final publication path is an exact `.github/releases/v1.0.0.authorized` marker on `main`, which creates/reuses the matching tag and dispatches tag-scoped release readiness. The tag-scoped workflow must pass packaging, independent candidate verification, attestations, and checksum re-verification before the GitHub Release is created.
+Nexowire v1.0.0 is published as a stable GitHub Release. Tag `v1.0.0` points at `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed Linux/Windows/macOS packaging, independent candidate verification, checksum re-verification, SLSA provenance, CycloneDX SBOM attestation, and GitHub Release publication. The release contains `nexowire-1.0.0.tgz`, `SHA256SUMS`, `release-manifest.json`, and `nexowire-sbom.cdx.json`. npm publication remains intentionally disabled.
 
-At the 2026-10-01 publication sync, v1.0.0 release preparation is merged on main at `db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0`, including successful normal CI and Linux/Windows/macOS release-readiness packaging. The only active release mutation is the exact `.github/releases/v1.0.0.authorized` marker. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
+At the 2026-10-01 post-release sync, the v1.0 implementation and publication goals are complete. Future domain recipes, probes, performance work, and reproduced hardening are post-v1 incremental work rather than missing release blockers. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
 ## Branch and merge discipline
 
