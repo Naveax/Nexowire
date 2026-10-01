@@ -64,7 +64,7 @@ Implemented on main as of the latest repository state:
 - reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
 - external OIDC/JWT MCP identity with issuer/audience/signature/time validation mapped into Nexowire roles and tool/device/route scopes
-- Linux Secret Service and macOS Keychain protected-secret adapters wired into hub/native-agent/relay bootstrap lookup paths
+- Linux Secret Service and macOS Keychain protected-secret adapters wired into hub/native-agent/relay bootstrap lookup paths; macOS create/update is stdin-backed, bounded, read-back verified, and covered by real Keychain CI
 - revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credentials support explicit user/operator/admin roles, and allowlists filter both tool discovery and call-time execution
 - direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
@@ -79,15 +79,15 @@ Implemented on main as of the latest repository state:
 - guided `nexowire onboard plan|bootstrap` deployment onboarding with hash-only stored credentials, one-time plaintext output, scoped MCP options, bounded TTLs, and doctor integration
 - first-party Windows current-user Scheduled Task, Linux systemd user-service, and macOS per-user LaunchAgent native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart, refusal to persist plaintext bearer variables, and real macOS lifecycle CI
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
-- nine replay-safe/parallel-safe read-only workflows migrated to skill manifest v2
+- 42 shipped skills, including twelve replay-safe/parallel-safe read-only manifest-v2 workflows and conservative artifact/browser/service/regression domain recipes
 
 ## Important unfinished slices
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. safe macOS Keychain protected-secret write/update through a proven no-argv/no-log first-party mechanism; otherwise keep writes fail-closed
-2. expand domain recipes or further skill metadata only when mutation/replay/concurrency behavior is explicit and testable
-3. keep doctor/onboarding, live HTTPS/OIDC/revocation CI, and real macOS LaunchAgent lifecycle CI green while preserving the frozen MCP v1 compatibility floor
+1. finish PR #103 so `wsl.exec` is advertised only when at least one installed WSL distro is actually detected
+2. expand domain recipes only when capability requirements and mutation/replay/concurrency behavior are explicit and testable
+3. keep doctor/onboarding, live HTTPS/OIDC/revocation, real macOS LaunchAgent/Keychain, browser, Linux, and WSL2 CI green while preserving the frozen MCP v1 compatibility floor
 
 Guided deployment onboarding and normal native-agent lifecycle across Windows, Linux, and macOS are merged baseline functionality. `event-driven-control` is also corrected to manifest v2 mixed/serial/manual-replay semantics because it creates processes.
 
