@@ -119,20 +119,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-The v1.0 implementation scope and release preparation are complete on `main` at `db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0`. Nexowire is versioned `1.0.0`, all release-preparation CI/package lanes passed, and the owner explicitly authorized the first GitHub Release. npm publication remains intentionally disabled for the initial self-hosted release.
+Nexowire v1.0.0 is released. Tag `v1.0.0` points at release commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication. npm publication remains intentionally disabled for the initial self-hosted release.
 
-- `release/v1.0.0-authorize`: active only to merge the exact `.github/releases/v1.0.0.authorized` publication marker after CI.
 - `future/domain-recipes`: post-v1 incremental work only. Add a workflow when repeated real work justifies explicit capability, mutation, replay, and concurrency semantics.
-- `future/release-publication`: GitHub v1.0.0 publication is owner-authorized. After release-prep merges, the exact `.github/releases/v1.0.0.authorized` marker is the final publication trigger. npm remains disabled.
 - Browser/WSL executable/runtime capability advertisement already fails closed when required local state is unavailable. Add more probes only when a real static-advertisement mismatch is demonstrated.
 
 ## Immediate next work
 
-1. Merge the exact v1.0.0 authorization marker only after its normal CI passes.
-2. Verify the marker-triggered tag creation plus tag-scoped package, attestation, and GitHub Release workflow succeeds.
-3. Preserve the frozen MCP v1 input/output compatibility contracts and first-party-only runtime invariant after release.
-4. Treat further domain recipes and capability probes as post-v1 incremental work, not release blockers, unless a reproduced defect changes that assessment.
-5. Keep npm publication disabled until package policy is explicitly changed and independently re-verified.
+1. Preserve the frozen MCP v1 input/output compatibility contracts and first-party-only runtime invariant.
+2. Keep the production regression floor green as post-v1 changes land.
+3. Treat further domain recipes and capability probes as incremental work, not missing v1 functionality, unless a reproduced defect changes that assessment.
+4. Keep npm publication disabled until package policy is explicitly changed and independently re-verified.
 
 ## Known machine note
 
