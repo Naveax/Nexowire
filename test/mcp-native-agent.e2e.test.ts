@@ -210,6 +210,9 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.ok(tools.tools.some((tool) => tool.name === 'events_read'));
   assert.ok(tools.tools.some((tool) => tool.name === 'process_start'));
   assert.ok(tools.tools.some((tool) => tool.name === 'process_prune'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'wsl_exec'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'wsl_list'));
+  assert.ok(tools.tools.some((tool) => tool.name === 'wsl_path_convert'));
   assert.ok(tools.tools.some((tool) => tool.name === 'file_patch'));
   assert.ok(tools.tools.some((tool) => tool.name === 'file_hash'));
   assert.ok(tools.tools.some((tool) => tool.name === 'workspace_detect'));
