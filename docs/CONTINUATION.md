@@ -77,7 +77,7 @@ Implemented on main as of the latest repository state:
 - platform-secret backend hardening with non-secret macOS status probes and hashed/redacted backend diagnostics
 - machine-readable `nexowire doctor` deployment readiness with strict remote-ready semantics and no secret output
 - guided `nexowire onboard plan|bootstrap` deployment onboarding with hash-only stored credentials, one-time plaintext output, scoped MCP options, bounded TTLs, and doctor integration
-- first-party Windows current-user Scheduled Task and Linux systemd user-service native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart and refusal to persist plaintext bearer variables
+- first-party Windows current-user Scheduled Task, Linux systemd user-service, and macOS per-user LaunchAgent native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart, refusal to persist plaintext bearer variables, and real macOS lifecycle CI
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
 - nine replay-safe/parallel-safe read-only workflows migrated to skill manifest v2
 
@@ -85,13 +85,11 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. first-party macOS LaunchAgent lifecycle, preserving user-session semantics and never persisting bearer values in argv/plists
-2. safe macOS Keychain protected-secret write/update through a proven no-argv/no-log first-party mechanism; otherwise keep writes fail-closed
-3. correct `event-driven-control` skill semantics before any v2 replay/concurrency declaration because it currently depends on `process.start`
-4. add domain recipes or further skill metadata only when mutation/replay/concurrency behavior is explicit and testable
-5. keep doctor/onboarding plus live HTTPS/OIDC/revocation CI green while preserving the frozen MCP v1 compatibility floor
+1. safe macOS Keychain protected-secret write/update through a proven no-argv/no-log first-party mechanism; otherwise keep writes fail-closed
+2. expand domain recipes or further skill metadata only when mutation/replay/concurrency behavior is explicit and testable
+3. keep doctor/onboarding, live HTTPS/OIDC/revocation CI, and real macOS LaunchAgent lifecycle CI green while preserving the frozen MCP v1 compatibility floor
 
-Guided deployment onboarding and Windows/Linux native-agent lifecycle are now merged baseline functionality, not unfinished work.
+Guided deployment onboarding and normal native-agent lifecycle across Windows, Linux, and macOS are merged baseline functionality. `event-driven-control` is also corrected to manifest v2 mixed/serial/manual-replay semantics because it creates processes.
 
 The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
 

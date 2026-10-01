@@ -56,7 +56,7 @@
 - [x] operation IDs plus persistent payload-free idempotency records for selected replay-safe mutations
 - [x] first-party native relay mode with direct/relay endpoint fallback and real native-agent relay CI
 - [x] first-party privilege separation with elevated Windows broker routing, DPAPI-protected same-user secret bootstrap, and highest-privilege per-user scheduled-task lifecycle
-- [~] first-party native-agent install/autostart lifecycle: Windows current-user Scheduled Task and Linux systemd user service are implemented; macOS LaunchAgent lifecycle remains open
+- [x] first-party native-agent install/autostart lifecycle across Windows current-user Scheduled Task, Linux systemd user service, and macOS per-user LaunchAgent, with real macOS lifecycle CI
 
 ## v0.5 - GUI and browser
 
@@ -77,6 +77,6 @@
 - [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
-- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, and nine explicit replay-safe/parallel-safe read-only migrations are implemented; broader domain recipes remain ongoing and event-driven-control requires mutation-classification cleanup before v2 migration
+- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, nine explicit replay-safe/parallel-safe read-only migrations, and corrected event-driven-control mixed/serial/manual-replay semantics are implemented; broader domain recipes remain ongoing
 - [x] Windows + WSL2 + Linux support: Windows control/browser lanes, real Ubuntu 24.04 WSL2 `wsl.exec` integration, and real Linux native-agent/relay core capability CI are implemented
 - zero required third-party computer-control runtime dependencies
