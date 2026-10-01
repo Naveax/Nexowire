@@ -170,6 +170,61 @@ test(
     assert.equal(deleteValue.data.deleted, true);
     assert.equal(deleteValue.data.verified, true);
 
+    const setDefault = (await executeWindowsCapability(
+      'windows.registry.set',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: '',
+        type: 'string',
+        value: 'hello-default-registry',
+      },
+    )) as {
+      data: {
+        name: string;
+        kind: string;
+        value: string;
+        verified: boolean;
+      };
+    };
+    assert.equal(setDefault.data.name, '');
+    assert.equal(setDefault.data.kind, 'String');
+    assert.equal(setDefault.data.value, 'hello-default-registry');
+    assert.equal(setDefault.data.verified, true);
+
+    const readDefault = (await executeWindowsCapability(
+      'windows.registry.read',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: '',
+        include_subkeys: false,
+      },
+    )) as {
+      data: {
+        values: Array<{ name: string; kind: string; value: string }>;
+      };
+    };
+    assert.deepEqual(readDefault.data.values, [
+      {
+        name: '',
+        kind: 'String',
+        value: 'hello-default-registry',
+      },
+    ]);
+
+    const deleteDefault = (await executeWindowsCapability(
+      'windows.registry.delete',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: '',
+      },
+    )) as { data: { name: string; deleted: boolean; verified: boolean } };
+    assert.equal(deleteDefault.data.name, '');
+    assert.equal(deleteDefault.data.deleted, true);
+    assert.equal(deleteDefault.data.verified, true);
+
     const deleteKey = (await executeWindowsCapability(
       'windows.registry.delete',
       {
