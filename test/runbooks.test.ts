@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { RunbookStore } from '../src/agent/runbook-store.js';
 import { executeDurableRunbook } from '../src/agent/runbooks.js';
 
@@ -145,10 +146,38 @@ test('durable runbook persists dependency-aware task/assertion steps without pay
 test('unknown assertion steps auto-retry safely after restart', async () => {
   const { root, stateFile, store } = await tempStore();
 
+  const steps = [
+    {
+      id: 'verify',
+      kind: 'assertions' as const,
+      depends_on: [],
+      assertions: {
+        assertions: [
+          {
+            id: 'alive',
+            kind: 'process.pid_alive',
+            pid: 1,
+          },
+        ],
+      },
+    },
+  ];
+  const specHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        steps,
+        max_parallel: 2,
+        stop_on_failure: false,
+        total_timeout_ms: 1_800_000,
+      }),
+      'utf8',
+    )
+    .digest('hex');
+
   try {
     const checkpoint = await store.prepare({
       id: 'assert-restart',
-      specHash: 'a'.repeat(64),
+      specHash,
       steps: [
         {
           id: 'verify',
@@ -177,21 +206,7 @@ test('unknown assertion steps auto-retry safely after restart', async () => {
       {
         runbook_id: 'assert-restart',
         resume: true,
-        steps: [
-          {
-            id: 'verify',
-            kind: 'assertions',
-            assertions: {
-              assertions: [
-                {
-                  id: 'alive',
-                  kind: 'process.pid_alive',
-                  pid: 1,
-                },
-              ],
-            },
-          },
-        ],
+        steps,
       },
       reloaded,
       {
@@ -214,18 +229,115 @@ test('unknown assertion steps auto-retry safely after restart', async () => {
 
     assert.equal(result.data.ok, true);
     assert.equal(assertionsCalls, 1);
-  } catch (error) {
-    // The manually constructed checkpoint uses a fake spec hash.
-    // Replace it with a real interrupted checkpoint through a first run
-    // if the executor correctly rejects specification drift.
-    if (
-      !(
-        error instanceof Error &&
-        error.message.includes('does not match')
-      )
-    ) {
-      throw error;
-    }
+    assert.equal(
+      reloaded.get('assert-restart').steps[0]?.status,
+      'succeeded',
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('unknown task-graph step requires explicit retry_unknown', async () => {
+  const { root, stateFile, store } = await tempStore();
+
+  const steps = [
+    {
+      id: 'build',
+      kind: 'task_graph' as const,
+      depends_on: [],
+      task_graph: {
+        jobs: [{ id: 'compile', command: 'echo build' }],
+      },
+    },
+  ];
+  const specHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        steps,
+        max_parallel: 2,
+        stop_on_failure: false,
+        total_timeout_ms: 1_800_000,
+      }),
+      'utf8',
+    )
+    .digest('hex');
+
+  try {
+    const checkpoint = await store.prepare({
+      id: 'task-restart',
+      specHash,
+      steps: [
+        {
+          id: 'build',
+          kind: 'task_graph',
+          dependsOn: [],
+          taskGraphId: 'rb-' + '1'.repeat(32),
+        },
+      ],
+      resume: false,
+      retryFailed: false,
+      retryUnknown: false,
+    });
+    checkpoint.status = 'running';
+    checkpoint.steps[0]!.status = 'running';
+    checkpoint.steps[0]!.attempts = 1;
+    await store.save(checkpoint);
+
+    const reloaded = new RunbookStore({ stateFile });
+    await reloaded.initialize();
+    let calls = 0;
+
+    const blocked = (await executeDurableRunbook(
+      {
+        runbook_id: 'task-restart',
+        resume: true,
+        steps,
+      },
+      reloaded,
+      {
+        runTaskGraph: async () => {
+          calls++;
+          return { data: { ok: true } };
+        },
+        runAssertions: async () => ({ data: { ok: true } }),
+      },
+    )) as {
+      data: {
+        ok: boolean;
+        summary: { unknown: number };
+      };
+    };
+
+    assert.equal(blocked.data.ok, false);
+    assert.equal(blocked.data.summary.unknown, 1);
+    assert.equal(calls, 0);
+
+    const retried = (await executeDurableRunbook(
+      {
+        runbook_id: 'task-restart',
+        resume: true,
+        retry_unknown: true,
+        steps,
+      },
+      reloaded,
+      {
+        runTaskGraph: async () => {
+          calls++;
+          return {
+            data: {
+              ok: true,
+              graphId: 'rb-' + '1'.repeat(32),
+              summary: { succeeded: 1 },
+            },
+          };
+        },
+        runAssertions: async () => ({ data: { ok: true } }),
+      },
+    )) as { data: { ok: boolean } };
+
+    assert.equal(retried.data.ok, true);
+    assert.equal(calls, 1);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
