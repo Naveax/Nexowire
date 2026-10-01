@@ -118,15 +118,10 @@
     "Do not infer completion from chat history; inspect main and CI.",
     "The first-party relay path is verified with a real native agent in Ubuntu CI.",
     "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation.",
-    "Durable runbooks are the preferred higher-level orchestration primitive; do not add new step kinds unless restart/replay semantics are explicit and tested."
+    "Durable runbooks are the preferred higher-level orchestration primitive; do not add new step kinds unless restart/replay semantics are explicit and tested.",
+    "MCP surface v1 is the compatibility floor; additive tools are allowed, but stable tool removal/rename requires a new surface version and migration path."
   ],
   "lastStateSync": "2026-10-01",
   "lastVerifiedMain": "d5de5143c284fe9ead93b2f483745b838cce72f7",
-  "activeWork": [
-    {
-      "id": "mcp-surface-v1",
-      "branch": "feat/mcp-surface-v1-v2",
-      "summary": "Freeze the current ChatGPT-facing tool-name floor as MCP surface v1 and expose independent MCP/native-agent protocol version discovery"
-    }
-  ]
+  "activeWork": []
 }
