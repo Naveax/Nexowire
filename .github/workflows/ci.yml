@@ -58,3 +58,25 @@ jobs:
       - run: node --test --import tsx test/relay-native-agent-live.test.ts
         env:
           NEXOWIRE_LIVE_RELAY_AGENT_TEST: "1"
+
+  wsl2-live:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install real Ubuntu WSL2 distro
+        uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364
+        with:
+          distribution: Ubuntu-24.04
+          wsl-version: 2
+          use-cache: "true"
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Verify Nexowire wsl.exec against real WSL2
+        run: node --test --import tsx test/wsl-live.test.ts
+        env:
+          NEXOWIRE_LIVE_WSL_TEST: "1"
+          NEXOWIRE_WSL_TEST_DISTRO: Ubuntu-24.04
