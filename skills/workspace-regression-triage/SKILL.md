@@ -4,7 +4,7 @@ name: workspace-regression-triage
 description: Reproduce and narrow a software regression from repository state, targeted checks, bounded search, and relevant file reads before attempting a fix.
 version: 0.1
 requires: workspace.detect, workspace.snapshot, workspace.checks, search.text, files.read_many
-prefers: task.graph.run, git.status
+prefers: task.graph.run, files.stat
 platforms: any
 mutation: mixed
 privilege: user
