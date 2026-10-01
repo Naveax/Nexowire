@@ -112,17 +112,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `fix/wsl-capability-detection-v1` / PR #103 is the active runtime-honesty slice: omit `wsl.exec` when a Windows native agent has no installed distro. Focused local tests pass; CI is the merge gate.
 - skill/domain-recipe work remains incremental: add workflows only when required/preferred capabilities and mutation/replay/concurrency semantics are explicit and testable.
+- browser and WSL runtime capability advertisement now fail closed when their required local executables/runtime state are unavailable.
 - macOS protected-secret write/update is merged baseline, not unfinished work.
 
 ## Immediate next work
 
-1. Finish and merge PR #103 after CI proves WSL capability detection on the full matrix.
+1. Continue domain recipes conservatively and prioritize repeated real workflows over catalog inflation.
 2. Keep deployment doctor/onboarding, live HTTPS/OIDC/revocation, real macOS LaunchAgent/Keychain, browser, Linux, and WSL2 CI green as the production regression floor.
-3. Continue domain recipes conservatively and prioritize repeated real workflows over catalog inflation.
-4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
-5. Consider additional executable/environment-aware capability probes only when a static advertisement can demonstrably expose an unusable tool.
+3. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+4. Consider additional executable/environment-aware capability probes only when a static advertisement can demonstrably expose an unusable tool.
+5. Prefer release/readiness hardening over adding low-value primitives now that the main v1 capability surface is broadly complete.
 
 ## Known machine note
 
