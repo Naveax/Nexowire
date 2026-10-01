@@ -79,6 +79,22 @@ This avoids loading a Windows/UIA workflow for a Linux machine or proposing a wo
 - `remote-recovery`
 - `browser-control`
 - `durable-runbook`
+- `git-safe-workflow`
+- `project-bootstrap`
+- `dependency-install`
+- `process-debug`
+- `service-debug`
+- `application-repair`
+- `disk-space-recovery`
+- `deploy-verify`
+- `machine-bootstrap`
+- `incident-triage`
+
+## Operational recipe set
+
+The v2 recipe expansion covers common work that previously required reconstructing the same plan from primitive tools every time: safe Git changes, project/bootstrap setup, dependency changes, process/service diagnosis, application repair, disk recovery, deployment verification, machine bootstrap, and read-only incident triage.
+
+These are still workflows, not magical permission bundles. A skill can propose `files.delete`; the runtime must still authorize and execute that capability normally. Tiny distinction, occasionally useful when the computer contains things people wanted to keep.
 
 ## Design rules
 
