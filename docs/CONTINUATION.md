@@ -57,7 +57,7 @@ Implemented on main as of the latest repository state:
 - higher-level durable runbooks combining task-graph stages and read-only postcondition stages with exact-spec resume and restart-safe retry rules
 - bounded artifact metadata listing/re-verification with changed/missing detection and no persisted artifact contents
 - event feed
-- structured Windows process/service/network/registry/task/eventlog/firewall/environment controls
+- structured Windows process/service/network/registry/task/eventlog/firewall/environment controls, including verified unnamed/default registry value mutation
 - exact HWND windows, screenshots, clipboard, keyboard, UI Automation, pointer fallback
 - first-party isolated Edge/Chrome CDP automation
 - exact-element browser visual verification with cropped PNG evidence
@@ -96,7 +96,7 @@ Most original v0.x/v1.0 infrastructure goals are now implemented. Remaining work
 
 Release-candidate evidence, checksum/manifest/SBOM verification, exact tag/package-version enforcement, tag-only SLSA provenance, and CycloneDX SBOM attestations are merged baseline functionality.
 
-At the 2026-10-01 continuation sync, main has no open implementation pull requests after merging the configuration-drift-audit recipe and domain skill capability-contract hardening. Shipped-skill CI verifies that `docs/SKILLS.md` exactly indexes the validated library, domain capability references resolve to known core capabilities, and read-only domain recipes use only runtime-classified read-only capabilities. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
+At the 2026-10-01 continuation sync, main has no open implementation pull requests after merging unnamed/default Windows registry value support. The Windows CI lane now runs structured Windows control tests, including registry mutation round-trips. Skill-library documentation and domain capability/read-only contracts remain CI-enforced. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
 ## Branch and merge discipline
 

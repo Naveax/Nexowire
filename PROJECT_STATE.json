@@ -160,10 +160,11 @@
     "Release candidates are independently re-verified before upload: tarball SHA256SUMS, manifest package/source/artifact/skill inventory, CycloneDX root identity, and private-package posture must all match.",
     "Tag-triggered release readiness now fails before canonical packaging unless the Git tag is exactly v<package-version>; branch and PR readiness runs are intentional no-ops for that tag check.",
     "Tag-only SLSA and CycloneDX artifact attestations are merged baseline functionality; write/OIDC permissions are isolated to explicit tag-push attestation work, and publication remains a separate owner-authorized action.",
-    "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization."
+    "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization.",
+    "Windows structured-control CI now runs test/windows-control.test.ts on a real Windows runner; unnamed/default registry values support verified set/read/delete round-trips without weakening exact key or hive-root deletion protections."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "34f487d000dd2ac0258284f38652d627ff4d834d",
+  "lastVerifiedMain": "23159f387cf216e49a35888de446378ab31d30e0",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
