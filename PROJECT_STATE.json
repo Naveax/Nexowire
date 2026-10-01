@@ -56,15 +56,15 @@
     },
     {
       "id": "production-auth",
-      "status": "partial",
+      "status": "done",
       "priority": 7,
-      "summary": "Direct TLS, rotating/revocable/expiring auth, roles/scopes, external OIDC/JWT identity, protected secret sources, redacted backend status, deployment doctor, guided hash-only deployment onboarding/bootstrap, and live HTTPS/OIDC/revocation CI are implemented; safe macOS non-argv protected-secret write remains open"
+      "summary": "Direct TLS, rotating/revocable/expiring auth, roles/scopes, external OIDC/JWT identity, protected secret sources, redacted backend status, deployment doctor, guided hash-only onboarding/bootstrap, live HTTPS/OIDC/revocation CI, and safe stdin-backed read-verified macOS Keychain writes are implemented"
     },
     {
       "id": "dynamic-tool-exposure",
       "status": "done",
       "priority": 8,
-      "summary": "Stored credential authorization filters tools/list and calls, and HTTP MCP discovery also filters native-backed schemas by the union of capabilities advertised by online Nexowire agents"
+      "summary": "Stored credential authorization filters tools/list and calls; HTTP MCP discovery filters native-backed schemas by online agent capabilities; browser capabilities are executable-aware and WSL capability probing is active work"
     },
     {
       "id": "postconditions",
@@ -100,7 +100,7 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, nine replay-safe parallel read-only v2 migrations, and corrected event-driven-control mixed/serial/manual-replay semantics are implemented; broader domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 42 shipped workflows, twelve replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and four conservative domain recipes are implemented; further domain recipes remain incremental"
     },
     {
       "id": "native-agent-lifecycle",
@@ -142,20 +142,22 @@
     "Live security CI now starts a real HTTPS hub and local OIDC provider, verifies scoped discovery and live stored-credential revocation, and confirms plaintext credentials are not persisted.",
     "Guided deployment onboarding/bootstrap is merged: plan mode is non-mutating; bootstrap issues missing hash-only credentials and emits plaintext tokens once without persisting them.",
     "event-driven-control is manifest v2 but deliberately mixed/serial/manual-replay because it includes process.start; do not reclassify it replay-safe merely because its observation phase is read-only.",
-    "Normal native-agent lifecycle is implemented for Windows, Linux, and macOS; macOS LaunchAgent install/control is verified in a real macos-latest CI lane while Keychain write/update remains a separate fail-closed gap."
+    "macOS Keychain create/update is now first-party and verified in real macOS CI using security -q -i with the mutation command on stdin, explicit overwrite semantics, bounded execution, and read-back verification; plaintext secrets are not placed in process argv.",
+    "The shipped skill library contains 42 workflows. Twelve read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics.",
+    "Browser capability advertisement is executable-aware across Windows/macOS/Linux. The active WSL capability-detection slice removes wsl.exec when a Windows agent has no installed distro."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "fb86fc11178288e6e7c6b16a2fb749fb26225575",
+  "lastVerifiedMain": "09f1d4dd7040b370d4e046e04ac6c9f002d6b95a",
   "activeWork": [
     {
-      "branch": "feat/macos-protected-secret-write-v1",
-      "status": "planned",
-      "goal": "Find and prove a macOS Keychain write/update path that does not expose plaintext secrets through argv or logs; otherwise keep writes fail-closed."
+      "branch": "fix/wsl-capability-detection-v1",
+      "status": "in_progress",
+      "goal": "Advertise wsl.exec only when the Windows native agent can detect at least one installed WSL distro; PR #103 is open with focused local tests passing and CI running."
     },
     {
-      "branch": "feat/skill-domain-recipes-v1",
-      "status": "planned",
-      "goal": "Expand domain recipes conservatively where capability requirements and mutation/replay/concurrency semantics are explicit and testable."
+      "branch": "future/domain-recipes",
+      "status": "incremental",
+      "goal": "Add further domain recipes only when capability requirements plus mutation/replay/concurrency semantics are explicit and testable."
     }
   ]
 }
