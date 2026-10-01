@@ -94,7 +94,7 @@
       "id": "stable-mcp-surface",
       "status": "partial",
       "priority": 13,
-      "summary": "Broad first-party MCP surface plus credential-aware and online-capability-aware discovery are implemented; remaining stabilization is mainly deployment-grade external identity/secret integration and versioning/compatibility hardening"
+      "summary": "MCP surface v1 now defines a stable tool-name compatibility floor, exposes surface/native-protocol versions, and regression-tests stable tool presence; remaining work is deeper input/output schema and semantic compatibility hardening"
     }
   ],
   "standardVerification": [
@@ -124,9 +124,9 @@
   "lastVerifiedMain": "d5de5143c284fe9ead93b2f483745b838cce72f7",
   "activeWork": [
     {
-      "id": "credential-roles",
-      "branch": "feat/credential-roles-v2",
-      "summary": "Add explicit user/operator/admin stored MCP credential roles while preserving legacy --admin compatibility and tool allowlist intersection"
+      "id": "mcp-surface-v1",
+      "branch": "feat/mcp-surface-v1-v2",
+      "summary": "Freeze the current ChatGPT-facing tool-name floor as MCP surface v1 and expose independent MCP/native-agent protocol version discovery"
     }
   ]
 }
