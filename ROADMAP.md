@@ -16,7 +16,7 @@
 - [x] Opt-in fully reattachable durable process I/O across native-agent restart
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
-- [~] Public deployment security: bootstrap bearer rotation and direct TLS are implemented; production authorization/revocation/encrypted secret storage remain open
+- [~] Public deployment security: bootstrap bearer rotation, direct TLS, descriptor-safe mounted secret files, and Windows DPAPI CurrentUser protected bootstrap secret envelopes are implemented; deployment-grade external identity and broader platform-backed secret storage remain open
 
 ## v0.2 - Computer control
 
@@ -69,7 +69,7 @@
 
 ## v1.0 - ChatGPT-ready remote control
 
-- [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored `user`/`operator`/`admin` roles, bearer rotation, and TLS are implemented; deployment-grade external identity and protected-at-rest secret integration remain
+- [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored `user`/`operator`/`admin` roles, bearer rotation, TLS, descriptor-safe mounted secrets, and Windows DPAPI bootstrap envelopes are implemented; deployment-grade external identity and broader cross-platform protected-at-rest integration remain
 - deployment-grade external identity plus platform-backed/encrypted secret handling beyond the current local credential store and mounted-secret/DPAPI paths
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - [~] stable MCP surface: v1 tool-name compatibility floor plus frozen backward-compatible input-schema contracts are implemented; machine-readable structured-output semantic compatibility remains
