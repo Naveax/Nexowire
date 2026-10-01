@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, and 38 validated shipped operational skills including the specialized v3 diagnostics/recovery pack
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 38 validated shipped workflows, and six read-only diagnostic workflows explicitly marked parallel-safe/replay-safe
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -67,6 +67,8 @@ Implemented:
 - external OIDC/JWT MCP identity with strict issuer/audience/signature/time verification and mapping into existing role/tool/device/route authorization
 - Linux Secret Service and macOS Keychain protected-secret adapters, with hub/native-agent/relay bootstrap lookup wiring, platform-secret backend status/capability reporting, non-secret macOS presence probes, redacted diagnostics, and fail-closed macOS write when no safe no-argv path exists
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
+- machine-readable deployment readiness doctor covering bind intent, TLS validity/expiry, MCP/native-agent auth, OIDC posture, secret-source mechanisms, and state-directory health without emitting credentials
+- live operational security CI combining a real HTTPS hub, OIDC discovery/JWKS, role/tool scopes, hash-only stored credentials, and live revocation
 - first-party relay server with inbound/upstream authentication, bounded backpressure/heartbeats, ordered agent endpoint fallback, and real native-agent relay CI coverage
 - revocable/expiring hash-only stored MCP/native-agent credentials plus optional MCP tool allowlists enforced before tool execution
 - stored MCP credential allowlists now filter both `tools/list` discovery and call-time execution, so restricted credentials do not receive unauthorized tool schemas
@@ -108,19 +110,18 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/deployment-readiness-v1`: machine-readable deployment doctor/readiness checks for TLS, auth/OIDC, native-agent auth, secret backends, relay/public-binding safety, and remediation.
-- `feat/security-operational-ci-v1`: end-to-end operational CI spanning external identity, scopes, revocation, discovery, TLS, and first-party transport.
-- `feat/skill-v2-migration-pack-v1`: migrate additional suitable workflows to manifest v2 while preserving manifest v1 and MCP v1 compatibility.
+- `feat/deployment-onboarding-v1`: guided deployment bootstrap on top of doctor/auth/TLS/OIDC without persisting plaintext credentials.
+- `feat/native-agent-lifecycle-v1`: first-party native-agent install/status/start/stop/uninstall/autostart lifecycle.
+- `feat/skill-v2-migration-pack-v2`: migrate additional conservative read-only workflows to manifest v2.
 
 ## Immediate next work
 
-1. Build deployment-readiness diagnostics that never print secrets and distinguish hard blockers from warnings.
-2. Add operational security CI that proves OIDC/scoped discovery/revocation/TLS work together rather than only in isolated unit tests.
-3. Migrate read-only/diagnostic skills to manifest v2 where capability alternatives, parallel safety, or replay safety are materially useful.
-4. Keep macOS Keychain write fail-closed until a first-party native no-argv/no-log secret path is proven.
-5. Keep Windows/Linux/WSL2 live integration lanes green after every relevant change.
-6. Extend durable workflows/idempotency only when restart/replay semantics remain explicit and tested.
-7. Preserve the frozen MCP v1 compatibility floor.
+1. Build a guided bootstrap that can create scoped MCP/native-agent credentials and produce secret-safe deployment instructions/status.
+2. Add persistent native-agent lifecycle so a normal machine can run Nexowire after reboot/logout without a hand-maintained console.
+3. Continue manifest-v2 migration only for workflows whose replay/concurrency semantics are explicit and safe.
+4. Keep deployment doctor plus live HTTPS/OIDC/revocation CI green as the production-security regression floor.
+5. Keep macOS Keychain write fail-closed until a first-party no-argv/no-log write mechanism is proven.
+6. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
 
 ## Known machine note
 

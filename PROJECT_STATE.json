@@ -58,7 +58,7 @@
       "id": "production-auth",
       "status": "partial",
       "priority": 7,
-      "summary": "Direct TLS, rotating bootstrap bearers, revocable/expiring hash-only credentials, role/tool/device/route scopes, external OIDC/JWT identity, Windows DPAPI, Linux Secret Service, macOS Keychain lookup/delete, and redacted platform-backend status are implemented; deployment-readiness/onboarding policy and safe macOS non-argv write remain open"
+      "summary": "Direct TLS, rotating/revocable/expiring auth, roles/scopes, external OIDC/JWT identity, protected secret sources, redacted backend status, machine-readable deployment doctor, and live HTTPS/OIDC/revocation CI are implemented; guided deployment onboarding and safe macOS non-argv write remain open"
     },
     {
       "id": "dynamic-tool-exposure",
@@ -100,7 +100,13 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1 plus additive backward-compatible manifest v2, validation, policy metadata, exact-device runnability, capability alternatives/preferences, replay/concurrency metadata, and 38 shipped workflows are implemented; broader v2 migration/domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, and six replay-safe parallel read-only v2 migrations are implemented; broader v2 migration/domain recipes remain incremental"
+    },
+    {
+      "id": "native-agent-lifecycle",
+      "status": "partial",
+      "priority": 15,
+      "summary": "Native agent runtime/transport is mature but first-party install/autostart/status/start/stop/uninstall lifecycle is not yet implemented for normal operator deployment"
     }
   ],
   "standardVerification": [
@@ -132,27 +138,27 @@
     "npm run continuation:check validates PROJECT_STATE.json, required continuation files, hot-file references, unique/sorted priorities, and the HANDOFF resume contract.",
     "Stable v1 structured-output semantics are frozen in src/mcp/v1-output-contract.json; regenerate only after explicit compatibility review.",
     "OIDC/JWT external MCP identity is merged and maps into existing Nexowire role/tool/device/route authorization; do not treat it as active unfinished work.",
-    "Platform secret hardening is merged: macOS status does not request plaintext, backend diagnostics are hashed/redacted, and unsupported safe macOS write remains explicitly fail-closed.",
-    "Real Ubuntu 24.04 WSL2 integration is CI-verified through a SHA-pinned provisioning action; the action is CI-only and not a Nexowire runtime dependency.",
-    "Skill manifest v2 is merged additively; v1 object/evaluation semantics remain backward compatible, and v2-only fields require explicit manifest_version: 2."
+    "Deployment doctor is merged and reports local/remote readiness, TLS validity, auth posture, secret-source mechanisms, OIDC posture, and state-directory health without printing credentials.",
+    "Live security CI now starts a real HTTPS hub and local OIDC provider, verifies scoped discovery and live stored-credential revocation, and confirms plaintext credentials are not persisted.",
+    "Six read-only diagnostic skills use manifest v2 parallel-safe/replay-safe metadata; mutation workflows remain excluded from replay-safe migration."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "92bbaa40047cdaf5b541a163042a7d0d00033142",
+  "lastVerifiedMain": "08040358658efc99862c43bc21fc0e52bb61b34f",
   "activeWork": [
     {
-      "branch": "feat/deployment-readiness-v1",
+      "branch": "feat/deployment-onboarding-v1",
       "status": "planned",
-      "goal": "Add a machine-readable deployment doctor/readiness workflow for TLS, external identity/auth, agent auth, secret backends, relay/public binding safety, and explicit remediation without exposing secrets."
+      "goal": "Add guided first-party deployment bootstrap/onboarding that creates scoped credentials/config guidance safely and integrates with doctor without persisting plaintext secrets."
     },
     {
-      "branch": "feat/skill-v2-migration-pack-v1",
+      "branch": "feat/native-agent-lifecycle-v1",
       "status": "planned",
-      "goal": "Migrate additional safe shipped workflows to manifest v2 metadata and alternatives while preserving v1 compatibility and frozen MCP v1 contracts."
+      "goal": "Add first-party install/status/start/stop/uninstall/autostart lifecycle for the native agent so normal deployments do not depend on manually keeping a terminal open."
     },
     {
-      "branch": "feat/security-operational-ci-v1",
+      "branch": "feat/skill-v2-migration-pack-v2",
       "status": "planned",
-      "goal": "Add end-to-end operational CI for production-facing authentication/authorization paths so OIDC, scoped discovery, revocation, TLS, and first-party transport remain verified together."
+      "goal": "Migrate additional suitable read-only workflows to manifest v2 capability/replay/concurrency metadata while preserving the MCP v1 compatibility floor."
     }
   ]
 }
