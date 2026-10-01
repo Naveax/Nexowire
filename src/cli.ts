@@ -15,10 +15,11 @@ import { runProtectedSecretCommand } from './security/protected-secrets-cli.js';
 import { CredentialStore } from './security/credential-store.js';
 import { evaluateDeploymentReadiness } from './security/deployment-readiness.js';
 import { runDeploymentOnboardingCommand } from './security/deployment-onboarding.js';
+import { NEXOWIRE_VERSION } from './version.js';
 
 function printHelp(): void {
   process.stdout.write(`
-Nexowire 0.1.0-dev.1
+Nexowire ${NEXOWIRE_VERSION}
 
 Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
