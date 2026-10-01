@@ -80,7 +80,7 @@ Implemented on main as of the latest repository state:
 - guided `nexowire onboard plan|bootstrap` deployment onboarding with hash-only stored credentials, one-time plaintext output, scoped MCP options, bounded TTLs, and doctor integration
 - first-party Windows current-user Scheduled Task, Linux systemd user-service, and macOS per-user LaunchAgent native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart, refusal to persist plaintext bearer variables, and real macOS lifecycle CI
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
-- 45 shipped skills, including fourteen replay-safe/parallel-safe read-only manifest-v2 workflows and conservative artifact/browser/service/regression/release-readiness/backup-integrity/configuration-drift domain recipes
+- 45 shipped skills, including fourteen replay-safe/parallel-safe read-only manifest-v2 workflows, conservative artifact/browser/service/regression/release-readiness/backup-integrity/configuration-drift domain recipes, and CI checks that domain capability references are known and read-only recipes use only read-only runtime capabilities
 - installable release-candidate packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, CycloneDX SBOM evidence, independent verification before upload, exact `v<package-version>` tag enforcement before canonical packaging, and tag-only SLSA provenance and CycloneDX SBOM attestations with isolated permissions
 - canonical-realpath async path authorization that handles platform aliases such as macOS `/var` -> `/private/var` without weakening symlink-escape protection
 
@@ -96,7 +96,7 @@ Most original v0.x/v1.0 infrastructure goals are now implemented. Remaining work
 
 Release-candidate evidence, checksum/manifest/SBOM verification, exact tag/package-version enforcement, tag-only SLSA provenance, and CycloneDX SBOM attestations are merged baseline functionality.
 
-At the 2026-10-01 continuation sync, main has no open implementation pull requests after merging the configuration-drift-audit recipe. Shipped-skill CI also verifies that `docs/SKILLS.md` exactly indexes the validated library. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
+At the 2026-10-01 continuation sync, main has no open implementation pull requests after merging the configuration-drift-audit recipe and domain skill capability-contract hardening. Shipped-skill CI verifies that `docs/SKILLS.md` exactly indexes the validated library, domain capability references resolve to known core capabilities, and read-only domain recipes use only runtime-classified read-only capabilities. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
 ## Branch and merge discipline
 
