@@ -119,16 +119,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Nexowire v1.0.0 is released. Tag `v1.0.0` points at release commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication. npm publication remains intentionally disabled for the initial self-hosted release.
+There is no active unfinished v1.0 implementation or publication work. Nexowire v1.0.0 is released. Tag `v1.0.0` points at release commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication. npm publication remains intentionally disabled for the initial self-hosted release.
 
-- `future/domain-recipes`: post-v1 incremental work only. Add a workflow when repeated real work justifies explicit capability, mutation, replay, and concurrency semantics.
-- Browser/WSL executable/runtime capability advertisement already fails closed when required local state is unavailable. Add more probes only when a real static-advertisement mismatch is demonstrated.
+Post-v1 domain recipes, additional capability probes, performance work, and reproduced hardening are backlog only. They become active work only when a concrete task is intentionally selected.
 
 ## Immediate next work
 
+There is no required v1.0 follow-up. For future changes:
+
 1. Preserve the frozen MCP v1 input/output compatibility contracts and first-party-only runtime invariant.
-2. Keep the production regression floor green as post-v1 changes land.
-3. Treat further domain recipes and capability probes as incremental work, not missing v1 functionality, unless a reproduced defect changes that assessment.
+2. Keep the production regression floor green.
+3. Add domain recipes/probes only for concrete repeated workflows or reproduced mismatches.
 4. Keep npm publication disabled until package policy is explicitly changed and independently re-verified.
 
 ## Known machine note
