@@ -21,6 +21,7 @@ import {
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
+import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 
 interface AgentIdentity {
   id: string;
@@ -51,13 +52,25 @@ function agentVersion(): string {
 
 export function agentTokenFromEnv(
   env: NodeJS.ProcessEnv,
+  platformSingle: (
+    name: string | undefined,
+    purpose: string,
+  ) => string | undefined = (
+    name: string | undefined,
+    purpose: string,
+  ) => optionalPlatformSecretSync(name, purpose),
 ): string | undefined {
+  const platformToken = platformSingle(
+    env.NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME,
+    'agent-bearer-token',
+  );
   return resolveProtectedSingleSecret(
     env.NEXOWIRE_AGENT_TOKEN,
     env.NEXOWIRE_AGENT_TOKEN_FILE,
     env.NEXOWIRE_AGENT_TOKEN_DPAPI_FILE,
     'agent-bearer-token',
     'native-agent bearer token',
+    platformToken,
   );
 }
 
