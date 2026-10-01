@@ -1,13 +1,17 @@
 ---
+manifest_version: 2
 name: verify-before-finish
 description: Verify the real post-change state before reporting a computer-control task as complete.
 version: 0.1
 requires: machine.snapshot
+prefers: workspace.detect, workspace.checks, process.list, files.stat, files.hash, network.tcp.probe, network.http.probe, windows.window.list, windows.screenshot
 platforms: any
 mutation: read-only
 privilege: user
 trust: reviewed
 tags: verification, postcondition, safety
+concurrency: parallel-safe
+replay: safe
 ---
 
 # Verify Before Finish
