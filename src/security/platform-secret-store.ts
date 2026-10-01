@@ -32,6 +32,7 @@ export interface PlatformSecretRunner {
     options?: {
       input?: string;
       maxBuffer?: number;
+      timeoutMs?: number;
     },
   ): {
     status: number | null;
@@ -46,6 +47,7 @@ export interface PlatformSecretRunner {
     options?: {
       input?: string;
       maxBuffer?: number;
+      timeoutMs?: number;
     },
   ): Promise<{
     status: number | null;
@@ -174,6 +176,52 @@ function macService(reference: PlatformSecretReference): string {
   return 'Nexowire/' + reference.purpose;
 }
 
+function securityInteractiveQuote(value: string): string {
+  return (
+    '"' +
+    value
+      .replaceAll('\\', '\\\\')
+      .replaceAll('"', '\\"') +
+    '"'
+  );
+}
+
+function macWriteCommand(
+  reference: PlatformSecretReference,
+  secret: string,
+  overwrite: boolean,
+): string {
+  if (/[\r\n]/.test(secret)) {
+    throw new PlatformSecretError(
+      'PLATFORM_SECRET_MULTILINE',
+      'macOS Keychain interactive writes require one non-empty line.',
+    );
+  }
+
+  const parts = [
+    'add-generic-password',
+    ...(overwrite ? ['-U'] : []),
+    '-a',
+    securityInteractiveQuote(reference.name),
+    '-s',
+    securityInteractiveQuote(macService(reference)),
+    '-w',
+    securityInteractiveQuote(secret),
+  ];
+  const command = parts.join(' ') + '\n';
+
+  // Apple's security(1) interactive parser uses a fixed 4096-byte line
+  // buffer. Keep a little headroom rather than depending on truncation.
+  if (Buffer.byteLength(command, 'utf8') > 4000) {
+    throw new PlatformSecretError(
+      'PLATFORM_SECRET_TOO_LARGE',
+      'macOS Keychain interactive write exceeds the safe 4000-byte command bound.',
+    );
+  }
+
+  return command;
+}
+
 function defaultRunner(): PlatformSecretRunner {
   return {
     runSync(command, args, options = {}) {
@@ -185,6 +233,7 @@ function defaultRunner(): PlatformSecretRunner {
           encoding: 'utf8',
           windowsHide: true,
           maxBuffer: options.maxBuffer ?? 2 * 1024 * 1024,
+          timeout: options.timeoutMs ?? 15_000,
         },
       );
       return {
@@ -206,8 +255,16 @@ function defaultRunner(): PlatformSecretRunner {
         let bytes = 0;
         const maxBuffer =
           options.maxBuffer ?? 2 * 1024 * 1024;
+        const timeoutMs = options.timeoutMs ?? 15_000;
         let overflow = false;
+        let timedOut = false;
         let launchError: Error | undefined;
+
+        const timer = setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGKILL');
+        }, timeoutMs);
+        timer.unref();
 
         const collect = (
           target: Buffer[],
@@ -216,7 +273,7 @@ function defaultRunner(): PlatformSecretRunner {
           bytes += chunk.length;
           if (bytes > maxBuffer) {
             overflow = true;
-            child.kill();
+            child.kill('SIGKILL');
             return;
           }
           target.push(chunk);
@@ -232,18 +289,25 @@ function defaultRunner(): PlatformSecretRunner {
           launchError = error;
         });
         child.once('close', (status) => {
+          clearTimeout(timer);
           resolve({
             status,
             stdout: Buffer.concat(stdout).toString('utf8'),
             stderr: Buffer.concat(stderr).toString('utf8'),
             ...(launchError ? { error: launchError } : {}),
-            ...(overflow
+            ...(timedOut
               ? {
                   error: new Error(
-                    'Platform secret command output exceeded the bound.',
+                    'Platform secret command timed out.',
                   ),
                 }
-              : {}),
+              : overflow
+                ? {
+                    error: new Error(
+                      'Platform secret command output exceeded the bound.',
+                    ),
+                  }
+                : {}),
           });
         });
         child.stdin.end(options.input ?? '', 'utf8');
@@ -332,12 +396,9 @@ export class PlatformSecretStore {
           ? 'keychain'
           : 'secret-service',
       read: true,
-      write: this.platform === 'linux',
+      write: true,
       delete: true,
-      secureWriteTransport:
-        this.platform === 'linux'
-          ? 'stdin'
-          : 'unsupported',
+      secureWriteTransport: 'stdin',
       presenceProbeReadsSecret: this.platform === 'linux',
     };
   }
@@ -472,15 +533,59 @@ export class PlatformSecretStore {
     const command = commandFor(this.platform);
 
     if (this.platform === 'darwin') {
-      throw new PlatformSecretError(
-        'PLATFORM_SECRET_WRITE_UNSUPPORTED',
-        'Nexowire does not pass macOS Keychain secret plaintext through process arguments. Provision this Keychain item with trusted OS tooling; Nexowire will read it without echoing the secret.',
+      if (
+        options.overwrite !== true &&
+        this.status(reference).present
+      ) {
+        throw new PlatformSecretError(
+          'PLATFORM_SECRET_EXISTS',
+          'Platform-backed secret already exists; explicit overwrite is required.',
+          {
+            platform: this.platform,
+            purpose: reference.purpose,
+            name: reference.name,
+          },
+        );
+      }
+
+      const result = await this.runner.run(
+        command,
+        ['-q', '-i'],
         {
-          platform: this.platform,
-          purpose: reference.purpose,
-          name: reference.name,
+          input: macWriteCommand(
+            reference,
+            secret,
+            options.overwrite === true,
+          ),
+          maxBuffer: 2 * 1024 * 1024,
+          timeoutMs: 15_000,
         },
       );
+      if (result.status !== 0 || result.error) {
+        throwCommandFailure(
+          this.platform,
+          'write',
+          result,
+        );
+      }
+
+      const verified = this.readSync(reference, {
+        allowMultiline: false,
+      });
+      if (verified !== secret) {
+        throw new PlatformSecretError(
+          'PLATFORM_SECRET_WRITE_NOT_VERIFIED',
+          'macOS Keychain write could not be verified.',
+          {
+            platform: this.platform,
+            purpose: reference.purpose,
+            name: reference.name,
+            expectedChars: secret.length,
+            actualChars: verified.length,
+          },
+        );
+      }
+      return;
     }
 
     if (

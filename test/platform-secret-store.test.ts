@@ -43,7 +43,7 @@ class FakeRunner implements PlatformSecretRunner {
   runSync(
     command: string,
     args: string[],
-    options: { input?: string } = {},
+    options: { input?: string; maxBuffer?: number; timeoutMs?: number } = {},
   ) {
     this.syncCalls.push({
       command,
@@ -58,7 +58,7 @@ class FakeRunner implements PlatformSecretRunner {
   async run(
     command: string,
     args: string[],
-    options: { input?: string } = {},
+    options: { input?: string; maxBuffer?: number; timeoutMs?: number } = {},
   ) {
     this.asyncCalls.push({
       command,
@@ -134,7 +134,7 @@ test('Linux Secret Service lookup and store use exact attributes and stdin for s
   );
 });
 
-test('macOS Keychain lookup avoids secret arguments and write fails closed', async () => {
+test('macOS Keychain lookup and write keep secret plaintext out of argv', async () => {
   const runner = new FakeRunner();
   const store = new PlatformSecretStore({
     platform: 'darwin',
@@ -160,20 +160,52 @@ test('macOS Keychain lookup avoids secret arguments and write fails closed', asy
     ],
   });
 
-  await assert.rejects(
-    () =>
-      store.write(
-        {
-          purpose: 'agent-bearer-token',
-          name: 'primary',
-        },
-        'never-in-argv',
-      ),
-    (error: unknown) =>
-      error instanceof PlatformSecretError &&
-      error.code === 'PLATFORM_SECRET_WRITE_UNSUPPORTED',
+  runner.syncCalls = [];
+  runner.syncResult = {
+    status: 0,
+    stdout: 'never-in-argv\n',
+    stderr: '',
+  };
+
+  await store.write(
+    {
+      purpose: 'agent-bearer-token',
+      name: 'primary',
+    },
+    'never-in-argv',
+    { overwrite: true },
   );
-  assert.equal(runner.asyncCalls.length, 0);
+
+  assert.equal(runner.asyncCalls.length, 1);
+  assert.deepEqual(runner.asyncCalls[0]?.args, ['-q', '-i']);
+  assert.equal(
+    runner.asyncCalls[0]?.args.includes('never-in-argv'),
+    false,
+  );
+  assert.match(
+    runner.asyncCalls[0]?.input ?? '',
+    /add-generic-password/,
+  );
+  assert.match(
+    runner.asyncCalls[0]?.input ?? '',
+    /never-in-argv/,
+  );
+  assert.equal(
+    (runner.asyncCalls[0]?.input ?? '').includes(' -T '),
+    false,
+  );
+
+  assert.deepEqual(runner.syncCalls[0], {
+    command: '/usr/bin/security',
+    args: [
+      'find-generic-password',
+      '-s',
+      'Nexowire/agent-bearer-token',
+      '-a',
+      'primary',
+      '-w',
+    ],
+  });
 });
 
 test('platform secret adapters reject unsupported platforms and unsafe references', () => {
@@ -357,9 +389,9 @@ test('platform secret capabilities expose safe lifecycle support without secret 
     platform: 'darwin',
     backend: 'keychain',
     read: true,
-    write: false,
+    write: true,
     delete: true,
-    secureWriteTransport: 'unsupported',
+    secureWriteTransport: 'stdin',
     presenceProbeReadsSecret: false,
   });
 });
@@ -391,9 +423,9 @@ test('macOS platform status checks metadata without requesting password plaintex
         platform: 'darwin',
         backend: 'keychain',
         read: true,
-        write: false,
+        write: true,
         delete: true,
-        secureWriteTransport: 'unsupported',
+        secureWriteTransport: 'stdin',
         presenceProbeReadsSecret: false,
       },
     },
@@ -451,5 +483,81 @@ test('platform secret backend failures expose hashed diagnostics instead of raw 
       );
       return true;
     },
+  );
+});
+
+
+test('macOS Keychain write rejects existing items without explicit overwrite', async () => {
+  const runner = new FakeRunner();
+  runner.syncResult = {
+    status: 0,
+    stdout: 'metadata only',
+    stderr: '',
+  };
+  const store = new PlatformSecretStore({
+    platform: 'darwin',
+    runner,
+  });
+
+  await assert.rejects(
+    () =>
+      store.write(
+        {
+          purpose: 'agent-bearer-token',
+          name: 'primary',
+        },
+        'new-secret',
+      ),
+    (error: unknown) =>
+      error instanceof PlatformSecretError &&
+      error.code === 'PLATFORM_SECRET_EXISTS',
+  );
+  assert.equal(runner.asyncCalls.length, 0);
+  assert.equal(
+    runner.syncCalls[0]?.args.includes('-w'),
+    false,
+  );
+});
+
+test('macOS Keychain interactive write rejects multiline and oversized command payloads', async () => {
+  const runner = new FakeRunner();
+  runner.syncResult = {
+    status: 0,
+    stdout: 'line-1\nline-2\n',
+    stderr: '',
+  };
+  const store = new PlatformSecretStore({
+    platform: 'darwin',
+    runner,
+  });
+
+  await assert.rejects(
+    () =>
+      store.write(
+        {
+          purpose: 'agent-bearer-token',
+          name: 'primary',
+        },
+        'line-1\nline-2',
+        { overwrite: true, allowMultiline: true },
+      ),
+    (error: unknown) =>
+      error instanceof PlatformSecretError &&
+      error.code === 'PLATFORM_SECRET_MULTILINE',
+  );
+
+  await assert.rejects(
+    () =>
+      store.write(
+        {
+          purpose: 'agent-bearer-token',
+          name: 'primary',
+        },
+        'x'.repeat(4096),
+        { overwrite: true },
+      ),
+    (error: unknown) =>
+      error instanceof PlatformSecretError &&
+      error.code === 'PLATFORM_SECRET_TOO_LARGE',
   );
 });
