@@ -63,6 +63,8 @@ Implemented:
 - first-party isolated Edge/Chrome CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, inline screenshots, and exact-element visual verification with cropped PNG evidence
 - reusable bounded read-only postcondition assertions for file existence/hash/text presence, PID liveness, TCP reachability, and HTTP status
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
+- external OIDC/JWT MCP identity with strict issuer/audience/signature/time verification and mapping into existing role/tool/device/route authorization
+- Linux Secret Service and macOS Keychain protected-secret adapters, with hub/native-agent/relay bootstrap lookup wiring and fail-closed backend errors
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - first-party relay server with inbound/upstream authentication, bounded backpressure/heartbeats, ordered agent endpoint fallback, and real native-agent relay CI coverage
 - revocable/expiring hash-only stored MCP/native-agent credentials plus optional MCP tool allowlists enforced before tool execution
@@ -105,20 +107,20 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/oidc-external-identity-v1`: deployment-grade external OIDC/JWT identity for MCP.
-- `feat/platform-secret-backends-v1`: optional Linux/macOS platform-backed protected secret readers.
-- MCP v1 output semantic contracts are merged on `main` and no longer active work.
+- `feat/platform-secret-hardening-v2`: harden cross-platform protected-secret behavior, with safe macOS write/update as the main unresolved backend gap.
+- `feat/wsl-live-integration-v1`: strengthen real WSL2-distro integration coverage without pretending a distro exists when the runner cannot provide one.
+- `feat/skill-manifest-v2`: evolve skills beyond manifest v1 while preserving v1 compatibility and the frozen MCP v1 surface.
 
 ## Immediate next work
 
-1. Land external OIDC/JWT identity with strict issuer/audience/signature/time validation and scoped Nexowire authorization mapping.
-2. Land cross-platform protected secret adapters while preserving Windows DPAPI behavior and fail-closed startup semantics.
-3. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
-4. Extend durable runbooks only where new workflow step types have explicit restart/replay semantics.
-5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
-6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests.
-7. Add real WSL2-distro integration coverage when a suitable Windows runner/machine is available.
-8. Continue specialized skill-library breadth/version evolution incrementally without destabilizing the frozen MCP v1 compatibility floor.
+1. Harden platform-backed secret lifecycle/status semantics and keep secret material out of argv/logs/state.
+2. Add the strongest practical real WSL2 distro integration lane, failing honestly when hosted runner constraints make a true distro unavailable.
+3. Design manifest v2 additively, with explicit migration/compatibility tests for every shipped v1 skill.
+4. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
+5. Extend durable runbooks only where new workflow step types have explicit restart/replay semantics.
+6. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
+7. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests.
+8. Continue skill-library breadth incrementally without destabilizing the frozen MCP v1 compatibility floor.
 
 ## Known machine note
 
