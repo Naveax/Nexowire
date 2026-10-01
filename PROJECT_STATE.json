@@ -151,12 +151,12 @@
   "activeWork": [
     {
       "branch": "fix/wsl-capability-detection-v1",
-      "status": "in_progress",
+      "status": "testing",
       "goal": "Advertise wsl.exec only when the Windows native agent can detect at least one installed WSL distro; PR #103 is open with focused local tests passing and CI running."
     },
     {
       "branch": "future/domain-recipes",
-      "status": "incremental",
+      "status": "planned",
       "goal": "Add further domain recipes only when capability requirements plus mutation/replay/concurrency semantics are explicit and testable."
     }
   ]
