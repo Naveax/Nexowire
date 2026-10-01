@@ -330,6 +330,13 @@ export class CredentialStore {
       }
     }
 
+    if (input.administrative === true && scope !== 'mcp') {
+      throw new CredentialStoreError(
+        'CREDENTIAL_ADMIN_SCOPE_UNSUPPORTED',
+        'Administrative authorization is supported only for MCP credentials.',
+      );
+    }
+
     const requestedRole = input.role
       ? CredentialRoleSchema.parse(input.role)
       : input.administrative === true
