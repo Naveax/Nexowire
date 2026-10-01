@@ -175,3 +175,127 @@ test('skill registry validation reports mismatched or invalid manifests without 
 
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test('skill manifest v2 supports capability alternatives, preferences, concurrency, and replay policy', () => {
+  const manifest = parseSkillManifest(
+    [
+      '---',
+      'manifest_version: 2',
+      'name: network-v2',
+      'description: Exercise additive manifest v2 semantics.',
+      'version: 2.0',
+      'requires: machine.health, network.dns.resolve',
+      'requires_any: network.http.probe | shell.exec; network.tcp.probe | shell.exec',
+      'prefers: network.http.probe, network.tcp.probe',
+      'platforms: any',
+      'mutation: read-only',
+      'privilege: user',
+      'trust: trusted',
+      'tags: network, diagnostics',
+      'concurrency: parallel-safe',
+      'replay: safe',
+      '---',
+      '# Network v2',
+      '',
+    ].join('\n'),
+  );
+
+  assert.deepEqual(manifest, {
+    name: 'network-v2',
+    description: 'Exercise additive manifest v2 semantics.',
+    version: '2.0',
+    requires: ['machine.health', 'network.dns.resolve'],
+    platforms: ['any'],
+    mutation: 'read-only',
+    privilege: 'user',
+    trust: 'trusted',
+    tags: ['network', 'diagnostics'],
+    manifestVersion: 2,
+    requiresAny: [
+      ['network.http.probe', 'shell.exec'],
+      ['network.tcp.probe', 'shell.exec'],
+    ],
+    prefers: ['network.http.probe', 'network.tcp.probe'],
+    concurrency: 'parallel-safe',
+    replay: 'safe',
+  });
+
+  assert.deepEqual(
+    evaluateSkillManifest(manifest, {
+      capabilities: [
+        'machine.health',
+        'network.dns.resolve',
+        'shell.exec',
+      ],
+      platform: 'linux',
+    }),
+    {
+      runnable: true,
+      platformCompatible: true,
+      missingCapabilities: [],
+      unsatisfiedCapabilityGroups: [],
+      availablePreferredCapabilities: [],
+      missingPreferredCapabilities: [
+        'network.http.probe',
+        'network.tcp.probe',
+      ],
+    },
+  );
+
+  assert.deepEqual(
+    evaluateSkillManifest(manifest, {
+      capabilities: [
+        'machine.health',
+        'network.dns.resolve',
+        'network.http.probe',
+      ],
+      platform: 'linux',
+    }),
+    {
+      runnable: false,
+      platformCompatible: true,
+      missingCapabilities: [],
+      unsatisfiedCapabilityGroups: [
+        ['network.tcp.probe', 'shell.exec'],
+      ],
+      availablePreferredCapabilities: [
+        'network.http.probe',
+      ],
+      missingPreferredCapabilities: [
+        'network.tcp.probe',
+      ],
+    },
+  );
+});
+
+test('skill manifest v1 rejects v2-only fields and v2 fails closed on unsafe replay declaration', () => {
+  assert.throws(
+    () =>
+      parseSkillManifest(
+        [
+          '---',
+          'name: bad-v1',
+          'requires_any: shell.exec | process.list',
+          '---',
+          '# Bad',
+        ].join('\n'),
+      ),
+    /manifest v2 fields require manifest_version: 2/,
+  );
+
+  assert.throws(
+    () =>
+      parseSkillManifest(
+        [
+          '---',
+          'manifest_version: 2',
+          'name: unsafe-replay',
+          'mutation: mutation',
+          'replay: safe',
+          '---',
+          '# Unsafe',
+        ].join('\n'),
+      ),
+    /cannot declare replay: safe/,
+  );
+});
