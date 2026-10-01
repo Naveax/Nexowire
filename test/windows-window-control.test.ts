@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { executeWindowsWindowCapability } from '../src/agent/windows-window-control.js';
 
 test(
@@ -69,47 +70,130 @@ test(
 test(
   'Windows window list supports title and process filters',
   { skip: process.platform !== 'win32' },
-  async () => {
-    const baseline = (await executeWindowsWindowCapability(
-      'windows.window.list',
-      { include_hidden: false, limit: 200 },
-    )) as {
-      data: {
-        windows: Array<{
-          title: string;
-          processId: number;
-        }>;
-      };
-    };
+  async (t) => {
+    const title =
+      'Nexowire Window Filter Fixture ' +
+      process.pid +
+      '-' +
+      Date.now();
 
-    const titled = baseline.data.windows.find(
-      (item) => item.title.trim().length >= 3,
-    );
-    if (!titled) return;
+    const script = [
+      "$ErrorActionPreference = 'Stop'",
+      'Add-Type -AssemblyName PresentationFramework',
+      '$window = New-Object System.Windows.Window',
+      '$window.Title = $env:NEXOWIRE_WINDOW_FILTER_TITLE',
+      '$window.Width = 420',
+      '$window.Height = 180',
+      "$window.WindowStartupLocation = 'Manual'",
+      '$window.Left = 70',
+      '$window.Top = 70',
+      '[void]$window.Show()',
+      "[Console]::Out.WriteLine('READY')",
+      '[Console]::Out.Flush()',
+      '[System.Windows.Threading.Dispatcher]::Run()',
+    ].join('; ');
 
-    const fragment = titled.title.slice(0, 3);
-    const filtered = (await executeWindowsWindowCapability(
-      'windows.window.list',
-      {
-        include_hidden: false,
-        title_contains: fragment,
-        process_id: titled.processId,
-        limit: 200,
-      },
-    )) as {
-      data: {
-        windows: Array<{ title: string; processId: number }>;
-      };
-    };
+    let child: ChildProcess | undefined;
+    try {
+      child = spawn(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-STA',
+          '-Command',
+          script,
+        ],
+        {
+          windowsHide: false,
+          env: {
+            ...process.env,
+            NEXOWIRE_WINDOW_FILTER_TITLE: title,
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
 
-    assert.ok(filtered.data.windows.length >= 1);
-    assert.ok(
-      filtered.data.windows.every(
-        (item) =>
-          item.processId === titled.processId &&
-          item.title.toLowerCase().includes(fragment.toLowerCase()),
-      ),
-    );
+      const ready = await new Promise<boolean>((resolve, reject) => {
+        let stdout = '';
+        let stderr = '';
+        const timer = setTimeout(() => resolve(false), 8_000);
+        child!.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString('utf8');
+          if (!stdout.includes('READY')) return;
+          clearTimeout(timer);
+          resolve(true);
+        });
+        child!.stderr?.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString('utf8');
+        });
+        child!.once('error', (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child!.once('exit', (code) => {
+          if (stdout.includes('READY')) return;
+          clearTimeout(timer);
+          reject(
+            new Error(
+              'Window filter fixture exited before readiness: ' +
+                String(code) +
+                ' stderr=' +
+                stderr,
+            ),
+          );
+        });
+      });
+
+      if (!ready || !child.pid) {
+        t.skip(
+          'Runner session could not expose a deterministic WPF window fixture.',
+        );
+        return;
+      }
+
+      let filtered:
+        | {
+            data: {
+              windows: Array<{
+                title: string;
+                processId: number;
+              }>;
+            };
+          }
+        | undefined;
+
+      const deadline = Date.now() + 8_000;
+      while (Date.now() < deadline) {
+        filtered = (await executeWindowsWindowCapability(
+          'windows.window.list',
+          {
+            include_hidden: false,
+            title_contains: title,
+            process_id: child.pid,
+            limit: 20,
+          },
+        )) as typeof filtered;
+
+        if ((filtered?.data.windows.length ?? 0) > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      assert.ok(filtered);
+      assert.ok(filtered.data.windows.length >= 1);
+      assert.ok(
+        filtered.data.windows.every(
+          (item) =>
+            item.processId === child!.pid &&
+            item.title.toLowerCase().includes(title.toLowerCase()),
+        ),
+      );
+    } finally {
+      if (child && child.exitCode === null) child.kill();
+    }
   },
 );
 
