@@ -54,7 +54,7 @@ Implemented:
 - real Ubuntu 24.04 WSL2 CI covering `wsl.exec` exact distro selection, Linux cwd, Unicode stdout, nonzero exit/stderr propagation, and machine snapshot distro discovery
 - real macOS native-agent core CI covering outbound connection, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
 - structured Windows process/service/network inspection and fail-closed exact-name service control; wildcard selectors are rejected, exactly one service is resolved, and requested state/startup postconditions must converge before success
-- structured Windows registry, scheduled-task, event-log, and firewall queries
+- structured Windows registry, scheduled-task, bounded Event Log, and firewall queries; Event Log text has per-field/per-message/aggregate budgets with explicit truncation metadata
 - verified exact Windows registry/task/firewall mutation controls, including unnamed/default registry values; structured Windows-control PowerShell JSON uses explicit UTF-8 stdin with real >64 KiB Unicode registry coverage
 - exact Windows environment name discovery, selective redacted reads, and verified process/user/machine set/delete; user/machine PowerShell JSON payloads use explicit UTF-8 stdin instead of child-process environment variables
 - structured top-level Windows window enumeration plus exact HWND focus with foreground verification
@@ -119,19 +119,20 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-At the 2026-10-01 continuation sync, there are no open implementation PRs. `windows.service.control` now fails closed on ambiguous targets and verifies state/startup postconditions with bounded convergence polling; real Windows CI mutates only an isolated temporary service fixture. Windows stdin transport and skill-library contract hardening remain baseline.
+The v1.0 implementation scope is complete. Nexowire is being prepared as `1.0.0`, the stable MCP v1 compatibility floor is preserved, and the owner has explicitly authorized the first GitHub Release. The release-preparation branch adds an exact authorization-marker publication workflow; npm publication remains intentionally disabled for the initial self-hosted release.
 
-- `future/domain-recipes`: planned, incremental only. Add a workflow when it represents repeated real work and its required/preferred capabilities plus mutation/replay/concurrency semantics are explicit and testable.
-- `future/release-publication`: blocked on explicit owner authorization. Release readiness, checksums, manifest, SBOM, tag enforcement, SLSA provenance, and SBOM attestations are implemented; do not create a GitHub Release or publish to npm unless the user explicitly asks.
+- `release/v1.0.0-prep`: active until version, policy, documentation, and publication-workflow changes pass CI and merge.
+- `future/domain-recipes`: post-v1 incremental work only. Add a workflow when repeated real work justifies explicit capability, mutation, replay, and concurrency semantics.
+- `future/release-publication`: GitHub v1.0.0 publication is owner-authorized. After release-prep merges, the exact `.github/releases/v1.0.0.authorized` marker is the final publication trigger. npm remains disabled.
 - Browser/WSL executable/runtime capability advertisement already fails closed when required local state is unavailable. Add more probes only when a real static-advertisement mismatch is demonstrated.
 
 ## Immediate next work
 
-1. Keep the release/readiness regression floor green across Linux, Windows, macOS, browser, WSL2, HTTPS/OIDC/revocation, LaunchAgent/Keychain, and packaged clean-install lanes.
-2. Continue domain recipes conservatively; prefer repeated operational workflows over catalog inflation.
-3. Preserve the frozen MCP v1 input/output compatibility contracts and the first-party-only runtime invariant.
-4. Harden or optimize existing capabilities only from reproduced failures, measurable latency/cost evidence, or a demonstrated unusable-tool advertisement.
-5. Do not perform npm publication, create a GitHub Release, or create a release tag as a side effect of development. Those actions require explicit owner authorization.
+1. Merge the v1.0.0 release-preparation PR only after normal CI and release-readiness packaging pass.
+2. Add the exact v1.0.0 authorization marker and verify the tag-scoped package, attestation, and GitHub Release workflow succeeds.
+3. Preserve the frozen MCP v1 input/output compatibility contracts and first-party-only runtime invariant after release.
+4. Treat further domain recipes and capability probes as post-v1 incremental work, not release blockers, unless a reproduced defect changes that assessment.
+5. Keep npm publication disabled until package policy is explicitly changed and independently re-verified.
 
 ## Known machine note
 

@@ -98,9 +98,9 @@
     },
     {
       "id": "skill-library",
-      "status": "partial",
+      "status": "done",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 45 shipped workflows, fourteen replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, seven conservative domain recipes including release-readiness, backup-integrity, and configuration-drift auditing, and CI-enforced domain capability/read-only contracts are implemented; further domain recipes remain incremental"
+      "summary": "The v1 skill-library baseline is complete: manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 45 shipped workflows, fourteen replay-safe parallel read-only v2 workflows, seven conservative domain recipes, and CI-enforced documentation/capability/read-only contracts; further recipes are post-v1 incremental additions"
     },
     {
       "id": "native-agent-lifecycle",
@@ -112,7 +112,7 @@
       "id": "release-readiness",
       "status": "done",
       "priority": 16,
-      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, independent pre-upload verification, exact v<package-version> tag enforcement, and tag-only SLSA/CycloneDX attestations are implemented without enabling implicit publication"
+      "summary": "Nexowire 1.0.0 release readiness is implemented: installable CLI packaging, bundled-skill lookup, deterministic package audits, clean tarball smoke on Linux/Windows/macOS, SHA256SUMS, release manifest, CycloneDX SBOM, independent verification, exact tag enforcement, SLSA/CycloneDX attestations, and an explicit authorization-marker GitHub Release gate; npm remains disabled for the initial release"
     }
   ],
   "standardVerification": [
@@ -165,20 +165,23 @@
     "Windows structured-control PowerShell JSON input now uses explicit UTF-8 stdin instead of child-process environment variables; real Windows CI verifies a >64 KiB Unicode registry mutation round-trip.",
     "Windows user/machine environment PowerShell JSON input now uses explicit UTF-8 stdin, preventing secret-bearing environment values from being copied into the child process environment; real Windows CI verifies a ~32 KiB Unicode user-scope round-trip.",
     "windows.service.control now rejects wildcard selectors before mutation and resolves exactly one case-insensitive service Name before applying start/stop/restart/startup operations via the resolved ServiceController; the stable MCP v1 input schema is unchanged.",
-    "windows.service.control now polls bounded postconditions after mutation: start/restart must converge to Running, stop to Stopped, and requested startup type must match final Win32_Service StartMode; real Windows CI verifies startup mutation on an isolated temporary service fixture."
+    "windows.service.control now polls bounded postconditions after mutation: start/restart must converge to Running, stop to Stopped, and requested startup type must match final Win32_Service StartMode; real Windows CI verifies startup mutation on an isolated temporary service fixture.",
+    "Windows Event Log query output is bounded by per-field, per-message, and aggregate message budgets with explicit truncation metadata; real Windows CI verifies those bounds.",
+    "The v1.0 implementation scope is complete and package version 1.0.0 is in release preparation; further domain recipes and capability additions are post-v1 incremental work rather than release blockers.",
+    "The owner explicitly authorized GitHub v1.0.0 publication on 2026-10-01. Publication must still pass the repository-owned exact authorization-marker, tag, package, checksum, manifest, SBOM, and attestation gates; npm remains disabled."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "606bfbea5d2a93ccfac458e84574d8ed35d8b5de",
+  "lastVerifiedMain": "bb585ebe5d4374ae83164bd1cf85f29d4f638cf8",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
       "status": "planned",
-      "goal": "Add further domain recipes only when capability requirements plus mutation/replay/concurrency semantics are explicit, conservative, and testable."
+      "goal": "Post-v1 only: add further domain recipes when repeated real workflows justify explicit capability, mutation, replay, and concurrency semantics."
     },
     {
       "branch": "future/release-publication",
-      "status": "blocked",
-      "goal": "Only after explicit owner authorization: create a matching release tag and/or GitHub Release/npm publication. Readiness and attestations must not be treated as implicit publication permission."
+      "status": "implementation",
+      "goal": "Owner-authorized GitHub v1.0.0 publication: merge release preparation, then add the exact .github/releases/v1.0.0.authorized marker so the repository creates the matching tag, reruns release readiness/attestations, and publishes the GitHub Release. npm remains disabled."
     }
   ]
 }
