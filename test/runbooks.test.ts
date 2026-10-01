@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { RunbookStore } from '../src/agent/runbook-store.js';
 import { executeDurableRunbook } from '../src/agent/runbooks.js';
 
@@ -150,7 +149,6 @@ test('unknown assertion steps auto-retry safely after restart', async () => {
     {
       id: 'verify',
       kind: 'assertions' as const,
-      depends_on: [],
       assertions: {
         assertions: [
           {
@@ -162,37 +160,54 @@ test('unknown assertion steps auto-retry safely after restart', async () => {
       },
     },
   ];
-  const specHash = createHash('sha256')
-    .update(
-      JSON.stringify({
-        steps,
-        max_parallel: 2,
-        stop_on_failure: false,
-        total_timeout_ms: 1_800_000,
-      }),
-      'utf8',
-    )
-    .digest('hex');
 
   try {
-    const checkpoint = await store.prepare({
-      id: 'assert-restart',
-      specHash,
-      steps: [
-        {
-          id: 'verify',
-          kind: 'assertions',
-          dependsOn: [],
+    await executeDurableRunbook(
+      {
+        runbook_id: 'assert-restart',
+        steps,
+      },
+      store,
+      {
+        runTaskGraph: async () => {
+          throw new Error('unexpected task graph call');
         },
-      ],
-      resume: false,
-      retryFailed: false,
-      retryUnknown: false,
-    });
-    checkpoint.status = 'running';
-    checkpoint.steps[0]!.status = 'running';
-    checkpoint.steps[0]!.attempts = 1;
-    await store.save(checkpoint);
+        runAssertions: async () => ({
+          data: {
+            ok: true,
+            passed: 1,
+            failed: 0,
+            skipped: 0,
+          },
+        }),
+      },
+    );
+
+    const persisted = JSON.parse(
+      await fs.readFile(stateFile, 'utf8'),
+    ) as {
+      runbooks: Array<{
+        id: string;
+        status: string;
+        steps: Array<{
+          status: string;
+          completedAt?: string;
+          durationMs?: number;
+        }>;
+      }>;
+    };
+    const interrupted = persisted.runbooks.find(
+      (entry) => entry.id === 'assert-restart',
+    )!;
+    interrupted.status = 'running';
+    interrupted.steps[0]!.status = 'running';
+    delete interrupted.steps[0]!.completedAt;
+    delete interrupted.steps[0]!.durationMs;
+    await fs.writeFile(
+      stateFile,
+      JSON.stringify(persisted, null, 2) + '\n',
+      'utf8',
+    );
 
     const reloaded = new RunbookStore({ stateFile });
     await reloaded.initialize();
@@ -245,44 +260,61 @@ test('unknown task-graph step requires explicit retry_unknown', async () => {
     {
       id: 'build',
       kind: 'task_graph' as const,
-      depends_on: [],
       task_graph: {
         jobs: [{ id: 'compile', command: 'echo build' }],
       },
     },
   ];
-  const specHash = createHash('sha256')
-    .update(
-      JSON.stringify({
-        steps,
-        max_parallel: 2,
-        stop_on_failure: false,
-        total_timeout_ms: 1_800_000,
-      }),
-      'utf8',
-    )
-    .digest('hex');
 
   try {
-    const checkpoint = await store.prepare({
-      id: 'task-restart',
-      specHash,
-      steps: [
-        {
-          id: 'build',
-          kind: 'task_graph',
-          dependsOn: [],
-          taskGraphId: 'rb-' + '1'.repeat(32),
-        },
-      ],
-      resume: false,
-      retryFailed: false,
-      retryUnknown: false,
-    });
-    checkpoint.status = 'running';
-    checkpoint.steps[0]!.status = 'running';
-    checkpoint.steps[0]!.attempts = 1;
-    await store.save(checkpoint);
+    await executeDurableRunbook(
+      {
+        runbook_id: 'task-restart',
+        steps,
+      },
+      store,
+      {
+        runTaskGraph: async (input) => ({
+          data: {
+            ok: true,
+            graphId:
+              typeof input === 'object' &&
+              input !== null &&
+              'graph_id' in input
+                ? input.graph_id
+                : undefined,
+            summary: { succeeded: 1 },
+          },
+        }),
+        runAssertions: async () => ({ data: { ok: true } }),
+      },
+    );
+
+    const persisted = JSON.parse(
+      await fs.readFile(stateFile, 'utf8'),
+    ) as {
+      runbooks: Array<{
+        id: string;
+        status: string;
+        steps: Array<{
+          status: string;
+          completedAt?: string;
+          durationMs?: number;
+        }>;
+      }>;
+    };
+    const interrupted = persisted.runbooks.find(
+      (entry) => entry.id === 'task-restart',
+    )!;
+    interrupted.status = 'running';
+    interrupted.steps[0]!.status = 'running';
+    delete interrupted.steps[0]!.completedAt;
+    delete interrupted.steps[0]!.durationMs;
+    await fs.writeFile(
+      stateFile,
+      JSON.stringify(persisted, null, 2) + '\n',
+      'utf8',
+    );
 
     const reloaded = new RunbookStore({ stateFile });
     await reloaded.initialize();
