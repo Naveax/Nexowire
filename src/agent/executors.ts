@@ -22,6 +22,7 @@ import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js'
 import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { privilegeRequirement } from '../security/privilege.js';
+import { detectWsl } from './wsl-detection.js';
 
 const ShellExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
@@ -872,20 +873,6 @@ async function searchText(input: unknown, policy: PathPolicy): Promise<unknown> 
   };
 }
 
-function listWslDistros(): string[] {
-  if (process.platform !== 'win32') return [];
-  const result = spawnSync('wsl.exe', ['--list', '--quiet'], {
-    windowsHide: true,
-    encoding: 'utf16le',
-  });
-  if (result.status !== 0 || !result.stdout) return [];
-  return result.stdout
-    .replaceAll('\u0000', '')
-    .split(/\r?\n/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
 async function machineSnapshot(policy: PathPolicy): Promise<unknown> {
   return {
     data: {
@@ -902,7 +889,7 @@ async function machineSnapshot(policy: PathPolicy): Promise<unknown> {
       cwd: process.cwd(),
       node: process.version,
       allowedRoots: policy.describe(),
-      wslDistros: listWslDistros(),
+      wslDistros: detectWsl().distros,
     },
   };
 }
