@@ -71,3 +71,21 @@ Shell execution can access anything available to the agent's operating-system ac
 
 - Mounted secret-file sources are canonicalized before reading, opened through a verified file descriptor, re-checked with `fstat`, bounded before content read, and use final-component no-follow semantics on POSIX. This closes the previous stat/read path-swap window without persisting secret contents.
 - On Windows, bootstrap MCP/native-agent/relay bearer sources may instead use purpose-bound DPAPI CurrentUser envelopes created by `nexowire secrets seal`. The envelope persists only metadata/purpose/ciphertext; plaintext is passed to DPAPI through stdin, never command-line arguments or environment variables, and cross-purpose unprotect attempts fail.
+
+## External OIDC identity
+
+Nexowire can authenticate MCP requests with externally issued OIDC/JWT access tokens when `NEXOWIRE_OIDC_ISSUER` and `NEXOWIRE_OIDC_AUDIENCE` are configured.
+
+The verifier is first-party code and fail-closed:
+
+- only compact JWS tokens using `RS256` or `ES256` are accepted
+- issuer and audience must exactly match the configured values
+- `exp` is required; `nbf` and `iat` are time-checked with bounded clock skew
+- discovery issuer must match the configured issuer
+- JWKS responses are bounded, cached, de-duplicated by `kid`, and refreshed once on key miss
+- JWKS and discovery endpoints require HTTPS except loopback development or an explicit insecure-development override
+- supported authorization claims map into existing Nexowire role/tool/device/route scopes rather than bypassing the authorization layer
+- unsupported roles, malformed scope arrays, unknown algorithms, missing keys, bad signatures, and expired/not-yet-active tokens are rejected
+- raw external tokens and full JWT claims are never persisted by the verifier
+
+OIDC currently authenticates MCP callers only. Native-agent authentication remains first-party Nexowire bearer/credential based.
