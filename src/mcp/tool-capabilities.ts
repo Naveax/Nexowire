@@ -76,6 +76,10 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   task_graph_prune: 'task.graph.prune',
   task_artifact_list: 'task.artifact.list',
   task_artifact_verify: 'task.artifact.verify',
+  runbook_run: 'runbook.run',
+  runbook_list: 'runbook.list',
+  runbook_get: 'runbook.get',
+  runbook_prune: 'runbook.prune',
 } as const satisfies Readonly<Record<string, string>>;
 
 export type CapabilityBackedMcpToolName =
