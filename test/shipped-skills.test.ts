@@ -151,10 +151,11 @@ test('documented shipped skill index matches the validated library', async () =>
   const section = markdown.match(
     /## Current shipped skills\n\n([\s\S]*?)\n\n## Operational recipe set/,
   );
-  assert.ok(section, 'Current shipped skills section is missing.');
+  const documentedSection = section?.[1];
+  assert.ok(documentedSection, 'Current shipped skills section is missing.');
 
   const documented = Array.from(
-    section[1].matchAll(/^- \`([^\`]+)\`$/gm),
+    documentedSection.matchAll(/^- `([^`]+)`$/gm),
     (match) => match[1],
   ).sort();
   const actual = validation.valid.map((skill) => skill.name).sort();
