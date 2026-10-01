@@ -40,7 +40,13 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The current package remains development versioned until an explicit release candidate/version decision is made.
+The v1 release line is now versioned as `1.0.0`. GitHub Release is the initial distribution path; npm publication remains intentionally disabled by `"private": true`.
+
+## Explicit GitHub Release authorization
+
+Official GitHub publication is a separate, auditable mutation. The repository contains a publication workflow that runs only when an exact version authorization marker is merged to `main`. The workflow validates that the marker matches `v<package-version>`, creates the matching tag, and dispatches the tag-scoped release-readiness workflow. The tag-scoped workflow reruns package verification, produces the canonical tarball/checksum/manifest/SBOM set, creates provenance/SBOM attestations, and publishes the GitHub Release only after all required jobs succeed.
+
+The initial v1.0.0 release keeps npm publishing disabled. Enabling npm requires a separate package-policy change because the release verifier intentionally requires `"private": true`.
 
 ## Release provenance metadata
 
