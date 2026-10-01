@@ -14,9 +14,10 @@ import {
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
 import {
-  resolveBearerAuthorization,
+  resolveMcpAuthorization,
   type BearerAuthorization,
 } from '../security/auth.js';
+import { OidcVerifier } from '../security/oidc.js';
 import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 import { onlineCapabilityUnion } from './tool-capabilities.js';
@@ -27,7 +28,9 @@ export async function runHttpServer(
   context: McpContext,
 ): Promise<void> {
   assertSafeRemoteBinding(config, {
-    mcp: context.credentials?.hasUsable('mcp') ?? false,
+    mcp:
+      (context.credentials?.hasUsable('mcp') ?? false) ||
+      Boolean(config.oidc),
     agent: context.credentials?.hasUsable('agent') ?? false,
   });
   const app = createMcpExpressApp({ host: config.host });
@@ -45,30 +48,38 @@ export async function runHttpServer(
   });
 
   const mcpTokens = mcpAuthTokens(config);
+  const oidcVerifier = config.oidc
+    ? new OidcVerifier(config.oidc)
+    : undefined;
   app.use('/mcp', (req: Request, res: Response, next: NextFunction) => {
     const authRequired =
       mcpTokens.length > 0 ||
-      context.credentials?.hasConfigured('mcp') === true;
+      context.credentials?.hasConfigured('mcp') === true ||
+      Boolean(oidcVerifier);
 
     if (!authRequired) {
       next();
       return;
     }
 
-    const authorization = resolveBearerAuthorization(
+    void resolveMcpAuthorization(
       req.headers.authorization,
-      'mcp',
       mcpTokens,
       context.credentials,
-    );
-    if (!authorization) {
-      res.status(401).json({ error: 'unauthorized' });
-      return;
-    }
-
-    res.locals.nexowireAuthorization =
-      authorization satisfies BearerAuthorization;
-    next();
+      oidcVerifier,
+    )
+      .then((authorization) => {
+        if (!authorization) {
+          res.status(401).json({ error: 'unauthorized' });
+          return;
+        }
+        res.locals.nexowireAuthorization =
+          authorization satisfies BearerAuthorization;
+        next();
+      })
+      .catch(() => {
+        res.status(401).json({ error: 'unauthorized' });
+      });
   });
 
   app.post('/mcp', async (req: Request, res: Response) => {

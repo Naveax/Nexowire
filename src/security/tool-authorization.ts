@@ -1,5 +1,8 @@
 import * as z from 'zod';
-import type { BearerAuthorization } from './auth.js';
+import {
+  authorizationGrant,
+  type BearerAuthorization,
+} from './auth.js';
 
 export const OPERATOR_MCP_TOOLS = new Set<string>([
   'policy_profile_list',
@@ -22,17 +25,6 @@ export const ADMIN_MCP_TOOLS = new Set<string>([
   'device_alias_set',
   'device_alias_delete',
 ]);
-
-function effectiveStoredRole(
-  authorization: Extract<BearerAuthorization, { kind: 'stored' }>,
-): 'user' | 'operator' | 'admin' {
-  return (
-    authorization.credential.role ??
-    (authorization.credential.administrative === true
-      ? 'admin'
-      : 'user')
-  );
-}
 
 export const ToolPatternSchema = z
   .string()
@@ -73,7 +65,9 @@ export function isMcpToolAuthorized(
     return true;
   }
 
-  const role = effectiveStoredRole(authorization);
+  const grant = authorizationGrant(authorization);
+  if (!grant) return true;
+  const role = grant.role;
   if (ADMIN_MCP_TOOLS.has(toolName) && role !== 'admin') {
     return false;
   }
@@ -85,7 +79,7 @@ export function isMcpToolAuthorized(
     return false;
   }
 
-  const patterns = authorization.credential.allowedTools;
+  const patterns = grant.allowedTools;
   if (!patterns) return true;
   return patterns.some((pattern) =>
     toolPatternMatches(pattern, toolName),

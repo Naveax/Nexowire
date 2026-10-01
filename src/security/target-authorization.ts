@@ -1,38 +1,31 @@
-import type { BearerAuthorization } from './auth.js';
+import {
+  authorizationGrant,
+  type BearerAuthorization,
+} from './auth.js';
 
 export function hasMcpTargetRestrictions(
   authorization: BearerAuthorization | undefined,
 ): boolean {
+  const grant = authorizationGrant(authorization);
   return (
-    authorization?.kind === 'stored' &&
-    authorization.scope === 'mcp' &&
-    ((authorization.credential.allowedDeviceIds?.length ?? 0) > 0 ||
-      (authorization.credential.allowedRoutingPolicies?.length ?? 0) > 0)
+    authorization?.scope === 'mcp' &&
+    ((grant?.allowedDeviceIds?.length ?? 0) > 0 ||
+      (grant?.allowedRoutingPolicies?.length ?? 0) > 0)
   );
 }
 
 export function directlyAuthorizedDeviceIds(
   authorization: BearerAuthorization | undefined,
 ): readonly string[] {
-  if (
-    authorization?.kind !== 'stored' ||
-    authorization.scope !== 'mcp'
-  ) {
-    return [];
-  }
-  return authorization.credential.allowedDeviceIds ?? [];
+  if (authorization?.scope !== 'mcp') return [];
+  return authorizationGrant(authorization)?.allowedDeviceIds ?? [];
 }
 
 export function authorizedRoutingPolicyNames(
   authorization: BearerAuthorization | undefined,
 ): readonly string[] {
-  if (
-    authorization?.kind !== 'stored' ||
-    authorization.scope !== 'mcp'
-  ) {
-    return [];
-  }
-  return authorization.credential.allowedRoutingPolicies ?? [];
+  if (authorization?.scope !== 'mcp') return [];
+  return authorizationGrant(authorization)?.allowedRoutingPolicies ?? [];
 }
 
 export function isRoutingPolicyAuthorized(

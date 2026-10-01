@@ -86,6 +86,9 @@ See `ROADMAP.md` and `HANDOFF.md` as the implementation grows. The ChatGPT-facin
 
 ## Security
 
+Nexowire supports both first-party revocable credentials and optional external OIDC/JWT identity for MCP clients. External identities still pass through Nexowire tool/device/route/role authorization; they do not bypass policy.
+
+
 Nexowire is intended to control real computers. Security is therefore part of the architecture rather than a later toggle. The project uses scoped capabilities, explicit target selection, audit events, credential isolation, safe defaults, and verification around destructive or privileged actions.
 
 Do not expose a development instance directly to the public Internet.
