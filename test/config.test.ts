@@ -236,3 +236,67 @@ test('external OIDC identity may satisfy MCP side of non-loopback auth availabil
     }),
   );
 });
+
+test('hub config can consume injected platform-backed secret references', () => {
+  const calls: Array<{ kind: string; name: string | undefined; purpose: string }> = [];
+  const config = loadConfig(
+    {
+      NEXOWIRE_MCP_BEARER_TOKEN_PLATFORM_NAME: 'mcp-primary',
+      NEXOWIRE_MCP_BEARER_TOKENS_PLATFORM_NAME: 'mcp-rotation',
+      NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME: 'agent-primary',
+      NEXOWIRE_AGENT_TOKENS_PLATFORM_NAME: 'agent-rotation',
+    },
+    process.cwd(),
+    {
+      platformSingle: (name, purpose) => {
+        calls.push({ kind: 'single', name, purpose });
+        if (!name) return undefined;
+        return purpose.startsWith('mcp')
+          ? 'mcp-platform'
+          : 'agent-platform';
+      },
+      platformList: (name, purpose) => {
+        calls.push({ kind: 'list', name, purpose });
+        if (!name) return undefined;
+        return purpose.startsWith('mcp')
+          ? 'mcp-old,mcp-next'
+          : 'agent-old,agent-next';
+      },
+    },
+  );
+
+  assert.equal(config.mcpBearerToken, 'mcp-platform');
+  assert.deepEqual(config.mcpBearerTokens, [
+    'mcp-platform',
+    'mcp-old',
+    'mcp-next',
+  ]);
+  assert.equal(config.agentToken, 'agent-platform');
+  assert.deepEqual(config.agentTokens, [
+    'agent-platform',
+    'agent-old',
+    'agent-next',
+  ]);
+  assert.deepEqual(calls, [
+    {
+      kind: 'single',
+      name: 'mcp-primary',
+      purpose: 'mcp-bearer-token',
+    },
+    {
+      kind: 'single',
+      name: 'agent-primary',
+      purpose: 'agent-bearer-token',
+    },
+    {
+      kind: 'list',
+      name: 'mcp-rotation',
+      purpose: 'mcp-bearer-token-list',
+    },
+    {
+      kind: 'list',
+      name: 'agent-rotation',
+      purpose: 'agent-bearer-token-list',
+    },
+  ]);
+});
