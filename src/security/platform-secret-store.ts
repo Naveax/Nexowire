@@ -313,12 +313,14 @@ export class PlatformSecretStore {
     );
 
     if (result.status !== 0) {
-      if (
+      const notFound =
         !result.error &&
-        result.status !== null &&
-        result.status !== 0 &&
-        result.stdout.trim() === ''
-      ) {
+        (this.platform === 'darwin'
+          ? result.status === 44
+          : result.status === 1 &&
+            result.stdout.trim() === '' &&
+            result.stderr.trim() === '');
+      if (notFound) {
         throw new PlatformSecretError(
           'PLATFORM_SECRET_NOT_FOUND',
           'Platform-backed secret was not found.',
@@ -432,13 +434,14 @@ export class PlatformSecretStore {
       { maxBuffer: 2 * 1024 * 1024 },
     );
     if (result.status === 0 && !result.error) return true;
-    if (
+    const notFound =
       !result.error &&
-      result.status !== null &&
-      result.stdout.trim() === ''
-    ) {
-      return false;
-    }
+      (this.platform === 'darwin'
+        ? result.status === 44
+        : result.status === 1 &&
+          result.stdout.trim() === '' &&
+          result.stderr.trim() === '');
+    if (notFound) return false;
     throwCommandFailure(
       this.platform,
       'delete',
