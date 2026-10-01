@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { RunbookStore } from '../src/agent/runbook-store.js';
 import { executeDurableRunbook } from '../src/agent/runbooks.js';
+import { isReadOnlyCapability } from '../src/protocol/capabilities.js';
 
 async function tempStore() {
   const root = await fs.mkdtemp(
@@ -427,4 +428,12 @@ test('runbook validates dependency cycles before persistence', async () => {
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+
+test('runbook list/get are read-only while run/prune are mutations', () => {
+  assert.equal(isReadOnlyCapability('runbook.list'), true);
+  assert.equal(isReadOnlyCapability('runbook.get'), true);
+  assert.equal(isReadOnlyCapability('runbook.run'), false);
+  assert.equal(isReadOnlyCapability('runbook.prune'), false);
 });
