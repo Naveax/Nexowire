@@ -8,7 +8,10 @@ import type {
   CredentialScope,
   CredentialStore,
 } from './credential-store.js';
-import type { ExternalIdentityGrant } from './oidc.js';
+import type {
+  ExternalIdentityGrant,
+  OidcVerifier,
+} from './oidc.js';
 
 export type BearerAuthorization =
   | {
@@ -131,5 +134,29 @@ export function authorizationGrant(
           ],
         }
       : {}),
+  };
+}
+
+export async function resolveMcpAuthorization(
+  header: string | undefined,
+  staticTokens: readonly string[],
+  credentials?: CredentialStore,
+  oidc?: OidcVerifier,
+): Promise<BearerAuthorization | undefined> {
+  const local = resolveBearerAuthorization(
+    header,
+    'mcp',
+    staticTokens,
+    credentials,
+  );
+  if (local) return local;
+  if (!oidc) return undefined;
+
+  const identity = await oidc.verifyBearerHeader(header);
+  if (!identity) return undefined;
+  return {
+    kind: 'oidc',
+    scope: 'mcp',
+    identity,
   };
 }
