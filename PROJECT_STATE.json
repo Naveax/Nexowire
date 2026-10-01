@@ -161,10 +161,12 @@
     "Tag-triggered release readiness now fails before canonical packaging unless the Git tag is exactly v<package-version>; branch and PR readiness runs are intentional no-ops for that tag check.",
     "Tag-only SLSA and CycloneDX artifact attestations are merged baseline functionality; write/OIDC permissions are isolated to explicit tag-push attestation work, and publication remains a separate owner-authorized action.",
     "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization.",
-    "Windows structured-control CI now runs test/windows-control.test.ts on a real Windows runner; unnamed/default registry values support verified set/read/delete round-trips without weakening exact key or hive-root deletion protections."
+    "Windows structured-control CI now runs test/windows-control.test.ts on a real Windows runner; unnamed/default registry values support verified set/read/delete round-trips without weakening exact key or hive-root deletion protections.",
+    "Windows structured-control PowerShell JSON input now uses explicit UTF-8 stdin instead of child-process environment variables; real Windows CI verifies a >64 KiB Unicode registry mutation round-trip.",
+    "Windows user/machine environment PowerShell JSON input now uses explicit UTF-8 stdin, preventing secret-bearing environment values from being copied into the child process environment; real Windows CI verifies a ~32 KiB Unicode user-scope round-trip."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "23159f387cf216e49a35888de446378ab31d30e0",
+  "lastVerifiedMain": "8847e5460f4f2db229a614393dd789d7b6b42021",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
