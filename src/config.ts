@@ -5,6 +5,10 @@ import {
   optionalSecretFile,
   optionalSecretListFile,
 } from './security/secret-files.js';
+import {
+  optionalProtectedSecretFile,
+  optionalProtectedSecretListFile,
+} from './security/protected-secret-files.js';
 
 export interface NexowireConfig {
   host: string;
@@ -78,31 +82,55 @@ export function loadConfig(
     env.NEXOWIRE_MCP_BEARER_TOKEN_FILE,
     'MCP bearer token',
   );
+  const protectedMcpToken = optionalProtectedSecretFile(
+    env.NEXOWIRE_MCP_BEARER_TOKEN_DPAPI_FILE,
+    'mcp-bearer-token',
+    'MCP bearer token',
+  );
   const inlineAgentToken = optional(env.NEXOWIRE_AGENT_TOKEN);
   const fileAgentToken = optionalSecretFile(
     env.NEXOWIRE_AGENT_TOKEN_FILE,
     'native-agent bearer token',
   );
+  const protectedAgentToken = optionalProtectedSecretFile(
+    env.NEXOWIRE_AGENT_TOKEN_DPAPI_FILE,
+    'agent-bearer-token',
+    'native-agent bearer token',
+  );
   const mcpBearerTokens = parseTokenList(
     inlineMcpToken,
     fileMcpToken,
+    protectedMcpToken,
     env.NEXOWIRE_MCP_BEARER_TOKENS,
     optionalSecretListFile(
       env.NEXOWIRE_MCP_BEARER_TOKENS_FILE,
+      'MCP bearer token list',
+    ),
+    optionalProtectedSecretListFile(
+      env.NEXOWIRE_MCP_BEARER_TOKENS_DPAPI_FILE,
+      'mcp-bearer-token-list',
       'MCP bearer token list',
     ),
   );
   const agentTokens = parseTokenList(
     inlineAgentToken,
     fileAgentToken,
+    protectedAgentToken,
     env.NEXOWIRE_AGENT_TOKENS,
     optionalSecretListFile(
       env.NEXOWIRE_AGENT_TOKENS_FILE,
       'native-agent bearer token list',
     ),
+    optionalProtectedSecretListFile(
+      env.NEXOWIRE_AGENT_TOKENS_DPAPI_FILE,
+      'agent-bearer-token-list',
+      'native-agent bearer token list',
+    ),
   );
-  const legacyMcpToken = inlineMcpToken ?? fileMcpToken;
-  const legacyAgentToken = inlineAgentToken ?? fileAgentToken;
+  const legacyMcpToken =
+    inlineMcpToken ?? fileMcpToken ?? protectedMcpToken;
+  const legacyAgentToken =
+    inlineAgentToken ?? fileAgentToken ?? protectedAgentToken;
 
   const tlsCertFile = optional(env.NEXOWIRE_TLS_CERT_FILE);
   const tlsKeyFile = optional(env.NEXOWIRE_TLS_KEY_FILE);
