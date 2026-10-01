@@ -10,7 +10,10 @@ import {
   OidcVerificationError,
   OidcVerifier,
 } from '../src/security/oidc.js';
-import type { BearerAuthorization } from '../src/security/auth.js';
+import {
+  resolveMcpAuthorization,
+  type BearerAuthorization,
+} from '../src/security/auth.js';
 import {
   isMcpToolAuthorized,
 } from '../src/security/tool-authorization.js';
@@ -308,4 +311,50 @@ test('OIDC verifier permits insecure HTTP only for loopback by default', () => {
       error instanceof OidcVerificationError &&
       error.code === 'OIDC_INSECURE_URL',
   );
+});
+
+test('unified MCP authorization prefers local tokens and falls back to OIDC', async () => {
+  const now = Date.parse('2026-10-01T09:00:00.000Z');
+  const fx = fixture();
+  let fetches = 0;
+  const verifier = new OidcVerifier({
+    issuer: fx.issuer,
+    audience: fx.audience,
+    now: () => now,
+    fetchFn: async (...args) => {
+      fetches++;
+      return await fx.fetchFn(...args);
+    },
+  });
+
+  const local = await resolveMcpAuthorization(
+    'Bearer local-token',
+    ['local-token'],
+    undefined,
+    verifier,
+  );
+  assert.deepEqual(local, {
+    kind: 'static',
+    scope: 'mcp',
+  });
+  assert.equal(fetches, 0);
+
+  const token = jwt(fx.privateKey, {
+    iss: fx.issuer,
+    sub: 'external-user',
+    aud: fx.audience,
+    exp: now / 1000 + 300,
+  });
+  const external = await resolveMcpAuthorization(
+    'Bearer ' + token,
+    [],
+    undefined,
+    verifier,
+  );
+  assert.equal(external?.kind, 'oidc');
+  if (external?.kind === 'oidc') {
+    assert.equal(external.identity.subject, 'external-user');
+    assert.equal(external.identity.role, 'user');
+  }
+  assert.ok(fetches >= 2);
 });
