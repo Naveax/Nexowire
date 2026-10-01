@@ -25,8 +25,8 @@
 - [x] durable reattachable process I/O with bounded sidecar output spool; live event feed is implemented
 - [x] structured process/service/network inspection and service control
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
-- [x] registry value/key (including unnamed/default values), task state, and firewall rule mutation controls with verification
-- [x] registry and exact process/user/machine environment controls
+- [x] registry value/key (including unnamed/default values), task state, and firewall rule mutation controls with verification; structured Windows-control PowerShell payloads use explicit UTF-8 stdin
+- [x] registry and exact process/user/machine environment controls; user/machine PowerShell payloads use explicit UTF-8 stdin and real Windows large-Unicode-value coverage
 - [x] structured DNS/TCP/HTTP network diagnostics
 - [x] batch file reads and bounded text search
 - [x] SHA-256 file revisions and conflict-safe exact patching
