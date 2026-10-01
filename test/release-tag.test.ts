@@ -25,9 +25,9 @@ test('release tag policy is inert on branch and pull-request refs', () => {
 test('release tag policy accepts only the exact v-prefixed package version', () => {
   assert.equal(
     checkReleaseTag({
-      packageVersion: '0.1.0-dev.1',
+      packageVersion: '1.0.0',
       refType: 'tag',
-      refName: 'v0.1.0-dev.1',
+      refName: 'v1.0.0',
     }).checked,
     true,
   );
@@ -35,9 +35,9 @@ test('release tag policy accepts only the exact v-prefixed package version', () 
   assert.throws(
     () =>
       checkReleaseTag({
-        packageVersion: '0.1.0-dev.1',
+        packageVersion: '1.0.0',
         refType: 'tag',
-        refName: 'v0.1.0',
+        refName: 'v1.0.0-rc.1',
       }),
     /does not match package version/,
   );
@@ -45,7 +45,7 @@ test('release tag policy accepts only the exact v-prefixed package version', () 
   assert.throws(
     () =>
       checkReleaseTag({
-        packageVersion: '0.1.0-dev.1',
+        packageVersion: '1.0.0',
         refType: 'tag',
         refName: null,
       }),
@@ -58,9 +58,9 @@ test('current release tag policy reads package.json and GitHub ref environment',
     rootDir: process.cwd(),
     env: {
       GITHUB_REF_TYPE: 'tag',
-      GITHUB_REF_NAME: 'v0.1.0-dev.1',
+      GITHUB_REF_NAME: 'v1.0.0',
     },
   });
   assert.equal(result.checked, true);
-  assert.equal(result.packageVersion, '0.1.0-dev.1');
+  assert.equal(result.packageVersion, '1.0.0');
 });
