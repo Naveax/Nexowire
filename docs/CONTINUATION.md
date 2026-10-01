@@ -80,22 +80,23 @@ Implemented on main as of the latest repository state:
 - guided `nexowire onboard plan|bootstrap` deployment onboarding with hash-only stored credentials, one-time plaintext output, scoped MCP options, bounded TTLs, and doctor integration
 - first-party Windows current-user Scheduled Task, Linux systemd user-service, and macOS per-user LaunchAgent native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart, refusal to persist plaintext bearer variables, and real macOS lifecycle CI
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
-- 43 shipped skills, including twelve replay-safe/parallel-safe read-only manifest-v2 workflows and conservative artifact/browser/service/regression/release-readiness domain recipes
-- installable release-candidate packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, CycloneDX SBOM evidence, independent verification before upload, and exact `v<package-version>` tag enforcement before canonical packaging
+- 44 shipped skills, including thirteen replay-safe/parallel-safe read-only manifest-v2 workflows and conservative artifact/browser/service/regression/release-readiness/backup-integrity domain recipes
+- installable release-candidate packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, CycloneDX SBOM evidence, independent verification before upload, exact `v<package-version>` tag enforcement before canonical packaging, and tag-only SLSA provenance and CycloneDX SBOM attestations with isolated permissions
 - canonical-realpath async path authorization that handles platform aliases such as macOS `/var` -> `/private/var` without weakening symlink-escape protection
 
 ## Important unfinished slices
 
-The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
+Most original v0.x/v1.0 infrastructure goals are now implemented. Remaining work is deliberately narrower:
 
-1. finish tag-only SLSA/CycloneDX artifact attestation after checksum-reverified candidate download; exact tag/package-version enforcement and independent candidate verification are already merged
-2. expand domain recipes only when capability requirements and mutation/replay/concurrency behavior are explicit and testable
-3. keep doctor/onboarding, live HTTPS/OIDC/revocation, macOS native/LaunchAgent/Keychain, browser, Linux, Windows, and WSL2 CI green while preserving the frozen MCP v1 compatibility floor
-4. prioritize honest capability probes over low-value surface expansion
+1. expand domain recipes only when they encode repeated real workflows with explicit capability requirements and mutation/replay/concurrency semantics
+2. keep the production regression floor green across packaged-runtime smoke, browser, Windows, Linux, macOS, WSL2, doctor/onboarding, HTTPS/OIDC/revocation, LaunchAgent, Keychain, relay, and privileged-broker lanes
+3. preserve the frozen MCP v1 input/output contracts and first-party-only runtime ownership invariant
+4. add executable/environment capability probes only after reproducing a static-advertisement mismatch
+5. release publication is intentionally not automatic: npm publication, GitHub Release creation, and release-tag creation require explicit owner authorization
 
-Guided deployment onboarding and normal native-agent lifecycle across Windows, Linux, and macOS are merged baseline functionality. `event-driven-control` is also corrected to manifest v2 mixed/serial/manual-replay semantics because it creates processes.
+Release-candidate evidence, checksum/manifest/SBOM verification, exact tag/package-version enforcement, tag-only SLSA provenance, and CycloneDX SBOM attestations are merged baseline functionality.
 
-The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
+At the 2026-10-01 continuation sync, main has no open pull requests after merging the backup-integrity-audit recipe. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
 ## Branch and merge discipline
 
