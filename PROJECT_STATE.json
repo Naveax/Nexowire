@@ -92,9 +92,9 @@
     },
     {
       "id": "stable-mcp-surface",
-      "status": "partial",
+      "status": "done",
       "priority": 13,
-      "summary": "MCP surface v1 has a stable tool-name floor plus a frozen per-tool input JSON Schema contract with conservative backward-compatibility checks; machine-readable structured-output semantic compatibility remains open"
+      "summary": "MCP surface v1 has a stable tool-name floor, frozen backward-compatible input contracts, and a machine-readable frozen structured-output semantic contract with canonical hash and surface discovery metadata"
     },
     {
       "id": "skill-library",
@@ -130,20 +130,16 @@
     "Stable v1 input schemas are frozen in src/mcp/v1-input-contract.json; regenerate only after explicit compatibility review.",
     "Shipped skill manifests are CI-validated as a library contract.",
     "Windows DPAPI protected bootstrap envelopes are purpose-bound and CurrentUser-scoped; keep cross-platform protected secret storage as a separate deployment concern.",
-    "npm run continuation:check validates PROJECT_STATE.json, required continuation files, hot-file references, unique/sorted priorities, and the HANDOFF resume contract."
+    "npm run continuation:check validates PROJECT_STATE.json, required continuation files, hot-file references, unique/sorted priorities, and the HANDOFF resume contract.",
+    "Stable v1 structured-output semantics are frozen in src/mcp/v1-output-contract.json; regenerate only after explicit compatibility review."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "8d61f49bf58336a3874d0616756647136e5f0047",
+  "lastVerifiedMain": "e3604945f46e379d99c1b8cfff405156bb1bc8b9",
   "activeWork": [
     {
-      "branch": "feat/mcp-output-contract-v1",
-      "status": "implementation",
-      "goal": "Add machine-readable structured-output semantic compatibility and a frozen output contract for MCP surface v1."
-    },
-    {
-      "branch": "feat/continuation-state-check-v1",
+      "branch": "feat/mcp-output-contract-v2",
       "status": "testing",
-      "goal": "Enforce the GitHub continuation sources as a machine-validated cross-chat handoff contract in normal CI."
+      "goal": "Land the frozen machine-readable MCP v1 structured-output semantic contract and compatibility hash."
     }
   ]
 }
