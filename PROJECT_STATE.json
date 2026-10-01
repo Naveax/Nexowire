@@ -94,7 +94,7 @@
       "id": "stable-mcp-surface",
       "status": "partial",
       "priority": 13,
-      "summary": "MCP surface v1 now defines a stable tool-name compatibility floor, exposes surface/native-protocol versions, and regression-tests stable tool presence; remaining work is deeper input/output schema and semantic compatibility hardening"
+      "summary": "MCP surface v1 has a stable tool-name floor plus a frozen per-tool input JSON Schema contract with conservative backward-compatibility checks; machine-readable structured-output semantic compatibility remains open"
     },
     {
       "id": "skill-library",
@@ -126,20 +126,16 @@
     "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation.",
     "Durable runbooks are the preferred higher-level orchestration primitive; do not add new step kinds unless restart/replay semantics are explicit and tested.",
     "MCP surface v1 is the compatibility floor; additive tools are allowed, but stable tool removal/rename requires a new surface version and migration path.",
-    "Shipped skills declare platform/mutation/privilege/trust/tags; skills_list can evaluate missing capabilities against an exact online device."
+    "Shipped skills declare platform/mutation/privilege/trust/tags; skills_list can evaluate missing capabilities against an exact online device.",
+    "Stable v1 input schemas are frozen in src/mcp/v1-input-contract.json; regenerate only after explicit compatibility review."
   ],
   "lastStateSync": "2026-10-01",
   "lastVerifiedMain": "d5de5143c284fe9ead93b2f483745b838cce72f7",
   "activeWork": [
     {
-      "branch": "feat/skill-manifest-v1",
-      "status": "testing",
-      "goal": "Land machine-readable skill manifests, validation, and per-device runnability."
-    },
-    {
       "branch": "feat/mcp-schema-compat-v1",
-      "status": "implementation",
-      "goal": "Freeze MCP v1 input schemas and reject backward-incompatible narrowing."
+      "status": "testing",
+      "goal": "Freeze MCP v1 input schemas and reject backward-incompatible input narrowing."
     }
   ]
 }
