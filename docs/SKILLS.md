@@ -112,3 +112,17 @@ These are still workflows, not magical permission bundles. A skill can propose `
 - Skill capability requirements describe workflow prerequisites, not permission escalation.
 - Invalid skill directories are omitted from normal discovery and surfaced by `skills_validate`.
 - Mutation, privilege, and trust labels inform planning; they do not bypass Nexowire's runtime security enforcement.
+
+
+## Manifest v2
+
+Manifest v1 remains the compatibility baseline and continues to parse unchanged.
+
+A skill opts into v2 with `manifest_version: 2`. V2 is additive and currently adds:
+
+- `requires_any`: semicolon-separated capability groups where at least one pipe-separated alternative in every group must be available.
+- `prefers`: non-required capabilities that improve the workflow when present.
+- `concurrency`: `serial` or `parallel-safe`.
+- `replay`: `safe`, `verify`, or `manual`.
+
+Read-only v2 skills may declare `replay: safe`. Mixed or mutation skills cannot. V1 skills cannot silently use v2-only fields; they must opt in explicitly so old manifests keep their exact semantics.
