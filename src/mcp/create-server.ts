@@ -39,6 +39,11 @@ import {
   MCP_SURFACE_VERSION,
   MCP_V1_STABLE_TOOLS,
 } from './surface.js';
+import {
+  MCP_V1_OUTPUT_CONTRACT_VERSION,
+  buildMcpV1OutputContracts,
+  mcpV1OutputContractHash,
+} from './output-contract.js';
 
 export interface McpContext {
   broker: AgentBroker;
@@ -518,17 +523,25 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'Report the stable MCP compatibility surface version and native-agent protocol version. Optionally include the v1 stable tool-name floor.',
       inputSchema: {
         include_tools: z.boolean().optional(),
+        include_output_contracts: z.boolean().optional(),
       },
     },
-    async ({ include_tools }) =>
-      toolResult({
+    async ({ include_tools, include_output_contracts }) => {
+      const outputContracts = buildMcpV1OutputContracts();
+      return toolResult({
         mcpSurfaceVersion: MCP_SURFACE_VERSION,
         nativeAgentProtocolVersion: AGENT_PROTOCOL_VERSION,
         stableToolCount: MCP_V1_STABLE_TOOLS.length,
+        outputContractVersion: MCP_V1_OUTPUT_CONTRACT_VERSION,
+        outputContractHash: mcpV1OutputContractHash(outputContracts),
         ...(include_tools
           ? { stableTools: [...MCP_V1_STABLE_TOOLS] }
           : {}),
-      }),
+        ...(include_output_contracts
+          ? { outputContracts }
+          : {}),
+      });
+    },
   );
 
   server.registerTool(
