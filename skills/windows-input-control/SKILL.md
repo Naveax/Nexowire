@@ -3,6 +3,11 @@ name: windows-input-control
 description: Use the Windows clipboard plus exact-foreground Unicode typing and hotkeys without allowing keyboard input to drift into the wrong window.
 version: 0.1
 requires: windows.clipboard.read, windows.clipboard.write, windows.clipboard.clear, windows.keyboard.type, windows.keyboard.hotkey, windows.window.list, windows.window.focus
+platforms: win32
+mutation: mutation
+privilege: user
+trust: reviewed
+tags: windows, keyboard, clipboard, input
 ---
 
 # Windows Input Control
