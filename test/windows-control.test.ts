@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { executeWindowsCapability } from '../src/agent/windows-control.js';
 
 test(
@@ -52,6 +53,88 @@ test(
         }),
       /startup_type is required/,
     );
+  },
+);
+
+test(
+  'windows service startup mutation verifies an isolated service postcondition',
+  {
+    skip:
+      process.platform !== 'win32' ||
+      process.env.NEXOWIRE_LIVE_WINDOWS_SERVICE_TEST !== '1',
+  },
+  async () => {
+    const serviceName =
+      'NexowireTestSvc_' + process.pid + '_' + Date.now();
+    const command = process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe';
+    const create = spawnSync(
+      'sc.exe',
+      [
+        'create',
+        serviceName,
+        'binPath=',
+        command + ' /c exit 0',
+        'start=',
+        'demand',
+      ],
+      {
+        encoding: 'utf8',
+        windowsHide: true,
+      },
+    );
+    assert.equal(
+      create.status,
+      0,
+      create.stderr || create.stdout || 'sc.exe create failed',
+    );
+
+    try {
+      const disabled = (await executeWindowsCapability(
+        'windows.service.control',
+        {
+          name: serviceName,
+          action: 'set_startup',
+          startup_type: 'disabled',
+        },
+      )) as {
+        data: {
+          name: string;
+          state: string;
+          startMode: string;
+        };
+      };
+      assert.equal(disabled.data.name, serviceName);
+      assert.equal(disabled.data.state, 'Stopped');
+      assert.equal(disabled.data.startMode, 'Disabled');
+
+      const manual = (await executeWindowsCapability(
+        'windows.service.control',
+        {
+          name: serviceName,
+          action: 'set_startup',
+          startup_type: 'manual',
+        },
+      )) as {
+        data: {
+          name: string;
+          state: string;
+          startMode: string;
+        };
+      };
+      assert.equal(manual.data.name, serviceName);
+      assert.equal(manual.data.state, 'Stopped');
+      assert.equal(manual.data.startMode, 'Manual');
+    } finally {
+      const remove = spawnSync('sc.exe', ['delete', serviceName], {
+        encoding: 'utf8',
+        windowsHide: true,
+      });
+      assert.equal(
+        remove.status,
+        0,
+        remove.stderr || remove.stdout || 'sc.exe delete failed',
+      );
+    }
   },
 );
 
