@@ -29,7 +29,10 @@ Use this skill before creating a release tag, archive, package, or deployment ar
 7. Check that secrets, local state, tests, source-only handoff files, and unrelated development artifacts are excluded from the distributable unless explicitly required.
 8. Verify required runtime data such as skills, templates, schemas, or static assets are present in the package.
 9. Record package filename, entry count, packed/unpacked size, and hashes when the project exposes them.
-10. Do not publish, push a release tag, or upload an external artifact as part of this audit unless a separate explicit release action authorizes that mutation.
+10. When checksum/manifest/SBOM generation exists, independently verify that evidence against the final candidate bytes rather than trusting the generation step.
+11. On tag-triggered readiness, require the exact release tag to match the package version before canonical packaging.
+12. Keep provenance/attestation credentials out of pull-request and ordinary package jobs. Signed attestations belong in a separate explicit-tag-only job after candidate verification.
+13. Do not publish, push a release tag, create a GitHub Release, or publish to a package registry as part of this audit unless a separate explicit release action authorizes that mutation.
 
 ## Replay and concurrency
 
@@ -43,5 +46,8 @@ On retry, re-read the workspace snapshot first. If a previous interrupted check 
 - A correct package version with a stale CLI-reported version is a release blocker.
 - A package that omits required runtime assets is a release blocker even when source-tree execution works.
 - A package containing plaintext secrets, local state, or unintended environment files is a release blocker.
+- A checksum generated successfully but not re-verified against the candidate bytes is incomplete evidence.
+- A tag that does not exactly match the package version is a release blocker.
+- OIDC/attestation write scopes must not leak into pull-request or ordinary package/test jobs.
 - Do not silently clean the workspace before auditing it; dirty/generated state is evidence.
-- Treat publication, tag creation, and external upload as separate explicit mutations.
+- Treat tag creation, public attestation, publication, and external release creation as separate explicit mutations.
