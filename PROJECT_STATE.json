@@ -100,13 +100,13 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, and nine replay-safe parallel read-only v2 migrations are implemented; domain recipes remain incremental and event-driven-control needs mutation-classification cleanup before migration"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, nine replay-safe parallel read-only v2 migrations, and corrected event-driven-control mixed/serial/manual-replay semantics are implemented; broader domain recipes remain incremental"
     },
     {
       "id": "native-agent-lifecycle",
-      "status": "partial",
+      "status": "done",
       "priority": 15,
-      "summary": "First-party Windows current-user Scheduled Task and Linux systemd user-service install/status/start/stop/restart/uninstall/autostart lifecycle is implemented with plaintext-secret persistence refusal; macOS LaunchAgent lifecycle remains open"
+      "summary": "First-party normal native-agent lifecycle is implemented across Windows current-user Scheduled Task, Linux systemd user service, and macOS per-user LaunchAgent with install/status/start/stop/restart/uninstall/autostart, plaintext-secret persistence refusal, and real macOS CI coverage"
     }
   ],
   "standardVerification": [
@@ -140,27 +140,22 @@
     "OIDC/JWT external MCP identity is merged and maps into existing Nexowire role/tool/device/route authorization; do not treat it as active unfinished work.",
     "Deployment doctor is merged and reports local/remote readiness, TLS validity, auth posture, secret-source mechanisms, OIDC posture, and state-directory health without printing credentials.",
     "Live security CI now starts a real HTTPS hub and local OIDC provider, verifies scoped discovery and live stored-credential revocation, and confirms plaintext credentials are not persisted.",
-    "Nine conservative read-only skills use manifest v2 parallel-safe/replay-safe metadata; event-driven-control remains v1 because its process.start dependency makes the current read-only label suspect and must be corrected before migration.",
     "Guided deployment onboarding/bootstrap is merged: plan mode is non-mutating; bootstrap issues missing hash-only credentials and emits plaintext tokens once without persisting them.",
-    "Normal native-agent lifecycle is merged for Windows and Linux; macOS LaunchAgent lifecycle remains intentionally open and must preserve no-secret-in-argv/plist constraints."
+    "event-driven-control is manifest v2 but deliberately mixed/serial/manual-replay because it includes process.start; do not reclassify it replay-safe merely because its observation phase is read-only.",
+    "Normal native-agent lifecycle is implemented for Windows, Linux, and macOS; macOS LaunchAgent install/control is verified in a real macos-latest CI lane while Keychain write/update remains a separate fail-closed gap."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "f147ee376d8805ee5f8e392ad362a414824635be",
+  "lastVerifiedMain": "fb86fc11178288e6e7c6b16a2fb749fb26225575",
   "activeWork": [
-    {
-      "branch": "feat/macos-agent-lifecycle-v1",
-      "status": "planned",
-      "goal": "Add first-party macOS LaunchAgent install/status/start/stop/restart/uninstall lifecycle without persisting secrets in argv/plists and with tested user-session semantics."
-    },
-    {
-      "branch": "fix/event-driven-skill-semantics-v1",
-      "status": "planned",
-      "goal": "Correct event-driven-control mutation/replay/concurrency metadata before any manifest-v2 migration because its process.start dependency is not genuinely read-only."
-    },
     {
       "branch": "feat/macos-protected-secret-write-v1",
       "status": "planned",
       "goal": "Find and prove a macOS Keychain write/update path that does not expose plaintext secrets through argv or logs; otherwise keep writes fail-closed."
+    },
+    {
+      "branch": "feat/skill-domain-recipes-v1",
+      "status": "planned",
+      "goal": "Expand domain recipes conservatively where capability requirements and mutation/replay/concurrency semantics are explicit and testable."
     }
   ]
 }
