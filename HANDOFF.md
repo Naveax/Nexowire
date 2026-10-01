@@ -39,7 +39,7 @@ Implemented:
 - bounded task artifact lifecycle tools to list persisted metadata and re-stat/re-hash outputs after restart or later mutation, with changed/missing/unverified/error states and bounded hashing
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
-- versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, and regression coverage preventing silent stable-tool removal/rename
+- versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, and a frozen per-tool input-schema contract that rejects provable narrowing
 - persistent workspace checkpoints
 - lazy skill registry
 - machine-readable skill manifest v1 with required capabilities, platforms, mutation/privilege/trust metadata, validation, and exact-device runnability evaluation
@@ -103,8 +103,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/skill-manifest-v1`: manifest/policy/device-aware skill discovery and validation.
-- `feat/mcp-schema-compat-v1`: frozen stable MCP input contracts and backward-compatibility checks.
+- `feat/mcp-schema-compat-v1`: frozen MCP v1 input contracts + compatibility checker.
 
 ## Immediate next work
 
