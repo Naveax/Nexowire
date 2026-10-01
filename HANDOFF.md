@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 44 validated shipped workflows, thirteen read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression/release-readiness/backup-integrity domain recipes
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 45 validated shipped workflows, fourteen read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression/release-readiness/backup-integrity/configuration-drift domain recipes
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -119,7 +119,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-At the 2026-10-01 continuation sync, there are no open implementation PRs. The previous release-attestation slice is merged, and the backup-integrity-audit recipe is merged.
+At the 2026-10-01 continuation sync, there are no open implementation PRs. The configuration-drift-audit recipe is merged, and shipped-skill tests now require `docs/SKILLS.md` to match the validated on-disk skill library.
 
 - `future/domain-recipes`: planned, incremental only. Add a workflow when it represents repeated real work and its required/preferred capabilities plus mutation/replay/concurrency semantics are explicit and testable.
 - `future/release-publication`: blocked on explicit owner authorization. Release readiness, checksums, manifest, SBOM, tag enforcement, SLSA provenance, and SBOM attestations are implemented; do not create a GitHub Release or publish to npm unless the user explicitly asks.
