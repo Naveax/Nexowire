@@ -72,7 +72,7 @@ Implemented on main as of the latest repository state:
 - lazy skills and MCP HTTP/stdio surfaces
 - versioned MCP surface v1 compatibility floor with hub-local version discovery, frozen input contracts, and `src/mcp/v1-output-contract.json` machine-readable structured-output semantic contracts with a canonical hash
 - real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
-- real Ubuntu 24.04 WSL2 CI covering Nexowire `wsl.exec` exact distro/cwd/Unicode/nonzero-exit behavior
+- real Ubuntu 24.04 WSL2 CI covering Nexowire `wsl.exec` exact distro/cwd/Unicode/nonzero-exit behavior; Windows agents advertise `wsl.exec` only when bounded distro discovery finds at least one installed distro
 - additive skill manifest v2 with capability alternatives/preferences plus replay/concurrency metadata while preserving v1 semantics
 - platform-secret backend hardening with non-secret macOS status probes and hashed/redacted backend diagnostics
 - machine-readable `nexowire doctor` deployment readiness with strict remote-ready semantics and no secret output
@@ -85,9 +85,9 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. finish PR #103 so `wsl.exec` is advertised only when at least one installed WSL distro is actually detected
-2. expand domain recipes only when capability requirements and mutation/replay/concurrency behavior are explicit and testable
-3. keep doctor/onboarding, live HTTPS/OIDC/revocation, real macOS LaunchAgent/Keychain, browser, Linux, and WSL2 CI green while preserving the frozen MCP v1 compatibility floor
+1. expand domain recipes only when capability requirements and mutation/replay/concurrency behavior are explicit and testable
+2. keep doctor/onboarding, live HTTPS/OIDC/revocation, real macOS LaunchAgent/Keychain, browser, Linux, and WSL2 CI green while preserving the frozen MCP v1 compatibility floor
+3. prioritize release/readiness hardening and honest capability probes over low-value surface expansion
 
 Guided deployment onboarding and normal native-agent lifecycle across Windows, Linux, and macOS are merged baseline functionality. `event-driven-control` is also corrected to manifest v2 mixed/serial/manual-replay semantics because it creates processes.
 
