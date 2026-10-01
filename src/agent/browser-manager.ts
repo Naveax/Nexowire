@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { constants as fsConstants, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -301,18 +301,250 @@ function publicSession(
 export interface BrowserManagerOptions {
   rootDir?: string;
   env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+  homeDir?: string;
+}
+
+export interface BrowserExecutable {
+  browser: BrowserKind;
+  executable: string;
+}
+
+export interface BrowserExecutableDetectionOptions {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+  homeDir?: string;
+}
+
+async function isExecutableFile(file: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(file);
+    if (!stat.isFile()) return false;
+    await fs.access(file, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function executableOnPath(
+  command: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string | undefined> {
+  for (const entry of env.PATH?.split(path.delimiter) ?? []) {
+    const dir = entry.trim();
+    if (!dir) continue;
+    const candidate = path.join(dir, command);
+    if (await isExecutableFile(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+export async function detectBrowserExecutable(
+  requested: 'auto' | BrowserKind = 'auto',
+  options: BrowserExecutableDetectionOptions = {},
+): Promise<BrowserExecutable | undefined> {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const homeDir = options.homeDir ?? os.homedir();
+
+  const candidates: Array<{
+    browser: BrowserKind;
+    executable?: string;
+    command?: string;
+  }> = [
+    {
+      browser: 'edge',
+      executable: env.NEXOWIRE_EDGE_PATH?.trim(),
+    },
+    {
+      browser: 'chrome',
+      executable: env.NEXOWIRE_CHROME_PATH?.trim(),
+    },
+  ];
+
+  if (platform === 'win32') {
+    const pf = env.ProgramFiles;
+    const pfx86 = env['ProgramFiles(x86)'];
+    const local = env.LOCALAPPDATA;
+    candidates.push(
+      {
+        browser: 'edge',
+        executable: pfx86
+          ? path.join(
+              pfx86,
+              'Microsoft',
+              'Edge',
+              'Application',
+              'msedge.exe',
+            )
+          : undefined,
+      },
+      {
+        browser: 'edge',
+        executable: pf
+          ? path.join(
+              pf,
+              'Microsoft',
+              'Edge',
+              'Application',
+              'msedge.exe',
+            )
+          : undefined,
+      },
+      {
+        browser: 'chrome',
+        executable: pf
+          ? path.join(
+              pf,
+              'Google',
+              'Chrome',
+              'Application',
+              'chrome.exe',
+            )
+          : undefined,
+      },
+      {
+        browser: 'chrome',
+        executable: pfx86
+          ? path.join(
+              pfx86,
+              'Google',
+              'Chrome',
+              'Application',
+              'chrome.exe',
+            )
+          : undefined,
+      },
+      {
+        browser: 'chrome',
+        executable: local
+          ? path.join(
+              local,
+              'Google',
+              'Chrome',
+              'Application',
+              'chrome.exe',
+            )
+          : undefined,
+      },
+    );
+  } else if (platform === 'darwin') {
+    candidates.push(
+      {
+        browser: 'edge',
+        executable:
+          '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      },
+      {
+        browser: 'edge',
+        executable: path.join(
+          homeDir,
+          'Applications',
+          'Microsoft Edge.app',
+          'Contents',
+          'MacOS',
+          'Microsoft Edge',
+        ),
+      },
+      {
+        browser: 'chrome',
+        executable:
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      },
+      {
+        browser: 'chrome',
+        executable: path.join(
+          homeDir,
+          'Applications',
+          'Google Chrome.app',
+          'Contents',
+          'MacOS',
+          'Google Chrome',
+        ),
+      },
+      {
+        browser: 'chrome',
+        executable:
+          '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      },
+      {
+        browser: 'chrome',
+        executable: path.join(
+          homeDir,
+          'Applications',
+          'Chromium.app',
+          'Contents',
+          'MacOS',
+          'Chromium',
+        ),
+      },
+    );
+  } else if (platform === 'linux') {
+    candidates.push(
+      { browser: 'edge', command: 'microsoft-edge' },
+      { browser: 'edge', command: 'microsoft-edge-stable' },
+      { browser: 'chrome', command: 'google-chrome' },
+      { browser: 'chrome', command: 'google-chrome-stable' },
+      { browser: 'chrome', command: 'chromium' },
+      { browser: 'chrome', command: 'chromium-browser' },
+    );
+  }
+
+  const ordered =
+    requested === 'auto'
+      ? candidates
+      : candidates.filter(
+          (candidate) => candidate.browser === requested,
+        );
+
+  for (const candidate of ordered) {
+    if (
+      candidate.executable &&
+      (await isExecutableFile(candidate.executable))
+    ) {
+      return {
+        browser: candidate.browser,
+        executable: candidate.executable,
+      };
+    }
+    if (candidate.command) {
+      const executable = await executableOnPath(
+        candidate.command,
+        env,
+      );
+      if (executable) {
+        return {
+          browser: candidate.browser,
+          executable,
+        };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+export async function browserCapabilitiesAvailable(
+  options: BrowserExecutableDetectionOptions = {},
+): Promise<boolean> {
+  return (await detectBrowserExecutable('auto', options)) !== undefined;
 }
 
 export class BrowserManager {
   private readonly sessions = new Map<string, BrowserSession>();
   private readonly rootDir: string;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly platform: NodeJS.Platform;
+  private readonly homeDir: string;
 
   constructor(options: BrowserManagerOptions = {}) {
+    this.env = options.env ?? process.env;
+    this.platform = options.platform ?? process.platform;
+    this.homeDir = options.homeDir ?? os.homedir();
     this.rootDir =
       options.rootDir ??
-      path.join(os.homedir(), '.nexowire', 'browser-sessions');
-    this.env = options.env ?? process.env;
+      path.join(this.homeDir, '.nexowire', 'browser-sessions');
   }
 
   async start(input: {
@@ -1503,117 +1735,30 @@ export class BrowserManager {
 
   private async resolveBrowser(
     requested: 'auto' | BrowserKind,
-  ): Promise<{ browser: BrowserKind; executable: string }> {
-    const pf = this.env.ProgramFiles;
-    const pfx86 = this.env['ProgramFiles(x86)'];
-    const local = this.env.LOCALAPPDATA;
-    const candidates: Array<{
-      browser: BrowserKind;
-      executable?: string;
-    }> = [
-      {
-        browser: 'edge',
-        executable: this.env.NEXOWIRE_EDGE_PATH?.trim(),
-      },
-      {
-        browser: 'edge',
-        executable: pfx86
-          ? path.join(
-              pfx86,
-              'Microsoft',
-              'Edge',
-              'Application',
-              'msedge.exe',
-            )
-          : undefined,
-      },
-      {
-        browser: 'edge',
-        executable: pf
-          ? path.join(
-              pf,
-              'Microsoft',
-              'Edge',
-              'Application',
-              'msedge.exe',
-            )
-          : undefined,
-      },
-      {
-        browser: 'chrome',
-        executable: this.env.NEXOWIRE_CHROME_PATH?.trim(),
-      },
-      {
-        browser: 'chrome',
-        executable: pf
-          ? path.join(
-              pf,
-              'Google',
-              'Chrome',
-              'Application',
-              'chrome.exe',
-            )
-          : undefined,
-      },
-      {
-        browser: 'chrome',
-        executable: pfx86
-          ? path.join(
-              pfx86,
-              'Google',
-              'Chrome',
-              'Application',
-              'chrome.exe',
-            )
-          : undefined,
-      },
-      {
-        browser: 'chrome',
-        executable: local
-          ? path.join(
-              local,
-              'Google',
-              'Chrome',
-              'Application',
-              'chrome.exe',
-            )
-          : undefined,
-      },
-    ];
-
-    const ordered =
-      requested === 'auto'
-        ? candidates
-        : candidates.filter(
-            (candidate) => candidate.browser === requested,
-          );
-
-    for (const candidate of ordered) {
-      if (!candidate.executable) continue;
-      try {
-        await fs.access(candidate.executable);
-        return {
-          browser: candidate.browser,
-          executable: candidate.executable,
-        };
-      } catch {
-        // Try next candidate.
-      }
-    }
+  ): Promise<BrowserExecutable> {
+    const resolved = await detectBrowserExecutable(requested, {
+      env: this.env,
+      platform: this.platform,
+      homeDir: this.homeDir,
+    });
+    if (resolved) return resolved;
 
     throw new BrowserControlError(
       'BROWSER_NOT_FOUND',
       requested === 'auto'
-        ? 'No supported Edge or Chrome executable was found.'
+        ? 'No supported Edge/Chrome/Chromium executable was found.'
         : 'Requested browser executable was not found.',
-      { requested },
+      {
+        requested,
+        platform: this.platform,
+      },
     );
   }
 
   private async terminate(child: ChildProcess): Promise<void> {
     if (!child.pid || !isAlive(child)) return;
 
-    if (process.platform === 'win32') {
+    if (this.platform === 'win32') {
       await new Promise<void>((resolve) => {
         const killer = spawn(
           'taskkill.exe',
