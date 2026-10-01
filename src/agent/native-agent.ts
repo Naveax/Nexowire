@@ -10,6 +10,7 @@ import {
 } from '../protocol/agent.js';
 import { capabilitiesForPlatform } from '../protocol/capabilities.js';
 import { browserCapabilitiesAvailable } from './browser-manager.js';
+import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
@@ -245,15 +246,28 @@ export async function capabilitiesForAgent(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string[]> {
-  const capabilities = capabilitiesForPlatform(platform);
+  let capabilities = capabilitiesForPlatform(platform);
+
   const browserAvailable = await browserCapabilitiesAvailable({
     platform,
     env,
   });
-  if (browserAvailable) return capabilities;
-  return capabilities.filter(
-    (capability) => !capability.startsWith('browser.'),
-  );
+  if (!browserAvailable) {
+    capabilities = capabilities.filter(
+      (capability) => !capability.startsWith('browser.'),
+    );
+  }
+
+  if (
+    platform === 'win32' &&
+    !detectWsl({ platform, env }).available
+  ) {
+    capabilities = capabilities.filter(
+      (capability) => capability !== 'wsl.exec',
+    );
+  }
+
+  return capabilities;
 }
 
 export async function runNativeAgent(
