@@ -3,6 +3,11 @@ name: conflict-safe-edit
 description: Edit source/config files with SHA-256 stale-read protection so AI changes do not silently overwrite concurrent edits.
 version: 0.1
 requires: files.read, files.read_many, files.hash, files.patch
+platforms: any
+mutation: mutation
+privilege: user
+trust: reviewed
+tags: files, editing, concurrency, safety
 ---
 
 # Conflict-Safe Edit
