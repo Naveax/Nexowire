@@ -100,6 +100,10 @@ Nexowire v1.0.0 is published as a stable GitHub Release. Tag `v1.0.0` points at 
 
 At the 2026-10-01 post-release sync, the v1.0 implementation and publication goals are complete. Future domain recipes, probes, performance work, and reproduced hardening are post-v1 incremental work rather than missing release blockers. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
+## Selected post-v1 work
+
+As of 2026-10-02, `PROJECT_STATE.json` tracks `feature/private-desktop-virtual-cursor` as active testing work. The slice adds a separately rendered, click-through Windows Nexowire cursor with independent state and explicit tests that its movement does not change the Windows system cursor. It is a foundation for later private-desktop/private-keyboard routing, not permission to reuse physical console input. Clean CI is required before merge; no patch release is authorized by this work.
+
 ## Branch and merge discipline
 
 - `main` is canonical.

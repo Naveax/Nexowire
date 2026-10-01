@@ -2842,6 +2842,181 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_virtual_pointer_status',
+    {
+      title: 'Read Nexowire virtual pointer status',
+      description:
+        'Read the independent Nexowire visual pointer state. This pointer is rendered as a click-through overlay and never moves the Windows system cursor.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.virtual_pointer.status',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_virtual_pointer_start',
+    {
+      title: 'Start Nexowire virtual pointer',
+      description:
+        'Start or reuse a visible, click-through Nexowire cursor overlay with independent coordinates. It does not inject mouse input or move the user cursor.',
+      inputSchema: {
+        ...targetFields,
+        x: z.number().int().min(-100_000).max(100_000).optional(),
+        y: z.number().int().min(-100_000).max(100_000).optional(),
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        size: z.number().int().min(16).max(96).optional(),
+        opacity: z.number().min(0.2).max(1).optional(),
+        label: z.string().min(1).max(24).optional(),
+        visible: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      x,
+      y,
+      color,
+      size,
+      opacity,
+      label,
+      visible,
+    }) =>
+      await execute(
+        ctx,
+        'windows.virtual_pointer.start',
+        {
+          ...(x !== undefined ? { x } : {}),
+          ...(y !== undefined ? { y } : {}),
+          ...(color ? { color } : {}),
+          ...(size !== undefined ? { size } : {}),
+          ...(opacity !== undefined ? { opacity } : {}),
+          ...(label ? { label } : {}),
+          ...(visible !== undefined ? { visible } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_virtual_pointer_stop',
+    {
+      title: 'Stop Nexowire virtual pointer',
+      description:
+        'Stop the Nexowire click-through cursor overlay without touching the Windows system cursor.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.virtual_pointer.stop',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_virtual_pointer_move',
+    {
+      title: 'Move Nexowire virtual pointer',
+      description:
+        'Move only the independent Nexowire visual cursor to absolute virtual-screen coordinates. The user Windows cursor remains unchanged.',
+      inputSchema: {
+        ...targetFields,
+        x: z.number().int().min(-100_000).max(100_000),
+        y: z.number().int().min(-100_000).max(100_000),
+        visible: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, x, y, visible }) =>
+      await execute(
+        ctx,
+        'windows.virtual_pointer.move',
+        {
+          x,
+          y,
+          ...(visible !== undefined ? { visible } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_virtual_pointer_style',
+    {
+      title: 'Style Nexowire virtual pointer',
+      description:
+        'Change the Nexowire cursor color, size, opacity, or short label without affecting user input.',
+      inputSchema: {
+        ...targetFields,
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        size: z.number().int().min(16).max(96).optional(),
+        opacity: z.number().min(0.2).max(1).optional(),
+        label: z.string().min(1).max(24).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      color,
+      size,
+      opacity,
+      label,
+    }) =>
+      await execute(
+        ctx,
+        'windows.virtual_pointer.style',
+        {
+          ...(color ? { color } : {}),
+          ...(size !== undefined ? { size } : {}),
+          ...(opacity !== undefined ? { opacity } : {}),
+          ...(label ? { label } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_virtual_pointer_visibility',
+    {
+      title: 'Show or hide Nexowire virtual pointer',
+      description:
+        'Show or hide the independent Nexowire visual cursor while preserving its position and style.',
+      inputSchema: {
+        ...targetFields,
+        visible: z.boolean(),
+      },
+    },
+    async ({ device_id, provider_id, visible }) =>
+      await execute(
+        ctx,
+        'windows.virtual_pointer.visibility',
+        { visible },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_processes',
     {
       title: 'List Windows processes',

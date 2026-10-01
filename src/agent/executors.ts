@@ -13,6 +13,7 @@ import { captureWindowsScreenshot } from './windows-screenshot.js';
 import { executeWindowsInputCapability } from './windows-input.js';
 import { executeWindowsAccessibilityCapability } from './windows-accessibility.js';
 import { executeWindowsPointerCapability } from './windows-pointer.js';
+import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
@@ -2204,6 +2205,13 @@ export async function executeCapability(
     case 'windows.pointer.click':
     case 'windows.pointer.scroll':
       return await executeWindowsPointerCapability(capability, input);
+    case 'windows.virtual_pointer.status':
+    case 'windows.virtual_pointer.start':
+    case 'windows.virtual_pointer.stop':
+    case 'windows.virtual_pointer.move':
+    case 'windows.virtual_pointer.style':
+    case 'windows.virtual_pointer.visibility':
+      return await executeWindowsVirtualPointerCapability(capability, input);
     case 'browser.session.start':
     case 'browser.session.list':
     case 'browser.session.stop':

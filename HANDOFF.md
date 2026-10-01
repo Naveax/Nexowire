@@ -1,6 +1,6 @@
 # Nexowire Handoff
 
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Goal
 
@@ -119,18 +119,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-There is no active unfinished v1.0 implementation or publication work. Nexowire v1.0.0 is released. Tag `v1.0.0` points at release commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication. npm publication remains intentionally disabled for the initial self-hosted release.
+Nexowire v1.0.0 is released and there is no unfinished v1.0 implementation/publication work. A concrete post-v1 feature is active on `feature/private-desktop-virtual-cursor`: an isolated click-through Windows Nexowire cursor with independent coordinates/state that never moves the user's system cursor. This is the first foundation for a later private-desktop/private-input surface. Physical console pointer/keyboard control remains a separate capability boundary and must not be silently reused as the private pointer implementation.
 
-Post-v1 domain recipes, additional capability probes, performance work, and reproduced hardening are backlog only. They become active work only when a concrete task is intentionally selected.
+Local Windows validation on 2026-10-02 showed the overlay visibly rendered as a separately colored `NX` cursor across the 3440x1440 virtual desktop while remaining non-foreground and click-through. Focused tests prove moving/styling/hiding the Nexowire cursor leaves the real Windows cursor coordinates unchanged. Typecheck, targeted MCP surface/schema/output/discovery tests, and build pass. The local `browser-live` regression currently fails independently because Edge exits before DevTools becomes ready / leaves a locked temporary profile; clean GitHub CI is the merge gate for that unrelated live-browser lane.
 
 ## Immediate next work
 
-There is no required v1.0 follow-up. For future changes:
-
-1. Preserve the frozen MCP v1 input/output compatibility contracts and first-party-only runtime invariant.
-2. Keep the production regression floor green.
-3. Add domain recipes/probes only for concrete repeated workflows or reproduced mismatches.
-4. Keep npm publication disabled until package policy is explicitly changed and independently re-verified.
+1. Finish CI/merge for `feature/private-desktop-virtual-cursor` without publishing a new release.
+2. Build the private desktop/viewer and isolated private keyboard/input routing on top of the virtual-pointer boundary.
+3. Preserve physical-console input as default-denied unless the user explicitly grants console control; do not implement the private path by moving the system cursor with `SendInput`.
+4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+5. Keep npm/GitHub release publication disabled unless explicitly authorized.
 
 ## Known machine note
 
