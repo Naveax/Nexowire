@@ -604,8 +604,33 @@ $value = switch ([string]$inputData.type) {
   'multi_string' { [string[]]@($inputData.value) }
   'binary' { [Convert]::FromBase64String([string]$inputData.value) }
 }
-$registryKey = Get-Item -LiteralPath $target -ErrorAction Stop
-$registryKey.SetValue([string]$inputData.name, $value, $kind)
+if ([string]$inputData.name -eq '') {
+  $rootKey = switch ([string]$inputData.hive) {
+    'HKCU' { [Microsoft.Win32.Registry]::CurrentUser }
+    'HKLM' { [Microsoft.Win32.Registry]::LocalMachine }
+    'HKCR' { [Microsoft.Win32.Registry]::ClassesRoot }
+    'HKU'  { [Microsoft.Win32.Registry]::Users }
+    'HKCC' { [Microsoft.Win32.Registry]::CurrentConfig }
+  }
+  $subPath = ([string]$inputData.path).Replace('/', '\\')
+  $writableKey = $rootKey.OpenSubKey($subPath, $true)
+  if ($null -eq $writableKey) { throw 'Registry key could not be opened for writing.' }
+  try {
+    $writableKey.SetValue('', $value, $kind)
+  } finally {
+    $writableKey.Dispose()
+  }
+} else {
+  $propertyType = switch ([string]$inputData.type) {
+    'string' { 'String' }
+    'expand_string' { 'ExpandString' }
+    'dword' { 'DWord' }
+    'qword' { 'QWord' }
+    'multi_string' { 'MultiString' }
+    'binary' { 'Binary' }
+  }
+  New-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -Value $value -PropertyType $propertyType -Force -ErrorAction Stop | Out-Null
+}
 $verifyItem = Get-Item -LiteralPath $target -ErrorAction Stop
 $storedKind = [string]$verifyItem.GetValueKind([string]$inputData.name)
 $storedValue = $verifyItem.GetValue([string]$inputData.name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
@@ -636,7 +661,21 @@ if ($null -ne $inputData.name) {
   $existing = @($item.GetValueNames() | Where-Object { $_ -eq [string]$inputData.name })
   if ($existing.Count -ne 1) { throw 'Registry value was not found.' }
   if ([string]$inputData.name -eq '') {
-    $item.DeleteValue('', $true)
+    $rootKey = switch ([string]$inputData.hive) {
+      'HKCU' { [Microsoft.Win32.Registry]::CurrentUser }
+      'HKLM' { [Microsoft.Win32.Registry]::LocalMachine }
+      'HKCR' { [Microsoft.Win32.Registry]::ClassesRoot }
+      'HKU'  { [Microsoft.Win32.Registry]::Users }
+      'HKCC' { [Microsoft.Win32.Registry]::CurrentConfig }
+    }
+    $subPath = ([string]$inputData.path).Replace('/', '\\')
+    $writableKey = $rootKey.OpenSubKey($subPath, $true)
+    if ($null -eq $writableKey) { throw 'Registry key could not be opened for writing.' }
+    try {
+      $writableKey.DeleteValue('', $true)
+    } finally {
+      $writableKey.Dispose()
+    }
   } else {
     Remove-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -ErrorAction Stop
   }
