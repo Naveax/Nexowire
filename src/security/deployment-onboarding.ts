@@ -277,7 +277,7 @@ export function parseDeploymentOnboardingArgs(
   const routes: string[] = [];
 
   for (; index < args.length; index++) {
-    const arg = args[index];
+    const arg = args[index]!;
     if (arg === '--remote') {
       options.remote = true;
       continue;
