@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   spawn,
   spawnSync,
@@ -57,6 +58,25 @@ export interface PlatformSecretRunner {
 export interface PlatformSecretStoreOptions {
   platform?: NodeJS.Platform;
   runner?: PlatformSecretRunner;
+}
+
+export interface PlatformSecretBackendCapabilities {
+  platform: PlatformSecretPlatform;
+  backend: 'secret-service' | 'keychain';
+  read: true;
+  write: boolean;
+  delete: true;
+  secureWriteTransport: 'stdin' | 'unsupported';
+  presenceProbeReadsSecret: boolean;
+}
+
+export interface PlatformSecretStatus {
+  platform: PlatformSecretPlatform;
+  backend: PlatformSecretBackendCapabilities['backend'];
+  purpose: string;
+  name: string;
+  present: boolean;
+  capabilities: PlatformSecretBackendCapabilities;
 }
 
 export class PlatformSecretError extends Error {
@@ -242,8 +262,17 @@ function commandUnavailable(
   );
 }
 
-function cleanErrorText(value: string): string {
-  return value.trim().slice(0, 2_000);
+function commandDiagnostic(value: string): {
+  chars: number;
+  sha256: string | null;
+} {
+  const normalized = value.trim();
+  return {
+    chars: normalized.length,
+    sha256: normalized
+      ? createHash('sha256').update(normalized, 'utf8').digest('hex')
+      : null,
+  };
 }
 
 function throwCommandFailure(
@@ -269,9 +298,16 @@ function throwCommandFailure(
     {
       platform,
       status: result.status,
-      stderr: cleanErrorText(result.stderr),
+      stderr: commandDiagnostic(result.stderr),
       ...(result.error
-        ? { error: result.error.message }
+        ? {
+            error: {
+              name: result.error.name,
+              messageSha256: createHash('sha256')
+                .update(result.error.message, 'utf8')
+                .digest('hex'),
+            },
+          }
         : {}),
     },
   );
@@ -286,6 +322,82 @@ export class PlatformSecretStore {
       options.platform ?? process.platform,
     );
     this.runner = options.runner ?? defaultRunner();
+  }
+
+  capabilities(): PlatformSecretBackendCapabilities {
+    return {
+      platform: this.platform,
+      backend:
+        this.platform === 'darwin'
+          ? 'keychain'
+          : 'secret-service',
+      read: true,
+      write: this.platform === 'linux',
+      delete: true,
+      secureWriteTransport:
+        this.platform === 'linux'
+          ? 'stdin'
+          : 'unsupported',
+      presenceProbeReadsSecret: this.platform === 'linux',
+    };
+  }
+
+  status(
+    referenceInput: PlatformSecretReference,
+  ): PlatformSecretStatus {
+    const reference = validateReference(referenceInput);
+    const capabilities = this.capabilities();
+
+    if (this.platform === 'darwin') {
+      const result = this.runner.runSync(
+        commandFor(this.platform),
+        [
+          'find-generic-password',
+          '-s',
+          macService(reference),
+          '-a',
+          reference.name,
+        ],
+        { maxBuffer: 2 * 1024 * 1024 },
+      );
+
+      if (result.status === 0 && !result.error) {
+        return {
+          platform: this.platform,
+          backend: capabilities.backend,
+          purpose: reference.purpose,
+          name: reference.name,
+          present: true,
+          capabilities,
+        };
+      }
+
+      if (!result.error && result.status === 44) {
+        return {
+          platform: this.platform,
+          backend: capabilities.backend,
+          purpose: reference.purpose,
+          name: reference.name,
+          present: false,
+          capabilities,
+        };
+      }
+
+      throwCommandFailure(
+        this.platform,
+        'status',
+        result,
+      );
+    }
+
+    return {
+      platform: this.platform,
+      backend: capabilities.backend,
+      purpose: reference.purpose,
+      name: reference.name,
+      present: this.exists(reference),
+      capabilities,
+    };
   }
 
   readSync(
