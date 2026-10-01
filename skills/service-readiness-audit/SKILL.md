@@ -4,7 +4,6 @@ name: service-readiness-audit
 description: Prove whether an already-running service is locally healthy and reachable using process, machine, TCP, DNS, and optional HTTP evidence without changing service state.
 version: 0.1
 requires: machine.health, process.list, network.tcp.probe
-requires_any: network.dns.resolve | network.tcp.probe
 prefers: network.dns.resolve, network.http.probe
 platforms: any
 mutation: read-only
