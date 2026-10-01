@@ -116,3 +116,5 @@ Whenever a major slice merges:
 - keep this file architectural and stable rather than filling it with transient branch noise
 
 If a conversation disappears, another chat should be able to continue by reading these repository files alone.
+
+`npm run continuation:check` machine-validates `PROJECT_STATE.json`, all declared continuation files, hot-file references, priority uniqueness/order, and the HANDOFF resume contract. Normal `npm run check` includes this validation so stale or broken continuation metadata fails CI rather than waiting for the next chat to discover archaeology.
