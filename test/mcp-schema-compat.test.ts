@@ -172,6 +172,44 @@ test('MCP v1 stable input schemas remain backward compatible with frozen contrac
       );
     }
 
+    const eventLogSchema = current.get('windows_eventlog_query') as
+      | {
+          required?: string[];
+          properties?: Record<
+            string,
+            {
+              minimum?: number;
+              maximum?: number;
+            }
+          >;
+        }
+      | undefined;
+    assert.ok(eventLogSchema, 'windows_eventlog_query schema is missing.');
+    assert.equal(
+      eventLogSchema?.properties?.max_message_chars?.minimum,
+      0,
+    );
+    assert.equal(
+      eventLogSchema?.properties?.max_message_chars?.maximum,
+      131_072,
+    );
+    assert.equal(
+      eventLogSchema?.properties?.max_total_message_chars?.minimum,
+      0,
+    );
+    assert.equal(
+      eventLogSchema?.properties?.max_total_message_chars?.maximum,
+      4_194_304,
+    );
+    assert.equal(
+      eventLogSchema?.required?.includes('max_message_chars') ?? false,
+      false,
+    );
+    assert.equal(
+      eventLogSchema?.required?.includes('max_total_message_chars') ?? false,
+      false,
+    );
+
     const failures: Array<{
       tool: string;
       path: string;
