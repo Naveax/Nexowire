@@ -3576,32 +3576,98 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'wsl_list',
+    {
+      title: 'List WSL distributions',
+      description:
+        'List installed Windows Subsystem for Linux distributions without entering a distro.',
+      inputSchema: targetFields,
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'wsl.list',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'wsl_exec',
     {
       title: 'Execute in WSL2',
       description:
-        'Execute a bash command inside a Windows Subsystem for Linux distribution.',
+        'Execute a bash command inside a Windows Subsystem for Linux distribution, optionally as one exact Linux user.',
       inputSchema: {
         ...targetFields,
         command: z.string().min(1).max(200_000),
         distro: z.string().min(1).max(128).optional(),
+        user: z.string().min(1).max(128).optional(),
         cwd: z.string().max(4096).optional(),
         timeout_ms: z.number().int().min(100).max(600_000).optional(),
       },
     },
-    async ({ device_id, provider_id, command, distro, cwd, timeout_ms }) =>
+    async ({
+      device_id,
+      provider_id,
+      command,
+      distro,
+      user,
+      cwd,
+      timeout_ms,
+    }) =>
       await execute(
         ctx,
         'wsl.exec',
         {
           command,
           ...(distro ? { distro } : {}),
+          ...(user ? { user } : {}),
           ...(cwd ? { cwd } : {}),
           ...(timeout_ms ? { timeout_ms } : {}),
         },
         device_id,
         provider_id,
         timeout_ms,
+      ),
+  );
+
+  server.registerTool(
+    'wsl_path_convert',
+    {
+      title: 'Convert Windows/WSL path',
+      description:
+        'Convert one path through wslpath inside the selected WSL distribution without shell interpolation.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        distro: z.string().min(1).max(128).optional(),
+        to: z.enum(['linux', 'windows']),
+        absolute: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      path,
+      distro,
+      to,
+      absolute,
+    }) =>
+      await execute(
+        ctx,
+        'wsl.path.convert',
+        {
+          path,
+          ...(distro ? { distro } : {}),
+          to,
+          ...(absolute !== undefined ? { absolute } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
       ),
   );
 
