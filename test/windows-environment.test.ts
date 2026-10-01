@@ -183,6 +183,40 @@ test(
       };
       assert.equal(read.data.values[0]?.exists, true);
       assert.equal(read.data.values[0]?.value, value);
+
+      const largeValue =
+        'Nexowire-env-stdin-ç-🚀-' + 'x'.repeat(32_000);
+      const largeSet = (await executeWindowsEnvironmentCapability(
+        'windows.environment.set',
+        {
+          scope: 'user',
+          name,
+          value: largeValue,
+        },
+      )) as {
+        data: {
+          verified: boolean;
+          processUpdated: boolean;
+          requiresNewProcess: boolean;
+        };
+      };
+      assert.equal(largeSet.data.verified, true);
+      assert.equal(largeSet.data.processUpdated, false);
+      assert.equal(largeSet.data.requiresNewProcess, true);
+
+      const largeRead = (await executeWindowsEnvironmentCapability(
+        'windows.environment.read',
+        {
+          scope: 'user',
+          names: [name],
+        },
+      )) as {
+        data: {
+          values: Array<{ exists: boolean; value: string | null }>;
+        };
+      };
+      assert.equal(largeRead.data.values[0]?.exists, true);
+      assert.equal(largeRead.data.values[0]?.value, largeValue);
     } finally {
       await executeWindowsEnvironmentCapability(
         'windows.environment.delete',
