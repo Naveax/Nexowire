@@ -1,13 +1,18 @@
 ---
+manifest_version: 2
 name: tls-diagnostics
 description: Diagnose HTTPS/TLS reachability, certificate, hostname, protocol, and proxy failures without weakening transport security as a shortcut.
 version: 1.0
-requires: network.dns.resolve, network.tcp.probe, network.http.probe, shell.exec
+requires: network.dns.resolve
+requires_any: network.tcp.probe | shell.exec; network.http.probe | shell.exec
+prefers: network.tcp.probe, network.http.probe
 platforms: any
 mutation: read-only
 privilege: user
 trust: trusted
 tags: tls, https, network, certificates, diagnostics
+concurrency: parallel-safe
+replay: safe
 ---
 
 # TLS Diagnostics
@@ -17,8 +22,8 @@ Use this workflow for certificate errors, HTTPS connection failures, hostname mi
 ## Workflow
 
 1. Resolve the hostname with `network.dns.resolve` and record the addresses actually returned.
-2. Probe TCP reachability to the exact destination port.
-3. Use `network.http.probe` against the intended HTTPS URL and preserve status/error metadata.
+2. Prefer `network.tcp.probe` for exact port reachability; use a bounded shell fallback only when the structured probe is unavailable.
+3. Prefer `network.http.probe` against the intended HTTPS URL and preserve status/error metadata; use bounded native TLS tooling only when the structured HTTP probe cannot express the needed certificate detail.
 4. Separate failure classes:
    - DNS resolution
    - TCP reachability
