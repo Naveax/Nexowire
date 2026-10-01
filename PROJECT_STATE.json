@@ -134,12 +134,17 @@
     "Stable v1 structured-output semantics are frozen in src/mcp/v1-output-contract.json; regenerate only after explicit compatibility review."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "e3604945f46e379d99c1b8cfff405156bb1bc8b9",
+  "lastVerifiedMain": "42bdf6cf060fb1a02c38b5f2aea27c1cbbd2072f",
   "activeWork": [
     {
-      "branch": "feat/mcp-output-contract-v2",
-      "status": "testing",
-      "goal": "Land the frozen machine-readable MCP v1 structured-output semantic contract and compatibility hash."
+      "branch": "feat/oidc-external-identity-v1",
+      "status": "implementation",
+      "goal": "Add deployment-grade external OIDC/JWT identity for MCP with issuer/audience/JWKS verification and Nexowire role/scope claim mapping."
+    },
+    {
+      "branch": "feat/platform-secret-backends-v1",
+      "status": "implementation",
+      "goal": "Add optional first-party platform-backed protected secret readers beyond Windows DPAPI, with fail-closed Linux/macOS adapters and tests."
     }
   ]
 }

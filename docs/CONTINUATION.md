@@ -73,13 +73,15 @@ Implemented on main as of the latest repository state:
 
 ## Important unfinished slices
 
-The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
+The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. continue deployment-grade external identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret reads, Windows DPAPI bootstrap envelopes, and dynamic tool discovery are implemented
-2. extend durable runbooks only with step types whose restart/replay semantics can be proven; task-graph and read-only assertion stages are implemented
-5. extend idempotency/postconditions only where replay and verification semantics are provably safe
-6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented
-7. extend MCP compatibility only when future semantic/nested-payload changes require a new reviewed contract; the frozen v1 structured-output profile/hash is implemented
+1. deployment-grade external OIDC/JWT identity and protected secret handling
+2. broader cross-platform platform-backed protected secret integration beyond Windows DPAPI
+3. real WSL2-distro integration coverage
+4. incremental specialized skill-library breadth/version evolution
+5. only add new durable-runbook/idempotency/postcondition semantics when restart/replay behavior is explicit and tested
+
+The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
 
 ## Branch and merge discipline
 

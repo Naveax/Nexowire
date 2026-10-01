@@ -105,17 +105,20 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/mcp-output-contract-v2`: frozen machine-readable structured-output semantic compatibility for MCP surface v1.
+- `feat/oidc-external-identity-v1`: deployment-grade external OIDC/JWT identity for MCP.
+- `feat/platform-secret-backends-v1`: optional Linux/macOS platform-backed protected secret readers.
+- MCP v1 output semantic contracts are merged on `main` and no longer active work.
 
 ## Immediate next work
 
-1. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
-2. Extend durable runbooks only where new workflow step types have well-defined restart/replay semantics; task graphs + read-only assertion stages are implemented.
-3. Continue deployment-grade external identity/protected secret handling; tool/device/route scopes, explicit user/operator/admin roles, revocation/TTL, rotation, TLS, descriptor-safe mounted secret reads, DPAPI broker protection, and Windows purpose-bound bootstrap secret envelopes are implemented.
+1. Land external OIDC/JWT identity with strict issuer/audience/signature/time validation and scoped Nexowire authorization mapping.
+2. Land cross-platform protected secret adapters while preserving Windows DPAPI behavior and fail-closed startup semantics.
+3. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
+4. Extend durable runbooks only where new workflow step types have explicit restart/replay semantics.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
-6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests; both core paths are implemented.
-7. Continue production authorization work: scoped credentials, revocation, TTL, rotation, TLS, and Windows protected bootstrap secret envelopes exist; deployment-grade external identity and broader cross-platform secret integration remain.
-8. Add real WSL2-distro integration coverage when a suitable Windows runner/machine is available.
+6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests.
+7. Add real WSL2-distro integration coverage when a suitable Windows runner/machine is available.
+8. Continue specialized skill-library breadth/version evolution incrementally without destabilizing the frozen MCP v1 compatibility floor.
 
 ## Known machine note
 
