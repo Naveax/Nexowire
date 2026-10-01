@@ -93,11 +93,7 @@ async function runPowerShellJson<T>(
       ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
       {
         windowsHide: true,
-        env: {
-          ...process.env,
-          NEXOWIRE_INPUT: JSON.stringify(input),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
     const stdout: Buffer[] = [];
@@ -153,12 +149,21 @@ async function runPowerShellJson<T>(
         );
       }
     });
+
+    child.stdin.end(JSON.stringify(input), 'utf8');
   });
 }
 
 const listScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8
+$stdinReader = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $true)
+try {
+  $inputData = $stdinReader.ReadToEnd() | ConvertFrom-Json
+} finally {
+  $stdinReader.Dispose()
+}
 $target = if ([string]$inputData.scope -eq 'user') {
   [EnvironmentVariableTarget]::User
 } else {
@@ -174,7 +179,14 @@ $names = @(
 
 const readScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8
+$stdinReader = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $true)
+try {
+  $inputData = $stdinReader.ReadToEnd() | ConvertFrom-Json
+} finally {
+  $stdinReader.Dispose()
+}
 $target = if ([string]$inputData.scope -eq 'user') {
   [EnvironmentVariableTarget]::User
 } else {
@@ -193,7 +205,14 @@ $values = foreach ($name in @($inputData.names)) {
 
 const setScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8
+$stdinReader = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $true)
+try {
+  $inputData = $stdinReader.ReadToEnd() | ConvertFrom-Json
+} finally {
+  $stdinReader.Dispose()
+}
 $target = if ([string]$inputData.scope -eq 'user') {
   [EnvironmentVariableTarget]::User
 } else {
@@ -222,7 +241,14 @@ if ($actual -cne [string]$inputData.value) {
 
 const deleteScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8
+$stdinReader = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $true)
+try {
+  $inputData = $stdinReader.ReadToEnd() | ConvertFrom-Json
+} finally {
+  $stdinReader.Dispose()
+}
 $target = if ([string]$inputData.scope -eq 'user') {
   [EnvironmentVariableTarget]::User
 } else {

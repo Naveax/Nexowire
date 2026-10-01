@@ -41,6 +41,8 @@ jobs:
       - run: npm run typecheck
       - name: Verify structured Windows controls
         run: node --test --import tsx test/windows-control.test.ts
+      - name: Verify Windows environment controls
+        run: node --test --import tsx test/windows-environment.test.ts
       - run: node --test --import tsx test/browser-live.test.ts
       - run: node --test --import tsx test/durable-process.test.ts
 
