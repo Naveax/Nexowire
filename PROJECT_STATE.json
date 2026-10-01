@@ -162,7 +162,7 @@
   "activeWork": [
     {
       "branch": "feat/release-candidate-verify-v1",
-      "status": "active",
+      "status": "implementation",
       "goal": "Add an independent verifier for generated release checksum/manifest/SBOM evidence and gate candidate upload on verification; do not publish."
     },
     {
