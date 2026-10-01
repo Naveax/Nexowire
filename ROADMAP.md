@@ -85,4 +85,4 @@
 - [x] independently verify generated checksum/manifest/SBOM evidence before candidate upload
 - [x] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs
 - [x] tag-only SLSA build provenance and CycloneDX SBOM attestations after verified candidate download with isolated OIDC/attestation permissions
-- [ ] GitHub v1.0.0 publication is explicitly owner-authorized and pending the final tagged publication gate; npm publication remains intentionally disabled for the initial self-hosted release
+- [x] GitHub v1.0.0 published with verified package artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, SLSA provenance, and SBOM attestation; npm publication remains intentionally disabled for the initial self-hosted release
