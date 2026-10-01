@@ -10,6 +10,7 @@ import {
 } from '../protocol/agent.js';
 import { capabilitiesForPlatform } from '../protocol/capabilities.js';
 import { browserCapabilitiesAvailable } from './browser-manager.js';
+import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
@@ -241,19 +242,50 @@ function heartbeatMs(env: NodeJS.ProcessEnv): number {
   return Math.min(120_000, Math.max(5_000, Math.round(parsed)));
 }
 
+export function filterRuntimeCapabilities(
+  platform: NodeJS.Platform,
+  availability: {
+    browser: boolean;
+    wsl: boolean;
+  },
+): string[] {
+  let capabilities = capabilitiesForPlatform(platform);
+
+  if (!availability.browser) {
+    capabilities = capabilities.filter(
+      (capability) => !capability.startsWith('browser.'),
+    );
+  }
+
+  if (platform === 'win32' && !availability.wsl) {
+    capabilities = capabilities.filter(
+      (capability) => capability !== 'wsl.exec',
+    );
+  }
+
+  return capabilities;
+}
+
 export async function capabilitiesForAgent(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string[]> {
-  const capabilities = capabilitiesForPlatform(platform);
-  const browserAvailable = await browserCapabilitiesAvailable({
-    platform,
-    env,
+  const [browser, wsl] = await Promise.all([
+    browserCapabilitiesAvailable({
+      platform,
+      env,
+    }),
+    Promise.resolve(
+      platform === 'win32'
+        ? detectWsl({ platform, env }).available
+        : false,
+    ),
+  ]);
+
+  return filterRuntimeCapabilities(platform, {
+    browser,
+    wsl,
   });
-  if (browserAvailable) return capabilities;
-  return capabilities.filter(
-    (capability) => !capability.startsWith('browser.'),
-  );
 }
 
 export async function runNativeAgent(
