@@ -41,6 +41,8 @@ jobs:
       - run: npm run typecheck
       - name: Verify structured Windows controls
         run: node --test --import tsx test/windows-control.test.ts
+        env:
+          NEXOWIRE_LIVE_WINDOWS_SERVICE_TEST: "1"
       - name: Verify Windows environment controls
         run: node --test --import tsx test/windows-environment.test.ts
       - run: node --test --import tsx test/browser-live.test.ts
