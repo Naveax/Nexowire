@@ -10,6 +10,7 @@ import { runRelayServer } from './relay/server.js';
 import { runPrivilegedBroker } from './agent/privileged-broker.js';
 import { runPrivilegedBrokerLifecycleCommand } from './agent/privileged-broker-lifecycle.js';
 import { runCredentialCommand } from './security/credentials-cli.js';
+import { runProtectedSecretCommand } from './security/protected-secrets-cli.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -21,6 +22,7 @@ Usage:
   nexowire agent   Start the native computer agent
   nexowire relay   Start a first-party native-agent relay
   nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
+  nexowire secrets <purposes|inspect|seal>   Manage Windows DPAPI protected bootstrap secret files
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -61,6 +63,13 @@ async function main(): Promise<void> {
   if (command === 'credentials') {
     await runCredentialCommand(
       loadConfig(),
+      process.argv.slice(3),
+    );
+    return;
+  }
+
+  if (command === 'secrets') {
+    await runProtectedSecretCommand(
       process.argv.slice(3),
     );
     return;
