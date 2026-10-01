@@ -21,7 +21,14 @@ const NetworkSnapshotInputSchema = z.object({
 });
 
 const ServiceControlInputSchema = z.object({
-  name: z.string().min(1).max(260),
+  name: z
+    .string()
+    .min(1)
+    .max(260)
+    .refine((value) => !/[\*?\[\]]/.test(value), {
+      message:
+        'Service control requires an exact service name without wildcard characters.',
+    }),
   action: z.enum(['start', 'stop', 'restart', 'set_startup']),
   startup_type: z.enum(['automatic', 'manual', 'disabled']).optional(),
 });
@@ -413,23 +420,29 @@ try {
   $stdinReader.Dispose()
 }
 $name = [string]$inputData.name
-$service = Get-Service -Name $name -ErrorAction Stop
+$matches = @(Get-Service -ErrorAction Stop | Where-Object {
+  [string]$_.Name -ieq $name
+})
+if ($matches.Count -ne 1) {
+  throw ('Expected exactly one Windows service, found ' + $matches.Count + '.')
+}
+$service = $matches[0]
 switch ([string]$inputData.action) {
   'start' {
     if ($service.Status -ne 'Running') {
-      Start-Service -Name $name -ErrorAction Stop
+      Start-Service -InputObject $service -ErrorAction Stop
     }
   }
   'stop' {
     if ($service.Status -ne 'Stopped') {
-      Stop-Service -Name $name -ErrorAction Stop
+      Stop-Service -InputObject $service -ErrorAction Stop
     }
   }
   'restart' {
     if ($service.Status -eq 'Running') {
-      Restart-Service -Name $name -ErrorAction Stop
+      Restart-Service -InputObject $service -ErrorAction Stop
     } else {
-      Start-Service -Name $name -ErrorAction Stop
+      Start-Service -InputObject $service -ErrorAction Stop
     }
   }
   'set_startup' {
@@ -444,7 +457,7 @@ if ($inputData.startup_type) {
     'manual' { 'Manual' }
     'disabled' { 'Disabled' }
   }
-  Set-Service -Name $name -StartupType $startup -ErrorAction Stop
+  Set-Service -InputObject $service -StartupType $startup -ErrorAction Stop
 }
 $final = Get-CimInstance Win32_Service -Filter ("Name='" + $name.Replace("'", "''") + "'") -ErrorAction Stop
 [pscustomobject]@{

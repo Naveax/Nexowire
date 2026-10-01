@@ -275,6 +275,24 @@ test(
   async () => {
     await assert.rejects(
       () =>
+        executeWindowsCapability('windows.service.control', {
+          name: '*',
+          action: 'stop',
+        }),
+      /exact service name/,
+    );
+
+    await assert.rejects(
+      () =>
+        executeWindowsCapability('windows.service.control', {
+          name: 'DefinitelyMissingNexowireService',
+          action: 'stop',
+        }),
+      /Expected exactly one Windows service, found 0/,
+    );
+
+    await assert.rejects(
+      () =>
         executeWindowsCapability('windows.task.control', {
           name: '*',
           path: '\\',
