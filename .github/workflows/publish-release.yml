@@ -1,0 +1,107 @@
+name: Publish Authorized Release
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/releases/*.authorized"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Authorized package version or v-prefixed tag"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-authorized-release
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    name: Authorize exact release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate exact authorization marker
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}"
+          MARKER=".github/releases/${TAG}.authorized"
+
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing non-stable release version: ${VERSION}" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            REQUESTED='${{ inputs.version }}'
+            if [[ "${REQUESTED}" != "${VERSION}" && "${REQUESTED}" != "${TAG}" ]]; then
+              echo "Requested version ${REQUESTED} does not match package version ${VERSION}." >&2
+              exit 1
+            fi
+          fi
+
+          if [[ ! -f "${MARKER}" ]]; then
+            echo "Missing explicit release authorization marker: ${MARKER}" >&2
+            exit 1
+          fi
+
+          EXPECTED="authorized-version=${TAG}"
+          ACTUAL="$(tr -d '\r\n' < "${MARKER}")"
+          if [[ "${ACTUAL}" != "${EXPECTED}" ]]; then
+            echo "Authorization marker does not exactly match ${EXPECTED}." >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+      - run: npm ci
+      - name: Run final release gate before tagging
+        run: npm run release:check
+      - name: Verify exact tag policy
+        env:
+          GITHUB_REF_TYPE: tag
+          GITHUB_REF_NAME: ${{ steps.release.outputs.tag }}
+        run: npm run release:tag:check
+      - name: Create exact release tag when absent
+        shell: bash
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            TARGET="$(git rev-list -n 1 "${TAG}")"
+            if [[ "${TARGET}" != "${GITHUB_SHA}" ]]; then
+              echo "Existing tag ${TAG} points to ${TARGET}, expected ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+            echo "Tag ${TAG} already points at this authorized commit; reusing it."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" "${GITHUB_SHA}" -m "Nexowire ${TAG#v}"
+            git push origin "${TAG}"
+          fi
+      - name: Dispatch tag-scoped release readiness and publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: gh workflow run release-readiness.yml --ref "${TAG}"
