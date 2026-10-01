@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 43 validated shipped workflows, twelve read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression/release-readiness domain recipes
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 44 validated shipped workflows, thirteen read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression/release-readiness/backup-integrity domain recipes
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -87,6 +87,7 @@ Implemented:
 - machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
 - independent release-candidate evidence verification that re-checks SHA256SUMS, manifest source/package/artifact/skill inventory, CycloneDX root identity, and private-package posture before upload
 - exact `v<package-version>` tag enforcement before canonical packaging on tag-triggered readiness runs; branch/PR readiness remains a non-tag no-op
+- tag-only SLSA/CycloneDX attestations with checksum re-verification, isolated OIDC/attestation permissions, and no implicit publication
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -118,18 +119,19 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/release-attestation-v1`: add a separate explicit-tag-only provenance job that re-checks the downloaded canonical checksum and creates SLSA + CycloneDX attestations with OIDC/attestation write scopes isolated from package/test jobs.
-- skill/domain-recipe work remains incremental: add workflows only when required/preferred capabilities and mutation/replay/concurrency semantics are explicit and testable.
-- browser and WSL runtime capability advertisement fail closed when required local executables/runtime state are unavailable.
-- macOS protected-secret write/update and release provenance metadata are merged baseline, not unfinished work.
+At the 2026-10-01 continuation sync, there are no open implementation PRs. The previous release-attestation slice is merged, and the backup-integrity-audit recipe is merged.
+
+- `future/domain-recipes`: planned, incremental only. Add a workflow when it represents repeated real work and its required/preferred capabilities plus mutation/replay/concurrency semantics are explicit and testable.
+- `future/release-publication`: blocked on explicit owner authorization. Release readiness, checksums, manifest, SBOM, tag enforcement, SLSA provenance, and SBOM attestations are implemented; do not create a GitHub Release or publish to npm unless the user explicitly asks.
+- Browser/WSL executable/runtime capability advertisement already fails closed when required local state is unavailable. Add more probes only when a real static-advertisement mismatch is demonstrated.
 
 ## Immediate next work
 
-1. Keep the now-packaged runtime and Linux/Windows/macOS clean-install release smoke green; add checksums/SBOM/provenance before an eventual explicitly authorized tagged release.
-2. Continue domain recipes conservatively and prioritize repeated real workflows over catalog inflation.
-3. Keep deployment doctor/onboarding, live HTTPS/OIDC/revocation, macOS native/LaunchAgent/Keychain, browser, Linux, Windows, and WSL2 CI green as the production regression floor.
-4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
-5. Add executable/environment-aware capability probes only when a static advertisement demonstrably exposes an unusable tool.
+1. Keep the release/readiness regression floor green across Linux, Windows, macOS, browser, WSL2, HTTPS/OIDC/revocation, LaunchAgent/Keychain, and packaged clean-install lanes.
+2. Continue domain recipes conservatively; prefer repeated operational workflows over catalog inflation.
+3. Preserve the frozen MCP v1 input/output compatibility contracts and the first-party-only runtime invariant.
+4. Harden or optimize existing capabilities only from reproduced failures, measurable latency/cost evidence, or a demonstrated unusable-tool advertisement.
+5. Do not perform npm publication, create a GitHub Release, or create a release tag as a side effect of development. Those actions require explicit owner authorization.
 
 ## Known machine note
 
