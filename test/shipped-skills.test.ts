@@ -39,6 +39,16 @@ const EXPECTED_V2_SKILLS = [
   'service-debug',
 ] as const;
 
+const EXPECTED_DOMAIN_READ_ONLY_V2_SKILLS = [
+  'artifact-integrity-audit',
+  'browser-session-inspection',
+  'service-readiness-audit',
+] as const;
+
+const EXPECTED_DOMAIN_MIXED_V2_SKILLS = [
+  'workspace-regression-triage',
+] as const;
+
 test('shipped skill library has valid machine-readable manifests', async () => {
   const registry = new SkillRegistry(
     path.join(process.cwd(), 'skills'),
@@ -56,6 +66,8 @@ test('shipped skill library has valid machine-readable manifests', async () => {
   for (const name of [
     ...EXPECTED_V2_SKILLS,
     ...EXPECTED_V3_SKILLS,
+    ...EXPECTED_DOMAIN_READ_ONLY_V2_SKILLS,
+    ...EXPECTED_DOMAIN_MIXED_V2_SKILLS,
   ]) {
     assert.ok(
       names.includes(name),
@@ -79,6 +91,43 @@ test('shipped skill library has valid machine-readable manifests', async () => {
     assert.equal(skill?.replay, 'safe', name);
     assert.equal(skill?.mutation, 'read-only', name);
   }
+});
+
+test('domain recipes declare explicit replay and concurrency semantics', async () => {
+  const registry = new SkillRegistry(
+    path.join(process.cwd(), 'skills'),
+  );
+
+  for (const name of EXPECTED_DOMAIN_READ_ONLY_V2_SKILLS) {
+    const loaded = await registry.load(name);
+    assert.equal(loaded.manifest.manifestVersion, 2, name);
+    assert.equal(loaded.manifest.mutation, 'read-only', name);
+    assert.equal(loaded.manifest.concurrency, 'parallel-safe', name);
+    assert.equal(loaded.manifest.replay, 'safe', name);
+  }
+
+  for (const name of EXPECTED_DOMAIN_MIXED_V2_SKILLS) {
+    const loaded = await registry.load(name);
+    assert.equal(loaded.manifest.manifestVersion, 2, name);
+    assert.equal(loaded.manifest.mutation, 'mixed', name);
+    assert.equal(loaded.manifest.concurrency, 'serial', name);
+    assert.equal(loaded.manifest.replay, 'verify', name);
+  }
+
+  const artifact = await registry.load('artifact-integrity-audit');
+  assert.ok(
+    artifact.manifest.requires.includes('task.artifact.verify'),
+  );
+
+  const browser = await registry.load('browser-session-inspection');
+  assert.ok(
+    browser.manifest.prefers?.includes('browser.visual.verify'),
+  );
+
+  const regression = await registry.load('workspace-regression-triage');
+  assert.ok(
+    regression.manifest.requires.includes('workspace.checks'),
+  );
 });
 
 test('Windows-only shipped skills are excluded from Linux runnability', async () => {
