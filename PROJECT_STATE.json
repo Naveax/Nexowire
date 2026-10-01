@@ -100,7 +100,7 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 45 shipped workflows, fourteen replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and seven conservative domain recipes including release-readiness, backup-integrity, and configuration-drift auditing are implemented; further domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 45 shipped workflows, fourteen replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, seven conservative domain recipes including release-readiness, backup-integrity, and configuration-drift auditing, and CI-enforced domain capability/read-only contracts are implemented; further domain recipes remain incremental"
     },
     {
       "id": "native-agent-lifecycle",
@@ -152,6 +152,7 @@
     "Windows native agents now advertise wsl.exec only when bounded wsl.exe distro discovery finds at least one installed distro; machine.snapshot reuses the same detector.",
     "The shipped skill library contains 45 workflows. Fourteen read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics, and configuration-drift-audit is the seventh conservative domain recipe.",
     "Shipped-skill CI verifies that docs/SKILLS.md exactly indexes the validated on-disk skill library.",
+    "Domain-recipe CI rejects unknown required/alternative/preferred capability references and rejects read-only domain recipes that reference capabilities outside READ_ONLY_CAPABILITIES.",
     "Real macOS native-agent core CI now verifies outbound transport, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions in addition to LaunchAgent/Keychain coverage.",
     "Async path-policy authorization is canonical-realpath based, preventing false denials such as macOS /var -> /private/var while retaining symlink escape protection.",
     "Windows window-filter regression coverage uses an isolated WPF fixture instead of racing arbitrary runner windows.",
@@ -162,7 +163,7 @@
     "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "c13dc6c855ac141b940f39ba1675e1c7c8096817",
+  "lastVerifiedMain": "34f487d000dd2ac0258284f38652d627ff4d834d",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
