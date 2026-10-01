@@ -29,7 +29,7 @@ Packaged/global executions must not depend on the caller's current working direc
 
 ## CI artifact
 
-`.github/workflows/release-readiness.yml` runs manually and on `v*` tags. It validates the release candidate and uploads the resulting `.tgz` as a GitHub Actions artifact. It does not publish to npm or automatically create a public GitHub Release.
+`.github/workflows/release-readiness.yml` runs on packaging-related pull requests, manually, and on `v*` tags. The clean tarball install/readiness check runs on Linux, Windows, and macOS; Linux produces the canonical `.tgz` Actions artifact. The workflow does not publish to npm or automatically create a public GitHub Release.
 
 ## Version discipline
 
