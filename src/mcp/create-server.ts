@@ -70,7 +70,8 @@ function applyToolRegistrationFilters(
   },
 ): void {
   const authorizationRestricted =
-    input.authorization?.kind === 'stored';
+    input.authorization !== undefined &&
+    input.authorization.kind !== 'static';
   const capabilityRestricted =
     input.availableCapabilities !== undefined;
 
