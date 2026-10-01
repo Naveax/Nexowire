@@ -29,6 +29,7 @@ Usage:
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
+  nexowire version Show the installed Nexowire version
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -41,6 +42,15 @@ async function main(): Promise<void> {
 
   if (command === 'help' || command === '--help' || command === '-h') {
     printHelp();
+    return;
+  }
+
+  if (
+    command === 'version' ||
+    command === '--version' ||
+    command === '-v'
+  ) {
+    process.stdout.write(NEXOWIRE_VERSION + '\n');
     return;
   }
 
