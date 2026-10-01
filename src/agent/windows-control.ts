@@ -60,7 +60,7 @@ const FirewallRulesInputSchema = z.object({
 const RegistrySetInputSchema = z.object({
   hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
   path: z.string().min(1).max(4096),
-  name: z.string().min(1).max(1024),
+  name: z.string().max(1024),
   type: z.enum([
     'string',
     'expand_string',
@@ -86,7 +86,7 @@ const RegistryDeleteInputSchema = z.object({
     .refine((value) => value.replace(/[\\/]/g, '').trim().length > 0, {
       message: 'Deleting a registry hive root is not allowed.',
     }),
-  name: z.string().min(1).max(1024).optional(),
+  name: z.string().max(1024).optional(),
   recursive: z.boolean().default(false),
 });
 
@@ -604,15 +604,8 @@ $value = switch ([string]$inputData.type) {
   'multi_string' { [string[]]@($inputData.value) }
   'binary' { [Convert]::FromBase64String([string]$inputData.value) }
 }
-$propertyType = switch ([string]$inputData.type) {
-  'string' { 'String' }
-  'expand_string' { 'ExpandString' }
-  'dword' { 'DWord' }
-  'qword' { 'QWord' }
-  'multi_string' { 'MultiString' }
-  'binary' { 'Binary' }
-}
-New-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -Value $value -PropertyType $propertyType -Force -ErrorAction Stop | Out-Null
+$registryKey = Get-Item -LiteralPath $target -ErrorAction Stop
+$registryKey.SetValue([string]$inputData.name, $value, $kind)
 $verifyItem = Get-Item -LiteralPath $target -ErrorAction Stop
 $storedKind = [string]$verifyItem.GetValueKind([string]$inputData.name)
 $storedValue = $verifyItem.GetValue([string]$inputData.name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
@@ -638,11 +631,15 @@ $base = switch ([string]$inputData.hive) {
   'HKCC' { 'Registry::HKEY_CURRENT_CONFIG' }
 }
 $target = Join-Path $base ([string]$inputData.path)
-if ($inputData.name) {
+if ($null -ne $inputData.name) {
   $item = Get-Item -LiteralPath $target -ErrorAction Stop
   $existing = @($item.GetValueNames() | Where-Object { $_ -eq [string]$inputData.name })
   if ($existing.Count -ne 1) { throw 'Registry value was not found.' }
-  Remove-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -ErrorAction Stop
+  if ([string]$inputData.name -eq '') {
+    $item.DeleteValue('', $true)
+  } else {
+    Remove-ItemProperty -LiteralPath $target -Name ([string]$inputData.name) -ErrorAction Stop
+  }
   $verify = Get-Item -LiteralPath $target -ErrorAction Stop
   $stillExists = @($verify.GetValueNames() | Where-Object { $_ -eq [string]$inputData.name }).Count -gt 0
   if ($stillExists) { throw 'Registry value deletion verification failed.' }
