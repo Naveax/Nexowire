@@ -76,18 +76,22 @@ Implemented on main as of the latest repository state:
 - additive skill manifest v2 with capability alternatives/preferences plus replay/concurrency metadata while preserving v1 semantics
 - platform-secret backend hardening with non-secret macOS status probes and hashed/redacted backend diagnostics
 - machine-readable `nexowire doctor` deployment readiness with strict remote-ready semantics and no secret output
+- guided `nexowire onboard plan|bootstrap` deployment onboarding with hash-only stored credentials, one-time plaintext output, scoped MCP options, bounded TTLs, and doctor integration
+- first-party Windows current-user Scheduled Task and Linux systemd user-service native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart and refusal to persist plaintext bearer variables
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
-- six replay-safe/parallel-safe read-only workflows migrated to skill manifest v2
+- nine replay-safe/parallel-safe read-only workflows migrated to skill manifest v2
 
 ## Important unfinished slices
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. guided deployment onboarding/bootstrap on top of the now-implemented doctor/auth/TLS/OIDC stack
-2. first-party native-agent install/autostart lifecycle so operator deployments survive logout/reboot without manual terminal sessions
-3. migrate additional suitable read-only skills to manifest v2 while keeping mutation replay conservative
-4. keep macOS protected-secret write fail-closed until a no-argv/no-log first-party path is proven
-5. only add durable-runbook/idempotency/postcondition semantics when restart/replay behavior is explicit and tested
+1. first-party macOS LaunchAgent lifecycle, preserving user-session semantics and never persisting bearer values in argv/plists
+2. safe macOS Keychain protected-secret write/update through a proven no-argv/no-log first-party mechanism; otherwise keep writes fail-closed
+3. correct `event-driven-control` skill semantics before any v2 replay/concurrency declaration because it currently depends on `process.start`
+4. add domain recipes or further skill metadata only when mutation/replay/concurrency behavior is explicit and testable
+5. keep doctor/onboarding plus live HTTPS/OIDC/revocation CI green while preserving the frozen MCP v1 compatibility floor
+
+Guided deployment onboarding and Windows/Linux native-agent lifecycle are now merged baseline functionality, not unfinished work.
 
 The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
 
