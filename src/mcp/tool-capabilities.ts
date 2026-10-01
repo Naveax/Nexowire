@@ -55,6 +55,8 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   process_list: 'process.list',
   process_prune: 'process.prune',
   wsl_exec: 'wsl.exec',
+  wsl_list: 'wsl.list',
+  wsl_path_convert: 'wsl.path.convert',
   file_read: 'files.read',
   file_read_many: 'files.read_many',
   file_write: 'files.write',
