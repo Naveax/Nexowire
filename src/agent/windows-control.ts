@@ -466,6 +466,16 @@ $expectedState = switch ([string]$inputData.action) {
   'stop' { 'Stopped' }
   default { $null }
 }
+$expectedStartMode = if ($inputData.startup_type) {
+  switch ([string]$inputData.startup_type) {
+    'automatic' { 'Auto' }
+    'manual' { 'Manual' }
+    'disabled' { 'Disabled' }
+  }
+} else {
+  $null
+}
+
 $deadline = (Get-Date).AddSeconds(15)
 do {
   $finalMatches = @(
@@ -475,7 +485,12 @@ do {
     throw ('Service postcondition verification expected exactly one service, found ' + $finalMatches.Count + '.')
   }
   $final = $finalMatches[0]
-  if ($null -eq $expectedState -or [string]$final.State -eq $expectedState) {
+  $stateMatches =
+    $null -eq $expectedState -or [string]$final.State -eq $expectedState
+  $startupMatches =
+    $null -eq $expectedStartMode -or
+    [string]$final.StartMode -eq $expectedStartMode
+  if ($stateMatches -and $startupMatches) {
     break
   }
   Start-Sleep -Milliseconds 100
@@ -491,21 +506,17 @@ if ($null -ne $expectedState -and [string]$final.State -ne $expectedState) {
   )
 }
 
-if ($inputData.startup_type) {
-  $expectedStartMode = switch ([string]$inputData.startup_type) {
-    'automatic' { 'Auto' }
-    'manual' { 'Manual' }
-    'disabled' { 'Disabled' }
-  }
-  if ([string]$final.StartMode -ne $expectedStartMode) {
-    throw (
-      'Service startup verification failed: expected ' +
-      $expectedStartMode +
-      ', got ' +
-      [string]$final.StartMode +
-      '.'
-    )
-  }
+if (
+  $null -ne $expectedStartMode -and
+  [string]$final.StartMode -ne $expectedStartMode
+) {
+  throw (
+    'Service startup verification failed: expected ' +
+    $expectedStartMode +
+    ', got ' +
+    [string]$final.StartMode +
+    '.'
+  )
 }
 
 [pscustomobject]@{
