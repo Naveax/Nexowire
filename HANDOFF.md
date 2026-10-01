@@ -79,7 +79,7 @@ Implemented:
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
 - purpose-bound Windows DPAPI CurrentUser protected bootstrap secret files for hub MCP/native-agent bearer sets, native-agent outbound auth, and relay inbound/upstream auth
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
-- first-party normal native-agent lifecycle: Windows current-user Scheduled Task and Linux systemd user service with install/status/start/stop/restart/uninstall/autostart, protected-secret-reference persistence, and plaintext-token persistence refusal
+- first-party normal native-agent lifecycle across Windows, Linux, and macOS: current-user Scheduled Task, systemd user service, and per-user LaunchAgent with install/status/start/stop/restart/uninstall/autostart, protected-secret-reference persistence, plaintext-token persistence refusal, plus real macOS lifecycle CI
 - machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
 - initial security/docs/tests/CI
 
@@ -112,18 +112,16 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- macOS native-agent LaunchAgent lifecycle remains intentionally open; Windows/Linux lifecycle is merged and production-safe secret references must not be weakened to finish macOS.
-- skill library work is incremental: migrate or add domain recipes only when replay/concurrency semantics are explicit; all current genuinely read-only shipped workflows except event-driven-control are already manifest v2.
+- skill library work is incremental: migrate or add domain recipes only when replay/concurrency semantics are explicit; event-driven-control is now correctly manifest v2 as mixed/serial/manual-replay rather than falsely read-only.
 - production deployment hardening remains open only where the current doctor/onboarding/security model still reports a real gap, especially safe macOS protected-secret write/update and platform lifecycle coverage.
 
 ## Immediate next work
 
-1. Add a first-party macOS LaunchAgent lifecycle only with tested per-user start/stop/restart/install/uninstall semantics and without putting secrets in argv/plists.
-2. Resolve the remaining macOS Keychain protected-write gap with a proven no-argv/no-log mechanism, or keep it fail-closed.
-3. Continue skill/domain-recipe expansion conservatively; `event-driven-control` is currently the only shipped read-only-labelled skill not on manifest v2 and its `process.start` requirement means its mutation classification must be corrected before any replay-safe migration.
-4. Keep deployment doctor/onboarding plus live HTTPS/OIDC/revocation CI green as the production-security regression floor.
-5. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
-6. Treat Windows/Linux lifecycle and guided onboarding as merged baseline, not unfinished work.
+1. Resolve the remaining macOS Keychain protected-write gap with a proven no-argv/no-log mechanism, or keep it fail-closed.
+2. Continue skill/domain-recipe expansion conservatively; event-driven-control is already corrected to mixed/serial/manual-replay and must remain non-replay-safe while it creates processes.
+3. Keep deployment doctor/onboarding plus live HTTPS/OIDC/revocation and real macOS LaunchAgent CI green as the production-security regression floor.
+4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+5. Treat guided onboarding and Windows/Linux/macOS normal-agent lifecycle as merged baseline, not unfinished work.
 
 ## Known machine note
 
