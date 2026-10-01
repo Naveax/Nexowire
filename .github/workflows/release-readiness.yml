@@ -7,7 +7,10 @@ on:
       - "package.json"
       - "package-lock.json"
       - "src/config.ts"
+      - "src/version.ts"
+      - "src/cli.ts"
       - "test/config.test.ts"
+      - "test/version.test.ts"
       - "scripts/check-release-package.ts"
       - "skills/**"
       - ".github/workflows/release-readiness.yml"
@@ -20,7 +23,11 @@ permissions:
 
 jobs:
   package:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,9 +36,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run release:check
-      - name: Build release tarball
+      - name: Build canonical release tarball
+        if: runner.os == 'Linux'
         run: npm pack
-      - name: Upload release candidate
+      - name: Upload canonical release candidate
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: nexowire-${{ github.ref_name }}-${{ github.sha }}
