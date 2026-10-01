@@ -357,13 +357,10 @@ export class PlatformSecretStore {
     );
     const command = commandFor(this.platform);
 
-    if (
-      options.overwrite !== true &&
-      this.exists(reference)
-    ) {
+    if (this.platform === 'darwin') {
       throw new PlatformSecretError(
-        'PLATFORM_SECRET_EXISTS',
-        'Platform-backed secret already exists; explicit overwrite is required.',
+        'PLATFORM_SECRET_WRITE_UNSUPPORTED',
+        'Nexowire does not pass macOS Keychain secret plaintext through process arguments. Provision this Keychain item with trusted OS tooling; Nexowire will read it without echoing the secret.',
         {
           platform: this.platform,
           purpose: reference.purpose,
@@ -372,10 +369,13 @@ export class PlatformSecretStore {
       );
     }
 
-    if (this.platform === 'darwin') {
+    if (
+      options.overwrite !== true &&
+      this.exists(reference)
+    ) {
       throw new PlatformSecretError(
-        'PLATFORM_SECRET_WRITE_UNSUPPORTED',
-        'Nexowire does not pass macOS Keychain secret plaintext through process arguments. Provision this Keychain item with trusted OS tooling; Nexowire will read it without echoing the secret.',
+        'PLATFORM_SECRET_EXISTS',
+        'Platform-backed secret already exists; explicit overwrite is required.',
         {
           platform: this.platform,
           purpose: reference.purpose,
