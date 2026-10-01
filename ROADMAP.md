@@ -77,6 +77,9 @@
 - [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering; browser capabilities are executable-aware and `wsl.exec` is advertised only when an installed distro is detected
-- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 42 shipped workflows, twelve explicit replay-safe/parallel-safe read-only workflows, corrected event-driven-control semantics, and four conservative domain recipes are implemented; broader recipes remain incremental
-- [x] Windows + WSL2 + Linux support: Windows control/browser lanes, real Ubuntu 24.04 WSL2 `wsl.exec` integration, and real Linux native-agent/relay core capability CI are implemented
-- zero required third-party computer-control runtime dependencies
+- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 43 shipped workflows, twelve explicit replay-safe/parallel-safe read-only workflows, corrected event-driven-control semantics, and five conservative domain recipes including release-readiness auditing are implemented; broader recipes remain incremental
+- [x] Windows + WSL2 + Linux + macOS core coverage: Windows control/browser lanes, real Ubuntu 24.04 WSL2 `wsl.exec`, real Linux native-agent/relay core CI, and real macOS native-agent machine/shell/file/process CI are implemented
+- [x] release-candidate readiness: installable CLI packaging, bundled skills outside repository cwd, deterministic package-content checks, and clean tarball install smoke on Linux/Windows/macOS with canonical GitHub Actions artifact upload
+- [x] zero required third-party computer-control runtime dependencies
+- [x] release provenance metadata: SHA256SUMS, release manifest, and CycloneDX SBOM are attached to canonical candidates
+- [~] independently verify generated checksum/manifest/SBOM evidence before candidate upload; tagged/public publication remains explicitly authorized and separate

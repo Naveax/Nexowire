@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 42 validated shipped workflows, twelve read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression domain recipes
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 43 validated shipped workflows, twelve read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression/release-readiness domain recipes
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -52,6 +52,7 @@ Implemented:
 - full MCP -> native-agent integration coverage
 - real Linux native-agent outbound transport integration in Ubuntu CI covering capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
 - real Ubuntu 24.04 WSL2 CI covering `wsl.exec` exact distro selection, Linux cwd, Unicode stdout, nonzero exit/stderr propagation, and machine snapshot distro discovery
+- real macOS native-agent core CI covering outbound connection, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
 - verified exact Windows registry/task/firewall mutation controls
@@ -80,6 +81,9 @@ Implemented:
 - purpose-bound Windows DPAPI CurrentUser protected bootstrap secret files for hub MCP/native-agent bearer sets, native-agent outbound auth, and relay inbound/upstream auth
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
 - first-party normal native-agent lifecycle across Windows, Linux, and macOS: current-user Scheduled Task, systemd user service, and per-user LaunchAgent with install/status/start/stop/restart/uninstall/autostart, protected-secret-reference persistence, plaintext-token persistence refusal, plus real macOS lifecycle CI
+- release-candidate packaging/readiness with installable CLI, bundled-skill lookup outside repository cwd, deterministic package audit, clean tarball install smoke on Linux/Windows/macOS, canonical GitHub artifact upload, SHA256SUMS, release-manifest.json, and CycloneDX SBOM; npm publication remains disabled
+- installable release-candidate packaging with a `nexowire` CLI bin, package-backed runtime version, bundled-skill lookup outside repository cwd, deterministic package-content audit, and clean tarball install smoke tests on Linux/Windows/macOS; npm publication remains disabled
+- canonical-realpath async path authorization that preserves symlink-escape protection across platform path aliases such as macOS `/var` -> `/private/var`, plus deterministic WPF-backed Windows window-filter regression coverage
 - machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
 - initial security/docs/tests/CI
 
@@ -112,21 +116,22 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
+- `feat/release-candidate-verify-v1`: independently verify generated tarball checksum, release manifest, and CycloneDX SBOM before release-candidate upload; this is non-publishing hardening.
 - skill/domain-recipe work remains incremental: add workflows only when required/preferred capabilities and mutation/replay/concurrency semantics are explicit and testable.
-- browser and WSL runtime capability advertisement now fail closed when their required local executables/runtime state are unavailable.
-- macOS protected-secret write/update is merged baseline, not unfinished work.
+- browser and WSL runtime capability advertisement fail closed when required local executables/runtime state are unavailable.
+- macOS protected-secret write/update and release provenance metadata are merged baseline, not unfinished work.
 
 ## Immediate next work
 
-1. Continue domain recipes conservatively and prioritize repeated real workflows over catalog inflation.
-2. Keep deployment doctor/onboarding, live HTTPS/OIDC/revocation, real macOS LaunchAgent/Keychain, browser, Linux, and WSL2 CI green as the production regression floor.
-3. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
-4. Consider additional executable/environment-aware capability probes only when a static advertisement can demonstrably expose an unusable tool.
-5. Prefer release/readiness hardening over adding low-value primitives now that the main v1 capability surface is broadly complete.
+1. Keep the now-packaged runtime and Linux/Windows/macOS clean-install release smoke green; add checksums/SBOM/provenance before an eventual explicitly authorized tagged release.
+2. Continue domain recipes conservatively and prioritize repeated real workflows over catalog inflation.
+3. Keep deployment doctor/onboarding, live HTTPS/OIDC/revocation, macOS native/LaunchAgent/Keychain, browser, Linux, Windows, and WSL2 CI green as the production regression floor.
+4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+5. Add executable/environment-aware capability probes only when a static advertisement demonstrably exposes an unusable tool.
 
 ## Known machine note
 
-WSL2 execution is implemented and a real Ubuntu 24.04 WSL2 distro is provisioned/verified in Windows CI. Real Linux native-agent integration also runs in Ubuntu CI.
+WSL2 execution is implemented and a real Ubuntu 24.04 WSL2 distro is provisioned/verified in Windows CI. Real Linux native-agent integration runs in Ubuntu CI, and real macOS native-agent core execution runs in macOS CI.
 
 ## Architecture rule
 
