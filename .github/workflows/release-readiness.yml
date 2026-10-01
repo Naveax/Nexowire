@@ -82,7 +82,7 @@ jobs:
 
   attest:
     name: Attest tagged release candidate
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -109,3 +109,36 @@ jobs:
         with:
           subject-path: "release-candidate/nexowire-*.tgz"
           sbom-path: "release-candidate/nexowire-sbom.cdx.json"
+
+  publish:
+    name: Publish GitHub Release
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [package, attest]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download verified release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: nexowire-${{ github.run_id }}-${{ github.sha }}
+          path: release-candidate
+      - name: Re-check release checksum
+        working-directory: release-candidate
+        run: sha256sum -c SHA256SUMS
+      - name: Publish GitHub Release
+        working-directory: release-candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            nexowire-*.tgz \
+            SHA256SUMS \
+            release-manifest.json \
+            nexowire-sbom.cdx.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "Nexowire ${GITHUB_REF_NAME#v}" \
+            --generate-notes
+
