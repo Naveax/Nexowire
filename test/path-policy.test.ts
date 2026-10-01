@@ -51,3 +51,46 @@ test('real-path enforcement blocks symlink escapes when supported', async (t) =>
     PathDeniedError,
   );
 });
+
+test('canonicalized allowed roots remain valid for later async resolution', async (t) => {
+  const parent = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-canonical-root-'),
+  );
+  const realRoot = path.join(parent, 'real');
+  const aliasRoot = path.join(parent, 'alias');
+  await fs.mkdir(realRoot, { recursive: true });
+  await fs.writeFile(path.join(realRoot, 'existing.txt'), 'ok', 'utf8');
+
+  try {
+    await fs.symlink(
+      realRoot,
+      aliasRoot,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+  } catch (error) {
+    await fs.rm(parent, { recursive: true, force: true });
+    t.skip(
+      'This environment does not permit symlink/junction creation: ' +
+        (error instanceof Error ? error.message : String(error)),
+    );
+    return;
+  }
+
+  try {
+    const policy = new PathPolicy([aliasRoot]);
+    const canonicalRoot = await policy.resolveExisting(aliasRoot);
+    assert.equal(canonicalRoot, await fs.realpath(realRoot));
+
+    const existing = await policy.resolveExisting(
+      path.join(canonicalRoot, 'existing.txt'),
+    );
+    assert.equal(existing, await fs.realpath(path.join(realRoot, 'existing.txt')));
+
+    const created = await policy.resolveForCreate(
+      path.join(canonicalRoot, 'new.txt'),
+    );
+    assert.equal(created, path.join(await fs.realpath(realRoot), 'new.txt'));
+  } finally {
+    await fs.rm(parent, { recursive: true, force: true });
+  }
+});
