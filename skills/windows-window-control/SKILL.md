@@ -3,6 +3,11 @@ name: windows-window-control
 description: Enumerate top-level Windows windows and focus one exact HWND with post-action foreground verification.
 version: 0.1
 requires: windows.window.list, windows.window.focus
+platforms: win32
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: windows, hwnd, window, gui
 ---
 
 # Windows Window Control
