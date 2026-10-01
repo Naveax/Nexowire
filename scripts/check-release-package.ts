@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 interface PackFile {
@@ -159,6 +161,130 @@ assert.ok(
   'Release package exceeds the 16 MiB unpacked safety budget.',
 );
 
+const smokeRoot = await fs.mkdtemp(
+  path.join(os.tmpdir(), 'nexowire-release-smoke-'),
+);
+let installSmokeVerified = false;
+let bundledSkillsVerified = false;
+try {
+  const packDir = path.join(smokeRoot, 'pack');
+  const installDir = path.join(smokeRoot, 'install');
+  const unrelatedCwd = path.join(smokeRoot, 'cwd');
+  await fs.mkdir(packDir, { recursive: true });
+  await fs.mkdir(installDir, { recursive: true });
+  await fs.mkdir(unrelatedCwd, { recursive: true });
+
+  const actualPack = JSON.parse(
+    run(npm, [
+      'pack',
+      '--json',
+      '--pack-destination',
+      packDir,
+    ]),
+  ) as PackResult[];
+  assert.equal(actualPack.length, 1);
+  const tarball = path.join(packDir, actualPack[0]!.filename);
+
+  const install = spawnSync(
+    npm,
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--prefix',
+      installDir,
+      tarball,
+    ],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      cwd: unrelatedCwd,
+    },
+  );
+  if (install.error) throw install.error;
+  if (install.status !== 0) {
+    throw new Error(
+      'Clean tarball install failed:\n' +
+        (install.stdout ?? '') +
+        '\n' +
+        (install.stderr ?? ''),
+    );
+  }
+
+  const installedRoot = path.join(
+    installDir,
+    'node_modules',
+    'nexowire',
+  );
+  const installedCli = path.join(
+    installedRoot,
+    'dist',
+    'src',
+    'cli.js',
+  );
+  const installedHelp = spawnSync(
+    process.execPath,
+    [installedCli, '--help'],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      cwd: unrelatedCwd,
+    },
+  );
+  assert.equal(installedHelp.status, 0);
+  assert.match(
+    installedHelp.stdout ?? '',
+    new RegExp(
+      '^Nexowire ' +
+        escapeRegExp(String(packageJson.version)),
+      'm',
+    ),
+  );
+  installSmokeVerified = true;
+
+  const installedConfigUrl = pathToFileURL(
+    path.join(installedRoot, 'dist', 'src', 'config.js'),
+  ).href;
+  const probe = spawnSync(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      [
+        "import { loadConfig } from " +
+          JSON.stringify(installedConfigUrl) + ";",
+        "const config = loadConfig({}, process.cwd(), {",
+        "  platformSingle: () => undefined,",
+        "  platformList: () => undefined,",
+        "});",
+        "process.stdout.write(config.skillsDir);",
+      ].join("\n"),
+    ],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      cwd: unrelatedCwd,
+    },
+  );
+  assert.equal(
+    probe.status,
+    0,
+    'Installed config probe failed: ' + (probe.stderr ?? ''),
+  );
+  const installedSkillsDir = (probe.stdout ?? '').trim();
+  assert.equal(
+    path.resolve(installedSkillsDir),
+    path.resolve(installedRoot, 'skills'),
+  );
+  await fs.access(
+    path.join(installedSkillsDir, 'browser-control', 'SKILL.md'),
+  );
+  bundledSkillsVerified = true;
+} finally {
+  await fs.rm(smokeRoot, { recursive: true, force: true });
+}
+
 process.stdout.write(
   JSON.stringify(
     {
@@ -171,6 +297,8 @@ process.stdout.write(
       unpackedBytes: pack.unpackedSize,
       skills: skillNames.length,
       cliHelpVerified: true,
+      installSmokeVerified,
+      bundledSkillsVerified,
     },
     null,
     2,
