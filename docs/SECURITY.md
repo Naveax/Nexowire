@@ -9,7 +9,7 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 - Non-loopback plaintext transport is also rejected by default. Direct TLS is enabled with `NEXOWIRE_TLS_CERT_FILE` + `NEXOWIRE_TLS_KEY_FILE` and uses TLS 1.2 or newer. `NEXOWIRE_ALLOW_INSECURE_REMOTE=1` is an explicit trusted-private-network escape hatch, not a production setting.
 - Bootstrap bearer authentication accepts bounded rotation sets (`old,current,next`) so credentials can be rolled without an all-at-once outage. Matching hashes candidate/configured tokens and compares digests with constant-time equality instead of direct string equality.
 - Stored MCP credentials may restrict tool names, stable device IDs, and deterministic named routing policies. Route grants authorize only the policy's current deterministic selected target; ambiguous or missing routes grant no target access.
-- Stored MCP credentials are non-administrative by default. Policy mutation, alias/group mutation, audit/event/global idempotency inspection, and related sensitive hub tools require an explicit administrative grant. Static operator credentials and local unauthenticated loopback operation retain the administrative surface.
+- Stored MCP credentials default to the `user` role. `operator` credentials may inspect sensitive control-plane state such as policy checks, audit/events, and idempotency metadata but cannot mutate policy/routing/group/alias configuration; `admin` credentials may perform those administrative mutations. Legacy `administrative: true` records and `--admin` issuance remain admin-compatible. Tool allowlists still intersect role permissions, so a role never expands an explicit tool allowlist. Static bootstrap credentials and local unauthenticated loopback operation retain the full surface.
 - Native agents connect outbound and authenticate to the hub.
 - Without an agent secret, only loopback agent connections are accepted.
 - Native-agent file operations are restricted to configured roots; the default root is the current user's home directory.
@@ -22,7 +22,7 @@ Nexowire can execute commands and modify files on real computers. Treat a deploy
 
 ## Important limitation
 
-The current bearer-token model is still a bootstrap mechanism, even with rotation support, constant-time matching, and direct TLS support. A public ChatGPT deployment should still use a proper authorization flow, short-lived credentials, encrypted secret storage, and revocation.
+The current bearer/stored-credential model is still a bootstrap/local identity mechanism, even with rotation, revocation/TTL, explicit roles, scoped authorization, constant-time matching, and direct TLS. A public ChatGPT deployment should still integrate a deployment-grade external identity/authorization flow and platform-backed protected secret storage.
 
 ## Provider failover
 
