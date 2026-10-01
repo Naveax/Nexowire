@@ -1,4 +1,11 @@
-import { readFileSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from 'node:fs';
 import path from 'node:path';
 
 export class SecretFileError extends Error {
@@ -41,13 +48,13 @@ export function readSecretFile(
     Math.max(1, options.maxBytes ?? 65_536),
   );
 
-  let stat;
+  let resolved: string;
   try {
-    stat = statSync(file);
+    resolved = realpathSync(file);
   } catch (error) {
     throw new SecretFileError(
       'SECRET_FILE_UNAVAILABLE',
-      label + ' secret file could not be read.',
+      label + ' secret file could not be resolved.',
       {
         path: path.resolve(file),
         cause:
@@ -56,45 +63,67 @@ export function readSecretFile(
     );
   }
 
-  if (!stat.isFile()) {
-    throw new SecretFileError(
-      'SECRET_FILE_NOT_FILE',
-      label + ' secret path is not a regular file.',
-      { path: path.resolve(file) },
-    );
-  }
-  if (stat.size > maxBytes) {
-    throw new SecretFileError(
-      'SECRET_FILE_TOO_LARGE',
-      label + ' secret file exceeds the configured byte bound.',
-      {
-        path: path.resolve(file),
-        bytes: stat.size,
-        maxBytes,
-      },
-    );
-  }
-
+  let descriptor: number | undefined;
   let raw: string;
   try {
-    raw = readFileSync(file, 'utf8');
+    const noFollow =
+      process.platform === 'win32'
+        ? 0
+        : constants.O_NOFOLLOW ?? 0;
+    descriptor = openSync(
+      resolved,
+      constants.O_RDONLY | noFollow,
+    );
+    const stat = fstatSync(descriptor);
+
+    if (!stat.isFile()) {
+      throw new SecretFileError(
+        'SECRET_FILE_NOT_FILE',
+        label + ' secret path is not a regular file.',
+        { path: resolved },
+      );
+    }
+    if (stat.size > maxBytes) {
+      throw new SecretFileError(
+        'SECRET_FILE_TOO_LARGE',
+        label + ' secret file exceeds the configured byte bound.',
+        {
+          path: resolved,
+          bytes: stat.size,
+          maxBytes,
+        },
+      );
+    }
+
+    raw = readFileSync(descriptor, {
+      encoding: 'utf8',
+    });
   } catch (error) {
+    if (error instanceof SecretFileError) throw error;
     throw new SecretFileError(
       'SECRET_FILE_UNAVAILABLE',
-      label + ' secret file could not be read.',
+      label + ' secret file could not be read safely.',
       {
-        path: path.resolve(file),
+        path: resolved,
         cause:
           error instanceof Error ? error.message : String(error),
       },
     );
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        // Best effort; descriptor is no longer used.
+      }
+    }
   }
 
   if (raw.includes('\0')) {
     throw new SecretFileError(
       'SECRET_FILE_INVALID',
       label + ' secret file contains a NUL byte.',
-      { path: path.resolve(file) },
+      { path: resolved },
     );
   }
 
@@ -103,7 +132,7 @@ export function readSecretFile(
     throw new SecretFileError(
       'SECRET_FILE_EMPTY',
       label + ' secret file is empty.',
-      { path: path.resolve(file) },
+      { path: resolved },
     );
   }
 
@@ -114,7 +143,7 @@ export function readSecretFile(
     throw new SecretFileError(
       'SECRET_FILE_MULTILINE',
       label + ' secret file must contain exactly one non-empty line.',
-      { path: path.resolve(file) },
+      { path: resolved },
     );
   }
 
