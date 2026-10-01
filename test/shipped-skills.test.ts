@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { SkillRegistry } from '../src/skills/registry.js';
 
+const EXPECTED_V3_SKILLS = [
+  'backup-restore',
+  'browser-workflow-recovery',
+  'large-file-investigation',
+  'log-triage',
+  'performance-triage',
+  'port-conflict',
+  'safe-config-migration',
+  'tls-diagnostics',
+] as const;
+
 const EXPECTED_V2_SKILLS = [
   'application-repair',
   'dependency-install',
@@ -30,7 +41,10 @@ test('shipped skill library has valid machine-readable manifests', async () => {
   assert.equal(validation.ok, true);
 
   const names = validation.valid.map((skill) => skill.name);
-  for (const name of EXPECTED_V2_SKILLS) {
+  for (const name of [
+    ...EXPECTED_V2_SKILLS,
+    ...EXPECTED_V3_SKILLS,
+  ]) {
     assert.ok(
       names.includes(name),
       'Expected shipped skill is missing: ' + name,
