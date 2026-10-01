@@ -152,6 +152,26 @@ test('MCP v1 stable input schemas remain backward compatible with frozen contrac
       listed.tools.map((tool) => [tool.name, tool.inputSchema]),
     );
 
+    for (const tool of [
+      'windows_registry_set',
+      'windows_registry_delete',
+    ] as const) {
+      const schema = current.get(tool) as
+        | {
+            properties?: Record<
+              string,
+              { minLength?: number }
+            >;
+          }
+        | undefined;
+      assert.ok(schema, tool + ' schema is missing.');
+      assert.equal(
+        schema?.properties?.name?.minLength ?? 0,
+        0,
+        tool + ' must allow an empty name for the unnamed/default registry value.',
+      );
+    }
+
     const failures: Array<{
       tool: string;
       path: string;
