@@ -11,7 +11,9 @@ on:
       - "src/cli.ts"
       - "test/config.test.ts"
       - "test/version.test.ts"
+      - "test/release-tag.test.ts"
       - "scripts/check-release-package.ts"
+      - "scripts/check-release-tag.ts"
       - "scripts/generate-release-metadata.ts"
       - "scripts/verify-release-candidate.ts"
       - "test/release-metadata.test.ts"
@@ -49,6 +51,9 @@ jobs:
           npm run typecheck
           npm run build
           node --import tsx scripts/check-release-package.ts
+      - name: Enforce exact tag/package version match
+        if: runner.os == 'Linux'
+        run: npm run release:tag:check
       - name: Build canonical release tarball
         if: runner.os == 'Linux'
         run: npm pack
