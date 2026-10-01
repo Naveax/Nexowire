@@ -10,8 +10,12 @@ export const CORE_CAPABILITIES = [
   'process.write',
   'process.stop',
   'process.list',
+  'wsl.list',
+  'wsl.path.convert',
   'process.prune',
   'wsl.exec',
+  'wsl.list',
+  'wsl.path.convert',
   'files.read',
   'files.read_many',
   'files.write',
@@ -95,7 +99,7 @@ export function hasCapability(
 export function capabilitiesForPlatform(platform: NodeJS.Platform): string[] {
   return CORE_CAPABILITIES.filter((capability) => {
     if (capability.startsWith('windows.')) return platform === 'win32';
-    if (capability === 'wsl.exec') return platform === 'win32';
+    if (capability.startsWith('wsl.')) return platform === 'win32';
     return true;
   });
 }
