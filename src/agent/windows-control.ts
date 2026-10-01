@@ -142,11 +142,7 @@ async function runPowerShell(
       ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
       {
         windowsHide: true,
-        env: {
-          ...process.env,
-          NEXOWIRE_INPUT: JSON.stringify(input),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
 
@@ -190,6 +186,8 @@ async function runPowerShell(
       }
       resolve(result);
     });
+
+    child.stdin.end(JSON.stringify(input), 'utf8');
   });
 }
 
@@ -263,7 +261,8 @@ function assertWindows(): void {
 
 const processListScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $items = @(Get-CimInstance Win32_Process)
 if ($null -ne $inputData.pid) {
   $items = @($items | Where-Object { $_.ProcessId -eq [int]$inputData.pid })
@@ -288,7 +287,8 @@ $result = @($items | Select-Object -First ([int]$inputData.limit) | ForEach-Obje
 
 const serviceListScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $items = @(Get-CimInstance Win32_Service)
 if ($inputData.name) {
   $needle = [string]$inputData.name
@@ -315,7 +315,8 @@ $result = @($items | Sort-Object Name | Select-Object -First ([int]$inputData.li
 
 const networkSnapshotScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $adapters = @(Get-NetAdapter -ErrorAction Stop | Sort-Object ifIndex | ForEach-Object {
   [pscustomobject]@{
     index = [int]$_.ifIndex
@@ -385,7 +386,8 @@ if ($inputData.include_connections) {
 
 const serviceControlScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $name = [string]$inputData.name
 $service = Get-Service -Name $name -ErrorAction Stop
 switch ([string]$inputData.action) {
@@ -432,7 +434,8 @@ $final = Get-CimInstance Win32_Service -Filter ("Name='" + $name.Replace("'", "'
 
 const registryReadScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $base = switch ([string]$inputData.hive) {
   'HKCU' { 'Registry::HKEY_CURRENT_USER' }
   'HKLM' { 'Registry::HKEY_LOCAL_MACHINE' }
@@ -471,7 +474,8 @@ if ($inputData.include_subkeys) {
 
 const scheduledTasksScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $items = @(Get-ScheduledTask -ErrorAction Stop)
 if ($inputData.name) {
   $needle = [string]$inputData.name
@@ -506,7 +510,8 @@ $result = @($items | Sort-Object TaskPath, TaskName | Select-Object -First ([int
 
 const eventLogQueryScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $filter = @{
   LogName = [string]$inputData.log_name
   StartTime = (Get-Date).AddMinutes(-[int]$inputData.since_minutes)
@@ -538,7 +543,8 @@ $events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents ([int]$inputData.ma
 
 const firewallRulesScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $items = @(Get-NetFirewallRule -ErrorAction Stop)
 if ($inputData.name) {
   $needle = [string]$inputData.name
@@ -574,7 +580,8 @@ $result = @($items | Sort-Object DisplayName | Select-Object -First ([int]$input
 
 const registrySetScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $base = switch ([string]$inputData.hive) {
   'HKCU' { 'Registry::HKEY_CURRENT_USER' }
   'HKLM' { 'Registry::HKEY_LOCAL_MACHINE' }
@@ -647,7 +654,8 @@ if ($storedValue -is [byte[]]) { $storedValue = [Convert]::ToBase64String($store
 
 const registryDeleteScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $base = switch ([string]$inputData.hive) {
   'HKCU' { 'Registry::HKEY_CURRENT_USER' }
   'HKLM' { 'Registry::HKEY_LOCAL_MACHINE' }
@@ -693,7 +701,8 @@ if ($null -ne $inputData.name) {
 
 const scheduledTaskControlScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $name = [string]$inputData.name
 $taskPath = [string]$inputData.path
 $matches = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq $name -and $_.TaskPath -eq $taskPath })
@@ -721,7 +730,8 @@ if ($inputData.action -eq 'disable' -and [string]$final.State -ne 'Disabled') { 
 
 const firewallControlScript = String.raw`
 $ErrorActionPreference = 'Stop'
-$inputData = $env:NEXOWIRE_INPUT | ConvertFrom-Json
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+$inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $name = [string]$inputData.name
 $matches = @(Get-NetFirewallRule -ErrorAction Stop | Where-Object { $_.Name -eq $name })
 if ($matches.Count -ne 1) { throw ('Expected exactly one firewall rule, found ' + $matches.Count + '.') }
