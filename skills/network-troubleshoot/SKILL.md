@@ -3,6 +3,11 @@ name: network-troubleshoot
 description: Diagnose connectivity from the target computer with structured DNS, TCP, HTTP, and machine-health probes before falling back to shell commands.
 version: 0.1
 requires: machine.health, network.dns.resolve, network.tcp.probe, network.http.probe
+platforms: any
+mutation: read-only
+privilege: user
+trust: reviewed
+tags: network, dns, tcp, http, diagnostics
 ---
 
 # Network Troubleshoot
