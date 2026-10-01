@@ -168,21 +168,16 @@
     "windows.service.control now polls bounded postconditions after mutation: start/restart must converge to Running, stop to Stopped, and requested startup type must match final Win32_Service StartMode; real Windows CI verifies startup mutation on an isolated temporary service fixture.",
     "Windows Event Log query output is bounded by per-field, per-message, and aggregate message budgets with explicit truncation metadata; real Windows CI verifies those bounds.",
     "The v1.0 implementation scope is complete and package version 1.0.0 is in release preparation; further domain recipes and capability additions are post-v1 incremental work rather than release blockers.",
-    "The owner explicitly authorized GitHub v1.0.0 publication on 2026-10-01. Publication must still pass the repository-owned exact authorization-marker, tag, package, checksum, manifest, SBOM, and attestation gates; npm remains disabled.",
+    "GitHub v1.0.0 was published successfully from tag/commit 98d040c284efad7f726c3d3ccaa1771d385ed60d. Release Readiness run 36890669730 passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication; npm remains intentionally disabled.",
     "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0",
+  "lastVerifiedMain": "98d040c284efad7f726c3d3ccaa1771d385ed60d",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
       "status": "planned",
       "goal": "Post-v1 only: add further domain recipes when repeated real workflows justify explicit capability, mutation, replay, and concurrency semantics."
-    },
-    {
-      "branch": "future/release-publication",
-      "status": "implementation",
-      "goal": "Owner-authorized GitHub v1.0.0 publication is at the final marker gate: merge .github/releases/v1.0.0.authorized after CI, then verify exact tag creation, tag-scoped package/attestation jobs, and GitHub Release publication. npm remains disabled."
     }
   ]
 }
