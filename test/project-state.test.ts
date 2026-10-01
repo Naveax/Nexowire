@@ -135,7 +135,7 @@ test('continuation validation fails when a declared source-of-truth file is miss
         },
       ],
       standardVerification: ['npm test'],
-      hotFiles: ['HANDOFF.md'],
+      hotFiles: ['HANDOFF.md', 'MISSING.md'],
       notes: [],
       lastStateSync: '2026-10-01',
       lastVerifiedMain: 'b'.repeat(40),
@@ -149,7 +149,7 @@ test('continuation validation fails when a declared source-of-truth file is miss
 
     await assert.rejects(
       () => validateProjectState(root),
-      /PROJECT_STATE\.json|ENOENT/,
+      /MISSING\.md|ENOENT/,
     );
   } finally {
     await fs.rm(root, { recursive: true, force: true });
