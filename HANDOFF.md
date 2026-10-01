@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifest v1 with required capabilities, platforms, mutation/privilege/trust metadata, validation, exact-device runnability evaluation, and 38 validated shipped operational skills including the specialized v3 diagnostics/recovery pack
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, and 38 validated shipped operational skills including the specialized v3 diagnostics/recovery pack
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -51,6 +51,7 @@ Implemented:
 - persistent payload-free idempotency records for selected replay-safe mutations, with key/fingerprint mismatch rejection and restart-safe unknown-state blocking
 - full MCP -> native-agent integration coverage
 - real Linux native-agent outbound transport integration in Ubuntu CI covering capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
+- real Ubuntu 24.04 WSL2 CI covering `wsl.exec` exact distro selection, Linux cwd, Unicode stdout, nonzero exit/stderr propagation, and machine snapshot distro discovery
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
 - verified exact Windows registry/task/firewall mutation controls
@@ -64,7 +65,7 @@ Implemented:
 - reusable bounded read-only postcondition assertions for file existence/hash/text presence, PID liveness, TCP reachability, and HTTP status
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - external OIDC/JWT MCP identity with strict issuer/audience/signature/time verification and mapping into existing role/tool/device/route authorization
-- Linux Secret Service and macOS Keychain protected-secret adapters, with hub/native-agent/relay bootstrap lookup wiring and fail-closed backend errors
+- Linux Secret Service and macOS Keychain protected-secret adapters, with hub/native-agent/relay bootstrap lookup wiring, platform-secret backend status/capability reporting, non-secret macOS presence probes, redacted diagnostics, and fail-closed macOS write when no safe no-argv path exists
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - first-party relay server with inbound/upstream authentication, bounded backpressure/heartbeats, ordered agent endpoint fallback, and real native-agent relay CI coverage
 - revocable/expiring hash-only stored MCP/native-agent credentials plus optional MCP tool allowlists enforced before tool execution
@@ -107,24 +108,23 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/platform-secret-hardening-v2`: harden cross-platform protected-secret behavior, with safe macOS write/update as the main unresolved backend gap.
-- `feat/wsl-live-integration-v1`: strengthen real WSL2-distro integration coverage without pretending a distro exists when the runner cannot provide one.
-- `feat/skill-manifest-v2`: evolve skills beyond manifest v1 while preserving v1 compatibility and the frozen MCP v1 surface.
+- `feat/deployment-readiness-v1`: machine-readable deployment doctor/readiness checks for TLS, auth/OIDC, native-agent auth, secret backends, relay/public-binding safety, and remediation.
+- `feat/security-operational-ci-v1`: end-to-end operational CI spanning external identity, scopes, revocation, discovery, TLS, and first-party transport.
+- `feat/skill-v2-migration-pack-v1`: migrate additional suitable workflows to manifest v2 while preserving manifest v1 and MCP v1 compatibility.
 
 ## Immediate next work
 
-1. Harden platform-backed secret lifecycle/status semantics and keep secret material out of argv/logs/state.
-2. Add the strongest practical real WSL2 distro integration lane, failing honestly when hosted runner constraints make a true distro unavailable.
-3. Design manifest v2 additively, with explicit migration/compatibility tests for every shipped v1 skill.
-4. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
-5. Extend durable runbooks only where new workflow step types have explicit restart/replay semantics.
-6. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
-7. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests.
-8. Continue skill-library breadth incrementally without destabilizing the frozen MCP v1 compatibility floor.
+1. Build deployment-readiness diagnostics that never print secrets and distinguish hard blockers from warnings.
+2. Add operational security CI that proves OIDC/scoped discovery/revocation/TLS work together rather than only in isolated unit tests.
+3. Migrate read-only/diagnostic skills to manifest v2 where capability alternatives, parallel safety, or replay safety are materially useful.
+4. Keep macOS Keychain write fail-closed until a first-party native no-argv/no-log secret path is proven.
+5. Keep Windows/Linux/WSL2 live integration lanes green after every relevant change.
+6. Extend durable workflows/idempotency only when restart/replay semantics remain explicit and tested.
+7. Preserve the frozen MCP v1 compatibility floor.
 
 ## Known machine note
 
-WSL2 execution is implemented. Real Linux native-agent integration runs in Ubuntu CI. A real WSL2-distro integration test still requires a distro on whichever Windows test machine is used.
+WSL2 execution is implemented and a real Ubuntu 24.04 WSL2 distro is provisioned/verified in Windows CI. Real Linux native-agent integration also runs in Ubuntu CI.
 
 ## Architecture rule
 
