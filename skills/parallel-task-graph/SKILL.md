@@ -3,6 +3,11 @@ name: parallel-task-graph
 description: Run independent shell jobs concurrently with dependencies, bounded concurrency, persistent checkpoints, and explicit restart-safe resume behavior.
 version: 0.1
 requires: task.graph.run, task.graph.list, task.graph.get, task.graph.prune, task.artifact.list, task.artifact.verify
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: tasks, parallel, dag, orchestration
 ---
 
 # Parallel Task Graph
