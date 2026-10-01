@@ -6,6 +6,7 @@ import * as z from 'zod';
 
 const WINDOWS_TASK_DEFAULT = 'Nexowire Native Agent';
 const LINUX_UNIT_DEFAULT = 'nexowire-agent.service';
+const MAC_LABEL_DEFAULT = 'com.nexowire.agent';
 
 const PERSISTED_ENV_NAMES = [
   'NEXOWIRE_HUB_WS_URL',
@@ -35,7 +36,7 @@ const FORBIDDEN_INLINE_SECRET_NAMES = [
 
 const StatusSchema = z.object({
   installed: z.boolean(),
-  platform: z.enum(['win32', 'linux']),
+  platform: z.enum(['win32', 'linux', 'darwin']),
   name: z.string(),
   state: z.string(),
   autostart: z.boolean(),
@@ -56,15 +57,23 @@ export interface NativeAgentLifecycleOptions {
   homeDir?: string;
   windowsTaskName?: string;
   linuxUnitName?: string;
+  macLabel?: string;
+  uid?: number;
 }
 
 function platformOf(
   options: NativeAgentLifecycleOptions,
-): 'win32' | 'linux' {
+): 'win32' | 'linux' | 'darwin' {
   const platform = options.platform ?? process.platform;
-  if (platform === 'win32' || platform === 'linux') return platform;
+  if (
+    platform === 'win32' ||
+    platform === 'linux' ||
+    platform === 'darwin'
+  ) {
+    return platform;
+  }
   throw new Error(
-    'Native-agent install/autostart lifecycle currently supports Windows and Linux.',
+    'Native-agent install/autostart lifecycle supports Windows, Linux, and macOS.',
   );
 }
 
@@ -88,9 +97,9 @@ function lifecycleRoot(
 
 function launcherPath(
   options: NativeAgentLifecycleOptions,
-  platform: 'win32' | 'linux',
+  platform: 'win32' | 'linux' | 'darwin',
 ): string {
-  if (platform === 'linux') {
+  if (platform !== 'win32') {
     return path.posix.join(
       lifecycleRoot(options).replaceAll(path.win32.sep, '/'),
       'launch.sh',
@@ -150,6 +159,40 @@ function linuxUnitPath(
     'user',
     linuxUnitName(options),
   );
+}
+
+function macLabel(
+  options: NativeAgentLifecycleOptions,
+): string {
+  const value =
+    options.macLabel ??
+    options.env?.NEXOWIRE_AGENT_LAUNCHD_LABEL ??
+    MAC_LABEL_DEFAULT;
+  const label = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(label)) {
+    throw new Error('Native-agent launchd label is invalid.');
+  }
+  return label;
+}
+
+function macPlistPath(
+  options: NativeAgentLifecycleOptions,
+): string {
+  return path.posix.join(
+    (options.homeDir ?? os.homedir()).replaceAll(path.win32.sep, '/'),
+    'Library',
+    'LaunchAgents',
+    macLabel(options) + '.plist',
+  );
+}
+
+function xmlEscape(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
 function runtime(
@@ -266,6 +309,35 @@ export function buildLinuxUserUnit(
     '',
     '[Install]',
     'WantedBy=default.target',
+    '',
+  ].join('\n');
+}
+
+export function buildMacLaunchAgentPlist(
+  options: NativeAgentLifecycleOptions = {},
+): string {
+  const label = macLabel(options);
+  const launcher = launcherPath(options, 'darwin');
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0">',
+    '<dict>',
+    '  <key>Label</key>',
+    '  <string>' + xmlEscape(label) + '</string>',
+    '  <key>ProgramArguments</key>',
+    '  <array>',
+    '    <string>/bin/sh</string>',
+    '    <string>' + xmlEscape(launcher) + '</string>',
+    '  </array>',
+    '  <key>RunAtLoad</key>',
+    '  <true/>',
+    '  <key>KeepAlive</key>',
+    '  <true/>',
+    '  <key>ProcessType</key>',
+    '  <string>Background</string>',
+    '</dict>',
+    '</plist>',
     '',
   ].join('\n');
 }
@@ -621,9 +693,187 @@ async function uninstallLinux(
   };
 }
 
+
+function launchdDomain(
+  options: NativeAgentLifecycleOptions,
+): string {
+  const uid =
+    options.uid ??
+    (typeof process.getuid === 'function'
+      ? process.getuid()
+      : undefined);
+  if (uid === undefined) {
+    throw new Error(
+      'Cannot determine current user ID for launchd lifecycle.',
+    );
+  }
+  return 'gui/' + uid;
+}
+
+async function macStatus(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const definition = macPlistPath(options);
+  let installed = false;
+  try {
+    await fs.access(definition);
+    installed = true;
+  } catch {
+    // Not installed.
+  }
+
+  if (!installed) {
+    return StatusSchema.parse({
+      installed: false,
+      platform: 'darwin',
+      name: macLabel(options),
+      state: 'not-installed',
+      autostart: false,
+      pid: null,
+      launcher: launcherPath(options, 'darwin'),
+      definition,
+    });
+  }
+
+  const target = launchdDomain(options) + '/' + macLabel(options);
+  const result = await runCommand(
+    'launchctl',
+    ['print', target],
+    options.env ?? process.env,
+    true,
+  );
+  const pidMatch = /\bpid\s*=\s*(\d+)/.exec(result.stdout);
+  const pid = pidMatch ? Number(pidMatch[1]) : null;
+
+  return StatusSchema.parse({
+    installed: true,
+    platform: 'darwin',
+    name: macLabel(options),
+    state:
+      result.code === 0
+        ? pid && pid > 0
+          ? 'running'
+          : 'loaded'
+        : 'stopped',
+    autostart: true,
+    pid: pid && pid > 0 ? pid : null,
+    launcher: launcherPath(options, 'darwin'),
+    definition,
+  });
+}
+
+async function installMac(
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const launcher = launcherPath(options, 'darwin');
+  const plist = macPlistPath(options);
+
+  await fs.mkdir(path.dirname(launcher), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.mkdir(path.dirname(plist), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await fs.writeFile(
+    launcher,
+    buildNativeAgentLauncher({
+      ...options,
+      platform: 'darwin',
+    }),
+    { encoding: 'utf8', mode: 0o700 },
+  );
+  await fs.chmod(launcher, 0o700);
+  await fs.writeFile(
+    plist,
+    buildMacLaunchAgentPlist(options),
+    { encoding: 'utf8', mode: 0o600 },
+  );
+
+  const domain = launchdDomain(options);
+  await runCommand(
+    'launchctl',
+    ['bootout', domain + '/' + macLabel(options)],
+    options.env ?? process.env,
+    true,
+  );
+  await runCommand(
+    'launchctl',
+    ['bootstrap', domain, plist],
+    options.env ?? process.env,
+  );
+
+  await writeManifest(options, 'darwin');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return await macStatus(options);
+}
+
+async function controlMac(
+  action: 'start' | 'stop' | 'restart',
+  options: NativeAgentLifecycleOptions,
+): Promise<NativeAgentLifecycleStatus> {
+  const domain = launchdDomain(options);
+  const target = domain + '/' + macLabel(options);
+  const plist = macPlistPath(options);
+
+  if (action === 'stop') {
+    await runCommand(
+      'launchctl',
+      ['bootout', target],
+      options.env ?? process.env,
+      true,
+    );
+  } else if (action === 'start') {
+    await runCommand(
+      'launchctl',
+      ['bootstrap', domain, plist],
+      options.env ?? process.env,
+    );
+  } else {
+    await runCommand(
+      'launchctl',
+      ['bootout', target],
+      options.env ?? process.env,
+      true,
+    );
+    await runCommand(
+      'launchctl',
+      ['bootstrap', domain, plist],
+      options.env ?? process.env,
+    );
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return await macStatus(options);
+}
+
+async function uninstallMac(
+  options: NativeAgentLifecycleOptions,
+): Promise<{ removed: boolean; name: string }> {
+  const status = await macStatus(options);
+  if (status.installed) {
+    await runCommand(
+      'launchctl',
+      ['bootout', launchdDomain(options) + '/' + macLabel(options)],
+      options.env ?? process.env,
+      true,
+    );
+  }
+  await fs.rm(macPlistPath(options), { force: true });
+  await fs.rm(lifecycleRoot(options), {
+    recursive: true,
+    force: true,
+  });
+  return {
+    removed: status.installed,
+    name: macLabel(options),
+  };
+}
+
 async function writeManifest(
   options: NativeAgentLifecycleOptions,
-  platform: 'win32' | 'linux',
+  platform: 'win32' | 'linux' | 'darwin',
 ): Promise<void> {
   const env = persistedNativeAgentEnvironment(
     options.env ?? process.env,
@@ -651,50 +901,56 @@ async function writeManifest(
 export async function nativeAgentLifecycleStatus(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
-  return platformOf(options) === 'win32'
-    ? await windowsStatus(options)
-    : await linuxStatus(options);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await windowsStatus(options);
+  if (platform === 'linux') return await linuxStatus(options);
+  return await macStatus(options);
 }
 
 export async function installNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
   persistedNativeAgentEnvironment(options.env ?? process.env);
-  return platformOf(options) === 'win32'
-    ? await installWindows(options)
-    : await installLinux(options);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await installWindows(options);
+  if (platform === 'linux') return await installLinux(options);
+  return await installMac(options);
 }
 
 export async function startNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
-  return platformOf(options) === 'win32'
-    ? await controlWindows('start', options)
-    : await controlLinux('start', options);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('start', options);
+  if (platform === 'linux') return await controlLinux('start', options);
+  return await controlMac('start', options);
 }
 
 export async function stopNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
-  return platformOf(options) === 'win32'
-    ? await controlWindows('stop', options)
-    : await controlLinux('stop', options);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('stop', options);
+  if (platform === 'linux') return await controlLinux('stop', options);
+  return await controlMac('stop', options);
 }
 
 export async function restartNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<NativeAgentLifecycleStatus> {
-  return platformOf(options) === 'win32'
-    ? await controlWindows('restart', options)
-    : await controlLinux('restart', options);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await controlWindows('restart', options);
+  if (platform === 'linux') return await controlLinux('restart', options);
+  return await controlMac('restart', options);
 }
 
 export async function uninstallNativeAgentLifecycle(
   options: NativeAgentLifecycleOptions = {},
 ): Promise<{ removed: boolean; name: string }> {
-  return platformOf(options) === 'win32'
-    ? await uninstallWindows(options)
-    : await uninstallLinux(options);
+  const platform = platformOf(options);
+  if (platform === 'win32') return await uninstallWindows(options);
+  if (platform === 'linux') return await uninstallLinux(options);
+  return await uninstallMac(options);
 }
 
 export async function runNativeAgentLifecycleCommand(
