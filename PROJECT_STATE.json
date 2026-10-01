@@ -58,7 +58,7 @@
       "id": "production-auth",
       "status": "partial",
       "priority": 7,
-      "summary": "Direct TLS, rotating/revocable/expiring auth, roles/scopes, external OIDC/JWT identity, protected secret sources, redacted backend status, machine-readable deployment doctor, and live HTTPS/OIDC/revocation CI are implemented; guided deployment onboarding and safe macOS non-argv write remain open"
+      "summary": "Direct TLS, rotating/revocable/expiring auth, roles/scopes, external OIDC/JWT identity, protected secret sources, redacted backend status, deployment doctor, guided hash-only deployment onboarding/bootstrap, and live HTTPS/OIDC/revocation CI are implemented; safe macOS non-argv protected-secret write remains open"
     },
     {
       "id": "dynamic-tool-exposure",
@@ -100,13 +100,13 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, and six replay-safe parallel read-only v2 migrations are implemented; broader v2 migration/domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, and nine replay-safe parallel read-only v2 migrations are implemented; domain recipes remain incremental and event-driven-control needs mutation-classification cleanup before migration"
     },
     {
       "id": "native-agent-lifecycle",
       "status": "partial",
       "priority": 15,
-      "summary": "Native agent runtime/transport is mature but first-party install/autostart/status/start/stop/uninstall lifecycle is not yet implemented for normal operator deployment"
+      "summary": "First-party Windows current-user Scheduled Task and Linux systemd user-service install/status/start/stop/restart/uninstall/autostart lifecycle is implemented with plaintext-secret persistence refusal; macOS LaunchAgent lifecycle remains open"
     }
   ],
   "standardVerification": [
@@ -140,25 +140,27 @@
     "OIDC/JWT external MCP identity is merged and maps into existing Nexowire role/tool/device/route authorization; do not treat it as active unfinished work.",
     "Deployment doctor is merged and reports local/remote readiness, TLS validity, auth posture, secret-source mechanisms, OIDC posture, and state-directory health without printing credentials.",
     "Live security CI now starts a real HTTPS hub and local OIDC provider, verifies scoped discovery and live stored-credential revocation, and confirms plaintext credentials are not persisted.",
-    "Six read-only diagnostic skills use manifest v2 parallel-safe/replay-safe metadata; mutation workflows remain excluded from replay-safe migration."
+    "Nine conservative read-only skills use manifest v2 parallel-safe/replay-safe metadata; event-driven-control remains v1 because its process.start dependency makes the current read-only label suspect and must be corrected before migration.",
+    "Guided deployment onboarding/bootstrap is merged: plan mode is non-mutating; bootstrap issues missing hash-only credentials and emits plaintext tokens once without persisting them.",
+    "Normal native-agent lifecycle is merged for Windows and Linux; macOS LaunchAgent lifecycle remains intentionally open and must preserve no-secret-in-argv/plist constraints."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "08040358658efc99862c43bc21fc0e52bb61b34f",
+  "lastVerifiedMain": "f147ee376d8805ee5f8e392ad362a414824635be",
   "activeWork": [
     {
-      "branch": "feat/deployment-onboarding-v1",
+      "branch": "feat/macos-agent-lifecycle-v1",
       "status": "planned",
-      "goal": "Add guided first-party deployment bootstrap/onboarding that creates scoped credentials/config guidance safely and integrates with doctor without persisting plaintext secrets."
+      "goal": "Add first-party macOS LaunchAgent install/status/start/stop/restart/uninstall lifecycle without persisting secrets in argv/plists and with tested user-session semantics."
     },
     {
-      "branch": "feat/native-agent-lifecycle-v1",
+      "branch": "fix/event-driven-skill-semantics-v1",
       "status": "planned",
-      "goal": "Add first-party install/status/start/stop/uninstall/autostart lifecycle for the native agent so normal deployments do not depend on manually keeping a terminal open."
+      "goal": "Correct event-driven-control mutation/replay/concurrency metadata before any manifest-v2 migration because its process.start dependency is not genuinely read-only."
     },
     {
-      "branch": "feat/skill-v2-migration-pack-v2",
+      "branch": "feat/macos-protected-secret-write-v1",
       "status": "planned",
-      "goal": "Migrate additional suitable read-only workflows to manifest v2 capability/replay/concurrency metadata while preserving the MCP v1 compatibility floor."
+      "goal": "Find and prove a macOS Keychain write/update path that does not expose plaintext secrets through argv or logs; otherwise keep writes fail-closed."
     }
   ]
 }
