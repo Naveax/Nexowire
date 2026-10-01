@@ -1,13 +1,17 @@
 ---
+manifest_version: 2
 name: performance-triage
 description: Diagnose CPU, memory, disk, process, and network bottlenecks from bounded snapshots before changing performance settings.
 version: 1.0
 requires: machine.health, machine.snapshot, process.list
+prefers: network.dns.resolve, network.tcp.probe, network.http.probe
 platforms: any
 mutation: read-only
 privilege: user
 trust: trusted
 tags: performance, cpu, memory, disk, diagnostics
+concurrency: parallel-safe
+replay: safe
 ---
 
 # Performance Triage
