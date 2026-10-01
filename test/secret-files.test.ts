@@ -188,3 +188,41 @@ test('native agent and relay can load bearer credentials from mounted secret fil
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('descriptor-backed secret reads canonicalize symlinks and reject non-files', async (t) => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-secret-descriptor-'),
+  );
+  const target = path.join(root, 'target.txt');
+  const link = path.join(root, 'link.txt');
+  const directory = path.join(root, 'directory');
+
+  try {
+    await fs.writeFile(target, 'descriptor-secret\n', 'utf8');
+    await fs.mkdir(directory);
+
+    if (process.platform !== 'win32') {
+      await fs.symlink(target, link);
+      assert.equal(
+        readSecretFile(link, 'symlinked secret'),
+        'descriptor-secret',
+      );
+    } else {
+      t.diagnostic(
+        'Symlink creation is skipped on Windows because CI accounts may not have symlink privilege.',
+      );
+    }
+
+    assert.throws(
+      () => readSecretFile(directory, 'directory secret'),
+      (error: unknown) =>
+        error instanceof SecretFileError &&
+        ['SECRET_FILE_NOT_FILE', 'SECRET_FILE_UNAVAILABLE'].includes(
+          error.code,
+        ),
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
