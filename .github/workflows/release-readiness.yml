@@ -12,6 +12,8 @@ on:
       - "test/config.test.ts"
       - "test/version.test.ts"
       - "scripts/check-release-package.ts"
+      - "scripts/generate-release-metadata.ts"
+      - "test/release-metadata.test.ts"
       - "skills/**"
       - "docs/RELEASE.md"
       - ".github/workflows/release-readiness.yml"
@@ -48,11 +50,21 @@ jobs:
       - name: Build canonical release tarball
         if: runner.os == 'Linux'
         run: npm pack
+      - name: Generate release checksums and manifest
+        if: runner.os == 'Linux'
+        run: node --import tsx scripts/generate-release-metadata.ts "$(ls -1 nexowire-*.tgz | head -n 1)"
+      - name: Generate CycloneDX SBOM
+        if: runner.os == 'Linux'
+        run: npm sbom --sbom-format cyclonedx > nexowire-sbom.cdx.json
       - name: Upload canonical release candidate
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: nexowire-${{ github.run_id }}-${{ github.sha }}
-          path: nexowire-*.tgz
+          path: |
+            nexowire-*.tgz
+            SHA256SUMS
+            release-manifest.json
+            nexowire-sbom.cdx.json
           if-no-files-found: error
           retention-days: 14
