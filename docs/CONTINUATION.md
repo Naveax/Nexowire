@@ -81,14 +81,14 @@ Implemented on main as of the latest repository state:
 - first-party Windows current-user Scheduled Task, Linux systemd user-service, and macOS per-user LaunchAgent native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart, refusal to persist plaintext bearer variables, and real macOS lifecycle CI
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
 - 43 shipped skills, including twelve replay-safe/parallel-safe read-only manifest-v2 workflows and conservative artifact/browser/service/regression/release-readiness domain recipes
-- installable release-candidate packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, and CycloneDX SBOM evidence
+- installable release-candidate packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, CycloneDX SBOM evidence, and independent verification before upload
 - canonical-realpath async path authorization that handles platform aliases such as macOS `/var` -> `/private/var` without weakening symlink-escape protection
 
 ## Important unfinished slices
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. finish independent verification of generated release checksum/manifest/SBOM evidence before candidate upload; checksums/manifest/CycloneDX SBOM generation is already merged
+1. finish exact tag/package-version enforcement before canonical packaging on tag-triggered release-readiness runs; checksum/manifest/SBOM generation and independent verification are already merged
 2. expand domain recipes only when capability requirements and mutation/replay/concurrency behavior are explicit and testable
 3. keep doctor/onboarding, live HTTPS/OIDC/revocation, macOS native/LaunchAgent/Keychain, browser, Linux, Windows, and WSL2 CI green while preserving the frozen MCP v1 compatibility floor
 4. prioritize honest capability probes over low-value surface expansion
