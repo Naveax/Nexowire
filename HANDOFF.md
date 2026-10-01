@@ -61,7 +61,7 @@ Implemented:
 - bounded clipboard read/write/clear plus exact-foreground Unicode typing/hotkeys; window focus has an attached-thread exact-HWND fallback before verification
 - bounded Windows UI Automation tree/find plus exact unique-selector InvokePattern and verified ValuePattern mutations with password-value suppression
 - exact foreground-HWND pointer position/move/click/scroll with client bounds, occlusion/hit checks, and cursor verification
-- first-party isolated Edge/Chrome CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, inline screenshots, and exact-element visual verification with cropped PNG evidence
+- first-party isolated Edge/Chrome/Chromium CDP sessions with navigation, bounded DOM snapshots, exact selector click/value actions, inline screenshots, and exact-element visual verification with cropped PNG evidence; native agents advertise browser capabilities only when a supported executable is actually detected
 - reusable bounded read-only postcondition assertions for file existence/hash/text presence, PID liveness, TCP reachability, and HTTP status
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - external OIDC/JWT MCP identity with strict issuer/audience/signature/time verification and mapping into existing role/tool/device/route authorization
