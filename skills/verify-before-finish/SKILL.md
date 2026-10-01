@@ -3,6 +3,11 @@ name: verify-before-finish
 description: Verify the real post-change state before reporting a computer-control task as complete.
 version: 0.1
 requires: machine.snapshot
+platforms: any
+mutation: read-only
+privilege: user
+trust: reviewed
+tags: verification, postcondition, safety
 ---
 
 # Verify Before Finish

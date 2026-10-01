@@ -3,6 +3,11 @@ name: windows-pointer-control
 description: Use raw Windows pointer movement, clicks, and scrolling only as an exact-HWND fallback after semantic UI controls are unavailable.
 version: 0.1
 requires: windows.pointer.position, windows.pointer.move, windows.pointer.click, windows.pointer.scroll, windows.window.list, windows.window.focus
+platforms: win32
+mutation: mutation
+privilege: user
+trust: reviewed
+tags: windows, pointer, mouse, gui
 ---
 
 # Windows Pointer Control

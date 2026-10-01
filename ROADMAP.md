@@ -75,6 +75,6 @@
 - [~] stable MCP surface: v1 tool-name compatibility floor, surface-version discovery, and removal/rename regression coverage are implemented; deeper schema/semantic compatibility review remains
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
-- mature skill library
+- [~] mature skill library: manifest v1, validation, policy metadata, and device-aware runnability are implemented; workflow breadth/version evolution remains ongoing
 - [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
 - zero required third-party computer-control runtime dependencies

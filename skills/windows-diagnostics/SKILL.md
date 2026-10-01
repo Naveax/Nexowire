@@ -3,6 +3,11 @@ name: windows-diagnostics
 description: Diagnose Windows process, service, and network state using structured Nexowire tools before falling back to shell text parsing.
 version: 0.1
 requires: windows.processes, windows.services, windows.network.snapshot, windows.registry.read, windows.tasks, windows.eventlog.query, windows.firewall.rules, windows.registry.set, windows.registry.delete, windows.task.control, windows.firewall.control
+platforms: win32
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: windows, diagnostics, service, registry, firewall
 ---
 
 # Windows Diagnostics

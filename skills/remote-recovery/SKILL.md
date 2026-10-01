@@ -3,6 +3,11 @@ name: remote-recovery
 description: Recover safely when a remote provider disconnects or fails during an operation.
 version: 0.1
 requires: machine.snapshot
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: remote, recovery, reconnect, verification
 ---
 
 # Remote Recovery

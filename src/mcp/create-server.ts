@@ -4776,14 +4776,56 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'skills_validate',
+    {
+      title: 'Validate Nexowire skill manifests',
+      description:
+        'Validate every installed SKILL.md manifest and report invalid directories without loading workflow bodies into normal tool context.',
+      inputSchema: {},
+    },
+    async () => toolResult(await ctx.skills.validate()),
+  );
+
+  server.registerTool(
     'skills_list',
     {
       title: 'List Nexowire skills',
       description:
-        'List lightweight skill metadata. Read a skill only when its workflow is relevant.',
-      inputSchema: {},
+        'List lightweight machine-readable skill manifests. Optionally evaluate whether each skill is runnable on one exact online Nexowire device.',
+      inputSchema: {
+        device_id: z.string().min(1).max(128).optional(),
+      },
     },
-    async () => toolResult({ skills: await ctx.skills.list() }),
+    async ({ device_id }) => {
+      if (!device_id) {
+        return toolResult({ skills: await ctx.skills.list() });
+      }
+
+      const targetId = await resolveDevice(ctx, device_id);
+      const target = (await routingEntries(ctx)).find(
+        (device) => device.id === targetId,
+      );
+      if (!target) {
+        throw new McpTargetAuthorizationError(
+          'Requested Nexowire device is unavailable for skill evaluation.',
+        );
+      }
+
+      return toolResult({
+        device: {
+          id: target.id,
+          name: target.name,
+          platform: target.platform ?? null,
+          capabilities: target.capabilities,
+        },
+        skills: await ctx.skills.list({
+          capabilities: target.capabilities,
+          ...(target.platform
+            ? { platform: target.platform as NodeJS.Platform }
+            : {}),
+        }),
+      });
+    },
   );
 
   server.registerTool(
@@ -4791,10 +4833,57 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Read Nexowire skill',
       description:
-        'Load one reusable computer-control workflow by name when needed.',
-      inputSchema: { name: z.string().min(1).max(128) },
+        'Load one reusable computer-control workflow by name. Optionally include runnability evaluation for one exact online device.',
+      inputSchema: {
+        name: z.string().min(1).max(128),
+        device_id: z.string().min(1).max(128).optional(),
+      },
     },
-    async ({ name }) => toolResult({ name, markdown: await ctx.skills.read(name) }),
+    async ({ name, device_id }) => {
+      const loaded = await ctx.skills.load(name);
+      if (!device_id) {
+        return toolResult({
+          name,
+          manifest: loaded.manifest,
+          markdown: loaded.markdown,
+        });
+      }
+
+      const targetId = await resolveDevice(ctx, device_id);
+      const target = (await routingEntries(ctx)).find(
+        (device) => device.id === targetId,
+      );
+      if (!target) {
+        throw new McpTargetAuthorizationError(
+          'Requested Nexowire device is unavailable for skill evaluation.',
+        );
+      }
+
+      const evaluated = (
+        await ctx.skills.list({
+          capabilities: target.capabilities,
+          ...(target.platform
+            ? { platform: target.platform as NodeJS.Platform }
+            : {}),
+        })
+      ).find((skill) => skill.name === loaded.manifest.name);
+
+      return toolResult({
+        name,
+        manifest: {
+          ...loaded.manifest,
+          ...(evaluated?.evaluation
+            ? { evaluation: evaluated.evaluation }
+            : {}),
+        },
+        device: {
+          id: target.id,
+          name: target.name,
+          platform: target.platform ?? null,
+        },
+        markdown: loaded.markdown,
+      });
+    },
   );
 
   return server;
