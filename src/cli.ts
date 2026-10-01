@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runNativeAgent } from './agent/native-agent.js';
+import { runNativeAgentLifecycleCommand } from './agent/native-agent-lifecycle.js';
 import { runProcessWorker } from './agent/process-worker.js';
 import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
@@ -22,8 +23,7 @@ Nexowire 0.1.0-dev.1
 Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
-  nexowire agent   Start the native computer agent
-  nexowire relay   Start a first-party native-agent relay
+  nexowire agent [run|install|status|start|stop|restart|uninstall]\n                   Run or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
   nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
@@ -44,7 +44,14 @@ async function main(): Promise<void> {
   }
 
   if (command === 'agent') {
-    await runNativeAgent();
+    const action = process.argv[3] ?? 'run';
+    if (action === 'run') {
+      await runNativeAgent();
+    } else {
+      await runNativeAgentLifecycleCommand(
+        process.argv.slice(3),
+      );
+    }
     return;
   }
 
