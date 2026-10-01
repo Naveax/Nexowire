@@ -225,6 +225,37 @@ test(
     assert.equal(deleteDefault.data.deleted, true);
     assert.equal(deleteDefault.data.verified, true);
 
+    const largeValue =
+      'Nexowire-stdin-ç-🚀-' + 'x'.repeat(65_536);
+    const largeSet = (await executeWindowsCapability(
+      'windows.registry.set',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: 'LargeInput',
+        type: 'string',
+        value: largeValue,
+      },
+    )) as {
+      data: {
+        value: string;
+        verified: boolean;
+      };
+    };
+    assert.equal(largeSet.data.verified, true);
+    assert.equal(largeSet.data.value, largeValue);
+
+    const largeDelete = (await executeWindowsCapability(
+      'windows.registry.delete',
+      {
+        hive: 'HKCU',
+        path: keyPath,
+        name: 'LargeInput',
+      },
+    )) as { data: { deleted: boolean; verified: boolean } };
+    assert.equal(largeDelete.data.deleted, true);
+    assert.equal(largeDelete.data.verified, true);
+
     const deleteKey = (await executeWindowsCapability(
       'windows.registry.delete',
       {
