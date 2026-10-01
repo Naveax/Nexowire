@@ -100,7 +100,7 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 44 shipped workflows, thirteen replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and six conservative domain recipes including release-readiness and backup-integrity auditing are implemented; further domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 45 shipped workflows, fourteen replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and seven conservative domain recipes including release-readiness, backup-integrity, and configuration-drift auditing are implemented; further domain recipes remain incremental"
     },
     {
       "id": "native-agent-lifecycle",
@@ -150,7 +150,8 @@
     "event-driven-control is manifest v2 but deliberately mixed/serial/manual-replay because it includes process.start; do not reclassify it replay-safe merely because its observation phase is read-only.",
     "macOS Keychain create/update is now first-party and verified in real macOS CI using security -q -i with the mutation command on stdin, explicit overwrite semantics, bounded execution, and read-back verification; plaintext secrets are not placed in process argv.",
     "Windows native agents now advertise wsl.exec only when bounded wsl.exe distro discovery finds at least one installed distro; machine.snapshot reuses the same detector.",
-    "The shipped skill library contains 44 workflows. Thirteen read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics, and backup-integrity-audit is the sixth conservative domain recipe.",
+    "The shipped skill library contains 45 workflows. Fourteen read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics, and configuration-drift-audit is the seventh conservative domain recipe.",
+    "Shipped-skill CI verifies that docs/SKILLS.md exactly indexes the validated on-disk skill library.",
     "Real macOS native-agent core CI now verifies outbound transport, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions in addition to LaunchAgent/Keychain coverage.",
     "Async path-policy authorization is canonical-realpath based, preventing false denials such as macOS /var -> /private/var while retaining symlink escape protection.",
     "Windows window-filter regression coverage uses an isolated WPF fixture instead of racing arbitrary runner windows.",
@@ -161,7 +162,7 @@
     "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "c2467e9f1feb01f0e6a9c379f4ecee4b72d7d233",
+  "lastVerifiedMain": "c13dc6c855ac141b940f39ba1675e1c7c8096817",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
