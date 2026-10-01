@@ -17,7 +17,7 @@
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
 - [x] machine-validated cross-chat continuation state contract integrated into normal checks
-- [~] Public deployment security: bootstrap bearer rotation, direct TLS, descriptor-safe mounted secret files, Windows DPAPI envelopes, external OIDC/JWT identity, and Linux Secret Service/macOS Keychain protected-secret lookup integration are implemented; deployment onboarding/revocation policy and remaining platform-store hardening remain open
+- [~] Public deployment security: bootstrap bearer rotation, direct TLS, mounted secret files, Windows DPAPI, external OIDC/JWT identity, Linux Secret Service/macOS Keychain integration, non-secret backend status, and redacted diagnostics are implemented; deployment readiness/onboarding policy and safe macOS non-argv write remain open
 
 ## v0.2 - Computer control
 
@@ -71,11 +71,11 @@
 ## v1.0 - ChatGPT-ready remote control
 
 - [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored `user`/`operator`/`admin` roles, bearer rotation, TLS, external OIDC/JWT identity, mounted secrets, Windows DPAPI, Linux Secret Service, and macOS Keychain lookup are implemented; deployment onboarding/revocation policy and remaining platform-store hardening remain
-- [~] platform-backed secret lifecycle: Windows DPAPI and Linux Secret Service support protected writes; macOS Keychain lookup/delete are implemented while safe non-argv write/update remains intentionally fail-closed
+- [~] platform-backed secret lifecycle: Windows DPAPI and Linux Secret Service support protected writes; macOS Keychain lookup/delete/status are implemented with non-secret presence probes and redacted diagnostics, while safe non-argv write/update remains intentionally fail-closed
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
-- [~] mature skill library: manifest v1, validation, device-aware runnability, and 38 shipped operational workflows are implemented; workflow version evolution and additional domain recipes remain ongoing
-- [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
+- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, and 38 shipped workflows are implemented; broader v2 migration and domain recipes remain ongoing
+- [x] Windows + WSL2 + Linux support: Windows control/browser lanes, real Ubuntu 24.04 WSL2 `wsl.exec` integration, and real Linux native-agent/relay core capability CI are implemented
 - zero required third-party computer-control runtime dependencies

@@ -58,7 +58,7 @@
       "id": "production-auth",
       "status": "partial",
       "priority": 7,
-      "summary": "Direct TLS, rotating bootstrap bearers, revocable/expiring hash-only credentials, role/tool/device/route scopes, Windows DPAPI envelopes, external OIDC/JWT identity, and Linux Secret Service/macOS Keychain protected-secret adapters wired into hub/agent/relay bootstrap are implemented; deployment onboarding/revocation policy and remaining platform-store hardening remain"
+      "summary": "Direct TLS, rotating bootstrap bearers, revocable/expiring hash-only credentials, role/tool/device/route scopes, external OIDC/JWT identity, Windows DPAPI, Linux Secret Service, macOS Keychain lookup/delete, and redacted platform-backend status are implemented; deployment-readiness/onboarding policy and safe macOS non-argv write remain open"
     },
     {
       "id": "dynamic-tool-exposure",
@@ -74,9 +74,9 @@
     },
     {
       "id": "linux-wsl-coverage",
-      "status": "partial",
+      "status": "done",
       "priority": 10,
-      "summary": "Real Linux native-agent outbound transport/core capability and real relay fallback integration run in Ubuntu CI; real WSL2 distro integration remains open"
+      "summary": "Real Linux native-agent/relay integration runs in Ubuntu CI and a pinned Windows CI lane provisions Ubuntu 24.04 under real WSL2 to verify Nexowire wsl.exec distro/cwd/Unicode/error semantics plus machine.snapshot discovery"
     },
     {
       "id": "audit-history",
@@ -100,7 +100,7 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1, validation, policy metadata, exact-device runnability, and 38 shipped operational workflows including specialized diagnostics/recovery v3 are implemented; manifest/version evolution and additional domain recipes remain incremental work"
+      "summary": "Manifest v1 plus additive backward-compatible manifest v2, validation, policy metadata, exact-device runnability, capability alternatives/preferences, replay/concurrency metadata, and 38 shipped workflows are implemented; broader v2 migration/domain recipes remain incremental"
     }
   ],
   "standardVerification": [
@@ -132,26 +132,27 @@
     "npm run continuation:check validates PROJECT_STATE.json, required continuation files, hot-file references, unique/sorted priorities, and the HANDOFF resume contract.",
     "Stable v1 structured-output semantics are frozen in src/mcp/v1-output-contract.json; regenerate only after explicit compatibility review.",
     "OIDC/JWT external MCP identity is merged and maps into existing Nexowire role/tool/device/route authorization; do not treat it as active unfinished work.",
-    "Linux Secret Service and macOS Keychain protected-secret adapters are merged and bootstrap lookup is wired into hub/native-agent/relay configuration; macOS safe non-argv write remains intentionally fail-closed.",
-    "Specialized skill pack v3 is merged; shipped operational skill count is 38."
+    "Platform secret hardening is merged: macOS status does not request plaintext, backend diagnostics are hashed/redacted, and unsupported safe macOS write remains explicitly fail-closed.",
+    "Real Ubuntu 24.04 WSL2 integration is CI-verified through a SHA-pinned provisioning action; the action is CI-only and not a Nexowire runtime dependency.",
+    "Skill manifest v2 is merged additively; v1 object/evaluation semantics remain backward compatible, and v2-only fields require explicit manifest_version: 2."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "c59ca2778fe7a81b4b743d77953335dbd29a4d8a",
+  "lastVerifiedMain": "92bbaa40047cdaf5b541a163042a7d0d00033142",
   "activeWork": [
     {
-      "branch": "feat/platform-secret-hardening-v2",
-      "status": "implementation",
-      "goal": "Harden cross-platform protected-secret behavior, especially safe macOS write/update semantics and backend capability/status reporting without secret leakage."
+      "branch": "feat/deployment-readiness-v1",
+      "status": "planned",
+      "goal": "Add a machine-readable deployment doctor/readiness workflow for TLS, external identity/auth, agent auth, secret backends, relay/public binding safety, and explicit remediation without exposing secrets."
     },
     {
-      "branch": "feat/wsl-live-integration-v1",
-      "status": "implementation",
-      "goal": "Add the strongest practical real WSL2-distro integration coverage available without weakening the existing native WSL execution contract."
+      "branch": "feat/skill-v2-migration-pack-v1",
+      "status": "planned",
+      "goal": "Migrate additional safe shipped workflows to manifest v2 metadata and alternatives while preserving v1 compatibility and frozen MCP v1 contracts."
     },
     {
-      "branch": "feat/skill-manifest-v2",
-      "status": "implementation",
-      "goal": "Evolve skills beyond manifest v1 while preserving v1 compatibility and the frozen MCP v1 surface."
+      "branch": "feat/security-operational-ci-v1",
+      "status": "planned",
+      "goal": "Add end-to-end operational CI for production-facing authentication/authorization paths so OIDC, scoped discovery, revocation, TLS, and first-party transport remain verified together."
     }
   ]
 }

@@ -72,16 +72,19 @@ Implemented on main as of the latest repository state:
 - lazy skills and MCP HTTP/stdio surfaces
 - versioned MCP surface v1 compatibility floor with hub-local version discovery, frozen input contracts, and `src/mcp/v1-output-contract.json` machine-readable structured-output semantic contracts with a canonical hash
 - real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
+- real Ubuntu 24.04 WSL2 CI covering Nexowire `wsl.exec` exact distro/cwd/Unicode/nonzero-exit behavior
+- additive skill manifest v2 with capability alternatives/preferences plus replay/concurrency metadata while preserving v1 semantics
+- platform-secret backend hardening with non-secret macOS status probes and hashed/redacted backend diagnostics
 
 ## Important unfinished slices
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. harden cross-platform protected-secret backends, especially safe macOS write/update behavior and capability/status reporting
-2. add the strongest practical real WSL2-distro integration coverage available
-3. evolve skill manifest/version semantics while keeping manifest v1 and MCP surface v1 backward compatible
-4. continue specialized skill-library breadth only where workflows are machine-validatable and conservative
-5. only add new durable-runbook/idempotency/postcondition semantics when restart/replay behavior is explicit and tested
+1. machine-readable deployment readiness/onboarding checks for the already-implemented TLS/auth/OIDC/secret/relay stack
+2. end-to-end operational security CI across external identity, scopes, revocation, discovery, TLS, and first-party transport
+3. migrate additional suitable skills to manifest v2 without weakening v1 compatibility
+4. keep macOS protected-secret write fail-closed until a no-argv/no-log native path is proven
+5. only add durable-runbook/idempotency/postcondition semantics when restart/replay behavior is explicit and tested
 
 The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
 
