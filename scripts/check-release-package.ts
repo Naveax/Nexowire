@@ -109,6 +109,11 @@ for (const skillName of skillNames) {
   await fs.access(path.join(skillRoot, skillName, 'SKILL.md'));
 }
 
+function quoteCmdArg(value: string): string {
+  if (!/[\s&()^|<>"]/u.test(value)) return value;
+  return '"' + value.replace(/"/g, '""') + '"';
+}
+
 function runNpm(args: string[]): string {
   if (process.platform !== 'win32') {
     return run('npm', args);
@@ -116,9 +121,7 @@ function runNpm(args: string[]): string {
 
   const command = [
     'npm.cmd',
-    ...args.map((arg) =>
-      '"' + arg.replace(/"/g, '""') + '"'
-    ),
+    ...args.map(quoteCmdArg),
   ].join(' ');
 
   return run(
@@ -220,9 +223,7 @@ try {
   if (process.platform === 'win32') {
     const command = [
       'npm.cmd',
-      ...installArgs.map((arg) =>
-        '"' + arg.replace(/"/g, '""') + '"'
-      ),
+      ...installArgs.map(quoteCmdArg),
     ].join(' ');
     const install = spawnSync(
       process.env.ComSpec ?? 'cmd.exe',
