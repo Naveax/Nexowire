@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSafeRemoteBinding, isLoopbackHost, loadConfig } from '../src/config.js';
+import os from 'node:os';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import {
+  assertSafeRemoteBinding,
+  isLoopbackHost,
+  loadConfig,
+  resolveSkillsDir,
+} from '../src/config.js';
 
 test('loopback host detection accepts local forms', () => {
   assert.equal(isLoopbackHost('127.0.0.1'), true);
@@ -299,4 +308,56 @@ test('hub config can consume injected platform-backed secret references', () => 
       purpose: 'agent-bearer-token-list',
     },
   ]);
+});
+
+
+test('skills directory resolves from packaged module layout instead of caller cwd', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-skills-layout-'),
+  );
+  try {
+    const packageRoot = path.join(root, 'package');
+    const moduleFile = path.join(
+      packageRoot,
+      'dist',
+      'src',
+      'config.js',
+    );
+    const skillsDir = path.join(packageRoot, 'skills');
+    const callerCwd = path.join(root, 'caller');
+    await fs.mkdir(path.dirname(moduleFile), { recursive: true });
+    await fs.mkdir(skillsDir, { recursive: true });
+    await fs.mkdir(callerCwd, { recursive: true });
+
+    assert.equal(
+      resolveSkillsDir(
+        {},
+        callerCwd,
+        pathToFileURL(moduleFile).href,
+      ),
+      skillsDir,
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('NEXOWIRE_SKILLS_DIR explicitly overrides packaged skill discovery', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-skills-override-'),
+  );
+  try {
+    assert.equal(
+      resolveSkillsDir(
+        { NEXOWIRE_SKILLS_DIR: 'custom-skills' },
+        root,
+        pathToFileURL(
+          path.join(root, 'package', 'dist', 'src', 'config.js'),
+        ).href,
+      ),
+      path.join(root, 'custom-skills'),
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
