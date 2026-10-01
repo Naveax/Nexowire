@@ -43,6 +43,7 @@ Implemented on main as of the latest repository state:
 - operation IDs, audit metadata, bounded persistent audit-history queries, mutation replay protection, selected idempotency records
 - shell, WSL2, files, search, volatile + durable reattachable process sessions, machine/workspace snapshots
 - persistent task-graph checkpoints and bounded parallel dependency execution
+- higher-level durable runbooks combining task-graph stages and read-only postcondition stages with exact-spec resume and restart-safe retry rules
 - bounded artifact metadata listing/re-verification with changed/missing detection and no persisted artifact contents
 - event feed
 - structured Windows process/service/network/registry/task/eventlog/firewall/environment controls
@@ -62,7 +63,7 @@ Implemented on main as of the latest repository state:
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
 1. continue deployment-grade production identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit stored admin grants, and dynamic tool discovery are implemented
-2. extend higher-level durable long-running workflows beyond current reattachable process, resumable task-graph, and artifact re-verification primitives
+2. extend durable runbooks only with step types whose restart/replay semantics can be proven; task-graph and read-only assertion stages are implemented
 5. extend idempotency/postconditions only where replay and verification semantics are provably safe
 6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented
 
