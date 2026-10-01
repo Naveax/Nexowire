@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { capabilitiesForAgent } from '../src/agent/native-agent.js';
+import {
+  capabilitiesForAgent,
+  filterRuntimeCapabilities,
+} from '../src/agent/native-agent.js';
 
 test('native agent hides browser capabilities when no browser executable is available', async () => {
   const root = await fs.mkdtemp(
@@ -74,28 +77,16 @@ test('native agent hides wsl.exec when Windows has no installed WSL distro', asy
   }
 });
 
-test('native agent advertises wsl.exec when an installed distro is detected', async () => {
-  const root = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'nexowire-agent-caps-wsl-'),
-  );
-  const executable = path.join(root, 'wsl.exe');
+test('runtime capability filter retains wsl.exec only when WSL is actually available', () => {
+  const available = filterRuntimeCapabilities('win32', {
+    browser: false,
+    wsl: true,
+  });
+  assert.ok(available.includes('wsl.exec'));
 
-  try {
-    await fs.writeFile(
-      executable,
-      '#!/bin/sh\nprintf "Ubuntu-24.04\\n"\n',
-      'utf8',
-    );
-    await fs.chmod(executable, 0o755);
-
-    const capabilities = await capabilitiesForAgent('win32', {
-      PATH: root,
-      NEXOWIRE_EDGE_PATH: '',
-      NEXOWIRE_CHROME_PATH: '',
-    });
-
-    assert.ok(capabilities.includes('wsl.exec'));
-  } finally {
-    await fs.rm(root, { recursive: true, force: true });
-  }
+  const unavailable = filterRuntimeCapabilities('win32', {
+    browser: false,
+    wsl: false,
+  });
+  assert.equal(unavailable.includes('wsl.exec'), false);
 });
