@@ -1,0 +1,4277 @@
+{
+  "audit_query": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+      },
+      "capability": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "started",
+          "succeeded",
+          "failed"
+        ]
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "operation_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "from_at": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+      },
+      "to_at": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+      },
+      "max_scan_bytes": {
+        "type": "integer",
+        "minimum": 65536,
+        "maximum": 33554432
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "audit_recent": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_click": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "button": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "middle"
+        ]
+      },
+      "click_count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3
+      }
+    },
+    "required": [
+      "session_id",
+      "selector"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_navigate": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "url": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 60000
+      }
+    },
+    "required": [
+      "session_id",
+      "url"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_screenshot": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "max_bytes": {
+        "type": "integer",
+        "minimum": 65536,
+        "maximum": 8388608
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_session_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_session_start": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "browser": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "edge",
+          "chrome"
+        ]
+      },
+      "headless": {
+        "type": "boolean"
+      },
+      "initial_url": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "width": {
+        "type": "integer",
+        "minimum": 320,
+        "maximum": 3840
+      },
+      "height": {
+        "type": "integer",
+        "minimum": 240,
+        "maximum": 2160
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_session_stop": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_set_value": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "value": {
+        "type": "string",
+        "maxLength": 20000
+      }
+    },
+    "required": [
+      "session_id",
+      "selector",
+      "value"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_snapshot": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "max_elements": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      },
+      "max_text_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100000
+      },
+      "max_element_text_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4096
+      },
+      "include_hidden": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_tabs": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "browser_visual_verify": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "target_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "expected_text": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "text_mode": {
+        "type": "string",
+        "enum": [
+          "contains",
+          "exact"
+        ]
+      },
+      "expected_visible": {
+        "type": "boolean"
+      },
+      "expected_enabled": {
+        "type": "boolean"
+      },
+      "expected_checked": {
+        "type": "boolean"
+      },
+      "padding": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 200
+      },
+      "max_bytes": {
+        "type": "integer",
+        "minimum": 65536,
+        "maximum": 8388608
+      }
+    },
+    "required": [
+      "session_id",
+      "selector"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_alias_delete": {
+    "type": "object",
+    "properties": {
+      "alias": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      }
+    },
+    "required": [
+      "alias"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_alias_list": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_alias_set": {
+    "type": "object",
+    "properties": {
+      "alias": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      },
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "required": [
+      "alias",
+      "device_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_group_delete": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_group_list": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_group_set": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      },
+      "devices": {
+        "minItems": 1,
+        "maxItems": 256,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "required": [
+      "name",
+      "devices"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_route": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "group": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      },
+      "platform": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "name_contains": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "required_capabilities": {
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "online_only": {
+        "type": "boolean"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_route_policy_delete": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_route_policy_list": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_route_policy_resolve": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "device_route_policy_set": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      },
+      "selection": {
+        "type": "string",
+        "enum": [
+          "unique_only",
+          "priority"
+        ]
+      },
+      "group": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      },
+      "platform": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "name_contains": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "required_capabilities": {
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "priority_devices": {
+        "maxItems": 256,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "online_only": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "devices_list": {
+    "type": "object",
+    "properties": {
+      "online_only": {
+        "type": "boolean"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "events_read": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "topics": {
+        "minItems": 1,
+        "maxItems": 32,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "after_seq": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "max_events": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      },
+      "wait_ms": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 10000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_copy": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "source": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "destination": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "overwrite": {
+        "type": "boolean"
+      },
+      "recursive": {
+        "type": "boolean"
+      },
+      "create_parents": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "source",
+      "destination"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_delete": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "recursive": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_hash": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "max_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 268435456
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "depth": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5
+      },
+      "max_entries": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_mkdir": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "recursive": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_move": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "source": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "destination": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "overwrite": {
+        "type": "boolean"
+      },
+      "recursive": {
+        "type": "boolean"
+      },
+      "create_parents": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "source",
+      "destination"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_patch": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "operations": {
+        "minItems": 1,
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "old_text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1048576
+            },
+            "new_text": {
+              "type": "string",
+              "maxLength": 1048576
+            },
+            "expected_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          },
+          "required": [
+            "old_text",
+            "new_text"
+          ]
+        }
+      },
+      "max_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 16777216
+      },
+      "expected_sha256": {
+        "type": "string",
+        "pattern": "^[a-fA-F0-9]{64}$"
+      }
+    },
+    "required": [
+      "path",
+      "operations"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_read": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "encoding": {
+        "type": "string",
+        "enum": [
+          "utf8",
+          "base64"
+        ]
+      },
+      "max_bytes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 16777216
+      },
+      "include_sha256": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_read_many": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "paths": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "encoding": {
+        "type": "string",
+        "enum": [
+          "utf8",
+          "base64"
+        ]
+      },
+      "max_bytes_each": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 16777216
+      },
+      "max_total_bytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 67108864
+      },
+      "include_sha256": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "paths"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_stat": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "file_write": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "content": {
+        "type": "string"
+      },
+      "encoding": {
+        "type": "string",
+        "enum": [
+          "utf8",
+          "base64"
+        ]
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "overwrite",
+          "append"
+        ]
+      },
+      "create_parents": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "path",
+      "content"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "machine_health": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "sample_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 2000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "machine_snapshot": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "network_dns_resolve": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "host": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 253
+      },
+      "family": {
+        "type": "string",
+        "enum": [
+          "any",
+          "ipv4",
+          "ipv6"
+        ]
+      }
+    },
+    "required": [
+      "host"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "network_http_probe": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "url": {
+        "type": "string",
+        "maxLength": 8192,
+        "format": "uri"
+      },
+      "method": {
+        "type": "string",
+        "enum": [
+          "HEAD",
+          "GET"
+        ]
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 30000
+      },
+      "follow_redirects": {
+        "type": "boolean"
+      },
+      "max_body_bytes": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1048576
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "network_tcp_probe": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "host": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 253
+      },
+      "port": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535
+      },
+      "family": {
+        "type": "string",
+        "enum": [
+          "any",
+          "ipv4",
+          "ipv6"
+        ]
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 30000
+      }
+    },
+    "required": [
+      "host",
+      "port"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "nexowire_surface_info": {
+    "type": "object",
+    "properties": {
+      "include_tools": {
+        "type": "boolean"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "operations_idempotency_list": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "policy_device_bind": {
+    "type": "object",
+    "properties": {
+      "device": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "profile": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      }
+    },
+    "required": [
+      "device",
+      "profile"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "policy_device_check": {
+    "type": "object",
+    "properties": {
+      "device": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "capability": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "required": [
+      "device",
+      "capability"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "policy_device_unbind": {
+    "type": "object",
+    "properties": {
+      "device": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "required": [
+      "device"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "policy_profile_delete": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "policy_profile_list": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "policy_profile_set": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+      },
+      "allow": {
+        "minItems": 1,
+        "maxItems": 256,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "deny": {
+        "maxItems": 256,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "required": [
+      "name",
+      "allow"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "process_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "process_prune": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "older_than_ms": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 2592000000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "process_read": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "after_seq": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "max_events": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      },
+      "wait_ms": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 10000
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "process_start": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "command": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+      },
+      "shell": {
+        "type": "string",
+        "enum": [
+          "pwsh",
+          "powershell",
+          "cmd",
+          "bash",
+          "sh"
+        ]
+      },
+      "cwd": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "durable": {
+        "type": "boolean"
+      },
+      "max_buffer_bytes": {
+        "type": "integer",
+        "minimum": 65536,
+        "maximum": 16777216
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "process_stop": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "process_write": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+      },
+      "input": {
+        "type": "string",
+        "maxLength": 1048576
+      },
+      "append_newline": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "session_id",
+      "input"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "runbook_get": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "runbook_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      }
+    },
+    "required": [
+      "runbook_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "runbook_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "runbook_prune": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "older_than_ms": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 2592000000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "runbook_run": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "runbook_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      },
+      "resume": {
+        "type": "boolean"
+      },
+      "retry_failed": {
+        "type": "boolean"
+      },
+      "retry_unknown": {
+        "type": "boolean"
+      },
+      "steps": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "task_graph"
+                },
+                "depends_on": {
+                  "maxItems": 31,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  }
+                },
+                "task_graph": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "minItems": 1,
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                          },
+                          "command": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200000
+                          },
+                          "shell": {
+                            "type": "string",
+                            "enum": [
+                              "pwsh",
+                              "powershell",
+                              "cmd",
+                              "bash",
+                              "sh"
+                            ]
+                          },
+                          "cwd": {
+                            "type": "string",
+                            "maxLength": 4096
+                          },
+                          "depends_on": {
+                            "maxItems": 31,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                            }
+                          },
+                          "timeout_ms": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "maximum": 600000
+                          },
+                          "max_output_bytes": {
+                            "type": "integer",
+                            "minimum": 1024,
+                            "maximum": 16777216
+                          },
+                          "artifacts": {
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            }
+                          },
+                          "artifact_max_bytes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1073741824
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "command"
+                        ]
+                      }
+                    },
+                    "max_parallel": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "stop_on_failure": {
+                      "type": "boolean"
+                    },
+                    "default_timeout_ms": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 600000
+                    },
+                    "total_timeout_ms": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 3600000
+                    },
+                    "default_max_output_bytes": {
+                      "type": "integer",
+                      "minimum": 1024,
+                      "maximum": 16777216
+                    }
+                  },
+                  "required": [
+                    "jobs"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "task_graph"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "assertions"
+                },
+                "depends_on": {
+                  "maxItems": 31,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                  }
+                },
+                "assertions": {
+                  "type": "object",
+                  "properties": {
+                    "assertions": {
+                      "minItems": 1,
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "file.exists"
+                              },
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "expected": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "path"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "file.sha256"
+                              },
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "expected_sha256": {
+                                "type": "string",
+                                "pattern": "^[a-fA-F0-9]{64}$"
+                              },
+                              "max_bytes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 268435456
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "path",
+                              "expected_sha256"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "file.text_contains"
+                              },
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "needle": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16384
+                              },
+                              "expected": {
+                                "type": "boolean"
+                              },
+                              "max_bytes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 16777216
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "path",
+                              "needle"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "process.pid_alive"
+                              },
+                              "pid": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "expected": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "pid"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "tcp.open"
+                              },
+                              "host": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 255
+                              },
+                              "port": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 65535
+                              },
+                              "expected": {
+                                "type": "boolean"
+                              },
+                              "timeout_ms": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 30000
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "host",
+                              "port"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "http.status"
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 4096,
+                                "format": "uri"
+                              },
+                              "expected_status": {
+                                "minItems": 1,
+                                "maxItems": 32,
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 100,
+                                  "maximum": 599
+                                }
+                              },
+                              "timeout_ms": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 30000
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "url",
+                              "expected_status"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "max_parallel": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "stop_on_failure": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "assertions"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "assertions"
+              ]
+            }
+          ]
+        }
+      },
+      "max_parallel": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8
+      },
+      "stop_on_failure": {
+        "type": "boolean"
+      },
+      "total_timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 7200000
+      }
+    },
+    "required": [
+      "runbook_id",
+      "steps"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "search_text": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "regex": {
+        "type": "boolean"
+      },
+      "case_sensitive": {
+        "type": "boolean"
+      },
+      "max_matches": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      },
+      "max_files": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100000
+      },
+      "max_file_bytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 16777216
+      },
+      "include_hidden": {
+        "type": "boolean"
+      },
+      "exclude_dirs": {
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "required": [
+      "path",
+      "query"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "shell_exec": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "command": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+      },
+      "shell": {
+        "type": "string",
+        "enum": [
+          "pwsh",
+          "powershell",
+          "cmd",
+          "bash",
+          "sh"
+        ]
+      },
+      "cwd": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 600000
+      },
+      "max_output_bytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 16777216
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "skill_read": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "skills_list": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "task_artifact_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "graph_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      },
+      "job_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "task_artifact_verify": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "graph_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      },
+      "job_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      },
+      "max_bytes_each": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1073741824
+      }
+    },
+    "required": [
+      "graph_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "task_graph_get": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "graph_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      }
+    },
+    "required": [
+      "graph_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "task_graph_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "task_graph_prune": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "older_than_ms": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 2592000000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "task_run_graph": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "graph_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      },
+      "resume": {
+        "type": "boolean"
+      },
+      "retry_failed": {
+        "type": "boolean"
+      },
+      "retry_unknown": {
+        "type": "boolean"
+      },
+      "jobs": {
+        "minItems": 1,
+        "maxItems": 32,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            "shell": {
+              "type": "string",
+              "enum": [
+                "pwsh",
+                "powershell",
+                "cmd",
+                "bash",
+                "sh"
+              ]
+            },
+            "cwd": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "depends_on": {
+              "maxItems": 31,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+              }
+            },
+            "timeout_ms": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 600000
+            },
+            "max_output_bytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 16777216
+            },
+            "artifacts": {
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "artifact_max_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1073741824
+            }
+          },
+          "required": [
+            "id",
+            "command"
+          ]
+        }
+      },
+      "max_parallel": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8
+      },
+      "stop_on_failure": {
+        "type": "boolean"
+      },
+      "default_timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 600000
+      },
+      "total_timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 3600000
+      },
+      "default_max_output_bytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 16777216
+      }
+    },
+    "required": [
+      "jobs"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "verify_assertions": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "assertions": {
+        "minItems": 1,
+        "maxItems": 32,
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "file.exists"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "expected": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "path"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "file.sha256"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "expected_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-fA-F0-9]{64}$"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 268435456
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "path",
+                "expected_sha256"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "file.text_contains"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "needle": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384
+                },
+                "expected": {
+                  "type": "boolean"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16777216
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "path",
+                "needle"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "process.pid_alive"
+                },
+                "pid": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "expected": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "pid"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "tcp.open"
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "expected": {
+                  "type": "boolean"
+                },
+                "timeout_ms": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 30000
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "host",
+                "port"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "http.status"
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 4096,
+                  "format": "uri"
+                },
+                "expected_status": {
+                  "minItems": 1,
+                  "maxItems": 32,
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 599
+                  }
+                },
+                "timeout_ms": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 30000
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "url",
+                "expected_status"
+              ]
+            }
+          ]
+        }
+      },
+      "max_parallel": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8
+      },
+      "stop_on_failure": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "assertions"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_accessibility_find": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "name_contains": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "automation_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "class_name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "control_type": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "max_results": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "include_offscreen": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "hwnd"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_accessibility_invoke": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "selector": {
+        "type": "object",
+        "properties": {
+          "automation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "control_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "required": [
+      "hwnd",
+      "selector"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_accessibility_set_value": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "selector": {
+        "type": "object",
+        "properties": {
+          "automation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "control_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "value": {
+        "type": "string",
+        "maxLength": 20000
+      }
+    },
+    "required": [
+      "hwnd",
+      "selector",
+      "value"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_accessibility_tree": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "max_depth": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 16
+      },
+      "max_nodes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2000
+      },
+      "include_offscreen": {
+        "type": "boolean"
+      },
+      "include_values": {
+        "type": "boolean"
+      },
+      "max_value_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8192
+      }
+    },
+    "required": [
+      "hwnd"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_clipboard_clear": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_clipboard_read": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "max_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_clipboard_write": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_environment_delete": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "scope": {
+        "type": "string",
+        "enum": [
+          "process",
+          "user",
+          "machine"
+        ]
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_environment_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "scope": {
+        "type": "string",
+        "enum": [
+          "process",
+          "user",
+          "machine"
+        ]
+      },
+      "prefix": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2048
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_environment_read": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "scope": {
+        "type": "string",
+        "enum": [
+          "process",
+          "user",
+          "machine"
+        ]
+      },
+      "names": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "reveal_sensitive": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "names"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_environment_set": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "scope": {
+        "type": "string",
+        "enum": [
+          "process",
+          "user",
+          "machine"
+        ]
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "value": {
+        "type": "string",
+        "maxLength": 32767
+      }
+    },
+    "required": [
+      "name",
+      "value"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_eventlog_query": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "log_name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "provider": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "level": {
+        "type": "string",
+        "enum": [
+          "all",
+          "critical",
+          "error",
+          "warning",
+          "information",
+          "verbose"
+        ]
+      },
+      "since_minutes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 43200
+      },
+      "max_events": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_firewall_control": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "enable",
+          "disable",
+          "set_action"
+        ]
+      },
+      "rule_action": {
+        "type": "string",
+        "enum": [
+          "allow",
+          "block"
+        ]
+      }
+    },
+    "required": [
+      "name",
+      "action"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_firewall_rules": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "direction": {
+        "type": "string",
+        "enum": [
+          "all",
+          "inbound",
+          "outbound"
+        ]
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "all",
+          "allow",
+          "block"
+        ]
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_keyboard_hotkey": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "keys": {
+        "minItems": 1,
+        "maxItems": 8,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      }
+    },
+    "required": [
+      "hwnd",
+      "keys"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_keyboard_type": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 20000
+      },
+      "interval_ms": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100
+      }
+    },
+    "required": [
+      "hwnd",
+      "text"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_network_snapshot": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "include_connections": {
+        "type": "boolean"
+      },
+      "connection_limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_pointer_click": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "coordinate_mode": {
+        "type": "string",
+        "enum": [
+          "client_pixels",
+          "normalized"
+        ]
+      },
+      "x": {
+        "type": "number"
+      },
+      "y": {
+        "type": "number"
+      },
+      "button": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "middle"
+        ]
+      },
+      "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3
+      },
+      "interval_ms": {
+        "type": "integer",
+        "minimum": 20,
+        "maximum": 1000
+      }
+    },
+    "required": [
+      "hwnd",
+      "x",
+      "y"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_pointer_move": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "coordinate_mode": {
+        "type": "string",
+        "enum": [
+          "client_pixels",
+          "normalized"
+        ]
+      },
+      "x": {
+        "type": "number"
+      },
+      "y": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "hwnd",
+      "x",
+      "y"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_pointer_position": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_pointer_scroll": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "coordinate_mode": {
+        "type": "string",
+        "enum": [
+          "client_pixels",
+          "normalized"
+        ]
+      },
+      "x": {
+        "type": "number"
+      },
+      "y": {
+        "type": "number"
+      },
+      "delta": {
+        "type": "integer",
+        "minimum": -12000,
+        "maximum": 12000
+      },
+      "horizontal": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "hwnd",
+      "x",
+      "y",
+      "delta"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_processes": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 260
+      },
+      "pid": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2000
+      },
+      "include_command_line": {
+        "type": "boolean"
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_registry_delete": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "hive": {
+        "type": "string",
+        "enum": [
+          "HKCU",
+          "HKLM",
+          "HKCR",
+          "HKU",
+          "HKCC"
+        ]
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "recursive": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "hive",
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_registry_read": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hive": {
+        "type": "string",
+        "enum": [
+          "HKCU",
+          "HKLM",
+          "HKCR",
+          "HKU",
+          "HKCC"
+        ]
+      },
+      "path": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "name": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "include_subkeys": {
+        "type": "boolean"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      }
+    },
+    "required": [
+      "hive"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_registry_set": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "idempotency_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$"
+      },
+      "hive": {
+        "type": "string",
+        "enum": [
+          "HKCU",
+          "HKLM",
+          "HKCR",
+          "HKU",
+          "HKCC"
+        ]
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "type": {
+        "type": "string",
+        "enum": [
+          "string",
+          "expand_string",
+          "dword",
+          "qword",
+          "multi_string",
+          "binary"
+        ]
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 4194304
+          },
+          {
+            "type": "number"
+          },
+          {
+            "maxItems": 4096,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          }
+        ]
+      },
+      "create_key": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "hive",
+      "path",
+      "name",
+      "type",
+      "value"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_screenshot": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "source": {
+        "type": "string",
+        "enum": [
+          "virtual_desktop",
+          "primary_screen",
+          "window"
+        ]
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "max_width": {
+        "type": "integer",
+        "minimum": 160,
+        "maximum": 7680
+      },
+      "max_height": {
+        "type": "integer",
+        "minimum": 120,
+        "maximum": 4320
+      },
+      "max_bytes": {
+        "type": "integer",
+        "minimum": 65536,
+        "maximum": 8388608
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_service_control": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 260
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "start",
+          "stop",
+          "restart",
+          "set_startup"
+        ]
+      },
+      "startup_type": {
+        "type": "string",
+        "enum": [
+          "automatic",
+          "manual",
+          "disabled"
+        ]
+      }
+    },
+    "required": [
+      "name",
+      "action"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_services": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 260
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "running",
+          "stopped",
+          "paused",
+          "all"
+        ]
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_task_control": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "start",
+          "stop",
+          "enable",
+          "disable"
+        ]
+      }
+    },
+    "required": [
+      "name",
+      "action"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_tasks": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "all",
+          "ready",
+          "running",
+          "disabled",
+          "queued",
+          "unknown"
+        ]
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_window_focus": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "hwnd": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32,
+        "pattern": "^(?:0x[0-9a-fA-F]+|[0-9]+)$"
+      },
+      "restore_if_minimized": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "hwnd"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "windows_window_list": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "include_hidden": {
+        "type": "boolean"
+      },
+      "title_contains": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "process_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2000
+      }
+    },
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "workspace_checkpoint_get": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "workspace_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "required": [
+      "device_id",
+      "workspace_id"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "workspace_checkpoint_list": {
+    "type": "object",
+    "properties": {},
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "workspace_checkpoint_save": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "workspace_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "cwd": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "summary": {
+        "type": "string",
+        "maxLength": 20000
+      },
+      "completed": {
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "remaining": {
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "last_commands": {
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "required": [
+      "device_id",
+      "workspace_id",
+      "summary"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "workspace_detect": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "workspace_run_checks": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "checks": {
+        "minItems": 1,
+        "maxItems": 8,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "parallel": {
+        "type": "boolean"
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 600000
+      },
+      "max_output_bytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 16777216
+      }
+    },
+    "required": [
+      "path",
+      "checks"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "workspace_snapshot": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  },
+  "wsl_exec": {
+    "type": "object",
+    "properties": {
+      "device_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "provider_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "command": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+      },
+      "distro": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "cwd": {
+        "type": "string",
+        "maxLength": 4096
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 600000
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "$schema": "http://json-schema.org/draft-07/schema#"
+  }
+}
