@@ -230,3 +230,61 @@ test('relay rejects invalid inbound agent bearer token', async (t) => {
 
   assert.equal(status, 401);
 });
+
+test('relay config can consume platform-backed inbound and upstream credentials', () => {
+  const config = loadRelayConfig(
+    {
+      NEXOWIRE_RELAY_AGENT_TOKEN_PLATFORM_NAME: 'relay-primary',
+      NEXOWIRE_RELAY_AGENT_TOKENS_PLATFORM_NAME: 'relay-rotation',
+      NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_PLATFORM_NAME: 'upstream-primary',
+    },
+    {
+      platformSingle: (name, purpose) => {
+        if (!name) return undefined;
+        if (purpose === 'relay-upstream-agent-token') {
+          return 'upstream-platform-token';
+        }
+        return 'relay-platform-token';
+      },
+      platformList: (name, purpose) => {
+        assert.equal(name, 'relay-rotation');
+        assert.equal(purpose, 'relay-inbound-agent-token-list');
+        return 'relay-old,relay-next';
+      },
+    },
+  );
+
+  assert.deepEqual(config.inboundAgentTokens, [
+    'relay-platform-token',
+    'relay-old',
+    'relay-next',
+  ]);
+  assert.equal(
+    config.upstreamAgentToken,
+    'upstream-platform-token',
+  );
+});
+
+test('relay upstream platform secret conflicts fail closed', () => {
+  assert.throws(
+    () =>
+      loadRelayConfig(
+        {
+          NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN: 'inline-token',
+          NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_PLATFORM_NAME:
+            'upstream-primary',
+        },
+        {
+          platformSingle: (name, purpose) => {
+            if (!name) return undefined;
+            if (purpose === 'relay-upstream-agent-token') {
+              return 'different-platform-token';
+            }
+            return undefined;
+          },
+          platformList: () => undefined,
+        },
+      ),
+    /multiple secret sources with different contents/i,
+  );
+});
