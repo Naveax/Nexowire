@@ -171,7 +171,13 @@
     "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0.",
     "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected."
   ],
-  "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "75afbda78efdefe0411a9f5d6ed947c24f822707",
-  "activeWork": []
+  "lastStateSync": "2026-10-02",
+  "lastVerifiedMain": "ad3675c6794da7e5109623e49d618ed7318601c5",
+  "activeWork": [
+    {
+      "branch": "feature/private-desktop-virtual-cursor",
+      "status": "testing",
+      "goal": "Add an isolated Windows Nexowire virtual cursor that is visibly distinct, click-through, independently positioned, and proven not to move the user system cursor; use it as the first foundation for private-desktop/private-input work while physical console input remains separately policy-gated."
+    }
+  ]
 }
