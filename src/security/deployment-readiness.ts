@@ -8,7 +8,6 @@ import {
   mcpAuthTokens,
   type NexowireConfig,
 } from '../config.js';
-import type { CredentialStore } from './credential-store.js';
 
 export type ReadinessStatus = 'pass' | 'warn' | 'fail';
 
@@ -18,6 +17,10 @@ export interface DeploymentReadinessCheck {
   summary: string;
   remediation?: string;
   details?: Record<string, unknown>;
+}
+
+export interface CredentialAvailability {
+  hasUsable(scope: 'mcp' | 'agent'): boolean;
 }
 
 export interface DeploymentReadinessReport {
@@ -210,7 +213,7 @@ async function tlsCheck(
 export async function evaluateDeploymentReadiness(
   config: NexowireConfig,
   options: {
-    credentials?: CredentialStore;
+    credentials?: CredentialAvailability;
     env?: NodeJS.ProcessEnv;
     now?: number;
     requireRemote?: boolean;
@@ -378,24 +381,29 @@ export async function evaluateDeploymentReadiness(
   };
 
   const ready = summary.fail === 0;
-  const remoteSpecificFailure =
-    mode === 'local' ||
-    checks.some(
-      (check) =>
-        [
-          'transport-tls',
-          'mcp-authentication',
-          'agent-authentication',
-          'external-identity',
-        ].includes(check.id) &&
-        check.status === 'fail',
-    );
+  const criticalRemoteIds = new Set([
+    'transport-tls',
+    'mcp-authentication',
+    'agent-authentication',
+    'state-directory',
+  ]);
+  const remoteReady =
+    mode === 'remote' &&
+    checks.every((check) => {
+      if (criticalRemoteIds.has(check.id)) {
+        return check.status === 'pass';
+      }
+      if (check.id === 'external-identity') {
+        return check.status !== 'fail';
+      }
+      return check.status !== 'fail';
+    });
 
   return {
     generatedAt: new Date(now).toISOString(),
     mode,
     ready,
-    remoteReady: !remoteSpecificFailure,
+    remoteReady,
     summary,
     checks,
   };
