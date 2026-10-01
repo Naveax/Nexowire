@@ -42,6 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, and regression coverage preventing silent stable-tool removal/rename
 - persistent workspace checkpoints
 - lazy skill registry
+- machine-readable skill manifest v1 with required capabilities, platforms, mutation/privilege/trust metadata, validation, and exact-device runnability evaluation
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -99,6 +100,11 @@ A new chat should not depend on conversation memory. Start from GitHub:
 8. Never assume Desktop Commander or SentinelX is part of the Nexowire runtime. They are development access tools only when temporarily needed.
 
 The repository is the source of truth. If this file disagrees with current code/CI, trust current `main`, tests, and the latest merged commits, then repair the handoff files.
+
+## Active parallel work
+
+- `feat/skill-manifest-v1`: manifest/policy/device-aware skill discovery and validation.
+- `feat/mcp-schema-compat-v1`: frozen stable MCP input contracts and backward-compatibility checks.
 
 ## Immediate next work
 
