@@ -159,7 +159,7 @@
     "Release-readiness CI performs a full Linux gate plus clean packaged-runtime smoke tests on Linux, Windows, and macOS; canonical candidates now include SHA256SUMS, release-manifest.json, and a CycloneDX SBOM while npm publication remains disabled.",
     "Release candidates are independently re-verified before upload: tarball SHA256SUMS, manifest package/source/artifact/skill inventory, CycloneDX root identity, and private-package posture must all match.",
     "Tag-triggered release readiness now fails before canonical packaging unless the Git tag is exactly v<package-version>; branch and PR readiness runs are intentional no-ops for that tag check.",
-    "Tag-only SLSA and CycloneDX artifact attestations are merged baseline functionality; write/OIDC permissions are isolated to explicit tag-push attestation work, and publication remains a separate owner-authorized action.",
+    "SLSA and CycloneDX artifact attestations are baseline release functionality with write/OIDC permissions isolated to tag-scoped attestation work; GitHub v1.0.0 publication completed successfully after explicit owner authorization.",
     "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization.",
     "Windows structured-control CI now runs test/windows-control.test.ts on a real Windows runner; unnamed/default registry values support verified set/read/delete round-trips without weakening exact key or hive-root deletion protections.",
     "Windows structured-control PowerShell JSON input now uses explicit UTF-8 stdin instead of child-process environment variables; real Windows CI verifies a >64 KiB Unicode registry mutation round-trip.",
@@ -167,17 +167,11 @@
     "windows.service.control now rejects wildcard selectors before mutation and resolves exactly one case-insensitive service Name before applying start/stop/restart/startup operations via the resolved ServiceController; the stable MCP v1 input schema is unchanged.",
     "windows.service.control now polls bounded postconditions after mutation: start/restart must converge to Running, stop to Stopped, and requested startup type must match final Win32_Service StartMode; real Windows CI verifies startup mutation on an isolated temporary service fixture.",
     "Windows Event Log query output is bounded by per-field, per-message, and aggregate message budgets with explicit truncation metadata; real Windows CI verifies those bounds.",
-    "The v1.0 implementation scope is complete and package version 1.0.0 is in release preparation; further domain recipes and capability additions are post-v1 incremental work rather than release blockers.",
     "GitHub v1.0.0 was published successfully from tag/commit 98d040c284efad7f726c3d3ccaa1771d385ed60d. Release Readiness run 36890669730 passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication; npm remains intentionally disabled.",
-    "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0."
+    "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0.",
+    "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "98d040c284efad7f726c3d3ccaa1771d385ed60d",
-  "activeWork": [
-    {
-      "branch": "future/domain-recipes",
-      "status": "planned",
-      "goal": "Post-v1 only: add further domain recipes when repeated real workflows justify explicit capability, mutation, replay, and concurrency semantics."
-    }
-  ]
+  "lastVerifiedMain": "75afbda78efdefe0411a9f5d6ed947c24f822707",
+  "activeWork": []
 }
