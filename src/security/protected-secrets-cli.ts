@@ -124,11 +124,7 @@ export async function runProtectedSecretCommand(
     if (action === 'platform-status') {
       process.stdout.write(
         JSON.stringify(
-          {
-            purpose,
-            name,
-            present: store.exists({ purpose, name }),
-          },
+          store.status({ purpose, name }),
           null,
           2,
         ) + '\n',
