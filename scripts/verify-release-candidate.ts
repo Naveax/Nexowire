@@ -242,6 +242,7 @@ export async function verifyReleaseCandidate(options: {
       component?: {
         name?: unknown;
         version?: unknown;
+        purl?: unknown;
       };
     };
   };
@@ -249,11 +250,22 @@ export async function verifyReleaseCandidate(options: {
   if (sbom.bomFormat !== 'CycloneDX') {
     fail('SBOM bomFormat is not CycloneDX.');
   }
+  const sbomName = sbom.metadata?.component?.name;
+  const sbomVersion = sbom.metadata?.component?.version;
+  const sbomPurl = sbom.metadata?.component?.purl;
   if (
-    sbom.metadata?.component?.name !== packageJson.name ||
-    sbom.metadata?.component?.version !== packageJson.version
+    typeof sbomName !== 'string' ||
+    sbomName.toLowerCase() !== packageJson.name.toLowerCase() ||
+    sbomVersion !== packageJson.version
   ) {
     fail('SBOM root component does not match package.json.');
+  }
+  if (
+    typeof sbomPurl === 'string' &&
+    sbomPurl.toLowerCase() !==
+      ('pkg:npm/' + packageJson.name + '@' + packageJson.version).toLowerCase()
+  ) {
+    fail('SBOM root component purl does not match package.json.');
   }
 
   return {
