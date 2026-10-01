@@ -3,6 +3,11 @@ name: repo-resume
 description: Resume an existing software workspace from its real current state without redoing completed work.
 version: 0.1
 requires: workspace.snapshot, search.text, files.read_many, shell.exec
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: repo, resume, workspace, recovery
 ---
 
 # Repo Resume
