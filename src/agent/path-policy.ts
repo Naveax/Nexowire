@@ -40,12 +40,16 @@ export class PathPolicy {
     requestedPath: string,
     cwd = process.cwd(),
   ): Promise<string> {
-    const resolved = this.resolve(requestedPath, cwd);
+    const resolved = path.resolve(cwd, requestedPath);
     if (this.roots.includes('*')) return await fs.realpath(resolved);
 
     const [realTarget, realRoots] = await Promise.all([
       fs.realpath(resolved),
-      Promise.all(this.roots.map((root) => fs.realpath(path.resolve(root)))),
+      Promise.all(
+        this.roots.map((root) =>
+          fs.realpath(path.resolve(root)),
+        ),
+      ),
     ]);
 
     if (!this.isWithinAnyRoot(realTarget, realRoots)) {
@@ -58,11 +62,13 @@ export class PathPolicy {
     requestedPath: string,
     cwd = process.cwd(),
   ): Promise<string> {
-    const resolved = this.resolve(requestedPath, cwd);
+    const resolved = path.resolve(cwd, requestedPath);
     if (this.roots.includes('*')) return resolved;
 
     const realRoots = await Promise.all(
-      this.roots.map((root) => fs.realpath(path.resolve(root))),
+      this.roots.map((root) =>
+        fs.realpath(path.resolve(root)),
+      ),
     );
 
     let cursor = resolved;
