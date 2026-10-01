@@ -9,6 +9,10 @@ import {
   optionalProtectedSecretFile,
   optionalProtectedSecretListFile,
 } from './security/protected-secret-files.js';
+import {
+  optionalPlatformSecretListSync,
+  optionalPlatformSecretSync,
+} from './security/platform-secret-store.js';
 
 export interface NexowireOidcConfig {
   issuer: string;
@@ -76,10 +80,30 @@ export function agentAuthTokens(config: NexowireConfig): string[] {
   );
 }
 
+export interface ConfigSecretResolvers {
+  platformSingle?: (
+    name: string | undefined,
+    purpose: string,
+  ) => string | undefined;
+  platformList?: (
+    name: string | undefined,
+    purpose: string,
+  ) => string | undefined;
+}
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
+  secretResolvers: ConfigSecretResolvers = {},
 ): NexowireConfig {
+  const platformSingle =
+    secretResolvers.platformSingle ??
+    ((name: string | undefined, purpose: string) =>
+      optionalPlatformSecretSync(name, purpose));
+  const platformList =
+    secretResolvers.platformList ??
+    ((name: string | undefined, purpose: string) =>
+      optionalPlatformSecretListSync(name, purpose));
   const rawPort = env.NEXOWIRE_HTTP_PORT ?? '43110';
   const port = Number.parseInt(rawPort, 10);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -100,6 +124,10 @@ export function loadConfig(
     'mcp-bearer-token',
     'MCP bearer token',
   );
+  const platformMcpToken = platformSingle(
+    env.NEXOWIRE_MCP_BEARER_TOKEN_PLATFORM_NAME,
+    'mcp-bearer-token',
+  );
   const inlineAgentToken = optional(env.NEXOWIRE_AGENT_TOKEN);
   const fileAgentToken = optionalSecretFile(
     env.NEXOWIRE_AGENT_TOKEN_FILE,
@@ -110,10 +138,15 @@ export function loadConfig(
     'agent-bearer-token',
     'native-agent bearer token',
   );
+  const platformAgentToken = platformSingle(
+    env.NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME,
+    'agent-bearer-token',
+  );
   const mcpBearerTokens = parseTokenList(
     inlineMcpToken,
     fileMcpToken,
     protectedMcpToken,
+    platformMcpToken,
     env.NEXOWIRE_MCP_BEARER_TOKENS,
     optionalSecretListFile(
       env.NEXOWIRE_MCP_BEARER_TOKENS_FILE,
@@ -124,11 +157,16 @@ export function loadConfig(
       'mcp-bearer-token-list',
       'MCP bearer token list',
     ),
+    platformList(
+      env.NEXOWIRE_MCP_BEARER_TOKENS_PLATFORM_NAME,
+      'mcp-bearer-token-list',
+    ),
   );
   const agentTokens = parseTokenList(
     inlineAgentToken,
     fileAgentToken,
     protectedAgentToken,
+    platformAgentToken,
     env.NEXOWIRE_AGENT_TOKENS,
     optionalSecretListFile(
       env.NEXOWIRE_AGENT_TOKENS_FILE,
@@ -139,11 +177,21 @@ export function loadConfig(
       'agent-bearer-token-list',
       'native-agent bearer token list',
     ),
+    platformList(
+      env.NEXOWIRE_AGENT_TOKENS_PLATFORM_NAME,
+      'agent-bearer-token-list',
+    ),
   );
   const legacyMcpToken =
-    inlineMcpToken ?? fileMcpToken ?? protectedMcpToken;
+    inlineMcpToken ??
+    fileMcpToken ??
+    protectedMcpToken ??
+    platformMcpToken;
   const legacyAgentToken =
-    inlineAgentToken ?? fileAgentToken ?? protectedAgentToken;
+    inlineAgentToken ??
+    fileAgentToken ??
+    protectedAgentToken ??
+    platformAgentToken;
 
   const tlsCertFile = optional(env.NEXOWIRE_TLS_CERT_FILE);
   const tlsKeyFile = optional(env.NEXOWIRE_TLS_KEY_FILE);

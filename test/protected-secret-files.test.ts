@@ -7,6 +7,7 @@ import {
   inspectProtectedSecretFile,
   readProtectedSecretFile,
   readProtectedSecretListFile,
+  resolveProtectedSingleSecret,
   writeProtectedSecretFile,
 } from '../src/security/protected-secret-files.js';
 import { SecretFileError } from '../src/security/secret-files.js';
@@ -282,3 +283,32 @@ test(
     }
   },
 );
+
+test('additional single-secret source participates in conflict detection', () => {
+  assert.equal(
+    resolveProtectedSingleSecret(
+      'same-secret',
+      undefined,
+      undefined,
+      'agent-bearer-token',
+      'agent token',
+      'same-secret',
+    ),
+    'same-secret',
+  );
+
+  assert.throws(
+    () =>
+      resolveProtectedSingleSecret(
+        'inline-secret',
+        undefined,
+        undefined,
+        'agent-bearer-token',
+        'agent token',
+        'platform-secret',
+      ),
+    (error: unknown) =>
+      error instanceof SecretFileError &&
+      error.code === 'SECRET_SOURCE_CONFLICT',
+  );
+});

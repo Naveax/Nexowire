@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  agentTokenFromEnv,
   parseHubEndpoints,
   planNextHubAttempt,
 } from '../src/agent/native-agent.js';
@@ -114,5 +115,44 @@ test('single endpoint keeps bounded exponential reconnect behavior', () => {
       backoffMs: 1_000,
       connectedMs: 0,
     }),
+  );
+});
+
+test('native agent token can come from a platform-backed secret reference', () => {
+  const token = agentTokenFromEnv(
+    {
+      NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME: 'agent-primary',
+    },
+    (name, purpose) => {
+      assert.equal(name, 'agent-primary');
+      assert.equal(purpose, 'agent-bearer-token');
+      return 'platform-agent-token';
+    },
+  );
+  assert.equal(token, 'platform-agent-token');
+});
+
+test('native agent token sources fail closed when platform and inline values disagree', () => {
+  assert.throws(
+    () =>
+      agentTokenFromEnv(
+        {
+          NEXOWIRE_AGENT_TOKEN: 'inline-token',
+          NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME: 'agent-primary',
+        },
+        () => 'different-platform-token',
+      ),
+    /multiple secret sources with different contents/i,
+  );
+
+  assert.equal(
+    agentTokenFromEnv(
+      {
+        NEXOWIRE_AGENT_TOKEN: 'same-token',
+        NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME: 'agent-primary',
+      },
+      () => 'same-token',
+    ),
+    'same-token',
   );
 });

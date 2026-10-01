@@ -504,3 +504,26 @@ export function optionalPlatformSecretSync(
       )
     : undefined;
 }
+
+export function optionalPlatformSecretListSync(
+  nameInput: string | undefined,
+  purpose: string,
+  options: {
+    platform?: NodeJS.Platform;
+    runner?: PlatformSecretRunner;
+  } = {},
+): string | undefined {
+  const value = optionalPlatformSecretSync(
+    nameInput,
+    purpose,
+    {
+      ...options,
+      allowMultiline: true,
+    },
+  );
+  return value
+    ?.split(/[\r\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .join(',');
+}

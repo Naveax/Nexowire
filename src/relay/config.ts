@@ -11,6 +11,10 @@ import {
   optionalProtectedSecretListFile,
   resolveProtectedSingleSecret,
 } from '../security/protected-secret-files.js';
+import {
+  optionalPlatformSecretListSync,
+  optionalPlatformSecretSync,
+} from '../security/platform-secret-store.js';
 
 export interface NexowireRelayConfig {
   host: string;
@@ -64,9 +68,29 @@ function parseBoundedInt(
   return value;
 }
 
+export interface RelaySecretResolvers {
+  platformSingle?: (
+    name: string | undefined,
+    purpose: string,
+  ) => string | undefined;
+  platformList?: (
+    name: string | undefined,
+    purpose: string,
+  ) => string | undefined;
+}
+
 export function loadRelayConfig(
   env: NodeJS.ProcessEnv = process.env,
+  secretResolvers: RelaySecretResolvers = {},
 ): NexowireRelayConfig {
+  const platformSingle =
+    secretResolvers.platformSingle ??
+    ((name: string | undefined, purpose: string) =>
+      optionalPlatformSecretSync(name, purpose));
+  const platformList =
+    secretResolvers.platformList ??
+    ((name: string | undefined, purpose: string) =>
+      optionalPlatformSecretListSync(name, purpose));
   const tlsCertFile = optional(env.NEXOWIRE_RELAY_TLS_CERT_FILE);
   const tlsKeyFile = optional(env.NEXOWIRE_RELAY_TLS_KEY_FILE);
   if (Boolean(tlsCertFile) !== Boolean(tlsKeyFile)) {
@@ -103,12 +127,17 @@ export function loadRelayConfig(
     );
   }
 
+  const upstreamPlatformToken = platformSingle(
+    env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_PLATFORM_NAME,
+    'relay-upstream-agent-token',
+  );
   const upstreamAgentToken = resolveProtectedSingleSecret(
     env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
     env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
     env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_DPAPI_FILE,
     'relay-upstream-agent-token',
     'relay upstream agent token',
+    upstreamPlatformToken,
   );
 
   return {
@@ -126,6 +155,10 @@ export function loadRelayConfig(
         'relay-inbound-agent-token',
         'relay inbound agent token',
       ),
+      platformSingle(
+        env.NEXOWIRE_RELAY_AGENT_TOKEN_PLATFORM_NAME,
+        'relay-inbound-agent-token',
+      ),
       env.NEXOWIRE_RELAY_AGENT_TOKENS,
       optionalSecretListFile(
         env.NEXOWIRE_RELAY_AGENT_TOKENS_FILE,
@@ -135,6 +168,10 @@ export function loadRelayConfig(
         env.NEXOWIRE_RELAY_AGENT_TOKENS_DPAPI_FILE,
         'relay-inbound-agent-token-list',
         'relay inbound agent token list',
+      ),
+      platformList(
+        env.NEXOWIRE_RELAY_AGENT_TOKENS_PLATFORM_NAME,
+        'relay-inbound-agent-token-list',
       ),
     ),
     ...(upstreamAgentToken ? { upstreamAgentToken } : {}),
