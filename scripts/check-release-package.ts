@@ -88,6 +88,12 @@ assert.match(
   ),
   'CLI help version must match package.json.',
 );
+const versionOutput = run(process.execPath, [builtCli, '--version']).trim();
+assert.equal(
+  versionOutput,
+  packageJson.version,
+  'CLI --version must match package.json.',
+);
 
 const skillRoot = path.join(root, 'skills');
 const skillEntries = await fs.readdir(skillRoot, {
@@ -297,6 +303,7 @@ process.stdout.write(
       unpackedBytes: pack.unpackedSize,
       skills: skillNames.length,
       cliHelpVerified: true,
+      cliVersionVerified: true,
       installSmokeVerified,
       bundledSkillsVerified,
     },
