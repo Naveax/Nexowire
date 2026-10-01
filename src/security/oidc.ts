@@ -213,6 +213,15 @@ function validateHeader(value: unknown): JwtHeader {
       'OIDC JWT typ header is invalid.',
     );
   }
+  if (
+    input.crit !== undefined ||
+    input.b64 !== undefined
+  ) {
+    throw new OidcVerificationError(
+      'OIDC_JWS_EXTENSION_UNSUPPORTED',
+      'OIDC JWT critical or detached-payload JWS extensions are not supported.',
+    );
+  }
   return {
     alg: input.alg,
     kid: input.kid,
@@ -348,13 +357,23 @@ function keyMatchesAlgorithm(
   jwk: JsonWebKey,
   algorithm: JwtHeader['alg'],
 ): boolean {
+  if (jwk.use !== undefined && jwk.use !== 'sig') {
+    return false;
+  }
+  if (
+    jwk.key_ops !== undefined &&
+    (!Array.isArray(jwk.key_ops) ||
+      !jwk.key_ops.includes('verify'))
+  ) {
+    return false;
+  }
+  if (jwk.alg !== undefined && jwk.alg !== algorithm) {
+    return false;
+  }
   if (algorithm === 'RS256') {
     return jwk.kty === 'RSA';
   }
-  return (
-    jwk.kty === 'EC' &&
-    (jwk.crv === undefined || jwk.crv === 'P-256')
-  );
+  return jwk.kty === 'EC' && jwk.crv === 'P-256';
 }
 
 export class OidcVerifier {
@@ -554,18 +573,26 @@ export class OidcVerifier {
       128,
       64,
     );
-    const allowedRoutingPolicies = routes?.map((value) => {
-      const normalized = value.trim().toLowerCase();
-      if (
-        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(normalized)
-      ) {
-        throw new OidcVerificationError(
-          'OIDC_ROUTE_SCOPE_INVALID',
-          'OIDC routing policy scope contains an invalid name.',
-        );
-      }
-      return normalized;
-    }).sort();
+    const allowedRoutingPolicies = routes
+      ? [
+          ...new Set(
+            routes.map((value) => {
+              const normalized = value.trim().toLowerCase();
+              if (
+                !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(
+                  normalized,
+                )
+              ) {
+                throw new OidcVerificationError(
+                  'OIDC_ROUTE_SCOPE_INVALID',
+                  'OIDC routing policy scope contains an invalid name.',
+                );
+              }
+              return normalized;
+            }),
+          ),
+        ].sort()
+      : undefined;
 
     return {
       issuer: this.issuer,
@@ -750,6 +777,7 @@ export class OidcVerifier {
       const response = await this.fetchFn(url, {
         headers: { Accept: 'application/json' },
         signal: controller.signal,
+        redirect: 'error',
       });
       if (!response.ok) {
         throw new OidcVerificationError(
