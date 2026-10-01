@@ -18,13 +18,23 @@ class FakeRunner implements PlatformSecretRunner {
     input?: string;
   }> = [];
 
-  syncResult = {
+  syncResult: {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+    error?: Error;
+  } = {
     status: 0,
     stdout: 'secret-value\n',
     stderr: '',
   };
 
-  asyncResult = {
+  asyncResult: {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+    error?: Error;
+  } = {
     status: 0,
     stdout: '',
     stderr: '',
