@@ -3,6 +3,11 @@ name: windows-screenshot
 description: Capture bounded Windows desktop or window screenshots as inline PNG images for visual verification without changing focus.
 version: 0.1
 requires: windows.screenshot
+platforms: win32
+mutation: read-only
+privilege: user
+trust: reviewed
+tags: windows, screenshot, vision, gui
 ---
 
 # Windows Screenshot
