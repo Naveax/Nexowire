@@ -1,4 +1,5 @@
 ---
+manifest_version: 2
 name: large-file-investigation
 description: Find what is consuming disk space with bounded filesystem inspection, distinguish disposable artifacts from user data, and prepare safe cleanup candidates.
 version: 1.0
@@ -8,6 +9,8 @@ mutation: read-only
 privilege: user
 trust: trusted
 tags: disk, files, cleanup, diagnostics
+concurrency: parallel-safe
+replay: safe
 ---
 
 # Large File Investigation
