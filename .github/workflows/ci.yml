@@ -110,6 +110,10 @@ jobs:
         run: node --test --import tsx test/native-agent-lifecycle.test.ts test/macos-agent-lifecycle-live.test.ts
         env:
           NEXOWIRE_LIVE_MACOS_AGENT_LIFECYCLE_TEST: "1"
+      - name: Verify real macOS native-agent core capabilities
+        run: node --test --import tsx test/macos-native-agent-live.test.ts
+        env:
+          NEXOWIRE_LIVE_MACOS_AGENT_TEST: "1"
       - name: Verify real Keychain stdin write lifecycle
         run: node --test --import tsx test/platform-secret-store.test.ts test/macos-keychain-live.test.ts
         env:
