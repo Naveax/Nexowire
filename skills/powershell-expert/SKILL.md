@@ -3,6 +3,11 @@ name: powershell-expert
 description: Use PowerShell as a structured Windows automation interface instead of treating every result as console text.
 version: 0.1
 requires: shell.exec
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: powershell, shell, windows
 ---
 
 # PowerShell Expert
