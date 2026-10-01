@@ -18,6 +18,8 @@ import {
 
 export const CredentialScopeSchema = z.enum(['mcp', 'agent']);
 export type CredentialScope = z.infer<typeof CredentialScopeSchema>;
+export const CredentialRoleSchema = z.enum(['user', 'operator', 'admin']);
+export type CredentialRole = z.infer<typeof CredentialRoleSchema>;
 
 const IdSchema = z
   .string()
@@ -51,6 +53,7 @@ const RecordSchema = z.object({
     .min(1)
     .max(128)
     .optional(),
+  role: CredentialRoleSchema.optional(),
   administrative: z.boolean().optional(),
   tokenHash: z.string().regex(/^[a-f0-9]{64}$/),
   createdAt: z.string().datetime(),
@@ -72,6 +75,7 @@ export interface CredentialMetadata {
   allowedTools?: string[];
   allowedDeviceIds?: string[];
   allowedRoutingPolicies?: string[];
+  role?: CredentialRole;
   administrative?: boolean;
   createdAt: string;
   expiresAt?: string;
@@ -105,7 +109,13 @@ function metadata(record: StoredCredential): CredentialMetadata {
     ...(record.allowedRoutingPolicies
       ? { allowedRoutingPolicies: [...record.allowedRoutingPolicies] }
       : {}),
-    administrative: record.administrative === true,
+    role:
+      record.role ??
+      (record.administrative === true ? 'admin' : 'user'),
+    administrative:
+      (record.role ??
+        (record.administrative === true ? 'admin' : 'user')) ===
+      'admin',
     createdAt: record.createdAt,
     ...(record.expiresAt ? { expiresAt: record.expiresAt } : {}),
     ...(record.revokedAt ? { revokedAt: record.revokedAt } : {}),
@@ -247,6 +257,7 @@ export class CredentialStore {
       allowedTools?: string[];
       allowedDeviceIds?: string[];
       allowedRoutingPolicies?: string[];
+      role?: CredentialRole;
       administrative?: boolean;
     } = {},
   ): Promise<{
@@ -319,10 +330,27 @@ export class CredentialStore {
       }
     }
 
-    if (input.administrative === true && scope !== 'mcp') {
+    const requestedRole = input.role
+      ? CredentialRoleSchema.parse(input.role)
+      : input.administrative === true
+        ? 'admin'
+        : 'user';
+
+    if (
+      input.administrative === true &&
+      input.role !== undefined &&
+      input.role !== 'admin'
+    ) {
       throw new CredentialStoreError(
-        'CREDENTIAL_ADMIN_SCOPE_UNSUPPORTED',
-        'Administrative authorization is supported only for MCP credentials.',
+        'CREDENTIAL_ROLE_CONFLICT',
+        '--admin/administrative=true conflicts with a non-admin role.',
+      );
+    }
+
+    if (scope !== 'mcp' && requestedRole !== 'user') {
+      throw new CredentialStoreError(
+        'CREDENTIAL_ROLE_SCOPE_UNSUPPORTED',
+        'Operator/admin roles are supported only for MCP credentials.',
       );
     }
 
@@ -354,7 +382,8 @@ export class CredentialStore {
       ...(allowedTools ? { allowedTools } : {}),
       ...(allowedDeviceIds ? { allowedDeviceIds } : {}),
       ...(allowedRoutingPolicies ? { allowedRoutingPolicies } : {}),
-      administrative: input.administrative === true,
+      role: requestedRole,
+      administrative: requestedRole === 'admin',
       tokenHash: hashToken(token).toString('hex'),
       createdAt: new Date(now).toISOString(),
       ...(input.ttlMs !== undefined
