@@ -7,6 +7,7 @@ export interface WslDetectionResult {
 
 export interface WslDetectionOptions {
   platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
   run?: (
     command: string,
     args: string[],
@@ -36,12 +37,17 @@ function decodeWslOutput(value: string | Buffer): string {
   return value.toString(encoding).replaceAll('\u0000', '');
 }
 
-function defaultRun(command: string, args: string[]) {
+function defaultRun(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+) {
   const result = spawnSync(command, args, {
     windowsHide: true,
     encoding: 'buffer',
     timeout: 5_000,
     maxBuffer: 512 * 1024,
+    env,
   });
   return {
     status: result.status,
@@ -59,10 +65,13 @@ export function detectWsl(
     return { available: false, distros: [] };
   }
 
-  const result = (options.run ?? defaultRun)(
-    'wsl.exe',
-    ['--list', '--quiet'],
-  );
+  const result = options.run
+    ? options.run('wsl.exe', ['--list', '--quiet'])
+    : defaultRun(
+        'wsl.exe',
+        ['--list', '--quiet'],
+        options.env ?? process.env,
+      );
   if (result.status !== 0 || result.error) {
     return { available: false, distros: [] };
   }
