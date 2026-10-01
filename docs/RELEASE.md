@@ -2,7 +2,7 @@
 
 Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifacts are the initial distribution path; npm publishing remains disabled by `"private": true` until an explicit publishing decision is made.
 
-## Local release candidate check
+## Published stable release\n\nNexowire v1.0.0 was published on 2026-10-01 from tag `v1.0.0` at commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed all package, verification, attestation, and GitHub Release publication jobs. The GitHub Release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, and CycloneDX SBOM. npm publication remains disabled.\n\n## Local release candidate check
 
 Run:
 
