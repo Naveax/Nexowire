@@ -13,6 +13,7 @@ import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
 import { TaskGraphStore } from './task-graph-store.js';
+import { RunbookStore } from './runbook-store.js';
 import {
   AgentRequestCache,
   fingerprintAgentRequest,
@@ -239,6 +240,9 @@ export async function runNativeAgent(
   const taskGraphStateFile =
     env.NEXOWIRE_TASK_GRAPH_STATE_FILE?.trim() ||
     path.join(os.homedir(), '.nexowire', 'task-graphs.json');
+  const runbookStateFile =
+    env.NEXOWIRE_RUNBOOK_STATE_FILE?.trim() ||
+    path.join(os.homedir(), '.nexowire', 'runbooks.json');
   const socketHeartbeatMs = heartbeatMs(env);
   const activePrivilegeMode = privilegeMode(env);
   const privilegedBroker = await privilegedBrokerFromEnv(
@@ -271,7 +275,12 @@ export async function runNativeAgent(
     onEvent: (event) => emitAgentEvent(event.topic, event.data),
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
-  await Promise.all([processes.initialize(), taskGraphs.initialize()]);
+  const runbooks = new RunbookStore({ stateFile: runbookStateFile });
+  await Promise.all([
+    processes.initialize(),
+    taskGraphs.initialize(),
+    runbooks.initialize(),
+  ]);
   let reconnectDelay = 1_000;
   let endpointIndex = 0;
 
@@ -366,6 +375,7 @@ export async function runNativeAgent(
                     {
                       processes,
                       taskGraphs,
+                      runbooks,
                       privilegeMode: activePrivilegeMode,
                       ...(privilegedBroker
                         ? { privilegedBroker }
