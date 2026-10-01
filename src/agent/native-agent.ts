@@ -24,6 +24,7 @@ import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
+import { NEXOWIRE_VERSION } from '../version.js';
 
 interface AgentIdentity {
   id: string;
@@ -48,8 +49,8 @@ async function loadIdentity(): Promise<AgentIdentity> {
   return identity;
 }
 
-function agentVersion(): string {
-  return '0.1.0-dev.1';
+export function agentVersion(): string {
+  return NEXOWIRE_VERSION;
 }
 
 export function agentTokenFromEnv(
