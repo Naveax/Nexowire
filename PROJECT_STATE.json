@@ -76,7 +76,7 @@
       "id": "linux-wsl-coverage",
       "status": "done",
       "priority": 10,
-      "summary": "Real Linux native-agent/relay integration runs in Ubuntu CI and a pinned Windows CI lane provisions Ubuntu 24.04 under real WSL2 to verify Nexowire wsl.exec distro/cwd/Unicode/error semantics plus machine.snapshot discovery"
+      "summary": "Real Linux native-agent/relay integration runs in Ubuntu CI, real Ubuntu 24.04 WSL2 verifies Nexowire wsl.exec on Windows CI, and real macOS native-agent core CI verifies outbound transport plus machine/shell/file/process execution"
     },
     {
       "id": "audit-history",
@@ -100,13 +100,19 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 42 shipped workflows, twelve replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and four conservative domain recipes are implemented; further domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 43 shipped workflows, twelve replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and five conservative domain recipes including release-readiness auditing are implemented; further domain recipes remain incremental"
     },
     {
       "id": "native-agent-lifecycle",
       "status": "done",
       "priority": 15,
       "summary": "First-party normal native-agent lifecycle is implemented across Windows current-user Scheduled Task, Linux systemd user service, and macOS per-user LaunchAgent with install/status/start/stop/restart/uninstall/autostart, plaintext-secret persistence refusal, and real macOS CI coverage"
+    },
+    {
+      "id": "release-readiness",
+      "status": "done",
+      "priority": 16,
+      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, and CycloneDX SBOM are implemented without enabling npm publication"
     }
   ],
   "standardVerification": [
@@ -143,12 +149,22 @@
     "Guided deployment onboarding/bootstrap is merged: plan mode is non-mutating; bootstrap issues missing hash-only credentials and emits plaintext tokens once without persisting them.",
     "event-driven-control is manifest v2 but deliberately mixed/serial/manual-replay because it includes process.start; do not reclassify it replay-safe merely because its observation phase is read-only.",
     "macOS Keychain create/update is now first-party and verified in real macOS CI using security -q -i with the mutation command on stdin, explicit overwrite semantics, bounded execution, and read-back verification; plaintext secrets are not placed in process argv.",
-    "The shipped skill library contains 42 workflows. Twelve read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics.",
-    "Windows native agents now advertise wsl.exec only when bounded wsl.exe distro discovery finds at least one installed distro; machine.snapshot reuses the same detector."
+    "Windows native agents now advertise wsl.exec only when bounded wsl.exe distro discovery finds at least one installed distro; machine.snapshot reuses the same detector.",
+    "The shipped skill library contains 43 workflows. Twelve read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics, and release-readiness-audit is the fifth conservative domain recipe.",
+    "Real macOS native-agent core CI now verifies outbound transport, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions in addition to LaunchAgent/Keychain coverage.",
+    "Async path-policy authorization is canonical-realpath based, preventing false denials such as macOS /var -> /private/var while retaining symlink escape protection.",
+    "Windows window-filter regression coverage uses an isolated WPF fixture instead of racing arbitrary runner windows.",
+    "Release-readiness CI performs a full Linux gate plus clean packaged-runtime smoke tests on Linux, Windows, and macOS; canonical candidates now include SHA256SUMS, release-manifest.json, and a CycloneDX SBOM while npm publication remains disabled.",
+    "A release-candidate verification slice is active to re-validate generated checksum/manifest/SBOM evidence before artifact upload instead of trusting generation alone."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "44170cd97de01df3849ff47f6f2d9f9019ba7784",
+  "lastVerifiedMain": "9548d08866c86a931510fe529948df6e0fdcdb32",
   "activeWork": [
+    {
+      "branch": "feat/release-candidate-verify-v1",
+      "status": "active",
+      "goal": "Add an independent verifier for generated release checksum/manifest/SBOM evidence and gate candidate upload on verification; do not publish."
+    },
     {
       "branch": "future/domain-recipes",
       "status": "planned",
