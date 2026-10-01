@@ -13,7 +13,9 @@ on:
       - "test/version.test.ts"
       - "scripts/check-release-package.ts"
       - "scripts/generate-release-metadata.ts"
+      - "scripts/verify-release-candidate.ts"
       - "test/release-metadata.test.ts"
+      - "test/release-candidate-verify.test.ts"
       - "skills/**"
       - "docs/RELEASE.md"
       - ".github/workflows/release-readiness.yml"
@@ -56,6 +58,9 @@ jobs:
       - name: Generate CycloneDX SBOM
         if: runner.os == 'Linux'
         run: npm sbom --sbom-format cyclonedx > nexowire-sbom.cdx.json
+      - name: Independently verify release candidate evidence
+        if: runner.os == 'Linux'
+        run: node --import tsx scripts/verify-release-candidate.ts "$(ls -1 nexowire-*.tgz | head -n 1)"
       - name: Upload canonical release candidate
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
