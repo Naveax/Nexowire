@@ -175,6 +175,7 @@ export function resolveProtectedSingleSecret(
   protectedFile: string | undefined,
   purpose: string,
   label: string,
+  additionalValue?: string,
 ): string | undefined {
   const inline = inlineValue?.trim() || undefined;
   const plain = plainFile?.trim()
@@ -186,7 +187,13 @@ export function resolveProtectedSingleSecret(
     label,
   );
 
-  const values = [inline, plain, protectedValue].filter(
+  const additional = additionalValue?.trim() || undefined;
+  const values = [
+    inline,
+    plain,
+    protectedValue,
+    additional,
+  ].filter(
     (value): value is string => value !== undefined,
   );
   if (
