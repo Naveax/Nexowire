@@ -89,6 +89,7 @@ function fixture() {
     issuer,
     audience,
     privateKey,
+    publicJwk: jwk,
     fetchFn,
   };
 }
@@ -357,4 +358,107 @@ test('unified MCP authorization prefers local tokens and falls back to OIDC', as
     assert.equal(external.identity.role, 'user');
   }
   assert.ok(fetches >= 2);
+});
+
+test('OIDC hardening rejects critical JWS extensions and JWKS signing-policy mismatches', async () => {
+  const now = Date.parse('2026-10-01T09:00:00.000Z');
+  const fx = fixture();
+
+  const payload = {
+    iss: fx.issuer,
+    sub: 'user-123',
+    aud: fx.audience,
+    exp: now / 1000 + 300,
+  };
+  const header = b64({
+    alg: 'RS256',
+    kid: 'key-1',
+    crit: ['b64'],
+    b64: false,
+  });
+  const body = b64(payload);
+  const input = Buffer.from(header + '.' + body, 'ascii');
+  const signature = sign('RSA-SHA256', input, fx.privateKey);
+  const criticalToken =
+    header + '.' + body + '.' + signature.toString('base64url');
+
+  const verifier = new OidcVerifier({
+    issuer: fx.issuer,
+    audience: fx.audience,
+    fetchFn: fx.fetchFn,
+    now: () => now,
+  });
+
+  await assert.rejects(
+    () => verifier.verify(criticalToken),
+    (error: unknown) =>
+      error instanceof OidcVerificationError &&
+      error.code === 'OIDC_JWS_EXTENSION_UNSUPPORTED',
+  );
+
+  const encJwk = {
+    ...fx.publicJwk,
+    use: 'enc',
+  };
+  const mismatchFetch: typeof fetch = async (input, init) => {
+    assert.equal(init?.redirect, 'error');
+    const url = String(input);
+    if (
+      url ===
+      fx.issuer + '/.well-known/openid-configuration'
+    ) {
+      return new Response(
+        JSON.stringify({
+          issuer: fx.issuer,
+          jwks_uri: fx.issuer + '/keys',
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(
+      JSON.stringify({ keys: [encJwk] }),
+      { status: 200 },
+    );
+  };
+
+  const mismatchVerifier = new OidcVerifier({
+    issuer: fx.issuer,
+    audience: fx.audience,
+    fetchFn: mismatchFetch,
+    now: () => now,
+  });
+
+  await assert.rejects(
+    () => mismatchVerifier.verify(jwt(fx.privateKey, payload)),
+    (error: unknown) =>
+      error instanceof OidcVerificationError &&
+      error.code === 'OIDC_KEY_ALGORITHM_MISMATCH',
+  );
+});
+
+test('OIDC route scopes normalize case and deduplicate after normalization', async () => {
+  const now = Date.parse('2026-10-01T09:00:00.000Z');
+  const fx = fixture();
+  const verifier = new OidcVerifier({
+    issuer: fx.issuer,
+    audience: fx.audience,
+    fetchFn: fx.fetchFn,
+    now: () => now,
+  });
+  const identity = await verifier.verify(
+    jwt(fx.privateKey, {
+      iss: fx.issuer,
+      sub: 'user',
+      aud: fx.audience,
+      exp: now / 1000 + 300,
+      nexowire_routing_policies: [
+        'Main.Route',
+        'main.route',
+      ],
+    }),
+  );
+  assert.deepEqual(
+    identity.allowedRoutingPolicies,
+    ['main.route'],
+  );
 });
