@@ -16,6 +16,7 @@
 - [x] Opt-in fully reattachable durable process I/O across native-agent restart
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
+- [x] machine-validated cross-chat continuation state contract integrated into normal checks
 - [~] Public deployment security: bootstrap bearer rotation, direct TLS, descriptor-safe mounted secret files, and Windows DPAPI CurrentUser protected bootstrap secret envelopes are implemented; deployment-grade external identity and broader platform-backed secret storage remain open
 
 ## v0.2 - Computer control
