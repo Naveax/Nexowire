@@ -34,9 +34,17 @@ const ShellExecInputSchema = z.object({
 const WslExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
   distro: z.string().min(1).max(128).optional(),
+  user: z.string().min(1).max(128).optional(),
   cwd: z.string().min(1).max(4096).optional(),
   timeout_ms: z.number().int().min(100).max(600_000).default(60_000),
   max_output_bytes: z.number().int().min(1024).max(16_777_216).default(2_097_152),
+});
+
+const WslPathInputSchema = z.object({
+  path: z.string().min(1).max(4096),
+  distro: z.string().min(1).max(128).optional(),
+  to: z.enum(['linux', 'windows']),
+  absolute: z.boolean().default(true),
 });
 
 const FileReadInputSchema = z.object({
@@ -422,6 +430,7 @@ async function executeWsl(input: unknown): Promise<unknown> {
   const parsed = WslExecInputSchema.parse(input);
   const args: string[] = [];
   if (parsed.distro) args.push('--distribution', parsed.distro);
+  if (parsed.user) args.push('--user', parsed.user);
   if (parsed.cwd) args.push('--cd', parsed.cwd);
   args.push('--', 'bash', '-lc', parsed.command);
 
@@ -436,6 +445,96 @@ async function executeWsl(input: unknown): Promise<unknown> {
     exitCode: result.exitCode,
     truncated: result.truncated,
     data: { timedOut: result.timedOut },
+  };
+}
+
+function normalizeWslCliText(value: string): string {
+  return value
+    .replace(/\u0000/g, '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r/g, '');
+}
+
+async function listWslDistributions(): Promise<unknown> {
+  if (process.platform !== 'win32') {
+    throw new Error('wsl.list is only available from a Windows native agent.');
+  }
+
+  const result = await runProcess(
+    'wsl.exe',
+    ['--list', '--quiet'],
+    {
+      timeoutMs: 15_000,
+      maxOutputBytes: 262_144,
+    },
+  );
+  const stdout = normalizeWslCliText(result.stdout);
+  const stderr = normalizeWslCliText(result.stderr);
+  const distributions = stdout
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .slice(0, 128);
+
+  return {
+    stdout: '',
+    stderr,
+    exitCode: result.exitCode,
+    truncated: result.truncated,
+    data: {
+      available: result.exitCode === 0,
+      installed: distributions.length > 0,
+      distributions,
+      count: distributions.length,
+      timedOut: result.timedOut,
+    },
+  };
+}
+
+async function convertWslPath(input: unknown): Promise<unknown> {
+  if (process.platform !== 'win32') {
+    throw new Error(
+      'wsl.path.convert is only available from a Windows native agent.',
+    );
+  }
+
+  const parsed = WslPathInputSchema.parse(input);
+  const args: string[] = [];
+  if (parsed.distro) {
+    args.push('--distribution', parsed.distro);
+  }
+  args.push(
+    '--',
+    'wslpath',
+    ...(parsed.absolute ? ['-a'] : []),
+    parsed.to === 'linux' ? '-u' : '-w',
+    parsed.path,
+  );
+
+  const result = await runProcess('wsl.exe', args, {
+    timeoutMs: 15_000,
+    maxOutputBytes: 65_536,
+  });
+  const converted = normalizeWslCliText(result.stdout).trim();
+  if (result.exitCode !== 0 || !converted) {
+    const error = new Error(
+      'WSL path conversion failed.' +
+        (result.stderr
+          ? ' ' + normalizeWslCliText(result.stderr).trim()
+          : ''),
+    ) as Error & { code?: string };
+    error.code = 'WSL_PATH_CONVERSION_FAILED';
+    throw error;
+  }
+
+  return {
+    data: {
+      input: parsed.path,
+      output: converted,
+      to: parsed.to,
+      absolute: parsed.absolute,
+      ...(parsed.distro ? { distro: parsed.distro } : {}),
+    },
   };
 }
 
@@ -2061,6 +2160,10 @@ export async function executeCapability(
       return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
       return await executeWsl(input);
+    case 'wsl.list':
+      return await listWslDistributions();
+    case 'wsl.path.convert':
+      return await convertWslPath(input);
     case 'files.read':
       return await readFile(input, policy);
     case 'files.read_many':
