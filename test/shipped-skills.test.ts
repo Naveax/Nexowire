@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { SkillRegistry } from '../src/skills/registry.js';
 
 const EXPECTED_V3_SKILLS = [
@@ -41,11 +42,14 @@ const EXPECTED_V2_SKILLS = [
 
 const EXPECTED_DOMAIN_READ_ONLY_V2_SKILLS = [
   'artifact-integrity-audit',
+  'backup-integrity-audit',
   'browser-session-inspection',
+  'configuration-drift-audit',
   'service-readiness-audit',
 ] as const;
 
 const EXPECTED_DOMAIN_MIXED_V2_SKILLS = [
+  'release-readiness-audit',
   'workspace-regression-triage',
 ] as const;
 
@@ -124,10 +128,38 @@ test('domain recipes declare explicit replay and concurrency semantics', async (
     browser.manifest.prefers?.includes('browser.visual.verify'),
   );
 
+  const configuration = await registry.load('configuration-drift-audit');
+  assert.ok(configuration.manifest.requires.includes('files.hash'));
+
   const regression = await registry.load('workspace-regression-triage');
   assert.ok(
     regression.manifest.requires.includes('workspace.checks'),
   );
+});
+
+test('documented shipped skill index matches the validated library', async () => {
+  const registry = new SkillRegistry(
+    path.join(process.cwd(), 'skills'),
+  );
+  const validation = await registry.validate();
+  assert.equal(validation.ok, true);
+
+  const markdown = await fs.readFile(
+    path.join(process.cwd(), 'docs', 'SKILLS.md'),
+    'utf8',
+  );
+  const section = markdown.match(
+    /## Current shipped skills\n\n([\s\S]*?)\n\n## Operational recipe set/,
+  );
+  assert.ok(section, 'Current shipped skills section is missing.');
+
+  const documented = Array.from(
+    section[1].matchAll(/^- \`([^\`]+)\`$/gm),
+    (match) => match[1],
+  ).sort();
+  const actual = validation.valid.map((skill) => skill.name).sort();
+
+  assert.deepEqual(documented, actual);
 });
 
 test('Windows-only shipped skills are excluded from Linux runnability', async () => {
