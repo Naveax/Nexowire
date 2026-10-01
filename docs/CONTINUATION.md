@@ -55,6 +55,7 @@ Implemented on main as of the latest repository state:
 - revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credentials support explicit user/operator/admin roles, and allowlists filter both tool discovery and call-time execution
 - direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
+- purpose-bound Windows DPAPI bootstrap secret envelopes for hub/native-agent/relay bearer credentials
 - lazy skills and MCP HTTP/stdio surfaces
 - versioned MCP surface v1 compatibility floor with hub-local version discovery; stable tool-name removal/rename is regression-tested separately from the native-agent protocol version
 - real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
@@ -63,10 +64,11 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
-1. continue deployment-grade external identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret reads, and dynamic tool discovery are implemented
+1. continue deployment-grade external identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret reads, Windows DPAPI bootstrap envelopes, and dynamic tool discovery are implemented
 2. extend durable runbooks only with step types whose restart/replay semantics can be proven; task-graph and read-only assertion stages are implemented
 5. extend idempotency/postconditions only where replay and verification semantics are provably safe
 6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented
+7. machine-readable structured-output semantic compatibility for the frozen MCP v1 surface
 
 ## Branch and merge discipline
 

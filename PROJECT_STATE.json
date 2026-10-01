@@ -58,7 +58,7 @@
       "id": "production-auth",
       "status": "partial",
       "priority": 7,
-      "summary": "Direct TLS, rotating bootstrap bearer credentials, revocable/expiring hash-only stored credentials, MCP tool/device/deterministic-route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret files, and DPAPI broker secret protection are implemented; deployment-grade external identity and broader platform-backed secret storage remain"
+      "summary": "Direct TLS, rotating bootstrap bearer credentials, revocable/expiring hash-only stored credentials, MCP tool/device/deterministic-route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret files, DPAPI broker protection, and purpose-bound Windows DPAPI bootstrap secret envelopes are implemented; deployment-grade external identity and broader cross-platform protected secret storage remain"
     },
     {
       "id": "dynamic-tool-exposure",
@@ -128,20 +128,21 @@
     "MCP surface v1 is the compatibility floor; additive tools are allowed, but stable tool removal/rename requires a new surface version and migration path.",
     "Shipped skills declare platform/mutation/privilege/trust/tags; skills_list can evaluate missing capabilities against an exact online device.",
     "Stable v1 input schemas are frozen in src/mcp/v1-input-contract.json; regenerate only after explicit compatibility review.",
-    "Shipped skill manifests are CI-validated as a library contract."
+    "Shipped skill manifests are CI-validated as a library contract.",
+    "Windows DPAPI protected bootstrap envelopes are purpose-bound and CurrentUser-scoped; keep cross-platform protected secret storage as a separate deployment concern."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "14ede52cc826468a486f669eeffd90c0d6aebaa2",
+  "lastVerifiedMain": "42909d4cbae2f887d3048bef13fb17a99c5838b9",
   "activeWork": [
     {
-      "branch": "feat/skill-library-v2",
+      "branch": "feat/windows-protected-secret-sources-v2",
       "status": "testing",
-      "goal": "Expand the validated machine-readable skill library with common operational workflows."
+      "goal": "Land purpose-bound Windows DPAPI protected bootstrap secret files on top of current main."
     },
     {
-      "branch": "feat/windows-protected-secret-sources-v1",
-      "status": "implementation",
-      "goal": "Add purpose-bound Windows DPAPI protected bootstrap secret files for hub/agent/relay credentials."
+      "branch": "planned:mcp-output-contract-v1",
+      "status": "planned",
+      "goal": "Add machine-readable structured-output semantic compatibility for the stable MCP v1 surface."
     }
   ]
 }

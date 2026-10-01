@@ -20,7 +20,7 @@ import {
 } from './request-cache.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
-import { resolveSingleSecret } from '../security/secret-files.js';
+import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
 
 interface AgentIdentity {
   id: string;
@@ -52,9 +52,11 @@ function agentVersion(): string {
 export function agentTokenFromEnv(
   env: NodeJS.ProcessEnv,
 ): string | undefined {
-  return resolveSingleSecret(
+  return resolveProtectedSingleSecret(
     env.NEXOWIRE_AGENT_TOKEN,
     env.NEXOWIRE_AGENT_TOKEN_FILE,
+    env.NEXOWIRE_AGENT_TOKEN_DPAPI_FILE,
+    'agent-bearer-token',
     'native-agent bearer token',
   );
 }

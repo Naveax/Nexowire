@@ -5,8 +5,12 @@ import { parseTokenList } from '../security/tokens.js';
 import {
   optionalSecretFile,
   optionalSecretListFile,
-  resolveSingleSecret,
 } from '../security/secret-files.js';
+import {
+  optionalProtectedSecretFile,
+  optionalProtectedSecretListFile,
+  resolveProtectedSingleSecret,
+} from '../security/protected-secret-files.js';
 
 export interface NexowireRelayConfig {
   host: string;
@@ -99,9 +103,11 @@ export function loadRelayConfig(
     );
   }
 
-  const upstreamAgentToken = resolveSingleSecret(
+  const upstreamAgentToken = resolveProtectedSingleSecret(
     env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN,
     env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_FILE,
+    env.NEXOWIRE_RELAY_UPSTREAM_AGENT_TOKEN_DPAPI_FILE,
+    'relay-upstream-agent-token',
     'relay upstream agent token',
   );
 
@@ -115,9 +121,19 @@ export function loadRelayConfig(
         env.NEXOWIRE_RELAY_AGENT_TOKEN_FILE,
         'relay inbound agent token',
       ),
+      optionalProtectedSecretFile(
+        env.NEXOWIRE_RELAY_AGENT_TOKEN_DPAPI_FILE,
+        'relay-inbound-agent-token',
+        'relay inbound agent token',
+      ),
       env.NEXOWIRE_RELAY_AGENT_TOKENS,
       optionalSecretListFile(
         env.NEXOWIRE_RELAY_AGENT_TOKENS_FILE,
+        'relay inbound agent token list',
+      ),
+      optionalProtectedSecretListFile(
+        env.NEXOWIRE_RELAY_AGENT_TOKENS_DPAPI_FILE,
+        'relay-inbound-agent-token-list',
         'relay inbound agent token list',
       ),
     ),

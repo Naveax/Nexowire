@@ -1,6 +1,6 @@
 # Nexowire Handoff
 
-Updated: 2026-09-30
+Updated: 2026-10-01
 
 ## Goal
 
@@ -71,6 +71,7 @@ Implemented:
 - explicit stored MCP `user`/`operator`/`admin` roles: operators can read sensitive control-plane/audit/idempotency state, admins can also mutate policy/routing/group/alias configuration, and legacy `administrative: true` credentials remain admin-compatible
 - HTTP MCP discovery filters native-backed tool schemas by the capabilities currently advertised by online Nexowire agents
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
+- purpose-bound Windows DPAPI CurrentUser protected bootstrap secret files for hub MCP/native-agent bearer sets, native-agent outbound auth, and relay inbound/upstream auth
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
 - initial security/docs/tests/CI
 
@@ -103,14 +104,14 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/skill-library-v2`: expanded validated operational workflow library.
-- `feat/windows-protected-secret-sources-v1`: purpose-bound Windows DPAPI protected bootstrap secret sources.
+- `feat/windows-protected-secret-sources-v2`: clean replay of purpose-bound Windows DPAPI protected bootstrap secret sources on current main.
+- next independent slice: machine-readable MCP structured-output semantic compatibility.
 
 ## Immediate next work
 
 1. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
 2. Extend durable runbooks only where new workflow step types have well-defined restart/replay semantics; task graphs + read-only assertion stages are implemented.
-3. Continue deployment-grade external identity/protected secret handling; tool/device/route scopes, explicit user/operator/admin roles, revocation/TTL, rotation, TLS, descriptor-safe mounted secret reads, and DPAPI broker secret protection are implemented.
+3. Continue deployment-grade external identity/protected secret handling; tool/device/route scopes, explicit user/operator/admin roles, revocation/TTL, rotation, TLS, descriptor-safe mounted secret reads, DPAPI broker protection, and Windows purpose-bound bootstrap secret envelopes are implemented.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
 6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests; both core paths are implemented.
 7. Continue production authorization work: scoped credentials, revocation, TTL, rotation, and TLS exist; stronger identity/admin policy and deployment secret handling remain.
