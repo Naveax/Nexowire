@@ -200,6 +200,8 @@ test('mutation capabilities are never classified as read-only', () => {
     'workspace.checks',
     'task.graph.run',
     'task.graph.prune',
+    'runbook.run',
+    'runbook.prune',
     'windows.service.control',
     'windows.registry.set',
     'windows.registry.delete',
