@@ -3142,13 +3142,13 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Set Windows registry value',
       description:
-        'Optional idempotency_key prevents duplicate retries. Create or update one exact registry value and verify the stored value type/content.',
+        'Optional idempotency_key prevents duplicate retries. Create or update one exact registry value and verify the stored value type/content. Use an empty name for the unnamed/default value.',
       inputSchema: {
         ...targetFields,
         ...idempotencyField,
         hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
         path: z.string().min(1).max(4096),
-        name: z.string().min(1).max(1024),
+        name: z.string().max(1024),
         type: z.enum([
           'string',
           'expand_string',
@@ -3199,13 +3199,13 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Delete Windows registry value or key',
       description:
-        'Optional idempotency_key prevents duplicate retries. Delete one exact registry value, or delete one non-root key. Recursive key deletion must be explicitly enabled.',
+        'Optional idempotency_key prevents duplicate retries. Delete one exact registry value, or delete one non-root key. Use an empty name for the unnamed/default value. Recursive key deletion must be explicitly enabled.',
       inputSchema: {
         ...targetFields,
         ...idempotencyField,
         hive: z.enum(['HKCU', 'HKLM', 'HKCR', 'HKU', 'HKCC']),
         path: z.string().min(1).max(4096),
-        name: z.string().min(1).max(1024).optional(),
+        name: z.string().max(1024).optional(),
         recursive: z.boolean().optional(),
       },
     },
@@ -3224,7 +3224,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         {
           hive,
           path,
-          ...(name ? { name } : {}),
+          ...(name !== undefined ? { name } : {}),
           ...(recursive !== undefined ? { recursive } : {}),
         },
         device_id,
