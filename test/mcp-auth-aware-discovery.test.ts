@@ -80,18 +80,29 @@ test('restricted stored MCP credentials only discover authorized tools', async (
   );
 });
 
-test('static credentials retain admin tools while stored credentials require explicit admin scope', async () => {
+test('auth-aware discovery respects user, operator, admin, and static roles', async () => {
   const staticTools = await listedTools({
     kind: 'static',
     scope: 'mcp',
   });
-  const storedTools = await listedTools({
+  const userTools = await listedTools({
     kind: 'stored',
     scope: 'mcp',
     credential: {
       id: 'credential5678',
       scope: 'mcp',
       createdAt: '2026-09-30T12:00:00.000Z',
+      role: 'user',
+    },
+  });
+  const operatorTools = await listedTools({
+    kind: 'stored',
+    scope: 'mcp',
+    credential: {
+      id: 'credentialoperator',
+      scope: 'mcp',
+      createdAt: '2026-09-30T12:00:00.000Z',
+      role: 'operator',
     },
   });
   const adminTools = await listedTools({
@@ -101,7 +112,7 @@ test('static credentials retain admin tools while stored credentials require exp
       id: 'credentialadmin',
       scope: 'mcp',
       createdAt: '2026-09-30T12:00:00.000Z',
-      administrative: true,
+      role: 'admin',
     },
   });
 
@@ -113,27 +124,36 @@ test('static credentials retain admin tools while stored credentials require exp
     'device_route',
   ]) {
     assert.ok(staticTools.includes(regular), regular);
-    assert.ok(storedTools.includes(regular), regular);
+    assert.ok(userTools.includes(regular), regular);
+    assert.ok(operatorTools.includes(regular), regular);
     assert.ok(adminTools.includes(regular), regular);
   }
 
-  for (const administrative of [
+  for (const operatorTool of [
     'policy_profile_list',
-    'device_alias_set',
-    'device_group_delete',
-    'device_route_policy_set',
+    'policy_device_check',
     'operations_idempotency_list',
     'events_read',
     'audit_query',
   ]) {
-    assert.ok(staticTools.includes(administrative), administrative);
-    assert.equal(
-      storedTools.includes(administrative),
-      false,
-      administrative,
-    );
-    assert.ok(adminTools.includes(administrative), administrative);
+    assert.ok(staticTools.includes(operatorTool), operatorTool);
+    assert.equal(userTools.includes(operatorTool), false, operatorTool);
+    assert.ok(operatorTools.includes(operatorTool), operatorTool);
+    assert.ok(adminTools.includes(operatorTool), operatorTool);
+  }
+
+  for (const adminTool of [
+    'policy_profile_set',
+    'device_alias_set',
+    'device_group_delete',
+    'device_route_policy_set',
+  ]) {
+    assert.ok(staticTools.includes(adminTool), adminTool);
+    assert.equal(userTools.includes(adminTool), false, adminTool);
+    assert.equal(operatorTools.includes(adminTool), false, adminTool);
+    assert.ok(adminTools.includes(adminTool), adminTool);
   }
 
   assert.deepEqual(adminTools, staticTools);
 });
+
