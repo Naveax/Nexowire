@@ -157,3 +157,51 @@ test('auth-aware discovery respects user, operator, admin, and static roles', as
   assert.deepEqual(adminTools, staticTools);
 });
 
+
+test('restricted OIDC MCP identities only discover authorized tools and respect roles', async () => {
+  const userTools = await listedTools({
+    kind: 'oidc',
+    scope: 'mcp',
+    identity: {
+      issuer: 'https://identity.example.test',
+      subject: 'oidc-user',
+      role: 'user',
+      allowedTools: ['machine_*', 'audit_query'],
+    },
+  });
+
+  assert.ok(userTools.includes('machine_snapshot'));
+  assert.ok(userTools.includes('machine_health'));
+  assert.equal(userTools.includes('file_read'), false);
+  assert.equal(userTools.includes('audit_query'), false);
+  assert.equal(userTools.includes('device_alias_set'), false);
+
+  const operatorTools = await listedTools({
+    kind: 'oidc',
+    scope: 'mcp',
+    identity: {
+      issuer: 'https://identity.example.test',
+      subject: 'oidc-operator',
+      role: 'operator',
+      allowedTools: ['machine_*', 'audit_query'],
+    },
+  });
+
+  assert.ok(operatorTools.includes('machine_snapshot'));
+  assert.ok(operatorTools.includes('audit_query'));
+  assert.equal(operatorTools.includes('device_alias_set'), false);
+
+  const adminTools = await listedTools({
+    kind: 'oidc',
+    scope: 'mcp',
+    identity: {
+      issuer: 'https://identity.example.test',
+      subject: 'oidc-admin',
+      role: 'admin',
+      allowedTools: ['device_alias_*'],
+    },
+  });
+  assert.ok(adminTools.includes('device_alias_set'));
+  assert.ok(adminTools.includes('device_alias_delete'));
+  assert.equal(adminTools.includes('machine_snapshot'), false);
+});
