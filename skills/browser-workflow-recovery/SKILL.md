@@ -2,7 +2,7 @@
 name: browser-workflow-recovery
 description: Recover a first-party Nexowire browser workflow after navigation, selector, popup, or state drift without falling back to blind screen clicks.
 version: 1.0
-requires: browser.session.list, browser.tabs, browser.snapshot, browser.navigate, browser.screenshot
+requires: browser.session.list, browser.tabs, browser.snapshot, browser.navigate, browser.screenshot, browser.visual.verify
 platforms: any
 mutation: mixed
 privilege: user
