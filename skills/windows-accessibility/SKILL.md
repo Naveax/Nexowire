@@ -3,6 +3,11 @@ name: windows-accessibility
 description: Inspect and act through Windows UI Automation before falling back to screenshots or raw input.
 version: 0.1
 requires: windows.accessibility.tree, windows.accessibility.find, windows.accessibility.invoke, windows.accessibility.set_value, windows.window.list
+platforms: win32
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: windows, uia, gui, accessibility
 ---
 
 # Windows Accessibility
