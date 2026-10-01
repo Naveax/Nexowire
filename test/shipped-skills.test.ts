@@ -123,3 +123,20 @@ test('Windows-only shipped skills are excluded from Linux runnability', async ()
   assert.equal(incident?.evaluation?.platformCompatible, true);
   assert.equal(incident?.evaluation?.runnable, true);
 });
+
+
+test('event-driven-control does not pretend process creation is replay-safe', async () => {
+  const registry = new SkillRegistry(
+    path.join(process.cwd(), 'skills'),
+  );
+  const loaded = await registry.load('event-driven-control');
+
+  assert.equal(loaded.manifest.manifestVersion, 2);
+  assert.equal(loaded.manifest.mutation, 'mixed');
+  assert.equal(loaded.manifest.concurrency, 'serial');
+  assert.equal(loaded.manifest.replay, 'manual');
+  assert.ok(
+    loaded.manifest.requires.includes('process.start'),
+  );
+  assert.notEqual(loaded.manifest.replay, 'safe');
+});
