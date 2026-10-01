@@ -3,6 +3,11 @@ name: windows-environment
 description: Inspect and safely change exact Windows environment variables across process, user, and machine scopes with sensitive-value redaction and verification.
 version: 0.1
 requires: windows.environment.list, windows.environment.read, windows.environment.set, windows.environment.delete
+platforms: win32
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: windows, environment, configuration
 ---
 
 # Windows Environment
