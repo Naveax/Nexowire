@@ -58,7 +58,7 @@
       "id": "production-auth",
       "status": "partial",
       "priority": 7,
-      "summary": "Direct TLS, rotating bootstrap bearer credentials, revocable/expiring hash-only stored credentials, MCP tool/device/deterministic-route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret files, DPAPI broker protection, and purpose-bound Windows DPAPI bootstrap secret envelopes are implemented; deployment-grade external identity and broader cross-platform protected secret storage remain"
+      "summary": "Direct TLS, rotating bootstrap bearers, revocable/expiring hash-only credentials, role/tool/device/route scopes, Windows DPAPI envelopes, external OIDC/JWT identity, and Linux Secret Service/macOS Keychain protected-secret adapters wired into hub/agent/relay bootstrap are implemented; deployment onboarding/revocation policy and remaining platform-store hardening remain"
     },
     {
       "id": "dynamic-tool-exposure",
@@ -100,7 +100,7 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1, validation, policy metadata, exact-device runnability, and 30 shipped operational workflows are implemented; specialized recipes and workflow version evolution can continue incrementally"
+      "summary": "Manifest v1, validation, policy metadata, exact-device runnability, and 38 shipped operational workflows including specialized diagnostics/recovery v3 are implemented; manifest/version evolution and additional domain recipes remain incremental work"
     }
   ],
   "standardVerification": [
@@ -129,22 +129,29 @@
     "Shipped skills declare platform/mutation/privilege/trust/tags; skills_list can evaluate missing capabilities against an exact online device.",
     "Stable v1 input schemas are frozen in src/mcp/v1-input-contract.json; regenerate only after explicit compatibility review.",
     "Shipped skill manifests are CI-validated as a library contract.",
-    "Windows DPAPI protected bootstrap envelopes are purpose-bound and CurrentUser-scoped; keep cross-platform protected secret storage as a separate deployment concern.",
     "npm run continuation:check validates PROJECT_STATE.json, required continuation files, hot-file references, unique/sorted priorities, and the HANDOFF resume contract.",
-    "Stable v1 structured-output semantics are frozen in src/mcp/v1-output-contract.json; regenerate only after explicit compatibility review."
+    "Stable v1 structured-output semantics are frozen in src/mcp/v1-output-contract.json; regenerate only after explicit compatibility review.",
+    "OIDC/JWT external MCP identity is merged and maps into existing Nexowire role/tool/device/route authorization; do not treat it as active unfinished work.",
+    "Linux Secret Service and macOS Keychain protected-secret adapters are merged and bootstrap lookup is wired into hub/native-agent/relay configuration; macOS safe non-argv write remains intentionally fail-closed.",
+    "Specialized skill pack v3 is merged; shipped operational skill count is 38."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "42bdf6cf060fb1a02c38b5f2aea27c1cbbd2072f",
+  "lastVerifiedMain": "c59ca2778fe7a81b4b743d77953335dbd29a4d8a",
   "activeWork": [
     {
-      "branch": "feat/oidc-external-identity-v1",
+      "branch": "feat/platform-secret-hardening-v2",
       "status": "implementation",
-      "goal": "Add deployment-grade external OIDC/JWT identity for MCP with issuer/audience/JWKS verification and Nexowire role/scope claim mapping."
+      "goal": "Harden cross-platform protected-secret behavior, especially safe macOS write/update semantics and backend capability/status reporting without secret leakage."
     },
     {
-      "branch": "feat/platform-secret-backends-v1",
+      "branch": "feat/wsl-live-integration-v1",
       "status": "implementation",
-      "goal": "Add optional first-party platform-backed protected secret readers beyond Windows DPAPI, with fail-closed Linux/macOS adapters and tests."
+      "goal": "Add the strongest practical real WSL2-distro integration coverage available without weakening the existing native WSL execution contract."
+    },
+    {
+      "branch": "feat/skill-manifest-v2",
+      "status": "implementation",
+      "goal": "Evolve skills beyond manifest v1 while preserving v1 compatibility and the frozen MCP v1 surface."
     }
   ]
 }

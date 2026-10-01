@@ -63,6 +63,8 @@ Implemented on main as of the latest repository state:
 - exact-element browser visual verification with cropped PNG evidence
 - reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
+- external OIDC/JWT MCP identity with issuer/audience/signature/time validation mapped into Nexowire roles and tool/device/route scopes
+- Linux Secret Service and macOS Keychain protected-secret adapters wired into hub/native-agent/relay bootstrap lookup paths
 - revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credentials support explicit user/operator/admin roles, and allowlists filter both tool discovery and call-time execution
 - direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
@@ -75,10 +77,10 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. deployment-grade external OIDC/JWT identity and protected secret handling
-2. broader cross-platform platform-backed protected secret integration beyond Windows DPAPI
-3. real WSL2-distro integration coverage
-4. incremental specialized skill-library breadth/version evolution
+1. harden cross-platform protected-secret backends, especially safe macOS write/update behavior and capability/status reporting
+2. add the strongest practical real WSL2-distro integration coverage available
+3. evolve skill manifest/version semantics while keeping manifest v1 and MCP surface v1 backward compatible
+4. continue specialized skill-library breadth only where workflows are machine-validatable and conservative
 5. only add new durable-runbook/idempotency/postcondition semantics when restart/replay behavior is explicit and tested
 
 The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
