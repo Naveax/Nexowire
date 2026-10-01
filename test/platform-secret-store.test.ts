@@ -333,3 +333,124 @@ test('macOS Keychain status 44 maps to not-found without leaking backend text', 
       error.code === 'PLATFORM_SECRET_NOT_FOUND',
   );
 });
+
+test('platform secret capabilities expose safe lifecycle support without secret material', () => {
+  const linux = new PlatformSecretStore({
+    platform: 'linux',
+    runner: new FakeRunner(),
+  });
+  assert.deepEqual(linux.capabilities(), {
+    platform: 'linux',
+    backend: 'secret-service',
+    read: true,
+    write: true,
+    delete: true,
+    secureWriteTransport: 'stdin',
+    presenceProbeReadsSecret: true,
+  });
+
+  const darwin = new PlatformSecretStore({
+    platform: 'darwin',
+    runner: new FakeRunner(),
+  });
+  assert.deepEqual(darwin.capabilities(), {
+    platform: 'darwin',
+    backend: 'keychain',
+    read: true,
+    write: false,
+    delete: true,
+    secureWriteTransport: 'unsupported',
+    presenceProbeReadsSecret: false,
+  });
+});
+
+test('macOS platform status checks metadata without requesting password plaintext', () => {
+  const runner = new FakeRunner();
+  runner.syncResult = {
+    status: 0,
+    stdout: 'keychain metadata',
+    stderr: '',
+  };
+  const store = new PlatformSecretStore({
+    platform: 'darwin',
+    runner,
+  });
+
+  assert.deepEqual(
+    store.status({
+      purpose: 'agent-bearer-token',
+      name: 'primary',
+    }),
+    {
+      platform: 'darwin',
+      backend: 'keychain',
+      purpose: 'agent-bearer-token',
+      name: 'primary',
+      present: true,
+      capabilities: {
+        platform: 'darwin',
+        backend: 'keychain',
+        read: true,
+        write: false,
+        delete: true,
+        secureWriteTransport: 'unsupported',
+        presenceProbeReadsSecret: false,
+      },
+    },
+  );
+
+  assert.deepEqual(runner.syncCalls[0], {
+    command: '/usr/bin/security',
+    args: [
+      'find-generic-password',
+      '-s',
+      'Nexowire/agent-bearer-token',
+      '-a',
+      'primary',
+    ],
+    maxBuffer: undefined,
+  });
+  assert.equal(
+    runner.syncCalls[0]?.args.includes('-w'),
+    false,
+  );
+});
+
+test('platform secret backend failures expose hashed diagnostics instead of raw stderr', () => {
+  const runner = new FakeRunner();
+  const store = new PlatformSecretStore({
+    platform: 'linux',
+    runner,
+  });
+  runner.syncResult = {
+    status: 2,
+    stdout: '',
+    stderr: 'sensitive-backend-diagnostic',
+  };
+
+  assert.throws(
+    () =>
+      store.readSync({
+        purpose: 'mcp-bearer-token',
+        name: 'primary',
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof PlatformSecretError);
+      assert.equal(error.code, 'PLATFORM_SECRET_COMMAND_FAILED');
+      const details = error.details ?? {};
+      assert.equal(
+        JSON.stringify(details).includes(
+          'sensitive-backend-diagnostic',
+        ),
+        false,
+      );
+      assert.equal(
+        typeof (
+          details.stderr as { sha256?: unknown } | undefined
+        )?.sha256,
+        'string',
+      );
+      return true;
+    },
+  );
+});
