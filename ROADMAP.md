@@ -69,8 +69,8 @@
 
 ## v1.0 - ChatGPT-ready remote control
 
-- [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored-credential admin grants, bearer rotation, and TLS are implemented; deployment-grade identity, secret handling, and stronger operator/admin identity remain
-- deployment-grade identity, encrypted secret handling, and stronger operator/admin authorization
+- [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored `user`/`operator`/`admin` roles, bearer rotation, and TLS are implemented; deployment-grade external identity and protected-at-rest secret integration remain
+- deployment-grade external identity plus platform-backed/encrypted secret handling beyond the current local credential store and mounted-secret/DPAPI paths
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - stable MCP surface
 - [x] multi-device routing

@@ -66,7 +66,7 @@ Implemented:
 - revocable/expiring hash-only stored MCP/native-agent credentials plus optional MCP tool allowlists enforced before tool execution
 - stored MCP credential allowlists now filter both `tools/list` discovery and call-time execution, so restricted credentials do not receive unauthorized tool schemas
 - stored MCP credentials can restrict stable device IDs and deterministic named routing policies; route grants authorize only their current unambiguous selected target
-- stored MCP credentials are non-administrative by default; sensitive hub administration requires an explicit administrative grant while static/local operator access remains compatible
+- explicit stored MCP `user`/`operator`/`admin` roles: operators can read sensitive control-plane/audit/idempotency state, admins can also mutate policy/routing/group/alias configuration, and legacy `administrative: true` credentials remain admin-compatible
 - HTTP MCP discovery filters native-backed tool schemas by the capabilities currently advertised by online Nexowire agents
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
@@ -103,7 +103,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 1. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
 2. Extend durable runbooks only where new workflow step types have well-defined restart/replay semantics; task graphs + read-only assertion stages are implemented.
-3. Continue deployment-grade identity/secret handling and stronger operator/admin authorization; tool/device/route scopes, explicit stored admin grants, revocation/TTL, rotation, TLS, and descriptor-safe mounted secret reads are implemented.
+3. Continue deployment-grade external identity/protected secret handling; tool/device/route scopes, explicit user/operator/admin roles, revocation/TTL, rotation, TLS, descriptor-safe mounted secret reads, and DPAPI broker secret protection are implemented.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
 6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests; both core paths are implemented.
 7. Continue production authorization work: scoped credentials, revocation, TTL, rotation, and TLS exist; stronger identity/admin policy and deployment secret handling remain.

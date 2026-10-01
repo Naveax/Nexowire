@@ -52,7 +52,7 @@ Implemented on main as of the latest repository state:
 - exact-element browser visual verification with cropped PNG evidence
 - reusable read-only postcondition assertions over files, PID liveness, TCP, and HTTP status
 - rotating bootstrap MCP/native-agent bearer token sets with constant-time matching
-- revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credential allowlists filter both tool discovery and call-time execution
+- revocable/expiring hash-only stored MCP/native-agent credentials; stored MCP credentials support explicit user/operator/admin roles, and allowlists filter both tool discovery and call-time execution
 - direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
 - lazy skills and MCP HTTP/stdio surfaces
@@ -62,7 +62,7 @@ Implemented on main as of the latest repository state:
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broadly:
 
-1. continue deployment-grade production identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit stored admin grants, and dynamic tool discovery are implemented
+1. continue deployment-grade external identity and protected secret handling; TLS, rotation, TTL/revocation, hash-only storage, tool/device/route scopes, explicit user/operator/admin roles, descriptor-safe mounted secret reads, and dynamic tool discovery are implemented
 2. extend durable runbooks only with step types whose restart/replay semantics can be proven; task-graph and read-only assertion stages are implemented
 5. extend idempotency/postconditions only where replay and verification semantics are provably safe
 6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented

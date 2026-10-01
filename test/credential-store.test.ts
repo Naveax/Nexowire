@@ -347,3 +347,75 @@ test('agent credentials reject MCP-only target and administrative scopes', async
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('explicit MCP roles persist and legacy administrative records migrate in metadata', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-credential-roles-'),
+  );
+
+  try {
+    const store = new CredentialStore(root);
+    await store.initialize();
+
+    const user = await store.issue('mcp', {
+      name: 'user-role',
+      role: 'user',
+    });
+    const operator = await store.issue('mcp', {
+      name: 'operator-role',
+      role: 'operator',
+    });
+    const admin = await store.issue('mcp', {
+      name: 'admin-role',
+      role: 'admin',
+    });
+    const legacyAdmin = await store.issue('mcp', {
+      name: 'legacy-admin',
+      administrative: true,
+    });
+
+    assert.equal(user.credential.role, 'user');
+    assert.equal(user.credential.administrative, false);
+    assert.equal(operator.credential.role, 'operator');
+    assert.equal(operator.credential.administrative, false);
+    assert.equal(admin.credential.role, 'admin');
+    assert.equal(admin.credential.administrative, true);
+    assert.equal(legacyAdmin.credential.role, 'admin');
+    assert.equal(legacyAdmin.credential.administrative, true);
+
+    const reloaded = new CredentialStore(root);
+    await reloaded.initialize();
+    assert.equal(
+      reloaded.authenticate('mcp', operator.token)?.role,
+      'operator',
+    );
+    assert.equal(
+      reloaded.authenticate('mcp', admin.token)?.role,
+      'admin',
+    );
+
+    await assert.rejects(
+      () =>
+        store.issue('agent', {
+          role: 'operator',
+        }),
+      (error: unknown) =>
+        error instanceof CredentialStoreError &&
+        error.code === 'CREDENTIAL_ROLE_SCOPE_UNSUPPORTED',
+    );
+
+    await assert.rejects(
+      () =>
+        store.issue('mcp', {
+          role: 'operator',
+          administrative: true,
+        }),
+      (error: unknown) =>
+        error instanceof CredentialStoreError &&
+        error.code === 'CREDENTIAL_ROLE_CONFLICT',
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
