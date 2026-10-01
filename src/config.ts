@@ -10,6 +10,18 @@ import {
   optionalProtectedSecretListFile,
 } from './security/protected-secret-files.js';
 
+export interface NexowireOidcConfig {
+  issuer: string;
+  audience: string;
+  jwksUri?: string;
+  roleClaim?: string;
+  toolsClaim?: string;
+  deviceIdsClaim?: string;
+  routingPoliciesClaim?: string;
+  clockSkewSeconds?: number;
+  allowInsecureHttp?: boolean;
+}
+
 export interface NexowireConfig {
   host: string;
   port: number;
@@ -20,6 +32,7 @@ export interface NexowireConfig {
   tlsCertFile?: string;
   tlsKeyFile?: string;
   allowInsecureRemote?: boolean;
+  oidc?: NexowireOidcConfig;
   stateDir: string;
   skillsDir: string;
 }
@@ -140,6 +153,63 @@ export function loadConfig(
     );
   }
 
+  const oidcIssuer = optional(env.NEXOWIRE_OIDC_ISSUER);
+  const oidcAudience = optional(env.NEXOWIRE_OIDC_AUDIENCE);
+  if (Boolean(oidcIssuer) !== Boolean(oidcAudience)) {
+    throw new Error(
+      'NEXOWIRE_OIDC_ISSUER and NEXOWIRE_OIDC_AUDIENCE must be configured together.',
+    );
+  }
+  const rawOidcSkew = optional(env.NEXOWIRE_OIDC_CLOCK_SKEW_SECONDS);
+  let oidcClockSkewSeconds: number | undefined;
+  if (rawOidcSkew !== undefined) {
+    const parsed = Number(rawOidcSkew);
+    if (
+      !Number.isInteger(parsed) ||
+      parsed < 0 ||
+      parsed > 300
+    ) {
+      throw new Error(
+        'NEXOWIRE_OIDC_CLOCK_SKEW_SECONDS must be an integer between 0 and 300.',
+      );
+    }
+    oidcClockSkewSeconds = parsed;
+  }
+  const oidc: NexowireOidcConfig | undefined =
+    oidcIssuer && oidcAudience
+      ? {
+          issuer: oidcIssuer,
+          audience: oidcAudience,
+          ...(optional(env.NEXOWIRE_OIDC_JWKS_URI)
+            ? { jwksUri: optional(env.NEXOWIRE_OIDC_JWKS_URI)! }
+            : {}),
+          ...(optional(env.NEXOWIRE_OIDC_ROLE_CLAIM)
+            ? { roleClaim: optional(env.NEXOWIRE_OIDC_ROLE_CLAIM)! }
+            : {}),
+          ...(optional(env.NEXOWIRE_OIDC_TOOLS_CLAIM)
+            ? { toolsClaim: optional(env.NEXOWIRE_OIDC_TOOLS_CLAIM)! }
+            : {}),
+          ...(optional(env.NEXOWIRE_OIDC_DEVICE_IDS_CLAIM)
+            ? {
+                deviceIdsClaim:
+                  optional(env.NEXOWIRE_OIDC_DEVICE_IDS_CLAIM)!,
+              }
+            : {}),
+          ...(optional(env.NEXOWIRE_OIDC_ROUTING_POLICIES_CLAIM)
+            ? {
+                routingPoliciesClaim:
+                  optional(env.NEXOWIRE_OIDC_ROUTING_POLICIES_CLAIM)!,
+              }
+            : {}),
+          ...(oidcClockSkewSeconds !== undefined
+            ? { clockSkewSeconds: oidcClockSkewSeconds }
+            : {}),
+          ...(envFlag(env.NEXOWIRE_OIDC_ALLOW_INSECURE_HTTP)
+            ? { allowInsecureHttp: true }
+            : {}),
+        }
+      : undefined;
+
   return {
     host: optional(env.NEXOWIRE_HTTP_HOST) ?? '127.0.0.1',
     port,
@@ -160,6 +230,7 @@ export function loadConfig(
     ...(envFlag(env.NEXOWIRE_ALLOW_INSECURE_REMOTE)
       ? { allowInsecureRemote: true }
       : {}),
+    ...(oidc ? { oidc } : {}),
     stateDir,
     skillsDir: path.join(cwd, 'skills'),
   };
