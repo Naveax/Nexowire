@@ -38,6 +38,8 @@ Packaged/global executions must not depend on the caller's current working direc
 
 The CLI version and `package.json` version must match. A version bump that updates only one side fails `release:check`.
 
+On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
+
 The current package remains development versioned until an explicit release candidate/version decision is made.
 
 ## Release provenance metadata
