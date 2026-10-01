@@ -57,7 +57,7 @@ Implemented on main as of the latest repository state:
 - higher-level durable runbooks combining task-graph stages and read-only postcondition stages with exact-spec resume and restart-safe retry rules
 - bounded artifact metadata listing/re-verification with changed/missing detection and no persisted artifact contents
 - event feed
-- structured Windows process/service/network/registry/task/eventlog/firewall/environment controls, including fail-closed exact-name service mutation with bounded verified state/startup postconditions, verified unnamed/default registry value mutation, and explicit UTF-8 stdin transport for structured-control plus user/machine environment PowerShell payloads
+- structured Windows process/service/network/registry/task/eventlog/firewall/environment controls, including fail-closed exact-name service mutation with bounded verified state/startup postconditions, bounded Event Log text with truncation metadata, verified unnamed/default registry value mutation, and explicit UTF-8 stdin transport for structured-control plus user/machine environment PowerShell payloads
 - exact HWND windows, screenshots, clipboard, keyboard, UI Automation, pointer fallback
 - first-party isolated Edge/Chrome CDP automation
 - exact-element browser visual verification with cropped PNG evidence
@@ -81,22 +81,24 @@ Implemented on main as of the latest repository state:
 - first-party Windows current-user Scheduled Task, Linux systemd user-service, and macOS per-user LaunchAgent native-agent lifecycle with install/status/start/stop/restart/uninstall/autostart, refusal to persist plaintext bearer variables, and real macOS lifecycle CI
 - live HTTPS/OIDC/scoped-discovery/revocation operational CI
 - 45 shipped skills, including fourteen replay-safe/parallel-safe read-only manifest-v2 workflows, conservative artifact/browser/service/regression/release-readiness/backup-integrity/configuration-drift domain recipes, and CI checks that domain capability references are known and read-only recipes use only read-only runtime capabilities
-- installable release-candidate packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, CycloneDX SBOM evidence, independent verification before upload, exact `v<package-version>` tag enforcement before canonical packaging, and tag-only SLSA provenance and CycloneDX SBOM attestations with isolated permissions
+- installable v1.0.0 release packaging with the `nexowire` CLI, package-backed version reporting, bundled-skill fallback outside repository cwd, deterministic package-content auditing, clean tarball install smoke on Linux/Windows/macOS, SHA256SUMS, release-manifest.json, CycloneDX SBOM evidence, independent verification before upload, exact `v<package-version>` tag enforcement, SLSA/CycloneDX attestations, and an explicit authorization-marker GitHub Release gate
 - canonical-realpath async path authorization that handles platform aliases such as macOS `/var` -> `/private/var` without weakening symlink-escape protection
 
-## Important unfinished slices
+## Release boundary and post-v1 work
 
-Most original v0.x/v1.0 infrastructure goals are now implemented. Remaining work is deliberately narrower:
+The v1.0 implementation scope is complete. Further domain recipes, additional capability probes, performance tuning, and reproduced hardening work are post-v1 incremental development rather than blockers for the first stable release.
 
-1. expand domain recipes only when they encode repeated real workflows with explicit capability requirements and mutation/replay/concurrency semantics
-2. keep the production regression floor green across packaged-runtime smoke, browser, Windows, Linux, macOS, WSL2, doctor/onboarding, HTTPS/OIDC/revocation, LaunchAgent, Keychain, relay, and privileged-broker lanes
-3. preserve the frozen MCP v1 input/output contracts and first-party-only runtime ownership invariant
+Before and after publication:
+
+1. keep the production regression floor green across packaged-runtime smoke, browser, Windows, Linux, macOS, WSL2, doctor/onboarding, HTTPS/OIDC/revocation, LaunchAgent, Keychain, relay, and privileged-broker lanes
+2. preserve the frozen MCP v1 input/output contracts and first-party-only runtime ownership invariant
+3. add new domain recipes only when they encode repeated real workflows with explicit capability requirements and mutation/replay/concurrency semantics
 4. add executable/environment capability probes only after reproducing a static-advertisement mismatch
-5. release publication is intentionally not automatic: npm publication, GitHub Release creation, and release-tag creation require explicit owner authorization
+5. keep npm publication disabled for the initial self-hosted v1.0.0 release unless package policy is explicitly changed later
 
-Release-candidate evidence, checksum/manifest/SBOM verification, exact tag/package-version enforcement, tag-only SLSA provenance, and CycloneDX SBOM attestations are merged baseline functionality.
+GitHub v1.0.0 publication has explicit owner authorization. The final publication path is an exact `.github/releases/v1.0.0.authorized` marker on `main`, which creates/reuses the matching tag and dispatches tag-scoped release readiness. The tag-scoped workflow must pass packaging, independent candidate verification, attestations, and checksum re-verification before the GitHub Release is created.
 
-At the 2026-10-01 continuation sync, main has no open implementation pull requests after merging Windows service-control postcondition verification. Start/restart must converge to Running, stop to Stopped, requested startup mode must converge, and real Windows CI verifies an isolated temporary service fixture. The stable MCP v1 input/output surfaces remain unchanged. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
+At the 2026-10-01 release-preparation sync, bounded Windows Event Log output is merged on main and no implementation PR remains. The release-preparation branch contains the 1.0.0 version change and explicit publication gate. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
 ## Branch and merge discipline
 
