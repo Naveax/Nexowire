@@ -18,6 +18,7 @@ on:
       - "scripts/verify-release-candidate.ts"
       - "test/release-metadata.test.ts"
       - "test/release-candidate-verify.test.ts"
+      - "test/release-attestation-policy.test.ts"
       - "skills/**"
       - "docs/RELEASE.md"
       - ".github/workflows/release-readiness.yml"
@@ -78,3 +79,33 @@ jobs:
             nexowire-sbom.cdx.json
           if-no-files-found: error
           retention-days: 14
+
+  attest:
+    name: Attest tagged release candidate
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download verified release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: nexowire-${{ github.run_id }}-${{ github.sha }}
+          path: release-candidate
+      - name: Re-check downloaded candidate checksum
+        working-directory: release-candidate
+        run: sha256sum -c SHA256SUMS
+      - name: Generate SLSA build provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: "release-candidate/nexowire-*.tgz"
+      - name: Generate SBOM attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: "release-candidate/nexowire-*.tgz"
+          sbom-path: "release-candidate/nexowire-sbom.cdx.json"
