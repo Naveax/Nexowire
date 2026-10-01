@@ -129,20 +129,21 @@
     "Shipped skills declare platform/mutation/privilege/trust/tags; skills_list can evaluate missing capabilities against an exact online device.",
     "Stable v1 input schemas are frozen in src/mcp/v1-input-contract.json; regenerate only after explicit compatibility review.",
     "Shipped skill manifests are CI-validated as a library contract.",
-    "Windows DPAPI protected bootstrap envelopes are purpose-bound and CurrentUser-scoped; keep cross-platform protected secret storage as a separate deployment concern."
+    "Windows DPAPI protected bootstrap envelopes are purpose-bound and CurrentUser-scoped; keep cross-platform protected secret storage as a separate deployment concern.",
+    "npm run continuation:check validates PROJECT_STATE.json, required continuation files, hot-file references, unique/sorted priorities, and the HANDOFF resume contract."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "42909d4cbae2f887d3048bef13fb17a99c5838b9",
+  "lastVerifiedMain": "8d61f49bf58336a3874d0616756647136e5f0047",
   "activeWork": [
     {
-      "branch": "feat/windows-protected-secret-sources-v2",
-      "status": "testing",
-      "goal": "Land purpose-bound Windows DPAPI protected bootstrap secret files on top of current main."
+      "branch": "feat/mcp-output-contract-v1",
+      "status": "implementation",
+      "goal": "Add machine-readable structured-output semantic compatibility and a frozen output contract for MCP surface v1."
     },
     {
-      "branch": "planned:mcp-output-contract-v1",
-      "status": "planned",
-      "goal": "Add machine-readable structured-output semantic compatibility for the stable MCP v1 surface."
+      "branch": "feat/continuation-state-check-v1",
+      "status": "testing",
+      "goal": "Enforce the GitHub continuation sources as a machine-validated cross-chat handoff contract in normal CI."
     }
   ]
 }

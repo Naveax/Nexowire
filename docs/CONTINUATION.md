@@ -2,6 +2,17 @@
 
 This file exists so development can continue from a completely new ChatGPT conversation with no access to prior chat history.
 
+## Canonical continuation files
+
+A new chat must treat these exact repository paths as the handoff set:
+
+- `docs/CONTINUATION.md`
+- `HANDOFF.md`
+- `ROADMAP.md`
+- `PROJECT_STATE.json`
+
+`PROJECT_STATE.json` declares the same set so CI can detect drift instead of relying on somebody remembering which markdown file was sacred this week.
+
 ## One-line goal
 
 Build a first-party ChatGPT/MCP computer-control stack whose runtime is owned by Nexowire: Hub + Native Agent + first-party transports/capabilities, with no required SentinelX, Desktop Commander, Codex, browser SaaS, or other quota-limited remote-control dependency.
@@ -116,3 +127,5 @@ Whenever a major slice merges:
 - keep this file architectural and stable rather than filling it with transient branch noise
 
 If a conversation disappears, another chat should be able to continue by reading these repository files alone.
+
+`npm run continuation:check` machine-validates `PROJECT_STATE.json`, all declared continuation files, hot-file references, priority uniqueness/order, and the HANDOFF resume contract. Normal `npm run check` includes this validation so stale or broken continuation metadata fails CI rather than waiting for the next chat to discover archaeology.

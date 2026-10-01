@@ -11,7 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test --import tsx test/**/*.test.ts",
-    "check": "npm run typecheck && npm test",
+    "check": "npm run typecheck && npm run continuation:check && npm test",
     "dev": "tsx src/cli.ts",
     "dev:http": "tsx src/cli.ts http",
     "dev:stdio": "tsx src/cli.ts stdio",
@@ -22,7 +22,8 @@
     "start:relay": "node dist/src/cli.js relay",
     "dev:privileged-broker": "tsx src/cli.ts privileged-broker",
     "start:privileged-broker": "node dist/src/cli.js privileged-broker",
-    "mcp:contract:generate": "node --import tsx scripts/generate-mcp-v1-contract.ts"
+    "mcp:contract:generate": "node --import tsx scripts/generate-mcp-v1-contract.ts",
+    "continuation:check": "node --import tsx scripts/check-continuation-state.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
