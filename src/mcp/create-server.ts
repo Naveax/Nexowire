@@ -4776,6 +4776,17 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'skills_validate',
+    {
+      title: 'Validate Nexowire skill manifests',
+      description:
+        'Validate every installed SKILL.md manifest and report invalid directories without loading workflow bodies into normal tool context.',
+      inputSchema: {},
+    },
+    async () => toolResult(await ctx.skills.validate()),
+  );
+
+  server.registerTool(
     'skills_list',
     {
       title: 'List Nexowire skills',
