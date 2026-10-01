@@ -242,32 +242,50 @@ function heartbeatMs(env: NodeJS.ProcessEnv): number {
   return Math.min(120_000, Math.max(5_000, Math.round(parsed)));
 }
 
-export async function capabilitiesForAgent(
-  platform: NodeJS.Platform = process.platform,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<string[]> {
+export function filterRuntimeCapabilities(
+  platform: NodeJS.Platform,
+  availability: {
+    browser: boolean;
+    wsl: boolean;
+  },
+): string[] {
   let capabilities = capabilitiesForPlatform(platform);
 
-  const browserAvailable = await browserCapabilitiesAvailable({
-    platform,
-    env,
-  });
-  if (!browserAvailable) {
+  if (!availability.browser) {
     capabilities = capabilities.filter(
       (capability) => !capability.startsWith('browser.'),
     );
   }
 
-  if (
-    platform === 'win32' &&
-    !detectWsl({ platform, env }).available
-  ) {
+  if (platform === 'win32' && !availability.wsl) {
     capabilities = capabilities.filter(
       (capability) => capability !== 'wsl.exec',
     );
   }
 
   return capabilities;
+}
+
+export async function capabilitiesForAgent(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string[]> {
+  const [browser, wsl] = await Promise.all([
+    browserCapabilitiesAvailable({
+      platform,
+      env,
+    }),
+    Promise.resolve(
+      platform === 'win32'
+        ? detectWsl({ platform, env }).available
+        : false,
+    ),
+  ]);
+
+  return filterRuntimeCapabilities(platform, {
+    browser,
+    wsl,
+  });
 }
 
 export async function runNativeAgent(
