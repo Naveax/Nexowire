@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 export class WindowsDpapiError extends Error {
   constructor(
@@ -10,30 +10,110 @@ export class WindowsDpapiError extends Error {
   }
 }
 
-const ENTROPY = 'Nexowire/privileged-broker/v1';
+const LEGACY_BROKER_ENTROPY = 'Nexowire/privileged-broker/v1';
+const PROTECTED_SECRET_PREFIX = 'Nexowire/protected-secret/v1/';
 
-async function runDpapi(
-  operation: 'protect' | 'unprotect',
-  value: Buffer,
-): Promise<Buffer> {
+function assertWindows(): void {
   if (process.platform !== 'win32') {
     throw new WindowsDpapiError(
       'WINDOWS_DPAPI_REQUIRED',
       'Windows DPAPI is available only on Windows.',
     );
   }
+}
 
+function validatePurpose(purpose: string): string {
+  const normalized = purpose.trim();
+  if (
+    normalized.length < 1 ||
+    normalized.length > 128 ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(normalized)
+  ) {
+    throw new WindowsDpapiError(
+      'WINDOWS_DPAPI_PURPOSE_INVALID',
+      'DPAPI purpose must be 1-128 safe identifier characters.',
+    );
+  }
+  return normalized;
+}
+
+function strictBase64(value: string): Buffer {
+  const normalized = value.trim();
+  if (
+    normalized.length === 0 ||
+    normalized.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)
+  ) {
+    throw new WindowsDpapiError(
+      'WINDOWS_DPAPI_INVALID_CIPHERTEXT',
+      'DPAPI ciphertext is not valid base64.',
+    );
+  }
+
+  const decoded = Buffer.from(normalized, 'base64');
+  if (
+    decoded.length === 0 ||
+    decoded.toString('base64') !== normalized
+  ) {
+    throw new WindowsDpapiError(
+      'WINDOWS_DPAPI_INVALID_CIPHERTEXT',
+      'DPAPI ciphertext is not canonical base64.',
+    );
+  }
+  return decoded;
+}
+
+function powershellScript(
+  operation: 'protect' | 'unprotect',
+): string {
   const method =
     operation === 'protect' ? 'Protect' : 'Unprotect';
-  const script = [
+  return [
     "$ErrorActionPreference='Stop'",
     'Add-Type -AssemblyName System.Security',
-    "$inputBytes=[Convert]::FromBase64String($env:NEXOWIRE_DPAPI_INPUT)",
-    "$entropy=[Text.Encoding]::UTF8.GetBytes($env:NEXOWIRE_DPAPI_ENTROPY)",
+    '$payload=[Console]::In.ReadToEnd() | ConvertFrom-Json',
+    '$inputBytes=[Convert]::FromBase64String([string]$payload.input)',
+    '$entropy=[Convert]::FromBase64String([string]$payload.entropy)',
     '$scope=[Security.Cryptography.DataProtectionScope]::CurrentUser',
     `$output=[Security.Cryptography.ProtectedData]::${method}($inputBytes,$entropy,$scope)`,
     '[Console]::Out.Write([Convert]::ToBase64String($output))',
   ].join('; ');
+}
+
+function stdinPayload(value: Buffer, entropy: string): string {
+  return JSON.stringify({
+    input: value.toString('base64'),
+    entropy: Buffer.from(entropy, 'utf8').toString('base64'),
+  });
+}
+
+function decodeOutput(
+  operation: 'protect' | 'unprotect',
+  stdout: string,
+): Buffer {
+  const out = stdout.trim();
+  try {
+    return strictBase64(out);
+  } catch (error) {
+    if (
+      error instanceof WindowsDpapiError &&
+      error.code === 'WINDOWS_DPAPI_INVALID_CIPHERTEXT'
+    ) {
+      throw new WindowsDpapiError(
+        'WINDOWS_DPAPI_INVALID_RESPONSE',
+        `Windows DPAPI ${operation} returned invalid base64.`,
+      );
+    }
+    throw error;
+  }
+}
+
+async function runDpapi(
+  operation: 'protect' | 'unprotect',
+  value: Buffer,
+  entropy: string,
+): Promise<Buffer> {
+  assertWindows();
 
   return await new Promise<Buffer>((resolve, reject) => {
     const child = spawn(
@@ -43,16 +123,11 @@ async function runDpapi(
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        script,
+        powershellScript(operation),
       ],
       {
         windowsHide: true,
-        env: {
-          ...process.env,
-          NEXOWIRE_DPAPI_INPUT: value.toString('base64'),
-          NEXOWIRE_DPAPI_ENTROPY: ENTROPY,
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
 
@@ -63,7 +138,7 @@ async function runDpapi(
 
     child.once('error', (error) => reject(error));
     child.once('close', (code) => {
-      const out = Buffer.concat(stdout).toString('utf8').trim();
+      const out = Buffer.concat(stdout).toString('utf8');
       const err = Buffer.concat(stderr).toString('utf8').trim();
 
       if (code !== 0) {
@@ -77,17 +152,53 @@ async function runDpapi(
       }
 
       try {
-        resolve(Buffer.from(out, 'base64'));
-      } catch {
-        reject(
-          new WindowsDpapiError(
-            'WINDOWS_DPAPI_INVALID_RESPONSE',
-            'Windows DPAPI returned invalid base64.',
-          ),
-        );
+        resolve(decodeOutput(operation, out));
+      } catch (error) {
+        reject(error);
       }
     });
+
+    child.stdin.end(stdinPayload(value, entropy), 'utf8');
   });
+}
+
+function runDpapiSync(
+  operation: 'protect' | 'unprotect',
+  value: Buffer,
+  entropy: string,
+): Buffer {
+  assertWindows();
+
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      powershellScript(operation),
+    ],
+    {
+      windowsHide: true,
+      input: stdinPayload(value, entropy),
+      encoding: 'utf8',
+      maxBuffer: 2 * 1024 * 1024,
+    },
+  );
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new WindowsDpapiError(
+      'WINDOWS_DPAPI_FAILED',
+      result.stderr.trim() ||
+        `Windows DPAPI ${operation} failed.`,
+    );
+  }
+  return decodeOutput(operation, result.stdout);
+}
+
+function entropyForPurpose(purpose: string): string {
+  return PROTECTED_SECRET_PREFIX + validatePurpose(purpose);
 }
 
 export async function protectWindowsUserSecret(
@@ -96,6 +207,7 @@ export async function protectWindowsUserSecret(
   const protectedBytes = await runDpapi(
     'protect',
     Buffer.from(plaintext, 'utf8'),
+    LEGACY_BROKER_ENTROPY,
   );
   return protectedBytes.toString('base64');
 }
@@ -103,15 +215,45 @@ export async function protectWindowsUserSecret(
 export async function unprotectWindowsUserSecret(
   ciphertext: string,
 ): Promise<string> {
-  let bytes: Buffer;
-  try {
-    bytes = Buffer.from(ciphertext, 'base64');
-  } catch {
-    throw new WindowsDpapiError(
-      'WINDOWS_DPAPI_INVALID_CIPHERTEXT',
-      'DPAPI ciphertext is not valid base64.',
-    );
-  }
-  const plaintext = await runDpapi('unprotect', bytes);
+  const plaintext = await runDpapi(
+    'unprotect',
+    strictBase64(ciphertext),
+    LEGACY_BROKER_ENTROPY,
+  );
   return plaintext.toString('utf8');
+}
+
+export async function protectWindowsUserSecretForPurpose(
+  plaintext: string,
+  purpose: string,
+): Promise<string> {
+  const protectedBytes = await runDpapi(
+    'protect',
+    Buffer.from(plaintext, 'utf8'),
+    entropyForPurpose(purpose),
+  );
+  return protectedBytes.toString('base64');
+}
+
+export async function unprotectWindowsUserSecretForPurpose(
+  ciphertext: string,
+  purpose: string,
+): Promise<string> {
+  const plaintext = await runDpapi(
+    'unprotect',
+    strictBase64(ciphertext),
+    entropyForPurpose(purpose),
+  );
+  return plaintext.toString('utf8');
+}
+
+export function unprotectWindowsUserSecretForPurposeSync(
+  ciphertext: string,
+  purpose: string,
+): string {
+  return runDpapiSync(
+    'unprotect',
+    strictBase64(ciphertext),
+    entropyForPurpose(purpose),
+  ).toString('utf8');
 }
