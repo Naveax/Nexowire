@@ -3,6 +3,11 @@ name: fast-repo-inspect
 description: Inspect an unfamiliar repository quickly using compact snapshots, targeted search, and batched reads instead of recursive context dumping.
 version: 0.1
 requires: workspace.detect, workspace.snapshot, search.text, files.read_many
+platforms: any
+mutation: read-only
+privilege: user
+trust: reviewed
+tags: repo, search, inspect, performance
 ---
 
 # Fast Repo Inspect
