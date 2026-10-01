@@ -83,4 +83,5 @@
 - [x] zero required third-party computer-control runtime dependencies
 - [x] release provenance metadata: SHA256SUMS, release manifest, and CycloneDX SBOM are attached to canonical candidates
 - [x] independently verify generated checksum/manifest/SBOM evidence before candidate upload
-- [~] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs; tagged/public publication remains explicitly authorized and separate
+- [x] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs
+- [~] tag-only SLSA build provenance and CycloneDX SBOM attestations after verified candidate download; npm/GitHub Release publication remains explicitly authorized and separate
