@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import { parseTokenList } from './security/tokens.js';
@@ -53,6 +55,29 @@ function envFlag(value: string | undefined): boolean {
     normalized === 'true' ||
     normalized === 'yes' ||
     normalized === 'on'
+  );
+}
+
+export function resolveSkillsDir(
+  env: NodeJS.ProcessEnv = process.env,
+  cwd = process.cwd(),
+  moduleUrl = import.meta.url,
+): string {
+  const explicit = optional(env.NEXOWIRE_SKILLS_DIR);
+  if (explicit) {
+    return path.resolve(cwd, explicit);
+  }
+
+  const moduleDir = path.dirname(fileURLToPath(moduleUrl));
+  const candidates = [
+    path.resolve(moduleDir, '..', 'skills'),
+    path.resolve(moduleDir, '..', '..', 'skills'),
+    path.join(cwd, 'skills'),
+  ];
+
+  return (
+    candidates.find((candidate) => existsSync(candidate)) ??
+    path.join(cwd, 'skills')
   );
 }
 
@@ -280,7 +305,7 @@ export function loadConfig(
       : {}),
     ...(oidc ? { oidc } : {}),
     stateDir,
-    skillsDir: path.join(cwd, 'skills'),
+    skillsDir: resolveSkillsDir(env, cwd),
   };
 }
 
