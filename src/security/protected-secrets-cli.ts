@@ -2,6 +2,7 @@ import {
   inspectProtectedSecretFile,
   writeProtectedSecretFile,
 } from './protected-secret-files.js';
+import { PlatformSecretStore } from './platform-secret-store.js';
 
 export const PROTECTED_SECRET_PURPOSES = [
   'mcp-bearer-token',
@@ -21,6 +22,9 @@ function usage(): string {
     '  nexowire secrets purposes',
     '  nexowire secrets inspect <file>',
     '  nexowire secrets seal <purpose> <file> [--overwrite]',
+    '  nexowire secrets platform-status <purpose> <name>',
+    '  nexowire secrets platform-store <purpose> <name> [--overwrite]',
+    '  nexowire secrets platform-delete <purpose> <name>',
     '',
     'seal reads the plaintext secret from stdin and never accepts it as a command-line argument.',
     '',
@@ -86,6 +90,91 @@ export async function runProtectedSecretCommand(
     process.stdout.write(
       JSON.stringify(
         inspectProtectedSecretFile(file),
+        null,
+        2,
+      ) + '\n',
+    );
+    return;
+  }
+
+  if (
+    action === 'platform-status' ||
+    action === 'platform-store' ||
+    action === 'platform-delete'
+  ) {
+    const purpose = args[1];
+    const name = args[2];
+    if (!purpose || !name) {
+      throw new Error(
+        'platform secret commands require <purpose> <name>.',
+      );
+    }
+    if (
+      !PROTECTED_SECRET_PURPOSES.includes(
+        purpose as (typeof PROTECTED_SECRET_PURPOSES)[number],
+      )
+    ) {
+      throw new Error(
+        'Unsupported protected-secret purpose. Run nexowire secrets purposes.',
+      );
+    }
+
+    const store = new PlatformSecretStore();
+
+    if (action === 'platform-status') {
+      process.stdout.write(
+        JSON.stringify(
+          {
+            purpose,
+            name,
+            present: store.exists({ purpose, name }),
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      return;
+    }
+
+    if (action === 'platform-delete') {
+      process.stdout.write(
+        JSON.stringify(
+          {
+            purpose,
+            name,
+            deleted: await store.delete({ purpose, name }),
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      return;
+    }
+
+    const flags = new Set(args.slice(3));
+    for (const flag of flags) {
+      if (flag !== '--overwrite') {
+        throw new Error(
+          'Unknown platform-store option: ' + flag,
+        );
+      }
+    }
+    const plaintext = await readStdinBounded();
+    await store.write(
+      { purpose, name },
+      plaintext,
+      {
+        allowMultiline: purpose.endsWith('-list'),
+        overwrite: flags.has('--overwrite'),
+      },
+    );
+    process.stdout.write(
+      JSON.stringify(
+        {
+          purpose,
+          name,
+          stored: true,
+        },
         null,
         2,
       ) + '\n',
