@@ -34,6 +34,11 @@ import {
   isRoutingPolicyAuthorized,
 } from '../security/target-authorization.js';
 import { isMcpToolAvailableForCapabilities } from './tool-capabilities.js';
+import { AGENT_PROTOCOL_VERSION } from '../protocol/agent.js';
+import {
+  MCP_SURFACE_VERSION,
+  MCP_V1_STABLE_TOOLS,
+} from './surface.js';
 
 export interface McpContext {
   broker: AgentBroker;
@@ -504,6 +509,27 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ? { availableCapabilities: ctx.availableCapabilities }
       : {}),
   });
+
+  server.registerTool(
+    'nexowire_surface_info',
+    {
+      title: 'Nexowire MCP surface info',
+      description:
+        'Report the stable MCP compatibility surface version and native-agent protocol version. Optionally include the v1 stable tool-name floor.',
+      inputSchema: {
+        include_tools: z.boolean().optional(),
+      },
+    },
+    async ({ include_tools }) =>
+      toolResult({
+        mcpSurfaceVersion: MCP_SURFACE_VERSION,
+        nativeAgentProtocolVersion: AGENT_PROTOCOL_VERSION,
+        stableToolCount: MCP_V1_STABLE_TOOLS.length,
+        ...(include_tools
+          ? { stableTools: [...MCP_V1_STABLE_TOOLS] }
+          : {}),
+      }),
+  );
 
   server.registerTool(
     'policy_profile_list',
