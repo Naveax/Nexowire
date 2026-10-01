@@ -32,6 +32,7 @@ export interface PlatformSecretRunner {
     options?: {
       input?: string;
       maxBuffer?: number;
+      timeoutMs?: number;
     },
   ): {
     status: number | null;
@@ -46,6 +47,7 @@ export interface PlatformSecretRunner {
     options?: {
       input?: string;
       maxBuffer?: number;
+      timeoutMs?: number;
     },
   ): Promise<{
     status: number | null;
@@ -205,8 +207,6 @@ function macWriteCommand(
     securityInteractiveQuote(macService(reference)),
     '-w',
     securityInteractiveQuote(secret),
-    '-T',
-    securityInteractiveQuote('/usr/bin/security'),
   ];
   const command = parts.join(' ') + '\n';
 
@@ -233,6 +233,7 @@ function defaultRunner(): PlatformSecretRunner {
           encoding: 'utf8',
           windowsHide: true,
           maxBuffer: options.maxBuffer ?? 2 * 1024 * 1024,
+          timeout: options.timeoutMs ?? 15_000,
         },
       );
       return {
@@ -254,8 +255,16 @@ function defaultRunner(): PlatformSecretRunner {
         let bytes = 0;
         const maxBuffer =
           options.maxBuffer ?? 2 * 1024 * 1024;
+        const timeoutMs = options.timeoutMs ?? 15_000;
         let overflow = false;
+        let timedOut = false;
         let launchError: Error | undefined;
+
+        const timer = setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGKILL');
+        }, timeoutMs);
+        timer.unref();
 
         const collect = (
           target: Buffer[],
@@ -264,7 +273,7 @@ function defaultRunner(): PlatformSecretRunner {
           bytes += chunk.length;
           if (bytes > maxBuffer) {
             overflow = true;
-            child.kill();
+            child.kill('SIGKILL');
             return;
           }
           target.push(chunk);
@@ -280,18 +289,25 @@ function defaultRunner(): PlatformSecretRunner {
           launchError = error;
         });
         child.once('close', (status) => {
+          clearTimeout(timer);
           resolve({
             status,
             stdout: Buffer.concat(stdout).toString('utf8'),
             stderr: Buffer.concat(stderr).toString('utf8'),
             ...(launchError ? { error: launchError } : {}),
-            ...(overflow
+            ...(timedOut
               ? {
                   error: new Error(
-                    'Platform secret command output exceeded the bound.',
+                    'Platform secret command timed out.',
                   ),
                 }
-              : {}),
+              : overflow
+                ? {
+                    error: new Error(
+                      'Platform secret command output exceeded the bound.',
+                    ),
+                  }
+                : {}),
           });
         });
         child.stdin.end(options.input ?? '', 'utf8');
@@ -542,6 +558,7 @@ export class PlatformSecretStore {
             options.overwrite === true,
           ),
           maxBuffer: 2 * 1024 * 1024,
+          timeoutMs: 15_000,
         },
       );
       if (result.status !== 0 || result.error) {
