@@ -55,8 +55,8 @@ Implemented:
 - real macOS native-agent core CI covering outbound connection, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
 - structured Windows process/service/network inspection and service control
 - structured Windows registry, scheduled-task, event-log, and firewall queries
-- verified exact Windows registry/task/firewall mutation controls, including unnamed/default registry values
-- exact Windows environment name discovery, selective redacted reads, and verified process/user/machine set/delete
+- verified exact Windows registry/task/firewall mutation controls, including unnamed/default registry values; structured Windows-control PowerShell JSON uses explicit UTF-8 stdin with real >64 KiB Unicode registry coverage
+- exact Windows environment name discovery, selective redacted reads, and verified process/user/machine set/delete; user/machine PowerShell JSON payloads use explicit UTF-8 stdin instead of child-process environment variables
 - structured top-level Windows window enumeration plus exact HWND focus with foreground verification
 - bounded inline PNG capture for virtual desktop, primary screen, and exact HWND rectangles with SHA-256 metadata
 - bounded clipboard read/write/clear plus exact-foreground Unicode typing/hotkeys; window focus has an attached-thread exact-HWND fallback before verification
@@ -119,7 +119,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-At the 2026-10-01 continuation sync, there are no open implementation PRs. Unnamed/default Windows registry value set/read/delete is merged and verified on a real Windows CI runner; structured Windows control tests now run in that Windows lane. Skill-library capability/read-only contracts remain CI-enforced.
+At the 2026-10-01 continuation sync, there are no open implementation PRs. Windows structured-control and user/machine environment PowerShell JSON transports now use explicit UTF-8 stdin rather than child-process environment variables; real Windows CI covers >64 KiB Unicode registry input and ~32 KiB Unicode user-environment input. Skill-library capability/read-only contracts remain CI-enforced.
 
 - `future/domain-recipes`: planned, incremental only. Add a workflow when it represents repeated real work and its required/preferred capabilities plus mutation/replay/concurrency semantics are explicit and testable.
 - `future/release-publication`: blocked on explicit owner authorization. Release readiness, checksums, manifest, SBOM, tag enforcement, SLSA provenance, and SBOM attestations are implemented; do not create a GitHub Release or publish to npm unless the user explicitly asks.
