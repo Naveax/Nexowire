@@ -85,6 +85,7 @@ Implemented:
 - installable release-candidate packaging with a `nexowire` CLI bin, package-backed runtime version, bundled-skill lookup outside repository cwd, deterministic package-content audit, and clean tarball install smoke tests on Linux/Windows/macOS; npm publication remains disabled
 - canonical-realpath async path authorization that preserves symlink-escape protection across platform path aliases such as macOS `/var` -> `/private/var`, plus deterministic WPF-backed Windows window-filter regression coverage
 - machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
+- independent release-candidate evidence verification that re-checks SHA256SUMS, manifest source/package/artifact/skill inventory, CycloneDX root identity, and private-package posture before upload
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -116,7 +117,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/release-candidate-verify-v1`: independently verify generated tarball checksum, release manifest, and CycloneDX SBOM before release-candidate upload; this is non-publishing hardening.
+- `feat/release-tag-policy-v2`: require tag-triggered release-readiness runs to use exactly `v<package-version>` before canonical packaging; branch/PR runs remain non-tag no-ops.
 - skill/domain-recipe work remains incremental: add workflows only when required/preferred capabilities and mutation/replay/concurrency semantics are explicit and testable.
 - browser and WSL runtime capability advertisement fail closed when required local executables/runtime state are unavailable.
 - macOS protected-secret write/update and release provenance metadata are merged baseline, not unfinished work.

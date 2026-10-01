@@ -82,4 +82,5 @@
 - [x] release-candidate readiness: installable CLI packaging, bundled skills outside repository cwd, deterministic package-content checks, and clean tarball install smoke on Linux/Windows/macOS with canonical GitHub Actions artifact upload
 - [x] zero required third-party computer-control runtime dependencies
 - [x] release provenance metadata: SHA256SUMS, release manifest, and CycloneDX SBOM are attached to canonical candidates
-- [~] independently verify generated checksum/manifest/SBOM evidence before candidate upload; tagged/public publication remains explicitly authorized and separate
+- [x] independently verify generated checksum/manifest/SBOM evidence before candidate upload
+- [~] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs; tagged/public publication remains explicitly authorized and separate
