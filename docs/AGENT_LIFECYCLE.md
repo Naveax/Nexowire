@@ -47,4 +47,13 @@ Whether a user service remains alive with no login session depends on the host's
 
 ## macOS
 
-The lifecycle command currently fails closed on macOS. Keychain reads are supported elsewhere in Nexowire, but LaunchAgent lifecycle will not be declared complete until its install/control path is covered without weakening secret handling.
+macOS uses a per-user LaunchAgent under `~/Library/LaunchAgents`.
+
+- `RunAtLoad` and `KeepAlive` provide login-start and restart behavior.
+- `stop` unloads the job for the current login session while keeping the plist installed.
+- `start` bootstraps the installed plist again.
+- `restart` performs an explicit bootout/bootstrap cycle.
+- `uninstall` unloads the job and removes the plist plus Nexowire lifecycle files.
+- The plist contains only `/bin/sh` plus the Nexowire launcher path. It does not contain bearer credentials.
+
+Use `NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME` to reference an existing Keychain item or another protected-secret reference. Nexowire still keeps macOS Keychain write/update fail-closed until a no-argv/no-log storage mechanism is proven; lifecycle support does not weaken that rule.

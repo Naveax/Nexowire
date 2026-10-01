@@ -95,3 +95,18 @@ jobs:
         run: node --test --import tsx test/security-operational-live.test.ts
         env:
           NEXOWIRE_LIVE_SECURITY_TEST: "1"
+
+  macos-agent-lifecycle-live:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Verify first-party LaunchAgent lifecycle
+        run: node --test --import tsx test/native-agent-lifecycle.test.ts test/macos-agent-lifecycle-live.test.ts
+        env:
+          NEXOWIRE_LIVE_MACOS_AGENT_LIFECYCLE_TEST: "1"
