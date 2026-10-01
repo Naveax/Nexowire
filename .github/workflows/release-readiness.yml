@@ -35,7 +35,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run release:check
+      - name: Run full release gate
+        if: runner.os == 'Linux'
+        run: npm run release:check
+      - name: Run cross-platform package smoke
+        if: runner.os != 'Linux'
+        run: |
+          npm run typecheck
+          npm run build
+          node --import tsx scripts/check-release-package.ts
       - name: Build canonical release tarball
         if: runner.os == 'Linux'
         run: npm pack
@@ -43,7 +51,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: nexowire-${{ github.ref_name }}-${{ github.sha }}
+          name: nexowire-${{ github.run_id }}-${{ github.sha }}
           path: nexowire-*.tgz
           if-no-files-found: error
           retention-days: 14
