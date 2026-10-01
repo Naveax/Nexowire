@@ -1,13 +1,15 @@
 import type { NexowireConfig } from '../config.js';
 import {
+  CredentialRoleSchema,
   CredentialScopeSchema,
   CredentialStore,
+  type CredentialRole,
   type CredentialScope,
 } from './credential-store.js';
 
 function usage(): never {
   throw new Error(
-    'Usage: nexowire credentials list [mcp|agent] | issue <mcp|agent> [name] [ttl_seconds] [--allow-tool <pattern>]... [--allow-device <stable-id>]... [--allow-route <policy>]... [--admin] | revoke <id>',
+    'Usage: nexowire credentials list [mcp|agent] | issue <mcp|agent> [name] [ttl_seconds] [--allow-tool <pattern>]... [--allow-device <stable-id>]... [--allow-route <policy>]... [--role user|operator|admin] [--admin] | revoke <id>',
   );
 }
 
@@ -20,12 +22,14 @@ function parseIssueOptions(
   allowedTools?: string[];
   allowedDeviceIds?: string[];
   allowedRoutingPolicies?: string[];
+  role?: CredentialRole;
   administrative?: boolean;
 } {
   const positional: string[] = [];
   const allowedTools: string[] = [];
   const allowedDeviceIds: string[] = [];
   const allowedRoutingPolicies: string[] = [];
+  let role: CredentialRole | undefined;
   let administrative = false;
 
   for (let index = 0; index < args.length; index++) {
@@ -87,6 +91,25 @@ function parseIssueOptions(
       continue;
     }
 
+    if (arg === '--role') {
+      const value = args[index + 1]?.trim();
+      if (!value || value.startsWith('--')) {
+        throw new Error('--role requires user, operator, or admin.');
+      }
+      role = CredentialRoleSchema.parse(value);
+      index++;
+      continue;
+    }
+
+    if (arg.startsWith('--role=')) {
+      const value = arg.slice('--role='.length).trim();
+      if (!value) {
+        throw new Error('--role requires user, operator, or admin.');
+      }
+      role = CredentialRoleSchema.parse(value);
+      continue;
+    }
+
     if (arg === '--admin') {
       administrative = true;
       continue;
@@ -122,10 +145,11 @@ function parseIssueOptions(
     (allowedTools.length > 0 ||
       allowedDeviceIds.length > 0 ||
       allowedRoutingPolicies.length > 0 ||
-      administrative)
+      administrative ||
+      (role !== undefined && role !== 'user'))
   ) {
     throw new Error(
-      '--allow-tool, --allow-device, --allow-route, and --admin are supported only for MCP credentials.',
+      '--allow-tool, --allow-device, --allow-route, non-user --role values, and --admin are supported only for MCP credentials.',
     );
   }
 
@@ -137,6 +161,7 @@ function parseIssueOptions(
     ...(allowedRoutingPolicies.length > 0
       ? { allowedRoutingPolicies }
       : {}),
+    ...(role ? { role } : {}),
     ...(administrative ? { administrative: true } : {}),
   };
 }
