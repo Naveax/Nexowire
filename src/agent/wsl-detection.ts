@@ -23,12 +23,17 @@ function decodeWslOutput(value: string | Buffer): string {
     return value.replaceAll('\u0000', '');
   }
 
-  const utf16 = value.toString('utf16le').replaceAll('\u0000', '');
-  if (/[
-]/.test(utf16) || /^[\x20-\x7e\u0080-\uffff]*$/u.test(utf16)) {
-    return utf16;
+  const sample = value.subarray(0, Math.min(value.length, 512));
+  let nulBytes = 0;
+  for (const byte of sample) {
+    if (byte === 0) nulBytes++;
   }
-  return value.toString('utf8').replaceAll('\u0000', '');
+
+  const encoding =
+    sample.length > 0 && nulBytes / sample.length >= 0.2
+      ? 'utf16le'
+      : 'utf8';
+  return value.toString(encoding).replaceAll('\u0000', '');
 }
 
 function defaultRun(command: string, args: string[]) {
