@@ -76,7 +76,7 @@
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
-- [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering; browser capability advertisement is executable-aware and WSL distro-aware advertisement is the current hardening slice
+- [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering; browser capabilities are executable-aware and `wsl.exec` is advertised only when an installed distro is detected
 - [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 42 shipped workflows, twelve explicit replay-safe/parallel-safe read-only workflows, corrected event-driven-control semantics, and four conservative domain recipes are implemented; broader recipes remain incremental
 - [x] Windows + WSL2 + Linux support: Windows control/browser lanes, real Ubuntu 24.04 WSL2 `wsl.exec` integration, and real Linux native-agent/relay core capability CI are implemented
 - zero required third-party computer-control runtime dependencies
