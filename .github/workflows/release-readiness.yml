@@ -1,0 +1,31 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check
+      - name: Build release tarball
+        run: npm pack
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexowire-${{ github.ref_name }}-${{ github.sha }}
+          path: nexowire-*.tgz
+          if-no-files-found: error
+          retention-days: 14
