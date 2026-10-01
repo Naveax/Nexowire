@@ -17,7 +17,7 @@
 - [x] Operation IDs and persistent audit metadata
 - [x] Structured bounded event feed with cursor-based long polling
 - [x] machine-validated cross-chat continuation state contract integrated into normal checks
-- [~] Public deployment security: bootstrap bearer rotation, direct TLS, mounted/platform secrets, external OIDC/JWT identity, backend status/redaction, deployment doctor, guided onboarding/bootstrap, and live HTTPS/OIDC/revocation CI are implemented; safe macOS non-argv write remains open
+- [x] Public deployment security foundation: bootstrap bearer rotation, direct TLS, mounted/platform secrets, external OIDC/JWT identity, backend status/redaction, deployment doctor, guided onboarding/bootstrap, live HTTPS/OIDC/revocation CI, and safe stdin-backed macOS Keychain write/update are implemented
 
 ## v0.2 - Computer control
 
@@ -71,12 +71,12 @@
 
 ## v1.0 - ChatGPT-ready remote control
 
-- [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, roles, bearer rotation, TLS, external OIDC/JWT identity, protected secret sources, machine-readable readiness, guided onboarding/bootstrap, and live revocation/security CI are implemented; safe macOS non-argv write remains
-- [~] platform-backed secret lifecycle: Windows DPAPI and Linux Secret Service support protected writes; macOS Keychain lookup/delete/status are implemented with non-secret presence probes and redacted diagnostics, while safe non-argv write/update remains intentionally fail-closed
+- [x] production authorization foundation: revocable/expiring hash-only credentials, tool/device/route scopes, roles, bearer rotation, TLS, external OIDC/JWT identity, protected secret sources including verified macOS Keychain write/update, machine-readable readiness, guided onboarding/bootstrap, and live revocation/security CI
+- [x] platform-backed secret lifecycle: Windows DPAPI, Linux Secret Service, and macOS Keychain support protected lifecycle operations; macOS write/update uses bounded `security -q -i` stdin commands with explicit overwrite and read-back verification
 - [x] bounded persistent audit/history query with payload-free metadata filters
 - [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
-- [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
-- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 38 shipped workflows, nine explicit replay-safe/parallel-safe read-only migrations, and corrected event-driven-control mixed/serial/manual-replay semantics are implemented; broader domain recipes remain ongoing
+- [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering; browser capability advertisement is executable-aware and WSL distro-aware advertisement is the current hardening slice
+- [~] mature skill library: backward-compatible manifest v1+v2, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 42 shipped workflows, twelve explicit replay-safe/parallel-safe read-only workflows, corrected event-driven-control semantics, and four conservative domain recipes are implemented; broader recipes remain incremental
 - [x] Windows + WSL2 + Linux support: Windows control/browser lanes, real Ubuntu 24.04 WSL2 `wsl.exec` integration, and real Linux native-agent/relay core capability CI are implemented
 - zero required third-party computer-control runtime dependencies
