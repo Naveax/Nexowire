@@ -12,10 +12,13 @@ const EXPECTED_V3_SKILLS = [
   'port-conflict',
   'safe-config-migration',
   'tls-diagnostics',
+  'verify-before-finish',
+  'windows-screenshot',
 ] as const;
 
 const EXPECTED_MANIFEST_V2_SKILLS = [
   'fast-repo-inspect',
+  'incident-triage',
   'large-file-investigation',
   'log-triage',
   'network-troubleshoot',
