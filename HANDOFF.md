@@ -73,6 +73,7 @@ Implemented:
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
 - purpose-bound Windows DPAPI CurrentUser protected bootstrap secret files for hub MCP/native-agent bearer sets, native-agent outbound auth, and relay inbound/upstream auth
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
+- machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -100,12 +101,12 @@ A new chat should not depend on conversation memory. Start from GitHub:
 7. After every merged capability slice, update HANDOFF/ROADMAP/PROJECT_STATE if the remaining-work picture changed.
 8. Never assume Desktop Commander or SentinelX is part of the Nexowire runtime. They are development access tools only when temporarily needed.
 
-The repository is the source of truth. If this file disagrees with current code/CI, trust current `main`, tests, and the latest merged commits, then repair the handoff files.
+The repository is the source of truth. If this file disagrees with current code/CI, trust current `main`, tests, and the latest merged commits, then repair the handoff files. Run `npm run continuation:check` after changing continuation state; normal `npm run check` includes it.
 
 ## Active parallel work
 
-- `feat/windows-protected-secret-sources-v2`: clean replay of purpose-bound Windows DPAPI protected bootstrap secret sources on current main.
-- next independent slice: machine-readable MCP structured-output semantic compatibility.
+- `feat/mcp-output-contract-v1`: machine-readable structured-output semantic contracts for the frozen MCP v1 surface.
+- `feat/continuation-state-check-v1`: CI-enforced continuation-state validation so a new chat can resume from GitHub alone.
 
 ## Immediate next work
 
