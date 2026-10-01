@@ -68,7 +68,7 @@ Implemented on main as of the latest repository state:
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
 - purpose-bound Windows DPAPI bootstrap secret envelopes for hub/native-agent/relay bearer credentials
 - lazy skills and MCP HTTP/stdio surfaces
-- versioned MCP surface v1 compatibility floor with hub-local version discovery; stable tool-name removal/rename is regression-tested separately from the native-agent protocol version
+- versioned MCP surface v1 compatibility floor with hub-local version discovery, frozen input contracts, and `src/mcp/v1-output-contract.json` machine-readable structured-output semantic contracts with a canonical hash
 - real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
 
 ## Important unfinished slices
@@ -79,7 +79,7 @@ The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Broa
 2. extend durable runbooks only with step types whose restart/replay semantics can be proven; task-graph and read-only assertion stages are implemented
 5. extend idempotency/postconditions only where replay and verification semantics are provably safe
 6. real WSL2-distro integration coverage; native Linux and real relay fallback CI are implemented
-7. machine-readable structured-output semantic compatibility for the frozen MCP v1 surface
+7. extend MCP compatibility only when future semantic/nested-payload changes require a new reviewed contract; the frozen v1 structured-output profile/hash is implemented
 
 ## Branch and merge discipline
 
