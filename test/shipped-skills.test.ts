@@ -16,11 +16,14 @@ const EXPECTED_V3_SKILLS = [
 
 const EXPECTED_MANIFEST_V2_SKILLS = [
   'fast-repo-inspect',
+  'incident-triage',
   'large-file-investigation',
   'log-triage',
   'network-troubleshoot',
   'performance-triage',
   'tls-diagnostics',
+  'verify-before-finish',
+  'windows-screenshot',
 ] as const;
 
 const EXPECTED_V2_SKILLS = [
