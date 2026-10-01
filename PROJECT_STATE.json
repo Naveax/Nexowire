@@ -112,7 +112,7 @@
       "id": "release-readiness",
       "status": "done",
       "priority": 16,
-      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, and independent evidence verification before upload are implemented without enabling npm publication"
+      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, independent pre-upload verification, and exact v<package-version> tag enforcement are implemented without enabling npm publication"
     }
   ],
   "standardVerification": [
@@ -156,15 +156,16 @@
     "Windows window-filter regression coverage uses an isolated WPF fixture instead of racing arbitrary runner windows.",
     "Release-readiness CI performs a full Linux gate plus clean packaged-runtime smoke tests on Linux, Windows, and macOS; canonical candidates now include SHA256SUMS, release-manifest.json, and a CycloneDX SBOM while npm publication remains disabled.",
     "Release candidates are independently re-verified before upload: tarball SHA256SUMS, manifest package/source/artifact/skill inventory, CycloneDX root identity, and private-package posture must all match.",
-    "Exact tag/package-version enforcement is active work on feat/release-tag-policy-v2 so tag-triggered candidate builds fail before packaging when v<package-version> does not match."
+    "Tag-triggered release readiness now fails before canonical packaging unless the Git tag is exactly v<package-version>; branch and PR readiness runs are intentional no-ops for that tag check.",
+    "Tag-only SLSA and CycloneDX artifact attestations are active work on feat/release-attestation-v1; write/OIDC permissions are isolated to a separate explicit tag-push job."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "2d05d0274ea2cf2a41ec50e843b4d40d1b1de48d",
+  "lastVerifiedMain": "6b74383c5565da0458d84b5ca9a6542fd9f0b258",
   "activeWork": [
     {
-      "branch": "feat/release-tag-policy-v2",
+      "branch": "feat/release-attestation-v1",
       "status": "implementation",
-      "goal": "Require tag-triggered release-readiness runs to use exactly v<package-version> before the canonical tarball is built; branch/PR runs remain non-tag no-ops."
+      "goal": "After an explicit matching tag and successful package matrix, re-check the downloaded canonical checksum and create tag-only SLSA provenance plus CycloneDX SBOM attestations with isolated OIDC/attestation permissions."
     },
     {
       "branch": "future/domain-recipes",

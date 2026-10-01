@@ -86,6 +86,7 @@ Implemented:
 - canonical-realpath async path authorization that preserves symlink-escape protection across platform path aliases such as macOS `/var` -> `/private/var`, plus deterministic WPF-backed Windows window-filter regression coverage
 - machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
 - independent release-candidate evidence verification that re-checks SHA256SUMS, manifest source/package/artifact/skill inventory, CycloneDX root identity, and private-package posture before upload
+- exact `v<package-version>` tag enforcement before canonical packaging on tag-triggered readiness runs; branch/PR readiness remains a non-tag no-op
 - initial security/docs/tests/CI
 
 ## Current security behavior
@@ -117,7 +118,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/release-tag-policy-v2`: require tag-triggered release-readiness runs to use exactly `v<package-version>` before canonical packaging; branch/PR runs remain non-tag no-ops.
+- `feat/release-attestation-v1`: add a separate explicit-tag-only provenance job that re-checks the downloaded canonical checksum and creates SLSA + CycloneDX attestations with OIDC/attestation write scopes isolated from package/test jobs.
 - skill/domain-recipe work remains incremental: add workflows only when required/preferred capabilities and mutation/replay/concurrency semantics are explicit and testable.
 - browser and WSL runtime capability advertisement fail closed when required local executables/runtime state are unavailable.
 - macOS protected-secret write/update and release provenance metadata are merged baseline, not unfinished work.
