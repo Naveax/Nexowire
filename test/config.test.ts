@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { assertSafeRemoteBinding, isLoopbackHost, loadConfig } from '../src/config.js';
 
 test('loopback host detection accepts local forms', () => {
@@ -299,4 +300,38 @@ test('hub config can consume injected platform-backed secret references', () => 
       purpose: 'agent-bearer-token-list',
     },
   ]);
+});
+
+test('skills directory supports explicit override and bundled fallback', () => {
+  const explicit = loadConfig(
+    {
+      NEXOWIRE_SKILLS_DIR: '/tmp/nexowire-custom-skills',
+    },
+    '/tmp/unrelated-working-directory',
+    {
+      platformSingle: () => undefined,
+      platformList: () => undefined,
+    },
+  );
+  assert.equal(
+    explicit.skillsDir,
+    '/tmp/nexowire-custom-skills',
+  );
+
+  const fallback = loadConfig(
+    {},
+    '/tmp/unrelated-working-directory',
+    {
+      platformSingle: () => undefined,
+      platformList: () => undefined,
+    },
+  );
+  assert.equal(
+    path.basename(fallback.skillsDir),
+    'skills',
+  );
+  assert.notEqual(
+    fallback.skillsDir,
+    path.join('/tmp/unrelated-working-directory', 'skills'),
+  );
 });
