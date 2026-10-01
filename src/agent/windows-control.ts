@@ -612,7 +612,7 @@ if ([string]$inputData.name -eq '') {
     'HKU'  { [Microsoft.Win32.Registry]::Users }
     'HKCC' { [Microsoft.Win32.Registry]::CurrentConfig }
   }
-  $subPath = ([string]$inputData.path).Replace('/', '\\')
+  $subPath = ([string]$inputData.path).Replace([char]47, [char]92)
   $writableKey = $rootKey.OpenSubKey($subPath, $true)
   if ($null -eq $writableKey) { throw 'Registry key could not be opened for writing.' }
   try {
@@ -668,7 +668,7 @@ if ($null -ne $inputData.name) {
       'HKU'  { [Microsoft.Win32.Registry]::Users }
       'HKCC' { [Microsoft.Win32.Registry]::CurrentConfig }
     }
-    $subPath = ([string]$inputData.path).Replace('/', '\\')
+    $subPath = ([string]$inputData.path).Replace([char]47, [char]92)
     $writableKey = $rootKey.OpenSubKey($subPath, $true)
     if ($null -eq $writableKey) { throw 'Registry key could not be opened for writing.' }
     try {
