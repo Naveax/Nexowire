@@ -3,6 +3,11 @@ name: durable-runbook
 description: Compose persistent task graphs and read-only postcondition groups into a higher-level resumable workflow that survives native-agent restart without persisting command/output payloads.
 version: 0.1
 requires: runbook.run, runbook.list, runbook.get, runbook.prune, task.graph.run, verify.assertions
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: workflow, durable, resume, orchestration
 ---
 
 # Durable Runbook
