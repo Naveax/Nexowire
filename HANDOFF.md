@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 38 validated shipped workflows, and six read-only diagnostic workflows explicitly marked parallel-safe/replay-safe
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 38 validated shipped workflows, and nine conservative read-only workflows explicitly marked parallel-safe/replay-safe
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -68,6 +68,7 @@ Implemented:
 - Linux Secret Service and macOS Keychain protected-secret adapters, with hub/native-agent/relay bootstrap lookup wiring, platform-secret backend status/capability reporting, non-secret macOS presence probes, redacted diagnostics, and fail-closed macOS write when no safe no-argv path exists
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - machine-readable deployment readiness doctor covering bind intent, TLS validity/expiry, MCP/native-agent auth, OIDC posture, secret-source mechanisms, and state-directory health without emitting credentials
+- guided `nexowire onboard plan|bootstrap` flow that creates scoped hash-only MCP/native-agent credentials only when needed, emits plaintext tokens once, and reuses doctor readiness without persisting bearer values
 - live operational security CI combining a real HTTPS hub, OIDC discovery/JWKS, role/tool scopes, hash-only stored credentials, and live revocation
 - first-party relay server with inbound/upstream authentication, bounded backpressure/heartbeats, ordered agent endpoint fallback, and real native-agent relay CI coverage
 - revocable/expiring hash-only stored MCP/native-agent credentials plus optional MCP tool allowlists enforced before tool execution
@@ -78,6 +79,7 @@ Implemented:
 - Windows elevated broker mode with DPAPI CurrentUser-protected shared broker secret when no explicit plaintext broker token is configured
 - purpose-bound Windows DPAPI CurrentUser protected bootstrap secret files for hub MCP/native-agent bearer sets, native-agent outbound auth, and relay inbound/upstream auth
 - privileged-broker scheduled-task lifecycle (`install/status/start/stop/uninstall`) running highest-privilege under the same Windows user
+- first-party normal native-agent lifecycle: Windows current-user Scheduled Task and Linux systemd user service with install/status/start/stop/restart/uninstall/autostart, protected-secret-reference persistence, and plaintext-token persistence refusal
 - machine-validated cross-chat continuation state contract (`PROJECT_STATE.json` + required handoff files) gated by `npm run check`
 - initial security/docs/tests/CI
 
@@ -110,18 +112,18 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/deployment-onboarding-v1`: guided deployment bootstrap on top of doctor/auth/TLS/OIDC without persisting plaintext credentials.
-- `feat/native-agent-lifecycle-v1`: first-party native-agent install/status/start/stop/uninstall/autostart lifecycle.
-- `feat/skill-v2-migration-pack-v2`: migrate additional conservative read-only workflows to manifest v2.
+- macOS native-agent LaunchAgent lifecycle remains intentionally open; Windows/Linux lifecycle is merged and production-safe secret references must not be weakened to finish macOS.
+- skill library work is incremental: migrate or add domain recipes only when replay/concurrency semantics are explicit; all current genuinely read-only shipped workflows except event-driven-control are already manifest v2.
+- production deployment hardening remains open only where the current doctor/onboarding/security model still reports a real gap, especially safe macOS protected-secret write/update and platform lifecycle coverage.
 
 ## Immediate next work
 
-1. Build a guided bootstrap that can create scoped MCP/native-agent credentials and produce secret-safe deployment instructions/status.
-2. Add persistent native-agent lifecycle so a normal machine can run Nexowire after reboot/logout without a hand-maintained console.
-3. Continue manifest-v2 migration only for workflows whose replay/concurrency semantics are explicit and safe.
-4. Keep deployment doctor plus live HTTPS/OIDC/revocation CI green as the production-security regression floor.
-5. Keep macOS Keychain write fail-closed until a first-party no-argv/no-log write mechanism is proven.
-6. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+1. Add a first-party macOS LaunchAgent lifecycle only with tested per-user start/stop/restart/install/uninstall semantics and without putting secrets in argv/plists.
+2. Resolve the remaining macOS Keychain protected-write gap with a proven no-argv/no-log mechanism, or keep it fail-closed.
+3. Continue skill/domain-recipe expansion conservatively; `event-driven-control` is currently the only shipped read-only-labelled skill not on manifest v2 and its `process.start` requirement means its mutation classification must be corrected before any replay-safe migration.
+4. Keep deployment doctor/onboarding plus live HTTPS/OIDC/revocation CI green as the production-security regression floor.
+5. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+6. Treat Windows/Linux lifecycle and guided onboarding as merged baseline, not unfinished work.
 
 ## Known machine note
 
