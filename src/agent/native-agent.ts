@@ -9,6 +9,7 @@ import {
   type AgentResponse,
 } from '../protocol/agent.js';
 import { capabilitiesForPlatform } from '../protocol/capabilities.js';
+import { browserCapabilitiesAvailable } from './browser-manager.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
@@ -240,6 +241,21 @@ function heartbeatMs(env: NodeJS.ProcessEnv): number {
   return Math.min(120_000, Math.max(5_000, Math.round(parsed)));
 }
 
+export async function capabilitiesForAgent(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string[]> {
+  const capabilities = capabilitiesForPlatform(platform);
+  const browserAvailable = await browserCapabilitiesAvailable({
+    platform,
+    env,
+  });
+  if (browserAvailable) return capabilities;
+  return capabilities.filter(
+    (capability) => !capability.startsWith('browser.'),
+  );
+}
+
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<never> {
@@ -265,6 +281,10 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
+  const advertisedCapabilities = await capabilitiesForAgent(
+    process.platform,
+    env,
+  );
 
   let stopped = false;
   let currentSocket: WebSocket | undefined;
@@ -356,7 +376,7 @@ export async function runNativeAgent(
               platform: process.platform,
               arch: process.arch,
               agentVersion: agentVersion(),
-              capabilities: capabilitiesForPlatform(process.platform),
+              capabilities: advertisedCapabilities,
             },
           }),
         );
