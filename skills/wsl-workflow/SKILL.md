@@ -3,6 +3,11 @@ name: wsl-workflow
 description: Work correctly across Windows and WSL2, including distro selection, paths, shells, and verification.
 version: 0.1
 requires: wsl.exec, machine.snapshot
+platforms: win32
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: windows, wsl, linux, shell
 ---
 
 # WSL Workflow
