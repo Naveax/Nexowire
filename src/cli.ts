@@ -13,6 +13,7 @@ import { runCredentialCommand } from './security/credentials-cli.js';
 import { runProtectedSecretCommand } from './security/protected-secrets-cli.js';
 import { CredentialStore } from './security/credential-store.js';
 import { evaluateDeploymentReadiness } from './security/deployment-readiness.js';
+import { runDeploymentOnboardingCommand } from './security/deployment-onboarding.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -26,6 +27,7 @@ Usage:
   nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
+  nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -73,6 +75,14 @@ async function main(): Promise<void> {
 
   if (command === 'secrets') {
     await runProtectedSecretCommand(
+      process.argv.slice(3),
+    );
+    return;
+  }
+
+  if (command === 'onboard') {
+    await runDeploymentOnboardingCommand(
+      loadConfig(),
       process.argv.slice(3),
     );
     return;
