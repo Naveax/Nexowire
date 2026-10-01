@@ -43,7 +43,7 @@ class FakeRunner implements PlatformSecretRunner {
   runSync(
     command: string,
     args: string[],
-    options: { input?: string } = {},
+    options: { input?: string; maxBuffer?: number; timeoutMs?: number } = {},
   ) {
     this.syncCalls.push({
       command,
@@ -58,7 +58,7 @@ class FakeRunner implements PlatformSecretRunner {
   async run(
     command: string,
     args: string[],
-    options: { input?: string } = {},
+    options: { input?: string; maxBuffer?: number; timeoutMs?: number } = {},
   ) {
     this.asyncCalls.push({
       command,
@@ -190,9 +190,9 @@ test('macOS Keychain lookup and write keep secret plaintext out of argv', async 
     runner.asyncCalls[0]?.input ?? '',
     /never-in-argv/,
   );
-  assert.match(
-    runner.asyncCalls[0]?.input ?? '',
-    /-T "\/usr\/bin\/security"/,
+  assert.equal(
+    (runner.asyncCalls[0]?.input ?? '').includes(' -T '),
+    false,
   );
 
   assert.deepEqual(runner.syncCalls[0], {
@@ -423,9 +423,9 @@ test('macOS platform status checks metadata without requesting password plaintex
         platform: 'darwin',
         backend: 'keychain',
         read: true,
-        write: false,
+        write: true,
         delete: true,
-        secureWriteTransport: 'unsupported',
+        secureWriteTransport: 'stdin',
         presenceProbeReadsSecret: false,
       },
     },
@@ -553,7 +553,7 @@ test('macOS Keychain interactive write rejects multiline and oversized command p
           purpose: 'agent-bearer-token',
           name: 'primary',
         },
-        'x'.repeat(3900),
+        'x'.repeat(4096),
         { overwrite: true },
       ),
     (error: unknown) =>
