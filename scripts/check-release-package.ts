@@ -109,8 +109,25 @@ for (const skillName of skillNames) {
   await fs.access(path.join(skillRoot, skillName, 'SKILL.md'));
 }
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const dryRun = run(npm, ['pack', '--dry-run', '--json']);
+function runNpm(args: string[]): string {
+  if (process.platform !== 'win32') {
+    return run('npm', args);
+  }
+
+  const command = [
+    'npm.cmd',
+    ...args.map((arg) =>
+      '"' + arg.replace(/"/g, '""') + '"'
+    ),
+  ].join(' ');
+
+  return run(
+    process.env.ComSpec ?? 'cmd.exe',
+    ['/d', '/s', '/c', command],
+  );
+}
+
+const dryRun = runNpm(['pack', '--dry-run', '--json']);
 const decoded = JSON.parse(dryRun) as PackResult[];
 assert.equal(decoded.length, 1);
 const pack = decoded[0]!;
@@ -181,7 +198,7 @@ try {
   await fs.mkdir(unrelatedCwd, { recursive: true });
 
   const actualPack = JSON.parse(
-    run(npm, [
+    runNpm([
       'pack',
       '--json',
       '--pack-destination',
@@ -191,31 +208,55 @@ try {
   assert.equal(actualPack.length, 1);
   const tarball = path.join(packDir, actualPack[0]!.filename);
 
-  const install = spawnSync(
-    npm,
-    [
-      'install',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
-      '--prefix',
-      installDir,
-      tarball,
-    ],
-    {
+  const installArgs = [
+    'install',
+    '--ignore-scripts',
+    '--no-audit',
+    '--no-fund',
+    '--prefix',
+    installDir,
+    tarball,
+  ];
+  if (process.platform === 'win32') {
+    const command = [
+      'npm.cmd',
+      ...installArgs.map((arg) =>
+        '"' + arg.replace(/"/g, '""') + '"'
+      ),
+    ].join(' ');
+    const install = spawnSync(
+      process.env.ComSpec ?? 'cmd.exe',
+      ['/d', '/s', '/c', command],
+      {
+        encoding: 'utf8',
+        windowsHide: true,
+        cwd: unrelatedCwd,
+      },
+    );
+    if (install.error) throw install.error;
+    if (install.status !== 0) {
+      throw new Error(
+        'Clean tarball install failed:\n' +
+          (install.stdout ?? '') +
+          '\n' +
+          (install.stderr ?? ''),
+      );
+    }
+  } else {
+    const install = spawnSync('npm', installArgs, {
       encoding: 'utf8',
       windowsHide: true,
       cwd: unrelatedCwd,
-    },
-  );
-  if (install.error) throw install.error;
-  if (install.status !== 0) {
-    throw new Error(
-      'Clean tarball install failed:\n' +
-        (install.stdout ?? '') +
-        '\n' +
-        (install.stderr ?? ''),
-    );
+    });
+    if (install.error) throw install.error;
+    if (install.status !== 0) {
+      throw new Error(
+        'Clean tarball install failed:\n' +
+          (install.stdout ?? '') +
+          '\n' +
+          (install.stderr ?? ''),
+      );
+    }
   }
 
   const installedRoot = path.join(
@@ -280,8 +321,8 @@ try {
   );
   const installedSkillsDir = (probe.stdout ?? '').trim();
   assert.equal(
-    path.resolve(installedSkillsDir),
-    path.resolve(installedRoot, 'skills'),
+    await fs.realpath(installedSkillsDir),
+    await fs.realpath(path.join(installedRoot, 'skills')),
   );
   await fs.access(
     path.join(installedSkillsDir, 'browser-control', 'SKILL.md'),
