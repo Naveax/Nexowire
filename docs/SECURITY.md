@@ -96,8 +96,10 @@ Nexowire can resolve bootstrap bearer credentials from operating-system secret s
 
 - Windows uses the existing purpose-bound DPAPI CurrentUser envelope files.
 - Linux can read/write/delete Secret Service items through `secret-tool`. Secret writes are passed on stdin, never in argv.
-- macOS can read/delete Keychain generic-password items through `/usr/bin/security`. Nexowire intentionally does not create/update macOS Keychain items through `security -w` because that interface would place plaintext in process arguments; provisioning those items remains an OS/deployment responsibility.
+- macOS can read/delete Keychain generic-password items and can create/update them without plaintext argv exposure. Nexowire runs `/usr/bin/security -q -i`, sends a bounded `add-generic-password` command through stdin, requires explicit overwrite for replacement, and read-back verifies the final value. The direct `security ... -w <secret>` argv form remains forbidden.
 
 Runtime references use a fixed Nexowire purpose plus an operator-chosen item name. Hub MCP/native-agent tokens and relay inbound/upstream tokens support platform-store references. If a referenced backend/tool/item is unavailable, startup fails closed rather than silently falling back to unauthenticated operation.
 
 Multiple single-secret sources used by the native agent or relay upstream must contain the same value or startup fails with a source-conflict error. Hub rotation lists intentionally combine distinct active tokens from configured rotation sources.
+
+- macOS Keychain write commands are bounded by a timeout/output limit so a GUI/keychain backend stall cannot hang the agent indefinitely. Real macOS CI verifies create/read/refuse-overwrite/update/delete behavior against the user Keychain.

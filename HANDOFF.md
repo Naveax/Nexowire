@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 38 validated shipped workflows, and nine conservative read-only workflows explicitly marked parallel-safe/replay-safe
+- machine-readable skill manifests with backward-compatible v1 plus additive v2 capability alternatives/preferences, replay/concurrency metadata, validation, exact-device runnability evaluation, 42 validated shipped workflows, twelve read-only workflows explicitly marked parallel-safe/replay-safe, and conservative artifact/browser/service/regression domain recipes
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection
@@ -65,7 +65,7 @@ Implemented:
 - reusable bounded read-only postcondition assertions for file existence/hash/text presence, PID liveness, TCP reachability, and HTTP status
 - rotating MCP/native-agent bootstrap bearer token sets with constant-time digest matching
 - external OIDC/JWT MCP identity with strict issuer/audience/signature/time verification and mapping into existing role/tool/device/route authorization
-- Linux Secret Service and macOS Keychain protected-secret adapters, with hub/native-agent/relay bootstrap lookup wiring, platform-secret backend status/capability reporting, non-secret macOS presence probes, redacted diagnostics, and fail-closed macOS write when no safe no-argv path exists
+- Linux Secret Service and macOS Keychain protected-secret adapters with hub/native-agent/relay bootstrap lookup wiring, backend capability/status reporting, redacted diagnostics, and real-CI-verified macOS create/update via bounded `security -q -i` stdin commands with explicit overwrite and read-back verification
 - direct HTTPS/WSS hub transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - machine-readable deployment readiness doctor covering bind intent, TLS validity/expiry, MCP/native-agent auth, OIDC posture, secret-source mechanisms, and state-directory health without emitting credentials
 - guided `nexowire onboard plan|bootstrap` flow that creates scoped hash-only MCP/native-agent credentials only when needed, emits plaintext tokens once, and reuses doctor readiness without persisting bearer values
@@ -112,16 +112,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- skill library work is incremental: migrate or add domain recipes only when replay/concurrency semantics are explicit; event-driven-control is now correctly manifest v2 as mixed/serial/manual-replay rather than falsely read-only.
-- production deployment hardening remains open only where the current doctor/onboarding/security model still reports a real gap, especially safe macOS protected-secret write/update and platform lifecycle coverage.
+- skill/domain-recipe work remains incremental: add workflows only when required/preferred capabilities and mutation/replay/concurrency semantics are explicit and testable.
+- browser and WSL runtime capability advertisement now fail closed when their required local executables/runtime state are unavailable.
+- macOS protected-secret write/update is merged baseline, not unfinished work.
 
 ## Immediate next work
 
-1. Resolve the remaining macOS Keychain protected-write gap with a proven no-argv/no-log mechanism, or keep it fail-closed.
-2. Continue skill/domain-recipe expansion conservatively; event-driven-control is already corrected to mixed/serial/manual-replay and must remain non-replay-safe while it creates processes.
-3. Keep deployment doctor/onboarding plus live HTTPS/OIDC/revocation and real macOS LaunchAgent CI green as the production-security regression floor.
-4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
-5. Treat guided onboarding and Windows/Linux/macOS normal-agent lifecycle as merged baseline, not unfinished work.
+1. Continue domain recipes conservatively and prioritize repeated real workflows over catalog inflation.
+2. Keep deployment doctor/onboarding, live HTTPS/OIDC/revocation, real macOS LaunchAgent/Keychain, browser, Linux, and WSL2 CI green as the production regression floor.
+3. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
+4. Consider additional executable/environment-aware capability probes only when a static advertisement can demonstrably expose an unusable tool.
+5. Prefer release/readiness hardening over adding low-value primitives now that the main v1 capability surface is broadly complete.
 
 ## Known machine note
 
