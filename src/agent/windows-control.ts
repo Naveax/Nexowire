@@ -54,6 +54,13 @@ const EventLogQueryInputSchema = z.object({
   level: z.enum(['all', 'critical', 'error', 'warning', 'information', 'verbose']).default('all'),
   since_minutes: z.number().int().min(1).max(43_200).default(60),
   max_events: z.number().int().min(1).max(2000).default(100),
+  max_message_chars: z.number().int().min(0).max(131_072).default(8192),
+  max_total_message_chars: z
+    .number()
+    .int()
+    .min(0)
+    .max(4_194_304)
+    .default(262_144),
 });
 
 const FirewallRulesInputSchema = z.object({
@@ -640,19 +647,56 @@ if ($inputData.level -ne 'all') {
     'verbose' { 5 }
   }
 }
+$script:outputTruncated = $false
+$script:remainingMessageChars = [int]$inputData.max_total_message_chars
+
+function Get-BoundedEventText {
+  param(
+    [AllowNull()][object]$Value,
+    [int]$Limit
+  )
+  if ($null -eq $Value) { return $null }
+  $text = [string]$Value
+  if ($text.Length -le $Limit) { return $text }
+  $script:outputTruncated = $true
+  return $text.Substring(0, $Limit)
+}
+
 $events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents ([int]$inputData.max_events) -ErrorAction SilentlyContinue | ForEach-Object {
+  $message = if ($_.Message) { [string]$_.Message } else { $null }
+  $messageTruncated = $false
+  if ($null -ne $message) {
+    $allowedMessageChars = [Math]::Min(
+      [int]$inputData.max_message_chars,
+      $script:remainingMessageChars
+    )
+    if ($message.Length -gt $allowedMessageChars) {
+      $message = $message.Substring(0, $allowedMessageChars)
+      $messageTruncated = $true
+      $script:outputTruncated = $true
+    }
+    $script:remainingMessageChars = [Math]::Max(
+      0,
+      $script:remainingMessageChars - $message.Length
+    )
+  }
+
   [pscustomobject]@{
     id = [int]$_.Id
     recordId = if ($null -ne $_.RecordId) { [long]$_.RecordId } else { $null }
     timeCreated = if ($_.TimeCreated) { ([datetime]$_.TimeCreated).ToUniversalTime().ToString('o') } else { $null }
-    level = [string]$_.LevelDisplayName
-    provider = [string]$_.ProviderName
-    logName = [string]$_.LogName
-    machineName = [string]$_.MachineName
-    message = if ($_.Message) { [string]$_.Message } else { $null }
+    level = Get-BoundedEventText $_.LevelDisplayName 64
+    provider = Get-BoundedEventText $_.ProviderName 512
+    logName = Get-BoundedEventText $_.LogName 512
+    machineName = Get-BoundedEventText $_.MachineName 512
+    message = $message
+    messageTruncated = $messageTruncated
   }
 })
-@($events) | ConvertTo-Json -Depth 6 -Compress
+[pscustomobject]@{
+  events = @($events)
+  truncated = [bool]$script:outputTruncated
+} | ConvertTo-Json -Depth 7 -Compress
 `;
 
 const firewallRulesScript = String.raw`
@@ -975,12 +1019,15 @@ export async function executeWindowsCapability(
     }
     case 'windows.eventlog.query': {
       const parsed = EventLogQueryInputSchema.parse(input);
+      const result = await runPowerShellJson<{
+        events?: unknown | unknown[];
+        truncated?: boolean;
+      }>(eventLogQueryScript, parsed, 45_000);
       return {
         data: {
-          events: asArray(
-            await runPowerShellJson<unknown | unknown[]>(eventLogQueryScript, parsed, 45_000),
-          ),
+          events: asArray(result?.events),
         },
+        truncated: result?.truncated ?? false,
       };
     }
     case 'windows.firewall.rules': {

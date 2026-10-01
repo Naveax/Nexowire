@@ -3052,7 +3052,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Query Windows Event Log',
       description:
-        'Query recent Windows events by log, provider, level, time window, and maximum result count.',
+        'Query recent Windows events by log, provider, level, time window, and maximum result count with bounded per-message and total message text.',
       inputSchema: {
         ...targetFields,
         log_name: z.string().min(1).max(512).optional(),
@@ -3069,6 +3069,18 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           .optional(),
         since_minutes: z.number().int().min(1).max(43_200).optional(),
         max_events: z.number().int().min(1).max(2000).optional(),
+        max_message_chars: z
+          .number()
+          .int()
+          .min(0)
+          .max(131_072)
+          .optional(),
+        max_total_message_chars: z
+          .number()
+          .int()
+          .min(0)
+          .max(4_194_304)
+          .optional(),
       },
     },
     async ({
@@ -3079,6 +3091,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       level,
       since_minutes,
       max_events,
+      max_message_chars,
+      max_total_message_chars,
     }) =>
       await execute(
         ctx,
@@ -3089,6 +3103,12 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(level ? { level } : {}),
           ...(since_minutes ? { since_minutes } : {}),
           ...(max_events ? { max_events } : {}),
+          ...(max_message_chars !== undefined
+            ? { max_message_chars }
+            : {}),
+          ...(max_total_message_chars !== undefined
+            ? { max_total_message_chars }
+            : {}),
         },
         device_id,
         provider_id,
