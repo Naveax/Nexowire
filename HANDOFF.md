@@ -53,7 +53,7 @@ Implemented:
 - real Linux native-agent outbound transport integration in Ubuntu CI covering capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
 - real Ubuntu 24.04 WSL2 CI covering `wsl.exec` exact distro selection, Linux cwd, Unicode stdout, nonzero exit/stderr propagation, and machine snapshot distro discovery
 - real macOS native-agent core CI covering outbound connection, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions
-- structured Windows process/service/network inspection and fail-closed exact-name service control; wildcard service mutation selectors are rejected and PowerShell requires exactly one service match
+- structured Windows process/service/network inspection and fail-closed exact-name service control; wildcard selectors are rejected, exactly one service is resolved, and requested state/startup postconditions must converge before success
 - structured Windows registry, scheduled-task, event-log, and firewall queries
 - verified exact Windows registry/task/firewall mutation controls, including unnamed/default registry values; structured Windows-control PowerShell JSON uses explicit UTF-8 stdin with real >64 KiB Unicode registry coverage
 - exact Windows environment name discovery, selective redacted reads, and verified process/user/machine set/delete; user/machine PowerShell JSON payloads use explicit UTF-8 stdin instead of child-process environment variables
@@ -119,7 +119,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-At the 2026-10-01 continuation sync, there are no open implementation PRs. Windows structured-control/environment PowerShell transport hardening is merged, and `windows.service.control` now fails closed on wildcard or non-unique service targets while preserving the stable MCP v1 schema. Skill-library capability/read-only contracts remain CI-enforced.
+At the 2026-10-01 continuation sync, there are no open implementation PRs. `windows.service.control` now fails closed on ambiguous targets and verifies state/startup postconditions with bounded convergence polling; real Windows CI mutates only an isolated temporary service fixture. Windows stdin transport and skill-library contract hardening remain baseline.
 
 - `future/domain-recipes`: planned, incremental only. Add a workflow when it represents repeated real work and its required/preferred capabilities plus mutation/replay/concurrency semantics are explicit and testable.
 - `future/release-publication`: blocked on explicit owner authorization. Release readiness, checksums, manifest, SBOM, tag enforcement, SLSA provenance, and SBOM attestations are implemented; do not create a GitHub Release or publish to npm unless the user explicitly asks.

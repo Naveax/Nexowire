@@ -23,7 +23,7 @@
 
 - [x] process metadata retention/recovery policy and explicit prune
 - [x] durable reattachable process I/O with bounded sidecar output spool; live event feed is implemented
-- [x] structured process/service/network inspection and fail-closed exact-name service control with wildcard rejection and exactly-one-target resolution
+- [x] structured process/service/network inspection and fail-closed exact-name service control with exactly-one-target resolution plus bounded verified state/startup postconditions
 - [x] registry read, scheduled-task list, event-log query, and firewall-rule list
 - [x] registry value/key (including unnamed/default values), task state, and firewall rule mutation controls with verification; structured Windows-control PowerShell payloads use explicit UTF-8 stdin
 - [x] registry and exact process/user/machine environment controls; user/machine PowerShell payloads use explicit UTF-8 stdin and real Windows large-Unicode-value coverage
