@@ -98,7 +98,7 @@ Before and after publication:
 
 GitHub v1.0.0 publication has explicit owner authorization. The final publication path is an exact `.github/releases/v1.0.0.authorized` marker on `main`, which creates/reuses the matching tag and dispatches tag-scoped release readiness. The tag-scoped workflow must pass packaging, independent candidate verification, attestations, and checksum re-verification before the GitHub Release is created.
 
-At the 2026-10-01 release-preparation sync, bounded Windows Event Log output is merged on main and no implementation PR remains. The release-preparation branch contains the 1.0.0 version change and explicit publication gate. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
+At the 2026-10-01 publication sync, v1.0.0 release preparation is merged on main at `db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0`, including successful normal CI and Linux/Windows/macOS release-readiness packaging. The only active release mutation is the exact `.github/releases/v1.0.0.authorized` marker. A new chat must still inspect current main/open PRs first because this sentence is a checkpoint, not an oracle.
 
 ## Branch and merge discipline
 
