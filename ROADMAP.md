@@ -73,7 +73,7 @@
 - [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored `user`/`operator`/`admin` roles, bearer rotation, TLS, descriptor-safe mounted secrets, and Windows DPAPI bootstrap envelopes are implemented; deployment-grade external identity and broader cross-platform protected-at-rest integration remain
 - deployment-grade external identity plus platform-backed/encrypted secret handling beyond the current local credential store and mounted-secret/DPAPI paths
 - [x] bounded persistent audit/history query with payload-free metadata filters
-- [~] stable MCP surface: v1 tool-name compatibility floor plus frozen backward-compatible input-schema contracts are implemented; machine-readable structured-output semantic compatibility remains
+- [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
 - [~] mature skill library: manifest v1, validation, device-aware runnability, and 30 shipped operational workflows are implemented; specialized workflow breadth/version evolution remains ongoing
