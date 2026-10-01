@@ -39,6 +39,7 @@ Implemented:
 - bounded task artifact lifecycle tools to list persisted metadata and re-stat/re-hash outputs after restart or later mutation, with changed/missing/unverified/error states and bounded hashing
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
+- versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, and regression coverage preventing silent stable-tool removal/rename
 - persistent workspace checkpoints
 - lazy skill registry
 - batch file reads and bounded text search

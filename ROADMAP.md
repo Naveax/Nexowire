@@ -72,7 +72,7 @@
 - [~] production authorization: revocable/expiring hash-only credentials, tool/device/route scopes, explicit stored `user`/`operator`/`admin` roles, bearer rotation, and TLS are implemented; deployment-grade external identity and protected-at-rest secret integration remain
 - deployment-grade external identity plus platform-backed/encrypted secret handling beyond the current local credential store and mounted-secret/DPAPI paths
 - [x] bounded persistent audit/history query with payload-free metadata filters
-- stable MCP surface
+- [~] stable MCP surface: v1 tool-name compatibility floor, surface-version discovery, and removal/rename regression coverage are implemented; deeper schema/semantic compatibility review remains
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
 - mature skill library

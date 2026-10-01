@@ -82,7 +82,7 @@ browser      workspace    devices      runtime
 
 The first milestones establish shared protocol types, a native execution backend, normalized execution results, workspace snapshots and resumable tasks, the ChatGPT-facing MCP server, multi-device routing, and tests for concurrency, validation, failure handling, and mutation safety.
 
-See `ROADMAP.md` and `HANDOFF.md` as the implementation grows.
+See `ROADMAP.md` and `HANDOFF.md` as the implementation grows. The ChatGPT-facing compatibility contract is versioned separately as MCP surface v1; `nexowire_surface_info` reports the MCP surface and native-agent protocol versions, and `docs/MCP_SURFACE.md` defines the compatibility rules.
 
 ## Security
 

@@ -56,6 +56,7 @@ Implemented on main as of the latest repository state:
 - direct HTTPS/WSS transport with TLS 1.2+ and default refusal of non-loopback plaintext
 - elevated Windows broker with DPAPI CurrentUser-protected bootstrap secret and per-user scheduled-task lifecycle
 - lazy skills and MCP HTTP/stdio surfaces
+- versioned MCP surface v1 compatibility floor with hub-local version discovery; stable tool-name removal/rename is regression-tested separately from the native-agent protocol version
 - real Linux native-agent outbound transport CI covering machine/shell/file/process core paths
 
 ## Important unfinished slices
