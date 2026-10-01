@@ -14,7 +14,7 @@ import {
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
 import {
-  resolveBearerAuthorization,
+  resolveMcpAuthorization,
   type BearerAuthorization,
 } from '../security/auth.js';
 import { OidcVerifier } from '../security/oidc.js';
@@ -62,37 +62,19 @@ export async function runHttpServer(
       return;
     }
 
-    const localAuthorization = resolveBearerAuthorization(
+    void resolveMcpAuthorization(
       req.headers.authorization,
-      'mcp',
       mcpTokens,
       context.credentials,
-    );
-    if (localAuthorization) {
-      res.locals.nexowireAuthorization =
-        localAuthorization satisfies BearerAuthorization;
-      next();
-      return;
-    }
-
-    if (!oidcVerifier) {
-      res.status(401).json({ error: 'unauthorized' });
-      return;
-    }
-
-    void oidcVerifier
-      .verifyBearerHeader(req.headers.authorization)
-      .then((identity) => {
-        if (!identity) {
+      oidcVerifier,
+    )
+      .then((authorization) => {
+        if (!authorization) {
           res.status(401).json({ error: 'unauthorized' });
           return;
         }
-        const authorization: BearerAuthorization = {
-          kind: 'oidc',
-          scope: 'mcp',
-          identity,
-        };
-        res.locals.nexowireAuthorization = authorization;
+        res.locals.nexowireAuthorization =
+          authorization satisfies BearerAuthorization;
         next();
       })
       .catch(() => {
