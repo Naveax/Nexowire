@@ -100,7 +100,7 @@
       "id": "skill-library",
       "status": "partial",
       "priority": 14,
-      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 43 shipped workflows, twelve replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and five conservative domain recipes including release-readiness auditing are implemented; further domain recipes remain incremental"
+      "summary": "Manifest v1+v2, validation, device-aware runnability, capability alternatives/preferences, replay/concurrency metadata, 44 shipped workflows, thirteen replay-safe parallel read-only v2 workflows, corrected event-driven-control semantics, and six conservative domain recipes including release-readiness and backup-integrity auditing are implemented; further domain recipes remain incremental"
     },
     {
       "id": "native-agent-lifecycle",
@@ -112,7 +112,7 @@
       "id": "release-readiness",
       "status": "done",
       "priority": 16,
-      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, independent pre-upload verification, and exact v<package-version> tag enforcement are implemented without enabling npm publication"
+      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, independent pre-upload verification, exact v<package-version> tag enforcement, and tag-only SLSA/CycloneDX attestations are implemented without enabling implicit publication"
     }
   ],
   "standardVerification": [
@@ -150,27 +150,28 @@
     "event-driven-control is manifest v2 but deliberately mixed/serial/manual-replay because it includes process.start; do not reclassify it replay-safe merely because its observation phase is read-only.",
     "macOS Keychain create/update is now first-party and verified in real macOS CI using security -q -i with the mutation command on stdin, explicit overwrite semantics, bounded execution, and read-back verification; plaintext secrets are not placed in process argv.",
     "Windows native agents now advertise wsl.exec only when bounded wsl.exe distro discovery finds at least one installed distro; machine.snapshot reuses the same detector.",
-    "The shipped skill library contains 43 workflows. Twelve read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics, and release-readiness-audit is the fifth conservative domain recipe.",
+    "The shipped skill library contains 44 workflows. Thirteen read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics, and backup-integrity-audit is the sixth conservative domain recipe.",
     "Real macOS native-agent core CI now verifies outbound transport, capability advertisement, machine snapshot, bash shell, allowlisted file I/O, and interactive process sessions in addition to LaunchAgent/Keychain coverage.",
     "Async path-policy authorization is canonical-realpath based, preventing false denials such as macOS /var -> /private/var while retaining symlink escape protection.",
     "Windows window-filter regression coverage uses an isolated WPF fixture instead of racing arbitrary runner windows.",
     "Release-readiness CI performs a full Linux gate plus clean packaged-runtime smoke tests on Linux, Windows, and macOS; canonical candidates now include SHA256SUMS, release-manifest.json, and a CycloneDX SBOM while npm publication remains disabled.",
     "Release candidates are independently re-verified before upload: tarball SHA256SUMS, manifest package/source/artifact/skill inventory, CycloneDX root identity, and private-package posture must all match.",
     "Tag-triggered release readiness now fails before canonical packaging unless the Git tag is exactly v<package-version>; branch and PR readiness runs are intentional no-ops for that tag check.",
-    "Tag-only SLSA and CycloneDX artifact attestations are active work on feat/release-attestation-v1; write/OIDC permissions are isolated to a separate explicit tag-push job."
+    "Tag-only SLSA and CycloneDX artifact attestations are merged baseline functionality; write/OIDC permissions are isolated to explicit tag-push attestation work, and publication remains a separate owner-authorized action.",
+    "GitHub Release/npm publication is intentionally not automatic. Creating release tags, GitHub Releases, or publishing packages requires explicit owner authorization."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "6b74383c5565da0458d84b5ca9a6542fd9f0b258",
+  "lastVerifiedMain": "c2467e9f1feb01f0e6a9c379f4ecee4b72d7d233",
   "activeWork": [
-    {
-      "branch": "feat/release-attestation-v1",
-      "status": "implementation",
-      "goal": "After an explicit matching tag and successful package matrix, re-check the downloaded canonical checksum and create tag-only SLSA provenance plus CycloneDX SBOM attestations with isolated OIDC/attestation permissions."
-    },
     {
       "branch": "future/domain-recipes",
       "status": "planned",
-      "goal": "Add further domain recipes only when capability requirements plus mutation/replay/concurrency semantics are explicit and testable."
+      "goal": "Add further domain recipes only when capability requirements plus mutation/replay/concurrency semantics are explicit, conservative, and testable."
+    },
+    {
+      "branch": "future/release-publication",
+      "status": "blocked",
+      "goal": "Only after explicit owner authorization: create a matching release tag and/or GitHub Release/npm publication. Readiness and attestations must not be treated as implicit publication permission."
     }
   ]
 }
