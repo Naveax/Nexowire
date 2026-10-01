@@ -75,15 +75,18 @@ Implemented on main as of the latest repository state:
 - real Ubuntu 24.04 WSL2 CI covering Nexowire `wsl.exec` exact distro/cwd/Unicode/nonzero-exit behavior
 - additive skill manifest v2 with capability alternatives/preferences plus replay/concurrency metadata while preserving v1 semantics
 - platform-secret backend hardening with non-secret macOS status probes and hashed/redacted backend diagnostics
+- machine-readable `nexowire doctor` deployment readiness with strict remote-ready semantics and no secret output
+- live HTTPS/OIDC/scoped-discovery/revocation operational CI
+- six replay-safe/parallel-safe read-only workflows migrated to skill manifest v2
 
 ## Important unfinished slices
 
 The canonical priority list lives in `PROJECT_STATE.json` and `ROADMAP.md`. Current focus:
 
-1. machine-readable deployment readiness/onboarding checks for the already-implemented TLS/auth/OIDC/secret/relay stack
-2. end-to-end operational security CI across external identity, scopes, revocation, discovery, TLS, and first-party transport
-3. migrate additional suitable skills to manifest v2 without weakening v1 compatibility
-4. keep macOS protected-secret write fail-closed until a no-argv/no-log native path is proven
+1. guided deployment onboarding/bootstrap on top of the now-implemented doctor/auth/TLS/OIDC stack
+2. first-party native-agent install/autostart lifecycle so operator deployments survive logout/reboot without manual terminal sessions
+3. migrate additional suitable read-only skills to manifest v2 while keeping mutation replay conservative
+4. keep macOS protected-secret write fail-closed until a no-argv/no-log first-party path is proven
 5. only add durable-runbook/idempotency/postcondition semantics when restart/replay behavior is explicit and tested
 
 The frozen MCP v1 input and structured-output contracts are complete on main. Future incompatible semantic changes require an explicit reviewed surface/version migration rather than silently editing the v1 contract.
