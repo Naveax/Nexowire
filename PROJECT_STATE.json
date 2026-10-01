@@ -64,7 +64,7 @@
       "id": "dynamic-tool-exposure",
       "status": "done",
       "priority": 8,
-      "summary": "Stored credential authorization filters tools/list and calls; HTTP MCP discovery filters native-backed schemas by online agent capabilities; browser capabilities are executable-aware and WSL capability probing is active work"
+      "summary": "Stored credential authorization filters tools/list and calls; HTTP MCP discovery filters native-backed schemas by online agent capabilities; browser advertisements are executable-aware and wsl.exec is advertised only when an installed distro is detected"
     },
     {
       "id": "postconditions",
@@ -144,16 +144,11 @@
     "event-driven-control is manifest v2 but deliberately mixed/serial/manual-replay because it includes process.start; do not reclassify it replay-safe merely because its observation phase is read-only.",
     "macOS Keychain create/update is now first-party and verified in real macOS CI using security -q -i with the mutation command on stdin, explicit overwrite semantics, bounded execution, and read-back verification; plaintext secrets are not placed in process argv.",
     "The shipped skill library contains 42 workflows. Twelve read-only manifest-v2 workflows are explicitly parallel-safe/replay-safe; mixed workflows retain verify/manual replay semantics.",
-    "Browser capability advertisement is executable-aware across Windows/macOS/Linux. The active WSL capability-detection slice removes wsl.exec when a Windows agent has no installed distro."
+    "Windows native agents now advertise wsl.exec only when bounded wsl.exe distro discovery finds at least one installed distro; machine.snapshot reuses the same detector."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "09f1d4dd7040b370d4e046e04ac6c9f002d6b95a",
+  "lastVerifiedMain": "44170cd97de01df3849ff47f6f2d9f9019ba7784",
   "activeWork": [
-    {
-      "branch": "fix/wsl-capability-detection-v1",
-      "status": "testing",
-      "goal": "Advertise wsl.exec only when the Windows native agent can detect at least one installed WSL distro; PR #103 is open with focused local tests passing and CI running."
-    },
     {
       "branch": "future/domain-recipes",
       "status": "planned",
