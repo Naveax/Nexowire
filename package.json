@@ -23,7 +23,8 @@
     "dev:privileged-broker": "tsx src/cli.ts privileged-broker",
     "start:privileged-broker": "node dist/src/cli.js privileged-broker",
     "mcp:contract:generate": "node --import tsx scripts/generate-mcp-v1-contract.ts",
-    "continuation:check": "node --import tsx scripts/check-continuation-state.ts"
+    "continuation:check": "node --import tsx scripts/check-continuation-state.ts",
+    "mcp:output-contract:generate": "node --import tsx scripts/generate-mcp-v1-output-contract.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
