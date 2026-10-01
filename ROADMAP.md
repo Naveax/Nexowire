@@ -39,9 +39,10 @@
 - [x] persistent task graph metadata and exact-spec resume
 - [x] persistent/resumable task graph metadata across agent restart with explicit unknown-state replay control
 - [x] bounded dependency-aware parallel independent jobs
-- resumable long-running work beyond task-graph job boundaries
+- [x] higher-level durable runbooks composing resumable task graphs and read-only postcondition stages
 - [x] verified task-graph artifact metadata tracking with SHA-256 and no persisted artifact contents
 - [x] bounded artifact lifecycle inspection/re-verification with changed/missing detection and MCP exposure
+- [x] payload-free runbook checkpoints with DAG dependencies, bounded parallelism, exact-spec resume, and fail-closed unknown task state
 
 ## v0.4 - Native remote runtime
 

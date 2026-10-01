@@ -35,6 +35,7 @@ Implemented:
 - structured workspace detection plus bounded parallel build/test/lint/typecheck execution
 - bounded dependency-aware parallel task graphs with failure blocking and total timeout
 - persisted payload-free task-graph checkpoints with exact-spec resume, succeeded-job reuse, unknown-state recovery, explicit retry controls, and verified artifact metadata (path/size/SHA-256/mtime) without artifact contents
+- higher-level durable runbooks that compose task-graph and read-only assertion stages into a persistent dependency DAG with exact-spec resume; unknown task stages require explicit retry while interrupted assertion stages are safely replayable
 - bounded task artifact lifecycle tools to list persisted metadata and re-stat/re-hash outputs after restart or later mutation, with changed/missing/unverified/error states and bounded hashing
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
@@ -101,8 +102,8 @@ The repository is the source of truth. If this file disagrees with current code/
 ## Immediate next work
 
 1. Keep Windows/Linux typecheck/test/build and live integration lanes green after each slice.
-2. Extend higher-level durable execution workflows beyond current reattachable process sessions, resumable task graphs, and artifact lifecycle primitives.
-3. Continue deployment-grade identity/secret handling and stronger operator/admin authorization; tool/device/route scopes, explicit stored admin grants, revocation/TTL, rotation, and TLS are implemented.
+2. Extend durable runbooks only where new workflow step types have well-defined restart/replay semantics; task graphs + read-only assertion stages are implemented.
+3. Continue deployment-grade identity/secret handling and stronger operator/admin authorization; tool/device/route scopes, explicit stored admin grants, revocation/TTL, rotation, TLS, and descriptor-safe mounted secret reads are implemented.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
 6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests; both core paths are implemented.
 7. Continue production authorization work: scoped credentials, revocation, TTL, rotation, and TLS exist; stronger identity/admin policy and deployment secret handling remain.

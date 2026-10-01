@@ -4381,6 +4381,238 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+  const runbookStepIdSchema = z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/);
+
+  const runbookTaskJobSchema = z.object({
+    id: runbookStepIdSchema,
+    command: z.string().min(1).max(200_000),
+    shell: z
+      .enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh'])
+      .optional(),
+    cwd: z.string().max(4096).optional(),
+    depends_on: z.array(runbookStepIdSchema).max(31).optional(),
+    timeout_ms: z
+      .number()
+      .int()
+      .min(100)
+      .max(600_000)
+      .optional(),
+    max_output_bytes: z
+      .number()
+      .int()
+      .min(1024)
+      .max(16_777_216)
+      .optional(),
+    artifacts: z
+      .array(z.string().min(1).max(4096))
+      .max(32)
+      .optional(),
+    artifact_max_bytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(1_073_741_824)
+      .optional(),
+  });
+
+  const runbookTaskGraphSchema = z.object({
+    jobs: z.array(runbookTaskJobSchema).min(1).max(32),
+    max_parallel: z.number().int().min(1).max(8).optional(),
+    stop_on_failure: z.boolean().optional(),
+    default_timeout_ms: z
+      .number()
+      .int()
+      .min(100)
+      .max(600_000)
+      .optional(),
+    total_timeout_ms: z
+      .number()
+      .int()
+      .min(100)
+      .max(3_600_000)
+      .optional(),
+    default_max_output_bytes: z
+      .number()
+      .int()
+      .min(1024)
+      .max(16_777_216)
+      .optional(),
+  });
+
+  const runbookAssertionInputSchema = z.object({
+    assertions: z
+      .array(postconditionAssertionSchema)
+      .min(1)
+      .max(32),
+    max_parallel: z.number().int().min(1).max(8).optional(),
+    stop_on_failure: z.boolean().optional(),
+  });
+
+  const runbookStepSchema = z.discriminatedUnion('kind', [
+    z.object({
+      id: runbookStepIdSchema,
+      kind: z.literal('task_graph'),
+      depends_on: z
+        .array(runbookStepIdSchema)
+        .max(31)
+        .optional(),
+      task_graph: runbookTaskGraphSchema,
+    }),
+    z.object({
+      id: runbookStepIdSchema,
+      kind: z.literal('assertions'),
+      depends_on: z
+        .array(runbookStepIdSchema)
+        .max(31)
+        .optional(),
+      assertions: runbookAssertionInputSchema,
+    }),
+  ]);
+
+  server.registerTool(
+    'runbook_run',
+    {
+      title: 'Run durable resumable runbook',
+      description:
+        'Run a persistent dependency-aware workflow whose steps are durable task graphs or read-only postcondition assertion groups. Only metadata/spec hashes are persisted by the runbook layer; command/output payloads remain in the underlying bounded execution response.',
+      inputSchema: {
+        ...targetFields,
+        runbook_id: runbookStepIdSchema,
+        resume: z.boolean().optional(),
+        retry_failed: z.boolean().optional(),
+        retry_unknown: z.boolean().optional(),
+        steps: z.array(runbookStepSchema).min(1).max(64),
+        max_parallel: z.number().int().min(1).max(8).optional(),
+        stop_on_failure: z.boolean().optional(),
+        total_timeout_ms: z
+          .number()
+          .int()
+          .min(100)
+          .max(7_200_000)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      runbook_id,
+      resume,
+      retry_failed,
+      retry_unknown,
+      steps,
+      max_parallel,
+      stop_on_failure,
+      total_timeout_ms,
+    }) => {
+      const timeout = total_timeout_ms ?? 1_800_000;
+      return await execute(
+        ctx,
+        'runbook.run',
+        {
+          runbook_id,
+          ...(resume !== undefined ? { resume } : {}),
+          ...(retry_failed !== undefined
+            ? { retry_failed }
+            : {}),
+          ...(retry_unknown !== undefined
+            ? { retry_unknown }
+            : {}),
+          steps,
+          ...(max_parallel !== undefined
+            ? { max_parallel }
+            : {}),
+          ...(stop_on_failure !== undefined
+            ? { stop_on_failure }
+            : {}),
+          ...(total_timeout_ms !== undefined
+            ? { total_timeout_ms }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        timeout + 15_000,
+      );
+    },
+  );
+
+  server.registerTool(
+    'runbook_list',
+    {
+      title: 'List persisted runbooks',
+      description:
+        'List payload-free durable runbook metadata and step states for one native device.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'runbook.list',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'runbook_get',
+    {
+      title: 'Get persisted runbook',
+      description:
+        'Read one durable runbook checkpoint including step status, attempts, derived task-graph references, and restart unknown-state markers.',
+      inputSchema: {
+        ...targetFields,
+        runbook_id: runbookStepIdSchema,
+      },
+    },
+    async ({ device_id, provider_id, runbook_id }) =>
+      await execute(
+        ctx,
+        'runbook.get',
+        { runbook_id },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'runbook_prune',
+    {
+      title: 'Prune persisted runbooks',
+      description:
+        'Delete completed/interrupted runbook metadata older than a requested age. Running runbooks are never pruned.',
+      inputSchema: {
+        ...targetFields,
+        older_than_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(2_592_000_000)
+          .optional(),
+      },
+    },
+    async ({ device_id, provider_id, older_than_ms }) =>
+      await execute(
+        ctx,
+        'runbook.prune',
+        {
+          ...(older_than_ms !== undefined
+            ? { older_than_ms }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
   server.registerTool(
     'workspace_checkpoint_save',
     {

@@ -15,9 +15,11 @@ import { executeWindowsAccessibilityCapability } from './windows-accessibility.j
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
+import { executeDurableRunbook } from './runbooks.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
+import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { privilegeRequirement } from '../security/privilege.js';
 
@@ -1995,6 +1997,7 @@ async function workspaceSnapshot(
 export interface AgentExecutionContext {
   processes?: ProcessManager;
   taskGraphs?: TaskGraphStore;
+  runbooks?: RunbookStore;
   privilegeMode?: 'direct' | 'broker';
   privilegedBroker?: PrivilegedBrokerClient;
 }
@@ -2009,6 +2012,13 @@ function requireTaskGraphs(context: AgentExecutionContext): TaskGraphStore {
     throw new Error('Persistent task graph store is unavailable.');
   }
   return context.taskGraphs;
+}
+
+function requireRunbooks(context: AgentExecutionContext): RunbookStore {
+  if (!context.runbooks) {
+    throw new Error('Persistent runbook store is unavailable.');
+  }
+  return context.runbooks;
 }
 
 export async function executeCapability(
@@ -2118,6 +2128,50 @@ export async function executeCapability(
       const parsed = TaskGraphPruneInputSchema.parse(input);
       return {
         data: await requireTaskGraphs(context).prune({
+          ...(parsed.older_than_ms !== undefined
+            ? { olderThanMs: parsed.older_than_ms }
+            : {}),
+        }),
+      };
+    }
+    case 'runbook.run':
+      return await executeDurableRunbook(
+        input,
+        requireRunbooks(context),
+        {
+          runTaskGraph: async (nestedInput) =>
+            await runTaskGraph(
+              nestedInput,
+              policy,
+              requireTaskGraphs(context),
+            ),
+          runAssertions: async (nestedInput) =>
+            await executePostconditions(nestedInput, policy),
+        },
+      );
+    case 'runbook.list':
+      return { data: requireRunbooks(context).list() };
+    case 'runbook.get': {
+      const parsed = z.object({
+        runbook_id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+      }).parse(input);
+      return { data: requireRunbooks(context).get(parsed.runbook_id) };
+    }
+    case 'runbook.prune': {
+      const parsed = z.object({
+        older_than_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(2_592_000_000)
+          .optional(),
+      }).parse(input);
+      return {
+        data: await requireRunbooks(context).prune({
           ...(parsed.older_than_ms !== undefined
             ? { olderThanMs: parsed.older_than_ms }
             : {}),
