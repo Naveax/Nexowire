@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { SkillRegistry } from '../src/skills/registry.js';
+import {
+  CORE_CAPABILITIES,
+  READ_ONLY_CAPABILITIES,
+} from '../src/protocol/capabilities.js';
 
 const EXPECTED_V3_SKILLS = [
   'backup-restore',
@@ -135,6 +139,48 @@ test('domain recipes declare explicit replay and concurrency semantics', async (
   assert.ok(
     regression.manifest.requires.includes('workspace.checks'),
   );
+});
+
+test('domain recipe capabilities stay known and read-only declarations stay read-only', async () => {
+  const registry = new SkillRegistry(
+    path.join(process.cwd(), 'skills'),
+  );
+  const coreCapabilities = new Set<string>(CORE_CAPABILITIES);
+
+  for (const name of [
+    ...EXPECTED_DOMAIN_READ_ONLY_V2_SKILLS,
+    ...EXPECTED_DOMAIN_MIXED_V2_SKILLS,
+  ]) {
+    const loaded = await registry.load(name);
+    const declared = [
+      ...loaded.manifest.requires,
+      ...(loaded.manifest.requiresAny ?? []).flat(),
+      ...(loaded.manifest.prefers ?? []),
+    ];
+
+    for (const capability of declared) {
+      assert.ok(
+        coreCapabilities.has(capability),
+        name + ': unknown capability ' + capability,
+      );
+    }
+  }
+
+  for (const name of EXPECTED_DOMAIN_READ_ONLY_V2_SKILLS) {
+    const loaded = await registry.load(name);
+    const declared = [
+      ...loaded.manifest.requires,
+      ...(loaded.manifest.requiresAny ?? []).flat(),
+      ...(loaded.manifest.prefers ?? []),
+    ];
+
+    for (const capability of declared) {
+      assert.ok(
+        READ_ONLY_CAPABILITIES.has(capability),
+        name + ': read-only recipe references mutating capability ' + capability,
+      );
+    }
+  }
 });
 
 test('documented shipped skill index matches the validated library', async () => {
