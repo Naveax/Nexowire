@@ -112,7 +112,7 @@
       "id": "release-readiness",
       "status": "done",
       "priority": 16,
-      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, and CycloneDX SBOM are implemented without enabling npm publication"
+      "summary": "Installable CLI packaging, bundled-skill lookup outside repository cwd, deterministic package audits, clean tarball install smoke tests on Linux/Windows/macOS, GitHub Actions release-candidate artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, and independent evidence verification before upload are implemented without enabling npm publication"
     }
   ],
   "standardVerification": [
@@ -155,15 +155,16 @@
     "Async path-policy authorization is canonical-realpath based, preventing false denials such as macOS /var -> /private/var while retaining symlink escape protection.",
     "Windows window-filter regression coverage uses an isolated WPF fixture instead of racing arbitrary runner windows.",
     "Release-readiness CI performs a full Linux gate plus clean packaged-runtime smoke tests on Linux, Windows, and macOS; canonical candidates now include SHA256SUMS, release-manifest.json, and a CycloneDX SBOM while npm publication remains disabled.",
-    "A release-candidate verification slice is active to re-validate generated checksum/manifest/SBOM evidence before artifact upload instead of trusting generation alone."
+    "Release candidates are independently re-verified before upload: tarball SHA256SUMS, manifest package/source/artifact/skill inventory, CycloneDX root identity, and private-package posture must all match.",
+    "Exact tag/package-version enforcement is active work on feat/release-tag-policy-v2 so tag-triggered candidate builds fail before packaging when v<package-version> does not match."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "9548d08866c86a931510fe529948df6e0fdcdb32",
+  "lastVerifiedMain": "2d05d0274ea2cf2a41ec50e843b4d40d1b1de48d",
   "activeWork": [
     {
-      "branch": "feat/release-candidate-verify-v1",
+      "branch": "feat/release-tag-policy-v2",
       "status": "implementation",
-      "goal": "Add an independent verifier for generated release checksum/manifest/SBOM evidence and gate candidate upload on verification; do not publish."
+      "goal": "Require tag-triggered release-readiness runs to use exactly v<package-version> before the canonical tarball is built; branch/PR runs remain non-tag no-ops."
     },
     {
       "branch": "future/domain-recipes",
