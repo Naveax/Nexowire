@@ -3,6 +3,11 @@ name: build-and-test
 description: Build and test a project using the smallest useful feedback loop before escalating to the full suite.
 version: 0.1
 requires: workspace.snapshot, shell.exec
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: repo, build, test, verification
 ---
 
 # Build And Test
