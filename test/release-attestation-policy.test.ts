@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-test('release attestation permissions stay isolated to explicit tag pushes', async () => {
+test('release attestation and publication stay isolated to explicit tag-scoped runs', async () => {
   const workflow = await fs.readFile(
     path.join(
       process.cwd(),
@@ -18,10 +18,14 @@ test('release attestation permissions stay isolated to explicit tag pushes', asy
   const index = workflow.indexOf(marker);
   assert.ok(index >= 0, 'attest job must exist');
 
-  const attest = workflow.slice(index);
+  const publishMarker = '\n  publish:\n';
+  const publishIndex = workflow.indexOf(publishMarker);
+  assert.ok(publishIndex > index, 'publish job must follow attest');
+
+  const attest = workflow.slice(index, publishIndex);
   assert.match(
     attest,
-    /if: github\.event_name == 'push' && github\.ref_type == 'tag'/,
+    /if: github\.ref_type == 'tag' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\)/,
   );
   assert.match(attest, /needs: package/);
   assert.match(attest, /actions: read/);
@@ -50,4 +54,20 @@ test('release attestation permissions stay isolated to explicit tag pushes', asy
   assert.doesNotMatch(packageJob, /id-token: write/);
   assert.doesNotMatch(packageJob, /attestations: write/);
   assert.doesNotMatch(packageJob, /artifact-metadata: write/);
+
+  const publish = workflow.slice(publishIndex);
+  assert.match(
+    publish,
+    /if: github\.ref_type == 'tag' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\)/,
+  );
+  assert.match(publish, /needs: \[package, attest\]/);
+  assert.match(publish, /actions: read/);
+  assert.match(publish, /contents: write/);
+  assert.match(publish, /actions\/download-artifact@v4/);
+  assert.match(publish, /sha256sum -c SHA256SUMS/);
+  assert.match(publish, /gh release create/);
+  assert.match(publish, /--verify-tag/);
+  assert.doesNotMatch(publish, /id-token: write/);
+  assert.doesNotMatch(publish, /attestations: write/);
 });
+
