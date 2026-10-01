@@ -75,6 +75,8 @@ test('MCP v1 compatibility floor remains present and unique', async () => {
       nativeAgentProtocolVersion?: number;
       stableToolCount?: number;
       stableTools?: string[];
+      outputContractVersion?: number;
+      outputContractHash?: string;
     };
     assert.equal(
       structured.mcpSurfaceVersion,
@@ -91,6 +93,50 @@ test('MCP v1 compatibility floor remains present and unique', async () => {
     assert.deepEqual(
       structured.stableTools,
       [...MCP_V1_STABLE_TOOLS],
+    );
+    assert.equal(structured.outputContractVersion, 1);
+    assert.match(
+      structured.outputContractHash ?? '',
+      /^[a-f0-9]{64}$/,
+    );
+
+    const withOutputs = await client.callTool({
+      name: 'nexowire_surface_info',
+      arguments: { include_output_contracts: true },
+    });
+    assert.equal(
+      'isError' in withOutputs ? withOutputs.isError : false,
+      false,
+    );
+    const outputStructured = withOutputs.structuredContent as {
+      outputContractVersion?: number;
+      outputContractHash?: string;
+      outputContracts?: Record<
+        string,
+        {
+          tool?: string;
+          structuredContentType?: string;
+          contentMode?: string;
+        }
+      >;
+    };
+    assert.equal(outputStructured.outputContractVersion, 1);
+    assert.match(
+      outputStructured.outputContractHash ?? '',
+      /^[a-f0-9]{64}$/,
+    );
+    assert.deepEqual(
+      Object.keys(outputStructured.outputContracts ?? {}),
+      [...MCP_V1_STABLE_TOOLS],
+    );
+    assert.equal(
+      outputStructured.outputContracts?.browser_screenshot?.contentMode,
+      'image-plus-json',
+    );
+    assert.equal(
+      outputStructured.outputContracts?.machine_snapshot
+        ?.structuredContentType,
+      'object',
     );
   } finally {
     await client.close();
