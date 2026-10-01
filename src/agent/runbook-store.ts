@@ -232,26 +232,42 @@ export class RunbookStore {
 
     for (const step of existing.steps) {
       if (step.status === 'running') step.status = 'unknown';
+    }
 
-      const retrySafeUnknown =
-        step.status === 'unknown' && step.kind === 'assertions';
-      const retryRequestedUnknown =
-        step.status === 'unknown' && input.retryUnknown;
-      const retryRequestedFailure =
-        input.retryFailed &&
-        (step.status === 'failed' || step.status === 'blocked');
+    const retrying = new Set(
+      existing.steps
+        .filter(
+          (step) =>
+            (step.status === 'unknown' &&
+              (step.kind === 'assertions' ||
+                input.retryUnknown)) ||
+            (step.status === 'failed' && input.retryFailed),
+        )
+        .map((step) => step.id),
+    );
+
+    const reset = (step: RunbookCheckpointStep): void => {
+      step.status = 'pending';
+      delete step.startedAt;
+      delete step.completedAt;
+      delete step.blockedBy;
+      delete step.durationMs;
+      delete step.errorCode;
+    };
+
+    for (const step of existing.steps) {
+      if (retrying.has(step.id)) {
+        reset(step);
+        continue;
+      }
 
       if (
-        retrySafeUnknown ||
-        retryRequestedUnknown ||
-        retryRequestedFailure
+        step.status === 'blocked' &&
+        (retrying.size > 0 ||
+          input.retryFailed ||
+          input.retryUnknown)
       ) {
-        step.status = 'pending';
-        delete step.startedAt;
-        delete step.completedAt;
-        delete step.blockedBy;
-        delete step.durationMs;
-        delete step.errorCode;
+        reset(step);
       }
     }
 
