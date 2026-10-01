@@ -92,7 +92,7 @@ function launcherPath(
 ): string {
   if (platform === 'linux') {
     return path.posix.join(
-      lifecycleRoot(options).replaceAll('\\\\', '/'),
+      lifecycleRoot(options).replaceAll(path.win32.sep, '/'),
       'launch.sh',
     );
   }
@@ -144,7 +144,7 @@ function linuxUnitPath(
   options: NativeAgentLifecycleOptions,
 ): string {
   return path.posix.join(
-    (options.homeDir ?? os.homedir()).replaceAll('\\\\', '/'),
+    (options.homeDir ?? os.homedir()).replaceAll(path.win32.sep, '/'),
     '.config',
     'systemd',
     'user',
