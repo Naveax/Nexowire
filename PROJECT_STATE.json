@@ -164,10 +164,11 @@
     "Windows structured-control CI now runs test/windows-control.test.ts on a real Windows runner; unnamed/default registry values support verified set/read/delete round-trips without weakening exact key or hive-root deletion protections.",
     "Windows structured-control PowerShell JSON input now uses explicit UTF-8 stdin instead of child-process environment variables; real Windows CI verifies a >64 KiB Unicode registry mutation round-trip.",
     "Windows user/machine environment PowerShell JSON input now uses explicit UTF-8 stdin, preventing secret-bearing environment values from being copied into the child process environment; real Windows CI verifies a ~32 KiB Unicode user-scope round-trip.",
-    "windows.service.control now rejects wildcard selectors before mutation and resolves exactly one case-insensitive service Name before applying start/stop/restart/startup operations via the resolved ServiceController; the stable MCP v1 input schema is unchanged."
+    "windows.service.control now rejects wildcard selectors before mutation and resolves exactly one case-insensitive service Name before applying start/stop/restart/startup operations via the resolved ServiceController; the stable MCP v1 input schema is unchanged.",
+    "windows.service.control now polls bounded postconditions after mutation: start/restart must converge to Running, stop to Stopped, and requested startup type must match final Win32_Service StartMode; real Windows CI verifies startup mutation on an isolated temporary service fixture."
   ],
   "lastStateSync": "2026-10-01",
-  "lastVerifiedMain": "f6c128a384a54e92a57dc00d56e8d030ee0f8cd3",
+  "lastVerifiedMain": "606bfbea5d2a93ccfac458e84574d8ed35d8b5de",
   "activeWork": [
     {
       "branch": "future/domain-recipes",
