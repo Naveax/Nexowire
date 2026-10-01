@@ -86,9 +86,9 @@
     },
     {
       "id": "durable-workflows",
-      "status": "partial",
+      "status": "done",
       "priority": 12,
-      "summary": "Durable process sessions, resumable task graphs, and bounded artifact list/re-verification are implemented; higher-level resumable long-running workflow orchestration and artifact lifecycle policies remain"
+      "summary": "Higher-level durable runbooks now compose persistent task-graph and read-only assertion stages with dependency DAGs, bounded parallelism, payload-free checkpoints, exact-spec resume, safe automatic replay of interrupted read-only assertions, and explicit retry for unknown task state"
     },
     {
       "id": "stable-mcp-surface",
@@ -117,15 +117,10 @@
     "Update this file after major merges that materially change remaining work.",
     "Do not infer completion from chat history; inspect main and CI.",
     "The first-party relay path is verified with a real native agent in Ubuntu CI.",
-    "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation."
+    "Development access through SentinelX/RDC is temporary tooling only and never counts as runtime implementation.",
+    "Durable runbooks are the preferred higher-level orchestration primitive; do not add new step kinds unless restart/replay semantics are explicit and tested."
   ],
   "lastStateSync": "2026-10-01",
   "lastVerifiedMain": "d5de5143c284fe9ead93b2f483745b838cce72f7",
-  "activeWork": [
-    {
-      "id": "task-artifact-lifecycle",
-      "branch": "feat/task-artifact-lifecycle-v1",
-      "summary": "Add bounded persisted artifact listing and re-verification plus MCP/skill integration"
-    }
-  ]
+  "activeWork": []
 }
