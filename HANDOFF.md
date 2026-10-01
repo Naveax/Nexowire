@@ -39,7 +39,7 @@ Implemented:
 - bounded task artifact lifecycle tools to list persisted metadata and re-stat/re-hash outputs after restart or later mutation, with changed/missing/unverified/error states and bounded hashing
 - bounded in-memory agent/process event feed with topic/device filters, cursors, long-poll waits, and cursor-expiry detection
 - Streamable HTTP MCP and stdio MCP
-- versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, and a frozen per-tool input-schema contract that rejects provable narrowing
+- versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
 - machine-readable skill manifest v1 with required capabilities, platforms, mutation/privilege/trust metadata, validation, exact-device runnability evaluation, and 30 validated shipped operational skills
@@ -105,8 +105,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-- `feat/mcp-output-contract-v1`: machine-readable structured-output semantic contracts for the frozen MCP v1 surface.
-- `feat/continuation-state-check-v1`: CI-enforced continuation-state validation so a new chat can resume from GitHub alone.
+- `feat/mcp-output-contract-v2`: frozen machine-readable structured-output semantic compatibility for MCP surface v1.
 
 ## Immediate next work
 
@@ -115,7 +114,7 @@ The repository is the source of truth. If this file disagrees with current code/
 3. Continue deployment-grade external identity/protected secret handling; tool/device/route scopes, explicit user/operator/admin roles, revocation/TTL, rotation, TLS, descriptor-safe mounted secret reads, DPAPI broker protection, and Windows purpose-bound bootstrap secret envelopes are implemented.
 5. Extend idempotency/postcondition coverage only where replay and verification semantics are provably safe.
 6. Keep first-party direct/relay routing and privilege-broker recovery covered by live/operational tests; both core paths are implemented.
-7. Continue production authorization work: scoped credentials, revocation, TTL, rotation, and TLS exist; stronger identity/admin policy and deployment secret handling remain.
+7. Continue production authorization work: scoped credentials, revocation, TTL, rotation, TLS, and Windows protected bootstrap secret envelopes exist; deployment-grade external identity and broader cross-platform secret integration remain.
 8. Add real WSL2-distro integration coverage when a suitable Windows runner/machine is available.
 
 ## Known machine note
