@@ -88,7 +88,7 @@ Implemented on main as of the latest repository state:
 
 The v1.0 implementation scope is complete. Further domain recipes, additional capability probes, performance tuning, and reproduced hardening work are post-v1 incremental development rather than blockers for the first stable release.
 
-Before and after publication:
+After publication:
 
 1. keep the production regression floor green across packaged-runtime smoke, browser, Windows, Linux, macOS, WSL2, doctor/onboarding, HTTPS/OIDC/revocation, LaunchAgent, Keychain, relay, and privileged-broker lanes
 2. preserve the frozen MCP v1 input/output contracts and first-party-only runtime ownership invariant
