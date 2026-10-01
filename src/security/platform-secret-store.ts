@@ -372,35 +372,32 @@ export class PlatformSecretStore {
       );
     }
 
-    const args =
-      this.platform === 'darwin'
-        ? [
-            'add-generic-password',
-            ...(options.overwrite === true ? ['-U'] : []),
-            '-s',
-            macService(reference),
-            '-a',
-            reference.name,
-            '-w',
-            secret,
-          ]
-        : [
-            'store',
-            '--label=Nexowire ' +
-              reference.purpose +
-              '/' +
-              reference.name,
-            ...attributes(reference),
-          ];
+    if (this.platform === 'darwin') {
+      throw new PlatformSecretError(
+        'PLATFORM_SECRET_WRITE_UNSUPPORTED',
+        'Nexowire does not pass macOS Keychain secret plaintext through process arguments. Provision this Keychain item with trusted OS tooling; Nexowire will read it without echoing the secret.',
+        {
+          platform: this.platform,
+          purpose: reference.purpose,
+          name: reference.name,
+        },
+      );
+    }
+
+    const args = [
+      'store',
+      '--label=Nexowire ' +
+        reference.purpose +
+        '/' +
+        reference.name,
+      ...attributes(reference),
+    ];
 
     const result = await this.runner.run(
       command,
       args,
       {
-        input:
-          this.platform === 'linux'
-            ? secret
-            : undefined,
+        input: secret,
         maxBuffer: 2 * 1024 * 1024,
       },
     );
