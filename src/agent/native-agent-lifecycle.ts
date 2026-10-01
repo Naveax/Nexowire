@@ -90,10 +90,13 @@ function launcherPath(
   options: NativeAgentLifecycleOptions,
   platform: 'win32' | 'linux',
 ): string {
-  return path.join(
-    lifecycleRoot(options),
-    platform === 'win32' ? 'launch.ps1' : 'launch.sh',
-  );
+  if (platform === 'linux') {
+    return path.posix.join(
+      lifecycleRoot(options).replaceAll('\\\\', '/'),
+      'launch.sh',
+    );
+  }
+  return path.join(lifecycleRoot(options), 'launch.ps1');
 }
 
 function manifestPath(
@@ -140,8 +143,8 @@ function linuxUnitName(
 function linuxUnitPath(
   options: NativeAgentLifecycleOptions,
 ): string {
-  return path.join(
-    options.homeDir ?? os.homedir(),
+  return path.posix.join(
+    (options.homeDir ?? os.homedir()).replaceAll('\\\\', '/'),
     '.config',
     'systemd',
     'user',
