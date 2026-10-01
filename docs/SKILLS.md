@@ -95,6 +95,7 @@ This avoids loading a Windows/UIA workflow for a Linux machine or proposing a wo
 - `safe-config-migration`
 - `backup-restore`
 - `backup-integrity-audit`
+- `configuration-drift-audit`
 - `performance-triage`
 - `browser-workflow-recovery`
 - `large-file-investigation`
@@ -106,7 +107,7 @@ This avoids loading a Windows/UIA workflow for a Linux machine or proposing a wo
 
 ## Operational recipe set
 
-The v2 recipe expansion covers common work that previously required reconstructing the same plan from primitive tools every time: safe Git changes, project/bootstrap setup, dependency changes, process/service diagnosis, application repair, disk recovery, deployment verification, machine bootstrap, and read-only incident triage. The v3 specialized pack adds exact port-conflict diagnosis, TLS/certificate triage, bounded log analysis, rollback-aware config migration, verified file backup/restore, read-only performance triage, browser workflow recovery, and evidence-first large-file investigation. The current domain pack adds artifact-integrity auditing, mutation-free browser-session inspection, service-readiness auditing, evidence-first workspace regression triage, release-readiness auditing, and read-only backup-integrity auditing; each opts into manifest v2 with explicit replay/concurrency semantics rather than relying on vibes, a surprisingly durable human scheduling primitive.
+The v2 recipe expansion covers common work that previously required reconstructing the same plan from primitive tools every time: safe Git changes, project/bootstrap setup, dependency changes, process/service diagnosis, application repair, disk recovery, deployment verification, machine bootstrap, and read-only incident triage. The v3 specialized pack adds exact port-conflict diagnosis, TLS/certificate triage, bounded log analysis, rollback-aware config migration, verified file backup/restore, read-only performance triage, browser workflow recovery, and evidence-first large-file investigation. The current domain pack adds artifact-integrity auditing, mutation-free browser-session inspection, service-readiness auditing, evidence-first workspace regression triage, release-readiness auditing, read-only backup-integrity auditing, and read-only configuration-drift auditing; each opts into manifest v2 with explicit replay/concurrency semantics rather than relying on vibes, a surprisingly durable human scheduling primitive.
 
 These are still workflows, not magical permission bundles. A skill can propose `files.delete`; the runtime must still authorize and execute that capability normally. Tiny distinction, occasionally useful when the computer contains things people wanted to keep.
 
