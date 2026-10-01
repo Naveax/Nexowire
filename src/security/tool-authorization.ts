@@ -1,24 +1,38 @@
 import * as z from 'zod';
 import type { BearerAuthorization } from './auth.js';
 
-export const ADMIN_MCP_TOOLS = new Set<string>([
+export const OPERATOR_MCP_TOOLS = new Set<string>([
   'policy_profile_list',
+  'policy_device_check',
+  'operations_idempotency_list',
+  'events_read',
+  'audit_recent',
+  'audit_query',
+]);
+
+export const ADMIN_MCP_TOOLS = new Set<string>([
   'policy_profile_set',
   'policy_profile_delete',
   'policy_device_bind',
   'policy_device_unbind',
-  'policy_device_check',
   'device_route_policy_set',
   'device_route_policy_delete',
   'device_group_set',
   'device_group_delete',
   'device_alias_set',
   'device_alias_delete',
-  'operations_idempotency_list',
-  'events_read',
-  'audit_recent',
-  'audit_query',
 ]);
+
+function effectiveStoredRole(
+  authorization: Extract<BearerAuthorization, { kind: 'stored' }>,
+): 'user' | 'operator' | 'admin' {
+  return (
+    authorization.credential.role ??
+    (authorization.credential.administrative === true
+      ? 'admin'
+      : 'user')
+  );
+}
 
 export const ToolPatternSchema = z
   .string()
@@ -59,9 +73,14 @@ export function isMcpToolAuthorized(
     return true;
   }
 
+  const role = effectiveStoredRole(authorization);
+  if (ADMIN_MCP_TOOLS.has(toolName) && role !== 'admin') {
+    return false;
+  }
   if (
-    ADMIN_MCP_TOOLS.has(toolName) &&
-    authorization.credential.administrative !== true
+    OPERATOR_MCP_TOOLS.has(toolName) &&
+    role !== 'operator' &&
+    role !== 'admin'
   ) {
     return false;
   }
