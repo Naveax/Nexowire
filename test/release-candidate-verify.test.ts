@@ -36,8 +36,13 @@ async function fixture() {
         metadata: {
           component: {
             type: 'application',
-            name: packageJson.name,
+            name: 'Nexowire',
             version: packageJson.version,
+            purl:
+              'pkg:npm/' +
+              packageJson.name +
+              '@' +
+              packageJson.version,
           },
         },
       },
