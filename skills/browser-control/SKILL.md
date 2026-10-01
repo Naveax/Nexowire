@@ -3,6 +3,11 @@ name: browser-control
 description: Use Nexowire-owned Edge/Chrome sessions through direct CDP for structured navigation, page inspection, exact selector actions, and visual verification.
 version: 0.1
 requires: browser.session.start, browser.session.list, browser.session.stop, browser.tabs, browser.navigate, browser.snapshot, browser.click, browser.set_value, browser.screenshot, browser.visual.verify
+platforms: any
+mutation: mixed
+privilege: user
+trust: reviewed
+tags: browser, cdp, web, gui
 ---
 
 # Browser Control
