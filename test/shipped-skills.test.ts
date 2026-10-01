@@ -14,6 +14,15 @@ const EXPECTED_V3_SKILLS = [
   'tls-diagnostics',
 ] as const;
 
+const EXPECTED_MANIFEST_V2_SKILLS = [
+  'fast-repo-inspect',
+  'large-file-investigation',
+  'log-triage',
+  'network-troubleshoot',
+  'performance-triage',
+  'tls-diagnostics',
+] as const;
+
 const EXPECTED_V2_SKILLS = [
   'application-repair',
   'dependency-install',
@@ -55,6 +64,17 @@ test('shipped skill library has valid machine-readable manifests', async () => {
     assert.ok(skill.requires.length > 0, skill.name);
     assert.ok(skill.platforms.length > 0, skill.name);
     assert.ok(skill.tags.length > 0, skill.name);
+  }
+
+  for (const name of EXPECTED_MANIFEST_V2_SKILLS) {
+    const skill = validation.valid.find(
+      (candidate) => candidate.name === name,
+    );
+    assert.ok(skill, 'Expected manifest-v2 skill is missing: ' + name);
+    assert.equal(skill?.manifestVersion, 2, name);
+    assert.equal(skill?.concurrency, 'parallel-safe', name);
+    assert.equal(skill?.replay, 'safe', name);
+    assert.equal(skill?.mutation, 'read-only', name);
   }
 });
 
