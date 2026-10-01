@@ -3,6 +3,11 @@ name: event-driven-control
 description: Watch remote process and agent activity with cursor-based long polling instead of repeatedly re-reading full process state.
 version: 0.1
 requires: process.start, process.read
+platforms: any
+mutation: read-only
+privilege: user
+trust: reviewed
+tags: events, polling, efficiency
 ---
 
 # Event-Driven Control
