@@ -459,7 +459,55 @@ if ($inputData.startup_type) {
   }
   Set-Service -InputObject $service -StartupType $startup -ErrorAction Stop
 }
-$final = Get-CimInstance Win32_Service -Filter ("Name='" + $name.Replace("'", "''") + "'") -ErrorAction Stop
+$escapedName = $name.Replace("'", "''")
+$expectedState = switch ([string]$inputData.action) {
+  'start' { 'Running' }
+  'restart' { 'Running' }
+  'stop' { 'Stopped' }
+  default { $null }
+}
+$deadline = (Get-Date).AddSeconds(15)
+do {
+  $finalMatches = @(
+    Get-CimInstance Win32_Service -Filter ("Name='" + $escapedName + "'") -ErrorAction Stop
+  )
+  if ($finalMatches.Count -ne 1) {
+    throw ('Service postcondition verification expected exactly one service, found ' + $finalMatches.Count + '.')
+  }
+  $final = $finalMatches[0]
+  if ($null -eq $expectedState -or [string]$final.State -eq $expectedState) {
+    break
+  }
+  Start-Sleep -Milliseconds 100
+} while ((Get-Date) -lt $deadline)
+
+if ($null -ne $expectedState -and [string]$final.State -ne $expectedState) {
+  throw (
+    'Service state verification failed: expected ' +
+    $expectedState +
+    ', got ' +
+    [string]$final.State +
+    '.'
+  )
+}
+
+if ($inputData.startup_type) {
+  $expectedStartMode = switch ([string]$inputData.startup_type) {
+    'automatic' { 'Auto' }
+    'manual' { 'Manual' }
+    'disabled' { 'Disabled' }
+  }
+  if ([string]$final.StartMode -ne $expectedStartMode) {
+    throw (
+      'Service startup verification failed: expected ' +
+      $expectedStartMode +
+      ', got ' +
+      [string]$final.StartMode +
+      '.'
+    )
+  }
+}
+
 [pscustomobject]@{
   name = [string]$final.Name
   displayName = [string]$final.DisplayName
