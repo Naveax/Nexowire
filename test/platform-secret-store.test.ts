@@ -284,3 +284,52 @@ test('platform secret plaintext is bounded and multiline is opt-in', () => {
     'line-1\nline-2',
   );
 });
+
+test('backend failure stderr is not misclassified as a missing secret', () => {
+  const runner = new FakeRunner();
+  const store = new PlatformSecretStore({
+    platform: 'linux',
+    runner,
+  });
+  runner.syncResult = {
+    status: 1,
+    stdout: '',
+    stderr: 'Error communicating with Secret Service',
+  };
+
+  assert.throws(
+    () =>
+      store.readSync({
+        purpose: 'mcp-bearer-token',
+        name: 'primary',
+      }),
+    (error: unknown) =>
+      error instanceof PlatformSecretError &&
+      error.code === 'PLATFORM_SECRET_COMMAND_FAILED',
+  );
+});
+
+test('macOS Keychain status 44 maps to not-found without leaking backend text', () => {
+  const runner = new FakeRunner();
+  const store = new PlatformSecretStore({
+    platform: 'darwin',
+    runner,
+  });
+  runner.syncResult = {
+    status: 44,
+    stdout: '',
+    stderr:
+      'security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.',
+  };
+
+  assert.throws(
+    () =>
+      store.readSync({
+        purpose: 'agent-bearer-token',
+        name: 'missing',
+      }),
+    (error: unknown) =>
+      error instanceof PlatformSecretError &&
+      error.code === 'PLATFORM_SECRET_NOT_FOUND',
+  );
+});
