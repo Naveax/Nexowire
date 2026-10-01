@@ -1,5 +1,7 @@
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseTokenList } from './security/tokens.js';
 import {
   optionalSecretFile,
@@ -45,6 +47,17 @@ function optional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }
+
+function defaultSkillsDir(cwd: string): string {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(cwd, 'skills'),
+    path.resolve(moduleDir, '..', 'skills'),
+    path.resolve(moduleDir, '..', '..', 'skills'),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
+}
+
 
 function envFlag(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
@@ -280,7 +293,9 @@ export function loadConfig(
       : {}),
     ...(oidc ? { oidc } : {}),
     stateDir,
-    skillsDir: path.join(cwd, 'skills'),
+    skillsDir:
+      optional(env.NEXOWIRE_SKILLS_DIR) ??
+      defaultSkillsDir(cwd),
   };
 }
 

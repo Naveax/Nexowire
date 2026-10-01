@@ -24,7 +24,8 @@
     "start:privileged-broker": "node dist/src/cli.js privileged-broker",
     "mcp:contract:generate": "node --import tsx scripts/generate-mcp-v1-contract.ts",
     "continuation:check": "node --import tsx scripts/check-continuation-state.ts",
-    "mcp:output-contract:generate": "node --import tsx scripts/generate-mcp-v1-output-contract.ts"
+    "mcp:output-contract:generate": "node --import tsx scripts/generate-mcp-v1-output-contract.ts",
+    "release:check": "npm run check && npm run build && node --import tsx scripts/check-release-package.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
@@ -38,5 +39,13 @@
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "@types/express": "^5.0.0"
-  }
+  },
+  "bin": {
+    "nexowire": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "skills",
+    "README.md"
+  ]
 }

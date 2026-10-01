@@ -15,10 +15,11 @@ import { runProtectedSecretCommand } from './security/protected-secrets-cli.js';
 import { CredentialStore } from './security/credential-store.js';
 import { evaluateDeploymentReadiness } from './security/deployment-readiness.js';
 import { runDeploymentOnboardingCommand } from './security/deployment-onboarding.js';
+import { NEXOWIRE_VERSION } from './version.js';
 
 function printHelp(): void {
   process.stdout.write(`
-Nexowire 0.1.0-dev.1
+Nexowire ${NEXOWIRE_VERSION}
 
 Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
@@ -28,6 +29,7 @@ Usage:
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
+  nexowire version Show the installed Nexowire version
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -40,6 +42,15 @@ async function main(): Promise<void> {
 
   if (command === 'help' || command === '--help' || command === '-h') {
     printHelp();
+    return;
+  }
+
+  if (
+    command === 'version' ||
+    command === '--version' ||
+    command === '-v'
+  ) {
+    process.stdout.write(NEXOWIRE_VERSION + '\n');
     return;
   }
 
