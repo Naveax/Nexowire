@@ -159,3 +159,80 @@ test('persisted auth availability can satisfy remote credential requirement', ()
     }),
   );
 });
+
+test('OIDC config requires issuer and audience together and maps scoped claims', () => {
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_OIDC_ISSUER: 'https://identity.example.test',
+      },
+      process.cwd(),
+    ),
+  );
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_OIDC_AUDIENCE: 'nexowire',
+      },
+      process.cwd(),
+    ),
+  );
+
+  const config = loadConfig(
+    {
+      NEXOWIRE_OIDC_ISSUER: 'https://identity.example.test/',
+      NEXOWIRE_OIDC_AUDIENCE: 'nexowire-chatgpt',
+      NEXOWIRE_OIDC_JWKS_URI:
+        'https://identity.example.test/custom-jwks',
+      NEXOWIRE_OIDC_ROLE_CLAIM: 'role',
+      NEXOWIRE_OIDC_TOOLS_CLAIM: 'tools',
+      NEXOWIRE_OIDC_DEVICE_IDS_CLAIM: 'devices',
+      NEXOWIRE_OIDC_ROUTING_POLICIES_CLAIM: 'routes',
+      NEXOWIRE_OIDC_CLOCK_SKEW_SECONDS: '45',
+    },
+    process.cwd(),
+  );
+
+  assert.deepEqual(config.oidc, {
+    issuer: 'https://identity.example.test/',
+    audience: 'nexowire-chatgpt',
+    jwksUri: 'https://identity.example.test/custom-jwks',
+    roleClaim: 'role',
+    toolsClaim: 'tools',
+    deviceIdsClaim: 'devices',
+    routingPoliciesClaim: 'routes',
+    clockSkewSeconds: 45,
+  });
+
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_OIDC_ISSUER: 'https://identity.example.test',
+        NEXOWIRE_OIDC_AUDIENCE: 'nexowire',
+        NEXOWIRE_OIDC_CLOCK_SKEW_SECONDS: '301',
+      },
+      process.cwd(),
+    ),
+  );
+});
+
+test('external OIDC identity may satisfy MCP side of non-loopback auth availability', () => {
+  const config = loadConfig(
+    {
+      NEXOWIRE_HTTP_HOST: '0.0.0.0',
+      NEXOWIRE_HTTP_PORT: '43110',
+      NEXOWIRE_ALLOW_INSECURE_REMOTE: '1',
+      NEXOWIRE_OIDC_ISSUER: 'https://identity.example.test',
+      NEXOWIRE_OIDC_AUDIENCE: 'nexowire-chatgpt',
+      NEXOWIRE_AGENT_TOKEN: 'agent-secret',
+    },
+    process.cwd(),
+  );
+
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding(config, {
+      mcp: Boolean(config.oidc),
+      agent: true,
+    }),
+  );
+});
