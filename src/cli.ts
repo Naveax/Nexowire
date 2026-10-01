@@ -11,6 +11,8 @@ import { runPrivilegedBroker } from './agent/privileged-broker.js';
 import { runPrivilegedBrokerLifecycleCommand } from './agent/privileged-broker-lifecycle.js';
 import { runCredentialCommand } from './security/credentials-cli.js';
 import { runProtectedSecretCommand } from './security/protected-secrets-cli.js';
+import { CredentialStore } from './security/credential-store.js';
+import { evaluateDeploymentReadiness } from './security/deployment-readiness.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -22,7 +24,8 @@ Usage:
   nexowire agent   Start the native computer agent
   nexowire relay   Start a first-party native-agent relay
   nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
-  nexowire secrets <purposes|inspect|seal>   Manage Windows DPAPI protected bootstrap secret files
+  nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
+  nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire help    Show this help
 
 Default HTTP endpoint: http://127.0.0.1:43110/mcp
@@ -72,6 +75,32 @@ async function main(): Promise<void> {
     await runProtectedSecretCommand(
       process.argv.slice(3),
     );
+    return;
+  }
+
+  if (command === 'doctor') {
+    const flags = new Set(process.argv.slice(3));
+    for (const flag of flags) {
+      if (flag !== '--remote') {
+        throw new Error('Unknown doctor option: ' + flag);
+      }
+    }
+
+    const config = loadConfig();
+    const credentials = new CredentialStore(config.stateDir);
+    await credentials.initialize();
+    const report = await evaluateDeploymentReadiness(config, {
+      credentials,
+      env: process.env,
+      requireRemote: flags.has('--remote'),
+    });
+    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    if (
+      !report.ready ||
+      (flags.has('--remote') && !report.remoteReady)
+    ) {
+      process.exitCode = 2;
+    }
     return;
   }
 
