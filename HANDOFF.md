@@ -42,7 +42,7 @@ Implemented:
 - versioned MCP surface v1 compatibility floor with `nexowire_surface_info`, independent native-agent protocol version reporting, stable-tool removal/rename protection, a frozen per-tool input-schema contract that rejects provable narrowing, and a machine-readable frozen MCP v1 structured-output semantic contract with canonical SHA-256
 - persistent workspace checkpoints
 - lazy skill registry
-- machine-readable skill manifest v1 with required capabilities, platforms, mutation/privilege/trust metadata, validation, exact-device runnability evaluation, and 30 validated shipped operational skills
+- machine-readable skill manifest v1 with required capabilities, platforms, mutation/privilege/trust metadata, validation, exact-device runnability evaluation, and 38 validated shipped operational skills including the specialized v3 diagnostics/recovery pack
 - batch file reads and bounded text search
 - safe file stat/mkdir/copy/move/delete/exact-patch primitives with real-path symlink escape checks
 - SHA-256 file revisions plus conflict-safe exact patching with `FILE_CONFLICT` stale-read detection

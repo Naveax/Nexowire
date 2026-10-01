@@ -76,6 +76,6 @@
 - [x] stable MCP surface v1: tool-name floor, frozen backward-compatible input contracts, machine-readable frozen structured-output semantic contracts, canonical output-contract hash, and surface discovery metadata
 - [x] multi-device routing
 - [x] dynamic capability exposure: credential-aware tools/list filtering plus online-device capability-aware schema filtering
-- [~] mature skill library: manifest v1, validation, device-aware runnability, and 30 shipped operational workflows are implemented; specialized workflow breadth/version evolution remains ongoing
+- [~] mature skill library: manifest v1, validation, device-aware runnability, and 38 shipped operational workflows are implemented; workflow version evolution and additional domain recipes remain ongoing
 - [~] Windows + WSL2 + Linux support: real Linux native-agent outbound transport/core capability CI is implemented; real WSL2 distro integration remains open
 - zero required third-party computer-control runtime dependencies
