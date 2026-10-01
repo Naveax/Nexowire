@@ -408,7 +408,6 @@ test('macOS platform status checks metadata without requesting password plaintex
       '-a',
       'primary',
     ],
-    maxBuffer: undefined,
   });
   assert.equal(
     runner.syncCalls[0]?.args.includes('-w'),
