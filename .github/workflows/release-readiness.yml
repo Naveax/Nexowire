@@ -19,9 +19,12 @@ on:
       - "test/release-metadata.test.ts"
       - "test/release-candidate-verify.test.ts"
       - "test/release-attestation-policy.test.ts"
+      - "test/release-publication-policy.test.ts"
       - "skills/**"
       - "docs/RELEASE.md"
+      - "docs/releases/**"
       - ".github/workflows/release-readiness.yml"
+      - ".github/workflows/publish-release.yml"
   push:
     tags:
       - "v*"
