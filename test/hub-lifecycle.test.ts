@@ -10,6 +10,8 @@ test('Hub launcher persists only non-secret self-host configuration', () => {
     NEXOWIRE_STATE_DIR: 'C:\\Users\\User\\.nexowire\\hub',
     NEXOWIRE_HTTP_HOST: '127.0.0.1',
     NEXOWIRE_HTTP_PORT: '43110',
+    NEXOWIRE_HTTP_ALLOWED_HOSTS:
+      'desktop-ondd84s.tail10f02d.ts.net',
   };
 
   assert.deepEqual(persistedHubEnvironment(env), env);
@@ -23,6 +25,11 @@ test('Hub launcher persists only non-secret self-host configuration', () => {
   assert.match(launcher, /NEXOWIRE_STATE_DIR/);
   assert.match(launcher, /NEXOWIRE_HTTP_HOST/);
   assert.match(launcher, /NEXOWIRE_HTTP_PORT/);
+  assert.match(launcher, /NEXOWIRE_HTTP_ALLOWED_HOSTS/);
+  assert.match(
+    launcher,
+    /desktop-ondd84s\.tail10f02d\.ts\.net/,
+  );
   assert.match(launcher, /'http'/);
   assert.equal(launcher.includes('NEXOWIRE_MCP_BEARER_TOKEN='), false);
   assert.equal(launcher.includes('NEXOWIRE_AGENT_TOKEN='), false);
