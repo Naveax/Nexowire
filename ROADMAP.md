@@ -103,4 +103,5 @@
 - [x] reject placeholder Hub URLs and unavailable protected credential references before treating an agent as connected
 - [x] detect local Tailscale connectivity, MagicDNS identity, Serve state, and Funnel state
 - [x] expose `nexowire tailscale status|serve|funnel|reset`; public Funnel is refused until MCP and native-agent authentication are configured
-- [ ] complete live enrollment of the new Windows PC against the real Hub endpoint and verify `devices_list`, `machine_snapshot`, and `machine_health`
+- [x] Windows one-command self-host bootstrap: hash-only credentials, DPAPI token recovery, Hub Scheduled Task, local Agent loopback enrollment, resumable state, and optional auth-gated Tailscale Funnel
+- [ ] complete live enrollment of the new Windows PC against either the restored existing Hub or the self-hosted Hub and verify `devices_list`, `machine_snapshot`, and `machine_health`
