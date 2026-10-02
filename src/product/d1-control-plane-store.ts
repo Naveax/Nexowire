@@ -1,8 +1,10 @@
 import type {
   ControlPlaneStore,
+  DeviceAnchorRecord,
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
+  ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   UsageAggregate,
   UsageAtomicChargeInput,
@@ -35,8 +37,23 @@ export interface D1DatabaseLike {
   ): Promise<D1ResultLike[]>;
 }
 
+type DbQuotaSubjectRow = {
+  id: string;
+  kind: 'free-cluster' | 'subscription' | 'prepaid';
+  created_at: string;
+  updated_at: string;
+};
+
+type DbDeviceAnchorRow = {
+  anchor_hash: string;
+  quota_subject_id: string;
+  created_at: string;
+  last_seen_at: string;
+};
+
 type DbAccountRow = {
   id: string;
+  quota_subject_id: string;
   display_name: string | null;
   plan_id: ProductPlanId;
   custom_plan_json: string | null;
@@ -58,6 +75,7 @@ type DbIdentityRow = {
 type DbDeviceRow = {
   id: string;
   owner_account_id: string;
+  device_anchor_hash: string | null;
   name: string;
   platform: string;
   credential_hash: string;
@@ -78,7 +96,7 @@ type DbPairingRow = {
 };
 
 type DbUsageRow = {
-  account_id: string;
+  quota_subject_id: string;
   period_key: string;
   period_start: string;
   period_end: string;
@@ -104,6 +122,7 @@ function parseCustomPlan(
 function accountFromRow(row: DbAccountRow): ProductAccountRecord {
   return {
     id: row.id,
+    quotaSubjectId: row.quota_subject_id,
     displayName: row.display_name,
     planId: row.plan_id,
     customPlan: parseCustomPlan(row.custom_plan_json),
@@ -131,6 +150,7 @@ function deviceFromRow(row: DbDeviceRow): ProductDeviceRecord {
   return {
     id: row.id,
     ownerAccountId: row.owner_account_id,
+    deviceAnchorHash: row.device_anchor_hash,
     name: row.name,
     platform: row.platform,
     credentialHash: row.credential_hash,
@@ -155,7 +175,7 @@ function pairingFromRow(row: DbPairingRow): PairingRecord {
 
 function usageFromRow(row: DbUsageRow): ProductUsagePeriodRecord {
   return {
-    accountId: row.account_id,
+    quotaSubjectId: row.quota_subject_id,
     periodKey: row.period_key,
     periodStart: row.period_start,
     periodEnd: row.period_end,
@@ -167,10 +187,160 @@ function usageFromRow(row: DbUsageRow): ProductUsagePeriodRecord {
 export class D1ControlPlaneStore implements ControlPlaneStore {
   constructor(private readonly db: D1DatabaseLike) {}
 
+  async getQuotaSubject(
+    id: string,
+  ): Promise<ProductQuotaSubjectRecord | null> {
+    const row = await this.db
+      .prepare(
+        'SELECT id, kind, created_at, updated_at FROM quota_subjects WHERE id = ?',
+      )
+      .bind(id)
+      .first<DbQuotaSubjectRow>();
+    return row
+      ? {
+          id: row.id,
+          kind: row.kind,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }
+      : null;
+  }
+
+  async putQuotaSubject(
+    record: ProductQuotaSubjectRecord,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO quota_subjects
+          (id, kind, created_at, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           kind = excluded.kind,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(
+        record.id,
+        record.kind,
+        record.createdAt,
+        record.updatedAt,
+      )
+      .run();
+  }
+
+  async getDeviceAnchor(
+    anchorHash: string,
+  ): Promise<DeviceAnchorRecord | null> {
+    const row = await this.db
+      .prepare(
+        'SELECT anchor_hash, quota_subject_id, created_at, last_seen_at FROM device_anchors WHERE anchor_hash = ?',
+      )
+      .bind(anchorHash)
+      .first<DbDeviceAnchorRow>();
+    return row
+      ? {
+          anchorHash: row.anchor_hash,
+          quotaSubjectId: row.quota_subject_id,
+          createdAt: row.created_at,
+          lastSeenAt: row.last_seen_at,
+        }
+      : null;
+  }
+
+  async putDeviceAnchor(
+    record: DeviceAnchorRecord,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO device_anchors
+          (anchor_hash, quota_subject_id, created_at, last_seen_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(anchor_hash) DO UPDATE SET
+           quota_subject_id = excluded.quota_subject_id,
+           last_seen_at = excluded.last_seen_at`,
+      )
+      .bind(
+        record.anchorHash,
+        record.quotaSubjectId,
+        record.createdAt,
+        record.lastSeenAt,
+      )
+      .run();
+  }
+
+  async mergeFreeQuotaSubjects(
+    sourceQuotaSubjectId: string,
+    targetQuotaSubjectId: string,
+  ): Promise<void> {
+    if (sourceQuotaSubjectId === targetQuotaSubjectId) return;
+
+    const [source, target] = await Promise.all([
+      this.getQuotaSubject(sourceQuotaSubjectId),
+      this.getQuotaSubject(targetQuotaSubjectId),
+    ]);
+    if (!source || !target) {
+      throw new Error('QUOTA_SUBJECT_NOT_FOUND');
+    }
+    if (
+      source.kind !== 'free-cluster' ||
+      target.kind !== 'free-cluster'
+    ) {
+      throw new Error('QUOTA_SUBJECT_MERGE_NOT_FREE');
+    }
+
+    await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO quota_usage_periods
+            (quota_subject_id, period_key, period_start, period_end, used_credits, prepaid_credits)
+           SELECT ?, period_key, period_start, period_end, used_credits, prepaid_credits
+           FROM quota_usage_periods
+           WHERE quota_subject_id = ?
+           ON CONFLICT(quota_subject_id, period_key) DO UPDATE SET
+             used_credits = quota_usage_periods.used_credits + excluded.used_credits,
+             prepaid_credits = quota_usage_periods.prepaid_credits + excluded.prepaid_credits`,
+        )
+        .bind(targetQuotaSubjectId, sourceQuotaSubjectId),
+      this.db
+        .prepare(
+          'DELETE FROM quota_usage_periods WHERE quota_subject_id = ?',
+        )
+        .bind(sourceQuotaSubjectId),
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO quota_usage_events
+            (quota_subject_id, period_key, event_id, credits, billing_mode, monthly_credits, period_start, period_end, charged_at, apply_usage)
+           SELECT ?, period_key, event_id, credits, billing_mode, monthly_credits, period_start, period_end, charged_at, 0
+           FROM quota_usage_events
+           WHERE quota_subject_id = ?`,
+        )
+        .bind(targetQuotaSubjectId, sourceQuotaSubjectId),
+      this.db
+        .prepare(
+          'DELETE FROM quota_usage_events WHERE quota_subject_id = ?',
+        )
+        .bind(sourceQuotaSubjectId),
+      this.db
+        .prepare(
+          'UPDATE accounts SET quota_subject_id = ? WHERE quota_subject_id = ?',
+        )
+        .bind(targetQuotaSubjectId, sourceQuotaSubjectId),
+      this.db
+        .prepare(
+          'UPDATE device_anchors SET quota_subject_id = ? WHERE quota_subject_id = ?',
+        )
+        .bind(targetQuotaSubjectId, sourceQuotaSubjectId),
+      this.db
+        .prepare(
+          'DELETE FROM quota_subjects WHERE id = ?',
+        )
+        .bind(sourceQuotaSubjectId),
+    ]);
+  }
+
   async getAccount(id: string): Promise<ProductAccountRecord | null> {
     const row = await this.db
       .prepare(
-        'SELECT id, display_name, plan_id, custom_plan_json, admin, created_at, updated_at FROM accounts WHERE id = ?',
+        'SELECT id, quota_subject_id, display_name, plan_id, custom_plan_json, admin, created_at, updated_at FROM accounts WHERE id = ?',
       )
       .bind(id)
       .first<DbAccountRow>();
@@ -181,9 +351,10 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     await this.db
       .prepare(
         `INSERT INTO accounts
-          (id, display_name, plan_id, custom_plan_json, admin, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+          (id, quota_subject_id, display_name, plan_id, custom_plan_json, admin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
+           quota_subject_id = excluded.quota_subject_id,
            display_name = excluded.display_name,
            plan_id = excluded.plan_id,
            custom_plan_json = excluded.custom_plan_json,
@@ -192,6 +363,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       )
       .bind(
         record.id,
+        record.quotaSubjectId,
         record.displayName,
         record.planId,
         record.customPlan === null
@@ -207,7 +379,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   async listAccounts(): Promise<ProductAccountRecord[]> {
     const result = await this.db
       .prepare(
-        'SELECT id, display_name, plan_id, custom_plan_json, admin, created_at, updated_at FROM accounts ORDER BY created_at ASC',
+        'SELECT id, quota_subject_id, display_name, plan_id, custom_plan_json, admin, created_at, updated_at FROM accounts ORDER BY created_at ASC',
       )
       .all<DbAccountRow>();
     return (result.results ?? []).map(accountFromRow);
@@ -255,7 +427,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   async getDevice(id: string): Promise<ProductDeviceRecord | null> {
     const row = await this.db
       .prepare(
-        'SELECT id, owner_account_id, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE id = ?',
+        'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE id = ?',
       )
       .bind(id)
       .first<DbDeviceRow>();
@@ -266,10 +438,11 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     await this.db
       .prepare(
         `INSERT INTO devices
-          (id, owner_account_id, name, platform, credential_hash, online, last_seen_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            owner_account_id = excluded.owner_account_id,
+           device_anchor_hash = excluded.device_anchor_hash,
            name = excluded.name,
            platform = excluded.platform,
            credential_hash = excluded.credential_hash,
@@ -280,6 +453,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       .bind(
         record.id,
         record.ownerAccountId,
+        record.deviceAnchorHash,
         record.name,
         record.platform,
         record.credentialHash,
@@ -297,11 +471,11 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     const statement =
       ownerAccountId === undefined
         ? this.db.prepare(
-            'SELECT id, owner_account_id, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices ORDER BY created_at ASC',
+            'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices ORDER BY created_at ASC',
           )
         : this.db
             .prepare(
-              'SELECT id, owner_account_id, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE owner_account_id = ? ORDER BY created_at ASC',
+              'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE owner_account_id = ? ORDER BY created_at ASC',
             )
             .bind(ownerAccountId);
     const result = await statement.all<DbDeviceRow>();
@@ -340,14 +514,14 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   }
 
   async getUsagePeriod(
-    accountId: string,
+    quotaSubjectId: string,
     periodKey: string,
   ): Promise<ProductUsagePeriodRecord | null> {
     const row = await this.db
       .prepare(
-        'SELECT account_id, period_key, period_start, period_end, used_credits, prepaid_credits FROM usage_periods WHERE account_id = ? AND period_key = ?',
+        'SELECT quota_subject_id, period_key, period_start, period_end, used_credits, prepaid_credits FROM quota_usage_periods WHERE quota_subject_id = ? AND period_key = ?',
       )
-      .bind(accountId, periodKey)
+      .bind(quotaSubjectId, periodKey)
       .first<DbUsageRow>();
     return row ? usageFromRow(row) : null;
   }
@@ -358,9 +532,13 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     const eventLookup = () =>
       this.db
         .prepare(
-          'SELECT event_id FROM usage_events WHERE account_id = ? AND period_key = ? AND event_id = ?',
+          'SELECT event_id FROM quota_usage_events WHERE quota_subject_id = ? AND period_key = ? AND event_id = ?',
         )
-        .bind(input.accountId, input.periodKey, input.eventId)
+        .bind(
+          input.quotaSubjectId,
+          input.periodKey,
+          input.eventId,
+        )
         .first<{ event_id: string }>();
 
     if (await eventLookup()) {
@@ -373,12 +551,12 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     try {
       await this.db
         .prepare(
-          `INSERT INTO usage_events
-            (account_id, period_key, event_id, credits, billing_mode, monthly_credits, period_start, period_end, charged_at)
+          `INSERT INTO quota_usage_events
+            (quota_subject_id, period_key, event_id, credits, billing_mode, monthly_credits, period_start, period_end, charged_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
-          input.accountId,
+          input.quotaSubjectId,
           input.periodKey,
           input.eventId,
           input.credits,
@@ -415,7 +593,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   }
 
   async setPrepaidCredits(
-    accountId: string,
+    quotaSubjectId: string,
     periodKey: string,
     periodStart: string,
     periodEnd: string,
@@ -423,14 +601,14 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   ): Promise<ProductUsagePeriodRecord> {
     await this.db
       .prepare(
-        `INSERT INTO usage_periods
-          (account_id, period_key, period_start, period_end, used_credits, prepaid_credits)
+        `INSERT INTO quota_usage_periods
+          (quota_subject_id, period_key, period_start, period_end, used_credits, prepaid_credits)
          VALUES (?, ?, ?, ?, 0, ?)
-         ON CONFLICT(account_id, period_key) DO UPDATE SET
+         ON CONFLICT(quota_subject_id, period_key) DO UPDATE SET
            prepaid_credits = excluded.prepaid_credits`,
       )
       .bind(
-        accountId,
+        quotaSubjectId,
         periodKey,
         periodStart,
         periodEnd,
@@ -438,7 +616,10 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       )
       .run();
 
-    const row = await this.getUsagePeriod(accountId, periodKey);
+    const row = await this.getUsagePeriod(
+      quotaSubjectId,
+      periodKey,
+    );
     if (!row) throw new Error('D1 prepaid upsert did not persist.');
     return row;
   }
@@ -454,13 +635,13 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     const [row24, row30] = await Promise.all([
       this.db
         .prepare(
-          'SELECT COUNT(*) AS count FROM usage_events WHERE charged_at >= ?',
+          'SELECT COUNT(*) AS count FROM quota_usage_events WHERE charged_at >= ?',
         )
         .bind(since24h)
         .first<{ count: number }>(),
       this.db
         .prepare(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(credits), 0) AS credits FROM usage_events WHERE charged_at >= ?',
+          'SELECT COUNT(*) AS count, COALESCE(SUM(credits), 0) AS credits FROM quota_usage_events WHERE charged_at >= ?',
         )
         .bind(since30d)
         .first<{ count: number; credits: number }>(),
@@ -477,12 +658,12 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     input: UsageAtomicChargeInput,
   ): Promise<ProductUsagePeriodRecord> {
     const record = await this.getUsagePeriod(
-      input.accountId,
+      input.quotaSubjectId,
       input.periodKey,
     );
     if (record) return record;
     return {
-      accountId: input.accountId,
+      quotaSubjectId: input.quotaSubjectId,
       periodKey: input.periodKey,
       periodStart: input.periodStart,
       periodEnd: input.periodEnd,

@@ -5,8 +5,28 @@ import type {
   ProductPlanId,
 } from './plans.js';
 
+export type QuotaSubjectKind =
+  | 'free-cluster'
+  | 'subscription'
+  | 'prepaid';
+
+export interface ProductQuotaSubjectRecord {
+  id: string;
+  kind: QuotaSubjectKind;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DeviceAnchorRecord {
+  anchorHash: string;
+  quotaSubjectId: string;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
 export interface ProductAccountRecord {
   id: string;
+  quotaSubjectId: string;
   displayName: string | null;
   planId: ProductPlanId;
   customPlan: CustomPlanInput | null;
@@ -28,6 +48,7 @@ export interface ExternalIdentityRecord {
 export interface ProductDeviceRecord {
   id: string;
   ownerAccountId: string;
+  deviceAnchorHash: string | null;
   name: string;
   platform: string;
   credentialHash: string;
@@ -38,7 +59,7 @@ export interface ProductDeviceRecord {
 }
 
 export interface ProductUsagePeriodRecord {
-  accountId: string;
+  quotaSubjectId: string;
   periodKey: string;
   periodStart: string;
   periodEnd: string;
@@ -47,7 +68,7 @@ export interface ProductUsagePeriodRecord {
 }
 
 export interface UsageAtomicChargeInput {
-  accountId: string;
+  quotaSubjectId: string;
   periodKey: string;
   periodStart: string;
   periodEnd: string;
@@ -79,6 +100,23 @@ export interface UsageAggregate {
 }
 
 export interface ControlPlaneStore {
+  getQuotaSubject(
+    id: string,
+  ): Promise<ProductQuotaSubjectRecord | null>;
+  putQuotaSubject(
+    record: ProductQuotaSubjectRecord,
+  ): Promise<void>;
+  getDeviceAnchor(
+    anchorHash: string,
+  ): Promise<DeviceAnchorRecord | null>;
+  putDeviceAnchor(
+    record: DeviceAnchorRecord,
+  ): Promise<void>;
+  mergeFreeQuotaSubjects(
+    sourceQuotaSubjectId: string,
+    targetQuotaSubjectId: string,
+  ): Promise<void>;
+
   getAccount(id: string): Promise<ProductAccountRecord | null>;
   putAccount(record: ProductAccountRecord): Promise<void>;
   listAccounts(): Promise<ProductAccountRecord[]>;
@@ -99,7 +137,7 @@ export interface ControlPlaneStore {
   putPairing(record: PairingRecord): Promise<void>;
 
   getUsagePeriod(
-    accountId: string,
+    quotaSubjectId: string,
     periodKey: string,
   ): Promise<ProductUsagePeriodRecord | null>;
 
@@ -108,7 +146,7 @@ export interface ControlPlaneStore {
   ): Promise<UsageAtomicChargeResult>;
 
   setPrepaidCredits(
-    accountId: string,
+    quotaSubjectId: string,
     periodKey: string,
     periodStart: string,
     periodEnd: string,

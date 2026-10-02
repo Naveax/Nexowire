@@ -1,9 +1,11 @@
 import type { PairingRecord } from './pairing.js';
 import type {
   ControlPlaneStore,
+  DeviceAnchorRecord,
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
+  ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   UsageAggregate,
   UsageAtomicChargeInput,
@@ -11,23 +13,26 @@ import type {
 } from './control-plane-store.js';
 
 interface UsageEventRecord {
-  accountId: string;
+  quotaSubjectId: string;
   periodKey: string;
   eventId: string;
   credits: number;
   chargedAt: string;
 }
 
-function usageKey(accountId: string, periodKey: string): string {
-  return accountId + ':' + periodKey;
+function usageKey(
+  quotaSubjectId: string,
+  periodKey: string,
+): string {
+  return quotaSubjectId + ':' + periodKey;
 }
 
 function eventKey(
-  accountId: string,
+  quotaSubjectId: string,
   periodKey: string,
   eventId: string,
 ): string {
-  return accountId + ':' + periodKey + ':' + eventId;
+  return quotaSubjectId + ':' + periodKey + ':' + eventId;
 }
 
 function clone<T>(value: T): T {
@@ -41,12 +46,120 @@ function validateCredits(name: string, credits: number): void {
 }
 
 export class MemoryControlPlaneStore implements ControlPlaneStore {
+  private readonly quotaSubjects =
+    new Map<string, ProductQuotaSubjectRecord>();
+  private readonly deviceAnchors =
+    new Map<string, DeviceAnchorRecord>();
   private readonly accounts = new Map<string, ProductAccountRecord>();
   private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
   private readonly pairings = new Map<string, PairingRecord>();
   private readonly usage = new Map<string, ProductUsagePeriodRecord>();
   private readonly events = new Map<string, UsageEventRecord>();
+
+  async getQuotaSubject(
+    id: string,
+  ): Promise<ProductQuotaSubjectRecord | null> {
+    const value = this.quotaSubjects.get(id);
+    return value ? clone(value) : null;
+  }
+
+  async putQuotaSubject(
+    record: ProductQuotaSubjectRecord,
+  ): Promise<void> {
+    this.quotaSubjects.set(record.id, clone(record));
+  }
+
+  async getDeviceAnchor(
+    anchorHash: string,
+  ): Promise<DeviceAnchorRecord | null> {
+    const value = this.deviceAnchors.get(anchorHash);
+    return value ? clone(value) : null;
+  }
+
+  async putDeviceAnchor(
+    record: DeviceAnchorRecord,
+  ): Promise<void> {
+    this.deviceAnchors.set(record.anchorHash, clone(record));
+  }
+
+  async mergeFreeQuotaSubjects(
+    sourceQuotaSubjectId: string,
+    targetQuotaSubjectId: string,
+  ): Promise<void> {
+    if (sourceQuotaSubjectId === targetQuotaSubjectId) return;
+
+    const source = this.quotaSubjects.get(sourceQuotaSubjectId);
+    const target = this.quotaSubjects.get(targetQuotaSubjectId);
+    if (!source || !target) {
+      throw new Error('QUOTA_SUBJECT_NOT_FOUND');
+    }
+    if (
+      source.kind !== 'free-cluster' ||
+      target.kind !== 'free-cluster'
+    ) {
+      throw new Error('QUOTA_SUBJECT_MERGE_NOT_FREE');
+    }
+
+    for (const [id, account] of this.accounts) {
+      if (account.quotaSubjectId === sourceQuotaSubjectId) {
+        this.accounts.set(id, {
+          ...account,
+          quotaSubjectId: targetQuotaSubjectId,
+          updatedAt: target.updatedAt,
+        });
+      }
+    }
+
+    for (const [hash, anchor] of this.deviceAnchors) {
+      if (anchor.quotaSubjectId === sourceQuotaSubjectId) {
+        this.deviceAnchors.set(hash, {
+          ...anchor,
+          quotaSubjectId: targetQuotaSubjectId,
+        });
+      }
+    }
+
+    for (const [key, record] of [...this.usage]) {
+      if (record.quotaSubjectId !== sourceQuotaSubjectId) continue;
+      const targetKey = usageKey(
+        targetQuotaSubjectId,
+        record.periodKey,
+      );
+      const existing = this.usage.get(targetKey);
+      this.usage.set(targetKey, {
+        quotaSubjectId: targetQuotaSubjectId,
+        periodKey: record.periodKey,
+        periodStart:
+          existing?.periodStart ?? record.periodStart,
+        periodEnd: existing?.periodEnd ?? record.periodEnd,
+        usedCredits:
+          (existing?.usedCredits ?? 0) + record.usedCredits,
+        prepaidCredits:
+          (existing?.prepaidCredits ?? 0) +
+          record.prepaidCredits,
+      });
+      this.usage.delete(key);
+    }
+
+    for (const [key, event] of [...this.events]) {
+      if (event.quotaSubjectId !== sourceQuotaSubjectId) continue;
+      const nextKey = eventKey(
+        targetQuotaSubjectId,
+        event.periodKey,
+        event.eventId,
+      );
+      if (!this.events.has(nextKey)) {
+        this.events.set(nextKey, {
+          ...event,
+          quotaSubjectId: targetQuotaSubjectId,
+        });
+      }
+      this.events.delete(key);
+    }
+
+    this.quotaSubjects.delete(sourceQuotaSubjectId);
+  }
 
   async getAccount(id: string): Promise<ProductAccountRecord | null> {
     const value = this.accounts.get(id);
@@ -109,10 +222,12 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   async getUsagePeriod(
-    accountId: string,
+    quotaSubjectId: string,
     periodKey: string,
   ): Promise<ProductUsagePeriodRecord | null> {
-    const value = this.usage.get(usageKey(accountId, periodKey));
+    const value = this.usage.get(
+      usageKey(quotaSubjectId, periodKey),
+    );
     return value ? clone(value) : null;
   }
 
@@ -124,11 +239,11 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
       throw new Error('credits must be at least 1.');
     }
 
-    const key = usageKey(input.accountId, input.periodKey);
+    const key = usageKey(input.quotaSubjectId, input.periodKey);
     const existing =
       this.usage.get(key) ??
       {
-        accountId: input.accountId,
+        quotaSubjectId: input.quotaSubjectId,
         periodKey: input.periodKey,
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,
@@ -137,7 +252,7 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
       };
 
     const duplicateKey = eventKey(
-      input.accountId,
+      input.quotaSubjectId,
       input.periodKey,
       input.eventId,
     );
@@ -171,7 +286,7 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
 
     this.usage.set(key, clone(existing));
     this.events.set(duplicateKey, {
-      accountId: input.accountId,
+      quotaSubjectId: input.quotaSubjectId,
       periodKey: input.periodKey,
       eventId: input.eventId,
       credits: input.credits,
@@ -185,18 +300,18 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   async setPrepaidCredits(
-    accountId: string,
+    quotaSubjectId: string,
     periodKey: string,
     periodStart: string,
     periodEnd: string,
     credits: number,
   ): Promise<ProductUsagePeriodRecord> {
     validateCredits('credits', credits);
-    const key = usageKey(accountId, periodKey);
+    const key = usageKey(quotaSubjectId, periodKey);
     const existing =
       this.usage.get(key) ??
       {
-        accountId,
+        quotaSubjectId,
         periodKey,
         periodStart,
         periodEnd,

@@ -7,6 +7,9 @@ import {
 } from '../src/product/control-plane-service.js';
 
 const fixedNow = new Date('2026-10-02T12:00:00.000Z');
+const anchorA = 'a'.repeat(64);
+const anchorB = 'b'.repeat(64);
+const anchorShared = 'c'.repeat(64);
 
 function setup() {
   const store = new MemoryControlPlaneStore();
@@ -50,6 +53,7 @@ test('pairing creates one device credential and stores only its hash', async () 
     pairingId: pairing.pairingId,
     token: pairing.token,
     platform: 'win32',
+    deviceAnchorHash: anchorA,
   });
 
   assert.match(consumed.deviceCredential, /^nwx_dev_/);
@@ -79,6 +83,7 @@ test('pairing creates one device credential and stores only its hash', async () 
       pairingId: pairing.pairingId,
       token: pairing.token,
       platform: 'win32',
+      deviceAnchorHash: anchorA,
     }),
     /PAIRING_ALREADY-CONSUMED/,
   );
@@ -97,6 +102,8 @@ test('free device limit is enforced before issuing another credential', async ()
       pairingId: pairing.pairingId,
       token: pairing.token,
       platform: 'win32',
+      deviceAnchorHash:
+        name === 'pc-1' ? anchorA : anchorB,
     });
   }
 
@@ -134,6 +141,79 @@ test('usage charging is idempotent and updates dashboard credits', async () => {
     role: 'user',
   });
   assert.equal(dashboard.usage.usedCredits, 1);
+});
+
+test('same device anchor merges free quota across different accounts', async () => {
+  const { store, service } = setup();
+  const accountA = await service.ensureAccount({ id: 'acct-a' });
+  const accountB = await service.ensureAccount({ id: 'acct-b' });
+
+  const usedByA = await service.chargeUsage({
+    accountId: accountA.id,
+    eventId: 'a-before-link',
+    toolName: 'machine_health',
+    baseCredits: 7_000,
+  });
+  const usedByB = await service.chargeUsage({
+    accountId: accountB.id,
+    eventId: 'b-before-link',
+    toolName: 'machine_health',
+    baseCredits: 5_000,
+  });
+  assert.equal(usedByA.status, 'charged');
+  assert.equal(usedByB.status, 'charged');
+
+  const pairingA = await service.beginPairing(
+    { accountId: accountA.id, role: 'user' },
+    'shared-pc-a',
+  );
+  await service.consumePairing({
+    pairingId: pairingA.pairingId,
+    token: pairingA.token,
+    platform: 'win32',
+    deviceAnchorHash: anchorShared,
+  });
+
+  const pairingB = await service.beginPairing(
+    { accountId: accountB.id, role: 'user' },
+    'shared-pc-b',
+  );
+  await service.consumePairing({
+    pairingId: pairingB.pairingId,
+    token: pairingB.token,
+    platform: 'win32',
+    deviceAnchorHash: anchorShared,
+  });
+
+  const persistedA = await store.getAccount(accountA.id);
+  const persistedB = await store.getAccount(accountB.id);
+  assert.ok(persistedA);
+  assert.ok(persistedB);
+  assert.equal(
+    persistedA?.quotaSubjectId,
+    persistedB?.quotaSubjectId,
+  );
+
+  const dashboardA = await service.dashboard({
+    accountId: accountA.id,
+    role: 'user',
+  });
+  const dashboardB = await service.dashboard({
+    accountId: accountB.id,
+    role: 'user',
+  });
+  assert.equal(dashboardA.usage.usedCredits, 12_000);
+  assert.equal(dashboardB.usage.usedCredits, 12_000);
+
+  const overQuota = await service.chargeUsage({
+    accountId: accountB.id,
+    eventId: 'b-after-link',
+    toolName: 'machine_health',
+    baseCredits: 8_001,
+  });
+  assert.equal(overQuota.status, 'denied');
+  assert.equal(overQuota.reason, 'quota-exhausted');
+  assert.equal(overQuota.remainingCredits, 8_000);
 });
 
 test('admin overview requires both admin identity and admin account flag', async () => {

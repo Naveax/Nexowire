@@ -28,15 +28,17 @@ Then:
    npx wrangler@latest d1 execute nexowire-control-plane --remote --file cloudflare/migrations/0001_control_plane.sql
 3. apply the identity migration:
    npx wrangler@latest d1 execute nexowire-control-plane --remote --file cloudflare/migrations/0002_external_identities.sql
-4. configure Worker secrets:
+4. apply the quota-subject/device-anchor migration:
+   npx wrangler@latest d1 execute nexowire-control-plane --remote --file cloudflare/migrations/0003_quota_subject_device_anchor.sql
+5. configure Worker secrets:
    npx wrangler@latest secret put GITHUB_CLIENT_ID
    npx wrangler@latest secret put GITHUB_CLIENT_SECRET
    npx wrangler@latest secret put NEXOWIRE_SESSION_SECRET
    npx wrangler@latest secret put NEXOWIRE_INTERNAL_SERVICE_TOKEN
    npx wrangler@latest secret put NEXOWIRE_ADMIN_GITHUB_ID
-5. build Nexowire:
+6. build Nexowire:
    npm run build
-6. deploy:
+7. deploy:
    npx wrangler@latest deploy --config cloudflare/wrangler.jsonc
 
 The checked-in config contains a placeholder database ID on purpose. No Cloudflare account secret or API token belongs in git.

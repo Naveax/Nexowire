@@ -87,6 +87,10 @@ export function createControlPlaneHttpHandler(
           pairingId: stringField(body, 'pairingId'),
           token: stringField(body, 'token'),
           platform: stringField(body, 'platform'),
+          deviceAnchorHash: stringField(
+            body,
+            'deviceAnchorHash',
+          ),
         });
         return json(200, result);
       }
