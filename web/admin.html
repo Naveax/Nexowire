@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Nexowire Admin</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Nexowire <span class="accent">Admin</span></div>
+    <div id="admin-pill" class="pill muted">Yükleniyor</div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Owner Console</p>
+        <h1>Operasyon özeti</h1>
+        <p class="subtle">Kullanıcı, cihaz, trafik ve zero-spend güvenlik durumu.</p>
+      </div>
+    </section>
+
+    <section class="grid metrics">
+      <article class="card"><span class="label">Kullanıcılar</span><strong id="users">—</strong><small id="users-detail">—</small></article>
+      <article class="card"><span class="label">Online cihaz</span><strong id="online-devices">—</strong><small id="devices-total">—</small></article>
+      <article class="card"><span class="label">24s çağrı</span><strong id="calls">—</strong><small id="success-rate">—</small></article>
+      <article class="card"><span class="label">Owner spend</span><strong id="owner-spend">—</strong><small id="capacity">—</small></article>
+    </section>
+
+    <section id="admin-error" class="error-panel hidden">
+      <strong>Admin verisi alınamadı.</strong>
+      <p id="admin-error-message"></p>
+    </section>
+  </main>
+
+  <script type="module" src="./admin.js"></script>
+</body>
+</html>
