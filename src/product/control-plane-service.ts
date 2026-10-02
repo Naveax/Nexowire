@@ -376,6 +376,7 @@ export class ControlPlaneService {
       credits: quote.credits,
       billingMode: plan.billingMode,
       monthlyCredits: plan.monthlyCredits,
+      chargedAt: this.now().toISOString(),
     });
 
     if (result.status === 'quota-exhausted') {
