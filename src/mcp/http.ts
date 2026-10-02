@@ -22,6 +22,41 @@ import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 import { onlineCapabilityUnion } from './tool-capabilities.js';
 
+export function configuredHttpAllowedHosts(
+  env: NodeJS.ProcessEnv = process.env,
+): string[] | undefined {
+  const raw = env.NEXOWIRE_HTTP_ALLOWED_HOSTS?.trim();
+  if (!raw) return undefined;
+
+  const extra = raw
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const host of extra) {
+    if (
+      host === '*' ||
+      host.includes('/') ||
+      host.includes('\\') ||
+      host.includes(' ') ||
+      host.length > 253
+    ) {
+      throw new Error(
+        'NEXOWIRE_HTTP_ALLOWED_HOSTS must contain explicit hostnames only.',
+      );
+    }
+  }
+
+  return [
+    ...new Set([
+      '127.0.0.1',
+      'localhost',
+      '[::1]',
+      ...extra,
+    ]),
+  ];
+}
+
 export async function runHttpServer(
   config: NexowireConfig,
   broker: AgentBroker,
@@ -33,7 +68,11 @@ export async function runHttpServer(
       Boolean(config.oidc),
     agent: context.credentials?.hasUsable('agent') ?? false,
   });
-  const app = createMcpExpressApp({ host: config.host });
+  const allowedHosts = configuredHttpAllowedHosts();
+  const app = createMcpExpressApp({
+    host: config.host,
+    ...(allowedHosts ? { allowedHosts } : {}),
+  });
   const tlsEnabled = hasDirectTls(config);
   const scheme = tlsEnabled ? 'https' : 'http';
 
