@@ -104,4 +104,5 @@
 - [x] detect local Tailscale connectivity, MagicDNS identity, Serve state, and Funnel state
 - [x] expose `nexowire tailscale status|serve|funnel|reset`; public Funnel is refused until MCP and native-agent authentication are configured
 - [x] Windows one-command self-host bootstrap: hash-only credentials, DPAPI token recovery, Hub Scheduled Task, local Agent loopback enrollment, resumable state, and optional auth-gated Tailscale Funnel
-- [ ] complete live enrollment of the new Windows PC against either the restored existing Hub or the self-hosted Hub and verify `devices_list`, `machine_snapshot`, and `machine_health`
+- [x] live self-hosted Hub + local Agent enrollment on DESKTOP-ONDD84S with authenticated local MCP `devices_list`, `machine_snapshot`, and `machine_health`
+- [ ] enable Tailscale Serve/Funnel at the tailnet account level and complete ChatGPT-side remote MCP connector verification
