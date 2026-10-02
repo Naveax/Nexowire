@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { NexowireConfig } from '../src/config.js';
 import { CredentialStore } from '../src/security/credential-store.js';
-import { assertFunnelAuthReady } from '../src/tailscale-exposure.js';
+import { assertFunnelAuthReady, tailscaleCommandErrorMessage } from '../src/tailscale-exposure.js';
 
 function config(stateDir: string): NexowireConfig {
   return {
@@ -53,4 +53,18 @@ test('public Tailscale Funnel accepts usable stored MCP and agent credentials', 
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+
+test('Tailscale command errors preserve actionable stdout such as enablement prompts', () => {
+  const message = tailscaleCommandErrorMessage({
+    message: 'Command failed: tailscale funnel --bg http://127.0.0.1:43110',
+    stdout:
+      'Funnel is not enabled on your tailnet.\nTo enable, visit:\nhttps://login.tailscale.com/f/funnel?node=test-node\n',
+    stderr: '',
+  });
+
+  assert.match(message, /Funnel is not enabled on your tailnet/);
+  assert.match(message, /https:\/\/login\.tailscale\.com\/f\/funnel\?node=test-node/);
+  assert.equal(message.includes('Command failed:'), false);
 });
