@@ -10,6 +10,47 @@ import { discoverTailscale } from './agent/tailscale-discovery.js';
 
 const execFileAsync = promisify(execFile);
 
+export function tailscaleCommandErrorMessage(error: unknown): string {
+  if (typeof error !== 'object' || error === null) {
+    return String(error).slice(0, 4_000);
+  }
+
+  const stdout =
+    'stdout' in error && typeof error.stdout === 'string'
+      ? error.stdout.trim()
+      : '';
+  const stderr =
+    'stderr' in error && typeof error.stderr === 'string'
+      ? error.stderr.trim()
+      : '';
+  const message =
+    'message' in error && typeof error.message === 'string'
+      ? error.message.trim()
+      : '';
+
+  const detail = [stdout, stderr]
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join('\n');
+
+  return (detail || message || 'Tailscale command failed.').slice(0, 4_000);
+}
+
+async function runTailscale(
+  args: readonly string[],
+  options: { timeout: number; maxBuffer: number },
+): Promise<void> {
+  try {
+    await execFileAsync('tailscale', [...args], {
+      timeout: options.timeout,
+      windowsHide: true,
+      maxBuffer: options.maxBuffer,
+    });
+  } catch (error) {
+    throw new Error(tailscaleCommandErrorMessage(error), { cause: error });
+  }
+}
+
 export type TailscaleExposureMode = 'serve' | 'funnel';
 
 export interface TailscaleExposureResult {
@@ -71,12 +112,10 @@ export async function configureTailscaleExposure(
   }
 
   const target = `http://127.0.0.1:${config.port}`;
-  await execFileAsync(
-    'tailscale',
+  await runTailscale(
     [mode, '--bg', target],
     {
       timeout: 15_000,
-      windowsHide: true,
       maxBuffer: 1024 * 1024,
     },
   );
@@ -95,12 +134,10 @@ export async function configureTailscaleExposure(
 export async function resetTailscaleExposure(
   mode: TailscaleExposureMode,
 ): Promise<void> {
-  await execFileAsync(
-    'tailscale',
+  await runTailscale(
     [mode, 'reset'],
     {
       timeout: 10_000,
-      windowsHide: true,
       maxBuffer: 512 * 1024,
     },
   );
