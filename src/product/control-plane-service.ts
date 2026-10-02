@@ -10,6 +10,7 @@ import type {
 } from './control-plane-contract.js';
 import type {
   ControlPlaneStore,
+  ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
 } from './control-plane-store.js';
@@ -149,6 +150,61 @@ export class ControlPlaneService {
     };
     await this.store.putAccount(record);
     return record;
+  }
+
+  async loginExternalIdentity(input: {
+    provider: string;
+    subject: string;
+    displayName?: string | null;
+    email?: string | null;
+    admin?: boolean;
+  }): Promise<{
+    account: ProductAccountRecord;
+    identity: ExternalIdentityRecord;
+  }> {
+    const provider = boundedId('provider', input.provider);
+    const subject = boundedId('subject', input.subject);
+    const now = this.now().toISOString();
+    const existing = await this.store.getExternalIdentity(
+      provider,
+      subject,
+    );
+
+    if (existing) {
+      const account = await this.requireAccount(existing.accountId);
+      const refreshed: ExternalIdentityRecord = {
+        ...existing,
+        displayName:
+          input.displayName === undefined ||
+          input.displayName === null
+            ? existing.displayName
+            : boundedText('displayName', input.displayName, 128),
+        email:
+          input.email === undefined || input.email === null
+            ? existing.email
+            : boundedText('email', input.email, 320),
+        lastLoginAt: now,
+      };
+      await this.store.putExternalIdentity(refreshed);
+      return { account, identity: refreshed };
+    }
+
+    const account = await this.ensureAccount({
+      id: 'acct_' + randomUUID(),
+      displayName: input.displayName ?? null,
+      admin: input.admin === true,
+    });
+    const identity: ExternalIdentityRecord = {
+      provider,
+      subject,
+      accountId: account.id,
+      displayName: input.displayName ?? null,
+      email: input.email ?? null,
+      createdAt: now,
+      lastLoginAt: now,
+    };
+    await this.store.putExternalIdentity(identity);
+    return { account, identity };
   }
 
   async dashboard(
