@@ -119,18 +119,22 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-PR #141 (`feature/agent-enrollment-doctor`) merged to `main` as `1904f1981bb02aef7517df589387436b8967d46f`. Merge CI run `36993286780` passed. The Windows global Nexowire installation on `DESKTOP-ONDD84S` was rebuilt from the merged feature tree and now exposes `agent enroll|doctor|status` plus Tailscale status/Serve/Funnel controls.
+PR #143 (`feature/self-hosted-node-bootstrap`) merged to `main` as `8e217e0b9ce93ecc7c6881c7163b6458c8610252`; merge CI run `36994785084` passed. The exact merged `main` package is installed globally on `DESKTOP-ONDD84S`.
 
-Live validation on 2026-10-02 shows the new PC itself is healthy enough to continue: Tailscale is connected as `desktop-ondd84s.tail10f02d.ts.net` / `100.116.23.60`, the stable Nexowire device ID is `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, and the new doctor correctly rejects the old placeholder `wss://HUB-ADRESI/agent` plus its missing DPAPI token file. The previously known `Naveax` Tailscale peer resolves as `naveax.tail10f02d.ts.net` / `100.88.128.85` but is currently offline, so live registration against that Hub cannot complete yet.
+Live self-host bootstrap completed successfully on `DESKTOP-ONDD84S` with device name `work-pc`. The Windows current-user `Nexowire Hub` and `Nexowire Native Agent` Scheduled Tasks are both running with autostart. The Hub stays on `127.0.0.1:43110`; the local agent connects through `ws://127.0.0.1:43110/agent` using a CurrentUser-DPAPI protected token. Hub health reports one connected agent, and the stable device ID remains `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`.
+
+A real local Streamable HTTP MCP client authenticated with the DPAPI-protected MCP credential and verified `devices_list`, `machine_snapshot`, and `machine_health` successfully for `work-pc`. Therefore Hub -> MCP -> native agent execution is proven locally.
+
+Tailscale is connected as `desktop-ondd84s.tail10f02d.ts.net` / `100.116.23.60`. Tailscale Serve and Funnel are currently disabled at the tailnet policy level and each returns a Tailscale account enablement prompt. Nexowire does not bypass that account-level approval. The existing ChatGPT-side Nexowire connector still points at the old unavailable transport, so remote ChatGPT verification is not complete yet.
 
 ## Immediate next work
 
-1. Add a safe one-command self-host bootstrap that can turn a Windows machine into Nexowire Hub + local Agent without plaintext token persistence, optionally exposing MCP through auth-gated Tailscale Funnel.
-2. Preserve a private/Tailnet-only agent path where practical; do not make public Funnel exposure a prerequisite for native-agent traffic.
-3. If the existing `Naveax` Hub returns online first, enroll `work-pc` against its real `wss://.../agent` endpoint instead of creating a competing Hub.
-4. Enrollment is complete only when Nexowire MCP `devices_list` shows the stable ID online and `machine_snapshot` plus `machine_health` succeed.
-5. Continue private-surface cursor routing and isolated private keyboard/text/hotkey delivery after remote enrollment is stable.
-6. Keep physical-console pointer/keyboard/UIA/clipboard mutations default-denied unless the user explicitly grants console control.
+1. Enable Tailscale Serve/Funnel for the tailnet using the Tailscale account approval flow. Serve is preferred for tailnet-only agent/private access; Funnel is only for the Internet-facing ChatGPT MCP ingress.
+2. After approval, run `nexowire tailscale serve` and `nexowire tailscale funnel`, then verify their status and the HTTPS endpoint.
+3. Point or recreate the ChatGPT Nexowire MCP connection at `https://desktop-ondd84s.tail10f02d.ts.net/mcp` using the protected MCP bearer credential from the explicit `nexowire node connector` command. Do not place the bearer in Git or plugin archives.
+4. From ChatGPT/Nexowire MCP, verify `devices_list`, `machine_snapshot`, and `machine_health`; only then mark remote enrollment complete.
+5. Verify Hub/Agent Scheduled Task restart/reconnect behavior after the remote connector is live.
+6. Continue private-surface cursor routing and isolated private keyboard/text/hotkey delivery. Keep physical-console pointer/keyboard/UIA/clipboard mutations default-denied unless explicitly granted.
 
 ## Known machine note
 
