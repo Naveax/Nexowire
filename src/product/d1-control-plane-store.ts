@@ -1,5 +1,6 @@
 import type {
   ControlPlaneStore,
+  ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
   ProductUsagePeriodRecord,
@@ -42,6 +43,16 @@ type DbAccountRow = {
   admin: number;
   created_at: string;
   updated_at: string;
+};
+
+type DbIdentityRow = {
+  provider: string;
+  subject: string;
+  account_id: string;
+  display_name: string | null;
+  email: string | null;
+  created_at: string;
+  last_login_at: string;
 };
 
 type DbDeviceRow = {
@@ -99,6 +110,20 @@ function accountFromRow(row: DbAccountRow): ProductAccountRecord {
     admin: row.admin === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function identityFromRow(
+  row: DbIdentityRow,
+): ExternalIdentityRecord {
+  return {
+    provider: row.provider,
+    subject: row.subject,
+    accountId: row.account_id,
+    displayName: row.display_name,
+    email: row.email,
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
   };
 }
 
@@ -186,6 +211,45 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       )
       .all<DbAccountRow>();
     return (result.results ?? []).map(accountFromRow);
+  }
+
+  async getExternalIdentity(
+    provider: string,
+    subject: string,
+  ): Promise<ExternalIdentityRecord | null> {
+    const row = await this.db
+      .prepare(
+        'SELECT provider, subject, account_id, display_name, email, created_at, last_login_at FROM external_identities WHERE provider = ? AND subject = ?',
+      )
+      .bind(provider, subject)
+      .first<DbIdentityRow>();
+    return row ? identityFromRow(row) : null;
+  }
+
+  async putExternalIdentity(
+    record: ExternalIdentityRecord,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO external_identities
+          (provider, subject, account_id, display_name, email, created_at, last_login_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(provider, subject) DO UPDATE SET
+           account_id = excluded.account_id,
+           display_name = excluded.display_name,
+           email = excluded.email,
+           last_login_at = excluded.last_login_at`,
+      )
+      .bind(
+        record.provider,
+        record.subject,
+        record.accountId,
+        record.displayName,
+        record.email,
+        record.createdAt,
+        record.lastLoginAt,
+      )
+      .run();
   }
 
   async getDevice(id: string): Promise<ProductDeviceRecord | null> {
