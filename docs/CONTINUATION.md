@@ -102,7 +102,7 @@ At the 2026-10-01 post-release sync, the v1.0 implementation and publication goa
 
 ## Selected post-v1 work
 
-As of 2026-10-02, `PROJECT_STATE.json` tracks `feature/private-desktop-virtual-cursor` as active testing work. The slice adds a separately rendered, click-through Windows Nexowire cursor with independent state and explicit tests that its movement does not change the Windows system cursor. It is a foundation for later private-desktop/private-keyboard routing, not permission to reuse physical console input. Clean CI is required before merge; no patch release is authorized by this work.
+As of 2026-10-02, the virtual-pointer slice is merged on main as `4cfbbadfac2d4d5e6d5b1afc36abfa78b8925a25`, and `PROJECT_STATE.json` tracks `feature/private-desktop-session` as active testing work. The current slice creates a separate `NexowirePrivate` Win32 desktop with a private shell, hidden-desktop process launch/window enumeration, and a user-only shortcut for switching into it. Automated Nexowire operations do not switch the visible input desktop; tests require `Default` to remain active. The next slices are private-surface cursor routing and private keyboard delivery. No patch release is authorized by this work.
 
 ## Branch and merge discipline
 

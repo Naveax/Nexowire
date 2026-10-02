@@ -172,12 +172,12 @@
     "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected."
   ],
   "lastStateSync": "2026-10-02",
-  "lastVerifiedMain": "ad3675c6794da7e5109623e49d618ed7318601c5",
+  "lastVerifiedMain": "4cfbbadfac2d4d5e6d5b1afc36abfa78b8925a25",
   "activeWork": [
     {
-      "branch": "feature/private-desktop-virtual-cursor",
+      "branch": "feature/private-desktop-session",
       "status": "testing",
-      "goal": "Add an isolated Windows Nexowire virtual cursor that is visibly distinct, click-through, independently positioned, and proven not to move the user system cursor; use it as the first foundation for private-desktop/private-input work while physical console input remains separately policy-gated."
+      "goal": "Add a real isolated NexowirePrivate Win32 desktop with a private shell, hidden-desktop app launch/enumeration, manual user-only switching, and no automatic takeover of the Default input desktop; then use it as the execution surface for isolated private keyboard/pointer routing."
     }
   ]
 }
