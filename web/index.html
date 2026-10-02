@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Nexowire</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Nexowire</div>
+    <div id="connection-pill" class="pill muted">Control plane bekleniyor</div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Dashboard</p>
+        <h1 id="welcome">Hesap yükleniyor…</h1>
+        <p class="subtle">Cihazlar, kullanım kotası ve bağlantı sağlığı tek yerde.</p>
+      </div>
+      <button id="connect-device" class="primary" disabled>Yeni cihaz bağla</button>
+    </section>
+
+    <section class="grid metrics">
+      <article class="card">
+        <span class="label">Plan</span>
+        <strong id="plan">—</strong>
+        <small id="plan-detail">—</small>
+      </article>
+      <article class="card">
+        <span class="label">Kullanım</span>
+        <strong id="usage">—</strong>
+        <div class="bar"><span id="usage-bar"></span></div>
+      </article>
+      <article class="card">
+        <span class="label">Cihazlar</span>
+        <strong id="devices-count">—</strong>
+        <small id="devices-detail">—</small>
+      </article>
+      <article class="card">
+        <span class="label">Stabilite</span>
+        <strong id="stability">—</strong>
+        <small id="latency">—</small>
+      </article>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Cihazlar</p>
+        <h2>Bağlı makineler</h2>
+      </div>
+    </section>
+    <section id="devices" class="device-list">
+      <div class="empty">Control plane bağlantısı kurulmadı.</div>
+    </section>
+
+    <section id="error-panel" class="error-panel hidden">
+      <strong>Dashboard verisi alınamadı.</strong>
+      <p id="error-message"></p>
+      <button id="retry" class="secondary">Tekrar dene</button>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
