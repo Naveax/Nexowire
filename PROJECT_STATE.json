@@ -118,7 +118,7 @@
       "id": "agent-enrollment-tailscale",
       "status": "partial",
       "priority": 17,
-      "summary": "Fail-closed native-agent enrollment/status/doctor and Tailscale discovery plus auth-gated Serve/Funnel CLI are implemented on feature/agent-enrollment-doctor; live new-PC registration still requires the real Hub endpoint and credential, followed by devices_list/machine_snapshot/machine_health verification."
+      "summary": "PR #141 merged fail-closed native-agent enrollment/status/doctor plus Tailscale discovery and auth-gated Serve/Funnel support; DESKTOP-ONDD84S is Tailscale-ready, but final MCP registration is blocked while the known Naveax Hub peer is offline. Next slice is safe one-command self-host bootstrap."
     }
   ],
   "standardVerification": [
@@ -176,15 +176,10 @@
     "GitHub v1.0.0 was published successfully from tag/commit 98d040c284efad7f726c3d3ccaa1771d385ed60d. Release Readiness run 36890669730 passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication; npm remains intentionally disabled.",
     "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0.",
     "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected.",
-    "Tailscale is an optional first-party connectivity aid, not a Nexowire runtime dependency; public Funnel exposure must remain auth-gated."
+    "Tailscale is an optional first-party connectivity aid, not a Nexowire runtime dependency; public Funnel exposure must remain auth-gated.",
+    "PR #141 merged as 1904f1981bb02aef7517df589387436b8967d46f and merge CI 36993286780 passed; DESKTOP-ONDD84S has merged onboarding/Tailscale code installed, while live registration remains blocked on a real reachable Hub and credential."
   ],
   "lastStateSync": "2026-10-02",
-  "lastVerifiedMain": "09f3ca57514702a60bfbed4fcfdd5fd1b335e82d",
-  "activeWork": [
-    {
-      "branch": "feature/agent-enrollment-doctor",
-      "status": "testing",
-      "goal": "Make native-agent setup self-diagnosing and easy to connect, including placeholder/credential detection, authenticated Hub probing, Tailscale MagicDNS discovery, and auth-gated Serve/Funnel exposure; then live-enroll DESKTOP-ONDD84S against the real Hub."
-    }
-  ]
+  "lastVerifiedMain": "1904f1981bb02aef7517df589387436b8967d46f",
+  "activeWork": []
 }
