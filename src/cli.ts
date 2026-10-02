@@ -19,7 +19,10 @@ import { runDeploymentOnboardingCommand } from './security/deployment-onboarding
 import { NEXOWIRE_VERSION } from './version.js';
 import { runTailscaleCommand } from './tailscale-exposure.js';
 import { runHubLifecycleCommand } from './hub/hub-lifecycle.js';
-import { runSelfHostedNodeCommand } from './self-host-bootstrap.js';
+import {
+  runSelfHostedNodeCommand,
+  selfHostedConnectorInfo,
+} from './self-host-bootstrap.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -99,9 +102,21 @@ async function main(): Promise<void> {
   }
 
   if (command === 'node') {
+    const args = process.argv.slice(3);
+    const action = args[0] ?? 'status';
+    if (action === 'connector') {
+      process.stdout.write(
+        JSON.stringify(
+          await selfHostedConnectorInfo(),
+          null,
+          2,
+        ) + '\n',
+      );
+      return;
+    }
     await runSelfHostedNodeCommand(
       loadConfig(),
-      process.argv.slice(3),
+      args,
     );
     return;
   }
