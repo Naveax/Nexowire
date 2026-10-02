@@ -15,6 +15,16 @@ export interface ProductAccountRecord {
   updatedAt: string;
 }
 
+export interface ExternalIdentityRecord {
+  provider: string;
+  subject: string;
+  accountId: string;
+  displayName: string | null;
+  email: string | null;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
 export interface ProductDeviceRecord {
   id: string;
   ownerAccountId: string;
@@ -72,6 +82,14 @@ export interface ControlPlaneStore {
   getAccount(id: string): Promise<ProductAccountRecord | null>;
   putAccount(record: ProductAccountRecord): Promise<void>;
   listAccounts(): Promise<ProductAccountRecord[]>;
+
+  getExternalIdentity(
+    provider: string,
+    subject: string,
+  ): Promise<ExternalIdentityRecord | null>;
+  putExternalIdentity(
+    record: ExternalIdentityRecord,
+  ): Promise<void>;
 
   getDevice(id: string): Promise<ProductDeviceRecord | null>;
   putDevice(record: ProductDeviceRecord): Promise<void>;
