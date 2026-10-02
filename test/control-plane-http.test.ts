@@ -103,6 +103,7 @@ test('pairing start plus public token consume returns one device credential', as
         pairingId: challenge.pairingId,
         token: challenge.token,
         platform: 'win32',
+        deviceAnchorHash: 'd'.repeat(64),
       }),
     }),
   );

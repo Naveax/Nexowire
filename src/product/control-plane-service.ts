@@ -63,6 +63,16 @@ function boundedText(name: string, input: string, max: number): string {
   return value;
 }
 
+function normalizeDeviceAnchorHash(input: string): string {
+  const value = input.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error(
+      'deviceAnchorHash must be a 64-character lowercase hex SHA-256 digest.',
+    );
+  }
+  return value;
+}
+
 function resolvePlan(account: ProductAccountRecord): ProductPlan {
   if (account.planId === 'custom') {
     if (!account.customPlan) {
@@ -135,8 +145,17 @@ export class ControlPlaneService {
     if (existing) return existing;
 
     const now = this.now().toISOString();
+    const quotaSubjectId = 'quota_' + randomUUID();
+    await this.store.putQuotaSubject({
+      id: quotaSubjectId,
+      kind: 'free-cluster',
+      createdAt: now,
+      updatedAt: now,
+    });
+
     const record: ProductAccountRecord = {
       id,
+      quotaSubjectId,
       displayName:
         input.displayName === undefined ||
         input.displayName === null
@@ -214,7 +233,7 @@ export class ControlPlaneService {
     const plan = resolvePlan(account);
     const period = monthPeriod(this.now());
     const usage = await this.store.getUsagePeriod(
-      account.id,
+      account.quotaSubjectId,
       period.key,
     );
     const devices = await this.store.listDevices(account.id);
@@ -341,6 +360,7 @@ export class ControlPlaneService {
     pairingId: string;
     token: string;
     platform: string;
+    deviceAnchorHash: string;
   }): Promise<{
     device: ProductDeviceRecord;
     deviceCredential: string;
@@ -368,12 +388,44 @@ export class ControlPlaneService {
       throw new Error('PAIRING_' + consumed.reason.toUpperCase());
     }
 
+    const deviceAnchorHash = normalizeDeviceAnchorHash(
+      input.deviceAnchorHash,
+    );
+    const now = this.now().toISOString();
+    let effectiveAccount = account;
+
+    if (plan.billingMode === 'free') {
+      const existingAnchor =
+        await this.store.getDeviceAnchor(deviceAnchorHash);
+
+      if (
+        existingAnchor &&
+        existingAnchor.quotaSubjectId !==
+          account.quotaSubjectId
+      ) {
+        await this.store.mergeFreeQuotaSubjects(
+          account.quotaSubjectId,
+          existingAnchor.quotaSubjectId,
+        );
+        effectiveAccount = await this.requireAccount(account.id);
+      }
+
+      await this.store.putDeviceAnchor({
+        anchorHash: deviceAnchorHash,
+        quotaSubjectId:
+          existingAnchor?.quotaSubjectId ??
+          effectiveAccount.quotaSubjectId,
+        createdAt: existingAnchor?.createdAt ?? now,
+        lastSeenAt: now,
+      });
+    }
+
     const rawCredential =
       'nwx_dev_' + randomBytes(32).toString('base64url');
-    const now = this.now().toISOString();
     const device: ProductDeviceRecord = {
       id: randomUUID(),
-      ownerAccountId: account.id,
+      ownerAccountId: effectiveAccount.id,
+      deviceAnchorHash,
       name: record.requestedDeviceName,
       platform: boundedText('platform', input.platform, 64),
       credentialHash: secretHash(rawCredential),
@@ -424,7 +476,7 @@ export class ControlPlaneService {
 
     const period = monthPeriod(this.now());
     const result = await this.store.chargeUsageAtomic({
-      accountId: account.id,
+      quotaSubjectId: account.quotaSubjectId,
       periodKey: period.key,
       periodStart: period.start,
       periodEnd: period.end,
