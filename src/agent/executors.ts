@@ -14,6 +14,7 @@ import { executeWindowsInputCapability } from './windows-input.js';
 import { executeWindowsAccessibilityCapability } from './windows-accessibility.js';
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
+import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
@@ -2212,6 +2213,12 @@ export async function executeCapability(
     case 'windows.virtual_pointer.style':
     case 'windows.virtual_pointer.visibility':
       return await executeWindowsVirtualPointerCapability(capability, input);
+    case 'windows.private_desktop.status':
+    case 'windows.private_desktop.start':
+    case 'windows.private_desktop.stop':
+    case 'windows.private_desktop.launch':
+    case 'windows.private_desktop.windows':
+      return await executeWindowsPrivateDesktopCapability(capability, input);
     case 'browser.session.start':
     case 'browser.session.list':
     case 'browser.session.stop':

@@ -3017,6 +3017,129 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_status',
+    {
+      title: 'Read Nexowire private desktop status',
+      description:
+        'Read the isolated Nexowire Win32 desktop state, process ids, hidden-desktop window count, and current input desktop without switching the user-visible desktop.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_desktop.status',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_desktop_start',
+    {
+      title: 'Start Nexowire private desktop',
+      description:
+        'Create or reuse the isolated NexowirePrivate Win32 desktop and its private shell. This never switches the user-visible input desktop. An optional local shortcut lets the user enter the private desktop manually.',
+      inputSchema: {
+        ...targetFields,
+        create_shortcut: z.boolean().optional(),
+      },
+    },
+    async ({ device_id, provider_id, create_shortcut }) =>
+      await execute(
+        ctx,
+        'windows.private_desktop.start',
+        {
+          ...(create_shortcut !== undefined
+            ? { create_shortcut }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_desktop_stop',
+    {
+      title: 'Stop Nexowire private desktop',
+      description:
+        'Stop the Nexowire private desktop shell and tracked private-desktop processes. The host fails safe toward the normal Default desktop.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_desktop.stop',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_desktop_launch',
+    {
+      title: 'Launch app on Nexowire private desktop',
+      description:
+        'Launch one executable onto the isolated NexowirePrivate Win32 desktop without moving it onto the user Default desktop or switching the visible input desktop.',
+      inputSchema: {
+        ...targetFields,
+        executable: z.string().min(1).max(4096),
+        args: z.array(z.string().max(32_768)).max(128).optional(),
+        cwd: z.string().max(4096).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      executable,
+      args,
+      cwd,
+    }) =>
+      await execute(
+        ctx,
+        'windows.private_desktop.launch',
+        {
+          executable,
+          ...(args ? { args } : {}),
+          ...(cwd ? { cwd } : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_desktop_windows',
+    {
+      title: 'List Nexowire private desktop windows',
+      description:
+        'Enumerate bounded top-level window metadata on the isolated NexowirePrivate Win32 desktop without switching the user-visible desktop.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_desktop.windows',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_processes',
     {
       title: 'List Windows processes',

@@ -119,17 +119,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Nexowire v1.0.0 is released and there is no unfinished v1.0 implementation/publication work. A concrete post-v1 feature is active on `feature/private-desktop-virtual-cursor`: an isolated click-through Windows Nexowire cursor with independent coordinates/state that never moves the user's system cursor. This is the first foundation for a later private-desktop/private-input surface. Physical console pointer/keyboard control remains a separate capability boundary and must not be silently reused as the private pointer implementation.
+Nexowire v1.0.0 is released and there is no unfinished v1.0 implementation/publication work. PR #139 merged the isolated click-through Windows Nexowire virtual cursor as main commit `4cfbbadfac2d4d5e6d5b1afc36abfa78b8925a25`; merge CI run `36930263370` passed all seven jobs. The current post-v1 feature is `feature/private-desktop-session`.
 
-Local Windows validation on 2026-10-02 showed the overlay visibly rendered as a separately colored `NX` cursor across the 3440x1440 virtual desktop while remaining non-foreground and click-through. Focused tests prove moving/styling/hiding the Nexowire cursor leaves the real Windows cursor coordinates unchanged. Typecheck, targeted MCP surface/schema/output/discovery tests, and build pass. The local `browser-live` regression currently fails independently because Edge exits before DevTools becomes ready / leaves a locked temporary profile; clean GitHub CI is the merge gate for that unrelated live-browser lane.
+This branch adds a real `NexowirePrivate` Win32 desktop object, a full-screen private WPF shell, hidden-desktop app launching, hidden-desktop window enumeration, a user-facing Start Menu switch shortcut, and fail-safe return-to-`Default` behavior. Automated start/launch/status/list operations never call `SwitchDesktop`; local Windows tests prove the input desktop remains `Default` while the isolated desktop and GUI windows run. Live validation on 2026-10-02 created the private desktop at 3440x1440, left `Default` active, and installed `Nexowire Private Desktop.lnk` with `Ctrl+Alt+N` entry; the private shell returns with its button or `Ctrl+Alt+D`.
 
 ## Immediate next work
 
-1. Finish CI/merge for `feature/private-desktop-virtual-cursor` without publishing a new release.
-2. Build the private desktop/viewer and isolated private keyboard/input routing on top of the virtual-pointer boundary.
-3. Preserve physical-console input as default-denied unless the user explicitly grants console control; do not implement the private path by moving the system cursor with `SendInput`.
-4. Preserve the frozen MCP v1 compatibility floor and first-party-only runtime invariant.
-5. Keep npm/GitHub release publication disabled unless explicitly authorized.
+1. Finish CI/merge for `feature/private-desktop-session` without publishing a new release.
+2. Route the Nexowire virtual cursor into the private desktop viewer/surface instead of the physical console overlay when private mode is active.
+3. Add isolated private keyboard/text/hotkey delivery that targets only the private desktop/application surface.
+4. Keep physical-console pointer/keyboard/UIA/clipboard mutations default-denied unless the user explicitly grants console control.
+5. Preserve the frozen MCP v1 compatibility floor, first-party-only runtime invariant, and explicit release authorization gate.
 
 ## Known machine note
 

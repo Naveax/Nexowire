@@ -86,3 +86,12 @@
 - [x] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs
 - [x] tag-only SLSA build provenance and CycloneDX SBOM attestations after verified candidate download with isolated OIDC/attestation permissions
 - [x] GitHub v1.0.0 published with verified package artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, SLSA provenance, and SBOM attestation; npm publication remains intentionally disabled for the initial self-hosted release
+
+## Post-v1 - Private desktop and isolated input
+
+- [x] independent click-through Nexowire virtual cursor with separate coordinates/style and proof that it never moves the Windows system cursor
+- [ ] real `NexowirePrivate` Win32 desktop with private shell, hidden-desktop process launch/window enumeration, user-only switch entry, and no automatic visible-desktop takeover
+- [ ] private-surface cursor routing so Nexowire pointer actions target the private desktop instead of the physical console
+- [ ] isolated private keyboard/text/hotkey routing scoped to the private desktop/application target
+- [ ] private viewer/switch UX with explicit user entry/exit and bounded screenshot/inspection path
+- [ ] time-bounded explicit console-control grant profile for physical pointer/keyboard/UIA/clipboard mutations
