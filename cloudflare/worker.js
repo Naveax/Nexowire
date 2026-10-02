@@ -132,8 +132,12 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/')) {
+      const agentUrl = String(
+        env.NEXOWIRE_AGENT_WS_URL ?? '',
+      ).trim();
       const handler = createControlPlaneHttpHandler(service, {
         authenticate: (req) => authenticate(req, env),
+        ...(agentUrl ? { agentUrl } : {}),
       });
       return handler(request);
     }

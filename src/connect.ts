@@ -9,13 +9,13 @@ import { promises as fs } from 'node:fs';
 import { promisify } from 'node:util';
 import { getOrCreateDeviceAnchor } from './agent/device-anchor.js';
 import {
-  writeProtectedSecretFile,
-} from './security/protected-secret-files.js';
+  enrollNativeAgent,
+  validateAgentHubUrl,
+} from './agent/native-agent-enrollment.js';
+import { loadOrCreateAgentIdentity } from './agent/native-agent.js';
 
 const execFileAsync = promisify(execFile);
 const CONNECT_CALLBACK_PATH = '/nexowire-connect';
-const CONTROL_PLANE_DEVICE_CREDENTIAL_PURPOSE =
-  'control-plane-device-credential-v1';
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
 export interface ConnectCliOptions {
@@ -39,11 +39,14 @@ export interface ControlPlaneRegisteredDevice {
 export interface ConnectResult {
   paired: true;
   controlPlaneUrl: string;
+  agentUrl: string;
   deviceId: string;
   deviceName: string;
   credentialStored: true;
-  dataPlaneReady: false;
-  next: 'data-plane-enrollment';
+  dataPlaneReady: true;
+  authenticated: true;
+  lifecycleState: string;
+  doctorOverall: 'PASS' | 'BLOCKED' | 'FAIL';
 }
 
 export interface ConnectRuntime {
@@ -51,6 +54,7 @@ export interface ConnectRuntime {
   fetchImpl?: typeof fetch;
   openBrowser?: (url: string) => Promise<void>;
   now?: () => Date;
+  enrollAgent?: typeof enrollNativeAgent;
 }
 
 function positiveTimeout(value: string): number {
@@ -191,12 +195,13 @@ function defaultCredentialFile(
   env: NodeJS.ProcessEnv,
 ): string {
   return path.resolve(
-    env.NEXOWIRE_CONTROL_PLANE_DEVICE_CREDENTIAL_DPAPI_FILE?.trim() ||
+    env.NEXOWIRE_AGENT_TOKEN_DPAPI_FILE?.trim() ||
+      env.NEXOWIRE_CONTROL_PLANE_DEVICE_CREDENTIAL_DPAPI_FILE?.trim() ||
       path.join(
         os.homedir(),
         '.nexowire',
         'secrets',
-        'control-plane-device-credential.dpapi.json',
+        'agent-bearer-token.dpapi.json',
       ),
   );
 }
@@ -226,6 +231,7 @@ export function buildConnectApprovalUrl(input: {
   controlPlaneUrl: string;
   callbackUrl: string;
   state: string;
+  deviceId: string;
   deviceName: string;
   platform: string;
 }): string {
@@ -244,6 +250,7 @@ export function buildConnectApprovalUrl(input: {
   const url = new URL('/connect.html', base + '/');
   url.searchParams.set('callback', callback.toString());
   url.searchParams.set('state', input.state);
+  url.searchParams.set('deviceId', input.deviceId);
   url.searchParams.set(
     'deviceName',
     boundedDeviceName(input.deviceName),
@@ -415,6 +422,7 @@ async function consumePairing(input: {
 }): Promise<{
   device: ControlPlaneRegisteredDevice;
   deviceCredential: string;
+  agentUrl: string;
 }> {
   const response = await input.fetchImpl(
     input.controlPlaneUrl +
@@ -445,6 +453,7 @@ async function consumePairing(input: {
   const body = await response.json() as {
     device?: ControlPlaneRegisteredDevice;
     deviceCredential?: string;
+    agentUrl?: string;
   };
 
   if (
@@ -452,7 +461,8 @@ async function consumePairing(input: {
     typeof body.device.id !== 'string' ||
     typeof body.device.name !== 'string' ||
     typeof body.deviceCredential !== 'string' ||
-    !body.deviceCredential.startsWith('nwx_dev_')
+    !body.deviceCredential.startsWith('nwx_dev_') ||
+    typeof body.agentUrl !== 'string'
   ) {
     throw new Error(
       'Control plane returned an invalid device enrollment response.',
@@ -462,12 +472,14 @@ async function consumePairing(input: {
   return {
     device: body.device,
     deviceCredential: body.deviceCredential,
+    agentUrl: validateAgentHubUrl(body.agentUrl),
   };
 }
 
 async function writeConnectionMetadata(input: {
   file: string;
   controlPlaneUrl: string;
+  agentUrl: string;
   device: ControlPlaneRegisteredDevice;
   credentialFile: string;
   anchorFile: string;
@@ -491,6 +503,7 @@ async function writeConnectionMetadata(input: {
       {
         version: 1,
         controlPlaneUrl: input.controlPlaneUrl,
+        agentUrl: input.agentUrl,
         deviceId: input.device.id,
         deviceName: input.device.name,
         credentialFile: input.credentialFile,
@@ -521,13 +534,18 @@ export async function connectNexowire(
   const env = runtime.env ?? process.env;
   const fetchImpl = runtime.fetchImpl ?? fetch;
   const opener = runtime.openBrowser ?? openDefaultBrowser;
+  const enrollAgent =
+    runtime.enrollAgent ?? enrollNativeAgent;
   const controlPlaneUrl = normalizeControlPlaneUrl(
     options.controlPlaneUrl,
   );
   const deviceName = boundedDeviceName(
     options.deviceName?.trim() || os.hostname(),
   );
-  const anchor = await getOrCreateDeviceAnchor(env);
+  const [anchor, identity] = await Promise.all([
+    getOrCreateDeviceAnchor(env),
+    loadOrCreateAgentIdentity(env),
+  ]);
   const state = randomBytes(32).toString('base64url');
   const receiver = await startConnectLoopbackReceiver({
     state,
@@ -539,6 +557,7 @@ export async function connectNexowire(
       controlPlaneUrl,
       callbackUrl: receiver.callbackUrl,
       state,
+      deviceId: identity.id,
       deviceName,
       platform: process.platform,
     });
@@ -568,12 +587,30 @@ export async function connectNexowire(
     });
 
     const credentialFile = defaultCredentialFile(env);
-    await writeProtectedSecretFile(
-      credentialFile,
-      CONTROL_PLANE_DEVICE_CREDENTIAL_PURPOSE,
+    const enrollment = await enrollAgent(
+      {
+        hubUrl: registered.agentUrl,
+        deviceName: registered.device.name,
+        allowedRoots: [os.homedir()],
+        secretFile: credentialFile,
+        overwriteSecret: true,
+        timeoutMs: Math.min(
+          options.timeoutMs ?? 5_000,
+          15_000,
+        ),
+      },
       registered.deviceCredential,
-      { overwrite: true },
+      env,
     );
+
+    if (
+      !enrollment.connectTest ||
+      enrollment.connectTest.authenticated !== true
+    ) {
+      throw new Error(
+        'Native agent enrollment did not verify the data-plane credential.',
+      );
+    }
 
     const connectedAt = (
       runtime.now?.() ?? new Date()
@@ -581,6 +618,7 @@ export async function connectNexowire(
     await writeConnectionMetadata({
       file: defaultConnectionFile(env),
       controlPlaneUrl,
+      agentUrl: registered.agentUrl,
       device: registered.device,
       credentialFile,
       anchorFile: anchor.storageFile,
@@ -590,11 +628,14 @@ export async function connectNexowire(
     return {
       paired: true,
       controlPlaneUrl,
+      agentUrl: registered.agentUrl,
       deviceId: registered.device.id,
       deviceName: registered.device.name,
       credentialStored: true,
-      dataPlaneReady: false,
-      next: 'data-plane-enrollment',
+      dataPlaneReady: true,
+      authenticated: true,
+      lifecycleState: enrollment.lifecycle.state,
+      doctorOverall: enrollment.doctor.overall,
     };
   } finally {
     await receiver.close();
@@ -610,3 +651,4 @@ export async function runConnectCommand(
     JSON.stringify(result, null, 2) + '\n',
   );
 }
+

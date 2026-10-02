@@ -335,3 +335,78 @@ test('skills directory supports explicit override and bundled fallback', () => {
     path.join('/tmp/unrelated-working-directory', 'skills'),
   );
 });
+
+
+test('control-plane device auth config requires URL and service token together', () => {
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_CONTROL_PLANE_URL:
+          'https://control.example.test',
+      },
+      process.cwd(),
+    ),
+  );
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN:
+          'service-token-0123456789',
+      },
+      process.cwd(),
+    ),
+  );
+
+  const config = loadConfig(
+    {
+      NEXOWIRE_CONTROL_PLANE_URL:
+        'https://control.example.test',
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN:
+        'service-token-0123456789',
+      NEXOWIRE_CONTROL_PLANE_AUTH_TIMEOUT_MS: '2500',
+    },
+    process.cwd(),
+  );
+
+  assert.deepEqual(config.controlPlaneAgentAuth, {
+    url: 'https://control.example.test',
+    serviceToken: 'service-token-0123456789',
+    timeoutMs: 2500,
+  });
+
+  assert.throws(() =>
+    loadConfig(
+      {
+        NEXOWIRE_CONTROL_PLANE_URL:
+          'https://control.example.test',
+        NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN:
+          'service-token-0123456789',
+        NEXOWIRE_CONTROL_PLANE_AUTH_TIMEOUT_MS: '249',
+      },
+      process.cwd(),
+    ),
+  );
+});
+
+test('control-plane device auth can satisfy native-agent remote auth availability', () => {
+  const config = loadConfig(
+    {
+      NEXOWIRE_HTTP_HOST: '0.0.0.0',
+      NEXOWIRE_HTTP_PORT: '43110',
+      NEXOWIRE_ALLOW_INSECURE_REMOTE: '1',
+      NEXOWIRE_MCP_BEARER_TOKEN: 'mcp-secret',
+      NEXOWIRE_CONTROL_PLANE_URL:
+        'https://control.example.test',
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN:
+        'service-token-0123456789',
+    },
+    process.cwd(),
+  );
+
+  assert.doesNotThrow(() =>
+    assertSafeRemoteBinding(config, {
+      mcp: true,
+      agent: Boolean(config.controlPlaneAgentAuth),
+    }),
+  );
+});

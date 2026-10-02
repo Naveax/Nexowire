@@ -22,6 +22,7 @@ async function setup() {
   });
 
   const handler = createControlPlaneHttpHandler(service, {
+    agentUrl: 'wss://relay.example.test/agent',
     authenticate: async (request) => {
       const raw = request.headers.get('x-test-identity');
       if (!raw) return null;

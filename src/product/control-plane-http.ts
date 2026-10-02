@@ -7,6 +7,37 @@ export interface ControlPlaneHttpOptions {
   authenticate(
     request: Request,
   ): Promise<ControlPlaneIdentity | null>;
+  agentUrl?: string;
+}
+
+function normalizeAgentUrl(input: string): string {
+  const raw = input.trim();
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Control-plane agent URL is invalid.');
+  }
+
+  const loopback =
+    url.hostname === '127.0.0.1' ||
+    url.hostname === 'localhost' ||
+    url.hostname === '[::1]' ||
+    url.hostname === '::1';
+  if (
+    url.username ||
+    url.password ||
+    (url.protocol !== 'wss:' &&
+      !(loopback && url.protocol === 'ws:')) ||
+    url.pathname !== '/agent' ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(
+      'Control-plane agent URL must be wss://.../agent (or loopback ws://.../agent for development).',
+    );
+  }
+  return url.toString();
 }
 
 function json(
@@ -60,7 +91,10 @@ function errorStatus(message: string): number {
     message === 'ADMIN_REQUIRED' ||
     message === 'DEVICE_LIMIT_REACHED'
   ) return 403;
-  if (message.startsWith('PAIRING_')) return 409;
+  if (
+    message.startsWith('PAIRING_') ||
+    message === 'DEVICE_ALREADY_BOUND'
+  ) return 409;
   if (
     message.startsWith('INVALID_') ||
     message === 'JSON_REQUIRED' ||
@@ -73,6 +107,10 @@ export function createControlPlaneHttpHandler(
   service: ControlPlaneService,
   options: ControlPlaneHttpOptions,
 ): (request: Request) => Promise<Response> {
+  const configuredAgentUrl = options.agentUrl
+    ? normalizeAgentUrl(options.agentUrl)
+    : null;
+
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -82,6 +120,11 @@ export function createControlPlaneHttpHandler(
         request.method === 'POST' &&
         path === '/api/v1/pairing/consume'
       ) {
+        if (!configuredAgentUrl) {
+          return json(503, {
+            error: 'AGENT_ENDPOINT_UNAVAILABLE',
+          });
+        }
         const body = await readJsonObject(request);
         const result = await service.consumePairing({
           pairingId: stringField(body, 'pairingId'),
@@ -92,7 +135,10 @@ export function createControlPlaneHttpHandler(
             'deviceAnchorHash',
           ),
         });
-        return json(200, result);
+        return json(200, {
+          ...result,
+          agentUrl: configuredAgentUrl,
+        });
       }
 
       const identity = await options.authenticate(request);
@@ -124,8 +170,28 @@ export function createControlPlaneHttpHandler(
           await service.beginPairing(
             identity,
             stringField(body, 'deviceName'),
+            typeof body.deviceId === 'string'
+              ? body.deviceId
+              : undefined,
           ),
         );
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/internal/device/authenticate'
+      ) {
+        if (identity.role !== 'service') {
+          return json(403, { error: 'SERVICE_REQUIRED' });
+        }
+        const body = await readJsonObject(request);
+        const device =
+          await service.authenticateDeviceCredential(
+            stringField(body, 'credential'),
+          );
+        return json(200, device
+          ? { authenticated: true, device }
+          : { authenticated: false });
       }
 
       if (

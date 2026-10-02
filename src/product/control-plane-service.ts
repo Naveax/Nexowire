@@ -36,6 +36,13 @@ export interface InfrastructureSnapshot {
   prepaidCapacityCredits: number;
 }
 
+export interface AuthenticatedDeviceIdentity {
+  deviceId: string;
+  ownerAccountId: string;
+  deviceName: string;
+  platform: string;
+}
+
 export interface ControlPlaneServiceOptions {
   now?: () => Date;
   infrastructure?: () => InfrastructureSnapshot;
@@ -327,6 +334,7 @@ export class ControlPlaneService {
   async beginPairing(
     identity: ControlPlaneIdentity,
     deviceName: string,
+    deviceIdInput?: string,
   ): Promise<{
     pairingId: string;
     token: string;
@@ -334,10 +342,20 @@ export class ControlPlaneService {
   }> {
     const account = await this.requireAccount(identity.accountId);
     const plan = resolvePlan(account);
+    const requestedDeviceId = deviceIdInput?.trim()
+      ? boundedId('deviceId', deviceIdInput)
+      : undefined;
+    const existingDevice = requestedDeviceId
+      ? await this.store.getDevice(requestedDeviceId)
+      : null;
     const devices = await this.store.listDevices(account.id);
+    const countsAsNew =
+      !existingDevice ||
+      existingDevice.ownerAccountId !== account.id;
 
     if (
       plan.maxDevices !== null &&
+      countsAsNew &&
       devices.length >= plan.maxDevices
     ) {
       throw new Error('DEVICE_LIMIT_REACHED');
@@ -346,7 +364,12 @@ export class ControlPlaneService {
     const challenge = createPairingChallenge(
       account.id,
       deviceName,
-      { now: this.now() },
+      {
+        now: this.now(),
+        ...(requestedDeviceId
+          ? { requestedDeviceId }
+          : {}),
+      },
     );
     await this.store.putPairing(challenge.record);
     return {
@@ -420,10 +443,39 @@ export class ControlPlaneService {
       });
     }
 
+    const requestedDeviceId =
+      record.requestedDeviceId ?? randomUUID();
+    const existingDevice =
+      await this.store.getDevice(requestedDeviceId);
+
+    if (
+      existingDevice &&
+      existingDevice.ownerAccountId !== effectiveAccount.id &&
+      !(
+        plan.billingMode === 'free' &&
+        existingDevice.deviceAnchorHash === deviceAnchorHash
+      )
+    ) {
+      throw new Error('DEVICE_ALREADY_BOUND');
+    }
+
+    const effectiveDevices =
+      await this.store.listDevices(effectiveAccount.id);
+    const countsAsNew =
+      !existingDevice ||
+      existingDevice.ownerAccountId !== effectiveAccount.id;
+    if (
+      plan.maxDevices !== null &&
+      countsAsNew &&
+      effectiveDevices.length >= plan.maxDevices
+    ) {
+      throw new Error('DEVICE_LIMIT_REACHED');
+    }
+
     const rawCredential =
       'nwx_dev_' + randomBytes(32).toString('base64url');
     const device: ProductDeviceRecord = {
-      id: randomUUID(),
+      id: requestedDeviceId,
       ownerAccountId: effectiveAccount.id,
       deviceAnchorHash,
       name: record.requestedDeviceName,
@@ -431,7 +483,7 @@ export class ControlPlaneService {
       credentialHash: secretHash(rawCredential),
       online: false,
       lastSeenAt: null,
-      createdAt: now,
+      createdAt: existingDevice?.createdAt ?? now,
       updatedAt: now,
     };
 
@@ -441,6 +493,33 @@ export class ControlPlaneService {
     return {
       device,
       deviceCredential: rawCredential,
+    };
+  }
+
+  async authenticateDeviceCredential(
+    credentialInput: string,
+  ): Promise<AuthenticatedDeviceIdentity | null> {
+    const credential = credentialInput.trim();
+    if (
+      !credential.startsWith('nwx_dev_') ||
+      credential.length < 16 ||
+      credential.length > 512 ||
+      /[\r\n\0]/.test(credential)
+    ) {
+      return null;
+    }
+
+    const device =
+      await this.store.getDeviceByCredentialHash(
+        secretHash(credential),
+      );
+    if (!device) return null;
+
+    return {
+      deviceId: device.id,
+      ownerAccountId: device.ownerAccountId,
+      deviceName: device.name,
+      platform: device.platform,
     };
   }
 

@@ -11,6 +11,7 @@ const MAX_TTL_MS = 15 * 60_000;
 export interface PairingRecord {
   id: string;
   ownerAccountId: string;
+  requestedDeviceId: string | null;
   requestedDeviceName: string;
   tokenHash: string;
   createdAt: string;
@@ -49,6 +50,7 @@ export function createPairingChallenge(
   options: {
     now?: Date;
     ttlMs?: number;
+    requestedDeviceId?: string;
   } = {},
 ): PairingChallenge {
   const ownerAccountId = boundedText(
@@ -61,6 +63,13 @@ export function createPairingChallenge(
     requestedDeviceNameInput,
     128,
   );
+  const requestedDeviceId = options.requestedDeviceId
+    ? boundedText(
+        'requestedDeviceId',
+        options.requestedDeviceId,
+        128,
+      )
+    : null;
   const now = options.now ?? new Date();
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
 
@@ -85,6 +94,7 @@ export function createPairingChallenge(
     record: {
       id,
       ownerAccountId,
+      requestedDeviceId,
       requestedDeviceName,
       tokenHash: tokenHashHex(token),
       createdAt: now.toISOString(),

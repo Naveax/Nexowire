@@ -88,6 +88,7 @@ type DbDeviceRow = {
 type DbPairingRow = {
   id: string;
   owner_account_id: string;
+  requested_device_id: string | null;
   requested_device_name: string;
   token_hash: string;
   created_at: string;
@@ -165,6 +166,7 @@ function pairingFromRow(row: DbPairingRow): PairingRecord {
   return {
     id: row.id,
     ownerAccountId: row.owner_account_id,
+    requestedDeviceId: row.requested_device_id,
     requestedDeviceName: row.requested_device_name,
     tokenHash: row.token_hash,
     createdAt: row.created_at,
@@ -434,6 +436,18 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     return row ? deviceFromRow(row) : null;
   }
 
+  async getDeviceByCredentialHash(
+    credentialHash: string,
+  ): Promise<ProductDeviceRecord | null> {
+    const row = await this.db
+      .prepare(
+        'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE credential_hash = ?',
+      )
+      .bind(credentialHash)
+      .first<DbDeviceRow>();
+    return row ? deviceFromRow(row) : null;
+  }
+
   async putDevice(record: ProductDeviceRecord): Promise<void> {
     await this.db
       .prepare(
@@ -485,7 +499,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   async getPairing(id: string): Promise<PairingRecord | null> {
     const row = await this.db
       .prepare(
-        'SELECT id, owner_account_id, requested_device_name, token_hash, created_at, expires_at, consumed_at FROM pairings WHERE id = ?',
+        'SELECT id, owner_account_id, requested_device_id, requested_device_name, token_hash, created_at, expires_at, consumed_at FROM pairings WHERE id = ?',
       )
       .bind(id)
       .first<DbPairingRow>();
@@ -496,14 +510,16 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     await this.db
       .prepare(
         `INSERT INTO pairings
-          (id, owner_account_id, requested_device_name, token_hash, created_at, expires_at, consumed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+          (id, owner_account_id, requested_device_id, requested_device_name, token_hash, created_at, expires_at, consumed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
+           requested_device_id = excluded.requested_device_id,
            consumed_at = excluded.consumed_at`,
       )
       .bind(
         record.id,
         record.ownerAccountId,
+        record.requestedDeviceId,
         record.requestedDeviceName,
         record.tokenHash,
         record.createdAt,
