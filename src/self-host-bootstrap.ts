@@ -376,12 +376,33 @@ export async function bootstrapSelfHostedNode(
 
   const port = state.port;
   const deviceName = state.deviceName;
+  const tailscaleBeforeHub = await discoverTailscale();
+  const httpAllowedHosts = new Set(
+    (process.env.NEXOWIRE_HTTP_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (
+    tailscaleBeforeHub.running &&
+    tailscaleBeforeHub.dnsName
+  ) {
+    httpAllowedHosts.add(
+      tailscaleBeforeHub.dnsName.toLowerCase(),
+    );
+  }
 
   const hubEnv: NodeJS.ProcessEnv = {
     ...process.env,
     NEXOWIRE_STATE_DIR: state.stateDir,
     NEXOWIRE_HTTP_HOST: '127.0.0.1',
     NEXOWIRE_HTTP_PORT: String(port),
+    ...(httpAllowedHosts.size > 0
+      ? {
+          NEXOWIRE_HTTP_ALLOWED_HOSTS:
+            [...httpAllowedHosts].join(','),
+        }
+      : {}),
   };
   delete hubEnv.NEXOWIRE_MCP_BEARER_TOKEN;
   delete hubEnv.NEXOWIRE_MCP_BEARER_TOKENS;
