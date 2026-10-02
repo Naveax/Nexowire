@@ -86,6 +86,7 @@ function render(snapshot) {
 
 async function load() {
   $('error-panel').classList.add('hidden');
+  $('login').classList.add('hidden');
   setPill('Bağlanıyor', 'muted');
 
   try {
@@ -93,6 +94,14 @@ async function load() {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
+    if (response.status === 401) {
+      setPill('Oturum yok', 'muted');
+      $('error-message').textContent =
+        'Dashboard için hesabınla giriş yap.';
+      $('login').classList.remove('hidden');
+      $('error-panel').classList.remove('hidden');
+      return;
+    }
     if (!response.ok) {
       throw new Error('HTTP ' + response.status);
     }
@@ -106,6 +115,11 @@ async function load() {
 }
 
 $('retry').addEventListener('click', load);
+$('login').addEventListener('click', () => {
+  window.location.href =
+    '/auth/github/start?next=' +
+    encodeURIComponent(window.location.pathname);
+});
 $('connect-device').addEventListener('click', () => {
   window.location.href = '/connect';
 });
