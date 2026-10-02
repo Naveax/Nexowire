@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { runNativeAgent } from './agent/native-agent.js';
 import { runNativeAgentLifecycleCommand } from './agent/native-agent-lifecycle.js';
+import { runNativeAgentEnrollmentCommand } from './agent/native-agent-enrollment.js';
 import { runProcessWorker } from './agent/process-worker.js';
 import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
@@ -58,6 +59,14 @@ async function main(): Promise<void> {
     const action = process.argv[3] ?? 'run';
     if (action === 'run') {
       await runNativeAgent();
+    } else if (
+      action === 'enroll' ||
+      action === 'doctor' ||
+      action === 'status'
+    ) {
+      await runNativeAgentEnrollmentCommand(
+        process.argv.slice(3),
+      );
     } else {
       await runNativeAgentLifecycleCommand(
         process.argv.slice(3),
