@@ -1,6 +1,7 @@
 import type { PairingRecord } from './pairing.js';
 import type {
   ControlPlaneStore,
+  ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
   ProductUsagePeriodRecord,
@@ -41,6 +42,7 @@ function validateCredits(name: string, credits: number): void {
 
 export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly accounts = new Map<string, ProductAccountRecord>();
+  private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
   private readonly pairings = new Map<string, PairingRecord>();
   private readonly usage = new Map<string, ProductUsagePeriodRecord>();
@@ -57,6 +59,23 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
 
   async listAccounts(): Promise<ProductAccountRecord[]> {
     return [...this.accounts.values()].map(clone);
+  }
+
+  async getExternalIdentity(
+    provider: string,
+    subject: string,
+  ): Promise<ExternalIdentityRecord | null> {
+    const value = this.identities.get(provider + ':' + subject);
+    return value ? clone(value) : null;
+  }
+
+  async putExternalIdentity(
+    record: ExternalIdentityRecord,
+  ): Promise<void> {
+    this.identities.set(
+      record.provider + ':' + record.subject,
+      clone(record),
+    );
   }
 
   async getDevice(id: string): Promise<ProductDeviceRecord | null> {
