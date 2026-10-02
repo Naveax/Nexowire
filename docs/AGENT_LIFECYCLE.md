@@ -6,8 +6,10 @@ Nexowire can manage its own native-agent autostart without Remote Desktop Comman
 
 ```text
 nexowire agent run
-nexowire agent install
+nexowire agent enroll --hub-url <ws://loopback/agent|wss://remote/agent>
+nexowire agent doctor
 nexowire agent status
+nexowire agent install
 nexowire agent start
 nexowire agent stop
 nexowire agent restart
@@ -57,3 +59,22 @@ macOS uses a per-user LaunchAgent under `~/Library/LaunchAgents`.
 - The plist contains only `/bin/sh` plus the Nexowire launcher path. It does not contain bearer credentials.
 
 Use `NEXOWIRE_AGENT_TOKEN_PLATFORM_NAME` to reference an existing Keychain item or another protected-secret reference. Nexowire still keeps macOS Keychain write/update fail-closed until a no-argv/no-log storage mechanism is proven; lifecycle support does not weaken that rule.
+
+
+## Enrollment and connection truth
+
+`agent status` reports lifecycle state separately from Hub connectivity. An installed Windows Scheduled Task in `ready` state is only configured, not proof that the agent is online.
+
+`agent doctor` validates the persisted Hub endpoint, protected credential reference, WebSocket authentication, Tailscale availability, and the local stable device identity. Final enrollment still requires MCP-side verification with `devices_list`, `machine_snapshot`, and `machine_health`.
+
+`agent enroll` rejects bearer tokens in argv. On Windows it reads the token from hidden TTY input or stdin, seals it with CurrentUser DPAPI, persists only the protected-file reference, validates the Hub endpoint, and probes authentication before persisting the lifecycle.
+
+## Tailscale-assisted setup
+
+`nexowire tailscale status` reports Tailscale connectivity and MagicDNS identity.
+
+`nexowire tailscale serve` proxies the local Nexowire Hub through Tailscale Serve for tailnet-only access.
+
+`nexowire tailscale funnel` exposes the local Hub through Tailscale Funnel for Internet-facing ChatGPT/MCP access. Nexowire refuses to configure Funnel unless both MCP and native-agent authentication are already available.
+
+`nexowire tailscale reset serve` and `nexowire tailscale reset funnel` remove the corresponding exposure.

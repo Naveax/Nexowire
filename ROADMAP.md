@@ -90,8 +90,17 @@
 ## Post-v1 - Private desktop and isolated input
 
 - [x] independent click-through Nexowire virtual cursor with separate coordinates/style and proof that it never moves the Windows system cursor
-- [ ] real `NexowirePrivate` Win32 desktop with private shell, hidden-desktop process launch/window enumeration, user-only switch entry, and no automatic visible-desktop takeover
+- [x] real `NexowirePrivate` Win32 desktop with private shell, hidden-desktop process launch/window enumeration, user-only switch entry, and no automatic visible-desktop takeover
 - [ ] private-surface cursor routing so Nexowire pointer actions target the private desktop instead of the physical console
 - [ ] isolated private keyboard/text/hotkey routing scoped to the private desktop/application target
 - [ ] private viewer/switch UX with explicit user entry/exit and bounded screenshot/inspection path
 - [ ] time-bounded explicit console-control grant profile for physical pointer/keyboard/UIA/clipboard mutations
+
+
+## Post-v1 - Easy onboarding and Tailscale transport
+
+- [x] fail-closed native-agent enrollment/status/doctor flow that distinguishes installed/configured/running from real Hub authentication
+- [x] reject placeholder Hub URLs and unavailable protected credential references before treating an agent as connected
+- [x] detect local Tailscale connectivity, MagicDNS identity, Serve state, and Funnel state
+- [x] expose `nexowire tailscale status|serve|funnel|reset`; public Funnel is refused until MCP and native-agent authentication are configured
+- [ ] complete live enrollment of the new Windows PC against the real Hub endpoint and verify `devices_list`, `machine_snapshot`, and `machine_health`

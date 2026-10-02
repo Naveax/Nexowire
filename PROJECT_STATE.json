@@ -113,6 +113,12 @@
       "status": "done",
       "priority": 16,
       "summary": "Nexowire 1.0.0 release readiness is implemented: installable CLI packaging, bundled-skill lookup, deterministic package audits, clean tarball smoke on Linux/Windows/macOS, SHA256SUMS, release manifest, CycloneDX SBOM, independent verification, exact tag enforcement, SLSA/CycloneDX attestations, and an explicit authorization-marker GitHub Release gate; npm remains disabled for the initial release"
+    },
+    {
+      "id": "agent-enrollment-tailscale",
+      "status": "partial",
+      "priority": 17,
+      "summary": "Fail-closed native-agent enrollment/status/doctor and Tailscale discovery plus auth-gated Serve/Funnel CLI are implemented on feature/agent-enrollment-doctor; live new-PC registration still requires the real Hub endpoint and credential, followed by devices_list/machine_snapshot/machine_health verification."
     }
   ],
   "standardVerification": [
@@ -169,15 +175,16 @@
     "Windows Event Log query output is bounded by per-field, per-message, and aggregate message budgets with explicit truncation metadata; real Windows CI verifies those bounds.",
     "GitHub v1.0.0 was published successfully from tag/commit 98d040c284efad7f726c3d3ccaa1771d385ed60d. Release Readiness run 36890669730 passed Linux/Windows/macOS packaging, independent candidate verification, SLSA provenance, CycloneDX SBOM attestation, checksum re-verification, and GitHub Release publication; npm remains intentionally disabled.",
     "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0.",
-    "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected."
+    "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected.",
+    "Tailscale is an optional first-party connectivity aid, not a Nexowire runtime dependency; public Funnel exposure must remain auth-gated."
   ],
   "lastStateSync": "2026-10-02",
-  "lastVerifiedMain": "4cfbbadfac2d4d5e6d5b1afc36abfa78b8925a25",
+  "lastVerifiedMain": "09f3ca57514702a60bfbed4fcfdd5fd1b335e82d",
   "activeWork": [
     {
-      "branch": "feature/private-desktop-session",
+      "branch": "feature/agent-enrollment-doctor",
       "status": "testing",
-      "goal": "Add a real isolated NexowirePrivate Win32 desktop with a private shell, hidden-desktop app launch/enumeration, manual user-only switching, and no automatic takeover of the Default input desktop; then use it as the execution surface for isolated private keyboard/pointer routing."
+      "goal": "Make native-agent setup self-diagnosing and easy to connect, including placeholder/credential detection, authenticated Hub probing, Tailscale MagicDNS discovery, and auth-gated Serve/Funnel exposure; then live-enroll DESKTOP-ONDD84S against the real Hub."
     }
   ]
 }
