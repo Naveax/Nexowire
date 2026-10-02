@@ -343,7 +343,7 @@ export async function bootstrapSelfHostedNode(
       await writeProtectedSecretFile(
         agentSecretFile,
         'agent-bearer-token',
-        agentToken,
+        agentIssued.token,
         { overwrite: false },
       );
 
@@ -397,7 +397,7 @@ export async function bootstrapSelfHostedNode(
   const agentEndpoint = `ws://127.0.0.1:${port}/agent`;
   const authProbe = await probeAgentHub(
     agentEndpoint,
-    agentIssued.token,
+    agentToken,
     5_000,
   );
   if (!authProbe.authenticated) {
