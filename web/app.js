@@ -121,7 +121,7 @@ $('login').addEventListener('click', () => {
     encodeURIComponent(window.location.pathname);
 });
 $('connect-device').addEventListener('click', () => {
-  window.location.href = '/connect';
+  window.location.href = '/connect.html';
 });
 
 load();
