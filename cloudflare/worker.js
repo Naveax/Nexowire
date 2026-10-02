@@ -1,21 +1,90 @@
-// Cloudflare Worker deployment adapter.
-// This file intentionally stays dependency-light. Production user authentication
-// is added in the next control-plane auth layer; until then API routes fail closed.
-
+import { timingSafeEqual } from 'node:crypto';
 import { D1ControlPlaneStore } from '../dist/src/product/d1-control-plane-store.js';
 import { ControlPlaneService } from '../dist/src/product/control-plane-service.js';
 import { createControlPlaneHttpHandler } from '../dist/src/product/control-plane-http.js';
+import {
+  clearSessionCookie,
+  sessionTokenFromRequest,
+  verifySessionToken,
+} from '../dist/src/product/control-plane-session.js';
+import {
+  githubOAuthCallback,
+  githubOAuthStart,
+} from '../dist/src/product/github-oauth.js';
 
-function fixedTimeSafeCapacity(env) {
+function boundedCapacity(env) {
   const raw = Number(env.NEXOWIRE_FREE_CAPACITY_PERCENT ?? '0');
   return Number.isFinite(raw)
     ? Math.max(0, Math.min(100, raw))
     : null;
 }
 
+function envValue(env, name) {
+  const value = String(env[name] ?? '').trim();
+  if (!value) throw new Error(name + ' is not configured.');
+  return value;
+}
+
+function safeSecretEqual(left, right) {
+  const a = Buffer.from(left, 'utf8');
+  const b = Buffer.from(right, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function oauthConfig(env) {
+  return {
+    clientId: envValue(env, 'GITHUB_CLIENT_ID'),
+    clientSecret: envValue(env, 'GITHUB_CLIENT_SECRET'),
+    sessionSecret: envValue(env, 'NEXOWIRE_SESSION_SECRET'),
+    ...(String(env.NEXOWIRE_ADMIN_GITHUB_ID ?? '').trim()
+      ? {
+          adminGitHubId: String(
+            env.NEXOWIRE_ADMIN_GITHUB_ID,
+          ).trim(),
+        }
+      : {}),
+  };
+}
+
+async function authenticate(request, env) {
+  const authorization =
+    request.headers.get('authorization') ?? '';
+  const prefix = 'Bearer ';
+  if (authorization.startsWith(prefix)) {
+    const supplied = authorization.slice(prefix.length).trim();
+    const expected = String(
+      env.NEXOWIRE_INTERNAL_SERVICE_TOKEN ?? '',
+    ).trim();
+    if (
+      expected &&
+      supplied &&
+      safeSecretEqual(supplied, expected)
+    ) {
+      return {
+        accountId: 'internal-service',
+        role: 'service',
+      };
+    }
+  }
+
+  const cookieToken = sessionTokenFromRequest(request);
+  if (!cookieToken) return null;
+  return verifySessionToken(
+    cookieToken,
+    envValue(env, 'NEXOWIRE_SESSION_SECRET'),
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const store = new D1ControlPlaneStore(env.DB);
+    const service = new ControlPlaneService(store, {
+      infrastructure: () => ({
+        freeCapacityPercent: boundedCapacity(env),
+        prepaidCapacityCredits: 0,
+      }),
+    });
 
     if (url.pathname === '/health') {
       return Response.json({
@@ -25,17 +94,46 @@ export default {
       });
     }
 
-    if (url.pathname.startsWith('/api/')) {
-      const store = new D1ControlPlaneStore(env.DB);
-      const service = new ControlPlaneService(store, {
-        infrastructure: () => ({
-          freeCapacityPercent: fixedTimeSafeCapacity(env),
-          prepaidCapacityCredits: 0,
-        }),
-      });
+    if (url.pathname === '/auth/github/start') {
+      try {
+        return githubOAuthStart(request, oauthConfig(env));
+      } catch {
+        return Response.json(
+          { error: 'AUTH_NOT_CONFIGURED' },
+          { status: 503 },
+        );
+      }
+    }
 
+    if (url.pathname === '/auth/github/callback') {
+      try {
+        return await githubOAuthCallback(
+          request,
+          service,
+          oauthConfig(env),
+        );
+      } catch {
+        return Response.json(
+          { error: 'AUTH_CALLBACK_FAILED' },
+          { status: 502 },
+        );
+      }
+    }
+
+    if (url.pathname === '/auth/logout') {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: '/',
+          'set-cookie': clearSessionCookie(),
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
+    if (url.pathname.startsWith('/api/')) {
       const handler = createControlPlaneHttpHandler(service, {
-        authenticate: async () => null,
+        authenticate: (req) => authenticate(req, env),
       });
       return handler(request);
     }
