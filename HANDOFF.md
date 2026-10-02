@@ -119,19 +119,17 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Nexowire v1.0.0 is released and there is no unfinished v1.0 implementation/publication work. The isolated `NexowirePrivate` Win32 desktop feature merged to `main` as commit `09f3ca57514702a60bfbed4fcfdd5fd1b335e82d`; CI run `36971770981` passed.
+PR #141 (`feature/agent-enrollment-doctor`) merged to `main` as `1904f1981bb02aef7517df589387436b8967d46f`. Merge CI run `36993286780` passed. The Windows global Nexowire installation on `DESKTOP-ONDD84S` was rebuilt from the merged feature tree and now exposes `agent enroll|doctor|status` plus Tailscale status/Serve/Funnel controls.
 
-The active branch is `feature/agent-enrollment-doctor`. It hardens native-agent onboarding so Scheduled Task state is not mistaken for a live connection, rejects placeholder Hub URLs, validates protected credential sources, probes Hub WebSocket authentication, reports Tailscale/MagicDNS status, and adds safe Tailscale Serve/Funnel CLI exposure. Public Funnel exposure fails closed until both MCP and native-agent authentication are configured.
-
-Live Windows validation on 2026-10-02 used `DESKTOP-ONDD84S`. Its previous launcher persisted `wss://HUB-ADRESI/agent` and referenced a missing DPAPI file, so the old `agent status` misleadingly reported lifecycle `ready` with no running PID. The new status correctly reports `runtimeState: configured`, `hubState: invalid-configuration`, the missing DPAPI source, and Tailscale connectivity. Tailscale is already connected on that PC with MagicDNS name `desktop-ondd84s.tail10f02d.ts.net`; Serve/Funnel are not yet configured.
+Live validation on 2026-10-02 shows the new PC itself is healthy enough to continue: Tailscale is connected as `desktop-ondd84s.tail10f02d.ts.net` / `100.116.23.60`, the stable Nexowire device ID is `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, and the new doctor correctly rejects the old placeholder `wss://HUB-ADRESI/agent` plus its missing DPAPI token file. The previously known `Naveax` Tailscale peer resolves as `naveax.tail10f02d.ts.net` / `100.88.128.85` but is currently offline, so live registration against that Hub cannot complete yet.
 
 ## Immediate next work
 
-1. Finish full repository verification and merge `feature/agent-enrollment-doctor`.
-2. Bring the actual Hub path online. Prefer Tailscale Serve/MagicDNS for private agent-to-Hub transport; use Tailscale Funnel only for the ChatGPT-facing public MCP endpoint and only after auth is configured.
-3. Enroll the new Windows PC using the real Hub `wss://.../agent` endpoint and a protected agent credential.
-4. Verify completion through Nexowire MCP: `devices_list` must show the stable device online, then `machine_snapshot` and `machine_health` must succeed.
-5. Continue private-surface cursor routing and isolated private keyboard/text/hotkey delivery after enrollment is stable.
+1. Add a safe one-command self-host bootstrap that can turn a Windows machine into Nexowire Hub + local Agent without plaintext token persistence, optionally exposing MCP through auth-gated Tailscale Funnel.
+2. Preserve a private/Tailnet-only agent path where practical; do not make public Funnel exposure a prerequisite for native-agent traffic.
+3. If the existing `Naveax` Hub returns online first, enroll `work-pc` against its real `wss://.../agent` endpoint instead of creating a competing Hub.
+4. Enrollment is complete only when Nexowire MCP `devices_list` shows the stable ID online and `machine_snapshot` plus `machine_health` succeed.
+5. Continue private-surface cursor routing and isolated private keyboard/text/hotkey delivery after remote enrollment is stable.
 6. Keep physical-console pointer/keyboard/UIA/clipboard mutations default-denied unless the user explicitly grants console control.
 
 ## Known machine note
