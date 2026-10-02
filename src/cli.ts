@@ -26,7 +26,7 @@ Nexowire ${NEXOWIRE_VERSION}
 Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
-  nexowire agent [run|install|status|start|stop|restart|uninstall]\n                   Run or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
+  nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
   nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
