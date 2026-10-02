@@ -45,6 +45,7 @@ export interface UsageAtomicChargeInput {
   credits: number;
   billingMode: BillingMode;
   monthlyCredits: number | null;
+  chargedAt: string;
 }
 
 export type UsageAtomicChargeResult =

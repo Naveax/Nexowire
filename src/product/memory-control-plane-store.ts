@@ -156,7 +156,7 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
       periodKey: input.periodKey,
       eventId: input.eventId,
       credits: input.credits,
-      chargedAt: new Date().toISOString(),
+      chargedAt: input.chargedAt,
     });
 
     return {
