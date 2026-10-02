@@ -36,6 +36,7 @@ interface SelfHostState {
 
 export interface SelfHostBootstrapResult {
   bootstrapped: true;
+  resumed: boolean;
   state: Omit<SelfHostState, 'mcpSecretFile' | 'agentSecretFile'> & {
     protectedSecrets: true;
   };
@@ -68,6 +69,23 @@ function stateFile(homeDir = os.homedir()): string {
 
 function secretDir(homeDir = os.homedir()): string {
   return path.join(homeDir, '.nexowire', 'secrets');
+}
+
+async function fileExists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function readState(
@@ -207,60 +225,161 @@ export async function bootstrapSelfHostedNode(
 
   const homeDir = options.homeDir ?? os.homedir();
   const existing = await readState(homeDir);
-  if (existing) {
+  const requestedPort = boundedPort(options.port ?? configInput.port);
+  const requestedDeviceName =
+    options.deviceName?.trim() || os.hostname();
+  if (!requestedDeviceName || requestedDeviceName.length > 128) {
+    throw new Error('Device name must be 1-128 characters.');
+  }
+
+  if (
+    existing &&
+    options.port !== undefined &&
+    existing.port !== requestedPort
+  ) {
     throw new Error(
-      'This machine is already self-host bootstrapped. Run nexowire node status instead of issuing duplicate credentials.',
+      'Existing self-host state uses a different port; refusing an implicit migration.',
+    );
+  }
+  if (
+    existing &&
+    options.deviceName !== undefined &&
+    existing.deviceName !== requestedDeviceName
+  ) {
+    throw new Error(
+      'Existing self-host state uses a different device name; refusing an implicit migration.',
+    );
+  }
+  if (existing && existing.stateDir !== configInput.stateDir) {
+    throw new Error(
+      'Existing self-host state uses a different Hub state directory.',
     );
   }
 
-  const port = boundedPort(options.port ?? configInput.port);
-  const deviceName = options.deviceName?.trim() || os.hostname();
-  if (!deviceName || deviceName.length > 128) {
-    throw new Error('Device name must be 1-128 characters.');
-  }
-  const credentialTtl = ttlMs(options.ttlDays ?? 365);
-  const stateDir = configInput.stateDir;
+  const stateDir = existing?.stateDir ?? configInput.stateDir;
   const store = new CredentialStore(stateDir);
   await store.initialize();
 
-  const [mcpIssued, agentIssued] = await Promise.all([
-    store.issue('mcp', {
+  let state: SelfHostState;
+  let mcpToken: string;
+  let agentToken: string;
+  const resumed = existing !== null;
+
+  if (existing) {
+    state = {
+      ...existing,
+      funnelRequested:
+        existing.funnelRequested ||
+        options.tailscaleFunnel === true,
+    };
+    mcpToken = readProtectedSecretFile(
+      state.mcpSecretFile,
+      'mcp-bearer-token',
+      'self-host MCP bearer token',
+    );
+    agentToken = readProtectedSecretFile(
+      state.agentSecretFile,
+      'agent-bearer-token',
+      'self-host agent bearer token',
+    );
+    if (
+      store.authenticate('mcp', mcpToken)?.id !==
+        state.mcpCredentialId ||
+      store.authenticate('agent', agentToken)?.id !==
+        state.agentCredentialId
+    ) {
+      throw new Error(
+        'Self-host bootstrap credentials are expired, revoked, or inconsistent with protected local state.',
+      );
+    }
+    if (state.funnelRequested !== existing.funnelRequested) {
+      await writeState(state, homeDir);
+    }
+  } else {
+    const credentialTtl = ttlMs(options.ttlDays ?? 365);
+    const secrets = secretDir(homeDir);
+    const mcpSecretFile = path.join(
+      secrets,
+      'self-host-mcp-token.dpapi.json',
+    );
+    const agentSecretFile = path.join(
+      secrets,
+      'self-host-agent-token.dpapi.json',
+    );
+    if (
+      (await fileExists(mcpSecretFile)) ||
+      (await fileExists(agentSecretFile))
+    ) {
+      throw new Error(
+        'Protected self-host secret files already exist without bootstrap state; refusing to overwrite ambiguous credentials.',
+      );
+    }
+
+    const mcpIssued = await store.issue('mcp', {
       name: 'self-host-chatgpt',
       role: 'admin',
       ttlMs: credentialTtl,
-    }),
-    store.issue('agent', {
-      name: 'self-host-local-agent',
-      ttlMs: credentialTtl,
-    }),
-  ]);
+    });
+    let agentIssued:
+      | Awaited<ReturnType<CredentialStore['issue']>>
+      | undefined;
+    try {
+      agentIssued = await store.issue('agent', {
+        name: 'self-host-local-agent',
+        ttlMs: credentialTtl,
+      });
+    } catch (error) {
+      await store.revoke(mcpIssued.credential.id).catch(() => undefined);
+      throw error;
+    }
 
-  const secrets = secretDir(homeDir);
-  const mcpSecretFile = path.join(
-    secrets,
-    'self-host-mcp-token.dpapi.json',
-  );
-  const agentSecretFile = path.join(
-    secrets,
-    'self-host-agent-token.dpapi.json',
-  );
+    try {
+      await writeProtectedSecretFile(
+        mcpSecretFile,
+        'mcp-bearer-token',
+        mcpIssued.token,
+        { overwrite: false },
+      );
+      await writeProtectedSecretFile(
+        agentSecretFile,
+        'agent-bearer-token',
+        agentToken,
+        { overwrite: false },
+      );
 
-  await writeProtectedSecretFile(
-    mcpSecretFile,
-    'mcp-bearer-token',
-    mcpIssued.token,
-    { overwrite: false },
-  );
-  await writeProtectedSecretFile(
-    agentSecretFile,
-    'agent-bearer-token',
-    agentIssued.token,
-    { overwrite: false },
-  );
+      state = {
+        version: 1,
+        createdAt: new Date().toISOString(),
+        stateDir,
+        port: requestedPort,
+        deviceName: requestedDeviceName,
+        mcpCredentialId: mcpIssued.credential.id,
+        agentCredentialId: agentIssued.credential.id,
+        mcpSecretFile,
+        agentSecretFile,
+        funnelRequested: options.tailscaleFunnel === true,
+      };
+      await writeState(state, homeDir);
+    } catch (error) {
+      await Promise.all([
+        store.revoke(mcpIssued.credential.id).catch(() => undefined),
+        store.revoke(agentIssued.credential.id).catch(() => undefined),
+        fs.rm(mcpSecretFile, { force: true }).catch(() => undefined),
+        fs.rm(agentSecretFile, { force: true }).catch(() => undefined),
+      ]);
+      throw error;
+    }
+
+    mcpToken = mcpIssued.token;
+    agentToken = agentIssued.token;
+  }
+
+  const port = state.port;
+  const deviceName = state.deviceName;
 
   const hubEnv: NodeJS.ProcessEnv = {
     ...process.env,
-    NEXOWIRE_STATE_DIR: stateDir,
+    NEXOWIRE_STATE_DIR: state.stateDir,
     NEXOWIRE_HTTP_HOST: '127.0.0.1',
     NEXOWIRE_HTTP_PORT: String(port),
   };
@@ -296,7 +415,7 @@ export async function bootstrapSelfHostedNode(
         ? options.allowedRoots.map((entry) => path.resolve(entry))
         : [homeDir]
     ).join(path.delimiter),
-    NEXOWIRE_AGENT_TOKEN_DPAPI_FILE: agentSecretFile,
+    NEXOWIRE_AGENT_TOKEN_DPAPI_FILE: state.agentSecretFile,
   };
   delete agentEnv.NEXOWIRE_AGENT_TOKEN;
   delete agentEnv.NEXOWIRE_AGENT_TOKENS;
@@ -309,36 +428,22 @@ export async function bootstrapSelfHostedNode(
   });
   health = await waitForLocalAgent(port);
 
-  const state: SelfHostState = {
-    version: 1,
-    createdAt: new Date().toISOString(),
-    stateDir,
-    port,
-    deviceName,
-    mcpCredentialId: mcpIssued.credential.id,
-    agentCredentialId: agentIssued.credential.id,
-    mcpSecretFile,
-    agentSecretFile,
-    funnelRequested: options.tailscaleFunnel === true,
-  };
-  await writeState(state, homeDir);
-
   let funnel: SelfHostBootstrapResult['funnel'] = {
-    requested: options.tailscaleFunnel === true,
+    requested: state.funnelRequested,
     configured: false,
     mcpUrl: null,
     agentUrl: null,
     error: null,
   };
 
-  if (options.tailscaleFunnel) {
+  if (state.funnelRequested) {
     try {
       const exposure = await configureTailscaleExposure(
         {
           ...configInput,
           host: '127.0.0.1',
           port,
-          stateDir,
+          stateDir: state.stateDir,
         },
         'funnel',
       );
@@ -369,6 +474,7 @@ export async function bootstrapSelfHostedNode(
 
   return {
     bootstrapped: true,
+    resumed,
     state: {
       version: state.version,
       createdAt: state.createdAt,
@@ -435,7 +541,7 @@ export async function selfHostedNodeStatus(
     }),
     tailscale: await discoverTailscale(),
     connectorCommand: 'nexowire node connector',
-    stateDir: configInput.stateDir,
+    stateDir: state.stateDir,
   };
 }
 
