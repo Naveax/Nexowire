@@ -1,0 +1,48 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  buildHubLauncher,
+  persistedHubEnvironment,
+} from '../src/hub/hub-lifecycle.js';
+
+test('Hub launcher persists only non-secret self-host configuration', () => {
+  const env = {
+    NEXOWIRE_STATE_DIR: 'C:\\Users\\User\\.nexowire\\hub',
+    NEXOWIRE_HTTP_HOST: '127.0.0.1',
+    NEXOWIRE_HTTP_PORT: '43110',
+  };
+
+  assert.deepEqual(persistedHubEnvironment(env), env);
+
+  const launcher = buildHubLauncher({
+    env,
+    execPath: 'C:\\Program Files\\nodejs\\node.exe',
+    cliEntrypoint: 'C:\\Tools\\nexowire\\dist\\src\\cli.js',
+  });
+
+  assert.match(launcher, /NEXOWIRE_STATE_DIR/);
+  assert.match(launcher, /NEXOWIRE_HTTP_HOST/);
+  assert.match(launcher, /NEXOWIRE_HTTP_PORT/);
+  assert.match(launcher, /'http'/);
+  assert.equal(launcher.includes('NEXOWIRE_MCP_BEARER_TOKEN='), false);
+  assert.equal(launcher.includes('NEXOWIRE_AGENT_TOKEN='), false);
+});
+
+test('Hub lifecycle refuses plaintext bearer persistence', () => {
+  for (const name of [
+    'NEXOWIRE_MCP_BEARER_TOKEN',
+    'NEXOWIRE_MCP_BEARER_TOKENS',
+    'NEXOWIRE_AGENT_TOKEN',
+    'NEXOWIRE_AGENT_TOKENS',
+  ]) {
+    assert.throws(
+      () =>
+        buildHubLauncher({
+          env: { [name]: 'secret' },
+          execPath: 'node',
+          cliEntrypoint: 'cli.js',
+        }),
+      /refuses to persist plaintext secret variable/,
+    );
+  }
+});
