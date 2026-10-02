@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Nexowire cihaz bağla</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Nexowire</div>
+    <div id="connect-pill" class="pill muted">Hazırlanıyor</div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Cihaz bağlantısı</p>
+        <h1>Bu bilgisayarı bağla</h1>
+        <p class="subtle">
+          Cihaz yalnız onayından sonra Nexowire hesabına eklenir.
+        </p>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <span class="label">Cihaz</span>
+        <strong id="device-name">—</strong>
+        <small id="platform">—</small>
+      </article>
+      <article class="card">
+        <span class="label">Hesap planı</span>
+        <strong id="plan">—</strong>
+        <small id="usage">—</small>
+      </article>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Onay</p>
+        <h2 id="status-title">Oturum kontrol ediliyor</h2>
+      </div>
+    </section>
+
+    <section class="card">
+      <p id="status-text" class="subtle">
+        Hesap bilgisi alınıyor.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:auto">
+        <button id="approve" class="primary" disabled>BAĞLA</button>
+        <a href="/" class="secondary" style="text-decoration:none">İptal</a>
+      </div>
+    </section>
+
+    <section id="error-panel" class="error-panel hidden">
+      <strong>Bağlantı tamamlanamadı.</strong>
+      <p id="error-message"></p>
+    </section>
+  </main>
+
+  <script type="module" src="./connect.js"></script>
+</body>
+</html>
