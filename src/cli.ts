@@ -18,6 +18,8 @@ import { evaluateDeploymentReadiness } from './security/deployment-readiness.js'
 import { runDeploymentOnboardingCommand } from './security/deployment-onboarding.js';
 import { NEXOWIRE_VERSION } from './version.js';
 import { runTailscaleCommand } from './tailscale-exposure.js';
+import { runHubLifecycleCommand } from './hub/hub-lifecycle.js';
+import { runSelfHostedNodeCommand } from './self-host-bootstrap.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -27,7 +29,7 @@ Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
-  nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
+  nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire hub [install|status|start|stop|restart|uninstall]  Manage Hub autostart\n  nexowire node [bootstrap|status|connector]  Bootstrap a self-hosted Hub + local Agent\n  nexowire privileged-broker [run|install|status|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
@@ -83,6 +85,21 @@ async function main(): Promise<void> {
 
   if (command === 'tailscale') {
     await runTailscaleCommand(
+      loadConfig(),
+      process.argv.slice(3),
+    );
+    return;
+  }
+
+  if (command === 'hub') {
+    await runHubLifecycleCommand(
+      process.argv.slice(3),
+    );
+    return;
+  }
+
+  if (command === 'node') {
+    await runSelfHostedNodeCommand(
       loadConfig(),
       process.argv.slice(3),
     );
