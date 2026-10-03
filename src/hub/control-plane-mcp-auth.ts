@@ -4,6 +4,7 @@ import type { CredentialRole } from '../security/credential-store.js';
 export interface RemoteMcpAuthorization {
   accountId: string;
   role: CredentialRole;
+  allowedDeviceIds: string[];
 }
 
 export interface RemoteMcpUsageDecision {
@@ -122,6 +123,13 @@ export class ControlPlaneMcpClient {
       !body.accountId.trim() ||
       !['user', 'operator', 'admin'].includes(
         String(body.role),
+      ) ||
+      !Array.isArray(body.allowedDeviceIds) ||
+      body.allowedDeviceIds.some(
+        (value) =>
+          typeof value !== 'string' ||
+          !value.trim() ||
+          value.length > 128,
       )
     ) {
       return undefined;
@@ -130,6 +138,13 @@ export class ControlPlaneMcpClient {
     return {
       accountId: body.accountId.trim(),
       role: body.role as CredentialRole,
+      allowedDeviceIds: [
+        ...new Set(
+          (body.allowedDeviceIds as string[]).map(
+            (value) => value.trim(),
+          ),
+        ),
+      ],
     };
   }
 
