@@ -162,6 +162,59 @@ export default {
       });
     }
 
+    if (
+      request.method === 'POST' &&
+      url.pathname ===
+        '/api/v1/internal/mcp/authenticate'
+    ) {
+      const caller = await authenticate(request, env);
+      if (!caller || caller.role !== 'service') {
+        return Response.json(
+          { error: 'SERVICE_REQUIRED' },
+          { status: 403 },
+        );
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json(
+          { error: 'INVALID_REQUEST' },
+          { status: 400 },
+        );
+      }
+      const accessToken =
+        typeof body?.accessToken === 'string'
+          ? body.accessToken
+          : '';
+      const tokenIdentity =
+        await oauth.authenticateAccessToken(
+          accessToken,
+        );
+      if (!tokenIdentity) {
+        return Response.json({
+          authenticated: false,
+        });
+      }
+
+      const account = await store.getAccount(
+        tokenIdentity.accountId,
+      );
+      if (!account) {
+        return Response.json({
+          authenticated: false,
+        });
+      }
+
+      return Response.json({
+        authenticated: true,
+        accountId: account.id,
+        role: account.admin ? 'admin' : 'user',
+        scopes: tokenIdentity.scopes,
+      });
+    }
+
     if (url.pathname.startsWith('/api/')) {
       const agentUrl = String(
         env.NEXOWIRE_AGENT_WS_URL ?? '',
