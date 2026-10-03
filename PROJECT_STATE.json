@@ -118,7 +118,13 @@
       "id": "agent-enrollment-tailscale",
       "status": "partial",
       "priority": 17,
-      "summary": "PR #143 merged and live self-host bootstrap is complete on DESKTOP-ONDD84S: Hub+Agent autostart, protected credentials, local MCP devices_list/machine_snapshot/machine_health all pass. Remaining work is tailnet Serve/Funnel enablement and ChatGPT-side remote MCP connector verification."
+      "summary": "Live self-host bootstrap is complete on DESKTOP-ONDD84S with Hub+Agent autostart, stable device identity, protected credentials, and healthy Tailscale Serve/Funnel at nexowire.tail10f02d.ts.net. Remaining work is hosted control-plane deployment plus ChatGPT-side OAuth MCP acceptance."
+    },
+    {
+      "id": "hosted-control-plane",
+      "status": "partial",
+      "priority": 18,
+      "summary": "Hosted product/control-plane code is implemented: plan/quota policy, D1 schema/store, GitHub login, device-anchor anti-abuse, one-click pairing, per-device agent auth, MCP OAuth 2.1/PKCE, account device isolation, usage metering, and automated Cloudflare deployment. Remaining work requires production Cloudflare/GitHub OAuth credentials, first deploy, live Hub service-token wiring, and ChatGPT end-to-end acceptance."
     }
   ],
   "standardVerification": [
@@ -178,9 +184,14 @@
     "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected.",
     "Tailscale is an optional first-party connectivity aid, not a Nexowire runtime dependency; public Funnel exposure must remain auth-gated.",
     "PR #141 merged as 1904f1981bb02aef7517df589387436b8967d46f and merge CI 36993286780 passed; DESKTOP-ONDD84S has merged onboarding/Tailscale code installed, while live registration remains blocked on a real reachable Hub and credential.",
-    "PR #143 merged as 8e217e0b9ce93ecc7c6881c7163b6458c8610252 with merge CI 36994785084 success. Live self-host bootstrap on DESKTOP-ONDD84S has Hub and Agent running/autostart; local authenticated MCP devices_list, machine_snapshot, and machine_health pass. Tailscale Serve/Funnel require tailnet account enablement before ChatGPT remote ingress can be completed."
+    "Tailscale Serve and Funnel are live on nexowire.tail10f02d.ts.net; public health is verified and current deployment variables point to https://nexowire.tail10f02d.ts.net/mcp and wss://nexowire.tail10f02d.ts.net/agent.",
+    "Live bootstrap on DESKTOP-ONDD84S was re-run from main 73c563ff631ea782733f6a71bfb021452850a1f3; the Hub PID stayed unchanged when launcher config was unchanged, validating the restart-on-drift fix on the real machine.",
+    "Hosted Cloudflare deployment is blocked only on external account credentials/authorization: Wrangler is not yet authenticated and the GitHub Actions deployment secret set is not configured."
   ],
-  "lastStateSync": "2026-10-02",
-  "lastVerifiedMain": "8e217e0b9ce93ecc7c6881c7163b6458c8610252",
-  "activeWork": []
+  "lastStateSync": "2026-10-03",
+  "lastVerifiedMain": "73c563ff631ea782733f6a71bfb021452850a1f3",
+  "activeWork": [
+    "cloudflare-production-control-plane-deploy",
+    "chatgpt-oauth-mcp-acceptance"
+  ]
 }
