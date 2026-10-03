@@ -14,6 +14,13 @@ function optionalEnv(name) {
   return value || undefined;
 }
 
+const REQUIRED_SECRETS = [
+  'GITHUB_CLIENT_ID',
+  'GITHUB_CLIENT_SECRET',
+  'NEXOWIRE_SESSION_SECRET',
+  'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+];
+
 function boundedPercent(raw) {
   if (raw === undefined) return '0';
   const value = Number(raw);
@@ -125,15 +132,6 @@ async function main() {
       : {}),
   };
 
-  template.secrets = {
-    required: [
-      'GITHUB_CLIENT_ID',
-      'GITHUB_CLIENT_SECRET',
-      'NEXOWIRE_SESSION_SECRET',
-      'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
-    ],
-  };
-
   await fs.mkdir(
     path.dirname(outputPath),
     { recursive: true },
@@ -153,8 +151,7 @@ async function main() {
         databaseName:
           template.d1_databases[0].database_name,
         vars: Object.keys(template.vars).sort(),
-        requiredSecrets:
-          template.secrets.required,
+        requiredSecrets: REQUIRED_SECRETS,
       },
       null,
       2,

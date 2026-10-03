@@ -32,7 +32,7 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
   );
 
   try {
-    execFileSync(
+    const stdout = execFileSync(
       process.execPath,
       [
         path.join(
@@ -55,16 +55,19 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
           NEXOWIRE_ADMIN_GITHUB_ID: '123456',
           NEXOWIRE_FREE_CAPACITY_PERCENT: '75',
         },
-        stdio: 'pipe',
+        encoding: 'utf8',
       },
     );
+    const summary = JSON.parse(stdout) as {
+      requiredSecrets: string[];
+    };
 
     const runtime = JSON.parse(
       await fs.readFile(output, 'utf8'),
     ) as {
       d1_databases: Array<Record<string, unknown>>;
       vars: Record<string, string>;
-      secrets: { required: string[] };
+      secrets?: unknown;
     };
 
     assert.equal(
@@ -91,8 +94,9 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
       runtime.vars.NEXOWIRE_ADMIN_GITHUB_ID,
       '123456',
     );
+    assert.equal(runtime.secrets, undefined);
     assert.deepEqual(
-      runtime.secrets.required,
+      summary.requiredSecrets,
       [
         'GITHUB_CLIENT_ID',
         'GITHUB_CLIENT_SECRET',
