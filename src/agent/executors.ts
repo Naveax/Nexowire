@@ -15,6 +15,7 @@ import { executeWindowsAccessibilityCapability } from './windows-accessibility.j
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
+import { captureWindowsPrivateScreen } from './windows-private-screen.js';
 import {
   assertPhysicalConsoleGrant,
   executeWindowsConsoleControlCapability,
@@ -2222,6 +2223,8 @@ export async function executeCapability(
     case 'windows.virtual_pointer.style':
     case 'windows.virtual_pointer.visibility':
       return await executeWindowsVirtualPointerCapability(capability, input);
+    case 'windows.private_screen.capture':
+      return await captureWindowsPrivateScreen(input);
     case 'windows.private_desktop.status':
     case 'windows.private_desktop.start':
     case 'windows.private_desktop.stop':
