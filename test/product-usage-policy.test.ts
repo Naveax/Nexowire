@@ -43,6 +43,19 @@ test('premium private-control tools consume heavier usage credits', () => {
       denialReason: null,
     },
   );
+  assert.deepEqual(
+    quoteToolUsage(
+      PRODUCT_PLANS.plus,
+      'windows_private_pointer_click',
+    ),
+    {
+      allowed: true,
+      credits: 2,
+      multiplier: 2,
+      requiredFeature: 'private-pointer',
+      denialReason: null,
+    },
+  );
   assert.equal(
     quoteToolUsage(
       PRODUCT_PLANS.plus,

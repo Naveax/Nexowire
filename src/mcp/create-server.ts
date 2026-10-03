@@ -3140,6 +3140,148 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_pointer_move',
+    {
+      title: 'Move Nexowire private pointer',
+      description:
+        'Route a mouse-move message to one exact top-level HWND on the isolated NexowirePrivate desktop. Client-pixel coordinates are bounded to that HWND and the physical Windows cursor is not moved.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        x: z.number().int().min(0).max(32_767),
+        y: z.number().int().min(0).max(32_767),
+      },
+    },
+    async ({ device_id, provider_id, hwnd, x, y }) =>
+      await execute(
+        ctx,
+        'windows.private_pointer.move',
+        { hwnd, x, y },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_pointer_click',
+    {
+      title: 'Click Nexowire private desktop HWND',
+      description:
+        'Route one to three bounded mouse clicks to an exact HWND on NexowirePrivate without switching desktops or touching the physical cursor.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        x: z.number().int().min(0).max(32_767),
+        y: z.number().int().min(0).max(32_767),
+        button: z.enum(['left', 'right', 'middle']).optional(),
+        clicks: z.number().int().min(1).max(3).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      x,
+      y,
+      button,
+      clicks,
+    }) =>
+      await execute(
+        ctx,
+        'windows.private_pointer.click',
+        {
+          hwnd,
+          x,
+          y,
+          ...(button ? { button } : {}),
+          ...(clicks !== undefined ? { clicks } : {}),
+        },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_keyboard_type',
+    {
+      title: 'Type text into Nexowire private HWND',
+      description:
+        'Route Unicode WM_CHAR text directly to one exact top-level HWND on NexowirePrivate. This does not use SendInput and does not inject into the user-visible input desktop.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        text: z.string().min(1).max(20_000),
+        interval_ms: z.number().int().min(0).max(100).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      hwnd,
+      text,
+      interval_ms,
+    }) =>
+      await execute(
+        ctx,
+        'windows.private_keyboard.type',
+        {
+          hwnd,
+          text,
+          ...(interval_ms !== undefined
+            ? { interval_ms }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        Math.max(
+          30_000,
+          text.length * (interval_ms ?? 0) + 10_000,
+        ),
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_keyboard_hotkey',
+    {
+      title: 'Send hotkey to Nexowire private HWND',
+      description:
+        'Route a bounded key chord directly to one exact top-level HWND on NexowirePrivate without switching the visible input desktop. Supports modifiers, navigation keys, A-Z, 0-9, and F1-F24.',
+      inputSchema: {
+        ...targetFields,
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        keys: z.array(z.string().min(1).max(32)).min(1).max(8),
+      },
+    },
+    async ({ device_id, provider_id, hwnd, keys }) =>
+      await execute(
+        ctx,
+        'windows.private_keyboard.hotkey',
+        { hwnd, keys },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_processes',
     {
       title: 'List Windows processes',

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -20,6 +21,10 @@ test('private desktop status/windows are read-only while lifecycle/launch mutate
     'windows.private_desktop.start',
     'windows.private_desktop.stop',
     'windows.private_desktop.launch',
+    'windows.private_pointer.move',
+    'windows.private_pointer.click',
+    'windows.private_keyboard.type',
+    'windows.private_keyboard.hotkey',
   ]) {
     assert.equal(isReadOnlyCapability(capability), false, capability);
   }
@@ -253,5 +258,357 @@ test(
     assert.equal(stopped.data.running, false);
     assert.equal(stopped.data.stopped, true);
     assert.equal(stopped.data.inputDesktop, 'Default');
+  },
+);
+
+
+test(
+  'private desktop routes pointer and keyboard messages without switching the visible desktop',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'nexowire-private-input-'),
+    );
+    const fixture = path.join(root, 'input-fixture.ps1');
+    const privateLog = path.join(root, 'private.log');
+    const privateHandleFile = path.join(root, 'private.hwnd');
+    const defaultLog = path.join(root, 'default.log');
+    const defaultHandleFile = path.join(root, 'default.hwnd');
+
+    const oldRoot = process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+    const oldSkip = process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT;
+    process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR = root;
+    process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT = '1';
+
+    await fs.writeFile(
+      fixture,
+      [
+        "param([string]$Log,[string]$HandleFile)",
+        "$ErrorActionPreference='Stop'",
+        "Add-Type -AssemblyName System.Windows.Forms",
+        "Add-Type -AssemblyName System.Drawing",
+        "$source=@'",
+        "using System;",
+        "using System.IO;",
+        "using System.Windows.Forms;",
+        "public sealed class NxPrivateInputFixture : Form {",
+        "  private readonly string logPath;",
+        "  private readonly string handlePath;",
+        "  public NxPrivateInputFixture(string log, string handle) {",
+        "    logPath = log;",
+        "    handlePath = handle;",
+        "    Text = \"Nexowire Private Input Fixture\";",
+        "    Width = 640;",
+        "    Height = 360;",
+        "    StartPosition = FormStartPosition.CenterScreen;",
+        "    Shown += delegate {",
+        "      File.WriteAllText(handlePath, \"0x\" + Handle.ToInt64().ToString(\"X\"));",
+        "    };",
+        "  }",
+        "  protected override void WndProc(ref Message m) {",
+        "    if (m.Msg == 0x0200 || m.Msg == 0x0201 || m.Msg == 0x0202 ||",
+        "        m.Msg == 0x0100 || m.Msg == 0x0101 || m.Msg == 0x0102) {",
+        "      long raw = m.LParam.ToInt64();",
+        "      int x = (short)(raw & 0xffff);",
+        "      int y = (short)((raw >> 16) & 0xffff);",
+        "      File.AppendAllText(",
+        "        logPath,",
+        "        m.Msg.ToString(\"X4\") + \" : \" + m.WParam.ToInt64() + \" : \" + x + \" : \" + y + Environment.NewLine",
+        "      );",
+        "    }",
+        "    base.WndProc(ref m);",
+        "  }",
+        "}",
+        "'@",
+        "Add-Type -TypeDefinition $source -ReferencedAssemblies @('System.Windows.Forms.dll','System.Drawing.dll')",
+        "[System.Windows.Forms.Application]::EnableVisualStyles()",
+        "$form=[NxPrivateInputFixture]::new($Log,$HandleFile)",
+        "[System.Windows.Forms.Application]::Run($form)",
+      ].join('\n'),
+      'utf8',
+    );
+
+    let defaultProcess:
+      | ReturnType<typeof spawn>
+      | undefined;
+
+    const waitText = async (
+      file: string,
+      timeoutMs = 8_000,
+    ): Promise<string> => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        try {
+          const value = (
+            await fs.readFile(file, 'utf8')
+          ).trim();
+          if (value) return value;
+        } catch {
+          // Keep polling until the fixture is ready.
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, 100),
+        );
+      }
+      throw new Error(
+        'Timed out waiting for fixture file: ' + file,
+      );
+    };
+
+    t.after(async () => {
+      if (
+        defaultProcess &&
+        defaultProcess.exitCode === null
+      ) {
+        try {
+          defaultProcess.kill();
+        } catch {
+          // Best effort cleanup.
+        }
+      }
+
+      try {
+        await executeWindowsPrivateDesktopCapability(
+          'windows.private_desktop.stop',
+          {},
+        );
+      } catch {
+        // Best effort cleanup.
+      }
+
+      if (oldRoot === undefined) {
+        delete process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+      } else {
+        process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR = oldRoot;
+      }
+      if (oldSkip === undefined) {
+        delete process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT;
+      } else {
+        process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT = oldSkip;
+      }
+
+      for (let i = 0; i < 20; i += 1) {
+        try {
+          await fs.rm(root, {
+            recursive: true,
+            force: true,
+          });
+          break;
+        } catch {
+          await new Promise((resolve) =>
+            setTimeout(resolve, 100),
+          );
+        }
+      }
+    });
+
+    await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.start',
+      { create_shortcut: false },
+    );
+
+    await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.launch',
+      {
+        executable: 'powershell.exe',
+        args: [
+          '-NoLogo',
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-STA',
+          '-File',
+          fixture,
+          '-Log',
+          privateLog,
+          '-HandleFile',
+          privateHandleFile,
+        ],
+      },
+    );
+
+    const privateHwnd = await waitText(
+      privateHandleFile,
+    );
+    assert.match(
+      privateHwnd,
+      /^0x[0-9A-F]+$/i,
+    );
+
+    defaultProcess = spawn(
+      'powershell.exe',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-STA',
+        '-File',
+        fixture,
+        '-Log',
+        defaultLog,
+        '-HandleFile',
+        defaultHandleFile,
+      ],
+      {
+        windowsHide: true,
+        stdio: 'ignore',
+      },
+    );
+
+    const defaultHwnd = await waitText(
+      defaultHandleFile,
+    );
+    assert.match(
+      defaultHwnd,
+      /^0x[0-9A-F]+$/i,
+    );
+
+    const move = (await executeWindowsPrivateDesktopCapability(
+      'windows.private_pointer.move',
+      {
+        hwnd: privateHwnd,
+        x: 40,
+        y: 50,
+      },
+    )) as {
+      data: {
+        inputDesktop: string;
+        touchesSystemCursor: boolean;
+        visibleDesktopChanged: boolean;
+      };
+    };
+    assert.equal(move.data.inputDesktop, 'Default');
+    assert.equal(move.data.touchesSystemCursor, false);
+    assert.equal(move.data.visibleDesktopChanged, false);
+
+    const click = (await executeWindowsPrivateDesktopCapability(
+      'windows.private_pointer.click',
+      {
+        hwnd: privateHwnd,
+        x: 45,
+        y: 55,
+        button: 'left',
+        clicks: 1,
+      },
+    )) as {
+      data: {
+        inputDesktop: string;
+        touchesSystemCursor: boolean;
+      };
+    };
+    assert.equal(click.data.inputDesktop, 'Default');
+    assert.equal(click.data.touchesSystemCursor, false);
+
+    const typed = (await executeWindowsPrivateDesktopCapability(
+      'windows.private_keyboard.type',
+      {
+        hwnd: privateHwnd,
+        text: 'Hi',
+      },
+    )) as {
+      data: {
+        inputDesktop: string;
+        charsSent: number;
+        touchesSystemKeyboard: boolean;
+      };
+    };
+    assert.equal(typed.data.inputDesktop, 'Default');
+    assert.equal(typed.data.charsSent, 2);
+    assert.equal(
+      typed.data.touchesSystemKeyboard,
+      false,
+    );
+
+    const hotkey = (await executeWindowsPrivateDesktopCapability(
+      'windows.private_keyboard.hotkey',
+      {
+        hwnd: privateHwnd,
+        keys: ['CTRL', 'A'],
+      },
+    )) as {
+      data: {
+        inputDesktop: string;
+        keyCount: number;
+        touchesSystemKeyboard: boolean;
+      };
+    };
+    assert.equal(hotkey.data.inputDesktop, 'Default');
+    assert.equal(hotkey.data.keyCount, 2);
+    assert.equal(
+      hotkey.data.touchesSystemKeyboard,
+      false,
+    );
+
+    const deadline = Date.now() + 5_000;
+    let log = '';
+    while (Date.now() < deadline) {
+      try {
+        log = await fs.readFile(privateLog, 'utf8');
+      } catch {
+        log = '';
+      }
+      if (
+        log.includes('0200 : 0 : 40 : 50') &&
+        log.includes('0201 : 1 : 45 : 55') &&
+        log.includes('0202 : 0 : 45 : 55') &&
+        log.includes('0102 : 72 : 0 : 0') &&
+        log.includes('0102 : 105 : 0 : 0') &&
+        log.includes('0100 : 17 : 0 : 0') &&
+        log.includes('0100 : 65 : 0 : 0') &&
+        log.includes('0101 : 65 : 0 : 0') &&
+        log.includes('0101 : 17 : 0 : 0')
+      ) {
+        break;
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, 100),
+      );
+    }
+
+    assert.match(log, /0200 : 0 : 40 : 50/);
+    assert.match(log, /0201 : 1 : 45 : 55/);
+    assert.match(log, /0202 : 0 : 45 : 55/);
+    assert.match(log, /0102 : 72 : 0 : 0/);
+    assert.match(log, /0102 : 105 : 0 : 0/);
+    assert.match(log, /0100 : 17 : 0 : 0/);
+    assert.match(log, /0100 : 65 : 0 : 0/);
+    assert.match(log, /0101 : 65 : 0 : 0/);
+    assert.match(log, /0101 : 17 : 0 : 0/);
+
+    await assert.rejects(
+      executeWindowsPrivateDesktopCapability(
+        'windows.private_pointer.click',
+        {
+          hwnd: defaultHwnd,
+          x: 20,
+          y: 20,
+          button: 'left',
+        },
+      ),
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code ===
+          'WINDOW_NOT_PRIVATE_DESKTOP',
+    );
+
+    const status = (await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.status',
+      {},
+    )) as {
+      data: {
+        running: boolean;
+        inputDesktop: string;
+        visibleDesktopChanged: boolean;
+      };
+    };
+    assert.equal(status.data.running, true);
+    assert.equal(status.data.inputDesktop, 'Default');
+    assert.equal(
+      status.data.visibleDesktopChanged,
+      false,
+    );
   },
 );

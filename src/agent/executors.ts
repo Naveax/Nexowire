@@ -2218,6 +2218,10 @@ export async function executeCapability(
     case 'windows.private_desktop.stop':
     case 'windows.private_desktop.launch':
     case 'windows.private_desktop.windows':
+    case 'windows.private_pointer.move':
+    case 'windows.private_pointer.click':
+    case 'windows.private_keyboard.type':
+    case 'windows.private_keyboard.hotkey':
       return await executeWindowsPrivateDesktopCapability(capability, input);
     case 'browser.session.start':
     case 'browser.session.list':

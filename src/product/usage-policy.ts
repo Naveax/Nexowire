@@ -34,6 +34,11 @@ const PREMIUM_USAGE_RULES: readonly UsageRule[] = Object.freeze([
     creditMultiplier: 2,
   },
   {
+    prefix: 'windows_private_pointer_',
+    feature: 'private-pointer',
+    creditMultiplier: 2,
+  },
+  {
     prefix: 'windows_private_keyboard_',
     feature: 'private-keyboard',
     creditMultiplier: 3,
