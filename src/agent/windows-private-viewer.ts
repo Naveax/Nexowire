@@ -375,10 +375,7 @@ function Heartbeat-Healthy {
   }
   try {
     $heartbeat = Get-Item -LiteralPath $HeartbeatPath
-    return (
-      ([DateTime]::UtcNow - $heartbeat.LastWriteTimeUtc).TotalSeconds
-      -le 20
-    )
+    return (([DateTime]::UtcNow - $heartbeat.LastWriteTimeUtc).TotalSeconds -le 20)
   } catch {
     return $false
   }
