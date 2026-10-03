@@ -14,6 +14,11 @@ import {
   type D1ResultLike,
 } from '../src/product/d1-control-plane-store.js';
 import { D1McpOAuthStore } from '../src/product/d1-mcp-oauth-store.js';
+import {
+  D1EncryptedRuntimeConfigStore,
+  decryptRuntimeConfig,
+  encryptRuntimeConfig,
+} from '../src/product/encrypted-runtime-config.js';
 import { ControlPlaneService } from '../src/product/control-plane-service.js';
 import { McpOAuthService } from '../src/product/mcp-oauth.js';
 
@@ -86,6 +91,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0003_quota_subject_device_anchor.sql',
     '0004_device_credential_lookup.sql',
     '0005_mcp_oauth.sql',
+    '0006_runtime_config.sql',
   ]) {
     db.exec(
       readFileSync(
@@ -196,6 +202,60 @@ test('D1 persists MCP OAuth registration, PKCE code and token rotation', async (
       )
       .get() as { count: number };
     assert.equal(Number(rows.count), 2);
+  } finally {
+    db.close();
+  }
+});
+
+
+test('D1 stores only encrypted runtime config and decrypts with the matching key', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+
+  try {
+    const adapter = new SqliteD1Database(db);
+    const store =
+      new D1EncryptedRuntimeConfigStore(adapter);
+    const key = Buffer.alloc(32, 7).toString('base64url');
+    const encrypted = encryptRuntimeConfig(
+      {
+        clientId: 'Iv1.test-client',
+        clientSecret: 'github-secret-must-not-appear',
+      },
+      key,
+    );
+
+    assert.equal(
+      encrypted.includes(
+        'github-secret-must-not-appear',
+      ),
+      false,
+    );
+
+    await store.put(
+      'github-oauth',
+      encrypted,
+      '2026-10-03T00:00:00.000Z',
+    );
+
+    const stored = await store.get('github-oauth');
+    assert.ok(stored);
+    assert.deepEqual(
+      decryptRuntimeConfig(stored!, key),
+      {
+        clientId: 'Iv1.test-client',
+        clientSecret: 'github-secret-must-not-appear',
+      },
+    );
+
+    assert.throws(
+      () =>
+        decryptRuntimeConfig(
+          stored!,
+          Buffer.alloc(32, 8).toString('base64url'),
+        ),
+    );
   } finally {
     db.close();
   }

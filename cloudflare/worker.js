@@ -1,4 +1,7 @@
-import { timingSafeEqual } from 'node:crypto';
+import {
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 import { D1ControlPlaneStore } from '../dist/src/product/d1-control-plane-store.js';
 import { ControlPlaneService } from '../dist/src/product/control-plane-service.js';
 import { D1McpOAuthStore } from '../dist/src/product/d1-mcp-oauth-store.js';
@@ -7,13 +10,24 @@ import { createMcpOAuthHttpHandler } from '../dist/src/product/mcp-oauth-http.js
 import { createControlPlaneHttpHandler } from '../dist/src/product/control-plane-http.js';
 import {
   clearSessionCookie,
+  issueOAuthState,
   sessionTokenFromRequest,
+  verifyOAuthState,
   verifySessionToken,
 } from '../dist/src/product/control-plane-session.js';
 import {
   githubOAuthCallback,
   githubOAuthStart,
 } from '../dist/src/product/github-oauth.js';
+import {
+  D1EncryptedRuntimeConfigStore,
+  decryptRuntimeConfig,
+  encryptRuntimeConfig,
+} from '../dist/src/product/encrypted-runtime-config.js';
+import {
+  buildGitHubAppManifest,
+  exchangeGitHubAppManifestCode,
+} from '../dist/src/product/github-app-manifest.js';
 
 function boundedCapacity(env) {
   const raw = Number(env.NEXOWIRE_FREE_CAPACITY_PERCENT ?? '0');
@@ -34,11 +48,93 @@ function safeSecretEqual(left, right) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function oauthConfig(env) {
+const GITHUB_RUNTIME_CONFIG_KEY = 'github-oauth';
+
+function optionalEnvValue(env, name) {
+  const value = String(env[name] ?? '').trim();
+  return value || undefined;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+async function storedGitHubOAuthCredentials(env, db) {
+  const clientId = optionalEnvValue(
+    env,
+    'GITHUB_CLIENT_ID',
+  );
+  const clientSecret = optionalEnvValue(
+    env,
+    'GITHUB_CLIENT_SECRET',
+  );
+
+  if (clientId || clientSecret) {
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        'GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be configured together.',
+      );
+    }
+    return {
+      clientId,
+      clientSecret,
+      source: 'environment',
+    };
+  }
+
+  const encrypted =
+    await new D1EncryptedRuntimeConfigStore(db).get(
+      GITHUB_RUNTIME_CONFIG_KEY,
+    );
+  if (!encrypted) return null;
+
+  const config = decryptRuntimeConfig(
+    encrypted,
+    envValue(
+      env,
+      'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+    ),
+  );
+  if (
+    typeof config !== 'object' ||
+    config === null ||
+    typeof config.clientId !== 'string' ||
+    !config.clientId.trim() ||
+    typeof config.clientSecret !== 'string' ||
+    !config.clientSecret.trim()
+  ) {
+    throw new Error(
+      'Stored GitHub OAuth configuration is invalid.',
+    );
+  }
+
   return {
-    clientId: envValue(env, 'GITHUB_CLIENT_ID'),
-    clientSecret: envValue(env, 'GITHUB_CLIENT_SECRET'),
-    sessionSecret: envValue(env, 'NEXOWIRE_SESSION_SECRET'),
+    clientId: config.clientId.trim(),
+    clientSecret: config.clientSecret.trim(),
+    source: 'encrypted-d1',
+  };
+}
+
+async function oauthConfig(env, db) {
+  const credentials =
+    await storedGitHubOAuthCredentials(env, db);
+  if (!credentials) {
+    throw new Error(
+      'GitHub OAuth is not configured.',
+    );
+  }
+  return {
+    clientId: credentials.clientId,
+    clientSecret: credentials.clientSecret,
+    sessionSecret: envValue(
+      env,
+      'NEXOWIRE_SESSION_SECRET',
+    ),
     ...(String(env.NEXOWIRE_ADMIN_GITHUB_ID ?? '').trim()
       ? {
           adminGitHubId: String(
@@ -47,6 +143,58 @@ function oauthConfig(env) {
         }
       : {}),
   };
+}
+
+function githubManifestSetupPage(input) {
+  const manifestJson = JSON.stringify(input.manifest);
+  const action =
+    'https://github.com/settings/apps/new?state=' +
+    encodeURIComponent(input.state);
+  return new Response(
+    '<!doctype html><html><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Nexowire GitHub kurulumu</title></head>' +
+      '<body style="font-family:system-ui;max-width:720px;margin:48px auto;padding:0 20px">' +
+      '<h1>Nexowire GitHub girişini etkinleştir</h1>' +
+      '<p>GitHub yalnız kullanıcı kimliği için kullanılacak. Repo erişimi istenmez.</p>' +
+      '<form method="post" action="' +
+      escapeHtml(action) +
+      '">' +
+      '<input type="hidden" name="manifest" value="' +
+      escapeHtml(manifestJson) +
+      '">' +
+      '<button type="submit" style="font-size:18px;padding:12px 20px">GitHub App oluştur</button>' +
+      '</form></body></html>',
+    {
+      status: 200,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    },
+  );
+}
+
+function githubManifestCompletePage(slug) {
+  return new Response(
+    '<!doctype html><html><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Nexowire hazır</title></head>' +
+      '<body style="font-family:system-ui;max-width:720px;margin:48px auto;padding:0 20px">' +
+      '<h1>GitHub girişi hazır</h1>' +
+      '<p>GitHub App güvenli şekilde bağlandı: <strong>' +
+      escapeHtml(slug) +
+      '</strong>.</p>' +
+      '<p><a href="/">Nexowire paneline dön</a></p>' +
+      '</body></html>',
+    {
+      status: 200,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    },
+  );
 }
 
 async function authenticate(request, env) {
@@ -91,12 +239,181 @@ export default {
     }
 
     const store = new D1ControlPlaneStore(env.DB);
+    const runtimeConfigStore =
+      new D1EncryptedRuntimeConfigStore(env.DB);
     const service = new ControlPlaneService(store, {
       infrastructure: () => ({
         freeCapacityPercent: boundedCapacity(env),
         prepaidCapacityCredits: 0,
       }),
     });
+
+    if (
+      request.method === 'POST' &&
+      url.pathname ===
+        '/api/v1/internal/setup/github/start'
+    ) {
+      const caller = await authenticate(request, env);
+      if (!caller || caller.role !== 'service') {
+        return Response.json(
+          { error: 'SERVICE_REQUIRED' },
+          { status: 403 },
+        );
+      }
+
+      const configured =
+        await storedGitHubOAuthCredentials(
+          env,
+          env.DB,
+        );
+      if (configured) {
+        return Response.json({
+          configured: true,
+          source: configured.source,
+        });
+      }
+
+      envValue(
+        env,
+        'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+      );
+      const state = issueOAuthState(
+        'github-app-manifest',
+        '/',
+        envValue(env, 'NEXOWIRE_SESSION_SECRET'),
+        { ttlSeconds: 10 * 60 },
+      );
+      return Response.json({
+        configured: false,
+        setupUrl:
+          url.origin +
+          '/setup/github?state=' +
+          encodeURIComponent(state),
+      });
+    }
+
+    if (
+      request.method === 'GET' &&
+      url.pathname ===
+        '/api/v1/internal/setup/status'
+    ) {
+      const caller = await authenticate(request, env);
+      if (!caller || caller.role !== 'service') {
+        return Response.json(
+          { error: 'SERVICE_REQUIRED' },
+          { status: 403 },
+        );
+      }
+      const configured =
+        await storedGitHubOAuthCredentials(
+          env,
+          env.DB,
+        );
+      return Response.json({
+        githubConfigured: Boolean(configured),
+        source: configured?.source ?? null,
+      });
+    }
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/setup/github'
+    ) {
+      const configured =
+        await storedGitHubOAuthCredentials(
+          env,
+          env.DB,
+        );
+      if (configured) {
+        return Response.json(
+          { error: 'SETUP_ALREADY_CONFIGURED' },
+          { status: 409 },
+        );
+      }
+
+      const state = url.searchParams.get('state') ?? '';
+      const verified = verifyOAuthState(
+        state,
+        'github-app-manifest',
+        envValue(env, 'NEXOWIRE_SESSION_SECRET'),
+      );
+      if (!verified) {
+        return Response.json(
+          { error: 'SETUP_STATE_INVALID' },
+          { status: 403 },
+        );
+      }
+
+      const manifest = buildGitHubAppManifest({
+        origin: url.origin + '/',
+        suggestedName:
+          'Nexowire-' +
+          randomBytes(4).toString('hex'),
+      });
+      return githubManifestSetupPage({
+        state,
+        manifest,
+      });
+    }
+
+    if (
+      request.method === 'GET' &&
+      url.pathname === '/setup/github/callback'
+    ) {
+      const configured =
+        await storedGitHubOAuthCredentials(
+          env,
+          env.DB,
+        );
+      if (configured) {
+        return Response.json(
+          { error: 'SETUP_ALREADY_CONFIGURED' },
+          { status: 409 },
+        );
+      }
+
+      const state = url.searchParams.get('state') ?? '';
+      const code = url.searchParams.get('code') ?? '';
+      const verified = verifyOAuthState(
+        state,
+        'github-app-manifest',
+        envValue(env, 'NEXOWIRE_SESSION_SECRET'),
+      );
+      if (!verified || !code) {
+        return Response.json(
+          { error: 'SETUP_CALLBACK_INVALID' },
+          { status: 400 },
+        );
+      }
+
+      try {
+        const credentials =
+          await exchangeGitHubAppManifestCode(code);
+        const encrypted = encryptRuntimeConfig(
+          {
+            clientId: credentials.clientId,
+            clientSecret: credentials.clientSecret,
+          },
+          envValue(
+            env,
+            'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+          ),
+        );
+        await runtimeConfigStore.put(
+          GITHUB_RUNTIME_CONFIG_KEY,
+          encrypted,
+          new Date().toISOString(),
+        );
+        return githubManifestCompletePage(
+          credentials.slug,
+        );
+      } catch {
+        return Response.json(
+          { error: 'GITHUB_APP_SETUP_FAILED' },
+          { status: 502 },
+        );
+      }
+    }
 
     const oauthNeeded =
       url.pathname.startsWith('/oauth/') ||
@@ -141,7 +458,10 @@ export default {
 
     if (url.pathname === '/auth/github/start') {
       try {
-        return githubOAuthStart(request, oauthConfig(env));
+        return githubOAuthStart(
+          request,
+          await oauthConfig(env, env.DB),
+        );
       } catch {
         return Response.json(
           { error: 'AUTH_NOT_CONFIGURED' },
@@ -155,7 +475,7 @@ export default {
         return await githubOAuthCallback(
           request,
           service,
-          oauthConfig(env),
+          await oauthConfig(env, env.DB),
         );
       } catch {
         return Response.json(

@@ -15,10 +15,9 @@ function optionalEnv(name) {
 }
 
 const REQUIRED_SECRETS = [
-  'GITHUB_CLIENT_ID',
-  'GITHUB_CLIENT_SECRET',
   'NEXOWIRE_SESSION_SECRET',
   'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+  'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
 ];
 
 function boundedPercent(raw) {
