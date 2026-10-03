@@ -92,25 +92,24 @@ BEGIN
   )
   ON CONFLICT(account_id, period_key) DO NOTHING;
 
-  SELECT CASE
-    WHEN NEW.billing_mode = 'prepaid-metered'
-      AND (
-        SELECT prepaid_credits
-        FROM usage_periods
-        WHERE account_id = NEW.account_id
-          AND period_key = NEW.period_key
-      ) < NEW.credits
-    THEN RAISE(ABORT, 'quota_exhausted')
-    WHEN NEW.billing_mode <> 'prepaid-metered'
-      AND NEW.monthly_credits IS NOT NULL
-      AND (
-        SELECT used_credits
-        FROM usage_periods
-        WHERE account_id = NEW.account_id
-          AND period_key = NEW.period_key
-      ) + NEW.credits > NEW.monthly_credits
-    THEN RAISE(ABORT, 'quota_exhausted')
-  END;
+  SELECT RAISE(ABORT, 'quota_exhausted')
+  WHERE NEW.billing_mode = 'prepaid-metered'
+    AND (
+      SELECT prepaid_credits
+      FROM usage_periods
+      WHERE account_id = NEW.account_id
+        AND period_key = NEW.period_key
+    ) < NEW.credits;
+
+  SELECT RAISE(ABORT, 'quota_exhausted')
+  WHERE NEW.billing_mode <> 'prepaid-metered'
+    AND NEW.monthly_credits IS NOT NULL
+    AND (
+      SELECT used_credits
+      FROM usage_periods
+      WHERE account_id = NEW.account_id
+        AND period_key = NEW.period_key
+    ) + NEW.credits > NEW.monthly_credits;
 
   UPDATE usage_periods
   SET

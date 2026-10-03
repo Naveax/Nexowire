@@ -180,3 +180,37 @@ test('Cloudflare runtime config generator rejects insecure or wrong-path hosted 
     });
   }
 });
+
+test('D1 quota triggers stay compatible with the remote migration splitter', async () => {
+  for (const name of [
+    '0001_control_plane.sql',
+    '0003_quota_subject_device_anchor.sql',
+  ]) {
+    const migration = await fs.readFile(
+      path.join(
+        process.cwd(),
+        'cloudflare',
+        'migrations',
+        name,
+      ),
+      'utf8',
+    );
+
+    const triggerStart = migration.indexOf('CREATE TRIGGER');
+    assert.notEqual(triggerStart, -1, name);
+    const trigger = migration.slice(triggerStart);
+
+    assert.equal(migration.includes('\r'), false, name);
+    assert.equal(trigger.includes('SELECT CASE'), false, name);
+    assert.equal(
+      (
+        trigger.match(
+          /SELECT RAISE\(ABORT, 'quota_exhausted'\)/g,
+        ) ?? []
+      ).length,
+      2,
+      name,
+    );
+    assert.match(trigger, /\nBEGIN\n/, name);
+  }
+});
