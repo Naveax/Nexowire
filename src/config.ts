@@ -10,6 +10,7 @@ import {
 import {
   optionalProtectedSecretFile,
   optionalProtectedSecretListFile,
+  resolveProtectedSingleSecret,
 } from './security/protected-secret-files.js';
 import {
   optionalPlatformSecretListSync,
@@ -320,15 +321,28 @@ export function loadConfig(
   const controlPlaneUrl = optional(
     env.NEXOWIRE_CONTROL_PLANE_URL,
   );
-  const controlPlaneServiceToken = optional(
-    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN,
-  );
+  const controlPlaneServiceToken =
+    resolveProtectedSingleSecret(
+      env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN,
+      env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE,
+      env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE,
+      'control-plane-service-token',
+      'control-plane service token',
+      optional(
+        env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME,
+      )
+        ? platformSingle(
+            env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME,
+            'control-plane-service-token',
+          )
+        : undefined,
+    );
   if (
     Boolean(controlPlaneUrl) !==
     Boolean(controlPlaneServiceToken)
   ) {
     throw new Error(
-      'NEXOWIRE_CONTROL_PLANE_URL and NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN must be configured together.',
+      'NEXOWIRE_CONTROL_PLANE_URL and a control-plane service-token source must be configured together.',
     );
   }
 

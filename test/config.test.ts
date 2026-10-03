@@ -453,3 +453,74 @@ test('public MCP resource URL is validated independently from agent control-plan
     );
   }
 });
+
+
+test('control-plane service token resolves from a platform-backed protected source', () => {
+  const calls: Array<{
+    name: string | undefined;
+    purpose: string;
+  }> = [];
+
+  const config = loadConfig(
+    {
+      NEXOWIRE_CONTROL_PLANE_URL:
+        'https://control.example.test',
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME:
+        'control-plane-service',
+    },
+    process.cwd(),
+    {
+      platformSingle: (name, purpose) => {
+        calls.push({ name, purpose });
+        if (
+          name === 'control-plane-service' &&
+          purpose === 'control-plane-service-token'
+        ) {
+          return 'service-token-from-platform';
+        }
+        return undefined;
+      },
+      platformList: () => undefined,
+    },
+  );
+
+  assert.deepEqual(config.controlPlaneAgentAuth, {
+    url: 'https://control.example.test',
+    serviceToken: 'service-token-from-platform',
+  });
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.name === 'control-plane-service' &&
+        call.purpose ===
+          'control-plane-service-token',
+    ),
+  );
+});
+
+test('control-plane service token sources fail closed on conflicting values', () => {
+  assert.throws(
+    () =>
+      loadConfig(
+        {
+          NEXOWIRE_CONTROL_PLANE_URL:
+            'https://control.example.test',
+          NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN:
+            'inline-service-token',
+          NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME:
+            'control-plane-service',
+        },
+        process.cwd(),
+        {
+          platformSingle: (name, purpose) =>
+            name === 'control-plane-service' &&
+            purpose ===
+              'control-plane-service-token'
+              ? 'different-platform-token'
+              : undefined,
+          platformList: () => undefined,
+        },
+      ),
+    /multiple secret sources with different contents/i,
+  );
+});
