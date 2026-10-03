@@ -119,22 +119,60 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-PR #143 (`feature/self-hosted-node-bootstrap`) merged to `main` as `8e217e0b9ce93ecc7c6881c7163b6458c8610252`; merge CI run `36994785084` passed. The exact merged `main` package is installed globally on `DESKTOP-ONDD84S`.
+Current verified `main`: `73c563ff631ea782733f6a71bfb021452850a1f3`.
 
-Live self-host bootstrap completed successfully on `DESKTOP-ONDD84S` with device name `work-pc`. The Windows current-user `Nexowire Hub` and `Nexowire Native Agent` Scheduled Tasks are both running with autostart. The Hub stays on `127.0.0.1:43110`; the local agent connects through `ws://127.0.0.1:43110/agent` using a CurrentUser-DPAPI protected token. Hub health reports one connected agent, and the stable device ID remains `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`.
+Recent merged product/hosting slices:
+- PR #157: hosted MCP account scope + usage metering.
+- PR #159: automated Cloudflare control-plane deployment workflow.
+- PR #160: restart running Hub only when persisted launcher configuration actually changes.
+- PR #161: protected control-plane service-token sources; plaintext service tokens are not persisted in Hub launcher configuration.
+- PR #162: generated Wrangler runtime configuration carries only non-secret deployment metadata.
 
-A real local Streamable HTTP MCP client authenticated with the DPAPI-protected MCP credential and verified `devices_list`, `machine_snapshot`, and `machine_health` successfully for `work-pc`. Therefore Hub -> MCP -> native agent execution is proven locally.
+Live Windows node:
+- machine: `DESKTOP-ONDD84S`;
+- Nexowire logical device: `work-pc`;
+- stable device ID: `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`;
+- Hub and Native Agent Scheduled Tasks are installed, running, and autostart;
+- Hub remains loopback-only at `127.0.0.1:43110`;
+- local Agent connects through `ws://127.0.0.1:43110/agent` with a CurrentUser-DPAPI protected credential;
+- local health reports one connected agent;
+- local authenticated MCP `devices_list`, `machine_snapshot`, and `machine_health` were previously verified.
 
-Tailscale is connected as `desktop-ondd84s.tail10f02d.ts.net` / `100.116.23.60`. Tailscale Serve and Funnel are currently disabled at the tailnet policy level and each returns a Tailscale account enablement prompt. Nexowire does not bypass that account-level approval. The existing ChatGPT-side Nexowire connector still points at the old unavailable transport, so remote ChatGPT verification is not complete yet.
+Tailscale live state:
+- MagicDNS host: `nexowire.tail10f02d.ts.net`;
+- IPv4: `100.116.23.60`;
+- Serve: enabled/configured;
+- Funnel: enabled/configured;
+- public health: `https://nexowire.tail10f02d.ts.net/health` -> healthy;
+- MCP resource: `https://nexowire.tail10f02d.ts.net/mcp`;
+- Agent endpoint: `wss://nexowire.tail10f02d.ts.net/agent`.
+
+The exact current `main` package was installed globally on the Windows node and a live resumable bootstrap run passed. When launcher configuration was unchanged, Hub PID remained unchanged, proving the restart-on-drift fix does not cause gratuitous restarts. Credentials and the stable device ID were reused.
+
+Hosted product/control-plane code is implemented:
+- Free / Plus / Pro / Custom product plans and weighted private-control usage policy;
+- account/device/quota-subject model with privacy-preserving device anchors;
+- anti-abuse quota sharing across repeated Free accounts from the same device anchor;
+- Cloudflare Worker + D1 store and migrations through MCP OAuth;
+- GitHub OAuth user sign-in and signed Nexowire sessions;
+- one-click browser pairing;
+- per-device agent credentials verified through the control plane;
+- OAuth 2.1 + PKCE for hosted MCP access;
+- hosted account device isolation;
+- hosted MCP usage metering and plan/feature enforcement;
+- automated GitHub Actions Cloudflare deployment workflow.
+
+Production deployment is not complete yet. GitHub Actions variables are configured for the current live Hub host, but repository deployment secrets are still absent. Wrangler on the Windows development machine is currently unauthenticated and is waiting for Cloudflare OAuth authorization. The remaining external-account prerequisites are Cloudflare deployment credentials/account authorization and a GitHub OAuth App client ID/secret.
 
 ## Immediate next work
 
-1. Enable Tailscale Serve/Funnel for the tailnet using the Tailscale account approval flow. Serve is preferred for tailnet-only agent/private access; Funnel is only for the Internet-facing ChatGPT MCP ingress.
-2. After approval, run `nexowire tailscale serve` and `nexowire tailscale funnel`, then verify their status and the HTTPS endpoint.
-3. Point or recreate the ChatGPT Nexowire MCP connection at `https://desktop-ondd84s.tail10f02d.ts.net/mcp` using the protected MCP bearer credential from the explicit `nexowire node connector` command. Do not place the bearer in Git or plugin archives.
-4. From ChatGPT/Nexowire MCP, verify `devices_list`, `machine_snapshot`, and `machine_health`; only then mark remote enrollment complete.
-5. Verify Hub/Agent Scheduled Task restart/reconnect behavior after the remote connector is live.
-6. Continue private-surface cursor routing and isolated private keyboard/text/hotkey delivery. Keep physical-console pointer/keyboard/UIA/clipboard mutations default-denied unless explicitly granted.
+1. Complete Cloudflare account authorization and create/obtain production deployment credentials without committing secret values.
+2. Create the GitHub OAuth App for the hosted control plane with callback `https://<control-plane-host>/auth/github/callback`.
+3. Configure GitHub Actions secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `NEXOWIRE_GITHUB_CLIENT_ID`, `NEXOWIRE_GITHUB_CLIENT_SECRET`, `NEXOWIRE_SESSION_SECRET`, and `NEXOWIRE_INTERNAL_SERVICE_TOKEN`.
+4. Trigger `Deploy Nexowire Control Plane`; verify D1 migrations 0001-0005, Worker/static asset deploy, control-plane `/health`, GitHub login, dashboard, and one-click pairing.
+5. Configure the live Hub with `NEXOWIRE_CONTROL_PLANE_URL`, a protected reference to the same internal service token, and `NEXOWIRE_MCP_RESOURCE_URL=https://nexowire.tail10f02d.ts.net/mcp`; verify restart/reconnect and OAuth protected-resource discovery.
+6. Recreate/connect the ChatGPT Nexowire MCP integration against the public MCP resource and verify `devices_list`, `machine_snapshot`, and `machine_health` from ChatGPT itself.
+7. After hosted acceptance passes, continue private-surface cursor routing, private keyboard/text/hotkey delivery, private viewer/switch UX, and explicit time-bounded physical-console grants.
 
 ## Known machine note
 
