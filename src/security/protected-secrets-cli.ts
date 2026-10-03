@@ -12,6 +12,7 @@ export const PROTECTED_SECRET_PURPOSES = [
   'relay-inbound-agent-token',
   'relay-inbound-agent-token-list',
   'relay-upstream-agent-token',
+  'control-plane-service-token',
 ] as const;
 
 function usage(): string {
