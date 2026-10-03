@@ -7,6 +7,9 @@ import {
 import {
   promises as fs,
 } from 'node:fs';
+import {
+  createServer,
+} from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -38,17 +41,53 @@ async function run(
   stderr: string;
 }> {
   return await new Promise((resolve, reject) => {
-    const child = spawn(executable, args, {
-      cwd: ROOT,
-      env: {
-        ...process.env,
-        ...options.env,
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...options.env,
+    };
+    const isWindowsBatch =
+      process.platform === 'win32' &&
+      /\.(?:cmd|bat)$/i.test(executable);
+    const childExecutable = isWindowsBatch
+      ? 'powershell.exe'
+      : executable;
+    const childArgs = isWindowsBatch
+      ? [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          [
+            "$ErrorActionPreference='Stop'",
+            '$exe=$env:NEXOWIRE_BOOTSTRAP_CHILD_EXE',
+            '$argv=@(ConvertFrom-Json -InputObject $env:NEXOWIRE_BOOTSTRAP_CHILD_ARGS_JSON)',
+            '& $exe @argv',
+            'exit $LASTEXITCODE',
+          ].join(';'),
+        ]
+      : args;
+
+    if (isWindowsBatch) {
+      childEnv.NEXOWIRE_BOOTSTRAP_CHILD_EXE =
+        executable;
+      childEnv.NEXOWIRE_BOOTSTRAP_CHILD_ARGS_JSON =
+        JSON.stringify(args);
+    }
+
+    const child = spawn(
+      childExecutable,
+      childArgs,
+      {
+        cwd: ROOT,
+        env: childEnv,
+        windowsHide: options.inherit !== true,
+        stdio: options.inherit
+          ? 'inherit'
+          : ['ignore', 'pipe', 'pipe'],
       },
-      windowsHide: options.inherit !== true,
-      stdio: options.inherit
-        ? 'inherit'
-        : ['ignore', 'pipe', 'pipe'],
-    });
+    );
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     if (!options.inherit) {
@@ -97,6 +136,56 @@ async function wrangler(
   );
 }
 
+async function callbackPortAvailable(
+  port = 8976,
+): Promise<boolean> {
+  return await new Promise<boolean>((resolve, reject) => {
+    const server = createServer();
+    server.once('error', (error) => {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === 'EADDRINUSE'
+      ) {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
+    server.listen(
+      {
+        host: '127.0.0.1',
+        port,
+        exclusive: true,
+      },
+      () => {
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve(true);
+        });
+      },
+    );
+  });
+}
+
+async function waitForWranglerCallbackPort(
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await callbackPortAvailable(8976)) {
+      return;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, 250),
+    );
+  }
+  throw new Error(
+    'Cloudflare OAuth callback port 8976 is still in use. Close the stale Wrangler login process and retry.',
+  );
+}
+
 async function ensureCloudflareLogin(): Promise<void> {
   const current = await wrangler(
     ['whoami', '--json'],
@@ -111,6 +200,7 @@ async function ensureCloudflareLogin(): Promise<void> {
         'Cloudflare browser authorization',
     }) + '\n',
   );
+  await waitForWranglerCallbackPort();
   const login = await wrangler(
     ['login'],
     { inherit: true, allowFailure: true },
