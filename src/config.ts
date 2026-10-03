@@ -328,10 +328,14 @@ export function loadConfig(
       env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE,
       'control-plane-service-token',
       'control-plane service token',
-      platformSingle(
+      optional(
         env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME,
-        'control-plane-service-token',
-      ),
+      )
+        ? platformSingle(
+            env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME,
+            'control-plane-service-token',
+          )
+        : undefined,
     );
   if (
     Boolean(controlPlaneUrl) !==
