@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
@@ -14,12 +15,16 @@ import {
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
 import { createControlPlaneAgentCredentialVerifier } from '../hub/control-plane-agent-auth.js';
+import { ControlPlaneMcpClient } from '../hub/control-plane-mcp-auth.js';
 import {
   resolveMcpAuthorization,
   type BearerAuthorization,
 } from '../security/auth.js';
 import { OidcVerifier } from '../security/oidc.js';
-import { deniedMcpToolNames } from '../security/tool-authorization.js';
+import {
+  deniedMcpToolNames,
+  requestedMcpToolNames,
+} from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 import { onlineCapabilityUnion } from './tool-capabilities.js';
 
@@ -58,6 +63,25 @@ export function configuredHttpAllowedHosts(
   ];
 }
 
+function hostedMcpUsageEventId(input: {
+  accountId: string;
+  authorizationHeader: string | undefined;
+  body: unknown;
+  toolName: string;
+}): string {
+  const digest = createHash('sha256')
+    .update(input.accountId, 'utf8')
+    .update('\0')
+    .update(input.authorizationHeader ?? '', 'utf8')
+    .update('\0')
+    .update(input.toolName, 'utf8')
+    .update('\0')
+    .update(JSON.stringify(input.body), 'utf8')
+    .digest('hex');
+
+  return 'mcp-' + digest;
+}
+
 export async function runHttpServer(
   config: NexowireConfig,
   broker: AgentBroker,
@@ -79,10 +103,36 @@ export async function runHttpServer(
         })
       : undefined;
 
+  const remoteMcpClient =
+    config.controlPlaneAgentAuth &&
+    config.mcpResourceUrl
+      ? new ControlPlaneMcpClient({
+          controlPlaneUrl:
+            config.controlPlaneAgentAuth.url,
+          serviceToken:
+            config.controlPlaneAgentAuth.serviceToken,
+          ...(config.controlPlaneAgentAuth.timeoutMs !== undefined
+            ? {
+                timeoutMs:
+                  config.controlPlaneAgentAuth.timeoutMs,
+              }
+            : {}),
+        })
+      : undefined;
+
+  const resourceMetadataUrl =
+    config.mcpResourceUrl
+      ? new URL(
+          '/.well-known/oauth-protected-resource/mcp',
+          config.mcpResourceUrl,
+        ).toString()
+      : undefined;
+
   assertSafeRemoteBinding(config, {
     mcp:
       (context.credentials?.hasUsable('mcp') ?? false) ||
-      Boolean(config.oidc),
+      Boolean(config.oidc) ||
+      Boolean(remoteMcpClient),
     agent:
       (context.credentials?.hasUsable('agent') ?? false) ||
       Boolean(remoteAgentCredentialVerifier),
@@ -105,6 +155,32 @@ export async function runHttpServer(
     });
   });
 
+  if (
+    remoteMcpClient &&
+    config.mcpResourceUrl &&
+    config.controlPlaneAgentAuth
+  ) {
+    const metadata = {
+      resource: config.mcpResourceUrl,
+      authorization_servers: [
+        config.controlPlaneAgentAuth.url,
+      ],
+      scopes_supported: ['mcp', 'offline_access'],
+    };
+    for (const metadataPath of [
+      '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-protected-resource/mcp',
+    ]) {
+      app.get(
+        metadataPath,
+        (_req: Request, res: Response) => {
+          res.setHeader('cache-control', 'no-store');
+          res.json(metadata);
+        },
+      );
+    }
+  }
+
   const mcpTokens = mcpAuthTokens(config);
   const oidcVerifier = config.oidc
     ? new OidcVerifier(config.oidc)
@@ -113,7 +189,8 @@ export async function runHttpServer(
     const authRequired =
       mcpTokens.length > 0 ||
       context.credentials?.hasConfigured('mcp') === true ||
-      Boolean(oidcVerifier);
+      Boolean(oidcVerifier) ||
+      Boolean(remoteMcpClient);
 
     if (!authRequired) {
       next();
@@ -125,9 +202,21 @@ export async function runHttpServer(
       mcpTokens,
       context.credentials,
       oidcVerifier,
+      remoteMcpClient
+        ? (header) =>
+            remoteMcpClient.authenticate(header)
+        : undefined,
     )
       .then((authorization) => {
         if (!authorization) {
+          if (resourceMetadataUrl) {
+            res.setHeader(
+              'WWW-Authenticate',
+              'Bearer resource_metadata="' +
+                resourceMetadataUrl +
+                '"',
+            );
+          }
           res.status(401).json({ error: 'unauthorized' });
           return;
         }
@@ -136,6 +225,14 @@ export async function runHttpServer(
         next();
       })
       .catch(() => {
+        if (resourceMetadataUrl) {
+          res.setHeader(
+            'WWW-Authenticate',
+            'Bearer resource_metadata="' +
+              resourceMetadataUrl +
+              '"',
+          );
+        }
         res.status(401).json({ error: 'unauthorized' });
       });
   });
@@ -155,6 +252,68 @@ export async function runHttpServer(
       });
       return;
     }
+    if (authorization?.kind === 'control-plane') {
+      if (!remoteMcpClient) {
+        res.status(503).json({
+          error: 'service_unavailable',
+          code: 'MCP_METERING_UNAVAILABLE',
+        });
+        return;
+      }
+
+      const requestedTools =
+        requestedMcpToolNames(req.body);
+      if (requestedTools.length > 1) {
+        res.status(400).json({
+          error: 'invalid_request',
+          code: 'MCP_METERED_BATCH_UNSUPPORTED',
+        });
+        return;
+      }
+
+      for (const toolName of requestedTools) {
+        const decision =
+          await remoteMcpClient.chargeTool({
+            accountId: authorization.accountId,
+            eventId: hostedMcpUsageEventId({
+              accountId: authorization.accountId,
+              authorizationHeader:
+                req.headers.authorization,
+              body: req.body,
+              toolName,
+            }),
+            toolName,
+          });
+
+        if (!decision) {
+          res.status(503).json({
+            error: 'service_unavailable',
+            code: 'MCP_METERING_UNAVAILABLE',
+          });
+          return;
+        }
+
+        if (decision.status === 'denied') {
+          const featureDenied =
+            decision.reason ===
+            'feature-not-in-plan';
+          res
+            .status(featureDenied ? 403 : 429)
+            .json({
+              error: featureDenied
+                ? 'forbidden'
+                : 'quota_exhausted',
+              code: featureDenied
+                ? 'MCP_FEATURE_NOT_IN_PLAN'
+                : 'MCP_QUOTA_EXHAUSTED',
+              remaining_credits:
+                decision.remainingCredits,
+            });
+          return;
+        }
+      }
+    }
+
     const availableCapabilities = onlineCapabilityUnion(
       await context.providers.listTargets(),
     );
