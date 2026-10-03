@@ -38,20 +38,53 @@ async function run(
   stderr: string;
 }> {
   return await new Promise((resolve, reject) => {
-    const child = spawn(executable, args, {
-      cwd: ROOT,
-      env: {
-        ...process.env,
-        ...options.env,
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...options.env,
+    };
+    const isWindowsBatch =
+      process.platform === 'win32' &&
+      /\.(?:cmd|bat)$/i.test(executable);
+    const childExecutable = isWindowsBatch
+      ? 'powershell.exe'
+      : executable;
+    const childArgs = isWindowsBatch
+      ? [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          [
+            "$ErrorActionPreference='Stop'",
+            '$exe=$env:NEXOWIRE_BOOTSTRAP_CHILD_EXE',
+            '$argv=@(ConvertFrom-Json -InputObject $env:NEXOWIRE_BOOTSTRAP_CHILD_ARGS_JSON)',
+            '& $exe @argv',
+            'exit $LASTEXITCODE',
+          ].join(';'),
+        ]
+      : args;
+
+    if (isWindowsBatch) {
+      childEnv.NEXOWIRE_BOOTSTRAP_CHILD_EXE =
+        executable;
+      childEnv.NEXOWIRE_BOOTSTRAP_CHILD_ARGS_JSON =
+        JSON.stringify(args);
+    }
+
+    const child = spawn(
+      childExecutable,
+      childArgs,
+      {
+        cwd: ROOT,
+        env: childEnv,
+        windowsHide: options.inherit !== true,
+        stdio: options.inherit
+          ? 'inherit'
+          : ['ignore', 'pipe', 'pipe'],
       },
-      shell:
-        process.platform === 'win32' &&
-        /\.(?:cmd|bat)$/i.test(executable),
-      windowsHide: options.inherit !== true,
-      stdio: options.inherit
-        ? 'inherit'
-        : ['ignore', 'pipe', 'pipe'],
-    });
+    );
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     if (!options.inherit) {
