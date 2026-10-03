@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHubLauncher,
   persistedHubEnvironment,
+  shouldRestartHubAfterInstall,
 } from '../src/hub/hub-lifecycle.js';
 
 test('Hub launcher persists only non-secret self-host configuration', () => {
@@ -52,4 +53,47 @@ test('Hub lifecycle refuses plaintext bearer persistence', () => {
       /refuses to persist plaintext secret variable/,
     );
   }
+});
+
+
+test("Hub install restarts only when a running launcher's persisted config changed", () => {
+  const oldLauncher =
+    '$env:NEXOWIRE_HTTP_ALLOWED_HOSTS=\'old.example\'';
+  const sameLauncher =
+    '$env:NEXOWIRE_HTTP_ALLOWED_HOSTS=\'old.example\'';
+  const newLauncher =
+    '$env:NEXOWIRE_HTTP_ALLOWED_HOSTS=\'new.example\'';
+
+  assert.equal(
+    shouldRestartHubAfterInstall({
+      wasRunning: true,
+      previousLauncher: oldLauncher,
+      nextLauncher: newLauncher,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldRestartHubAfterInstall({
+      wasRunning: true,
+      previousLauncher: oldLauncher,
+      nextLauncher: sameLauncher,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldRestartHubAfterInstall({
+      wasRunning: false,
+      previousLauncher: oldLauncher,
+      nextLauncher: newLauncher,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldRestartHubAfterInstall({
+      wasRunning: true,
+      previousLauncher: null,
+      nextLauncher: newLauncher,
+    }),
+    true,
+  );
 });
