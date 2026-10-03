@@ -105,4 +105,22 @@
 - [x] expose `nexowire tailscale status|serve|funnel|reset`; public Funnel is refused until MCP and native-agent authentication are configured
 - [x] Windows one-command self-host bootstrap: hash-only credentials, DPAPI token recovery, Hub Scheduled Task, local Agent loopback enrollment, resumable state, and optional auth-gated Tailscale Funnel
 - [x] live self-hosted Hub + local Agent enrollment on DESKTOP-ONDD84S with authenticated local MCP `devices_list`, `machine_snapshot`, and `machine_health`
-- [ ] enable Tailscale Serve/Funnel at the tailnet account level and complete ChatGPT-side remote MCP connector verification
+- [x] enable Tailscale Serve/Funnel at the tailnet account level and verify public HTTPS/WSS ingress on `nexowire.tail10f02d.ts.net`
+- [ ] complete ChatGPT-side OAuth MCP connector verification
+
+
+## Post-v1 - Hosted product control plane
+
+- [x] Free / Plus / Pro / Custom plan model with hard-stop zero-owner-spend policy
+- [x] quota subjects, privacy-preserving device anchors, and Free-account anti-abuse binding
+- [x] Cloudflare Worker + D1 control plane with migrations through MCP OAuth
+- [x] GitHub OAuth sign-in and signed Nexowire sessions
+- [x] one-click browser pairing and per-device agent credentials
+- [x] OAuth 2.1 + PKCE hosted MCP authorization
+- [x] hosted account device isolation and MCP usage metering
+- [x] automated Cloudflare production deployment workflow with generated secret-free runtime config
+- [ ] complete Cloudflare account authorization and first production Worker/D1 deployment
+- [ ] configure production GitHub OAuth App credentials
+- [ ] configure live Hub protected control-plane service authentication
+- [ ] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
+- [ ] add subscription/payment provider integration after hosted free-plan acceptance
