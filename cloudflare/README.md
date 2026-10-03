@@ -27,43 +27,57 @@ The Worker runs first for:
 - `/.well-known/*`
 - `/health`
 
-## Recommended deployment
+## Recommended first deployment
 
-Use the repository workflow:
+On the Windows owner machine, use:
 
-`.github/workflows/deploy-control-plane.yml`
+`npm run control-plane:bootstrap`
 
-It:
-1. validates required secrets/variables;
-2. resolves or creates the `nexowire-control-plane` D1 database;
-3. generates `wrangler.runtime.json` without copying secret values into it;
-4. applies every migration in `cloudflare/migrations`;
-5. deploys the Worker and static assets;
-6. removes generated secret/runtime material.
+The bootstrap:
+1. checks Wrangler authentication and opens the Cloudflare OAuth authorization flow when needed;
+2. discovers the live Nexowire Funnel MCP/agent endpoints;
+3. resolves or creates the `nexowire-control-plane` D1 database;
+4. generates the session, internal-service, and runtime-config encryption secrets locally;
+5. stores those owner secrets in purpose-bound CurrentUser DPAPI envelopes;
+6. generates a secret-free Wrangler runtime config;
+7. applies every migration in `cloudflare/migrations`;
+8. deploys the Worker and static assets;
+9. opens a short-lived GitHub App Manifest setup page;
+10. stores only the GitHub OAuth client ID/secret needed for sign-in, encrypted in D1;
+11. wires the live Hub to the control plane through a protected service-token reference;
+12. verifies control-plane health and MCP OAuth protected-resource metadata.
 
-Do not manually apply individual migrations unless debugging. The current migration chain includes:
+The generated GitHub App requests no repository permissions or repository events. The manifest response's private key and webhook secret are deliberately discarded.
+
+The current migration chain includes:
 - `0001_control_plane.sql`
 - `0002_external_identities.sql`
 - `0003_quota_subject_device_anchor.sql`
 - `0004_device_credential_lookup.sql`
 - `0005_mcp_oauth.sql`
+- `0006_runtime_config.sql`
+
+## GitHub Actions deployment
+
+For later CI-driven deployments, use:
+
+`.github/workflows/deploy-control-plane.yml`
+
+It resolves/creates D1, generates runtime config, applies all migrations, deploys Worker/static assets, and removes temporary deployment material.
 
 ## GitHub Actions secrets
 
-Configure these repository secrets:
+Configure these repository secrets only when using the CI deployment workflow:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `NEXOWIRE_GITHUB_CLIENT_ID`
-- `NEXOWIRE_GITHUB_CLIENT_SECRET`
 - `NEXOWIRE_SESSION_SECRET`
 - `NEXOWIRE_INTERNAL_SERVICE_TOKEN`
+- `NEXOWIRE_CONFIG_ENCRYPTION_KEY`
 
-The GitHub OAuth App callback must be:
+`NEXOWIRE_GITHUB_CLIENT_ID` and `NEXOWIRE_GITHUB_CLIENT_SECRET` remain optional for backward compatibility. New deployments should use the protected GitHub App Manifest setup instead.
 
-`https://<control-plane-worker-host>/auth/github/callback`
-
-Never commit these values or place them in `wrangler.jsonc`.
+Never commit secret values or place them in `wrangler.jsonc`.
 
 ## GitHub Actions variables
 
