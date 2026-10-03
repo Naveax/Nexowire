@@ -44,6 +44,9 @@ async function run(
         ...process.env,
         ...options.env,
       },
+      shell:
+        process.platform === 'win32' &&
+        /\.(?:cmd|bat)$/i.test(executable),
       windowsHide: options.inherit !== true,
       stdio: options.inherit
         ? 'inherit'
