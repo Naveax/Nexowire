@@ -1,0 +1,168 @@
+name: Deploy Nexowire Control Plane
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: nexowire-control-plane-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GITHUB_CLIENT_ID: ${{ secrets.NEXOWIRE_GITHUB_CLIENT_ID }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.NEXOWIRE_GITHUB_CLIENT_SECRET }}
+      NEXOWIRE_SESSION_SECRET: ${{ secrets.NEXOWIRE_SESSION_SECRET }}
+      NEXOWIRE_INTERNAL_SERVICE_TOKEN: ${{ secrets.NEXOWIRE_INTERNAL_SERVICE_TOKEN }}
+      NEXOWIRE_AGENT_WS_URL: ${{ vars.NEXOWIRE_AGENT_WS_URL }}
+      NEXOWIRE_MCP_RESOURCE_URL: ${{ vars.NEXOWIRE_MCP_RESOURCE_URL }}
+      NEXOWIRE_ADMIN_GITHUB_ID: ${{ vars.NEXOWIRE_ADMIN_GITHUB_ID }}
+      NEXOWIRE_FREE_CAPACITY_PERCENT: ${{ vars.NEXOWIRE_FREE_CAPACITY_PERCENT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Nexowire
+        run: npm run build
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            CLOUDFLARE_API_TOKEN
+            CLOUDFLARE_ACCOUNT_ID
+            GITHUB_CLIENT_ID
+            GITHUB_CLIENT_SECRET
+            NEXOWIRE_SESSION_SECRET
+            NEXOWIRE_INTERNAL_SERVICE_TOKEN
+            NEXOWIRE_AGENT_WS_URL
+            NEXOWIRE_MCP_RESOURCE_URL
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required GitHub secret/variable: $name"
+              exit 1
+            fi
+          done
+
+      - name: Resolve or create D1 database
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .wrangler
+
+          npx --yes wrangler@4 d1 list --json > .wrangler/d1-list.json
+          DB_ID="$(
+            node - <<'NODE'
+          const fs = require('node:fs');
+          const rows = JSON.parse(
+            fs.readFileSync('.wrangler/d1-list.json', 'utf8'),
+          );
+          const row = Array.isArray(rows)
+            ? rows.find((entry) =>
+                entry && entry.name === 'nexowire-control-plane')
+            : undefined;
+          process.stdout.write(
+            String(row?.uuid ?? row?.id ?? ''),
+          );
+          NODE
+          )"
+
+          if [[ -z "$DB_ID" ]]; then
+            npx --yes wrangler@4 d1 create nexowire-control-plane
+            npx --yes wrangler@4 d1 list --json > .wrangler/d1-list.json
+            DB_ID="$(
+              node - <<'NODE'
+          const fs = require('node:fs');
+          const rows = JSON.parse(
+            fs.readFileSync('.wrangler/d1-list.json', 'utf8'),
+          );
+          const row = Array.isArray(rows)
+            ? rows.find((entry) =>
+                entry && entry.name === 'nexowire-control-plane')
+            : undefined;
+          process.stdout.write(
+            String(row?.uuid ?? row?.id ?? ''),
+          );
+          NODE
+            )"
+          fi
+
+          if [[ -z "$DB_ID" ]]; then
+            echo "::error::Could not resolve the nexowire-control-plane D1 database ID."
+            exit 1
+          fi
+
+          echo "NEXOWIRE_D1_DATABASE_ID=$DB_ID" >> "$GITHUB_ENV"
+
+      - name: Build production Wrangler config
+        run: node scripts/prepare-cloudflare-control-plane.mjs
+
+      - name: Build deployment secrets file
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const required = [
+            'GITHUB_CLIENT_ID',
+            'GITHUB_CLIENT_SECRET',
+            'NEXOWIRE_SESSION_SECRET',
+            'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+          ];
+          const secrets = Object.fromEntries(
+            required.map((name) => {
+              const value = process.env[name];
+              if (!value) {
+                throw new Error(name + ' is missing.');
+              }
+              return [name, value];
+            }),
+          );
+          fs.mkdirSync('.wrangler', { recursive: true });
+          fs.writeFileSync(
+            '.wrangler/secrets.json',
+            JSON.stringify(secrets),
+            { mode: 0o600 },
+          );
+          NODE
+
+      - name: Apply D1 migrations
+        run: >-
+          npx --yes wrangler@4 d1 migrations apply
+          nexowire-control-plane
+          --remote
+          --config wrangler.runtime.json
+
+      - name: Deploy Worker and static assets
+        run: >-
+          npx --yes wrangler@4 deploy
+          --config wrangler.runtime.json
+          --secrets-file .wrangler/secrets.json
+          --strict
+
+      - name: Remove generated secret material
+        if: always()
+        shell: bash
+        run: |
+          rm -f .wrangler/secrets.json
+          rm -f .wrangler/d1-list.json
+          rm -f wrangler.runtime.json
