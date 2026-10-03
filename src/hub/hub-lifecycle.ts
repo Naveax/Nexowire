@@ -33,6 +33,17 @@ const StatusSchema = z.object({
 
 export type HubLifecycleStatus = z.infer<typeof StatusSchema>;
 
+export function shouldRestartHubAfterInstall(input: {
+  wasRunning: boolean;
+  previousLauncher: string | null;
+  nextLauncher: string;
+}): boolean {
+  return (
+    input.wasRunning &&
+    input.previousLauncher !== input.nextLauncher
+  );
+}
+
 export interface HubLifecycleOptions {
   env?: NodeJS.ProcessEnv;
   cliEntrypoint?: string;
@@ -262,17 +273,54 @@ export async function installHubLifecycle(
   persistedHubEnvironment(options.env ?? process.env);
   const root = rootDir(options);
   const launcher = launcherPath(options);
+  const nextLauncher = buildHubLauncher(options);
+
+  let previousLauncher: string | null = null;
+  try {
+    previousLauncher = await fs.readFile(
+      launcher,
+      'utf8',
+    );
+  } catch (error) {
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      !('code' in error) ||
+      error.code !== 'ENOENT'
+    ) {
+      throw error;
+    }
+  }
+
+  const previousStatus =
+    await hubLifecycleStatus(options);
+  const restartRequired =
+    shouldRestartHubAfterInstall({
+      wasRunning:
+        previousStatus.installed &&
+        previousStatus.state === 'running',
+      previousLauncher,
+      nextLauncher,
+    });
+
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
-  await fs.writeFile(launcher, buildHubLauncher(options), {
+  await fs.writeFile(launcher, nextLauncher, {
     encoding: 'utf8',
     mode: 0o600,
   });
+
+  const lifecycleEnv = {
+    ...windowsEnv(options),
+    NEXOWIRE_HUB_RESTART_REQUIRED:
+      restartRequired ? '1' : '0',
+  };
 
   await runPowerShellJson<{ ok: boolean }>(
     [
       "$ErrorActionPreference='Stop'",
       '$name=$env:NEXOWIRE_HUB_TASK_NAME',
       '$launcher=$env:NEXOWIRE_HUB_LAUNCHER',
+      '$restartRequired=$env:NEXOWIRE_HUB_RESTART_REQUIRED -eq \'1\'',
       '$user=[Security.Principal.WindowsIdentity]::GetCurrent().Name',
       '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
       "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument",
@@ -280,10 +328,19 @@ export async function installHubLifecycle(
       '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
       '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
       "Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire first-party Hub' -Force | Out-Null",
+      'if ($restartRequired) {',
+      '  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+      '  $deadline=(Get-Date).AddSeconds(5)',
+      '  do {',
+      '    $state=(Get-ScheduledTask -TaskName $name).State',
+      "    if ($state -ne 'Running') { break }",
+      '    Start-Sleep -Milliseconds 100',
+      '  } while ((Get-Date) -lt $deadline)',
+      '}',
       'Start-ScheduledTask -TaskName $name',
       '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
     ].join('\n'),
-    windowsEnv(options),
+    lifecycleEnv,
   );
 
   await writeManifest(options);
