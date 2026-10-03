@@ -37,6 +37,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_virtual_pointer_move: 'windows.virtual_pointer.move',
   windows_virtual_pointer_style: 'windows.virtual_pointer.style',
   windows_virtual_pointer_visibility: 'windows.virtual_pointer.visibility',
+  windows_private_screen_capture: 'windows.private_screen.capture',
   windows_private_desktop_status: 'windows.private_desktop.status',
   windows_private_desktop_start: 'windows.private_desktop.start',
   windows_private_desktop_stop: 'windows.private_desktop.stop',

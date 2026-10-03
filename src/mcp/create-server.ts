@@ -3017,6 +3017,142 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_screen_capture',
+    {
+      title: 'Capture Nexowire private screen',
+      description:
+        'Render the isolated NexowirePrivate desktop or one exact private HWND as a bounded PNG using PrintWindow. This does not switch the visible Windows input desktop and does not capture the physical Default desktop.',
+      inputSchema: {
+        ...targetFields,
+        source: z
+          .enum(['desktop', 'window'])
+          .optional(),
+        hwnd: z
+          .string()
+          .min(1)
+          .max(32)
+          .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/)
+          .optional(),
+        max_width: z
+          .number()
+          .int()
+          .min(160)
+          .max(7680)
+          .optional(),
+        max_height: z
+          .number()
+          .int()
+          .min(120)
+          .max(4320)
+          .optional(),
+        max_bytes: z
+          .number()
+          .int()
+          .min(65_536)
+          .max(8_388_608)
+          .optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      source,
+      hwnd,
+      max_width,
+      max_height,
+      max_bytes,
+    }) => {
+      const response = await execute(
+        ctx,
+        'windows.private_screen.capture',
+        {
+          ...(source ? { source } : {}),
+          ...(hwnd ? { hwnd } : {}),
+          ...(max_width !== undefined
+            ? { max_width }
+            : {}),
+          ...(max_height !== undefined
+            ? { max_height }
+            : {}),
+          ...(max_bytes !== undefined
+            ? { max_bytes }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      );
+
+      if (
+        'isError' in response &&
+        response.isError
+      ) {
+        return response;
+      }
+
+      const structured =
+        response.structuredContent as Record<
+          string,
+          unknown
+        >;
+      const screenshot =
+        typeof structured.data === 'object' &&
+        structured.data !== null &&
+        !Array.isArray(structured.data)
+          ? (structured.data as Record<
+              string,
+              unknown
+            >)
+          : undefined;
+      const base64 = screenshot?.base64;
+      const mimeType = screenshot?.mimeType;
+
+      if (
+        !screenshot ||
+        typeof base64 !== 'string' ||
+        typeof mimeType !== 'string'
+      ) {
+        return toolResult(
+          {
+            ok: false,
+            error:
+              'Private-screen provider returned no inline image payload.',
+          },
+          true,
+        );
+      }
+
+      const {
+        base64: _base64,
+        ...metadata
+      } = screenshot;
+      const sanitized = {
+        ...structured,
+        data: metadata,
+      };
+
+      return {
+        content: [
+          {
+            type: 'image' as const,
+            data: base64,
+            mimeType,
+          },
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              sanitized,
+              null,
+              2,
+            ),
+          },
+        ],
+        structuredContent: sanitized,
+      };
+    },
+  );
+
+  server.registerTool(
     'windows_private_desktop_status',
     {
       title: 'Read Nexowire private desktop status',

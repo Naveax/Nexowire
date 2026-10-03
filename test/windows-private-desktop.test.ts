@@ -7,10 +7,14 @@ import { promises as fs } from 'node:fs';
 import {
   executeWindowsPrivateDesktopCapability,
 } from '../src/agent/windows-private-desktop.js';
+import {
+  captureWindowsPrivateScreen,
+} from '../src/agent/windows-private-screen.js';
 import { isReadOnlyCapability } from '../src/protocol/capabilities.js';
 
 test('private desktop status/windows are read-only while lifecycle/launch mutate', () => {
   for (const capability of [
+    'windows.private_screen.capture',
     'windows.private_desktop.status',
     'windows.private_desktop.windows',
   ]) {
@@ -592,6 +596,89 @@ test(
         'code' in error &&
         error.code ===
           'WINDOW_NOT_PRIVATE_DESKTOP',
+    );
+
+    const windowCapture =
+      await captureWindowsPrivateScreen({
+        source: 'window',
+        hwnd: privateHwnd,
+        max_width: 800,
+        max_height: 600,
+        max_bytes: 2_097_152,
+      });
+    assert.equal(
+      windowCapture.data.source,
+      'window',
+    );
+    assert.equal(
+      windowCapture.data.hwnd?.toUpperCase(),
+      privateHwnd.toUpperCase(),
+    );
+    assert.equal(
+      windowCapture.data.mimeType,
+      'image/png',
+    );
+    assert.equal(
+      windowCapture.data.inputDesktopBefore,
+      'Default',
+    );
+    assert.equal(
+      windowCapture.data.inputDesktopAfter,
+      'Default',
+    );
+    assert.equal(
+      windowCapture.data.visibleDesktopChanged,
+      false,
+    );
+    assert.ok(windowCapture.data.bytes > 100);
+    assert.ok(windowCapture.data.width > 0);
+    assert.ok(windowCapture.data.height > 0);
+    const windowPng = Buffer.from(
+      windowCapture.data.base64,
+      'base64',
+    );
+    assert.deepEqual(
+      [...windowPng.subarray(0, 4)],
+      [0x89, 0x50, 0x4e, 0x47],
+    );
+
+    const desktopCapture =
+      await captureWindowsPrivateScreen({
+        source: 'desktop',
+        max_width: 1280,
+        max_height: 720,
+        max_bytes: 4_194_304,
+      });
+    assert.equal(
+      desktopCapture.data.source,
+      'desktop',
+    );
+    assert.equal(
+      desktopCapture.data.inputDesktopBefore,
+      'Default',
+    );
+    assert.equal(
+      desktopCapture.data.inputDesktopAfter,
+      'Default',
+    );
+    assert.equal(
+      desktopCapture.data.visibleDesktopChanged,
+      false,
+    );
+    assert.ok(
+      desktopCapture.data.capturedWindows >= 1,
+    );
+    assert.ok(
+      desktopCapture.data.enumeratedWindows >=
+        desktopCapture.data.capturedWindows,
+    );
+    const desktopPng = Buffer.from(
+      desktopCapture.data.base64,
+      'base64',
+    );
+    assert.deepEqual(
+      [...desktopPng.subarray(0, 4)],
+      [0x89, 0x50, 0x4e, 0x47],
     );
 
     const status = (await executeWindowsPrivateDesktopCapability(
