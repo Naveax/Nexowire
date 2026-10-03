@@ -1,6 +1,9 @@
 import { timingSafeEqual } from 'node:crypto';
 import { D1ControlPlaneStore } from '../dist/src/product/d1-control-plane-store.js';
 import { ControlPlaneService } from '../dist/src/product/control-plane-service.js';
+import { D1McpOAuthStore } from '../dist/src/product/d1-mcp-oauth-store.js';
+import { McpOAuthService } from '../dist/src/product/mcp-oauth.js';
+import { createMcpOAuthHttpHandler } from '../dist/src/product/mcp-oauth-http.js';
 import { createControlPlaneHttpHandler } from '../dist/src/product/control-plane-http.js';
 import {
   clearSessionCookie,
@@ -85,6 +88,34 @@ export default {
         prepaidCapacityCredits: 0,
       }),
     });
+    const oauth = new McpOAuthService(
+      new D1McpOAuthStore(env.DB),
+      {
+        issuer: url.origin,
+        resource: envValue(
+          env,
+          'NEXOWIRE_MCP_RESOURCE_URL',
+        ),
+      },
+    );
+    const oauthHandler = createMcpOAuthHttpHandler(
+      oauth,
+      {
+        authenticateSession: (req) =>
+          authenticate(req, env),
+        loginRedirect: (req) => {
+          const target = new URL(req.url);
+          const next =
+            target.pathname + target.search;
+          return (
+            '/auth/github/start?next=' +
+            encodeURIComponent(next)
+          );
+        },
+      },
+    );
+    const oauthResponse = await oauthHandler(request);
+    if (oauthResponse) return oauthResponse;
 
     if (url.pathname === '/health') {
       return Response.json({
