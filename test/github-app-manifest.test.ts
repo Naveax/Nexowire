@@ -67,12 +67,12 @@ test('GitHub App manifest exchange returns only OAuth credentials needed by Nexo
     'https://api.github.com/app-manifests/manifest-code-12345678/conversions',
   ]);
   assert.equal(
-    'pem' in (credentials as Record<string, unknown>),
+    'pem' in (credentials as unknown as Record<string, unknown>),
     false,
   );
   assert.equal(
     'webhookSecret' in
-      (credentials as Record<string, unknown>),
+      (credentials as unknown as Record<string, unknown>),
     false,
   );
 });
