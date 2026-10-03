@@ -19,14 +19,11 @@ export interface HostedMcpMeteringDecision {
 
 export function hostedMcpUsageEventId(input: {
   accountId: string;
-  authorizationHeader: string | undefined;
   body: unknown;
   toolName: string;
 }): string {
   const digest = createHash('sha256')
     .update(input.accountId, 'utf8')
-    .update('\0')
-    .update(input.authorizationHeader ?? '', 'utf8')
     .update('\0')
     .update(input.toolName, 'utf8')
     .update('\0')
@@ -71,8 +68,6 @@ export async function enforceHostedMcpMetering(input: {
       accountId: input.authorization.accountId,
       eventId: hostedMcpUsageEventId({
         accountId: input.authorization.accountId,
-        authorizationHeader:
-          input.authorizationHeader,
         body: input.body,
         toolName,
       }),
