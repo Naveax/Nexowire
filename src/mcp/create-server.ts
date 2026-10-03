@@ -3282,6 +3282,107 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_show',
+    {
+      title: 'Show Nexowire private desktop',
+      description:
+        'Switch the physical Windows input desktop to NexowirePrivate. This is default-denied and requires an active local physical-console grant. Ctrl+Alt+D remains the manual return failsafe.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_desktop.show',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_console_control_status',
+    {
+      title: 'Read physical console-control grant',
+      description:
+        'Read whether the local Windows user has explicitly approved a still-valid physical-console control grant, including its expiry.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.console_control.status',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_console_control_request',
+    {
+      title: 'Request physical console control',
+      description:
+        'Ask the local Windows user for explicit, time-bounded permission to control the physical console. A local ALLOW/DENY dialog is required; remote approval alone cannot create the grant.',
+      inputSchema: {
+        ...targetFields,
+        duration_minutes: z
+          .number()
+          .int()
+          .min(1)
+          .max(60)
+          .optional(),
+        reason: z.string().min(1).max(256).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      duration_minutes,
+      reason,
+    }) =>
+      await execute(
+        ctx,
+        'windows.console_control.request',
+        {
+          ...(duration_minutes !== undefined
+            ? { duration_minutes }
+            : {}),
+          ...(reason ? { reason } : {}),
+        },
+        device_id,
+        provider_id,
+        130_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_console_control_revoke',
+    {
+      title: 'Revoke physical console control',
+      description:
+        'Immediately revoke the current physical-console control grant. Revocation is always allowed and does not require an active grant.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.console_control.revoke',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_processes',
     {
       title: 'List Windows processes',
