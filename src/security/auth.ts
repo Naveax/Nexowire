@@ -33,6 +33,7 @@ export type BearerAuthorization =
       scope: 'mcp';
       accountId: string;
       role: CredentialRole;
+      allowedDeviceIds?: string[];
     };
 
 export function resolveBearerAuthorization(
@@ -93,6 +94,13 @@ export function authorizationGrant(
   if (authorization.kind === 'control-plane') {
     return {
       role: authorization.role,
+      ...(authorization.allowedDeviceIds
+        ? {
+            allowedDeviceIds: [
+              ...authorization.allowedDeviceIds,
+            ],
+          }
+        : {}),
     };
   }
 
@@ -160,6 +168,7 @@ export async function resolveMcpAuthorization(
     | {
         accountId: string;
         role: CredentialRole;
+        allowedDeviceIds?: string[];
       }
     | undefined
   >,
@@ -194,5 +203,12 @@ export async function resolveMcpAuthorization(
     scope: 'mcp',
     accountId: remote.accountId,
     role: remote.role,
+    ...(remote.allowedDeviceIds
+      ? {
+          allowedDeviceIds: [
+            ...remote.allowedDeviceIds,
+          ],
+        }
+      : {}),
   };
 }
