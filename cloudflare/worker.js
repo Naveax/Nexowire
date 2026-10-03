@@ -319,6 +319,18 @@ export default {
       request.method === 'GET' &&
       url.pathname === '/setup/github'
     ) {
+      const configured =
+        await storedGitHubOAuthCredentials(
+          env,
+          env.DB,
+        );
+      if (configured) {
+        return Response.json(
+          { error: 'SETUP_ALREADY_CONFIGURED' },
+          { status: 409 },
+        );
+      }
+
       const state = url.searchParams.get('state') ?? '';
       const verified = verifyOAuthState(
         state,
@@ -348,6 +360,18 @@ export default {
       request.method === 'GET' &&
       url.pathname === '/setup/github/callback'
     ) {
+      const configured =
+        await storedGitHubOAuthCredentials(
+          env,
+          env.DB,
+        );
+      if (configured) {
+        return Response.json(
+          { error: 'SETUP_ALREADY_CONFIGURED' },
+          { status: 409 },
+        );
+      }
+
       const state = url.searchParams.get('state') ?? '';
       const code = url.searchParams.get('code') ?? '';
       const verified = verifyOAuthState(
