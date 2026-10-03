@@ -56,7 +56,7 @@ test('Hub lifecycle refuses plaintext bearer persistence', () => {
 });
 
 
-test('Hub install restarts only when a running launcher's persisted config changed', () => {
+test("Hub install restarts only when a running launcher's persisted config changed", () => {
   const oldLauncher =
     '$env:NEXOWIRE_HTTP_ALLOWED_HOSTS=\'old.example\'';
   const sameLauncher =
