@@ -207,11 +207,16 @@ export default {
         });
       }
 
+      const devices = await store.listDevices(account.id);
+
       return Response.json({
         authenticated: true,
         accountId: account.id,
         role: account.admin ? 'admin' : 'user',
         scopes: tokenIdentity.scopes,
+        allowedDeviceIds: devices.map(
+          (device) => device.id,
+        ),
       });
     }
 
