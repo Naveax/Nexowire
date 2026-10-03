@@ -85,7 +85,7 @@ async function main() {
     'cloudflare/wrangler.jsonc';
   const outputPath =
     process.argv[3] ??
-    '.wrangler/nexowire-control-plane.runtime.json';
+    'wrangler.runtime.json';
 
   const template = JSON.parse(
     await fs.readFile(templatePath, 'utf8'),
