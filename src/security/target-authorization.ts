@@ -6,11 +6,19 @@ import {
 export function hasMcpTargetRestrictions(
   authorization: BearerAuthorization | undefined,
 ): boolean {
+  if (authorization?.scope !== 'mcp') return false;
+
+  // Hosted control-plane identities are always scoped to the
+  // account's explicit device set. An empty set means "no devices",
+  // never "unrestricted".
+  if (authorization.kind === 'control-plane') {
+    return true;
+  }
+
   const grant = authorizationGrant(authorization);
   return (
-    authorization?.scope === 'mcp' &&
-    ((grant?.allowedDeviceIds?.length ?? 0) > 0 ||
-      (grant?.allowedRoutingPolicies?.length ?? 0) > 0)
+    (grant?.allowedDeviceIds?.length ?? 0) > 0 ||
+    (grant?.allowedRoutingPolicies?.length ?? 0) > 0
   );
 }
 

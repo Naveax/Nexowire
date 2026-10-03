@@ -46,6 +46,7 @@ export interface NexowireConfig {
   allowInsecureRemote?: boolean;
   oidc?: NexowireOidcConfig;
   controlPlaneAgentAuth?: NexowireControlPlaneAgentAuthConfig;
+  mcpResourceUrl?: string;
   stateDir: string;
   skillsDir: string;
 }
@@ -74,6 +75,44 @@ function envFlag(value: string | undefined): boolean {
     normalized === 'yes' ||
     normalized === 'on'
   );
+}
+
+function optionalMcpResourceUrl(
+  value: string | undefined,
+): string | undefined {
+  const raw = optional(value);
+  if (!raw) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(
+      'NEXOWIRE_MCP_RESOURCE_URL must be a valid URL.',
+    );
+  }
+
+  const loopback =
+    url.hostname === '127.0.0.1' ||
+    url.hostname === 'localhost' ||
+    url.hostname === '::1' ||
+    url.hostname === '[::1]';
+
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== '/mcp' ||
+    (url.protocol !== 'https:' &&
+      !(loopback && url.protocol === 'http:'))
+  ) {
+    throw new Error(
+      'NEXOWIRE_MCP_RESOURCE_URL must be https://.../mcp (or loopback http://.../mcp for development).',
+    );
+  }
+
+  return url.toString();
 }
 
 export function isLoopbackHost(host: string): boolean {
@@ -311,6 +350,10 @@ export function loadConfig(
     controlPlaneTimeoutMs = parsed;
   }
 
+  const mcpResourceUrl = optionalMcpResourceUrl(
+    env.NEXOWIRE_MCP_RESOURCE_URL,
+  );
+
   const controlPlaneAgentAuth:
     | NexowireControlPlaneAgentAuthConfig
     | undefined =
@@ -347,6 +390,9 @@ export function loadConfig(
     ...(oidc ? { oidc } : {}),
     ...(controlPlaneAgentAuth
       ? { controlPlaneAgentAuth }
+      : {}),
+    ...(mcpResourceUrl
+      ? { mcpResourceUrl }
       : {}),
     stateDir,
     skillsDir:

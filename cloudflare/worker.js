@@ -81,41 +81,6 @@ async function authenticate(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const store = new D1ControlPlaneStore(env.DB);
-    const service = new ControlPlaneService(store, {
-      infrastructure: () => ({
-        freeCapacityPercent: boundedCapacity(env),
-        prepaidCapacityCredits: 0,
-      }),
-    });
-    const oauth = new McpOAuthService(
-      new D1McpOAuthStore(env.DB),
-      {
-        issuer: url.origin,
-        resource: envValue(
-          env,
-          'NEXOWIRE_MCP_RESOURCE_URL',
-        ),
-      },
-    );
-    const oauthHandler = createMcpOAuthHttpHandler(
-      oauth,
-      {
-        authenticateSession: (req) =>
-          authenticate(req, env),
-        loginRedirect: (req) => {
-          const target = new URL(req.url);
-          const next =
-            target.pathname + target.search;
-          return (
-            '/auth/github/start?next=' +
-            encodeURIComponent(next)
-          );
-        },
-      },
-    );
-    const oauthResponse = await oauthHandler(request);
-    if (oauthResponse) return oauthResponse;
 
     if (url.pathname === '/health') {
       return Response.json({
@@ -123,6 +88,55 @@ export default {
         service: 'nexowire-control-plane',
         ownerPaidSpendAllowed: false,
       });
+    }
+
+    const store = new D1ControlPlaneStore(env.DB);
+    const service = new ControlPlaneService(store, {
+      infrastructure: () => ({
+        freeCapacityPercent: boundedCapacity(env),
+        prepaidCapacityCredits: 0,
+      }),
+    });
+
+    const oauthNeeded =
+      url.pathname.startsWith('/oauth/') ||
+      url.pathname.startsWith('/.well-known/') ||
+      url.pathname ===
+        '/api/v1/internal/mcp/authenticate';
+    const oauth = oauthNeeded
+      ? new McpOAuthService(
+          new D1McpOAuthStore(env.DB),
+          {
+            issuer: url.origin,
+            resource: envValue(
+              env,
+              'NEXOWIRE_MCP_RESOURCE_URL',
+            ),
+          },
+        )
+      : null;
+
+    if (oauth) {
+      const oauthHandler =
+        createMcpOAuthHttpHandler(
+          oauth,
+          {
+            authenticateSession: (req) =>
+              authenticate(req, env),
+            loginRedirect: (req) => {
+              const target = new URL(req.url);
+              const next =
+                target.pathname + target.search;
+              return (
+                '/auth/github/start?next=' +
+                encodeURIComponent(next)
+              );
+            },
+          },
+        );
+      const oauthResponse =
+        await oauthHandler(request);
+      if (oauthResponse) return oauthResponse;
     }
 
     if (url.pathname === '/auth/github/start') {
@@ -159,6 +173,70 @@ export default {
           'set-cookie': clearSessionCookie(),
           'cache-control': 'no-store',
         },
+      });
+    }
+
+    if (
+      request.method === 'POST' &&
+      url.pathname ===
+        '/api/v1/internal/mcp/authenticate'
+    ) {
+      const caller = await authenticate(request, env);
+      if (!caller || caller.role !== 'service') {
+        return Response.json(
+          { error: 'SERVICE_REQUIRED' },
+          { status: 403 },
+        );
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json(
+          { error: 'INVALID_REQUEST' },
+          { status: 400 },
+        );
+      }
+      const accessToken =
+        typeof body?.accessToken === 'string'
+          ? body.accessToken
+          : '';
+      if (!oauth) {
+        return Response.json(
+          { error: 'OAUTH_NOT_CONFIGURED' },
+          { status: 503 },
+        );
+      }
+      const tokenIdentity =
+        await oauth.authenticateAccessToken(
+          accessToken,
+        );
+      if (!tokenIdentity) {
+        return Response.json({
+          authenticated: false,
+        });
+      }
+
+      const account = await store.getAccount(
+        tokenIdentity.accountId,
+      );
+      if (!account) {
+        return Response.json({
+          authenticated: false,
+        });
+      }
+
+      const devices = await store.listDevices(account.id);
+
+      return Response.json({
+        authenticated: true,
+        accountId: account.id,
+        role: account.admin ? 'admin' : 'user',
+        scopes: tokenIdentity.scopes,
+        allowedDeviceIds: devices.map(
+          (device) => device.id,
+        ),
       });
     }
 
