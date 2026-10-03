@@ -404,6 +404,32 @@ async function openBrowser(url: string): Promise<void> {
   child.unref();
 }
 
+async function fetchUntilOk(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 15_000,
+): Promise<Response> {
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = 0;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, options);
+      lastStatus = response.status;
+      if (response.ok) return response;
+    } catch {
+      // Deployment/restart propagation can briefly refuse connections.
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, 500),
+    );
+  }
+  throw new Error(
+    'Endpoint did not become healthy in time: ' +
+      url +
+      (lastStatus ? ' (last HTTP ' + lastStatus + ')' : ''),
+  );
+}
+
 async function githubSetup(
   workerUrl: string,
   serviceToken: string,
@@ -619,14 +645,9 @@ async function main() {
       deployed.stdout + '\n' + deployed.stderr,
     );
 
-    const health = await fetch(
+    await fetchUntilOk(
       workerUrl + '/health',
     );
-    if (!health.ok) {
-      throw new Error(
-        'Control-plane health verification failed.',
-      );
-    }
 
     await githubSetup(
       workerUrl,
@@ -639,17 +660,14 @@ async function main() {
       nodeStatus: endpoints.status,
     });
 
-    const metadata = await fetch(
+    await fetchUntilOk(
       new URL(
         '/.well-known/oauth-protected-resource/mcp',
         endpoints.mcpUrl,
-      ),
+      ).toString(),
+      {},
+      20_000,
     );
-    if (!metadata.ok) {
-      throw new Error(
-        'Hub OAuth protected-resource metadata is unavailable after configuration.',
-      );
-    }
 
     process.stdout.write(
       JSON.stringify(
