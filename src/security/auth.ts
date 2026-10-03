@@ -27,6 +27,12 @@ export type BearerAuthorization =
       kind: 'oidc';
       scope: 'mcp';
       identity: ExternalIdentityGrant;
+    }
+  | {
+      kind: 'control-plane';
+      scope: 'mcp';
+      accountId: string;
+      role: CredentialRole;
     };
 
 export function resolveBearerAuthorization(
@@ -84,6 +90,12 @@ export function authorizationGrant(
   if (!authorization || authorization.kind === 'static') {
     return undefined;
   }
+  if (authorization.kind === 'control-plane') {
+    return {
+      role: authorization.role,
+    };
+  }
+
   if (authorization.kind === 'stored') {
     return {
       role:
@@ -142,6 +154,15 @@ export async function resolveMcpAuthorization(
   staticTokens: readonly string[],
   credentials?: CredentialStore,
   oidc?: OidcVerifier,
+  remoteVerifier?: (
+    header: string | undefined,
+  ) => Promise<
+    | {
+        accountId: string;
+        role: CredentialRole;
+      }
+    | undefined
+  >,
 ): Promise<BearerAuthorization | undefined> {
   const local = resolveBearerAuthorization(
     header,
@@ -150,13 +171,28 @@ export async function resolveMcpAuthorization(
     credentials,
   );
   if (local) return local;
-  if (!oidc) return undefined;
 
-  const identity = await oidc.verifyBearerHeader(header);
-  if (!identity) return undefined;
+  if (oidc) {
+    const identity =
+      await oidc.verifyBearerHeader(header);
+    if (identity) {
+      return {
+        kind: 'oidc',
+        scope: 'mcp',
+        identity,
+      };
+    }
+  }
+
+  const remote = remoteVerifier
+    ? await remoteVerifier(header)
+    : undefined;
+  if (!remote) return undefined;
+
   return {
-    kind: 'oidc',
+    kind: 'control-plane',
     scope: 'mcp',
-    identity,
+    accountId: remote.accountId,
+    role: remote.role,
   };
 }
