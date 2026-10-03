@@ -1,48 +1,89 @@
 # Cloudflare zero-owner-spend deployment
 
-This directory contains the first hosted control-plane target.
+This directory contains the hosted Nexowire control-plane target.
 
 Current state:
-- static dashboard assets: ready;
-- D1 schema: ready;
-- D1 store adapter: ready;
-- API handler: ready;
-- GitHub OAuth user sign-in: ready;
-- signed HttpOnly Nexowire sessions: ready;
-- internal usage charging: protected by a separate service bearer token.
+- static dashboard and one-click connect UI;
+- D1 accounts, devices, quota subjects, usage ledger and OAuth persistence;
+- GitHub OAuth user sign-in;
+- signed HttpOnly Nexowire sessions;
+- MCP OAuth 2.1 / PKCE support;
+- internal device authentication and usage charging;
+- no automatic paid infrastructure upgrade.
 
-## Why one Worker
+## Production topology
 
-Cloudflare Workers Static Assets can serve the web dashboard and invoke the Worker first only for /api/* and /health. This keeps the deployment small and avoids a separate frontend server.
+The Cloudflare Worker serves the control plane and static assets. The user's Nexowire Hub remains the MCP / native-agent data plane.
 
-## First deployment steps
+Required public endpoints:
+- control plane: Cloudflare Worker URL;
+- MCP resource: `https://<hub-host>/mcp`;
+- native agent: `wss://<hub-host>/agent`.
 
-Before first deploy, create a GitHub OAuth app with callback URL:
-   https://<your-worker-host>/auth/github/callback
+The Worker runs first for:
+- `/api/*`
+- `/auth/*`
+- `/oauth/*`
+- `/.well-known/*`
+- `/health`
 
-Then:
+## Recommended deployment
 
-1. create a D1 database:
-   npx wrangler@latest d1 create nexowire-control-plane --update-config --binding DB
-2. apply the migration:
-   npx wrangler@latest d1 execute nexowire-control-plane --remote --file cloudflare/migrations/0001_control_plane.sql
-3. apply the identity migration:
-   npx wrangler@latest d1 execute nexowire-control-plane --remote --file cloudflare/migrations/0002_external_identities.sql
-4. apply the quota-subject/device-anchor migration:
-   npx wrangler@latest d1 execute nexowire-control-plane --remote --file cloudflare/migrations/0003_quota_subject_device_anchor.sql
-5. configure Worker secrets:
-   npx wrangler@latest secret put GITHUB_CLIENT_ID
-   npx wrangler@latest secret put GITHUB_CLIENT_SECRET
-   npx wrangler@latest secret put NEXOWIRE_SESSION_SECRET
-   npx wrangler@latest secret put NEXOWIRE_INTERNAL_SERVICE_TOKEN
-   npx wrangler@latest secret put NEXOWIRE_ADMIN_GITHUB_ID
-6. build Nexowire:
-   npm run build
-7. deploy:
-   npx wrangler@latest deploy --config cloudflare/wrangler.jsonc
+Use the repository workflow:
 
-The checked-in config contains a placeholder database ID on purpose. No Cloudflare account secret or API token belongs in git.
+`.github/workflows/deploy-control-plane.yml`
+
+It:
+1. validates required secrets/variables;
+2. resolves or creates the `nexowire-control-plane` D1 database;
+3. generates `wrangler.runtime.json` without copying secret values into it;
+4. applies every migration in `cloudflare/migrations`;
+5. deploys the Worker and static assets;
+6. removes generated secret/runtime material.
+
+Do not manually apply individual migrations unless debugging. The current migration chain includes:
+- `0001_control_plane.sql`
+- `0002_external_identities.sql`
+- `0003_quota_subject_device_anchor.sql`
+- `0004_device_credential_lookup.sql`
+- `0005_mcp_oauth.sql`
+
+## GitHub Actions secrets
+
+Configure these repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `NEXOWIRE_GITHUB_CLIENT_ID`
+- `NEXOWIRE_GITHUB_CLIENT_SECRET`
+- `NEXOWIRE_SESSION_SECRET`
+- `NEXOWIRE_INTERNAL_SERVICE_TOKEN`
+
+The GitHub OAuth App callback must be:
+
+`https://<control-plane-worker-host>/auth/github/callback`
+
+Never commit these values or place them in `wrangler.jsonc`.
+
+## GitHub Actions variables
+
+Configure:
+
+- `NEXOWIRE_AGENT_WS_URL=wss://<hub-host>/agent`
+- `NEXOWIRE_MCP_RESOURCE_URL=https://<hub-host>/mcp`
+- `NEXOWIRE_ADMIN_GITHUB_ID=<numeric GitHub account id>`
+- `NEXOWIRE_FREE_CAPACITY_PERCENT=0..100`
+
+The MCP resource URL points at the Hub, not the Cloudflare Worker.
+
+## Local preparation
+
+The checked-in `cloudflare/wrangler.jsonc` deliberately contains a placeholder D1 database ID. Production config is generated with:
+
+`node scripts/prepare-cloudflare-control-plane.mjs`
+
+The generated `wrangler.runtime.json` and `.wrangler/*` deployment material are ignored by git.
 
 ## Financial invariant
 
-Do not configure automatic paid upgrades. Free-capacity exhaustion must fail closed. Any future paid relay capacity must be funded only from already-collected prepaid/subscription revenue.
+Nexowire must not auto-upgrade to paid provider capacity. Free-capacity exhaustion fails closed. Any future paid relay capacity must be funded from already-collected subscription/prepaid revenue rather than owner-paid overage.
