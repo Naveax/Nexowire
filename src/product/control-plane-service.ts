@@ -22,7 +22,9 @@ import {
   PRODUCT_PLANS,
   createCustomPlan,
   planHasFeature,
+  type CustomPlanInput,
   type ProductPlan,
+  type ProductPlanId,
 } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
 
@@ -520,6 +522,197 @@ export class ControlPlaneService {
       ownerAccountId: device.ownerAccountId,
       deviceName: device.name,
       platform: device.platform,
+    };
+  }
+
+  async setAccountEntitlement(
+    identity: ControlPlaneIdentity,
+    input: {
+      accountId: string;
+      planId: ProductPlanId;
+      customPlan?: CustomPlanInput | null;
+    },
+  ): Promise<{
+    accountId: string;
+    planId: ProductPlanId;
+    billingMode:
+      | 'free'
+      | 'subscription'
+      | 'prepaid-metered';
+    quotaSubjectId: string;
+  }> {
+    if (identity.role !== 'service') {
+      const actor = await this.requireAccount(
+        identity.accountId,
+      );
+      if (
+        identity.role !== 'admin' ||
+        actor.admin !== true
+      ) {
+        throw new Error('ADMIN_REQUIRED');
+      }
+    }
+
+    const account = await this.requireAccount(
+      input.accountId,
+    );
+
+    let targetPlan: ProductPlan;
+    let normalizedCustomPlan: CustomPlanInput | null;
+
+    if (input.planId === 'custom') {
+      if (!input.customPlan) {
+        throw new Error('CUSTOM_PLAN_REQUIRED');
+      }
+      targetPlan = createCustomPlan(input.customPlan);
+      normalizedCustomPlan = {
+        billingMode: input.customPlan.billingMode,
+        ...(input.customPlan.monthlyCredits !== undefined
+          ? {
+              monthlyCredits:
+                input.customPlan.monthlyCredits,
+            }
+          : {}),
+        ...(input.customPlan.maxDevices !== undefined
+          ? {
+              maxDevices: input.customPlan.maxDevices,
+            }
+          : {}),
+        ...(input.customPlan.maxConcurrentTasks !== undefined
+          ? {
+              maxConcurrentTasks:
+                input.customPlan.maxConcurrentTasks,
+            }
+          : {}),
+        ...(input.customPlan.features !== undefined
+          ? {
+              features: [
+                ...input.customPlan.features,
+              ],
+            }
+          : {}),
+      };
+    } else {
+      if (input.customPlan !== undefined &&
+          input.customPlan !== null) {
+        throw new Error('CUSTOM_PLAN_NOT_ALLOWED');
+      }
+      const builtIn = PRODUCT_PLANS[input.planId];
+      if (!builtIn) {
+        throw new Error('INVALID_PLAN_ID');
+      }
+      targetPlan = builtIn;
+      normalizedCustomPlan = null;
+    }
+
+    const targetKind =
+      targetPlan.billingMode === 'free'
+        ? 'free-cluster'
+        : targetPlan.billingMode ===
+            'prepaid-metered'
+          ? 'prepaid'
+          : 'subscription';
+
+    const currentSubject =
+      await this.store.getQuotaSubject(
+        account.quotaSubjectId,
+      );
+    if (!currentSubject) {
+      throw new Error('QUOTA_SUBJECT_NOT_FOUND');
+    }
+
+    const now = this.now().toISOString();
+    let quotaSubjectId = account.quotaSubjectId;
+
+    if (currentSubject.kind !== targetKind) {
+      if (targetKind === 'free-cluster') {
+        const devices =
+          await this.store.listDevices(account.id);
+        const freeSubjectIds = new Set<string>();
+
+        for (const device of devices) {
+          if (!device.deviceAnchorHash) continue;
+          const anchor =
+            await this.store.getDeviceAnchor(
+              device.deviceAnchorHash,
+            );
+          if (!anchor) continue;
+          const subject =
+            await this.store.getQuotaSubject(
+              anchor.quotaSubjectId,
+            );
+          if (subject?.kind === 'free-cluster') {
+            freeSubjectIds.add(subject.id);
+          }
+        }
+
+        const existingFreeSubjectId =
+          freeSubjectIds.values().next()
+            .value as string | undefined;
+
+        if (existingFreeSubjectId) {
+          quotaSubjectId =
+            existingFreeSubjectId;
+          for (const subjectId of freeSubjectIds) {
+            if (subjectId === quotaSubjectId) continue;
+            await this.store.mergeFreeQuotaSubjects(
+              subjectId,
+              quotaSubjectId,
+            );
+          }
+        } else {
+          quotaSubjectId =
+            'quota_' + randomUUID();
+          await this.store.putQuotaSubject({
+            id: quotaSubjectId,
+            kind: 'free-cluster',
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        for (const device of devices) {
+          if (!device.deviceAnchorHash) continue;
+          const existingAnchor =
+            await this.store.getDeviceAnchor(
+              device.deviceAnchorHash,
+            );
+          await this.store.putDeviceAnchor({
+            anchorHash:
+              device.deviceAnchorHash,
+            quotaSubjectId,
+            createdAt:
+              existingAnchor?.createdAt ??
+              now,
+            lastSeenAt: now,
+          });
+        }
+      } else {
+        quotaSubjectId =
+          'quota_' + randomUUID();
+        await this.store.putQuotaSubject({
+          id: quotaSubjectId,
+          kind: targetKind,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    const updated: ProductAccountRecord = {
+      ...account,
+      quotaSubjectId,
+      planId: input.planId,
+      customPlan: normalizedCustomPlan,
+      updatedAt: now,
+    };
+    await this.store.putAccount(updated);
+
+    return {
+      accountId: updated.id,
+      planId: updated.planId,
+      billingMode: targetPlan.billingMode,
+      quotaSubjectId: updated.quotaSubjectId,
     };
   }
 
