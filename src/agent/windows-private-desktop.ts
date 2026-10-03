@@ -396,6 +396,7 @@ Add-Type -TypeDefinition @"
 using System;using System.Runtime.InteropServices;public static class NxGo{public const uint S=0x100;[DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr OpenDesktop(string n,int f,bool i,uint a);[DllImport("user32.dll")]static extern bool SwitchDesktop(IntPtr h);[DllImport("user32.dll")]static extern bool CloseDesktop(IntPtr h);public static bool Go(){var d=OpenDesktop("NexowirePrivate",0,false,S);if(d==IntPtr.Zero)return false;try{return SwitchDesktop(d);}finally{CloseDesktop(d);}}}
 "@
 if(-not[NxGo]::Go()){[Windows.MessageBox]::Show('Nexowire Private Desktop is not running.','Nexowire')|Out-Null;exit 2}
+[pscustomobject]@{ok=$true;desktop='NexowirePrivate'}|ConvertTo-Json -Compress
 `;
 
 async function ensureScripts(): Promise<void> {
@@ -866,6 +867,73 @@ async function privateKeyboardHotkey(
   }
 }
 
+async function showPrivateDesktop(): Promise<{ data: unknown }> {
+  assertWindows();
+  await requireRunningPrivateDesktop();
+  await ensureScripts();
+
+  const before = await inputDesktop().catch(() => '');
+  if (before === DESKTOP_NAME) {
+    return {
+      data: {
+        shown: true,
+        reused: true,
+        desktopName: DESKTOP_NAME,
+        inputDesktopBefore: before,
+        inputDesktopAfter: before,
+        visibleDesktopChanged: false,
+        manualReturnHotkey: 'Ctrl+Alt+D',
+      },
+    };
+  }
+
+  const result = z
+    .object({
+      ok: z.literal(true),
+      desktop: z.literal(DESKTOP_NAME),
+    })
+    .parse(
+      await psJson([
+        '-File',
+        paths().switcher,
+      ]),
+    );
+
+  const deadline = Date.now() + 3_000;
+  let after = '';
+  while (Date.now() < deadline) {
+    after = await inputDesktop().catch(() => '');
+    if (after === DESKTOP_NAME) break;
+    await new Promise((resolve) =>
+      setTimeout(resolve, 50),
+    );
+  }
+
+  if (after !== DESKTOP_NAME) {
+    throw new PrivateDesktopError(
+      'PRIVATE_DESKTOP_SWITCH_NOT_VERIFIED',
+      'Windows did not confirm NexowirePrivate as the active input desktop.',
+      {
+        inputDesktopBefore: before,
+        inputDesktopAfter: after,
+      },
+    );
+  }
+
+  return {
+    data: {
+      ...result,
+      shown: true,
+      reused: false,
+      desktopName: DESKTOP_NAME,
+      inputDesktopBefore: before,
+      inputDesktopAfter: after,
+      visibleDesktopChanged: before !== after,
+      manualReturnHotkey: 'Ctrl+Alt+D',
+    },
+  };
+}
+
 export async function executeWindowsPrivateDesktopCapability(
   capability: string,
   input: unknown,
@@ -881,6 +949,8 @@ export async function executeWindowsPrivateDesktopCapability(
       return await launchApp(input);
     case 'windows.private_desktop.windows':
       return await windows();
+    case 'windows.private_desktop.show':
+      return await showPrivateDesktop();
     case 'windows.private_pointer.move':
       return await privatePointerMove(input);
     case 'windows.private_pointer.click':

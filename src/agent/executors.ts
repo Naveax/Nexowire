@@ -15,6 +15,11 @@ import { executeWindowsAccessibilityCapability } from './windows-accessibility.j
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
+import {
+  assertPhysicalConsoleGrant,
+  executeWindowsConsoleControlCapability,
+  requiresPhysicalConsoleGrant,
+} from './windows-console-grant.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
@@ -2016,6 +2021,10 @@ export async function executeCapability(
   policy: PathPolicy,
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
+  if (requiresPhysicalConsoleGrant(capability)) {
+    assertPhysicalConsoleGrant(capability);
+  }
+
   if (
     context.privilegeMode === 'broker' &&
     privilegeRequirement(capability, input) === 'elevated'
@@ -2222,7 +2231,12 @@ export async function executeCapability(
     case 'windows.private_pointer.click':
     case 'windows.private_keyboard.type':
     case 'windows.private_keyboard.hotkey':
+    case 'windows.private_desktop.show':
       return await executeWindowsPrivateDesktopCapability(capability, input);
+    case 'windows.console_control.status':
+    case 'windows.console_control.request':
+    case 'windows.console_control.revoke':
+      return await executeWindowsConsoleControlCapability(capability, input);
     case 'browser.session.start':
     case 'browser.session.list':
     case 'browser.session.stop':
