@@ -7,6 +7,9 @@ import {
 import {
   promises as fs,
 } from 'node:fs';
+import {
+  createServer,
+} from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -133,6 +136,40 @@ async function wrangler(
   );
 }
 
+async function freeLoopbackPort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(
+      {
+        host: '127.0.0.1',
+        port: 0,
+        exclusive: true,
+      },
+      () => {
+        const address = server.address();
+        if (
+          !address ||
+          typeof address === 'string'
+        ) {
+          server.close();
+          reject(
+            new Error(
+              'Could not allocate a Cloudflare OAuth callback port.',
+            ),
+          );
+          return;
+        }
+        const port = address.port;
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve(port);
+        });
+      },
+    );
+  });
+}
+
 async function ensureCloudflareLogin(): Promise<void> {
   const current = await wrangler(
     ['whoami', '--json'],
@@ -147,8 +184,13 @@ async function ensureCloudflareLogin(): Promise<void> {
         'Cloudflare browser authorization',
     }) + '\n',
   );
+  const callbackPort = await freeLoopbackPort();
   const login = await wrangler(
-    ['login'],
+    [
+      'login',
+      '--callback-port',
+      String(callbackPort),
+    ],
     { inherit: true, allowFailure: true },
   );
   if (login.code !== 0) {
