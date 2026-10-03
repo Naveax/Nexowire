@@ -98,10 +98,9 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
     assert.deepEqual(
       summary.requiredSecrets,
       [
-        'GITHUB_CLIENT_ID',
-        'GITHUB_CLIENT_SECRET',
         'NEXOWIRE_SESSION_SECRET',
         'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+        'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
       ],
     );
 
