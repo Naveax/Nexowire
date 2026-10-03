@@ -136,38 +136,54 @@ async function wrangler(
   );
 }
 
-async function freeLoopbackPort(): Promise<number> {
-  return await new Promise<number>((resolve, reject) => {
+async function callbackPortAvailable(
+  port = 8976,
+): Promise<boolean> {
+  return await new Promise<boolean>((resolve, reject) => {
     const server = createServer();
-    server.once('error', reject);
+    server.once('error', (error) => {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === 'EADDRINUSE'
+      ) {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
     server.listen(
       {
         host: '127.0.0.1',
-        port: 0,
+        port,
         exclusive: true,
       },
       () => {
-        const address = server.address();
-        if (
-          !address ||
-          typeof address === 'string'
-        ) {
-          server.close();
-          reject(
-            new Error(
-              'Could not allocate a Cloudflare OAuth callback port.',
-            ),
-          );
-          return;
-        }
-        const port = address.port;
         server.close((error) => {
           if (error) reject(error);
-          else resolve(port);
+          else resolve(true);
         });
       },
     );
   });
+}
+
+async function waitForWranglerCallbackPort(
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await callbackPortAvailable(8976)) {
+      return;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, 250),
+    );
+  }
+  throw new Error(
+    'Cloudflare OAuth callback port 8976 is still in use. Close the stale Wrangler login process and retry.',
+  );
 }
 
 async function ensureCloudflareLogin(): Promise<void> {
@@ -184,13 +200,9 @@ async function ensureCloudflareLogin(): Promise<void> {
         'Cloudflare browser authorization',
     }) + '\n',
   );
-  const callbackPort = await freeLoopbackPort();
+  await waitForWranglerCallbackPort();
   const login = await wrangler(
-    [
-      'login',
-      '--callback-port',
-      String(callbackPort),
-    ],
+    ['login'],
     { inherit: true, allowFailure: true },
   );
   if (login.code !== 0) {
