@@ -27,7 +27,8 @@
     "mcp:output-contract:generate": "node --import tsx scripts/generate-mcp-v1-output-contract.ts",
     "release:check": "npm run check && npm run build && node --import tsx scripts/check-release-package.ts",
     "release:verify": "node --import tsx scripts/verify-release-candidate.ts",
-    "release:tag:check": "node --import tsx scripts/check-release-tag.ts"
+    "release:tag:check": "node --import tsx scripts/check-release-tag.ts",
+    "control-plane:bootstrap": "node --import tsx scripts/bootstrap-cloudflare-control-plane.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
