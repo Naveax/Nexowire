@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
@@ -21,11 +20,9 @@ import {
   type BearerAuthorization,
 } from '../security/auth.js';
 import { OidcVerifier } from '../security/oidc.js';
-import {
-  deniedMcpToolNames,
-  requestedMcpToolNames,
-} from '../security/tool-authorization.js';
+import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
+import { enforceHostedMcpMetering } from './hosted-metering.js';
 import { onlineCapabilityUnion } from './tool-capabilities.js';
 
 export function configuredHttpAllowedHosts(
@@ -61,25 +58,6 @@ export function configuredHttpAllowedHosts(
       ...extra,
     ]),
   ];
-}
-
-function hostedMcpUsageEventId(input: {
-  accountId: string;
-  authorizationHeader: string | undefined;
-  body: unknown;
-  toolName: string;
-}): string {
-  const digest = createHash('sha256')
-    .update(input.accountId, 'utf8')
-    .update('\0')
-    .update(input.authorizationHeader ?? '', 'utf8')
-    .update('\0')
-    .update(input.toolName, 'utf8')
-    .update('\0')
-    .update(JSON.stringify(input.body), 'utf8')
-    .digest('hex');
-
-  return 'mcp-' + digest;
 }
 
 export async function runHttpServer(
@@ -252,66 +230,30 @@ export async function runHttpServer(
       });
       return;
     }
-    if (authorization?.kind === 'control-plane') {
-      if (!remoteMcpClient) {
-        res.status(503).json({
-          error: 'service_unavailable',
-          code: 'MCP_METERING_UNAVAILABLE',
-        });
-        return;
-      }
-
-      const requestedTools =
-        requestedMcpToolNames(req.body);
-      if (requestedTools.length > 1) {
-        res.status(400).json({
-          error: 'invalid_request',
-          code: 'MCP_METERED_BATCH_UNSUPPORTED',
-        });
-        return;
-      }
-
-      for (const toolName of requestedTools) {
-        const decision =
-          await remoteMcpClient.chargeTool({
-            accountId: authorization.accountId,
-            eventId: hostedMcpUsageEventId({
-              accountId: authorization.accountId,
-              authorizationHeader:
-                req.headers.authorization,
-              body: req.body,
-              toolName,
-            }),
-            toolName,
-          });
-
-        if (!decision) {
-          res.status(503).json({
-            error: 'service_unavailable',
-            code: 'MCP_METERING_UNAVAILABLE',
-          });
-          return;
-        }
-
-        if (decision.status === 'denied') {
-          const featureDenied =
-            decision.reason ===
-            'feature-not-in-plan';
-          res
-            .status(featureDenied ? 403 : 429)
-            .json({
-              error: featureDenied
-                ? 'forbidden'
-                : 'quota_exhausted',
-              code: featureDenied
-                ? 'MCP_FEATURE_NOT_IN_PLAN'
-                : 'MCP_QUOTA_EXHAUSTED',
+    const metering =
+      await enforceHostedMcpMetering({
+        authorization,
+        authorizationHeader:
+          req.headers.authorization,
+        body: req.body,
+        client: remoteMcpClient,
+      });
+    if (!metering.allowed) {
+      res.status(metering.status ?? 503).json({
+        error:
+          metering.error ??
+          'service_unavailable',
+        code:
+          metering.code ??
+          'MCP_METERING_UNAVAILABLE',
+        ...(metering.remainingCredits !== undefined
+          ? {
               remaining_credits:
-                decision.remainingCredits,
-            });
-          return;
-        }
-      }
+                metering.remainingCredits,
+            }
+          : {}),
+      });
+      return;
     }
 
     const availableCapabilities = onlineCapabilityUnion(
