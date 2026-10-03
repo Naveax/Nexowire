@@ -222,3 +222,145 @@ test('native agent WebSocket accepts and revokes a persisted agent credential', 
   assert.equal(status, 401);
   first.close();
 });
+
+
+test('remote device credential authorizes only its bound agent identity', async (t) => {
+  const http = createServer();
+  const broker = new AgentBroker();
+  const boundDeviceId =
+    '77777777-7777-4777-8777-777777777777';
+  const remoteCredentialVerifier = async (
+    authorizationHeader: string | undefined,
+  ) =>
+    authorizationHeader ===
+    'Bearer nwx_dev_remote-credential-1234567890'
+      ? { deviceId: boundDeviceId }
+      : undefined;
+
+  const wss = attachAgentWebSocketServer(
+    http,
+    broker,
+    [],
+    {
+      remoteCredentialVerifier,
+      heartbeatMs: 1_000,
+      helloTimeoutMs: 1_000,
+    },
+  );
+  await new Promise<void>((resolve) =>
+    http.listen(0, '127.0.0.1', resolve),
+  );
+
+  t.after(async () => {
+    for (const client of wss.clients) client.close();
+    await new Promise<void>((resolve) =>
+      wss.close(() => resolve()),
+    );
+    await new Promise<void>((resolve) =>
+      http.close(() => resolve()),
+    );
+  });
+
+  const address = http.address();
+  assert.ok(address && typeof address === 'object');
+  const url =
+    'ws://127.0.0.1:' + address.port + '/agent';
+
+  const accepted = new WebSocket(url, {
+    headers: {
+      Authorization:
+        'Bearer nwx_dev_remote-credential-1234567890',
+    },
+  });
+  await new Promise<void>((resolve, reject) => {
+    accepted.once('open', resolve);
+    accepted.once('error', reject);
+  });
+  accepted.send(
+    JSON.stringify({
+      type: 'hello',
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      instanceId:
+        '88888888-8888-4888-8888-888888888888',
+      device: {
+        id: boundDeviceId,
+        name: 'Remote Bound Device',
+        platform: process.platform,
+        arch: process.arch,
+        agentVersion: 'test',
+        capabilities: ['machine.snapshot'],
+      },
+    }),
+  );
+
+  for (
+    let i = 0;
+    i < 50 && !broker.has(boundDeviceId);
+    i++
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(broker.has(boundDeviceId), true);
+  accepted.close();
+
+  const mismatchedId =
+    '99999999-9999-4999-8999-999999999999';
+  const mismatched = new WebSocket(url, {
+    headers: {
+      Authorization:
+        'Bearer nwx_dev_remote-credential-1234567890',
+    },
+  });
+  await new Promise<void>((resolve, reject) => {
+    mismatched.once('open', resolve);
+    mismatched.once('error', reject);
+  });
+  const closed = new Promise<number>((resolve) => {
+    mismatched.once('close', (code) => resolve(code));
+  });
+  mismatched.send(
+    JSON.stringify({
+      type: 'hello',
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      instanceId:
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      device: {
+        id: mismatchedId,
+        name: 'Impersonation Attempt',
+        platform: process.platform,
+        arch: process.arch,
+        agentVersion: 'test',
+        capabilities: ['machine.snapshot'],
+      },
+    }),
+  );
+  assert.equal(await closed, 1008);
+  assert.equal(broker.has(mismatchedId), false);
+
+  const unauthorizedStatus =
+    await new Promise<number>((resolve, reject) => {
+      const denied = new WebSocket(url, {
+        headers: {
+          Authorization: 'Bearer nwx_dev_invalid-token',
+        },
+      });
+      denied.once(
+        'unexpected-response',
+        (_request, response) => {
+          resolve(response.statusCode ?? 0);
+          denied.terminate();
+        },
+      );
+      denied.once('open', () => {
+        reject(
+          new Error(
+            'Invalid remote device credential unexpectedly opened.',
+          ),
+        );
+      });
+      denied.once('error', () => {
+        // ws may also surface the 401 as an error after unexpected-response.
+      });
+    });
+  assert.equal(unauthorizedStatus, 401);
+});

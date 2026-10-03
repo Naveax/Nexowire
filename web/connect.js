@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(window.location.search);
 const callbackRaw = params.get('callback') ?? '';
 const state = params.get('state') ?? '';
+const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
 
@@ -20,7 +21,7 @@ function showError(message) {
 }
 
 function validatedLoopbackCallback() {
-  if (!callbackRaw || !state || !deviceName) {
+  if (!callbackRaw || !state || !deviceId || !deviceName) {
     return null;
   }
 
@@ -111,7 +112,7 @@ async function loadAccount() {
           accept: 'application/json',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ deviceName }),
+        body: JSON.stringify({ deviceName, deviceId }),
       });
 
       if (!pairing.ok) {

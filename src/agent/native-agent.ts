@@ -26,13 +26,18 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 
-interface AgentIdentity {
+export interface AgentIdentity {
   id: string;
 }
 
-async function loadIdentity(): Promise<AgentIdentity> {
-  const dir = path.join(os.homedir(), '.nexowire');
-  const file = path.join(dir, 'agent.json');
+export async function loadOrCreateAgentIdentity(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<AgentIdentity> {
+  const file = path.resolve(
+    env.NEXOWIRE_AGENT_IDENTITY_FILE?.trim() ||
+      path.join(os.homedir(), '.nexowire', 'agent.json'),
+  );
+  const dir = path.dirname(file);
   await fs.mkdir(dir, { recursive: true });
 
   try {
@@ -292,7 +297,7 @@ export async function capabilitiesForAgent(
 export async function runNativeAgent(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<never> {
-  const identity = await loadIdentity();
+  const identity = await loadOrCreateAgentIdentity(env);
   const instanceId = randomUUID();
   const hubEndpoints = parseHubEndpoints(env);
   const token = agentTokenFromEnv(env);

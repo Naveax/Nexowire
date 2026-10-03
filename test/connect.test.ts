@@ -10,6 +10,7 @@ import {
   parseConnectArgs,
   startConnectLoopbackReceiver,
 } from '../src/connect.js';
+import { writeProtectedSecretFile } from '../src/security/protected-secret-files.js';
 
 test('control-plane URL requires HTTPS except loopback development', () => {
   assert.equal(
@@ -55,6 +56,7 @@ test('approval URL only accepts a strict 127.0.0.1 callback', () => {
       callbackUrl:
         'http://127.0.0.1:43199/nexowire-connect',
       state: 'state-123',
+      deviceId: '11111111-1111-4111-8111-111111111111',
       deviceName: 'gaming-pc',
       platform: 'win32',
     }),
@@ -67,6 +69,10 @@ test('approval URL only accepts a strict 127.0.0.1 callback', () => {
     'http://127.0.0.1:43199/nexowire-connect',
   );
   assert.equal(url.searchParams.get('state'), 'state-123');
+  assert.equal(
+    url.searchParams.get('deviceId'),
+    '11111111-1111-4111-8111-111111111111',
+  );
   assert.equal(url.searchParams.get('deviceName'), 'gaming-pc');
 
   assert.throws(
@@ -75,6 +81,7 @@ test('approval URL only accepts a strict 127.0.0.1 callback', () => {
         controlPlaneUrl: 'https://example.com',
         callbackUrl: 'https://evil.example/nexowire-connect',
         state: 'x',
+        deviceId: '11111111-1111-4111-8111-111111111111',
         deviceName: 'pc',
         platform: 'win32',
       }),
@@ -113,7 +120,7 @@ test('loopback receiver rejects wrong state and accepts the matching state', asy
 });
 
 test(
-  'one-click connect stores device credential with DPAPI and never exposes it in result',
+  'one-click connect verifies data-plane auth and stores the device credential with DPAPI',
   { skip: process.platform !== 'win32' },
   async () => {
     const dir = await fs.mkdtemp(
@@ -125,24 +132,33 @@ test(
     );
     const credentialFile = path.join(
       dir,
-      'device-credential.dpapi.json',
+      'agent-bearer-token.dpapi.json',
     );
     const connectionFile = path.join(
       dir,
       'control-plane.json',
     );
+    const identityFile = path.join(dir, 'agent.json');
 
     const env = {
       ...process.env,
       NEXOWIRE_DEVICE_ANCHOR_DPAPI_FILE: anchorFile,
-      NEXOWIRE_CONTROL_PLANE_DEVICE_CREDENTIAL_DPAPI_FILE:
-        credentialFile,
+      NEXOWIRE_AGENT_TOKEN_DPAPI_FILE: credentialFile,
       NEXOWIRE_CONTROL_PLANE_CONNECTION_FILE:
         connectionFile,
+      NEXOWIRE_AGENT_IDENTITY_FILE: identityFile,
     };
 
     let consumeBody:
       | Record<string, unknown>
+      | undefined;
+    let approvalDeviceId: string | undefined;
+    let enrolled:
+      | {
+          hubUrl: string;
+          token: string;
+          secretFile: string;
+        }
       | undefined;
 
     const fetchImpl: typeof fetch = async (input, init) => {
@@ -155,19 +171,27 @@ test(
         String(init?.body ?? '{}'),
       ) as Record<string, unknown>;
 
+      assert.ok(approvalDeviceId);
       return Response.json({
         device: {
-          id: 'device-123',
+          id: approvalDeviceId,
           name: 'gaming-pc',
           platform: 'win32',
         },
         deviceCredential:
           'nwx_dev_test-secret-that-must-not-leak',
+        agentUrl: 'wss://relay.example.com/agent',
       });
     };
 
     const openBrowser = async (approvalUrl: string) => {
       const approval = new URL(approvalUrl);
+      approvalDeviceId =
+        approval.searchParams.get('deviceId') ?? undefined;
+      assert.match(
+        approvalDeviceId ?? '',
+        /^[0-9a-f-]{36}$/i,
+      );
       const callback = new URL(
         approval.searchParams.get('callback')!,
       );
@@ -187,6 +211,51 @@ test(
       assert.equal(response.status, 200);
     };
 
+    const enrollAgent = async (
+      options: {
+        hubUrl: string;
+        secretFile?: string;
+      },
+      token: string,
+    ) => {
+      assert.ok(options.secretFile);
+      enrolled = {
+        hubUrl: options.hubUrl,
+        token,
+        secretFile: options.secretFile!,
+      };
+      await writeProtectedSecretFile(
+        options.secretFile!,
+        'agent-bearer-token',
+        token,
+        { overwrite: true },
+      );
+      return {
+        enrolled: true as const,
+        connectTest: {
+          endpoint: options.hubUrl,
+          reachable: true,
+          authenticated: true,
+          status: 'authenticated' as const,
+          durationMs: 1,
+        },
+        lifecycle: {
+          installed: true,
+          platform: 'win32' as const,
+          name: 'Nexowire Native Agent',
+          state: 'running',
+          autostart: true,
+          pid: 123,
+          launcher: 'launcher.ps1',
+          definition: 'task',
+        },
+        doctor: {
+          overall: 'PASS' as const,
+        },
+        externalVerificationRequired: true as const,
+      } as any;
+    };
+
     try {
       const result = await connectNexowire(
         {
@@ -197,6 +266,7 @@ test(
           env,
           fetchImpl,
           openBrowser,
+          enrollAgent: enrollAgent as any,
           now: () =>
             new Date('2026-10-02T12:00:00.000Z'),
         },
@@ -205,11 +275,14 @@ test(
       assert.deepEqual(result, {
         paired: true,
         controlPlaneUrl: 'https://example.com',
-        deviceId: 'device-123',
+        agentUrl: 'wss://relay.example.com/agent',
+        deviceId: approvalDeviceId,
         deviceName: 'gaming-pc',
         credentialStored: true,
-        dataPlaneReady: false,
-        next: 'data-plane-enrollment',
+        dataPlaneReady: true,
+        authenticated: true,
+        lifecycleState: 'running',
+        doctorOverall: 'PASS',
       });
 
       assert.equal(
@@ -224,6 +297,11 @@ test(
         String(consumeBody?.deviceAnchorHash),
         /^[a-f0-9]{64}$/,
       );
+      assert.deepEqual(enrolled, {
+        hubUrl: 'wss://relay.example.com/agent',
+        token: 'nwx_dev_test-secret-that-must-not-leak',
+        secretFile: credentialFile,
+      });
 
       const protectedCredential =
         await fs.readFile(credentialFile, 'utf8');
@@ -246,7 +324,17 @@ test(
         ),
         false,
       );
-      assert.match(metadata, /"deviceId": "device-123"/);
+      assert.ok(approvalDeviceId);
+      assert.match(
+        metadata,
+        new RegExp(
+          '"deviceId": "' + approvalDeviceId + '"',
+        ),
+      );
+      assert.match(
+        metadata,
+        /"agentUrl": "wss:\/\/relay\.example\.com\/agent"/,
+      );
     } finally {
       await fs.rm(dir, {
         recursive: true,

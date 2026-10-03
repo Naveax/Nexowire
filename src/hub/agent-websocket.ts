@@ -5,6 +5,7 @@ import { AgentHelloSchema } from '../protocol/agent.js';
 import { parseTokenList } from '../security/tokens.js';
 import { authorizeBearer } from '../security/auth.js';
 import type { CredentialStore } from '../security/credential-store.js';
+import type { RemoteAgentAuthorization } from './control-plane-agent-auth.js';
 
 function isLoopbackAddress(address: string | undefined): boolean {
   if (!address) return false;
@@ -19,6 +20,9 @@ export interface AgentWebSocketServerOptions {
   heartbeatMs?: number;
   helloTimeoutMs?: number;
   credentialStore?: CredentialStore;
+  remoteCredentialVerifier?: (
+    authorizationHeader: string | undefined,
+  ) => Promise<RemoteAgentAuthorization | undefined>;
 }
 
 export function attachAgentWebSocketServer(
@@ -36,30 +40,67 @@ export function attachAgentWebSocketServer(
       ? parseTokenList(agentTokens)
       : parseTokenList(...(agentTokens ?? []));
 
+  const remotelyAuthorizedDeviceIds =
+    new WeakMap<WebSocket, string>();
+
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     if (url.pathname !== '/agent') return;
 
-    const authRequired =
-      configuredAgentTokens.length > 0 ||
-      options.credentialStore?.hasConfigured('agent') === true;
-    const authenticated = authRequired
-      ? authorizeBearer(
-          request.headers.authorization,
-          'agent',
-          configuredAgentTokens,
-          options.credentialStore,
-        )
-      : isLoopbackAddress(request.socket.remoteAddress);
+    void (async () => {
+      const localAuthConfigured =
+        configuredAgentTokens.length > 0 ||
+        options.credentialStore?.hasConfigured('agent') === true;
+      const remoteAuthConfigured =
+        options.remoteCredentialVerifier !== undefined;
+      const authRequired =
+        localAuthConfigured || remoteAuthConfigured;
 
-    if (!authenticated) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-      socket.destroy();
-      return;
-    }
+      const locallyAuthenticated = localAuthConfigured
+        ? authorizeBearer(
+            request.headers.authorization,
+            'agent',
+            configuredAgentTokens,
+            options.credentialStore,
+          )
+        : false;
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
+      const remoteAuthorization =
+        !locallyAuthenticated &&
+        options.remoteCredentialVerifier
+          ? await options.remoteCredentialVerifier(
+              request.headers.authorization,
+            )
+          : undefined;
+
+      const authenticated = authRequired
+        ? locallyAuthenticated || Boolean(remoteAuthorization)
+        : isLoopbackAddress(request.socket.remoteAddress);
+
+      if (!authenticated) {
+        socket.write(
+          'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n',
+        );
+        socket.destroy();
+        return;
+      }
+
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        if (remoteAuthorization) {
+          remotelyAuthorizedDeviceIds.set(
+            ws,
+            remoteAuthorization.deviceId,
+          );
+        }
+        wss.emit('connection', ws, request);
+      });
+    })().catch(() => {
+      if (!socket.destroyed) {
+        socket.write(
+          'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n',
+        );
+        socket.destroy();
+      }
     });
   });
 
@@ -84,6 +125,19 @@ export function attachAgentWebSocketServer(
       const hello = AgentHelloSchema.safeParse(decoded);
       if (!hello.success) {
         socket.close(1008, 'Invalid agent hello');
+        return;
+      }
+
+      const authorizedDeviceId =
+        remotelyAuthorizedDeviceIds.get(socket);
+      if (
+        authorizedDeviceId &&
+        hello.data.device.id !== authorizedDeviceId
+      ) {
+        socket.close(
+          1008,
+          'Agent credential does not match device identity',
+        );
         return;
       }
 

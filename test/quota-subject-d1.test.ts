@@ -81,6 +81,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0001_control_plane.sql',
     '0002_external_identities.sql',
     '0003_quota_subject_device_anchor.sql',
+    '0004_device_credential_lookup.sql',
   ]) {
     db.exec(
       readFileSync(

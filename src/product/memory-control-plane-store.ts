@@ -196,6 +196,17 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
     return value ? clone(value) : null;
   }
 
+  async getDeviceByCredentialHash(
+    credentialHash: string,
+  ): Promise<ProductDeviceRecord | null> {
+    for (const device of this.devices.values()) {
+      if (device.credentialHash === credentialHash) {
+        return clone(device);
+      }
+    }
+    return null;
+  }
+
   async putDevice(record: ProductDeviceRecord): Promise<void> {
     this.devices.set(record.id, clone(record));
   }

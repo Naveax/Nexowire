@@ -28,6 +28,12 @@ export interface NexowireOidcConfig {
   allowInsecureHttp?: boolean;
 }
 
+export interface NexowireControlPlaneAgentAuthConfig {
+  url: string;
+  serviceToken: string;
+  timeoutMs?: number;
+}
+
 export interface NexowireConfig {
   host: string;
   port: number;
@@ -39,6 +45,7 @@ export interface NexowireConfig {
   tlsKeyFile?: string;
   allowInsecureRemote?: boolean;
   oidc?: NexowireOidcConfig;
+  controlPlaneAgentAuth?: NexowireControlPlaneAgentAuthConfig;
   stateDir: string;
   skillsDir: string;
 }
@@ -271,6 +278,52 @@ export function loadConfig(
         }
       : undefined;
 
+  const controlPlaneUrl = optional(
+    env.NEXOWIRE_CONTROL_PLANE_URL,
+  );
+  const controlPlaneServiceToken = optional(
+    env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN,
+  );
+  if (
+    Boolean(controlPlaneUrl) !==
+    Boolean(controlPlaneServiceToken)
+  ) {
+    throw new Error(
+      'NEXOWIRE_CONTROL_PLANE_URL and NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN must be configured together.',
+    );
+  }
+
+  const rawControlPlaneTimeout = optional(
+    env.NEXOWIRE_CONTROL_PLANE_AUTH_TIMEOUT_MS,
+  );
+  let controlPlaneTimeoutMs: number | undefined;
+  if (rawControlPlaneTimeout !== undefined) {
+    const parsed = Number(rawControlPlaneTimeout);
+    if (
+      !Number.isInteger(parsed) ||
+      parsed < 250 ||
+      parsed > 10_000
+    ) {
+      throw new Error(
+        'NEXOWIRE_CONTROL_PLANE_AUTH_TIMEOUT_MS must be an integer between 250 and 10000.',
+      );
+    }
+    controlPlaneTimeoutMs = parsed;
+  }
+
+  const controlPlaneAgentAuth:
+    | NexowireControlPlaneAgentAuthConfig
+    | undefined =
+    controlPlaneUrl && controlPlaneServiceToken
+      ? {
+          url: controlPlaneUrl,
+          serviceToken: controlPlaneServiceToken,
+          ...(controlPlaneTimeoutMs !== undefined
+            ? { timeoutMs: controlPlaneTimeoutMs }
+            : {}),
+        }
+      : undefined;
+
   return {
     host: optional(env.NEXOWIRE_HTTP_HOST) ?? '127.0.0.1',
     port,
@@ -292,6 +345,9 @@ export function loadConfig(
       ? { allowInsecureRemote: true }
       : {}),
     ...(oidc ? { oidc } : {}),
+    ...(controlPlaneAgentAuth
+      ? { controlPlaneAgentAuth }
+      : {}),
     stateDir,
     skillsDir:
       optional(env.NEXOWIRE_SKILLS_DIR) ??

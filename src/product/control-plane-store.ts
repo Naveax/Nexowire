@@ -130,6 +130,9 @@ export interface ControlPlaneStore {
   ): Promise<void>;
 
   getDevice(id: string): Promise<ProductDeviceRecord | null>;
+  getDeviceByCredentialHash(
+    credentialHash: string,
+  ): Promise<ProductDeviceRecord | null>;
   putDevice(record: ProductDeviceRecord): Promise<void>;
   listDevices(ownerAccountId?: string): Promise<ProductDeviceRecord[]>;
 

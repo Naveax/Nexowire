@@ -13,6 +13,7 @@ import {
   mcpAuthTokens,
 } from '../config.js';
 import { attachAgentWebSocketServer } from '../hub/agent-websocket.js';
+import { createControlPlaneAgentCredentialVerifier } from '../hub/control-plane-agent-auth.js';
 import {
   resolveMcpAuthorization,
   type BearerAuthorization,
@@ -62,11 +63,29 @@ export async function runHttpServer(
   broker: AgentBroker,
   context: McpContext,
 ): Promise<void> {
+  const remoteAgentCredentialVerifier =
+    config.controlPlaneAgentAuth
+      ? createControlPlaneAgentCredentialVerifier({
+          controlPlaneUrl:
+            config.controlPlaneAgentAuth.url,
+          serviceToken:
+            config.controlPlaneAgentAuth.serviceToken,
+          ...(config.controlPlaneAgentAuth.timeoutMs !== undefined
+            ? {
+                timeoutMs:
+                  config.controlPlaneAgentAuth.timeoutMs,
+              }
+            : {}),
+        })
+      : undefined;
+
   assertSafeRemoteBinding(config, {
     mcp:
       (context.credentials?.hasUsable('mcp') ?? false) ||
       Boolean(config.oidc),
-    agent: context.credentials?.hasUsable('agent') ?? false,
+    agent:
+      (context.credentials?.hasUsable('agent') ?? false) ||
+      Boolean(remoteAgentCredentialVerifier),
   });
   const allowedHosts = configuredHttpAllowedHosts();
   const app = createMcpExpressApp({
@@ -203,6 +222,12 @@ export async function runHttpServer(
     agentAuthTokens(config),
     {
       credentialStore: context.credentials,
+      ...(remoteAgentCredentialVerifier
+        ? {
+            remoteCredentialVerifier:
+              remoteAgentCredentialVerifier,
+          }
+        : {}),
     },
   );
 
