@@ -119,60 +119,67 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Current verified `main`: `73c563ff631ea782733f6a71bfb021452850a1f3`.
+Current verified `main`: `594a6a81d155ab30cc18e31fa0b68a5f8fae4d93`.
 
-Recent merged product/hosting slices:
-- PR #157: hosted MCP account scope + usage metering.
-- PR #159: automated Cloudflare control-plane deployment workflow.
-- PR #160: restart running Hub only when persisted launcher configuration actually changes.
-- PR #161: protected control-plane service-token sources; plaintext service tokens are not persisted in Hub launcher configuration.
-- PR #162: generated Wrangler runtime configuration carries only non-secret deployment metadata.
+Verification:
+- PR #169 merged into this SHA and the main CI run completed successfully.
+- this exact `main` was built, packed, and installed globally on `DESKTOP-ONDD84S`;
+- Hub and Native Agent were explicitly restarted so the running processes load the new package;
+- resumable node bootstrap preserved the stable device ID `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`;
+- local health reports one connected agent;
+- public Tailscale health at `https://nexowire.tail10f02d.ts.net/health` reports one connected agent.
+
+Recent merged onboarding/product slices:
+- PR #164: one-command Cloudflare production bootstrap, owner secrets generated locally into purpose-bound Windows DPAPI envelopes, GitHub App Manifest setup, encrypted D1 runtime config, and migration `0006_runtime_config.sql`.
+- PR #165: hardened Windows child-process spawning plus Wrangler OAuth callback-port handling for the production bootstrap.
+- PR #166: private-desktop pointer and keyboard/text/hotkey routing bound to exact HWNDs on `NexowirePrivate` without switching the physical desktop.
+- PR #167: explicit time-bounded local physical-console grants; physical pointer/keyboard/UIA/clipboard mutations and remote desktop switching fail closed without a local ALLOW action.
+- PR #168: bounded hidden `NexowirePrivate` PNG capture for full private desktop or exact private HWND without switching the visible input desktop.
+- PR #169: local read-only Nexowire Private Viewer with bounded hidden-desktop refresh, heartbeat fail-close, grant-gated remote opening, and local-only ENTER PRIVATE DESKTOP action.
 
 Live Windows node:
 - machine: `DESKTOP-ONDD84S`;
 - Nexowire logical device: `work-pc`;
 - stable device ID: `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`;
 - Hub and Native Agent Scheduled Tasks are installed, running, and autostart;
-- Hub remains loopback-only at `127.0.0.1:43110`;
-- local Agent connects through `ws://127.0.0.1:43110/agent` with a CurrentUser-DPAPI protected credential;
-- local health reports one connected agent;
-- local authenticated MCP `devices_list`, `machine_snapshot`, and `machine_health` were previously verified.
-
-Tailscale live state:
-- MagicDNS host: `nexowire.tail10f02d.ts.net`;
-- IPv4: `100.116.23.60`;
-- Serve: enabled/configured;
-- Funnel: enabled/configured;
-- public health: `https://nexowire.tail10f02d.ts.net/health` -> healthy;
+- Hub is loopback-only at `127.0.0.1:43110`;
+- local Agent authenticates to `ws://127.0.0.1:43110/agent` from a CurrentUser-DPAPI protected credential;
+- local and public health both report `agents: 1`;
+- Tailscale MagicDNS host: `nexowire.tail10f02d.ts.net`;
+- Tailscale Serve and Funnel are enabled/configured;
 - MCP resource: `https://nexowire.tail10f02d.ts.net/mcp`;
 - Agent endpoint: `wss://nexowire.tail10f02d.ts.net/agent`.
 
-The exact current `main` package was installed globally on the Windows node and a live resumable bootstrap run passed. When launcher configuration was unchanged, Hub PID remained unchanged, proving the restart-on-drift fix does not cause gratuitous restarts. Credentials and the stable device ID were reused.
+Private desktop / isolated input is now complete as a product slice:
+- independent visual virtual cursor;
+- real `NexowirePrivate` Win32 desktop and isolated app launch/window enumeration;
+- exact private-HWND pointer routing;
+- exact private-HWND Unicode text and bounded hotkey routing;
+- hidden private-screen capture;
+- local viewer with explicit local entry button and existing Ctrl+Alt+D return failsafe;
+- time-bounded local physical-console approval for mutations that touch the user's Default desktop;
+- private screen/viewer usage is gated by the existing `private-screen` entitlement and weighted at 5x; private pointer/keyboard retain their existing weighted plan policy.
 
 Hosted product/control-plane code is implemented:
-- Free / Plus / Pro / Custom product plans and weighted private-control usage policy;
-- account/device/quota-subject model with privacy-preserving device anchors;
-- anti-abuse quota sharing across repeated Free accounts from the same device anchor;
-- Cloudflare Worker + D1 store and migrations through MCP OAuth;
-- GitHub OAuth user sign-in and signed Nexowire sessions;
-- one-click browser pairing;
-- per-device agent credentials verified through the control plane;
-- OAuth 2.1 + PKCE for hosted MCP access;
-- hosted account device isolation;
-- hosted MCP usage metering and plan/feature enforcement;
-- automated GitHub Actions Cloudflare deployment workflow.
+- Free / Plus / Pro / Custom plan model with zero-owner-spend hard stops;
+- account/device/quota-subject model and privacy-preserving device-anchor anti-abuse;
+- Cloudflare Worker + D1 migrations through `0006_runtime_config.sql`;
+- GitHub OAuth sign-in, signed Nexowire sessions, MCP OAuth 2.1 + PKCE, and refresh rotation;
+- one-click browser pairing and per-device agent credentials;
+- hosted account device isolation and usage metering;
+- automated GitHub Actions deployment;
+- one-command owner bootstrap via `npm run control-plane:bootstrap`.
 
-Production deployment is not complete yet. GitHub Actions variables are configured for the current live Hub host, but repository deployment secrets are still absent. Wrangler on the Windows development machine is currently unauthenticated and is waiting for Cloudflare OAuth authorization. The remaining external-account prerequisites are Cloudflare deployment credentials/account authorization and a GitHub OAuth App client ID/secret.
+Production hosted deployment is still blocked on an external account action, not missing product code. Wrangler is currently unauthenticated. Running `npm run control-plane:bootstrap` opens the Cloudflare OAuth authorization page; no authorization was completed, so the attempt timed out safely and left no background process. The new bootstrap no longer requires manually creating/copying GitHub OAuth client credentials: after Cloudflare deploy it opens a short-lived GitHub App Manifest flow, requests no repository permissions/events, stores only the returned OAuth client ID/secret encrypted in D1, and discards the manifest private key/webhook secret.
 
 ## Immediate next work
 
-1. Complete Cloudflare account authorization and create/obtain production deployment credentials without committing secret values.
-2. Create the GitHub OAuth App for the hosted control plane with callback `https://<control-plane-host>/auth/github/callback`.
-3. Configure GitHub Actions secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `NEXOWIRE_GITHUB_CLIENT_ID`, `NEXOWIRE_GITHUB_CLIENT_SECRET`, `NEXOWIRE_SESSION_SECRET`, and `NEXOWIRE_INTERNAL_SERVICE_TOKEN`.
-4. Trigger `Deploy Nexowire Control Plane`; verify D1 migrations 0001-0005, Worker/static asset deploy, control-plane `/health`, GitHub login, dashboard, and one-click pairing.
-5. Configure the live Hub with `NEXOWIRE_CONTROL_PLANE_URL`, a protected reference to the same internal service token, and `NEXOWIRE_MCP_RESOURCE_URL=https://nexowire.tail10f02d.ts.net/mcp`; verify restart/reconnect and OAuth protected-resource discovery.
-6. Recreate/connect the ChatGPT Nexowire MCP integration against the public MCP resource and verify `devices_list`, `machine_snapshot`, and `machine_health` from ChatGPT itself.
-7. After hosted acceptance passes, continue private-surface cursor routing, private keyboard/text/hotkey delivery, private viewer/switch UX, and explicit time-bounded physical-console grants.
+1. On `DESKTOP-ONDD84S`, run `npm run control-plane:bootstrap` and approve the Cloudflare browser authorization when it opens.
+2. Let the bootstrap automatically create/resolve D1, apply migrations 0001-0006, deploy Worker/static assets, generate/store owner secrets through CurrentUser DPAPI, and open the protected GitHub App Manifest setup.
+3. Locally approve `Create GitHub App` in the manifest page. No OAuth client-secret copy/paste is required.
+4. Let the bootstrap store GitHub OAuth credentials encrypted in D1, wire the same protected internal service token into the live Hub, and verify control-plane health/OAuth metadata.
+5. Recreate/connect the ChatGPT Nexowire custom MCP integration against `https://nexowire.tail10f02d.ts.net/mcp` and complete hosted OAuth acceptance: `devices_list`, `machine_snapshot`, `machine_health`, plus reconnect after Hub/Agent restart.
+6. After hosted Free-plan acceptance passes, proceed to subscription/payment-provider integration. Paid capacity must remain prepaid/subscription-funded; owner-paid automatic overage remains forbidden.
 
 ## Known machine note
 
