@@ -410,3 +410,46 @@ test('control-plane device auth can satisfy native-agent remote auth availabilit
     }),
   );
 });
+
+
+test('public MCP resource URL is validated independently from agent control-plane auth', () => {
+  const config = loadConfig(
+    {
+      NEXOWIRE_MCP_RESOURCE_URL:
+        'https://mcp.example.test/mcp',
+    },
+    process.cwd(),
+  );
+  assert.equal(
+    config.mcpResourceUrl,
+    'https://mcp.example.test/mcp',
+  );
+
+  const loopback = loadConfig(
+    {
+      NEXOWIRE_MCP_RESOURCE_URL:
+        'http://127.0.0.1:43110/mcp',
+    },
+    process.cwd(),
+  );
+  assert.equal(
+    loopback.mcpResourceUrl,
+    'http://127.0.0.1:43110/mcp',
+  );
+
+  for (const invalid of [
+    'http://mcp.example.test/mcp',
+    'https://mcp.example.test/not-mcp',
+    'https://user:pass@mcp.example.test/mcp',
+    'https://mcp.example.test/mcp?token=nope',
+  ]) {
+    assert.throws(() =>
+      loadConfig(
+        {
+          NEXOWIRE_MCP_RESOURCE_URL: invalid,
+        },
+        process.cwd(),
+      ),
+    );
+  }
+});
