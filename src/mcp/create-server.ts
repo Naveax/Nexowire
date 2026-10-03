@@ -3152,6 +3152,119 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     },
   );
 
+
+  server.registerTool(
+    'windows_private_viewer_status',
+    {
+      title: 'Read Nexowire private viewer status',
+      description:
+        'Read whether the local Nexowire Private Viewer is open and how fresh its hidden-desktop preview frame is. This is read-only and never switches desktops.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_viewer.status',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_viewer_start',
+    {
+      title: 'Open Nexowire private viewer',
+      description:
+        'Open a local read-only viewer window on the physical Default desktop that refreshes bounded screenshots from NexowirePrivate. Opening visible UI requires an active local physical-console grant. Entering NexowirePrivate from the viewer still requires a local user button click.',
+      inputSchema: {
+        ...targetFields,
+        refresh_ms: z
+          .number()
+          .int()
+          .min(250)
+          .max(5_000)
+          .optional(),
+        max_width: z
+          .number()
+          .int()
+          .min(320)
+          .max(2_560)
+          .optional(),
+        max_height: z
+          .number()
+          .int()
+          .min(240)
+          .max(1_440)
+          .optional(),
+        max_bytes: z
+          .number()
+          .int()
+          .min(262_144)
+          .max(8_388_608)
+          .optional(),
+        topmost: z.boolean().optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      refresh_ms,
+      max_width,
+      max_height,
+      max_bytes,
+      topmost,
+    }) =>
+      await execute(
+        ctx,
+        'windows.private_viewer.start',
+        {
+          ...(refresh_ms !== undefined
+            ? { refresh_ms }
+            : {}),
+          ...(max_width !== undefined
+            ? { max_width }
+            : {}),
+          ...(max_height !== undefined
+            ? { max_height }
+            : {}),
+          ...(max_bytes !== undefined
+            ? { max_bytes }
+            : {}),
+          ...(topmost !== undefined
+            ? { topmost }
+            : {}),
+        },
+        device_id,
+        provider_id,
+        60_000,
+      ),
+  );
+
+  server.registerTool(
+    'windows_private_viewer_stop',
+    {
+      title: 'Close Nexowire private viewer',
+      description:
+        'Close the local Nexowire Private Viewer and stop its preview refresh loop. This cleanup action is always allowed and does not switch desktops.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_viewer.stop',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
   server.registerTool(
     'windows_private_desktop_status',
     {

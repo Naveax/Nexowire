@@ -58,6 +58,7 @@ const PHYSICAL_CONSOLE_CAPABILITIES = new Set<string>([
   'windows.accessibility.invoke',
   'windows.accessibility.set_value',
   'windows.private_desktop.show',
+  'windows.private_viewer.start',
 ]);
 
 let activeGrant: PhysicalConsoleGrant | null = null;

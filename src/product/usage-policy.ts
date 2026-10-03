@@ -49,6 +49,11 @@ const PREMIUM_USAGE_RULES: readonly UsageRule[] = Object.freeze([
     creditMultiplier: 5,
   },
   {
+    prefix: 'windows_private_viewer_',
+    feature: 'private-screen',
+    creditMultiplier: 5,
+  },
+  {
     prefix: 'windows_private_desktop_',
     feature: 'private-screen',
     creditMultiplier: 5,
