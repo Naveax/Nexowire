@@ -191,7 +191,10 @@
   "lastStateSync": "2026-10-03",
   "lastVerifiedMain": "73c563ff631ea782733f6a71bfb021452850a1f3",
   "activeWork": [
-    "cloudflare-production-control-plane-deploy",
-    "chatgpt-oauth-mcp-acceptance"
+    {
+      "branch": "ops/cloudflare-production-acceptance",
+      "status": "blocked",
+      "goal": "Complete Cloudflare/GitHub OAuth production credentials, deploy the Worker/D1 control plane, wire the live Hub protected service token, and finish ChatGPT OAuth MCP acceptance."
+    }
   ]
 }
