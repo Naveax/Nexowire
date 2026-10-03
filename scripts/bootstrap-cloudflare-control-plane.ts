@@ -642,8 +642,12 @@ async function main() {
       'nexowire-control-plane-',
     ),
   );
+  // Wrangler resolves main/assets/D1 migration paths relative to the
+  // config file. Keep the generated runtime config at the repository
+  // root, matching the production deploy workflow, while secret
+  // material remains isolated in the OS temp directory.
   const runtimeConfig = path.join(
-    temp,
+    ROOT,
     'wrangler.runtime.json',
   );
   const secretsFile = path.join(
@@ -769,6 +773,9 @@ async function main() {
       ) + '\n',
     );
   } finally {
+    await fs.rm(runtimeConfig, {
+      force: true,
+    });
     await fs.rm(temp, {
       recursive: true,
       force: true,
