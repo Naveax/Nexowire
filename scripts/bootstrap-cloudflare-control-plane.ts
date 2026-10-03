@@ -280,6 +280,7 @@ async function ensureSecret(input: {
   create: () => string;
 }): Promise<string> {
   try {
+    await fs.access(input.file);
     return readProtectedSecretFile(
       input.file,
       input.purpose,
@@ -287,19 +288,12 @@ async function ensureSecret(input: {
     );
   } catch (error) {
     if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: string }).code !==
-        'SECRET_FILE_NOT_FOUND'
+      typeof error !== 'object' ||
+      error === null ||
+      !('code' in error) ||
+      (error as { code?: string }).code !== 'ENOENT'
     ) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
-      if (!/could not be resolved|ENOENT|not found/i.test(message)) {
-        throw error;
-      }
+      throw error;
     }
   }
 
