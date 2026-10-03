@@ -91,10 +91,10 @@
 
 - [x] independent click-through Nexowire virtual cursor with separate coordinates/style and proof that it never moves the Windows system cursor
 - [x] real `NexowirePrivate` Win32 desktop with private shell, hidden-desktop process launch/window enumeration, user-only switch entry, and no automatic visible-desktop takeover
-- [ ] private-surface cursor routing so Nexowire pointer actions target the private desktop instead of the physical console
-- [ ] isolated private keyboard/text/hotkey routing scoped to the private desktop/application target
-- [ ] private viewer/switch UX with explicit user entry/exit and bounded screenshot/inspection path
-- [ ] time-bounded explicit console-control grant profile for physical pointer/keyboard/UIA/clipboard mutations
+- [x] private-surface cursor routing so Nexowire pointer actions target the private desktop instead of the physical console
+- [x] isolated private keyboard/text/hotkey routing scoped to the private desktop/application target
+- [x] private viewer/switch UX with explicit user entry/exit and bounded screenshot/inspection path
+- [x] time-bounded explicit console-control grant profile for physical pointer/keyboard/UIA/clipboard mutations
 
 
 ## Post-v1 - Easy onboarding and Tailscale transport
@@ -119,8 +119,9 @@
 - [x] OAuth 2.1 + PKCE hosted MCP authorization
 - [x] hosted account device isolation and MCP usage metering
 - [x] automated Cloudflare production deployment workflow with generated secret-free runtime config
-- [ ] complete Cloudflare account authorization and first production Worker/D1 deployment
-- [ ] configure production GitHub OAuth App credentials
-- [ ] configure live Hub protected control-plane service authentication
+- [x] one-command owner bootstrap with DPAPI owner secrets, D1 migrations, Worker deploy orchestration, protected GitHub App Manifest setup, and encrypted D1 OAuth runtime config
+- [ ] complete Cloudflare browser authorization and first production Worker/D1 deployment
+- [ ] complete the live GitHub App Manifest creation during the first production bootstrap
+- [ ] complete live Hub protected control-plane service authentication
 - [ ] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
 - [ ] add subscription/payment provider integration after hosted free-plan acceptance
