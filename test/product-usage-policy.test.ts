@@ -70,6 +70,13 @@ test('premium private-control tools consume heavier usage credits', () => {
     ).credits,
     5,
   );
+  assert.equal(
+    quoteToolUsage(
+      PRODUCT_PLANS.plus,
+      'windows_private_viewer_start',
+    ).credits,
+    5,
+  );
 });
 
 test('free plan fails closed for premium private-control tools', () => {
@@ -80,6 +87,17 @@ test('free plan fails closed for premium private-control tools', () => {
   assert.equal(decision.allowed, false);
   assert.equal(decision.credits, 0);
   assert.equal(decision.denialReason, 'feature-not-in-plan');
+
+  const viewer = quoteToolUsage(
+    PRODUCT_PLANS.free,
+    'windows_private_viewer_start',
+  );
+  assert.equal(viewer.allowed, false);
+  assert.equal(viewer.credits, 0);
+  assert.equal(
+    viewer.denialReason,
+    'feature-not-in-plan',
+  );
 });
 
 test('normal tools remain one credit unless a later policy overrides them', () => {

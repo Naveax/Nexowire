@@ -27,6 +27,7 @@ test('physical console mutations are default-denied while private input stays is
     'windows.accessibility.invoke',
     'windows.accessibility.set_value',
     'windows.private_desktop.show',
+    'windows.private_viewer.start',
   ]) {
     assert.equal(
       requiresPhysicalConsoleGrant(capability),
@@ -52,6 +53,8 @@ test('physical console mutations are default-denied while private input stays is
     'windows.private_pointer.click',
     'windows.private_keyboard.type',
     'windows.private_keyboard.hotkey',
+    'windows.private_viewer.status',
+    'windows.private_viewer.stop',
     'windows.console_control.status',
     'windows.console_control.request',
     'windows.console_control.revoke',
@@ -79,6 +82,24 @@ test('physical console mutations are default-denied while private input stays is
 test('console-control status is read-only and Windows advertises grant capabilities', () => {
   assert.equal(
     isReadOnlyCapability(
+      'windows.private_viewer.status',
+    ),
+    true,
+  );
+  assert.equal(
+    isReadOnlyCapability(
+      'windows.private_viewer.start',
+    ),
+    false,
+  );
+  assert.equal(
+    isReadOnlyCapability(
+      'windows.private_viewer.stop',
+    ),
+    false,
+  );
+  assert.equal(
+    isReadOnlyCapability(
       'windows.console_control.status',
     ),
     true,
@@ -101,6 +122,9 @@ test('console-control status is read-only and Windows advertises grant capabilit
   );
   for (const capability of [
     'windows.private_desktop.show',
+    'windows.private_viewer.status',
+    'windows.private_viewer.start',
+    'windows.private_viewer.stop',
     'windows.console_control.status',
     'windows.console_control.request',
     'windows.console_control.revoke',
