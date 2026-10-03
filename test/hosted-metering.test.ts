@@ -33,8 +33,6 @@ test('hosted metering event id is deterministic for retries and opaque', () => {
   const body = toolCall(7, 'machine_health');
   const first = hostedMcpUsageEventId({
     accountId: 'acct-1',
-    authorizationHeader:
-      'Bearer nwx_mcp_secret-token',
     body,
     toolName: 'machine_health',
   });
