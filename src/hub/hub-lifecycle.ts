@@ -51,6 +51,36 @@ export function shouldRestartHubAfterInstall(input: {
   );
 }
 
+export interface HubInstallPlan {
+  registerTask: boolean;
+  restartTask: boolean;
+  startTask: boolean;
+}
+
+export function planHubInstall(input: {
+  installed: boolean;
+  state: string;
+  previousLauncher: string | null;
+  nextLauncher: string;
+}): HubInstallPlan {
+  if (!input.installed) {
+    return {
+      registerTask: true,
+      restartTask: false,
+      startTask: true,
+    };
+  }
+
+  const running = input.state === 'running';
+  return {
+    registerTask: false,
+    restartTask:
+      running &&
+      input.previousLauncher !== input.nextLauncher,
+    startTask: !running,
+  };
+}
+
 export interface HubLifecycleOptions {
   env?: NodeJS.ProcessEnv;
   cliEntrypoint?: string;
@@ -301,14 +331,12 @@ export async function installHubLifecycle(
 
   const previousStatus =
     await hubLifecycleStatus(options);
-  const restartRequired =
-    shouldRestartHubAfterInstall({
-      wasRunning:
-        previousStatus.installed &&
-        previousStatus.state === 'running',
-      previousLauncher,
-      nextLauncher,
-    });
+  const installPlan = planHubInstall({
+    installed: previousStatus.installed,
+    state: previousStatus.state,
+    previousLauncher,
+    nextLauncher,
+  });
 
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   await fs.writeFile(launcher, nextLauncher, {
@@ -316,10 +344,43 @@ export async function installHubLifecycle(
     mode: 0o600,
   });
 
+  if (!installPlan.registerTask) {
+    let status = previousStatus;
+    try {
+      if (installPlan.restartTask) {
+        status = await restartHubLifecycle(options);
+      } else if (installPlan.startTask) {
+        status = await startHubLifecycle(options);
+      }
+    } catch (error) {
+      if (previousLauncher === null) {
+        await fs.rm(launcher, { force: true });
+      } else {
+        await fs.writeFile(launcher, previousLauncher, {
+          encoding: 'utf8',
+          mode: 0o600,
+        });
+      }
+      if (
+        previousStatus.state === 'running' &&
+        installPlan.restartTask
+      ) {
+        try {
+          await startHubLifecycle(options);
+        } catch {
+          // Best-effort restore; preserve the original failure.
+        }
+      }
+      throw error;
+    }
+
+    await writeManifest(options);
+    return status;
+  }
+
   const lifecycleEnv = {
     ...windowsEnv(options),
-    NEXOWIRE_HUB_RESTART_REQUIRED:
-      restartRequired ? '1' : '0',
+    NEXOWIRE_HUB_RESTART_REQUIRED: '0',
   };
 
   await runPowerShellJson<{ ok: boolean }>(
