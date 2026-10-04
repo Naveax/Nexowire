@@ -6,6 +6,11 @@ import type {
   ProductDeviceRecord,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
+  PrepaidCreditInput,
+  PrepaidCreditResult,
+  PrepaidPurchaseRecord,
+  PrepaidRefundInput,
+  PrepaidRefundResult,
   UsageAggregate,
   UsageAtomicChargeInput,
   UsageAtomicChargeResult,
@@ -104,6 +109,40 @@ type DbUsageRow = {
   used_credits: number;
   prepaid_credits: number;
 };
+
+type DbPrepaidPurchaseRow = {
+  provider: string;
+  provider_order_id: string;
+  account_id: string;
+  quota_subject_id: string;
+  variant_id: string;
+  purchased_credits: number;
+  total_amount: number;
+  refunded_amount: number;
+  revoked_credits: number;
+  provider_updated_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+function prepaidPurchaseFromRow(
+  row: DbPrepaidPurchaseRow,
+): PrepaidPurchaseRecord {
+  return {
+    provider: row.provider,
+    providerOrderId: row.provider_order_id,
+    accountId: row.account_id,
+    quotaSubjectId: row.quota_subject_id,
+    variantId: row.variant_id,
+    purchasedCredits: row.purchased_credits,
+    totalAmount: row.total_amount,
+    refundedAmount: row.refunded_amount,
+    revokedCredits: row.revoked_credits,
+    providerUpdatedAt: row.provider_updated_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 function parseCustomPlan(
   raw: string | null,
@@ -615,22 +654,34 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     periodEnd: string,
     credits: number,
   ): Promise<ProductUsagePeriodRecord> {
-    await this.db
-      .prepare(
-        `INSERT INTO quota_usage_periods
-          (quota_subject_id, period_key, period_start, period_end, used_credits, prepaid_credits)
-         VALUES (?, ?, ?, ?, 0, ?)
-         ON CONFLICT(quota_subject_id, period_key) DO UPDATE SET
-           prepaid_credits = excluded.prepaid_credits`,
-      )
-      .bind(
-        quotaSubjectId,
-        periodKey,
-        periodStart,
-        periodEnd,
-        credits,
-      )
-      .run();
+    const now = new Date().toISOString();
+    await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO prepaid_credit_balances
+            (quota_subject_id, prepaid_credits, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(quota_subject_id) DO UPDATE SET
+             prepaid_credits = excluded.prepaid_credits,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(quotaSubjectId, credits, now),
+      this.db
+        .prepare(
+          `INSERT INTO quota_usage_periods
+            (quota_subject_id, period_key, period_start, period_end, used_credits, prepaid_credits)
+           VALUES (?, ?, ?, ?, 0, ?)
+           ON CONFLICT(quota_subject_id, period_key) DO UPDATE SET
+             prepaid_credits = excluded.prepaid_credits`,
+        )
+        .bind(
+          quotaSubjectId,
+          periodKey,
+          periodStart,
+          periodEnd,
+          credits,
+        ),
+    ]);
 
     const row = await this.getUsagePeriod(
       quotaSubjectId,
@@ -638,6 +689,256 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     );
     if (!row) throw new Error('D1 prepaid upsert did not persist.');
     return row;
+  }
+
+  async getPrepaidCreditsBalance(
+    quotaSubjectId: string,
+  ): Promise<number> {
+    const row = await this.db
+      .prepare(
+        'SELECT prepaid_credits FROM prepaid_credit_balances WHERE quota_subject_id = ?',
+      )
+      .bind(quotaSubjectId)
+      .first<{ prepaid_credits: number }>();
+    return row?.prepaid_credits ?? 0;
+  }
+
+  async getPrepaidRefundDebt(
+    quotaSubjectId: string,
+  ): Promise<number> {
+    const row = await this.db
+      .prepare(
+        'SELECT refund_debt_credits FROM prepaid_credit_balances WHERE quota_subject_id = ?',
+      )
+      .bind(quotaSubjectId)
+      .first<{ refund_debt_credits: number }>();
+    return row?.refund_debt_credits ?? 0;
+  }
+
+  async addPrepaidCreditsAtomic(
+    input: PrepaidCreditInput,
+  ): Promise<PrepaidCreditResult> {
+    const eventLookup = () =>
+      this.db
+        .prepare(
+          'SELECT quota_subject_id FROM prepaid_credit_events WHERE event_id = ?',
+        )
+        .bind(input.eventId)
+        .first<{ quota_subject_id: string }>();
+
+    const existingEvent = await eventLookup();
+    if (existingEvent) {
+      if (existingEvent.quota_subject_id !== input.quotaSubjectId) {
+        throw new Error('PREPAID_CREDIT_EVENT_MISMATCH');
+      }
+      return {
+        status: 'duplicate',
+        prepaidCredits:
+          await this.getPrepaidCreditsBalance(
+            input.quotaSubjectId,
+          ),
+      };
+    }
+
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO prepaid_credit_events
+            (quota_subject_id, event_id, credits, credited_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .bind(
+          input.quotaSubjectId,
+          input.eventId,
+          input.credits,
+          input.creditedAt,
+        )
+        .run();
+      return {
+        status: 'credited',
+        prepaidCredits:
+          await this.getPrepaidCreditsBalance(
+            input.quotaSubjectId,
+          ),
+      };
+    } catch (error) {
+      const racedEvent = await eventLookup();
+      if (racedEvent) {
+        if (racedEvent.quota_subject_id !== input.quotaSubjectId) {
+          throw new Error('PREPAID_CREDIT_EVENT_MISMATCH');
+        }
+        return {
+          status: 'duplicate',
+          prepaidCredits:
+            await this.getPrepaidCreditsBalance(
+              input.quotaSubjectId,
+            ),
+        };
+      }
+      throw error;
+    }
+  }
+
+  async getPrepaidPurchase(
+    provider: string,
+    providerOrderId: string,
+  ): Promise<PrepaidPurchaseRecord | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT provider, provider_order_id, account_id,
+                quota_subject_id, variant_id, purchased_credits,
+                total_amount, refunded_amount, revoked_credits,
+                provider_updated_at, created_at, updated_at
+         FROM prepaid_purchases
+         WHERE provider = ? AND provider_order_id = ?`,
+      )
+      .bind(provider, providerOrderId)
+      .first<DbPrepaidPurchaseRow>();
+    return row ? prepaidPurchaseFromRow(row) : null;
+  }
+
+  async putPrepaidPurchase(
+    record: PrepaidPurchaseRecord,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO prepaid_purchases (
+           provider, provider_order_id, account_id,
+           quota_subject_id, variant_id, purchased_credits,
+           total_amount, refunded_amount, revoked_credits,
+           provider_updated_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        record.provider,
+        record.providerOrderId,
+        record.accountId,
+        record.quotaSubjectId,
+        record.variantId,
+        record.purchasedCredits,
+        record.totalAmount,
+        record.refundedAmount,
+        record.revokedCredits,
+        record.providerUpdatedAt,
+        record.createdAt,
+        record.updatedAt,
+      )
+      .run();
+  }
+
+  async applyPrepaidRefundAtomic(
+    input: PrepaidRefundInput,
+  ): Promise<PrepaidRefundResult> {
+    const current = await this.getPrepaidPurchase(
+      input.provider,
+      input.providerOrderId,
+    );
+    if (!current) throw new Error('PREPAID_PURCHASE_NOT_FOUND');
+    if (
+      input.refundedAmount < current.refundedAmount ||
+      input.targetRevokedCredits < current.revokedCredits
+    ) {
+      return {
+        status: 'stale',
+        prepaidCredits:
+          await this.getPrepaidCreditsBalance(
+            current.quotaSubjectId,
+          ),
+        refundDebtCredits:
+          await this.getPrepaidRefundDebt(
+            current.quotaSubjectId,
+          ),
+        purchase: current,
+      };
+    }
+    if (
+      input.refundedAmount === current.refundedAmount &&
+      input.targetRevokedCredits === current.revokedCredits
+    ) {
+      return {
+        status: 'duplicate',
+        prepaidCredits:
+          await this.getPrepaidCreditsBalance(
+            current.quotaSubjectId,
+          ),
+        refundDebtCredits:
+          await this.getPrepaidRefundDebt(
+            current.quotaSubjectId,
+          ),
+        purchase: current,
+      };
+    }
+    if (
+      input.refundedAmount > current.totalAmount ||
+      input.targetRevokedCredits > current.purchasedCredits
+    ) {
+      throw new Error('PREPAID_REFUND_INVALID');
+    }
+
+    const eventLookup = () =>
+      this.db
+        .prepare(
+          `SELECT refunded_amount FROM prepaid_refund_events
+           WHERE provider = ? AND provider_order_id = ?
+             AND refunded_amount = ?`,
+        )
+        .bind(
+          input.provider,
+          input.providerOrderId,
+          input.refundedAmount,
+        )
+        .first<{ refunded_amount: number }>();
+
+    let status: 'applied' | 'duplicate' | 'stale' = 'applied';
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO prepaid_refund_events (
+             provider, provider_order_id, refunded_amount,
+             target_revoked_credits, provider_updated_at,
+             applied_at
+           ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          input.provider,
+          input.providerOrderId,
+          input.refundedAmount,
+          input.targetRevokedCredits,
+          input.providerUpdatedAt,
+          input.appliedAt,
+        )
+        .run();
+    } catch (error) {
+      if (await eventLookup()) {
+        status = 'duplicate';
+      } else {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        if (message.includes('prepaid_refund_stale')) {
+          status = 'stale';
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    const purchase =
+      (await this.getPrepaidPurchase(
+        input.provider,
+        input.providerOrderId,
+      )) ?? current;
+    return {
+      status,
+      prepaidCredits:
+        await this.getPrepaidCreditsBalance(
+          purchase.quotaSubjectId,
+        ),
+      refundDebtCredits:
+        await this.getPrepaidRefundDebt(
+          purchase.quotaSubjectId,
+        ),
+      purchase,
+    };
   }
 
   async getUsageAggregate(now = new Date()): Promise<UsageAggregate> {
@@ -684,7 +985,12 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
       periodStart: input.periodStart,
       periodEnd: input.periodEnd,
       usedCredits: 0,
-      prepaidCredits: 0,
+      prepaidCredits:
+        input.billingMode === 'prepaid-metered'
+          ? await this.getPrepaidCreditsBalance(
+              input.quotaSubjectId,
+            )
+          : 0,
     };
   }
 }

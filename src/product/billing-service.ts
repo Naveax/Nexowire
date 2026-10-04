@@ -98,6 +98,15 @@ export class BillingService {
       renewsAt: string | null;
       endsAt: string | null;
     } | null;
+    prepaid: {
+      balance: number;
+      refundDebt: number;
+      packs: Array<{
+        variantId: string;
+        credits: number;
+        label: string;
+      }>;
+    } | null;
   }> {
     const account = await this.requireAccount(
       identity.accountId,
@@ -108,6 +117,21 @@ export class BillingService {
       subscriptions,
       this.now(),
     );
+    const prepaid =
+      account.planId === 'custom' &&
+      account.customPlan?.billingMode === 'prepaid-metered'
+        ? {
+            balance:
+              await this.controlStore.getPrepaidCreditsBalance(
+                account.quotaSubjectId,
+              ),
+            refundDebt:
+              await this.controlStore.getPrepaidRefundDebt(
+                account.quotaSubjectId,
+              ),
+            packs: this.provider.listPrepaidPacks(),
+          }
+        : null;
     return {
       provider: 'lemonsqueezy',
       planId: account.planId,
@@ -120,6 +144,7 @@ export class BillingService {
             endsAt: selected.endsAt,
           }
         : null,
+      prepaid,
     };
   }
 
@@ -157,6 +182,38 @@ export class BillingService {
       url: await this.provider.createCheckout({
         accountId: account.id,
         planId,
+        redirectUrl,
+      }),
+    };
+  }
+
+  async createPrepaidCheckout(
+    identity: ControlPlaneIdentity,
+    variantId: string,
+    redirectUrl: string,
+  ): Promise<{ url: string }> {
+    const account = await this.requireAccount(
+      identity.accountId,
+    );
+    if (
+      account.planId !== 'custom' ||
+      account.customPlan?.billingMode !== 'prepaid-metered'
+    ) {
+      throw new Error('BILLING_PREPAID_REQUIRED');
+    }
+    const quota = await this.controlStore.getQuotaSubject(
+      account.quotaSubjectId,
+    );
+    if (quota?.kind !== 'prepaid') {
+      throw new Error('BILLING_PREPAID_REQUIRED');
+    }
+    if (this.provider.listPrepaidPacks().length === 0) {
+      throw new Error('BILLING_PREPAID_PACKS_UNAVAILABLE');
+    }
+    return {
+      url: await this.provider.createPrepaidCheckout({
+        accountId: account.id,
+        variantId,
         redirectUrl,
       }),
     };
@@ -218,6 +275,157 @@ export class BillingService {
         eventName: parsed.eventName,
         accountId: duplicate.accountId,
         planId: null,
+      };
+    }
+
+    if (parsed.kind === 'prepaid-order') {
+      if (parsed.credits === null) {
+        throw new Error('BILLING_VARIANT_UNKNOWN');
+      }
+      const accountId = boundedAccountId(
+        parsed.accountId ?? '',
+      );
+      const account = await this.requireAccount(accountId);
+      if (
+        account.planId !== 'custom' ||
+        account.customPlan?.billingMode !== 'prepaid-metered'
+      ) {
+        throw new Error('BILLING_PREPAID_REQUIRED');
+      }
+      const quota = await this.controlStore.getQuotaSubject(
+        account.quotaSubjectId,
+      );
+      if (quota?.kind !== 'prepaid') {
+        throw new Error('BILLING_PREPAID_REQUIRED');
+      }
+
+      const receivedAt = this.now().toISOString();
+      const existingPurchase =
+        await this.controlStore.getPrepaidPurchase(
+          'lemonsqueezy',
+          parsed.providerOrderId,
+        );
+      if (
+        existingPurchase &&
+        (existingPurchase.accountId !== accountId ||
+          existingPurchase.quotaSubjectId !==
+            account.quotaSubjectId ||
+          existingPurchase.variantId !== parsed.variantId ||
+          existingPurchase.purchasedCredits !== parsed.credits ||
+          existingPurchase.totalAmount !== parsed.totalAmount)
+      ) {
+        throw new Error('BILLING_PURCHASE_MISMATCH');
+      }
+
+      let credited;
+      try {
+        credited =
+          await this.controlStore.addPrepaidCreditsAtomic({
+            quotaSubjectId: account.quotaSubjectId,
+            eventId:
+              'lemonsqueezy:order:' +
+              parsed.providerOrderId,
+            credits: parsed.credits,
+            creditedAt: receivedAt,
+          });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'PREPAID_CREDIT_EVENT_MISMATCH'
+        ) {
+          throw new Error('BILLING_PURCHASE_MISMATCH');
+        }
+        throw error;
+      }
+
+      if (!existingPurchase) {
+        await this.controlStore.putPrepaidPurchase({
+          provider: 'lemonsqueezy',
+          providerOrderId: parsed.providerOrderId,
+          accountId,
+          quotaSubjectId: account.quotaSubjectId,
+          variantId: parsed.variantId,
+          purchasedCredits: parsed.credits,
+          totalAmount: parsed.totalAmount,
+          refundedAmount: 0,
+          revokedCredits: 0,
+          providerUpdatedAt: parsed.providerUpdatedAt,
+          createdAt: parsed.providerCreatedAt,
+          updatedAt: receivedAt,
+        });
+      }
+
+      await this.billingStore.putWebhookEvent({
+        provider: 'lemonsqueezy',
+        eventHash: parsed.eventHash,
+        eventName: parsed.eventName,
+        providerObjectId: parsed.providerOrderId,
+        accountId,
+        receivedAt,
+        processedAt: this.now().toISOString(),
+      });
+      return {
+        status:
+          credited.status === 'duplicate'
+            ? 'duplicate'
+            : 'processed',
+        eventName: parsed.eventName,
+        accountId,
+        planId: account.planId,
+      };
+    }
+
+    if (parsed.kind === 'order-refund') {
+      const purchase =
+        await this.controlStore.getPrepaidPurchase(
+          'lemonsqueezy',
+          parsed.providerOrderId,
+        );
+      const receivedAt = this.now().toISOString();
+      if (!purchase) {
+        throw new Error('BILLING_PREPAID_PURCHASE_PENDING');
+      }
+      if (
+        purchase.variantId !== parsed.variantId ||
+        purchase.totalAmount !== parsed.totalAmount
+      ) {
+        throw new Error('BILLING_PURCHASE_MISMATCH');
+      }
+      const targetRevokedCredits =
+        parsed.refundedAmount >= purchase.totalAmount
+          ? purchase.purchasedCredits
+          : Math.floor(
+              (purchase.purchasedCredits *
+                parsed.refundedAmount) /
+                purchase.totalAmount,
+            );
+      const refund =
+        await this.controlStore.applyPrepaidRefundAtomic({
+          provider: 'lemonsqueezy',
+          providerOrderId: parsed.providerOrderId,
+          refundedAmount: parsed.refundedAmount,
+          targetRevokedCredits,
+          providerUpdatedAt: parsed.providerUpdatedAt,
+          appliedAt: receivedAt,
+        });
+      await this.billingStore.putWebhookEvent({
+        provider: 'lemonsqueezy',
+        eventHash: parsed.eventHash,
+        eventName: parsed.eventName,
+        providerObjectId: parsed.providerOrderId,
+        accountId: purchase.accountId,
+        receivedAt,
+        processedAt: this.now().toISOString(),
+      });
+      return {
+        status:
+          refund.status === 'applied'
+            ? 'processed'
+            : refund.status,
+        eventName: parsed.eventName,
+        accountId: purchase.accountId,
+        planId:
+          (await this.requireAccount(purchase.accountId)).planId,
       };
     }
 

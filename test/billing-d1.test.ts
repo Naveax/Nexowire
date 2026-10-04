@@ -86,6 +86,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0005_mcp_oauth.sql',
     '0006_runtime_config.sql',
     '0007_billing_subscriptions.sql',
+    '0008_prepaid_credit_balance.sql',
   ]) {
     db.exec(
       readFileSync(
@@ -192,6 +193,289 @@ test('D1 billing migration stores subscriptions and idempotent webhook metadata'
     );
     assert.equal(listed.length, 1);
     assert.equal(listed[0]?.planId, 'pro');
+  } finally {
+    db.close();
+  }
+});
+
+test('D1 prepaid balance carries across periods and credit events are idempotent', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+
+  try {
+    const adapter = new SqliteD1Database(db);
+    const store = new D1ControlPlaneStore(adapter);
+    const control = new ControlPlaneService(store, {
+      now: () =>
+        new Date('2026-10-04T12:00:00.000Z'),
+    });
+    const account = await control.ensureAccount({
+      id: 'acct_prepaid_d1',
+    });
+    await store.putQuotaSubject({
+      id: account.quotaSubjectId,
+      kind: 'prepaid',
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+    });
+
+    const firstCredit = await store.addPrepaidCreditsAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      eventId: 'order-1',
+      credits: 10,
+      creditedAt: '2026-10-04T12:00:00.000Z',
+    });
+    assert.equal(firstCredit.status, 'credited');
+    assert.equal(firstCredit.prepaidCredits, 10);
+
+    const duplicateCredit =
+      await store.addPrepaidCreditsAtomic({
+        quotaSubjectId: account.quotaSubjectId,
+        eventId: 'order-1',
+        credits: 10,
+        creditedAt: '2026-10-04T12:00:01.000Z',
+      });
+    assert.equal(duplicateCredit.status, 'duplicate');
+    assert.equal(duplicateCredit.prepaidCredits, 10);
+
+    const october = await store.chargeUsageAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      periodKey: '2026-10',
+      periodStart: '2026-10-01T00:00:00.000Z',
+      periodEnd: '2026-11-01T00:00:00.000Z',
+      eventId: 'oct-use',
+      credits: 3,
+      billingMode: 'prepaid-metered',
+      monthlyCredits: null,
+      chargedAt: '2026-10-31T23:59:00.000Z',
+    });
+    assert.equal(october.status, 'charged');
+    assert.equal(october.record.prepaidCredits, 7);
+
+    const november = await store.chargeUsageAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      periodKey: '2026-11',
+      periodStart: '2026-11-01T00:00:00.000Z',
+      periodEnd: '2026-12-01T00:00:00.000Z',
+      eventId: 'nov-use',
+      credits: 2,
+      billingMode: 'prepaid-metered',
+      monthlyCredits: null,
+      chargedAt: '2026-11-01T00:01:00.000Z',
+    });
+    assert.equal(november.status, 'charged');
+    assert.equal(november.record.prepaidCredits, 5);
+    assert.equal(
+      await store.getPrepaidCreditsBalance(
+        account.quotaSubjectId,
+      ),
+      5,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('D1 prepaid credit event ids are globally unique across quota subjects', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+
+  try {
+    const adapter = new SqliteD1Database(db);
+    const store = new D1ControlPlaneStore(adapter);
+    const control = new ControlPlaneService(store, {
+      now: () =>
+        new Date('2026-10-04T12:00:00.000Z'),
+    });
+    const accountA = await control.ensureAccount({
+      id: 'acct_prepaid_event_a',
+    });
+    const accountB = await control.ensureAccount({
+      id: 'acct_prepaid_event_b',
+    });
+    for (const account of [accountA, accountB]) {
+      await store.putQuotaSubject({
+        id: account.quotaSubjectId,
+        kind: 'prepaid',
+        createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
+      });
+    }
+
+    await store.addPrepaidCreditsAtomic({
+      quotaSubjectId: accountA.quotaSubjectId,
+      eventId: 'lemonsqueezy:order:shared-order',
+      credits: 100,
+      creditedAt: '2026-10-04T12:00:00.000Z',
+    });
+
+    await assert.rejects(
+      store.addPrepaidCreditsAtomic({
+        quotaSubjectId: accountB.quotaSubjectId,
+        eventId: 'lemonsqueezy:order:shared-order',
+        credits: 100,
+        creditedAt: '2026-10-04T12:00:01.000Z',
+      }),
+      /PREPAID_CREDIT_EVENT_MISMATCH/,
+    );
+    assert.equal(
+      await store.getPrepaidCreditsBalance(
+        accountA.quotaSubjectId,
+      ),
+      100,
+    );
+    assert.equal(
+      await store.getPrepaidCreditsBalance(
+        accountB.quotaSubjectId,
+      ),
+      0,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('D1 prepaid refund atomically claws back balance, creates debt, and future top-up repays debt first', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+
+  try {
+    const adapter = new SqliteD1Database(db);
+    const store = new D1ControlPlaneStore(adapter);
+    const control = new ControlPlaneService(store, {
+      now: () =>
+        new Date('2026-10-04T12:00:00.000Z'),
+    });
+    const account = await control.ensureAccount({
+      id: 'acct_prepaid_refund_d1',
+    });
+    await store.putQuotaSubject({
+      id: account.quotaSubjectId,
+      kind: 'prepaid',
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+    });
+
+    await store.addPrepaidCreditsAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      eventId: 'lemonsqueezy:order:9001',
+      credits: 100_000,
+      creditedAt: '2026-10-04T12:00:00.000Z',
+    });
+    await store.putPrepaidPurchase({
+      provider: 'lemonsqueezy',
+      providerOrderId: '9001',
+      accountId: account.id,
+      quotaSubjectId: account.quotaSubjectId,
+      variantId: '3001',
+      purchasedCredits: 100_000,
+      totalAmount: 1000,
+      refundedAmount: 0,
+      revokedCredits: 0,
+      providerUpdatedAt: '2026-10-04T12:00:00.000Z',
+      createdAt: '2026-10-04T11:59:00.000Z',
+      updatedAt: '2026-10-04T12:00:00.000Z',
+    });
+
+    const spent = await store.chargeUsageAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      periodKey: '2026-10',
+      periodStart: '2026-10-01T00:00:00.000Z',
+      periodEnd: '2026-11-01T00:00:00.000Z',
+      eventId: 'spend-before-refund',
+      credits: 80_000,
+      billingMode: 'prepaid-metered',
+      monthlyCredits: null,
+      chargedAt: '2026-10-04T12:10:00.000Z',
+    });
+    assert.equal(spent.status, 'charged');
+    assert.equal(spent.record.prepaidCredits, 20_000);
+
+    const half = await store.applyPrepaidRefundAtomic({
+      provider: 'lemonsqueezy',
+      providerOrderId: '9001',
+      refundedAmount: 500,
+      targetRevokedCredits: 50_000,
+      providerUpdatedAt: '2026-10-04T12:30:00.000Z',
+      appliedAt: '2026-10-04T12:30:01.000Z',
+    });
+    assert.equal(half.status, 'applied');
+    assert.equal(half.prepaidCredits, 0);
+    assert.equal(half.refundDebtCredits, 30_000);
+    assert.equal(half.purchase.refundedAmount, 500);
+    assert.equal(half.purchase.revokedCredits, 50_000);
+
+    const duplicate = await store.applyPrepaidRefundAtomic({
+      provider: 'lemonsqueezy',
+      providerOrderId: '9001',
+      refundedAmount: 500,
+      targetRevokedCredits: 50_000,
+      providerUpdatedAt: '2026-10-04T12:30:00.000Z',
+      appliedAt: '2026-10-04T12:31:00.000Z',
+    });
+    assert.equal(duplicate.status, 'duplicate');
+    assert.equal(duplicate.refundDebtCredits, 30_000);
+
+    const blocked = await store.chargeUsageAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      periodKey: '2026-10',
+      periodStart: '2026-10-01T00:00:00.000Z',
+      periodEnd: '2026-11-01T00:00:00.000Z',
+      eventId: 'blocked-by-refund-debt',
+      credits: 1,
+      billingMode: 'prepaid-metered',
+      monthlyCredits: null,
+      chargedAt: '2026-10-04T12:32:00.000Z',
+    });
+    assert.equal(blocked.status, 'quota-exhausted');
+
+    await store.addPrepaidCreditsAtomic({
+      quotaSubjectId: account.quotaSubjectId,
+      eventId: 'lemonsqueezy:order:9002',
+      credits: 100_000,
+      creditedAt: '2026-10-04T12:40:00.000Z',
+    });
+    assert.equal(
+      await store.getPrepaidRefundDebt(
+        account.quotaSubjectId,
+      ),
+      0,
+    );
+    assert.equal(
+      await store.getPrepaidCreditsBalance(
+        account.quotaSubjectId,
+      ),
+      70_000,
+    );
+
+    const full = await store.applyPrepaidRefundAtomic({
+      provider: 'lemonsqueezy',
+      providerOrderId: '9001',
+      refundedAmount: 1000,
+      targetRevokedCredits: 100_000,
+      providerUpdatedAt: '2026-10-04T12:50:00.000Z',
+      appliedAt: '2026-10-04T12:50:01.000Z',
+    });
+    assert.equal(full.status, 'applied');
+    assert.equal(full.prepaidCredits, 20_000);
+    assert.equal(full.refundDebtCredits, 0);
+    assert.equal(full.purchase.refundedAmount, 1000);
+    assert.equal(full.purchase.revokedCredits, 100_000);
+
+    const stale = await store.applyPrepaidRefundAtomic({
+      provider: 'lemonsqueezy',
+      providerOrderId: '9001',
+      refundedAmount: 750,
+      targetRevokedCredits: 75_000,
+      providerUpdatedAt: '2026-10-04T12:45:00.000Z',
+      appliedAt: '2026-10-04T12:55:00.000Z',
+    });
+    assert.equal(stale.status, 'stale');
+    assert.equal(stale.prepaidCredits, 20_000);
+    assert.equal(stale.refundDebtCredits, 0);
   } finally {
     db.close();
   }

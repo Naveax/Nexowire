@@ -10,6 +10,7 @@ Current state:
 - MCP OAuth 2.1 / PKCE support;
 - internal device authentication and usage charging;
 - optional Lemon Squeezy Plus/Pro hosted checkout, signed subscription webhooks, and customer portal integration;
+- admin-provisioned Custom prepaid plans with one-time Lemon Squeezy credit-pack checkout and carry-over credit balances;
 - no automatic paid infrastructure upgrade.
 
 ## Production topology
@@ -58,6 +59,7 @@ The current migration chain includes:
 - `0005_mcp_oauth.sql`
 - `0006_runtime_config.sql`
 - `0007_billing_subscriptions.sql`
+- `0008_prepaid_credit_balance.sql`
 
 ## GitHub Actions deployment
 
@@ -107,6 +109,14 @@ Optional Lemon Squeezy billing variables, configured together:
 - `NEXOWIRE_LEMONSQUEEZY_STORE_ID=<numeric store id>`
 - `NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID=<numeric variant id>`
 - `NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID=<numeric variant id>`
+
+Optional prepaid pack mapping, only when the base Lemon Squeezy billing configuration above is present:
+
+- `NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON=[{"variantId":"3001","credits":100000,"label":"100k kredi"}]`
+
+The pack mapping is not a price table. Variant pricing stays in Lemon Squeezy. Nexowire maps only an approved one-time variant ID to the number of prepaid usage credits granted after a signed `order_created` webhook. Purchased credits carry across monthly usage periods and are debited atomically from a quota-subject balance.
+
+Signed `order_refunded` webhooks claw back prepaid credits proportionally from Lemon Squeezy's cumulative refunded amount. If refunded credits were already spent, Nexowire records the remainder as refund debt, blocks further prepaid usage, and applies later top-ups to that debt before making any new credits spendable. Subscription-order refunds that do not match a recorded prepaid purchase are ignored by the prepaid ledger.
 
 If none of the Lemon Squeezy settings are present, billing routes stay disabled with `503 BILLING_NOT_CONFIGURED` and the Free-plan control plane continues normally. Partial billing configuration is rejected.
 

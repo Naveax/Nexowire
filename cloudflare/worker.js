@@ -59,6 +59,53 @@ function optionalEnvValue(env, name) {
   return value || undefined;
 }
 
+function prepaidPackConfig(env) {
+  const raw = optionalEnvValue(
+    env,
+    'NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON',
+  );
+  if (!raw) return [];
+  let decoded;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    throw new Error('BILLING_NOT_CONFIGURED');
+  }
+  if (!Array.isArray(decoded) || decoded.length > 20) {
+    throw new Error('BILLING_NOT_CONFIGURED');
+  }
+  return decoded.map((entry) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      Array.isArray(entry)
+    ) {
+      throw new Error('BILLING_NOT_CONFIGURED');
+    }
+    const variantId = String(entry.variantId ?? '').trim();
+    const credits = Number(entry.credits);
+    const label =
+      typeof entry.label === 'string'
+        ? entry.label.trim()
+        : undefined;
+    if (
+      !/^\d+$/.test(variantId) ||
+      !Number.isInteger(credits) ||
+      credits < 1 ||
+      credits > 2_147_483_647 ||
+      (label !== undefined &&
+        (!label || label.length > 80 || /[\r\n\0]/.test(label)))
+    ) {
+      throw new Error('BILLING_NOT_CONFIGURED');
+    }
+    return {
+      variantId,
+      credits,
+      ...(label ? { label } : {}),
+    };
+  });
+}
+
 function lemonSqueezyConfig(env) {
   const names = [
     'NEXOWIRE_LEMONSQUEEZY_API_KEY',
@@ -89,6 +136,7 @@ function lemonSqueezyConfig(env) {
       values.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID,
     proVariantId:
       values.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID,
+    prepaidPacks: prepaidPackConfig(env),
   };
 }
 

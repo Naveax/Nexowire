@@ -8,6 +8,8 @@ Nexowire is moving from a single-owner self-hosted tool toward a multi-user prod
 - Providers must never auto-upgrade into a paid tier.
 - Free capacity exhaustion must throttle or deny work, never create an owner bill.
 - Metered/custom usage is prepaid. Postpaid balances are not allowed.
+- Purchased prepaid credits belong to the quota subject, carry across month boundaries, and are changed only through idempotent credit/debit events.
+- Full and partial prepaid refunds revoke credits from signed provider refund events. Already-spent refunded credits become refund debt; usage stays fail-closed until later top-ups repay that debt.
 - Data-plane routing is direct-first. Relay is a fallback and may only consume free capacity or prepaid revenue-backed capacity.
 - Free includes the core remote-control product but does not include the isolated private pointer/keyboard/screen family.
 - Plus, Pro, and explicitly configured Custom plans include private-control features without a separate add-on price.
@@ -25,7 +27,9 @@ Nexowire is moving from a single-owner self-hosted tool toward a multi-user prod
 | Pro | 500,000 | 50 | 20 | Included |
 | Custom | Explicit | Explicit | Explicit | Explicit |
 
-Prices are deliberately not embedded in the runtime yet. Billing policy and technical entitlements should not be coupled to a temporary price experiment.
+Prices are deliberately not embedded in the runtime. Subscription and prepaid-pack prices remain provider-side. The runtime maps approved provider variant IDs to technical entitlements or prepaid credit quantities only.
+
+Custom prepaid plans are explicitly provisioned by an administrator. A signed one-time-payment webhook can increase an existing Custom prepaid balance, but it cannot silently convert a Free/Plus/Pro account into Custom or create postpaid debt.
 
 ## Scale target
 

@@ -2,6 +2,7 @@ import type {
   ControlPlaneIdentity,
 } from './control-plane-service.js';
 import { ControlPlaneService } from './control-plane-service.js';
+import type { ProductFeature } from './plans.js';
 
 export interface ControlPlaneHttpOptions {
   authenticate(
@@ -82,6 +83,56 @@ function stringField(
   return value;
 }
 
+function optionalPositiveIntegerField(
+  input: Record<string, unknown>,
+  name: string,
+): number | null | undefined {
+  const value = input[name];
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > 1_000_000
+  ) {
+    throw new Error('INVALID_' + name.toUpperCase());
+  }
+  return value;
+}
+
+const CUSTOM_FEATURES = new Set<ProductFeature>([
+  'private-pointer',
+  'private-keyboard',
+  'private-screen',
+  'automation',
+  'priority-routing',
+]);
+
+function optionalFeatureList(
+  input: Record<string, unknown>,
+): ProductFeature[] | undefined {
+  const value = input.features;
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > CUSTOM_FEATURES.size) {
+    throw new Error('INVALID_FEATURES');
+  }
+  const output: ProductFeature[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (
+      typeof entry !== 'string' ||
+      !CUSTOM_FEATURES.has(entry as ProductFeature) ||
+      seen.has(entry)
+    ) {
+      throw new Error('INVALID_FEATURES');
+    }
+    seen.add(entry);
+    output.push(entry as ProductFeature);
+  }
+  return output;
+}
+
 function errorStatus(message: string): number {
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
@@ -158,6 +209,32 @@ export function createControlPlaneHttpHandler(
         path === '/api/v1/admin/overview'
       ) {
         return json(200, await service.adminOverview(identity));
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/admin/accounts/custom-prepaid'
+      ) {
+        const body = await readJsonObject(request);
+        return json(
+          200,
+          await service.configureCustomPrepaidPlan(
+            identity,
+            stringField(body, 'accountId'),
+            {
+              maxDevices: optionalPositiveIntegerField(
+                body,
+                'maxDevices',
+              ),
+              maxConcurrentTasks:
+                optionalPositiveIntegerField(
+                  body,
+                  'maxConcurrentTasks',
+                ),
+              features: optionalFeatureList(body),
+            },
+          ),
+        );
       }
 
       if (

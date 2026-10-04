@@ -18,6 +18,9 @@ function setBillingBusy(busy) {
   ]) {
     $(id).disabled = busy;
   }
+  for (const button of $('prepaid-packs').querySelectorAll('button')) {
+    button.disabled = busy;
+  }
 }
 
 function subscriptionLabel(status) {
@@ -40,6 +43,40 @@ function renderBilling(status) {
   $('upgrade-plus').classList.add('hidden');
   $('upgrade-pro').classList.add('hidden');
   $('billing-portal').classList.add('hidden');
+  const prepaidRoot = $('prepaid-packs');
+  prepaidRoot.classList.add('hidden');
+  prepaidRoot.textContent = '';
+
+  if (status.prepaid) {
+    const refundDebt =
+      Number(status.prepaid.refundDebt ?? 0);
+    $('billing-detail').textContent =
+      'Custom prepaid · ' +
+      formatNumber(status.prepaid.balance) +
+      ' kredi bakiye' +
+      (refundDebt > 0
+        ? ' · ' +
+          formatNumber(refundDebt) +
+          ' kredi iade borcu; yeni paket önce bu borcu kapatır'
+        : '');
+    if (Array.isArray(status.prepaid.packs) && status.prepaid.packs.length) {
+      prepaidRoot.classList.remove('hidden');
+      for (const pack of status.prepaid.packs) {
+        const button = document.createElement('button');
+        button.className = 'secondary';
+        button.textContent = pack.label ||
+          formatNumber(pack.credits) + ' kredi';
+        button.addEventListener('click', () => {
+          void startPrepaidCheckout(pack.variantId);
+        });
+        prepaidRoot.appendChild(button);
+      }
+    } else {
+      $('billing-detail').textContent +=
+        ' · Satın alınabilir kredi paketi yapılandırılmamış.';
+    }
+    return;
+  }
 
   if (status.subscription) {
     $('billing-detail').textContent =
@@ -111,6 +148,37 @@ async function startCheckout(planId) {
     if (!response.ok || typeof body.url !== 'string') {
       throw new Error(
         body.error || 'Checkout açılamadı.',
+      );
+    }
+    window.location.assign(body.url);
+  } catch (error) {
+    $('billing-detail').textContent =
+      error instanceof Error
+        ? error.message
+        : String(error);
+    setBillingBusy(false);
+  }
+}
+
+async function startPrepaidCheckout(variantId) {
+  setBillingBusy(true);
+  try {
+    const response = await fetch(
+      '/api/v1/billing/prepaid/checkout',
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ variantId }),
+      },
+    );
+    const body = await response.json();
+    if (!response.ok || typeof body.url !== 'string') {
+      throw new Error(
+        body.error || 'Kredi checkout açılamadı.',
       );
     }
     window.location.assign(body.url);

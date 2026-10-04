@@ -52,9 +52,17 @@ function errorStatus(message: string): number {
   if (
     message === 'BILLING_PORTAL_REQUIRED' ||
     message === 'BILLING_ACCOUNT_MISMATCH' ||
-    message === 'BILLING_CUSTOM_MANAGED'
+    message === 'BILLING_CUSTOM_MANAGED' ||
+    message === 'BILLING_PREPAID_REQUIRED' ||
+    message === 'BILLING_PURCHASE_MISMATCH'
   ) return 409;
   if (message === 'BILLING_VARIANT_UNKNOWN') return 422;
+  if (
+    message === 'BILLING_PREPAID_PACKS_UNAVAILABLE' ||
+    message === 'BILLING_PREPAID_PURCHASE_PENDING'
+  ) {
+    return 503;
+  }
   if (
     message.startsWith('BILLING_WEBHOOK_INVALID') ||
     message === 'BILLING_PLAN_INVALID' ||
@@ -152,6 +160,25 @@ export function createBillingHttpHandler(
             identity,
             planId,
             url.origin + '/?billing=success',
+          ),
+        );
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/billing/prepaid/checkout'
+      ) {
+        const body = await readJsonObject(request);
+        const variantId =
+          typeof body.variantId === 'string'
+            ? body.variantId
+            : '';
+        return json(
+          200,
+          await service.createPrepaidCheckout(
+            identity,
+            variantId,
+            url.origin + '/?billing=prepaid-success',
           ),
         );
       }

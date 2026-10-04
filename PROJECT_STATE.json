@@ -124,7 +124,7 @@
       "id": "hosted-control-plane",
       "status": "partial",
       "priority": 18,
-      "summary": "Hosted production control plane, ChatGPT Web OAuth MCP connector acceptance, and Free-plan production acceptance are complete. The live dashboard reports work-pc online from D1-backed presence sync, quota metering matched distinct MCP events to applied credits, and the production OAuth client demonstrated refresh-token rotation with only one active refresh token. PR #175 fixed stale device presence and was deployed to production. Remaining work is subscription/payment-provider integration plus provisioning or replacing the missing GitHub Actions Cloudflare deployment credential."
+      "summary": "Hosted production control plane, ChatGPT Web OAuth MCP connector acceptance, and Free-plan production acceptance are complete. PR #178 merged Lemon Squeezy Plus/Pro subscription billing. Custom prepaid billing is implemented on feature/custom-prepaid-billing with carry-over quota-subject balances, one-time credit-pack checkout, idempotent signed order crediting, proportional refund clawback, and fail-closed refund debt. Remaining hosted work is merge/deploy/live paid-plan acceptance plus provisioning or replacing the missing GitHub Actions Cloudflare deployment credential."
     },
     {
       "id": "private-desktop-isolation",
@@ -196,15 +196,17 @@
     "The preferred hosted deployment path is now npm run control-plane:bootstrap. It generates owner secrets into CurrentUser DPAPI, applies D1 migrations through 0006, deploys Cloudflare, opens a protected GitHub App Manifest flow, stores only OAuth client ID/secret encrypted in D1, and wires the protected control-plane service token into the Hub.",
     "Hosted Free-plan production acceptance completed on 2026-10-04: dashboard HTTP 200 showed work-pc online, D1 presence matched the live reconnect timestamp, quota usage/event totals matched exactly during acceptance, and the ChatGPT OAuth client had three refresh-token records with two revoked and one active. PR #175 presence sync passed CI and was deployed as Worker version ffafa40c-e7eb-40c7-83bc-6356b347224a; the global Hub runtime was updated and restarted successfully.",
     "Manual GitHub Actions control-plane deploy run 37208026750 failed before deployment because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets; the DPAPI-protected local owner bootstrap remains the working production deploy path.",
-    "PR #177 fixed a Windows durable-process terminal-state race exposed by the Windows Server 2025 CI runner; its CI passed, it merged as main 9aed2daf152aff28902ca7948de73aa5a2a62963, and exact-main CI run 37210095593 passed all jobs."
+    "PR #177 fixed a Windows durable-process terminal-state race exposed by the Windows Server 2025 CI runner; its CI passed, it merged as main 9aed2daf152aff28902ca7948de73aa5a2a62963, and exact-main CI run 37210095593 passed all jobs.",
+    "PR #178 merged Lemon Squeezy Plus/Pro subscription billing into main 7130e032db364698b0620140c52c6004ef336997, including hosted checkout, signed subscription webhooks, customer portal, D1 billing persistence, and protected owner-bootstrap billing secrets.",
+    "feature/custom-prepaid-billing implements Custom prepaid packs, carry-over balances, idempotent signed purchase credits, partial/full refund clawback, and refund debt. Typecheck, build, continuation validation, and focused billing/prepaid/D1 regression pass. The full local suite still has the two baseline non-elevated Windows firewall failures; full-load task-graph timeout and virtual-pointer GUI flakes both pass immediately when rerun in isolation."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "9aed2daf152aff28902ca7948de73aa5a2a62963",
+  "lastVerifiedMain": "7130e032db364698b0620140c52c6004ef336997",
   "activeWork": [
     {
-      "branch": "feature/subscription-payment-provider",
-      "status": "planned",
-      "goal": "Implement Plus/Pro/Custom subscription and payment-provider integration with webhook-driven plan state, idempotent billing events, checkout/billing portal entry points, and no owner-paid automatic overage."
+      "branch": "feature/custom-prepaid-billing",
+      "status": "testing",
+      "goal": "Finish review/CI/merge for Custom prepaid credit packs, carry-over balances, signed one-time order reconciliation, proportional refund clawback, and refund debt; then deploy and run live paid-plan acceptance without owner-paid automatic overage."
     }
   ]
 }
