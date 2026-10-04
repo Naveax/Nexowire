@@ -117,3 +117,41 @@ export function parseD1DatabaseId(
   }
   return id;
 }
+export const REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES = [
+  'CLOUDFLARE_API_TOKEN',
+  'CLOUDFLARE_ACCOUNT_ID',
+  'NEXOWIRE_SESSION_SECRET',
+  'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+  'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+] as const;
+
+export interface OwnerDeploymentSecretSpec {
+  githubName:
+    | 'NEXOWIRE_SESSION_SECRET'
+    | 'NEXOWIRE_INTERNAL_SERVICE_TOKEN'
+    | 'NEXOWIRE_CONFIG_ENCRYPTION_KEY';
+  fileName: string;
+  purpose: string;
+  label: string;
+}
+
+export const OWNER_DEPLOYMENT_SECRET_SPECS: readonly OwnerDeploymentSecretSpec[] = [
+  {
+    githubName: 'NEXOWIRE_SESSION_SECRET',
+    fileName: 'session-secret.dpapi.json',
+    purpose: 'control-plane-session-secret',
+    label: 'control-plane session secret',
+  },
+  {
+    githubName: 'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+    fileName: 'service-token.dpapi.json',
+    purpose: 'control-plane-service-token',
+    label: 'control-plane service token',
+  },
+  {
+    githubName: 'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+    fileName: 'config-encryption-key.dpapi.json',
+    purpose: 'control-plane-config-encryption-key',
+    label: 'control-plane config encryption key',
+  },
+];
