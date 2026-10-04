@@ -243,3 +243,72 @@ test('admin overview requires both admin identity and admin account flag', async
     /ADMIN_REQUIRED/,
   );
 });
+
+
+test('device presence updates dashboard and ignores stale state events', async () => {
+  const { service } = setup();
+  await service.ensureAccount({ id: 'acct-1' });
+
+  const pairing = await service.beginPairing(
+    { accountId: 'acct-1', role: 'user' },
+    'work-pc',
+    '11111111-1111-4111-8111-111111111111',
+  );
+  const consumed = await service.consumePairing({
+    pairingId: pairing.pairingId,
+    token: pairing.token,
+    platform: 'win32',
+    deviceAnchorHash: anchorA,
+  });
+
+  assert.equal(
+    await service.setDevicePresence(
+      consumed.device.id,
+      true,
+      '2026-10-04T13:36:15.338Z',
+    ),
+    true,
+  );
+
+  let dashboard = await service.dashboard({
+    accountId: 'acct-1',
+    role: 'user',
+  });
+  assert.equal(dashboard.devices[0]?.online, true);
+  assert.equal(
+    dashboard.devices[0]?.lastSeenAt,
+    '2026-10-04T13:36:15.338Z',
+  );
+
+  assert.equal(
+    await service.setDevicePresence(
+      consumed.device.id,
+      false,
+      '2026-10-04T13:36:14.000Z',
+    ),
+    true,
+  );
+  dashboard = await service.dashboard({
+    accountId: 'acct-1',
+    role: 'user',
+  });
+  assert.equal(dashboard.devices[0]?.online, true);
+
+  assert.equal(
+    await service.setDevicePresence(
+      consumed.device.id,
+      false,
+      '2026-10-04T13:36:16.338Z',
+    ),
+    true,
+  );
+  dashboard = await service.dashboard({
+    accountId: 'acct-1',
+    role: 'user',
+  });
+  assert.equal(dashboard.devices[0]?.online, false);
+  assert.equal(
+    dashboard.devices[0]?.lastSeenAt,
+    '2026-10-04T13:36:16.338Z',
+  );
+});

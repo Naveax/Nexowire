@@ -196,6 +196,27 @@ export function createControlPlaneHttpHandler(
 
       if (
         request.method === 'POST' &&
+        path === '/api/v1/internal/device/presence'
+      ) {
+        if (identity.role !== 'service') {
+          return json(403, { error: 'SERVICE_REQUIRED' });
+        }
+        const body = await readJsonObject(request);
+        if (typeof body.online !== 'boolean') {
+          return json(400, { error: 'INVALID_REQUEST' });
+        }
+        const updated = await service.setDevicePresence(
+          stringField(body, 'deviceId'),
+          body.online,
+          stringField(body, 'at'),
+        );
+        return updated
+          ? json(200, { updated: true })
+          : json(404, { error: 'DEVICE_NOT_FOUND' });
+      }
+
+      if (
+        request.method === 'POST' &&
         path === '/api/v1/internal/usage/charge'
       ) {
         if (identity.role !== 'service') {
