@@ -85,7 +85,7 @@ After creating the token, do not paste it into a shell argument or repository fi
 
 `npm run cloudflare:ci-provision -- --apply`
 
-The helper derives the single accessible Cloudflare account ID from the local Wrangler OAuth session, reads the API token from a hidden prompt/stdin, verifies that the token can read the existing Worker deployment and existing D1 database, then writes `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` directly to GitHub Actions secrets through the authenticated GitHub CLI. The token value is not printed or persisted locally by this helper.
+The helper derives the single accessible Cloudflare account ID from the local Wrangler OAuth session, reads the API token from a hidden prompt/stdin, verifies that the token can read the existing Worker deployment and existing D1 database, then writes `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` directly to GitHub Actions secrets through the authenticated GitHub CLI. On `--apply`, it also reads the existing purpose-bound Windows DPAPI files for `NEXOWIRE_SESSION_SECRET`, `NEXOWIRE_INTERNAL_SERVICE_TOKEN`, and `NEXOWIRE_CONFIG_ENCRYPTION_KEY` and sends those values directly to GitHub Actions secrets without printing them. The Cloudflare token value is not printed or persisted locally by this helper.
 
 Optional Lemon Squeezy billing secrets, configured together with the billing variables below:
 

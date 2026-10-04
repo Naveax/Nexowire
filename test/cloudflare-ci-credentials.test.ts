@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   normalizeCloudflareAccountId,
   normalizeGitHubRepositorySlug,
+  OWNER_DEPLOYMENT_SECRET_SPECS,
   parseD1DatabaseId,
   parseWranglerWhoamiAccount,
+  REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES,
 } from '../src/ops/cloudflare-ci-credentials.js';
 
 test('parses the only Wrangler account by default', () => {
@@ -110,5 +112,46 @@ test('normalizes account and repository identifiers', () => {
   );
   assert.throws(
     () => normalizeGitHubRepositorySlug('not a repo'),
+  );
+});
+
+
+test('GitHub deployment secret contract includes Cloudflare and protected owner secrets', () => {
+  assert.deepEqual(
+    REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES,
+    [
+      'CLOUDFLARE_API_TOKEN',
+      'CLOUDFLARE_ACCOUNT_ID',
+      'NEXOWIRE_SESSION_SECRET',
+      'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+      'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+    ],
+  );
+
+  assert.deepEqual(
+    OWNER_DEPLOYMENT_SECRET_SPECS.map(
+      (entry) => entry.githubName,
+    ),
+    [
+      'NEXOWIRE_SESSION_SECRET',
+      'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
+      'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+    ],
+  );
+  assert.equal(
+    new Set(
+      OWNER_DEPLOYMENT_SECRET_SPECS.map(
+        (entry) => entry.fileName,
+      ),
+    ).size,
+    OWNER_DEPLOYMENT_SECRET_SPECS.length,
+  );
+  assert.equal(
+    new Set(
+      OWNER_DEPLOYMENT_SECRET_SPECS.map(
+        (entry) => entry.purpose,
+      ),
+    ).size,
+    OWNER_DEPLOYMENT_SECRET_SPECS.length,
   );
 });

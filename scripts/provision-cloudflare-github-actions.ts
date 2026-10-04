@@ -1,11 +1,16 @@
 import { spawn } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import {
   normalizeCloudflareAccountId,
   normalizeGitHubRepositorySlug,
+  OWNER_DEPLOYMENT_SECRET_SPECS,
   parseD1DatabaseId,
   parseWranglerWhoamiAccount,
+  REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES,
 } from '../src/ops/cloudflare-ci-credentials.js';
+import { readProtectedSecretFile } from '../src/security/protected-secret-files.js';
 
 const WORKER_NAME = 'nexowire-control-plane';
 const D1_NAME = 'nexowire-control-plane';
@@ -26,7 +31,9 @@ function help(): string {
     'The Cloudflare API token is never accepted as a command-line argument.',
     'It is read from a hidden TTY prompt or stdin, preflighted against the',
     'existing Nexowire Worker and D1 database, then written directly to',
-    'GitHub Actions secrets only when --apply is supplied.',
+    'GitHub Actions secrets only when --apply is supplied. The apply step',
+    'also copies the three existing DPAPI-protected Nexowire owner deploy',
+    'secrets directly into GitHub Actions without printing their values.',
   ].join('\n');
 }
 
@@ -294,6 +301,25 @@ async function setGitHubSecret(
   );
 }
 
+function readOwnerDeploymentSecrets(): Array<{
+  name: string;
+  value: string;
+}> {
+  const directory = path.join(
+    os.homedir(),
+    '.nexowire',
+    'control-plane',
+  );
+  return OWNER_DEPLOYMENT_SECRET_SPECS.map((spec) => ({
+    name: spec.githubName,
+    value: readProtectedSecretFile(
+      path.join(directory, spec.fileName),
+      spec.purpose,
+      spec.label,
+    ),
+  }));
+}
+
 async function verifyGitHubSecretNames(
   repo: string,
 ): Promise<void> {
@@ -311,10 +337,7 @@ async function verifyGitHubSecretNames(
   const names = new Set(
     rows.map((row) => row.name).filter(Boolean),
   );
-  for (const required of [
-    'CLOUDFLARE_API_TOKEN',
-    'CLOUDFLARE_ACCOUNT_ID',
-  ]) {
+  for (const required of REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES) {
     if (!names.has(required)) {
       throw new Error(
         'GITHUB_SECRET_NOT_VISIBLE:' + required,
@@ -331,6 +354,10 @@ async function main(): Promise<void> {
 
   if (options.apply) {
     await run(command('gh'), ['auth', 'status']);
+
+    const ownerDeploymentSecrets =
+      readOwnerDeploymentSecrets();
+
     await setGitHubSecret(
       options.repo,
       'CLOUDFLARE_API_TOKEN',
@@ -341,6 +368,14 @@ async function main(): Promise<void> {
       'CLOUDFLARE_ACCOUNT_ID',
       account.id,
     );
+    for (const secret of ownerDeploymentSecrets) {
+      await setGitHubSecret(
+        options.repo,
+        secret.name,
+        secret.value,
+      );
+    }
+
     await verifyGitHubSecretNames(options.repo);
   }
 
