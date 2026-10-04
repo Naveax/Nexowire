@@ -664,6 +664,10 @@ async function main() {
     process.env
       .NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID?.trim() ||
     undefined;
+  const billingPrepaidPacksJson =
+    process.env
+      .NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON?.trim() ||
+    undefined;
   const billingValues = [
     billingApiKey,
     billingWebhookSecret,
@@ -684,6 +688,11 @@ async function main() {
   }
   const billingConfigured =
     configuredBilling.length === billingValues.length;
+  if (billingPrepaidPacksJson && !billingConfigured) {
+    throw new Error(
+      'Lemon Squeezy prepaid packs require the base billing configuration.',
+    );
+  }
 
   const temp = await fs.mkdtemp(
     path.join(
@@ -728,6 +737,12 @@ async function main() {
               billingPlusVariantId!,
             NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID:
               billingProVariantId!,
+            ...(billingPrepaidPacksJson
+              ? {
+                  NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON:
+                    billingPrepaidPacksJson,
+                }
+              : {}),
           }
         : {}),
     };

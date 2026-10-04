@@ -99,6 +99,49 @@ export interface UsageAggregate {
   chargedCredits30d: number;
 }
 
+export interface PrepaidCreditInput {
+  quotaSubjectId: string;
+  eventId: string;
+  credits: number;
+  creditedAt: string;
+}
+
+export interface PrepaidCreditResult {
+  status: 'credited' | 'duplicate';
+  prepaidCredits: number;
+}
+
+export interface PrepaidPurchaseRecord {
+  provider: string;
+  providerOrderId: string;
+  accountId: string;
+  quotaSubjectId: string;
+  variantId: string;
+  purchasedCredits: number;
+  totalAmount: number;
+  refundedAmount: number;
+  revokedCredits: number;
+  providerUpdatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PrepaidRefundInput {
+  provider: string;
+  providerOrderId: string;
+  refundedAmount: number;
+  targetRevokedCredits: number;
+  providerUpdatedAt: string;
+  appliedAt: string;
+}
+
+export interface PrepaidRefundResult {
+  status: 'applied' | 'duplicate' | 'stale';
+  prepaidCredits: number;
+  refundDebtCredits: number;
+  purchase: PrepaidPurchaseRecord;
+}
+
 export interface ControlPlaneStore {
   getQuotaSubject(
     id: string,
@@ -155,6 +198,31 @@ export interface ControlPlaneStore {
     periodEnd: string,
     credits: number,
   ): Promise<ProductUsagePeriodRecord>;
+
+  getPrepaidCreditsBalance(
+    quotaSubjectId: string,
+  ): Promise<number>;
+
+  getPrepaidRefundDebt(
+    quotaSubjectId: string,
+  ): Promise<number>;
+
+  addPrepaidCreditsAtomic(
+    input: PrepaidCreditInput,
+  ): Promise<PrepaidCreditResult>;
+
+  getPrepaidPurchase(
+    provider: string,
+    providerOrderId: string,
+  ): Promise<PrepaidPurchaseRecord | null>;
+
+  putPrepaidPurchase(
+    record: PrepaidPurchaseRecord,
+  ): Promise<void>;
+
+  applyPrepaidRefundAtomic(
+    input: PrepaidRefundInput,
+  ): Promise<PrepaidRefundResult>;
 
   getUsageAggregate(now?: Date): Promise<UsageAggregate>;
 }

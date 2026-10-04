@@ -22,6 +22,8 @@ import {
   PRODUCT_PLANS,
   createCustomPlan,
   planHasFeature,
+  type CustomPlanInput,
+  type ProductFeature,
   type ProductPlan,
 } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
@@ -239,11 +241,19 @@ export class ControlPlaneService {
     const account = await this.requireAccount(identity.accountId);
     const plan = resolvePlan(account);
     const period = monthPeriod(this.now());
-    const usage = await this.store.getUsagePeriod(
-      account.quotaSubjectId,
-      period.key,
-    );
-    const devices = await this.store.listDevices(account.id);
+    const [usage, devices, prepaidCredits] =
+      await Promise.all([
+        this.store.getUsagePeriod(
+          account.quotaSubjectId,
+          period.key,
+        ),
+        this.store.listDevices(account.id),
+        plan.billingMode === 'prepaid-metered'
+          ? this.store.getPrepaidCreditsBalance(
+              account.quotaSubjectId,
+            )
+          : Promise.resolve(0),
+      ]);
 
     return {
       accountId: account.id,
@@ -255,7 +265,7 @@ export class ControlPlaneService {
         monthlyCredits: plan.monthlyCredits,
         prepaidCredits:
           plan.billingMode === 'prepaid-metered'
-            ? usage?.prepaidCredits ?? 0
+            ? prepaidCredits
             : null,
         periodStart: period.start,
         periodEnd: period.end,
@@ -329,6 +339,71 @@ export class ControlPlaneService {
         prepaidCapacityCredits: infra.prepaidCapacityCredits,
       },
     };
+  }
+
+  async configureCustomPrepaidPlan(
+    identity: ControlPlaneIdentity,
+    targetAccountIdInput: string,
+    input: {
+      maxDevices?: number | null;
+      maxConcurrentTasks?: number | null;
+      features?: readonly ProductFeature[];
+    },
+  ): Promise<ProductAccountRecord> {
+    const actor = await this.requireAccount(identity.accountId);
+    if (identity.role !== 'admin' || !actor.admin) {
+      throw new Error('ADMIN_REQUIRED');
+    }
+
+    const target = await this.requireAccount(
+      targetAccountIdInput,
+    );
+    let normalized: ProductPlan;
+    try {
+      normalized = createCustomPlan({
+        billingMode: 'prepaid-metered',
+        monthlyCredits: null,
+        maxDevices: input.maxDevices,
+        maxConcurrentTasks: input.maxConcurrentTasks,
+        features: input.features,
+      });
+    } catch {
+      throw new Error('INVALID_CUSTOM_PLAN');
+    }
+
+    const now = this.now().toISOString();
+    const currentQuota =
+      await this.store.getQuotaSubject(
+        target.quotaSubjectId,
+      );
+    let quotaSubjectId = target.quotaSubjectId;
+    if (!currentQuota || currentQuota.kind !== 'prepaid') {
+      quotaSubjectId = 'quota_' + randomUUID();
+      await this.store.putQuotaSubject({
+        id: quotaSubjectId,
+        kind: 'prepaid',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const customPlan: CustomPlanInput = {
+      billingMode: 'prepaid-metered',
+      monthlyCredits: null,
+      maxDevices: normalized.maxDevices,
+      maxConcurrentTasks:
+        normalized.maxConcurrentTasks,
+      features: [...normalized.features],
+    };
+    const updated: ProductAccountRecord = {
+      ...target,
+      quotaSubjectId,
+      planId: 'custom',
+      customPlan,
+      updatedAt: now,
+    };
+    await this.store.putAccount(updated);
+    return updated;
   }
 
   async beginPairing(

@@ -7,6 +7,11 @@ import type {
   ProductDeviceRecord,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
+  PrepaidCreditInput,
+  PrepaidCreditResult,
+  PrepaidPurchaseRecord,
+  PrepaidRefundInput,
+  PrepaidRefundResult,
   UsageAggregate,
   UsageAtomicChargeInput,
   UsageAtomicChargeResult,
@@ -56,6 +61,12 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly pairings = new Map<string, PairingRecord>();
   private readonly usage = new Map<string, ProductUsagePeriodRecord>();
   private readonly events = new Map<string, UsageEventRecord>();
+  private readonly prepaidBalances = new Map<string, number>();
+  private readonly prepaidRefundDebts = new Map<string, number>();
+  private readonly prepaidCreditEvents = new Map<string, string>();
+  private readonly prepaidPurchases =
+    new Map<string, PrepaidPurchaseRecord>();
+  private readonly prepaidRefundEvents = new Set<string>();
 
   async getQuotaSubject(
     id: string,
@@ -259,7 +270,12 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,
         usedCredits: 0,
-        prepaidCredits: 0,
+        prepaidCredits:
+          input.billingMode === 'prepaid-metered'
+            ? this.prepaidBalances.get(
+                input.quotaSubjectId,
+              ) ?? 0
+            : 0,
       };
 
     const duplicateKey = eventKey(
@@ -275,13 +291,23 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
     }
 
     if (input.billingMode === 'prepaid-metered') {
-      if (existing.prepaidCredits < input.credits) {
+      const balance =
+        this.prepaidBalances.get(input.quotaSubjectId) ?? 0;
+      const refundDebt =
+        this.prepaidRefundDebts.get(input.quotaSubjectId) ?? 0;
+      if (balance < input.credits || refundDebt > 0) {
+        existing.prepaidCredits = balance;
         return {
           status: 'quota-exhausted',
           record: clone(existing),
         };
       }
-      existing.prepaidCredits -= input.credits;
+      const remaining = balance - input.credits;
+      this.prepaidBalances.set(
+        input.quotaSubjectId,
+        remaining,
+      );
+      existing.prepaidCredits = remaining;
     } else if (
       input.monthlyCredits !== null &&
       existing.usedCredits + input.credits >
@@ -330,8 +356,166 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
         prepaidCredits: 0,
       };
     existing.prepaidCredits = credits;
+    this.prepaidBalances.set(quotaSubjectId, credits);
     this.usage.set(key, clone(existing));
     return clone(existing);
+  }
+
+  async getPrepaidCreditsBalance(
+    quotaSubjectId: string,
+  ): Promise<number> {
+    return this.prepaidBalances.get(quotaSubjectId) ?? 0;
+  }
+
+  async getPrepaidRefundDebt(
+    quotaSubjectId: string,
+  ): Promise<number> {
+    return this.prepaidRefundDebts.get(quotaSubjectId) ?? 0;
+  }
+
+  async addPrepaidCreditsAtomic(
+    input: PrepaidCreditInput,
+  ): Promise<PrepaidCreditResult> {
+    validateCredits('credits', input.credits);
+    if (input.credits < 1) {
+      throw new Error('credits must be at least 1.');
+    }
+    const existingQuotaSubjectId =
+      this.prepaidCreditEvents.get(input.eventId);
+    if (existingQuotaSubjectId) {
+      if (existingQuotaSubjectId !== input.quotaSubjectId) {
+        throw new Error('PREPAID_CREDIT_EVENT_MISMATCH');
+      }
+      return {
+        status: 'duplicate',
+        prepaidCredits:
+          this.prepaidBalances.get(
+            input.quotaSubjectId,
+          ) ?? 0,
+      };
+    }
+
+    const debt =
+      this.prepaidRefundDebts.get(input.quotaSubjectId) ?? 0;
+    const debtPayment = Math.min(debt, input.credits);
+    const nextDebt = debt - debtPayment;
+    const next =
+      (this.prepaidBalances.get(input.quotaSubjectId) ?? 0) +
+      (input.credits - debtPayment);
+    this.prepaidBalances.set(input.quotaSubjectId, next);
+    this.prepaidRefundDebts.set(
+      input.quotaSubjectId,
+      nextDebt,
+    );
+    this.prepaidCreditEvents.set(
+      input.eventId,
+      input.quotaSubjectId,
+    );
+    return {
+      status: 'credited',
+      prepaidCredits: next,
+    };
+  }
+
+  async getPrepaidPurchase(
+    provider: string,
+    providerOrderId: string,
+  ): Promise<PrepaidPurchaseRecord | null> {
+    const value = this.prepaidPurchases.get(
+      provider + ':' + providerOrderId,
+    );
+    return value ? clone(value) : null;
+  }
+
+  async putPrepaidPurchase(
+    record: PrepaidPurchaseRecord,
+  ): Promise<void> {
+    const key = record.provider + ':' + record.providerOrderId;
+    if (!this.prepaidPurchases.has(key)) {
+      this.prepaidPurchases.set(key, clone(record));
+    }
+  }
+
+  async applyPrepaidRefundAtomic(
+    input: PrepaidRefundInput,
+  ): Promise<PrepaidRefundResult> {
+    const key = input.provider + ':' + input.providerOrderId;
+    const current = this.prepaidPurchases.get(key);
+    if (!current) throw new Error('PREPAID_PURCHASE_NOT_FOUND');
+
+    if (
+      input.refundedAmount < current.refundedAmount ||
+      input.targetRevokedCredits < current.revokedCredits
+    ) {
+      return {
+        status: 'stale',
+        prepaidCredits:
+          this.prepaidBalances.get(current.quotaSubjectId) ?? 0,
+        refundDebtCredits:
+          this.prepaidRefundDebts.get(current.quotaSubjectId) ?? 0,
+        purchase: clone(current),
+      };
+    }
+    if (
+      input.refundedAmount === current.refundedAmount &&
+      input.targetRevokedCredits === current.revokedCredits
+    ) {
+      return {
+        status: 'duplicate',
+        prepaidCredits:
+          this.prepaidBalances.get(current.quotaSubjectId) ?? 0,
+        refundDebtCredits:
+          this.prepaidRefundDebts.get(current.quotaSubjectId) ?? 0,
+        purchase: clone(current),
+      };
+    }
+    if (
+      input.refundedAmount > current.totalAmount ||
+      input.targetRevokedCredits > current.purchasedCredits
+    ) {
+      throw new Error('PREPAID_REFUND_INVALID');
+    }
+
+    const eventKey =
+      key + ':refund:' + String(input.refundedAmount);
+    if (this.prepaidRefundEvents.has(eventKey)) {
+      return {
+        status: 'duplicate',
+        prepaidCredits:
+          this.prepaidBalances.get(current.quotaSubjectId) ?? 0,
+        refundDebtCredits:
+          this.prepaidRefundDebts.get(current.quotaSubjectId) ?? 0,
+        purchase: clone(current),
+      };
+    }
+
+    const delta =
+      input.targetRevokedCredits - current.revokedCredits;
+    const balance =
+      this.prepaidBalances.get(current.quotaSubjectId) ?? 0;
+    const removed = Math.min(balance, delta);
+    const nextBalance = balance - removed;
+    const nextDebt =
+      (this.prepaidRefundDebts.get(current.quotaSubjectId) ?? 0) +
+      (delta - removed);
+    this.prepaidBalances.set(current.quotaSubjectId, nextBalance);
+    this.prepaidRefundDebts.set(current.quotaSubjectId, nextDebt);
+
+    const updated: PrepaidPurchaseRecord = {
+      ...current,
+      refundedAmount: input.refundedAmount,
+      revokedCredits: input.targetRevokedCredits,
+      providerUpdatedAt: input.providerUpdatedAt,
+      updatedAt: input.appliedAt,
+    };
+    this.prepaidPurchases.set(key, clone(updated));
+    this.prepaidRefundEvents.add(eventKey);
+    return {
+      status: 'applied',
+      prepaidCredits: nextBalance,
+      refundDebtCredits: nextDebt,
+      purchase: clone(updated),
+    };
   }
 
   async getUsageAggregate(now = new Date()): Promise<UsageAggregate> {

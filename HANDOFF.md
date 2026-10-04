@@ -166,7 +166,9 @@ Private desktop / isolated input is now complete as a product slice:
 Hosted product/control-plane code is implemented:
 - Free / Plus / Pro / Custom plan model with zero-owner-spend hard stops;
 - account/device/quota-subject model and privacy-preserving device-anchor anti-abuse;
-- Cloudflare Worker + D1 migrations through `0006_runtime_config.sql`;
+- Cloudflare Worker + D1 migrations through `0008_prepaid_credit_balance.sql`;
+- Lemon Squeezy Plus/Pro subscription checkout, signed webhook reconciliation, customer portal, and DPAPI-protected owner bootstrap secrets;
+- admin-provisioned Custom prepaid plans with one-time credit-pack checkout, quota-subject carry-over balances, idempotent purchase credits, proportional refund clawback, and fail-closed refund debt;
 - GitHub OAuth sign-in, signed Nexowire sessions, MCP OAuth 2.1 + PKCE, and refresh rotation;
 - one-click browser pairing and per-device agent credentials;
 - hosted account device isolation and usage metering;
@@ -177,9 +179,9 @@ Production hosted deployment is live. `npm run control-plane:bootstrap` complete
 
 ## Immediate next work
 
-1. Implement subscription/payment-provider integration for Plus / Pro / Custom while preserving the existing hard-stop zero-owner-spend policy and Free-plan quota behavior.
-2. Add webhook-driven subscription state changes, checkout/billing-portal entry points, idempotent event processing, and tests for upgrade/downgrade/cancel/renewal failure paths.
-3. Keep prepaid/custom capacity explicitly funded; never silently convert quota exhaustion into owner-paid automatic overage.
+1. Finish review/CI and merge `feature/custom-prepaid-billing`. PR #178 already merged the Plus/Pro Lemon Squeezy subscription provider; this branch adds Custom prepaid packs, carry-over credit accounting, signed one-time order reconciliation, partial/full refund clawback, and refund debt.
+2. After merge, provision production Lemon Squeezy store/variant/webhook settings and run live Plus/Pro/Custom billing acceptance. Billing remains disabled fail-closed when provider configuration is absent, while Free-plan behavior remains available.
+3. Preserve the financial invariant: custom capacity is prepaid only, refund debt blocks spend until repaid, and quota exhaustion never becomes owner-paid automatic overage.
 4. The GitHub Actions deploy workflow is implemented but the repository is not yet provisioned with a usable `CLOUDFLARE_API_TOKEN`; manual dispatch run `37208026750` failed during configuration validation. Production deployment remains available through the DPAPI-protected local owner bootstrap until Actions credentials or a renewable deployment-auth mechanism is configured.
 
 ## Known machine note

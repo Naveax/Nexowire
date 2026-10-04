@@ -18,12 +18,19 @@ const SUBSCRIPTION_EVENTS = new Set([
   'subscription_unpaused',
 ]);
 
+export interface LemonSqueezyPrepaidPackConfig {
+  variantId: string;
+  credits: number;
+  label?: string;
+}
+
 export interface LemonSqueezyBillingConfig {
   apiKey: string;
   webhookSecret: string;
   storeId: string;
   plusVariantId: string;
   proVariantId: string;
+  prepaidPacks?: readonly LemonSqueezyPrepaidPackConfig[];
   apiBaseUrl?: string;
 }
 
@@ -44,6 +51,31 @@ export interface LemonSqueezySubscriptionWebhook {
   providerCreatedAt: string;
 }
 
+export interface LemonSqueezyPrepaidOrderWebhook {
+  kind: 'prepaid-order';
+  eventHash: string;
+  eventName: 'order_created';
+  providerOrderId: string;
+  providerCustomerId: string;
+  accountId: string | null;
+  variantId: string;
+  credits: number | null;
+  totalAmount: number;
+  providerUpdatedAt: string;
+  providerCreatedAt: string;
+}
+
+export interface LemonSqueezyOrderRefundWebhook {
+  kind: 'order-refund';
+  eventHash: string;
+  eventName: 'order_refunded';
+  providerOrderId: string;
+  variantId: string;
+  totalAmount: number;
+  refundedAmount: number;
+  providerUpdatedAt: string;
+}
+
 export interface LemonSqueezyIgnoredWebhook {
   kind: 'ignored';
   eventHash: string;
@@ -52,6 +84,8 @@ export interface LemonSqueezyIgnoredWebhook {
 
 export type LemonSqueezyWebhook =
   | LemonSqueezySubscriptionWebhook
+  | LemonSqueezyPrepaidOrderWebhook
+  | LemonSqueezyOrderRefundWebhook
   | LemonSqueezyIgnoredWebhook;
 
 function required(
@@ -130,6 +164,21 @@ function stringValue(
   return value.trim();
 }
 
+function integerValue(
+  value: unknown,
+  error: string,
+  options: { positive?: boolean } = {},
+): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < (options.positive ? 1 : 0)
+  ) {
+    throw new Error(error);
+  }
+  return value;
+}
+
 function idValue(
   value: unknown,
   error: string,
@@ -196,6 +245,8 @@ export class LemonSqueezyBillingProvider {
   private readonly storeId: string;
   private readonly plusVariantId: string;
   private readonly proVariantId: string;
+  private readonly prepaidPacksByVariant =
+    new Map<string, { credits: number; label: string }>();
   private readonly apiBaseUrl: string;
 
   constructor(
@@ -228,6 +279,42 @@ export class LemonSqueezyBillingProvider {
       throw new Error(
         'Lemon Squeezy Plus and Pro variant IDs must differ.',
       );
+    }
+
+    for (const pack of config.prepaidPacks ?? []) {
+      const variantId = numericId(
+        'Lemon Squeezy prepaid variant ID',
+        pack.variantId,
+      );
+      if (
+        variantId === this.plusVariantId ||
+        variantId === this.proVariantId ||
+        this.prepaidPacksByVariant.has(variantId)
+      ) {
+        throw new Error(
+          'Lemon Squeezy prepaid variant IDs must be unique and separate from subscription variants.',
+        );
+      }
+      if (
+        !Number.isInteger(pack.credits) ||
+        pack.credits < 1 ||
+        pack.credits > 2_147_483_647
+      ) {
+        throw new Error(
+          'Lemon Squeezy prepaid pack credits are invalid.',
+        );
+      }
+      const label =
+        pack.label?.trim() || String(pack.credits) + ' credits';
+      if (label.length > 80 || /[\r\n\0]/.test(label)) {
+        throw new Error(
+          'Lemon Squeezy prepaid pack label is invalid.',
+        );
+      }
+      this.prepaidPacksByVariant.set(variantId, {
+        credits: pack.credits,
+        label,
+      });
     }
 
     const base =
@@ -281,6 +368,109 @@ export class LemonSqueezyBillingProvider {
             checkout_data: {
               custom: {
                 account_id: input.accountId,
+              },
+            },
+          },
+          relationships: {
+            store: {
+              data: {
+                type: 'stores',
+                id: this.storeId,
+              },
+            },
+            variant: {
+              data: {
+                type: 'variants',
+                id: variantId,
+              },
+            },
+          },
+        },
+      }),
+    });
+
+    const body = asRecord(
+      await response.json(),
+      'BILLING_PROVIDER_RESPONSE_INVALID',
+    );
+    const data = asRecord(
+      body.data,
+      'BILLING_PROVIDER_RESPONSE_INVALID',
+    );
+    const attributes = asRecord(
+      data.attributes,
+      'BILLING_PROVIDER_RESPONSE_INVALID',
+    );
+    return safeHttpsUrl(
+      'Lemon Squeezy checkout URL',
+      stringValue(
+        attributes.url,
+        'BILLING_PROVIDER_RESPONSE_INVALID',
+      ),
+    );
+  }
+
+  listPrepaidPacks(): Array<{
+    variantId: string;
+    credits: number;
+    label: string;
+  }> {
+    return [...this.prepaidPacksByVariant.entries()]
+      .map(([variantId, pack]) => ({
+        variantId,
+        credits: pack.credits,
+        label: pack.label,
+      }))
+      .sort(
+        (a, b) =>
+          a.credits - b.credits ||
+          a.variantId.localeCompare(b.variantId),
+      );
+  }
+
+  creditsForPrepaidVariant(
+    variantId: string,
+  ): number | null {
+    return (
+      this.prepaidPacksByVariant.get(
+        String(variantId).trim(),
+      )?.credits ?? null
+    );
+  }
+
+  async createPrepaidCheckout(input: {
+    accountId: string;
+    variantId: string;
+    redirectUrl: string;
+  }): Promise<string> {
+    const redirectUrl = safeHttpsUrl(
+      'Billing redirect URL',
+      input.redirectUrl,
+    );
+    const variantId = numericId(
+      'Lemon Squeezy prepaid variant ID',
+      input.variantId,
+    );
+    if (!this.prepaidPacksByVariant.has(variantId)) {
+      throw new Error('BILLING_VARIANT_UNKNOWN');
+    }
+
+    const response = await this.api('/checkouts', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          type: 'checkouts',
+          attributes: {
+            product_options: {
+              redirect_url: redirectUrl,
+              enabled_variants: [
+                Number.parseInt(variantId, 10),
+              ],
+            },
+            checkout_data: {
+              custom: {
+                account_id: input.accountId,
+                purchase_kind: 'prepaid_credits',
               },
             },
           },
@@ -401,6 +591,144 @@ export class LemonSqueezyBillingProvider {
       meta.event_name,
       'BILLING_WEBHOOK_INVALID_EVENT',
     );
+
+    if (eventName === 'order_refunded') {
+      const custom =
+        typeof meta.custom_data === 'object' &&
+        meta.custom_data !== null &&
+        !Array.isArray(meta.custom_data)
+          ? (meta.custom_data as Record<string, unknown>)
+          : {};
+      if (custom.purchase_kind !== 'prepaid_credits') {
+        return {
+          kind: 'ignored',
+          eventHash,
+          eventName,
+        };
+      }
+      const data = asRecord(
+        body.data,
+        'BILLING_WEBHOOK_INVALID',
+      );
+      if (data.type !== 'orders') {
+        throw new Error('BILLING_WEBHOOK_INVALID_TYPE');
+      }
+      const attributes = asRecord(
+        data.attributes,
+        'BILLING_WEBHOOK_INVALID',
+      );
+      const firstOrderItem = asRecord(
+        attributes.first_order_item,
+        'BILLING_WEBHOOK_INVALID_ORDER_ITEM',
+      );
+      const totalAmount = integerValue(
+        attributes.total,
+        'BILLING_WEBHOOK_INVALID_ORDER_TOTAL',
+        { positive: true },
+      );
+      const refundedAmount = integerValue(
+        attributes.refunded_amount,
+        'BILLING_WEBHOOK_INVALID_REFUND_AMOUNT',
+        { positive: true },
+      );
+      if (refundedAmount > totalAmount) {
+        throw new Error(
+          'BILLING_WEBHOOK_INVALID_REFUND_AMOUNT',
+        );
+      }
+      return {
+        kind: 'order-refund',
+        eventHash,
+        eventName,
+        providerOrderId: idValue(
+          data.id,
+          'BILLING_WEBHOOK_INVALID_ORDER',
+        ),
+        variantId: idValue(
+          firstOrderItem.variant_id,
+          'BILLING_WEBHOOK_INVALID_VARIANT',
+        ),
+        totalAmount,
+        refundedAmount,
+        providerUpdatedAt: isoRequired(
+          'UPDATED_AT',
+          attributes.updated_at,
+        ),
+      };
+    }
+
+    if (eventName === 'order_created') {
+      const data = asRecord(
+        body.data,
+        'BILLING_WEBHOOK_INVALID',
+      );
+      if (data.type !== 'orders') {
+        throw new Error('BILLING_WEBHOOK_INVALID_TYPE');
+      }
+      const attributes = asRecord(
+        data.attributes,
+        'BILLING_WEBHOOK_INVALID',
+      );
+      const custom =
+        typeof meta.custom_data === 'object' &&
+        meta.custom_data !== null &&
+        !Array.isArray(meta.custom_data)
+          ? (meta.custom_data as Record<string, unknown>)
+          : {};
+      if (custom.purchase_kind !== 'prepaid_credits') {
+        return {
+          kind: 'ignored',
+          eventHash,
+          eventName,
+        };
+      }
+      if (attributes.status !== 'paid') {
+        throw new Error(
+          'BILLING_WEBHOOK_INVALID_ORDER_STATUS',
+        );
+      }
+      const firstOrderItem = asRecord(
+        attributes.first_order_item,
+        'BILLING_WEBHOOK_INVALID_ORDER_ITEM',
+      );
+      const variantId = idValue(
+        firstOrderItem.variant_id,
+        'BILLING_WEBHOOK_INVALID_VARIANT',
+      );
+      return {
+        kind: 'prepaid-order',
+        eventHash,
+        eventName,
+        providerOrderId: idValue(
+          data.id,
+          'BILLING_WEBHOOK_INVALID_ORDER',
+        ),
+        providerCustomerId: idValue(
+          attributes.customer_id,
+          'BILLING_WEBHOOK_INVALID_CUSTOMER',
+        ),
+        accountId:
+          typeof custom.account_id === 'string' &&
+          custom.account_id.trim()
+            ? custom.account_id.trim()
+            : null,
+        variantId,
+        credits: this.creditsForPrepaidVariant(variantId),
+        totalAmount: integerValue(
+          attributes.total,
+          'BILLING_WEBHOOK_INVALID_ORDER_TOTAL',
+          { positive: true },
+        ),
+        providerUpdatedAt: isoRequired(
+          'UPDATED_AT',
+          attributes.updated_at,
+        ),
+        providerCreatedAt: isoRequired(
+          'CREATED_AT',
+          attributes.created_at,
+        ),
+      };
+    }
 
     if (!SUBSCRIPTION_EVENTS.has(eventName)) {
       return {

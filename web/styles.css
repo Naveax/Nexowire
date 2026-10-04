@@ -43,6 +43,8 @@ h2 { font-size: 24px; margin-bottom: 0; }
 .billing-panel h2 { margin-bottom: 6px; }
 .billing-panel p:last-child { margin-bottom: 0; }
 .billing-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.prepaid-packs { display: flex; flex-wrap: wrap; gap: 10px; }
+.prepaid-packs.hidden { display: none; }
 .billing-actions button:disabled { opacity: .45; cursor: not-allowed; }
 .section-head { margin: 42px 0 14px; }
 .device-list { display: grid; gap: 10px; }

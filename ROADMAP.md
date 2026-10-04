@@ -126,4 +126,6 @@
 - [x] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
 - [x] complete hosted Free-plan production acceptance: live dashboard/device presence, quota/event accounting, and OAuth refresh-token rotation
 - [ ] configure production GitHub Actions deployment credentials or migrate deploy authentication to a renewable mechanism
-- [ ] add subscription/payment provider integration after hosted free-plan acceptance
+- [x] add Lemon Squeezy Plus/Pro subscription checkout, signed webhook reconciliation, customer portal, and protected deployment-secret handling
+- [x] add Custom prepaid credit packs with carry-over quota-subject balances, idempotent signed order credits, refund clawback, and refund debt
+- [ ] provision production Lemon Squeezy store/variants/webhook configuration and complete live Plus/Pro/Custom paid-plan acceptance

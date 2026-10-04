@@ -38,10 +38,20 @@ function optionalBillingVars() {
       optionalEnv(name),
     ]),
   );
+  const prepaidPacksJson = optionalEnv(
+    'NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON',
+  );
   const present = BILLING_VAR_NAMES.filter(
     (name) => values[name] !== undefined,
   );
-  if (present.length === 0) return {};
+  if (present.length === 0) {
+    if (prepaidPacksJson !== undefined) {
+      throw new Error(
+        'Lemon Squeezy prepaid packs require the base billing vars.',
+      );
+    }
+    return {};
+  }
   if (present.length !== BILLING_VAR_NAMES.length) {
     throw new Error(
       'Lemon Squeezy billing vars must be configured together.',
@@ -60,7 +70,64 @@ function optionalBillingVars() {
       'Lemon Squeezy Plus and Pro variant IDs must differ.',
     );
   }
-  return values;
+
+  if (prepaidPacksJson === undefined) return values;
+
+  let decoded;
+  try {
+    decoded = JSON.parse(prepaidPacksJson);
+  } catch {
+    throw new Error(
+      'NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON must be valid JSON.',
+    );
+  }
+  if (!Array.isArray(decoded) || decoded.length > 20) {
+    throw new Error(
+      'NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON must be an array with at most 20 packs.',
+    );
+  }
+  const seen = new Set([
+    values.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID,
+    values.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID,
+  ]);
+  const normalized = decoded.map((entry) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      Array.isArray(entry)
+    ) {
+      throw new Error('Lemon Squeezy prepaid pack is invalid.');
+    }
+    const variantId = String(entry.variantId ?? '').trim();
+    const credits = Number(entry.credits);
+    const label =
+      typeof entry.label === 'string'
+        ? entry.label.trim()
+        : undefined;
+    if (
+      !/^\d+$/.test(variantId) ||
+      seen.has(variantId) ||
+      !Number.isInteger(credits) ||
+      credits < 1 ||
+      credits > 2_147_483_647 ||
+      (label !== undefined &&
+        (!label || label.length > 80 || /[\r\n\0]/.test(label)))
+    ) {
+      throw new Error('Lemon Squeezy prepaid pack is invalid.');
+    }
+    seen.add(variantId);
+    return {
+      variantId,
+      credits,
+      ...(label ? { label } : {}),
+    };
+  });
+
+  return {
+    ...values,
+    NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON:
+      JSON.stringify(normalized),
+  };
 }
 
 function boundedPercent(raw) {

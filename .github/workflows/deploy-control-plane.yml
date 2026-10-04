@@ -31,6 +31,7 @@ jobs:
       NEXOWIRE_LEMONSQUEEZY_STORE_ID: ${{ vars.NEXOWIRE_LEMONSQUEEZY_STORE_ID }}
       NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID: ${{ vars.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID }}
       NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID: ${{ vars.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID }}
+      NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON: ${{ vars.NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON }}
 
     steps:
       - name: Checkout
@@ -83,6 +84,10 @@ jobs:
           done
           if [[ "$configured_billing" -ne 0 && "$configured_billing" -ne "${#billing[@]}" ]]; then
             echo "::error::Lemon Squeezy billing configuration must be provided together."
+            exit 1
+          fi
+          if [[ -n "${NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON:-}" && "$configured_billing" -ne "${#billing[@]}" ]]; then
+            echo "::error::Lemon Squeezy prepaid packs require the base billing configuration."
             exit 1
           fi
 

@@ -57,6 +57,14 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
           NEXOWIRE_LEMONSQUEEZY_STORE_ID: '1001',
           NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID: '2001',
           NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID: '2002',
+          NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON:
+            JSON.stringify([
+              {
+                variantId: '3001',
+                credits: 100000,
+                label: '100k kredi',
+              },
+            ]),
         },
         encoding: 'utf8',
       },
@@ -109,6 +117,16 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
     assert.equal(
       runtime.vars.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID,
       '2002',
+    );
+    assert.equal(
+      runtime.vars.NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON,
+      JSON.stringify([
+        {
+          variantId: '3001',
+          credits: 100000,
+          label: '100k kredi',
+        },
+      ]),
     );
     assert.equal(runtime.secrets, undefined);
     assert.deepEqual(
@@ -208,6 +226,7 @@ test('D1 quota triggers stay compatible with the remote migration splitter', asy
   for (const name of [
     '0001_control_plane.sql',
     '0003_quota_subject_device_anchor.sql',
+    '0008_prepaid_credit_balance.sql',
   ]) {
     const migration = await fs.readFile(
       path.join(
@@ -238,6 +257,84 @@ test('D1 quota triggers stay compatible with the remote migration splitter', asy
   }
 });
 
+
+test('Cloudflare runtime config generator rejects malformed or colliding prepaid pack config', async () => {
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-cf-prepaid-config-'),
+  );
+  const template = path.join(dir, 'wrangler.jsonc');
+  const output = path.join(dir, 'runtime.json');
+
+  await fs.writeFile(
+    template,
+    JSON.stringify({
+      name: 'nexowire-control-plane',
+      d1_databases: [
+        {
+          binding: 'DB',
+          database_name: 'nexowire-control-plane',
+          database_id: 'placeholder',
+        },
+      ],
+    }),
+  );
+
+  const baseEnv = {
+    ...process.env,
+    NEXOWIRE_D1_DATABASE_ID:
+      '11111111-2222-4333-8444-555555555555',
+    NEXOWIRE_AGENT_WS_URL:
+      'wss://relay.example.test/agent',
+    NEXOWIRE_MCP_RESOURCE_URL:
+      'https://relay.example.test/mcp',
+    NEXOWIRE_LEMONSQUEEZY_STORE_ID: '1001',
+    NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID: '2001',
+    NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID: '2002',
+  };
+
+  try {
+    for (const bad of [
+      '{not-json',
+      JSON.stringify([
+        { variantId: '2001', credits: 1000 },
+      ]),
+      JSON.stringify([
+        { variantId: '3001', credits: 0 },
+      ]),
+    ]) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          path.join(
+            process.cwd(),
+            'scripts',
+            'prepare-cloudflare-control-plane.mjs',
+          ),
+          template,
+          output,
+        ],
+        {
+          env: {
+            ...baseEnv,
+            NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON:
+              bad,
+          },
+          encoding: 'utf8',
+        },
+      );
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr + result.stdout,
+        /prepaid/i,
+      );
+    }
+  } finally {
+    await fs.rm(dir, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
 
 test('Cloudflare runtime config generator rejects partial Lemon Squeezy billing vars', async () => {
   const dir = await fs.mkdtemp(
