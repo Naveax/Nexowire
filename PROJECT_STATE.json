@@ -124,7 +124,7 @@
       "id": "hosted-control-plane",
       "status": "partial",
       "priority": 18,
-      "summary": "Hosted production control plane, ChatGPT Web OAuth MCP connector acceptance, and Free-plan production acceptance are complete. The live dashboard reports work-pc online from D1-backed presence sync, quota metering matched distinct MCP events to applied credits, and the production OAuth client demonstrated refresh-token rotation with only one active refresh token. PR #175 fixed stale device presence and was deployed to production. Remaining work is subscription/payment-provider integration plus provisioning or replacing the missing GitHub Actions Cloudflare deployment credential."
+      "summary": "Hosted control plane, ChatGPT Web OAuth MCP acceptance, Free-plan production acceptance, and the Lemon Squeezy Plus/Pro billing core are complete. PR #178 added hosted checkout, signed subscription webhooks, customer portal URLs, D1 billing state/idempotency, dashboard controls, and DPAPI-capable billing secret sources. Migration 0007 and Worker version b5495420-951e-4122-9cd9-df2b012c6528 are live with billing intentionally disabled until real provider configuration is supplied. Remaining work is Custom/prepaid funded-credit payments, live Lemon Squeezy activation/acceptance, and the separate GitHub Actions Cloudflare deployment-auth gap."
     },
     {
       "id": "private-desktop-isolation",
@@ -196,15 +196,16 @@
     "The preferred hosted deployment path is now npm run control-plane:bootstrap. It generates owner secrets into CurrentUser DPAPI, applies D1 migrations through 0006, deploys Cloudflare, opens a protected GitHub App Manifest flow, stores only OAuth client ID/secret encrypted in D1, and wires the protected control-plane service token into the Hub.",
     "Hosted Free-plan production acceptance completed on 2026-10-04: dashboard HTTP 200 showed work-pc online, D1 presence matched the live reconnect timestamp, quota usage/event totals matched exactly during acceptance, and the ChatGPT OAuth client had three refresh-token records with two revoked and one active. PR #175 presence sync passed CI and was deployed as Worker version ffafa40c-e7eb-40c7-83bc-6356b347224a; the global Hub runtime was updated and restarted successfully.",
     "Manual GitHub Actions control-plane deploy run 37208026750 failed before deployment because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets; the DPAPI-protected local owner bootstrap remains the working production deploy path.",
-    "PR #177 fixed a Windows durable-process terminal-state race exposed by the Windows Server 2025 CI runner; its CI passed, it merged as main 9aed2daf152aff28902ca7948de73aa5a2a62963, and exact-main CI run 37210095593 passed all jobs."
+    "PR #177 fixed a Windows durable-process terminal-state race exposed by the Windows Server 2025 CI runner; its CI passed, it merged as main 9aed2daf152aff28902ca7948de73aa5a2a62963, and exact-main CI run 37210095593 passed all jobs.",
+    "PR #178 merged Plus/Pro Lemon Squeezy billing on 2026-10-04 and passed all GitHub CI jobs. Production migration 0007 succeeded and Worker version b5495420-951e-4122-9cd9-df2b012c6528 was deployed with no Lemon Squeezy bindings, so billing stays disabled while Free dashboard and Nexowire MCP regression checks pass."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "9aed2daf152aff28902ca7948de73aa5a2a62963",
+  "lastVerifiedMain": "7130e032db364698b0620140c52c6004ef336997",
   "activeWork": [
     {
-      "branch": "feature/subscription-payment-provider",
+      "branch": "feature/custom-prepaid-billing",
       "status": "planned",
-      "goal": "Implement Plus/Pro/Custom subscription and payment-provider integration with webhook-driven plan state, idempotent billing events, checkout/billing portal entry points, and no owner-paid automatic overage."
+      "goal": "Implement Custom/prepaid funded-credit payments and reconciliation on top of the merged billing provider/store while preserving no owner-paid overage and non-negative balances."
     }
   ]
 }

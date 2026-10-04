@@ -119,7 +119,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Current verified `main`: `9aed2daf152aff28902ca7948de73aa5a2a62963`.
+Current verified `main`: `7130e032db364698b0620140c52c6004ef336997`.
 
 Verification:
 - local `main` and `origin/main` were synchronized at this SHA before the state sync;
@@ -173,14 +173,14 @@ Hosted product/control-plane code is implemented:
 - automated GitHub Actions deployment;
 - one-command owner bootstrap via `npm run control-plane:bootstrap`.
 
-Production hosted deployment is live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0006`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. ChatGPT Web has a first-party Nexowire custom MCP App using OAuth against `https://nexowire.tail10f02d.ts.net/mcp`. End-to-end connector acceptance passed through Nexowire itself, and hosted Free-plan acceptance is now complete: the production dashboard returns `work-pc` online, broker connect/disconnect presence is persisted to D1, October quota metering matched 86 distinct events to 86 applied credits during acceptance, and the live ChatGPT OAuth client showed two successful refresh-token rotations with only one active refresh token remaining. PR #175 fixed stale hosted device presence and merge CI run `37207366849` passed; local owner bootstrap then deployed Worker version `ffafa40c-e7eb-40c7-83bc-6356b347224a` and the global Hub runtime was updated/restarted. The stable device ID remained `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, with post-update `devices_list`, `machine_snapshot`, and `machine_health` passing. RDC/SentinelX were not used as final acceptance evidence.
+Production hosted deployment is live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0007`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. ChatGPT Web has a first-party Nexowire custom MCP App using OAuth against `https://nexowire.tail10f02d.ts.net/mcp`. End-to-end connector acceptance passed through Nexowire itself, and hosted Free-plan acceptance is now complete: the production dashboard returns `work-pc` online, broker connect/disconnect presence is persisted to D1, October quota metering matched 86 distinct events to 86 applied credits during acceptance, and the live ChatGPT OAuth client showed two successful refresh-token rotations with only one active refresh token remaining. PR #175 fixed stale hosted device presence and merge CI run `37207366849` passed; local owner bootstrap then deployed Worker version `ffafa40c-e7eb-40c7-83bc-6356b347224a` and the global Hub runtime was updated/restarted. The stable device ID remained `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, with post-update `devices_list`, `machine_snapshot`, and `machine_health` passing. RDC/SentinelX were not used as final acceptance evidence. Plus/Pro subscription billing is now implemented and merged in PR #178 using Lemon Squeezy: hosted checkout, signed HMAC-SHA256 webhooks, customer portal URLs, D1 subscription/idempotency state, stale-event protection, DPAPI-capable deployment secrets, and dashboard controls. The merged code was deployed to production as Worker version `b5495420-951e-4122-9cd9-df2b012c6528`; migration `0007_billing_subscriptions.sql` applied successfully. Billing remains intentionally disabled in production until real Lemon Squeezy credentials/store/variant IDs are configured, so `/api/v1/billing/status` returns `503 BILLING_NOT_CONFIGURED`, while the normal Free dashboard and Nexowire MCP acceptance continue to pass.
 
 ## Immediate next work
 
-1. Implement subscription/payment-provider integration for Plus / Pro / Custom while preserving the existing hard-stop zero-owner-spend policy and Free-plan quota behavior.
-2. Add webhook-driven subscription state changes, checkout/billing-portal entry points, idempotent event processing, and tests for upgrade/downgrade/cancel/renewal failure paths.
-3. Keep prepaid/custom capacity explicitly funded; never silently convert quota exhaustion into owner-paid automatic overage.
-4. The GitHub Actions deploy workflow is implemented but the repository is not yet provisioned with a usable `CLOUDFLARE_API_TOKEN`; manual dispatch run `37208026750` failed during configuration validation. Production deployment remains available through the DPAPI-protected local owner bootstrap until Actions credentials or a renewable deployment-auth mechanism is configured.
+1. Implement the Custom/prepaid funding slice on top of the merged billing store so metered custom capacity can only consume already-funded credits; preserve the hard-stop zero-owner-spend invariant.
+2. Add explicit prepaid top-up/order webhook handling, ledger reconciliation, idempotency, and tests for duplicate/reversed/failed payment events without allowing a negative balance.
+3. Provision the real Lemon Squeezy store only after the code path is complete. Live activation requires the owner's Lemon Squeezy account/store activation plus real store ID, Plus/Pro variant IDs, API key, and webhook secret; protect local owner secrets with the new DPAPI purposes.
+4. The GitHub Actions deploy workflow still lacks a usable `CLOUDFLARE_API_TOKEN`; manual dispatch run `37208026750` failed configuration validation. DPAPI-protected local deployment remains the production path until Actions auth is fixed.
 
 ## Known machine note
 

@@ -110,7 +110,7 @@ Hosted Free-plan production acceptance is also complete. PR #175 added Hub-to-co
 
 PR #177 fixed the Windows durable-process terminal-state race uncovered by the state-sync CI; exact-main CI run `37210095593` passed all jobs on `9aed2daf152aff28902ca7948de73aa5a2a62963`.
 
-Remaining hosted product work is subscription/payment-provider integration for Plus / Pro / Custom. Preserve zero-owner-spend behavior and prepaid-only custom capacity. Separately, the GitHub Actions deployment workflow still needs a production Cloudflare credential or a renewable deployment-auth replacement; manual run `37208026750` failed validation because `CLOUDFLARE_API_TOKEN` is not configured, while the DPAPI-protected local owner bootstrap remains functional.
+The Plus/Pro subscription-provider core is now complete and merged via PR #178. Lemon Squeezy hosted checkout, signed webhooks, customer portal URLs, D1 billing state/idempotency, dashboard controls, and protected billing secret sources are implemented. Migration `0007_billing_subscriptions.sql` and Worker version `b5495420-951e-4122-9cd9-df2b012c6528` are live, but provider configuration is intentionally absent so billing remains disabled and Free production behavior is unchanged. Remaining hosted product work is the Custom/prepaid funded-credit flow plus live Lemon Squeezy store activation/acceptance. Preserve zero-owner-spend behavior and prepaid-only custom capacity. Separately, the GitHub Actions deployment workflow still needs a production Cloudflare credential or a renewable deployment-auth replacement; manual run `37208026750` failed validation because `CLOUDFLARE_API_TOKEN` is not configured, while the DPAPI-protected local owner bootstrap remains functional.
 
 ## Branch and merge discipline
 
