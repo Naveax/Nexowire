@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   readProtectedSecretFile,
+  resolveProtectedSingleSecret,
   writeProtectedSecretFile,
 } from '../src/security/protected-secret-files.js';
 
@@ -636,6 +637,54 @@ async function main() {
   const dbId = await d1DatabaseId();
   const secrets = await secureDeploymentSecrets();
 
+  const billingApiKey = resolveProtectedSingleSecret(
+    process.env.NEXOWIRE_LEMONSQUEEZY_API_KEY,
+    undefined,
+    process.env.NEXOWIRE_LEMONSQUEEZY_API_KEY_DPAPI_FILE,
+    'billing-lemonsqueezy-api-key',
+    'Lemon Squeezy API key',
+  );
+  const billingWebhookSecret =
+    resolveProtectedSingleSecret(
+      process.env.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET,
+      undefined,
+      process.env
+        .NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET_DPAPI_FILE,
+      'billing-lemonsqueezy-webhook-secret',
+      'Lemon Squeezy webhook secret',
+    );
+  const billingStoreId =
+    process.env.NEXOWIRE_LEMONSQUEEZY_STORE_ID?.trim() ||
+    undefined;
+  const billingPlusVariantId =
+    process.env
+      .NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID?.trim() ||
+    undefined;
+  const billingProVariantId =
+    process.env
+      .NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID?.trim() ||
+    undefined;
+  const billingValues = [
+    billingApiKey,
+    billingWebhookSecret,
+    billingStoreId,
+    billingPlusVariantId,
+    billingProVariantId,
+  ];
+  const configuredBilling = billingValues.filter(
+    (value) => value !== undefined,
+  );
+  if (
+    configuredBilling.length !== 0 &&
+    configuredBilling.length !== billingValues.length
+  ) {
+    throw new Error(
+      'Lemon Squeezy billing configuration must provide API key, webhook secret, store ID, Plus variant ID, and Pro variant ID together.',
+    );
+  }
+  const billingConfigured =
+    configuredBilling.length === billingValues.length;
+
   const temp = await fs.mkdtemp(
     path.join(
       os.tmpdir(),
@@ -671,6 +720,16 @@ async function main() {
         args.get('--free-capacity') ??
         process.env.NEXOWIRE_FREE_CAPACITY_PERCENT ??
         '0',
+      ...(billingConfigured
+        ? {
+            NEXOWIRE_LEMONSQUEEZY_STORE_ID:
+              billingStoreId!,
+            NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID:
+              billingPlusVariantId!,
+            NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID:
+              billingProVariantId!,
+          }
+        : {}),
     };
 
     await run(
@@ -700,6 +759,14 @@ async function main() {
           secrets.serviceToken,
         NEXOWIRE_CONFIG_ENCRYPTION_KEY:
           secrets.configEncryptionKey,
+        ...(billingConfigured
+          ? {
+              NEXOWIRE_LEMONSQUEEZY_API_KEY:
+                billingApiKey!,
+              NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET:
+                billingWebhookSecret!,
+            }
+          : {}),
       }),
       {
         encoding: 'utf8',

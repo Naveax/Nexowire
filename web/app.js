@@ -10,6 +10,145 @@ function setPill(text, state) {
   pill.className = 'pill ' + state;
 }
 
+function setBillingBusy(busy) {
+  for (const id of [
+    'upgrade-plus',
+    'upgrade-pro',
+    'billing-portal',
+  ]) {
+    $(id).disabled = busy;
+  }
+}
+
+function subscriptionLabel(status) {
+  const labels = {
+    on_trial: 'Deneme',
+    active: 'Aktif',
+    paused: 'Duraklatıldı',
+    past_due: 'Ödeme bekleniyor',
+    unpaid: 'Ödenmedi',
+    cancelled: 'İptal edildi',
+    expired: 'Sona erdi',
+  };
+  return labels[status] ?? status;
+}
+
+function renderBilling(status) {
+  const panel = $('billing-panel');
+  panel.classList.remove('hidden');
+
+  $('upgrade-plus').classList.add('hidden');
+  $('upgrade-pro').classList.add('hidden');
+  $('billing-portal').classList.add('hidden');
+
+  if (status.subscription) {
+    $('billing-detail').textContent =
+      status.subscription.planId.toUpperCase() +
+      ' · ' +
+      subscriptionLabel(status.subscription.status);
+    $('billing-portal').classList.remove('hidden');
+    return;
+  }
+
+  if (status.planId === 'custom') {
+    $('billing-detail').textContent =
+      'Custom planın yönetilen faturalama akışını kullanıyor.';
+    return;
+  }
+
+  $('billing-detail').textContent =
+    status.planId === 'free'
+      ? 'İhtiyacına göre Plus veya Pro planına geçebilirsin.'
+      : status.planId.toUpperCase() + ' planı aktif.';
+
+  if (status.planId === 'free') {
+    $('upgrade-plus').classList.remove('hidden');
+    $('upgrade-pro').classList.remove('hidden');
+  }
+}
+
+async function loadBilling() {
+  const panel = $('billing-panel');
+  panel.classList.add('hidden');
+
+  const response = await fetch('/api/v1/billing/status', {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (response.status === 503) {
+    return;
+  }
+  if (response.status === 401) {
+    return;
+  }
+  if (!response.ok) {
+    throw new Error('Billing HTTP ' + response.status);
+  }
+  renderBilling(await response.json());
+}
+
+async function startCheckout(planId) {
+  setBillingBusy(true);
+  try {
+    const response = await fetch(
+      '/api/v1/billing/checkout',
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ planId }),
+      },
+    );
+    const body = await response.json();
+    if (response.status === 409 &&
+        body.error === 'BILLING_PORTAL_REQUIRED') {
+      await openBillingPortal();
+      return;
+    }
+    if (!response.ok || typeof body.url !== 'string') {
+      throw new Error(
+        body.error || 'Checkout açılamadı.',
+      );
+    }
+    window.location.assign(body.url);
+  } catch (error) {
+    $('billing-detail').textContent =
+      error instanceof Error
+        ? error.message
+        : String(error);
+    setBillingBusy(false);
+  }
+}
+
+async function openBillingPortal() {
+  setBillingBusy(true);
+  try {
+    const response = await fetch(
+      '/api/v1/billing/portal',
+      {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      },
+    );
+    const body = await response.json();
+    if (!response.ok || typeof body.url !== 'string') {
+      throw new Error(
+        body.error || 'Abonelik portalı açılamadı.',
+      );
+    }
+    window.location.assign(body.url);
+  } catch (error) {
+    $('billing-detail').textContent =
+      error instanceof Error
+        ? error.message
+        : String(error);
+    setBillingBusy(false);
+  }
+}
+
 function render(snapshot) {
   $('welcome').textContent = snapshot.displayName
     ? 'Merhaba, ' + snapshot.displayName
@@ -106,6 +245,15 @@ async function load() {
       throw new Error('HTTP ' + response.status);
     }
     render(await response.json());
+    try {
+      await loadBilling();
+    } catch (billingError) {
+      $('billing-panel').classList.remove('hidden');
+      $('billing-detail').textContent =
+        billingError instanceof Error
+          ? billingError.message
+          : String(billingError);
+    }
   } catch (error) {
     setPill('Offline', 'bad');
     $('error-message').textContent =
@@ -122,6 +270,15 @@ $('login').addEventListener('click', () => {
 });
 $('connect-device').addEventListener('click', () => {
   window.location.href = '/connect.html';
+});
+$('upgrade-plus').addEventListener('click', () => {
+  void startCheckout('plus');
+});
+$('upgrade-pro').addEventListener('click', () => {
+  void startCheckout('pro');
+});
+$('billing-portal').addEventListener('click', () => {
+  void openBillingPortal();
 });
 
 load();

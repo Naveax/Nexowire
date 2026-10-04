@@ -15,6 +15,8 @@ export const PROTECTED_SECRET_PURPOSES = [
   'control-plane-service-token',
   'control-plane-session-secret',
   'control-plane-config-encryption-key',
+  'billing-lemonsqueezy-api-key',
+  'billing-lemonsqueezy-webhook-secret',
 ] as const;
 
 function usage(): string {

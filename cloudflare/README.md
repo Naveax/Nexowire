@@ -9,6 +9,7 @@ Current state:
 - signed HttpOnly Nexowire sessions;
 - MCP OAuth 2.1 / PKCE support;
 - internal device authentication and usage charging;
+- optional Lemon Squeezy Plus/Pro hosted checkout, signed subscription webhooks, and customer portal integration;
 - no automatic paid infrastructure upgrade.
 
 ## Production topology
@@ -56,6 +57,7 @@ The current migration chain includes:
 - `0004_device_credential_lookup.sql`
 - `0005_mcp_oauth.sql`
 - `0006_runtime_config.sql`
+- `0007_billing_subscriptions.sql`
 
 ## GitHub Actions deployment
 
@@ -75,6 +77,18 @@ Configure these repository secrets only when using the CI deployment workflow:
 - `NEXOWIRE_INTERNAL_SERVICE_TOKEN`
 - `NEXOWIRE_CONFIG_ENCRYPTION_KEY`
 
+Optional Lemon Squeezy billing secrets, configured together with the billing variables below:
+
+- `NEXOWIRE_LEMONSQUEEZY_API_KEY`
+- `NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET`
+
+For the Windows owner bootstrap, prefer DPAPI-protected files instead of plaintext environment values:
+
+- `NEXOWIRE_LEMONSQUEEZY_API_KEY_DPAPI_FILE` using purpose `billing-lemonsqueezy-api-key`
+- `NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET_DPAPI_FILE` using purpose `billing-lemonsqueezy-webhook-secret`
+
+The protected-secret CLI reads plaintext only from stdin; secret command-line arguments are intentionally unsupported.
+
 `NEXOWIRE_GITHUB_CLIENT_ID` and `NEXOWIRE_GITHUB_CLIENT_SECRET` remain optional for backward compatibility. New deployments should use the protected GitHub App Manifest setup instead.
 
 Never commit secret values or place them in `wrangler.jsonc`.
@@ -87,6 +101,14 @@ Configure:
 - `NEXOWIRE_MCP_RESOURCE_URL=https://<hub-host>/mcp`
 - `NEXOWIRE_ADMIN_GITHUB_ID=<numeric GitHub account id>`
 - `NEXOWIRE_FREE_CAPACITY_PERCENT=0..100`
+
+Optional Lemon Squeezy billing variables, configured together:
+
+- `NEXOWIRE_LEMONSQUEEZY_STORE_ID=<numeric store id>`
+- `NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID=<numeric variant id>`
+- `NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID=<numeric variant id>`
+
+If none of the Lemon Squeezy settings are present, billing routes stay disabled with `503 BILLING_NOT_CONFIGURED` and the Free-plan control plane continues normally. Partial billing configuration is rejected.
 
 The MCP resource URL points at the Hub, not the Cloudflare Worker.
 
