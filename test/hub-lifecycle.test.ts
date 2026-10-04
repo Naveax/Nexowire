@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHubLauncher,
   persistedHubEnvironment,
+  planHubInstall,
   shouldRestartHubAfterInstall,
 } from '../src/hub/hub-lifecycle.js';
 
@@ -109,6 +110,65 @@ test("Hub install restarts only when a running launcher's persisted config chang
       nextLauncher: newLauncher,
     }),
     true,
+  );
+});
+
+
+test('Hub install reuses an existing Scheduled Task instead of re-registering it', () => {
+  assert.deepEqual(
+    planHubInstall({
+      installed: false,
+      state: 'not-installed',
+      previousLauncher: null,
+      nextLauncher: 'next',
+    }),
+    {
+      registerTask: true,
+      restartTask: false,
+      startTask: true,
+    },
+  );
+
+  assert.deepEqual(
+    planHubInstall({
+      installed: true,
+      state: 'running',
+      previousLauncher: 'same',
+      nextLauncher: 'same',
+    }),
+    {
+      registerTask: false,
+      restartTask: false,
+      startTask: false,
+    },
+  );
+
+  assert.deepEqual(
+    planHubInstall({
+      installed: true,
+      state: 'running',
+      previousLauncher: 'old',
+      nextLauncher: 'new',
+    }),
+    {
+      registerTask: false,
+      restartTask: true,
+      startTask: false,
+    },
+  );
+
+  assert.deepEqual(
+    planHubInstall({
+      installed: true,
+      state: 'ready',
+      previousLauncher: 'old',
+      nextLauncher: 'new',
+    }),
+    {
+      registerTask: false,
+      restartTask: false,
+      startTask: true,
+    },
   );
 });
 
