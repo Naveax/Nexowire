@@ -108,6 +108,16 @@ function resolveShell(
   return { executable: selected, args: ['-lc', command], label: selected };
 }
 
+function isTransientAtomicRenameError(error: unknown): boolean {
+  return (
+    process.platform === 'win32' &&
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    ['EACCES', 'EBUSY', 'EPERM'].includes(String(error.code))
+  );
+}
+
 async function atomicJson(
   file: string,
   value: unknown,
@@ -118,7 +128,23 @@ async function atomicJson(
     encoding: 'utf8',
     ...(mode !== undefined ? { mode } : {}),
   });
-  await fs.rename(temp, file);
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rename(temp, file);
+      return;
+    } catch (error) {
+      if (
+        attempt >= 7 ||
+        !isTransientAtomicRenameError(error)
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, 25 * (attempt + 1)),
+      );
+    }
+  }
 }
 
 async function killPidTree(pid: number): Promise<void> {
