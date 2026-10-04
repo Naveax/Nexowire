@@ -120,8 +120,8 @@
 - [x] hosted account device isolation and MCP usage metering
 - [x] automated Cloudflare production deployment workflow with generated secret-free runtime config
 - [x] one-command owner bootstrap with DPAPI owner secrets, D1 migrations, Worker deploy orchestration, protected GitHub App Manifest setup, and encrypted D1 OAuth runtime config
-- [ ] complete Cloudflare browser authorization and first production Worker/D1 deployment
-- [ ] complete the live GitHub App Manifest creation during the first production bootstrap
-- [ ] complete live Hub protected control-plane service authentication
+- [x] complete Cloudflare browser authorization and first production Worker/D1 deployment
+- [x] complete the live GitHub App Manifest creation during the first production bootstrap
+- [x] complete live Hub protected control-plane service authentication
 - [ ] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
 - [ ] add subscription/payment provider integration after hosted free-plan acceptance

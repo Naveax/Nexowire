@@ -102,7 +102,9 @@ At the 2026-10-01 post-release sync, the v1.0 implementation and publication goa
 
 ## Selected post-v1 work
 
-As of 2026-10-02, the virtual-pointer slice is merged on main as `4cfbbadfac2d4d5e6d5b1afc36abfa78b8925a25`, and `PROJECT_STATE.json` tracks `feature/private-desktop-session` as active testing work. The current slice creates a separate `NexowirePrivate` Win32 desktop with a private shell, hidden-desktop process launch/window enumeration, and a user-only shortcut for switching into it. Automated Nexowire operations do not switch the visible input desktop; tests require `Default` to remain active. The next slices are private-surface cursor routing and private keyboard delivery. No patch release is authorized by this work.
+As of 2026-10-04, the private-desktop/isolation slice is complete and the hosted control plane is live. Production bootstrap has completed Cloudflare authorization, D1 migrations through `0006`, Worker deployment, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. OAuth discovery and Hub/Agent restart health checks pass while preserving the stable `work-pc` device identity.
+
+The only active acceptance blocker is ChatGPT-side tool activation: the private `Nexowire` plugin points at `https://nexowire.tail10f02d.ts.net/mcp`, but the current conversation did not hot-load the plugin MCP tools. A plugin-enabled conversation must complete `devices_list`, `machine_snapshot`, and `machine_health`, restart/reconnect, then repeat those checks. Development-tool evidence through RDC/SentinelX is explicitly not the final acceptance proof. Payment-provider work starts only after this hosted Free-plan acceptance succeeds.
 
 ## Branch and merge discipline
 

@@ -1,6 +1,6 @@
 # Nexowire Handoff
 
-Updated: 2026-10-02
+Updated: 2026-10-04
 
 ## Goal
 
@@ -119,15 +119,18 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Current verified `main`: `594a6a81d155ab30cc18e31fa0b68a5f8fae4d93`.
+Current verified `main`: `f4657ddcef9ba5ff993565ce2753ce893160a0a0`.
 
 Verification:
-- PR #169 merged into this SHA and the main CI run completed successfully.
-- this exact `main` was built, packed, and installed globally on `DESKTOP-ONDD84S`;
-- Hub and Native Agent were explicitly restarted so the running processes load the new package;
-- resumable node bootstrap preserved the stable device ID `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`;
-- local health reports one connected agent;
-- public Tailscale health at `https://nexowire.tail10f02d.ts.net/health` reports one connected agent.
+- local `main` and `origin/main` were synchronized at this SHA before the state sync;
+- GitHub Actions CI run `37161335554` for this exact SHA completed successfully;
+- hosted production bootstrap completed successfully against Cloudflare and GitHub App Manifest setup;
+- control-plane health is live at `https://nexowire-control-plane.nexowire-naveax.workers.dev/health` with owner-paid automatic spend disabled;
+- GitHub OAuth runtime credentials are stored encrypted in D1;
+- the Hub control-plane service credential remains protected with Windows CurrentUser DPAPI;
+- Hub and Native Agent were restarted after hosted wiring and both returned to running state;
+- the native agent preserved stable device ID `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`;
+- local and public health report one connected agent.
 
 Recent merged onboarding/product slices:
 - PR #164: one-command Cloudflare production bootstrap, owner secrets generated locally into purpose-bound Windows DPAPI envelopes, GitHub App Manifest setup, encrypted D1 runtime config, and migration `0006_runtime_config.sql`.
@@ -170,16 +173,14 @@ Hosted product/control-plane code is implemented:
 - automated GitHub Actions deployment;
 - one-command owner bootstrap via `npm run control-plane:bootstrap`.
 
-Production hosted deployment is still blocked on an external account action, not missing product code. Wrangler is currently unauthenticated. Running `npm run control-plane:bootstrap` opens the Cloudflare OAuth authorization page; no authorization was completed, so the attempt timed out safely and left no background process. The new bootstrap no longer requires manually creating/copying GitHub OAuth client credentials: after Cloudflare deploy it opens a short-lived GitHub App Manifest flow, requests no repository permissions/events, stores only the returned OAuth client ID/secret encrypted in D1, and discards the manifest private key/webhook secret.
+Production hosted deployment is now live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0006`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. The live MCP protected-resource metadata points to the hosted authorization server, which advertises authorization-code flow, PKCE S256, refresh tokens, and `mcp`/`offline_access` scopes. The remaining blocker is only final ChatGPT-side connector acceptance: the private Nexowire plugin is installed, but the current conversation tool set has not hot-loaded its MCP tools.
 
 ## Immediate next work
 
-1. On `DESKTOP-ONDD84S`, run `npm run control-plane:bootstrap` and approve the Cloudflare browser authorization when it opens.
-2. Let the bootstrap automatically create/resolve D1, apply migrations 0001-0006, deploy Worker/static assets, generate/store owner secrets through CurrentUser DPAPI, and open the protected GitHub App Manifest setup.
-3. Locally approve `Create GitHub App` in the manifest page. No OAuth client-secret copy/paste is required.
-4. Let the bootstrap store GitHub OAuth credentials encrypted in D1, wire the same protected internal service token into the live Hub, and verify control-plane health/OAuth metadata.
-5. Recreate/connect the ChatGPT Nexowire custom MCP integration against `https://nexowire.tail10f02d.ts.net/mcp` and complete hosted OAuth acceptance: `devices_list`, `machine_snapshot`, `machine_health`, plus reconnect after Hub/Agent restart.
-6. After hosted Free-plan acceptance passes, proceed to subscription/payment-provider integration. Paid capacity must remain prepaid/subscription-funded; owner-paid automatic overage remains forbidden.
+1. Activate/use the installed private `Nexowire` ChatGPT plugin in a plugin-enabled chat so its MCP tools are present in the conversation tool set.
+2. Complete first-party connector acceptance against `https://nexowire.tail10f02d.ts.net/mcp`: `devices_list` must show exactly `work-pc` online, then `machine_snapshot` and `machine_health` must pass.
+3. Restart Hub + Native Agent once through the established lifecycle, verify reconnect, and repeat the same three Nexowire connector checks. RDC/SentinelX evidence does not count as the final connector proof.
+4. After hosted Free-plan acceptance passes, proceed to subscription/payment-provider integration. Paid capacity must remain prepaid/subscription-funded; owner-paid automatic overage remains forbidden.
 
 ## Known machine note
 
