@@ -108,6 +108,8 @@ First-party acceptance was performed through Nexowire itself. `devices_list` ret
 
 Hosted Free-plan production acceptance is also complete. PR #175 added Hub-to-control-plane device-presence persistence, merge CI passed, the Worker was deployed as version `ffafa40c-e7eb-40c7-83bc-6356b347224a`, and the global Hub runtime was updated/restarted. The production dashboard returned HTTP 200 with `work-pc` online, D1 `last_seen_at` matched the live reconnect timestamp, quota usage matched distinct metered events during acceptance, and the live ChatGPT OAuth client demonstrated refresh-token rotation with exactly one active refresh token after two prior rotations.
 
+PR #177 fixed the Windows durable-process terminal-state race uncovered by the state-sync CI; exact-main CI run `37210095593` passed all jobs on `9aed2daf152aff28902ca7948de73aa5a2a62963`.
+
 Remaining hosted product work is subscription/payment-provider integration for Plus / Pro / Custom. Preserve zero-owner-spend behavior and prepaid-only custom capacity. Separately, the GitHub Actions deployment workflow still needs a production Cloudflare credential or a renewable deployment-auth replacement; manual run `37208026750` failed validation because `CLOUDFLARE_API_TOKEN` is not configured, while the DPAPI-protected local owner bootstrap remains functional.
 
 ## Branch and merge discipline

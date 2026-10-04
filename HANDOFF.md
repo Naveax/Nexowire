@@ -119,11 +119,11 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Current verified `main`: `d2dfb4a2223c0fcbb74102b6605dec957815730f`.
+Current verified `main`: `9aed2daf152aff28902ca7948de73aa5a2a62963`.
 
 Verification:
 - local `main` and `origin/main` were synchronized at this SHA before the state sync;
-- GitHub Actions merge CI run `37207366849` for this exact SHA completed successfully;
+- GitHub Actions CI run `37210095593` for this exact SHA completed successfully;
 - hosted production bootstrap completed successfully against Cloudflare and GitHub App Manifest setup;
 - control-plane health is live at `https://nexowire-control-plane.nexowire-naveax.workers.dev/health` with owner-paid automatic spend disabled;
 - GitHub OAuth runtime credentials are stored encrypted in D1;

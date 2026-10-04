@@ -195,10 +195,11 @@
     "PRs #166-#169 complete the post-v1 private desktop slice: private-HWND pointer input, isolated keyboard/text/hotkeys, explicit time-bounded local physical-console grants, bounded hidden screen capture, and a local heartbeat-backed private viewer with local-only desktop entry.",
     "The preferred hosted deployment path is now npm run control-plane:bootstrap. It generates owner secrets into CurrentUser DPAPI, applies D1 migrations through 0006, deploys Cloudflare, opens a protected GitHub App Manifest flow, stores only OAuth client ID/secret encrypted in D1, and wires the protected control-plane service token into the Hub.",
     "Hosted Free-plan production acceptance completed on 2026-10-04: dashboard HTTP 200 showed work-pc online, D1 presence matched the live reconnect timestamp, quota usage/event totals matched exactly during acceptance, and the ChatGPT OAuth client had three refresh-token records with two revoked and one active. PR #175 presence sync passed CI and was deployed as Worker version ffafa40c-e7eb-40c7-83bc-6356b347224a; the global Hub runtime was updated and restarted successfully.",
-    "Manual GitHub Actions control-plane deploy run 37208026750 failed before deployment because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets; the DPAPI-protected local owner bootstrap remains the working production deploy path."
+    "Manual GitHub Actions control-plane deploy run 37208026750 failed before deployment because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets; the DPAPI-protected local owner bootstrap remains the working production deploy path.",
+    "PR #177 fixed a Windows durable-process terminal-state race exposed by the Windows Server 2025 CI runner; its CI passed, it merged as main 9aed2daf152aff28902ca7948de73aa5a2a62963, and exact-main CI run 37210095593 passed all jobs."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "d2dfb4a2223c0fcbb74102b6605dec957815730f",
+  "lastVerifiedMain": "9aed2daf152aff28902ca7948de73aa5a2a62963",
   "activeWork": [
     {
       "branch": "feature/subscription-payment-provider",
