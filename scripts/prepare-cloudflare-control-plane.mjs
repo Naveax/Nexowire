@@ -20,6 +20,49 @@ const REQUIRED_SECRETS = [
   'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
 ];
 
+const OPTIONAL_BILLING_SECRETS = [
+  'NEXOWIRE_LEMONSQUEEZY_API_KEY',
+  'NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET',
+];
+
+const BILLING_VAR_NAMES = [
+  'NEXOWIRE_LEMONSQUEEZY_STORE_ID',
+  'NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID',
+  'NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID',
+];
+
+function optionalBillingVars() {
+  const values = Object.fromEntries(
+    BILLING_VAR_NAMES.map((name) => [
+      name,
+      optionalEnv(name),
+    ]),
+  );
+  const present = BILLING_VAR_NAMES.filter(
+    (name) => values[name] !== undefined,
+  );
+  if (present.length === 0) return {};
+  if (present.length !== BILLING_VAR_NAMES.length) {
+    throw new Error(
+      'Lemon Squeezy billing vars must be configured together.',
+    );
+  }
+  for (const name of BILLING_VAR_NAMES) {
+    if (!/^\d+$/.test(values[name])) {
+      throw new Error(name + ' must be a numeric ID.');
+    }
+  }
+  if (
+    values.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID ===
+    values.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID
+  ) {
+    throw new Error(
+      'Lemon Squeezy Plus and Pro variant IDs must differ.',
+    );
+  }
+  return values;
+}
+
 function boundedPercent(raw) {
   if (raw === undefined) return '0';
   const value = Number(raw);
@@ -112,6 +155,8 @@ async function main() {
     migrations_dir: './cloudflare/migrations',
   };
 
+  const billingVars = optionalBillingVars();
+
   template.vars = {
     NEXOWIRE_AGENT_WS_URL: agentUrl,
     NEXOWIRE_MCP_RESOURCE_URL: mcpResourceUrl,
@@ -121,6 +166,7 @@ async function main() {
           'NEXOWIRE_FREE_CAPACITY_PERCENT',
         ),
       ),
+    ...billingVars,
     ...(optionalEnv('NEXOWIRE_ADMIN_GITHUB_ID')
       ? {
           NEXOWIRE_ADMIN_GITHUB_ID:
@@ -151,6 +197,7 @@ async function main() {
           template.d1_databases[0].database_name,
         vars: Object.keys(template.vars).sort(),
         requiredSecrets: REQUIRED_SECRETS,
+        optionalSecrets: OPTIONAL_BILLING_SECRETS,
       },
       null,
       2,

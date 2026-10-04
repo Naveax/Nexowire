@@ -8,6 +8,10 @@ import { D1McpOAuthStore } from '../dist/src/product/d1-mcp-oauth-store.js';
 import { McpOAuthService } from '../dist/src/product/mcp-oauth.js';
 import { createMcpOAuthHttpHandler } from '../dist/src/product/mcp-oauth-http.js';
 import { createControlPlaneHttpHandler } from '../dist/src/product/control-plane-http.js';
+import { D1BillingStore } from '../dist/src/product/d1-billing-store.js';
+import { BillingService } from '../dist/src/product/billing-service.js';
+import { createBillingHttpHandler } from '../dist/src/product/billing-http.js';
+import { LemonSqueezyBillingProvider } from '../dist/src/product/lemon-squeezy-billing.js';
 import {
   clearSessionCookie,
   issueOAuthState,
@@ -53,6 +57,39 @@ const GITHUB_RUNTIME_CONFIG_KEY = 'github-oauth';
 function optionalEnvValue(env, name) {
   const value = String(env[name] ?? '').trim();
   return value || undefined;
+}
+
+function lemonSqueezyConfig(env) {
+  const names = [
+    'NEXOWIRE_LEMONSQUEEZY_API_KEY',
+    'NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET',
+    'NEXOWIRE_LEMONSQUEEZY_STORE_ID',
+    'NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID',
+    'NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID',
+  ];
+  const values = Object.fromEntries(
+    names.map((name) => [
+      name,
+      optionalEnvValue(env, name),
+    ]),
+  );
+  const present = names.filter(
+    (name) => values[name] !== undefined,
+  );
+  if (present.length === 0) return null;
+  if (present.length !== names.length) {
+    throw new Error('BILLING_NOT_CONFIGURED');
+  }
+  return {
+    apiKey: values.NEXOWIRE_LEMONSQUEEZY_API_KEY,
+    webhookSecret:
+      values.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET,
+    storeId: values.NEXOWIRE_LEMONSQUEEZY_STORE_ID,
+    plusVariantId:
+      values.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID,
+    proVariantId:
+      values.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID,
+  };
 }
 
 function escapeHtml(value) {
@@ -247,6 +284,39 @@ export default {
         prepaidCapacityCredits: 0,
       }),
     });
+
+    if (url.pathname.startsWith('/api/v1/billing/')) {
+      let billingConfig;
+      try {
+        billingConfig = lemonSqueezyConfig(env);
+      } catch {
+        return Response.json(
+          { error: 'BILLING_NOT_CONFIGURED' },
+          { status: 503 },
+        );
+      }
+      if (!billingConfig) {
+        return Response.json(
+          { error: 'BILLING_NOT_CONFIGURED' },
+          { status: 503 },
+        );
+      }
+
+      const billingService = new BillingService(
+        store,
+        new D1BillingStore(env.DB),
+        new LemonSqueezyBillingProvider(billingConfig),
+      );
+      const billingHandler = createBillingHttpHandler(
+        billingService,
+        {
+          authenticate: (req) => authenticate(req, env),
+        },
+      );
+      const billingResponse =
+        await billingHandler(request);
+      if (billingResponse) return billingResponse;
+    }
 
     if (
       request.method === 'POST' &&

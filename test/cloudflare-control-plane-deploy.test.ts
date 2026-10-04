@@ -54,12 +54,16 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
             'https://relay.example.test/mcp',
           NEXOWIRE_ADMIN_GITHUB_ID: '123456',
           NEXOWIRE_FREE_CAPACITY_PERCENT: '75',
+          NEXOWIRE_LEMONSQUEEZY_STORE_ID: '1001',
+          NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID: '2001',
+          NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID: '2002',
         },
         encoding: 'utf8',
       },
     );
     const summary = JSON.parse(stdout) as {
       requiredSecrets: string[];
+      optionalSecrets: string[];
     };
 
     const runtime = JSON.parse(
@@ -94,6 +98,18 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
       runtime.vars.NEXOWIRE_ADMIN_GITHUB_ID,
       '123456',
     );
+    assert.equal(
+      runtime.vars.NEXOWIRE_LEMONSQUEEZY_STORE_ID,
+      '1001',
+    );
+    assert.equal(
+      runtime.vars.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID,
+      '2001',
+    );
+    assert.equal(
+      runtime.vars.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID,
+      '2002',
+    );
     assert.equal(runtime.secrets, undefined);
     assert.deepEqual(
       summary.requiredSecrets,
@@ -101,6 +117,13 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
         'NEXOWIRE_SESSION_SECRET',
         'NEXOWIRE_INTERNAL_SERVICE_TOKEN',
         'NEXOWIRE_CONFIG_ENCRYPTION_KEY',
+      ],
+    );
+    assert.deepEqual(
+      summary.optionalSecrets,
+      [
+        'NEXOWIRE_LEMONSQUEEZY_API_KEY',
+        'NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET',
       ],
     );
 
@@ -212,5 +235,67 @@ test('D1 quota triggers stay compatible with the remote migration splitter', asy
       name,
     );
     assert.match(trigger, /\nBEGIN\n/, name);
+  }
+});
+
+
+test('Cloudflare runtime config generator rejects partial Lemon Squeezy billing vars', async () => {
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-cf-billing-config-'),
+  );
+  const template = path.join(dir, 'wrangler.jsonc');
+  const output = path.join(dir, 'runtime.json');
+
+  await fs.writeFile(
+    template,
+    JSON.stringify({
+      name: 'nexowire-control-plane',
+      d1_databases: [
+        {
+          binding: 'DB',
+          database_name: 'nexowire-control-plane',
+          database_id: 'placeholder',
+        },
+      ],
+    }),
+  );
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(
+          process.cwd(),
+          'scripts',
+          'prepare-cloudflare-control-plane.mjs',
+        ),
+        template,
+        output,
+      ],
+      {
+        env: {
+          ...process.env,
+          NEXOWIRE_D1_DATABASE_ID:
+            '11111111-2222-4333-8444-555555555555',
+          NEXOWIRE_AGENT_WS_URL:
+            'wss://relay.example.test/agent',
+          NEXOWIRE_MCP_RESOURCE_URL:
+            'https://relay.example.test/mcp',
+          NEXOWIRE_LEMONSQUEEZY_STORE_ID: '1001',
+        },
+        encoding: 'utf8',
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /billing vars must be configured together/i,
+    );
+  } finally {
+    await fs.rm(dir, {
+      recursive: true,
+      force: true,
+    });
   }
 });

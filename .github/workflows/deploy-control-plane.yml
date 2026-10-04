@@ -26,6 +26,11 @@ jobs:
       NEXOWIRE_MCP_RESOURCE_URL: ${{ vars.NEXOWIRE_MCP_RESOURCE_URL }}
       NEXOWIRE_ADMIN_GITHUB_ID: ${{ vars.NEXOWIRE_ADMIN_GITHUB_ID }}
       NEXOWIRE_FREE_CAPACITY_PERCENT: ${{ vars.NEXOWIRE_FREE_CAPACITY_PERCENT }}
+      NEXOWIRE_LEMONSQUEEZY_API_KEY: ${{ secrets.NEXOWIRE_LEMONSQUEEZY_API_KEY }}
+      NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET: ${{ secrets.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET }}
+      NEXOWIRE_LEMONSQUEEZY_STORE_ID: ${{ vars.NEXOWIRE_LEMONSQUEEZY_STORE_ID }}
+      NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID: ${{ vars.NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID }}
+      NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID: ${{ vars.NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID }}
 
     steps:
       - name: Checkout
@@ -62,6 +67,24 @@ jobs:
               exit 1
             fi
           done
+
+          billing=(
+            NEXOWIRE_LEMONSQUEEZY_API_KEY
+            NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET
+            NEXOWIRE_LEMONSQUEEZY_STORE_ID
+            NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID
+            NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID
+          )
+          configured_billing=0
+          for name in "${billing[@]}"; do
+            if [[ -n "${!name:-}" ]]; then
+              configured_billing=$((configured_billing + 1))
+            fi
+          done
+          if [[ "$configured_billing" -ne 0 && "$configured_billing" -ne "${#billing[@]}" ]]; then
+            echo "::error::Lemon Squeezy billing configuration must be provided together."
+            exit 1
+          fi
 
       - name: Resolve or create D1 database
         shell: bash
@@ -148,6 +171,21 @@ jobs:
           if (githubClientId && githubClientSecret) {
             secrets.GITHUB_CLIENT_ID = githubClientId;
             secrets.GITHUB_CLIENT_SECRET = githubClientSecret;
+          }
+          const billingApiKey =
+            process.env.NEXOWIRE_LEMONSQUEEZY_API_KEY?.trim();
+          const billingWebhookSecret =
+            process.env.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET?.trim();
+          if (Boolean(billingApiKey) !== Boolean(billingWebhookSecret)) {
+            throw new Error(
+              'Lemon Squeezy API key and webhook secret must be configured together.',
+            );
+          }
+          if (billingApiKey && billingWebhookSecret) {
+            secrets.NEXOWIRE_LEMONSQUEEZY_API_KEY =
+              billingApiKey;
+            secrets.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET =
+              billingWebhookSecret;
           }
           fs.mkdirSync('.wrangler', { recursive: true });
           fs.writeFileSync(
