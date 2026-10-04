@@ -124,7 +124,7 @@
       "id": "hosted-control-plane",
       "status": "partial",
       "priority": 18,
-      "summary": "Hosted production control plane and ChatGPT Web OAuth MCP connector acceptance are live. The first-party Nexowire connector returned work-pc online, machine_snapshot and machine_health passed, the Agent was rotated to a DPAPI-protected hosted per-device credential, and Hub/Agent restart-reconnect acceptance passed with the stable device ID preserved. Remaining work is final Free-plan dashboard/quota/refresh-token acceptance and then subscription/payment-provider integration."
+      "summary": "Hosted production control plane, ChatGPT Web OAuth MCP connector acceptance, and Free-plan production acceptance are complete. The live dashboard reports work-pc online from D1-backed presence sync, quota metering matched distinct MCP events to applied credits, and the production OAuth client demonstrated refresh-token rotation with only one active refresh token. PR #175 fixed stale device presence and was deployed to production. Remaining work is subscription/payment-provider integration plus provisioning or replacing the missing GitHub Actions Cloudflare deployment credential."
     },
     {
       "id": "private-desktop-isolation",
@@ -194,15 +194,16 @@
     "Exact main f4657ddcef9ba5ff993565ce2753ce893160a0a0 passed GitHub Actions CI run 37161335554 and was synchronized locally before the 2026-10-04 state sync. Live Hub/Agent restart acceptance preserved stable device ID aeaa5295-0aa8-4742-bf0c-2a6340dcf187 and local/public health report one connected agent.",
     "PRs #166-#169 complete the post-v1 private desktop slice: private-HWND pointer input, isolated keyboard/text/hotkeys, explicit time-bounded local physical-console grants, bounded hidden screen capture, and a local heartbeat-backed private viewer with local-only desktop entry.",
     "The preferred hosted deployment path is now npm run control-plane:bootstrap. It generates owner secrets into CurrentUser DPAPI, applies D1 migrations through 0006, deploys Cloudflare, opens a protected GitHub App Manifest flow, stores only OAuth client ID/secret encrypted in D1, and wires the protected control-plane service token into the Hub.",
-    "Hosted production and ChatGPT Web connector acceptance completed successfully on 2026-10-04: Cloudflare auth, D1 migrations, Worker deployment, GitHub App Manifest conversion, encrypted-D1 OAuth config, protected Hub service-token wiring, OAuth discovery, first-party devices_list/machine_snapshot/machine_health, hosted per-device DPAPI Agent credential rotation, and Hub/Agent restart-reconnect checks all passed."
+    "Hosted Free-plan production acceptance completed on 2026-10-04: dashboard HTTP 200 showed work-pc online, D1 presence matched the live reconnect timestamp, quota usage/event totals matched exactly during acceptance, and the ChatGPT OAuth client had three refresh-token records with two revoked and one active. PR #175 presence sync passed CI and was deployed as Worker version ffafa40c-e7eb-40c7-83bc-6356b347224a; the global Hub runtime was updated and restarted successfully.",
+    "Manual GitHub Actions control-plane deploy run 37208026750 failed before deployment because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets; the DPAPI-protected local owner bootstrap remains the working production deploy path."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "3a948440a4e495d024ff78e94009f5e0c056df53",
+  "lastVerifiedMain": "d2dfb4a2223c0fcbb74102b6605dec957815730f",
   "activeWork": [
     {
-      "branch": "ops/connector-acceptance-state-sync",
-      "status": "testing",
-      "goal": "Record completed ChatGPT Web Nexowire connector acceptance, then finish hosted Free-plan dashboard/device-state, quota/usage, and OAuth refresh-token checks before starting subscription/payment-provider integration."
+      "branch": "feature/subscription-payment-provider",
+      "status": "planned",
+      "goal": "Implement Plus/Pro/Custom subscription and payment-provider integration with webhook-driven plan state, idempotent billing events, checkout/billing portal entry points, and no owner-paid automatic overage."
     }
   ]
 }

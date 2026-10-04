@@ -104,9 +104,11 @@ At the 2026-10-01 post-release sync, the v1.0 implementation and publication goa
 
 As of 2026-10-04, the private-desktop/isolation slice, hosted control-plane bootstrap, and ChatGPT Web OAuth MCP connector acceptance are complete. The canonical ChatGPT path is a first-party Nexowire custom MCP App connected by OAuth to `https://nexowire.tail10f02d.ts.net/mcp`; Codex, Remote Desktop Commander, SentinelX, and desktop-only wrapper plugins are not runtime dependencies.
 
-First-party acceptance was performed through Nexowire itself. `devices_list` returned exactly `work-pc` online, `machine_snapshot` and `machine_health` passed, the native Agent was rotated from the self-host bootstrap token to a hosted per-device credential stored in a Windows CurrentUser-DPAPI envelope, Hub and Agent were independently restarted, the stable device ID `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` survived both reconnects, and the same connector checks passed again afterwards.
+First-party acceptance was performed through Nexowire itself. `devices_list` returned exactly `work-pc` online, `machine_snapshot` and `machine_health` passed, the native Agent uses a hosted per-device credential stored in a Windows CurrentUser-DPAPI envelope, and the stable device ID `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` survived Hub/Agent reconnects.
 
-Remaining hosted work is narrower: verify Free-plan dashboard/device-state presentation, quota/usage accounting, and OAuth refresh-token rotation end-to-end, then add subscription/payment-provider integration for Plus / Pro / Custom without permitting owner-paid automatic overage.
+Hosted Free-plan production acceptance is also complete. PR #175 added Hub-to-control-plane device-presence persistence, merge CI passed, the Worker was deployed as version `ffafa40c-e7eb-40c7-83bc-6356b347224a`, and the global Hub runtime was updated/restarted. The production dashboard returned HTTP 200 with `work-pc` online, D1 `last_seen_at` matched the live reconnect timestamp, quota usage matched distinct metered events during acceptance, and the live ChatGPT OAuth client demonstrated refresh-token rotation with exactly one active refresh token after two prior rotations.
+
+Remaining hosted product work is subscription/payment-provider integration for Plus / Pro / Custom. Preserve zero-owner-spend behavior and prepaid-only custom capacity. Separately, the GitHub Actions deployment workflow still needs a production Cloudflare credential or a renewable deployment-auth replacement; manual run `37208026750` failed validation because `CLOUDFLARE_API_TOKEN` is not configured, while the DPAPI-protected local owner bootstrap remains functional.
 
 ## Branch and merge discipline
 

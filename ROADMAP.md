@@ -124,4 +124,6 @@
 - [x] complete the live GitHub App Manifest creation during the first production bootstrap
 - [x] complete live Hub protected control-plane service authentication
 - [x] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
+- [x] complete hosted Free-plan production acceptance: live dashboard/device presence, quota/event accounting, and OAuth refresh-token rotation
+- [ ] configure production GitHub Actions deployment credentials or migrate deploy authentication to a renewable mechanism
 - [ ] add subscription/payment provider integration after hosted free-plan acceptance

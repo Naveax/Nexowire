@@ -119,11 +119,11 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Current verified `main`: `3a948440a4e495d024ff78e94009f5e0c056df53`.
+Current verified `main`: `d2dfb4a2223c0fcbb74102b6605dec957815730f`.
 
 Verification:
 - local `main` and `origin/main` were synchronized at this SHA before the state sync;
-- GitHub Actions CI run `37161335554` for this exact SHA completed successfully;
+- GitHub Actions merge CI run `37207366849` for this exact SHA completed successfully;
 - hosted production bootstrap completed successfully against Cloudflare and GitHub App Manifest setup;
 - control-plane health is live at `https://nexowire-control-plane.nexowire-naveax.workers.dev/health` with owner-paid automatic spend disabled;
 - GitHub OAuth runtime credentials are stored encrypted in D1;
@@ -173,14 +173,14 @@ Hosted product/control-plane code is implemented:
 - automated GitHub Actions deployment;
 - one-command owner bootstrap via `npm run control-plane:bootstrap`.
 
-Production hosted deployment is live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0006`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. ChatGPT Web now has a first-party Nexowire custom MCP App using OAuth against `https://nexowire.tail10f02d.ts.net/mcp`. End-to-end connector acceptance passed through Nexowire itself: `devices_list` returned exactly `work-pc` online, `machine_snapshot` and `machine_health` passed, the native Agent was rotated to a DPAPI-protected hosted per-device credential, Hub and Agent were each restarted, the stable device ID remained `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, and the same connector checks passed again after reconnect. RDC/SentinelX were not used as final acceptance evidence.
+Production hosted deployment is live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0006`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. ChatGPT Web has a first-party Nexowire custom MCP App using OAuth against `https://nexowire.tail10f02d.ts.net/mcp`. End-to-end connector acceptance passed through Nexowire itself, and hosted Free-plan acceptance is now complete: the production dashboard returns `work-pc` online, broker connect/disconnect presence is persisted to D1, October quota metering matched 86 distinct events to 86 applied credits during acceptance, and the live ChatGPT OAuth client showed two successful refresh-token rotations with only one active refresh token remaining. PR #175 fixed stale hosted device presence and merge CI run `37207366849` passed; local owner bootstrap then deployed Worker version `ffafa40c-e7eb-40c7-83bc-6356b347224a` and the global Hub runtime was updated/restarted. The stable device ID remained `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, with post-update `devices_list`, `machine_snapshot`, and `machine_health` passing. RDC/SentinelX were not used as final acceptance evidence.
 
 ## Immediate next work
 
-1. Finish the remaining hosted Free-plan product checks that are not covered by connector transport acceptance: dashboard/device presentation, quota/usage accounting, and OAuth refresh-token rotation.
-2. Confirm the hosted device row/dashboard state remains consistent with live Hub routing after reconnects; the MCP route already derives online state from the first-party native-agent registry.
-3. Add subscription/payment-provider integration for Plus / Pro / Custom only after the remaining Free-plan checks pass. Paid capacity must remain prepaid/subscription-funded; owner-paid automatic overage remains forbidden.
-4. Keep the working ChatGPT Web Nexowire custom App + OAuth path as the canonical ChatGPT integration. Codex, RDC, SentinelX, and standalone desktop-only MCP wrappers are not runtime dependencies.
+1. Implement subscription/payment-provider integration for Plus / Pro / Custom while preserving the existing hard-stop zero-owner-spend policy and Free-plan quota behavior.
+2. Add webhook-driven subscription state changes, checkout/billing-portal entry points, idempotent event processing, and tests for upgrade/downgrade/cancel/renewal failure paths.
+3. Keep prepaid/custom capacity explicitly funded; never silently convert quota exhaustion into owner-paid automatic overage.
+4. The GitHub Actions deploy workflow is implemented but the repository is not yet provisioned with a usable `CLOUDFLARE_API_TOKEN`; manual dispatch run `37208026750` failed during configuration validation. Production deployment remains available through the DPAPI-protected local owner bootstrap until Actions credentials or a renewable deployment-auth mechanism is configured.
 
 ## Known machine note
 
