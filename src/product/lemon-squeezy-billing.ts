@@ -8,7 +8,12 @@ import type {
   BillingSubscriptionStatus,
 } from './billing-store.js';
 
-const SUBSCRIPTION_EVENTS = new Set([
+export const LEMON_SQUEEZY_ORDER_EVENT_NAMES = [
+  'order_created',
+  'order_refunded',
+] as const;
+
+export const LEMON_SQUEEZY_SUBSCRIPTION_EVENT_NAMES = [
   'subscription_created',
   'subscription_updated',
   'subscription_cancelled',
@@ -16,7 +21,11 @@ const SUBSCRIPTION_EVENTS = new Set([
   'subscription_expired',
   'subscription_paused',
   'subscription_unpaused',
-]);
+] as const;
+
+const SUBSCRIPTION_EVENTS = new Set<string>(
+  LEMON_SQUEEZY_SUBSCRIPTION_EVENT_NAMES,
+);
 
 export interface LemonSqueezyPrepaidPackConfig {
   variantId: string;

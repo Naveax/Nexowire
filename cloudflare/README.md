@@ -120,6 +120,32 @@ Signed `order_refunded` webhooks claw back prepaid credits proportionally from L
 
 If none of the Lemon Squeezy settings are present, billing routes stay disabled with `503 BILLING_NOT_CONFIGURED` and the Free-plan control plane continues normally. Partial billing configuration is rejected.
 
+### Windows production billing provisioning
+
+The preferred owner workflow is a one-time protected provisioning command instead of maintaining billing environment variables by hand:
+
+```powershell
+npm run billing:provision -- `
+  --store-id <store-id> `
+  --plus-variant-id <subscription-variant-id> `
+  --pro-variant-id <subscription-variant-id> `
+  --prepaid-pack <one-time-variant-id>:100000:"100k kredi" `
+  --webhook-url https://<worker-host>/api/v1/billing/webhook/lemonsqueezy
+```
+
+Without `--apply`, the command validates the production store/catalog and reports whether the webhook would be created or updated. If no protected API key exists yet, the API key is read from a hidden terminal prompt and is never accepted as a command-line argument.
+
+After the dry-run passes, repeat the same command with `--apply`. The command:
+
+- stores the API key in `~/.nexowire/control-plane/billing-lemonsqueezy-api-key.dpapi.json`;
+- generates a 40-character random webhook signing secret and stores it in `~/.nexowire/control-plane/billing-lemonsqueezy-webhook-secret.dpapi.json`;
+- creates or updates the production Lemon Squeezy webhook with the required order/subscription events;
+- writes only non-secret store/variant/pack/webhook metadata to `~/.nexowire/control-plane/billing-lemonsqueezy.json`.
+
+Once that state file exists, `npm run control-plane:bootstrap` automatically discovers the two DPAPI files plus the non-secret catalog mapping. Explicit billing environment values are still supported, but a value that conflicts with the provisioned state fails closed instead of silently overriding it.
+
+The provisioner validates that Plus and Pro are subscription variants, prepaid packs are one-time variants, all variants belong to the configured production store, and draft/test-mode catalog entries are rejected.
+
 The MCP resource URL points at the Hub, not the Cloudflare Worker.
 
 ## Local preparation

@@ -17,6 +17,11 @@ import {
   resolveProtectedSingleSecret,
   writeProtectedSecretFile,
 } from '../src/security/protected-secret-files.js';
+import {
+  defaultLemonSqueezyProvisioningPaths,
+  mergeLemonSqueezyProvisioningEnvironment,
+  optionalReadLemonSqueezyProvisioningState,
+} from '../src/product/lemon-squeezy-provisioning.js';
 
 const ROOT = process.cwd();
 const WRANGLER_VERSION = '4';
@@ -637,35 +642,49 @@ async function main() {
   const dbId = await d1DatabaseId();
   const secrets = await secureDeploymentSecrets();
 
+  const billingProvisioningPaths =
+    defaultLemonSqueezyProvisioningPaths();
+  const billingProvisioningState =
+    await optionalReadLemonSqueezyProvisioningState(
+      billingProvisioningPaths.configFile,
+    );
+  const billingEnv = billingProvisioningState
+    ? mergeLemonSqueezyProvisioningEnvironment(
+        process.env,
+        billingProvisioningState,
+        billingProvisioningPaths,
+      )
+    : process.env;
+
   const billingApiKey = resolveProtectedSingleSecret(
-    process.env.NEXOWIRE_LEMONSQUEEZY_API_KEY,
+    billingEnv.NEXOWIRE_LEMONSQUEEZY_API_KEY,
     undefined,
-    process.env.NEXOWIRE_LEMONSQUEEZY_API_KEY_DPAPI_FILE,
+    billingEnv.NEXOWIRE_LEMONSQUEEZY_API_KEY_DPAPI_FILE,
     'billing-lemonsqueezy-api-key',
     'Lemon Squeezy API key',
   );
   const billingWebhookSecret =
     resolveProtectedSingleSecret(
-      process.env.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET,
+      billingEnv.NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET,
       undefined,
-      process.env
+      billingEnv
         .NEXOWIRE_LEMONSQUEEZY_WEBHOOK_SECRET_DPAPI_FILE,
       'billing-lemonsqueezy-webhook-secret',
       'Lemon Squeezy webhook secret',
     );
   const billingStoreId =
-    process.env.NEXOWIRE_LEMONSQUEEZY_STORE_ID?.trim() ||
+    billingEnv.NEXOWIRE_LEMONSQUEEZY_STORE_ID?.trim() ||
     undefined;
   const billingPlusVariantId =
-    process.env
+    billingEnv
       .NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID?.trim() ||
     undefined;
   const billingProVariantId =
-    process.env
+    billingEnv
       .NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID?.trim() ||
     undefined;
   const billingPrepaidPacksJson =
-    process.env
+    billingEnv
       .NEXOWIRE_LEMONSQUEEZY_PREPAID_PACKS_JSON?.trim() ||
     undefined;
   const billingValues = [
