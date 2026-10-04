@@ -118,13 +118,13 @@
       "id": "agent-enrollment-tailscale",
       "status": "partial",
       "priority": 17,
-      "summary": "Live self-host bootstrap is complete on DESKTOP-ONDD84S with Hub+Agent autostart, stable device identity, protected credentials, healthy Tailscale Serve/Funnel, and exact main 594a6a81 running after Hub/Agent restart. Remaining work is hosted control-plane deployment plus ChatGPT-side OAuth MCP acceptance."
+      "summary": "Live self-host bootstrap is complete on DESKTOP-ONDD84S with Hub+Agent autostart, stable device identity, protected credentials, healthy Tailscale Serve/Funnel, and exact main 594a6a81 running after Hub/Agent restart. Hosted control-plane deployment is now live; remaining work is ChatGPT-side OAuth MCP connector acceptance."
     },
     {
       "id": "hosted-control-plane",
       "status": "partial",
       "priority": 18,
-      "summary": "Hosted control-plane code is implemented through D1 migration 0006, including plans/quotas, device-anchor anti-abuse, one-click pairing, per-device agent auth, MCP OAuth 2.1/PKCE, account device isolation, usage metering, automated Cloudflare deploy, and one-command owner bootstrap with DPAPI secrets plus protected GitHub App Manifest setup. Remaining work is Cloudflare browser authorization, first live deploy/bootstrap, and ChatGPT end-to-end acceptance."
+      "summary": "Hosted control-plane production deployment is live: Cloudflare authorization completed, D1 migrations through 0006 applied, Worker/static assets deployed, GitHub App Manifest conversion completed, GitHub OAuth client credentials stored encrypted in D1, protected Hub service authentication wired, OAuth metadata live, and Hub/Agent restart acceptance passed. Remaining work is only end-to-end ChatGPT Nexowire OAuth MCP connector acceptance, followed by payment-provider integration after Free-plan acceptance."
     },
     {
       "id": "private-desktop-isolation",
@@ -189,20 +189,20 @@
     "The v1.0.0 release-preparation PR passed normal CI plus Linux/Windows/macOS Release Readiness and merged as db9a5f1c1f228516eaa7c1b72f54fa4766bc65a0.",
     "There is no active unfinished v1.0 implementation or publication work. Future domain recipes, probes, performance tuning, and reproduced hardening are optional post-v1 backlog and should become active only when a concrete task is selected.",
     "Tailscale is an optional first-party connectivity aid, not a Nexowire runtime dependency; public Funnel exposure must remain auth-gated.",
-    "PR #141 merged as 1904f1981bb02aef7517df589387436b8967d46f and merge CI 36993286780 passed; DESKTOP-ONDD84S has merged onboarding/Tailscale code installed, while live registration remains blocked on a real reachable Hub and credential.",
+    "PR #141 established the onboarding/Tailscale base; the live DESKTOP-ONDD84S node is now enrolled, authenticated, publicly health-checked through Tailscale, and wired to the hosted control plane.",
     "Tailscale Serve and Funnel are live on nexowire.tail10f02d.ts.net; public health is verified and current deployment variables point to https://nexowire.tail10f02d.ts.net/mcp and wss://nexowire.tail10f02d.ts.net/agent.",
-    "Exact main 594a6a81d155ab30cc18e31fa0b68a5f8fae4d93 passed main CI, was built/packed/installed globally on DESKTOP-ONDD84S, and was loaded into freshly restarted Hub and Native Agent processes; node status kept stable device ID aeaa5295-0aa8-4742-bf0c-2a6340dcf187 and local/public health both reported one connected agent.",
+    "Exact main f4657ddcef9ba5ff993565ce2753ce893160a0a0 passed GitHub Actions CI run 37161335554 and was synchronized locally before the 2026-10-04 state sync. Live Hub/Agent restart acceptance preserved stable device ID aeaa5295-0aa8-4742-bf0c-2a6340dcf187 and local/public health report one connected agent.",
     "PRs #166-#169 complete the post-v1 private desktop slice: private-HWND pointer input, isolated keyboard/text/hotkeys, explicit time-bounded local physical-console grants, bounded hidden screen capture, and a local heartbeat-backed private viewer with local-only desktop entry.",
     "The preferred hosted deployment path is now npm run control-plane:bootstrap. It generates owner secrets into CurrentUser DPAPI, applies D1 migrations through 0006, deploys Cloudflare, opens a protected GitHub App Manifest flow, stores only OAuth client ID/secret encrypted in D1, and wires the protected control-plane service token into the Hub.",
-    "Current hosted blocker is the Cloudflare browser authorization itself. A bootstrap attempt opened Wrangler OAuth but no local authorization was completed, so it timed out safely with no background process. Manual GitHub OAuth client-secret copy/paste is no longer required by the preferred bootstrap."
+    "Hosted production bootstrap completed successfully on 2026-10-04: Cloudflare auth, D1 migrations, Worker deployment, GitHub App Manifest conversion, encrypted-D1 OAuth config, protected Hub service-token wiring, OAuth discovery, and restart health checks all passed. Remaining hosted blocker is final ChatGPT-side Nexowire connector acceptance because the current conversation tool set has not hot-loaded the installed private plugin tools."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "594a6a81d155ab30cc18e31fa0b68a5f8fae4d93",
+  "lastVerifiedMain": "f4657ddcef9ba5ff993565ce2753ce893160a0a0",
   "activeWork": [
     {
-      "branch": "ops/cloudflare-production-acceptance",
+      "branch": "ops/hosted-acceptance-state-sync",
       "status": "blocked",
-      "goal": "Approve the Cloudflare OAuth browser prompt, rerun the one-command production bootstrap through Worker/D1 + GitHub App Manifest + protected Hub service-token wiring, then finish ChatGPT hosted OAuth MCP acceptance."
+      "goal": "Sync continuation state after successful hosted production bootstrap, then activate the installed private Nexowire plugin in a plugin-enabled ChatGPT conversation and complete first-party devices_list, machine_snapshot, machine_health, restart/reconnect acceptance."
     }
   ]
 }
