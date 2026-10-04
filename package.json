@@ -28,7 +28,8 @@
     "release:check": "npm run check && npm run build && node --import tsx scripts/check-release-package.ts",
     "release:verify": "node --import tsx scripts/verify-release-candidate.ts",
     "release:tag:check": "node --import tsx scripts/check-release-tag.ts",
-    "control-plane:bootstrap": "node --import tsx scripts/bootstrap-cloudflare-control-plane.ts"
+    "control-plane:bootstrap": "node --import tsx scripts/bootstrap-cloudflare-control-plane.ts",
+    "billing:provision": "node --import tsx scripts/provision-lemonsqueezy-production.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
