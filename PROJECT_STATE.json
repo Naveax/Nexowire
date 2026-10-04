@@ -198,15 +198,17 @@
     "Manual GitHub Actions control-plane deploy run 37208026750 failed before deployment because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets; the DPAPI-protected local owner bootstrap remains the working production deploy path.",
     "PR #177 fixed a Windows durable-process terminal-state race exposed by the Windows Server 2025 CI runner; its CI passed, it merged as main 9aed2daf152aff28902ca7948de73aa5a2a62963, and exact-main CI run 37210095593 passed all jobs.",
     "PR #178 merged Lemon Squeezy Plus/Pro subscription billing into main 7130e032db364698b0620140c52c6004ef336997, including hosted checkout, signed subscription webhooks, customer portal, D1 billing persistence, and protected owner-bootstrap billing secrets.",
-    "PR #179 merged Custom prepaid billing as main 0e386f191324b38de4ce13b7238d502c6e40acc6. Exact-main CI run 37222549163 passed all seven jobs, covering the merged Custom prepaid packs, carry-over balances, globally unique/idempotent purchase credits, partial/full refund clawback, refund-before-purchase retry semantics, and refund debt."
+    "PR #179 merged Custom prepaid billing as main 0e386f191324b38de4ce13b7238d502c6e40acc6. Exact-main CI run 37222549163 passed all seven jobs, covering the merged Custom prepaid packs, carry-over balances, globally unique/idempotent purchase credits, partial/full refund clawback, refund-before-purchase retry semantics, and refund debt.",
+    "PR #181 fixed repeated non-admin owner bootstrap by refreshing an existing Hub Scheduled Task instead of re-registering it; it merged as main f1285693db1ee4563402b1da06260aa5963fd2c5 and exact-main CI run 37224568557 passed all seven jobs.",
+    "Production bootstrap on f1285693 completed end-to-end with exit code 0 and deployed Worker d7eedb34-7ad4-4908-a4b8-e9fbef85f1fe. D1 migration 0008 prepaid/refund tables are live, public health reports ownerPaidSpendAllowed=false, the Nexowire connector sees work-pc online with stable device ID aeaa5295-0aa8-4742-bf0c-2a6340dcf187, and billing remains fail-closed HTTP 503 until Lemon Squeezy production configuration is provisioned."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "0e386f191324b38de4ce13b7238d502c6e40acc6",
+  "lastVerifiedMain": "f1285693db1ee4563402b1da06260aa5963fd2c5",
   "activeWork": [
     {
       "branch": "ops/paid-plan-production-acceptance",
       "status": "planned",
-      "goal": "Provision protected production Lemon Squeezy store, Plus/Pro/prepaid variants and webhook configuration, deploy the merged billing migration/runtime config, then run live Plus/Pro/Custom checkout, webhook, refund, debt, quota, and Free-plan non-regression acceptance without owner-paid automatic overage."
+      "goal": "Provision protected production Lemon Squeezy store, Plus/Pro/prepaid variants and webhook configuration, then run live Plus/Pro/Custom checkout, webhook, refund, debt, quota, and Free-plan non-regression acceptance without owner-paid automatic overage. The merged billing runtime and D1 migration 0008 are already live and fail closed while provider configuration is absent."
     }
   ]
 }
