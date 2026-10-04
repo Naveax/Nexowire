@@ -237,6 +237,40 @@ async function readJsonIfExists<T>(
   }
 }
 
+async function readDurableWorkerStatus(
+  workerDir: string,
+  expectedSessionId: string,
+): Promise<WorkerStatus | undefined> {
+  const statusFile = path.join(workerDir, 'status.json');
+  const current = await readJsonIfExists(
+    statusFile,
+    WorkerStatusSchema,
+  );
+
+  if (
+    current?.status === 'exited' ||
+    (current &&
+      (current.sessionId !== expectedSessionId ||
+        isPidAlive(current.workerPid)))
+  ) {
+    return current;
+  }
+
+  const pending = await readJsonIfExists(
+    statusFile + '.tmp',
+    WorkerStatusSchema,
+  );
+  if (
+    pending?.status === 'exited' &&
+    pending.sessionId === expectedSessionId &&
+    (!current || pending.workerPid === current.workerPid)
+  ) {
+    return pending;
+  }
+
+  return current;
+}
+
 async function readWorkerEvents(
   workerDir: string,
 ): Promise<ProcessOutputEvent[]> {
@@ -484,9 +518,9 @@ export class ProcessManager {
 
       if (durable && saved.workerDir) {
         try {
-          const workerStatus = await readJsonIfExists(
-            path.join(saved.workerDir, 'status.json'),
-            WorkerStatusSchema,
+          const workerStatus = await readDurableWorkerStatus(
+            saved.workerDir,
+            saved.id,
           );
           events = await readWorkerEvents(saved.workerDir);
           nextSeq =
@@ -580,9 +614,9 @@ export class ProcessManager {
     const previousLatest = session.events.at(-1)?.seq ?? 0;
     const previousStatus = session.status;
     const [workerStatus, events] = await Promise.all([
-      readJsonIfExists(
-        path.join(session.workerDir, 'status.json'),
-        WorkerStatusSchema,
+      readDurableWorkerStatus(
+        session.workerDir,
+        session.id,
       ),
       readWorkerEvents(session.workerDir),
     ]);

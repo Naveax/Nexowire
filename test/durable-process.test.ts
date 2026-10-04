@@ -152,3 +152,96 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('durable process recovers terminal status from a completed atomic temp record', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-durable-terminal-recovery-'),
+  );
+  const stateFile = path.join(root, 'sessions.json');
+  const workerDir = path.join(root, 'worker');
+  const sessionId = '11111111-1111-4111-8111-111111111111';
+  const deadPid = 2_147_483_000;
+  const startedAt = '2026-10-04T14:00:00.000Z';
+  const exitedAt = '2026-10-04T14:00:01.000Z';
+
+  try {
+    await fs.mkdir(workerDir, { recursive: true });
+    await fs.writeFile(
+      path.join(workerDir, 'events.jsonl'),
+      '',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workerDir, 'status.json'),
+      JSON.stringify({
+        version: 1,
+        sessionId,
+        workerPid: deadPid,
+        childPid: deadPid - 1,
+        status: 'running',
+        startedAt,
+        exitCode: null,
+        signal: null,
+        nextSeq: 1,
+        maxBufferBytes: 4_194_304,
+      }) + '\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(workerDir, 'status.json.tmp'),
+      JSON.stringify({
+        version: 1,
+        sessionId,
+        workerPid: deadPid,
+        childPid: deadPid - 1,
+        status: 'exited',
+        startedAt,
+        exitedAt,
+        exitCode: 0,
+        signal: null,
+        nextSeq: 1,
+        maxBufferBytes: 4_194_304,
+      }) + '\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      stateFile,
+      JSON.stringify({
+        version: 1,
+        sessions: [
+          {
+            id: sessionId,
+            pid: deadPid - 1,
+            shell: 'pwsh',
+            startedAt,
+            exitCode: null,
+            signal: null,
+            status: 'running',
+            durable: true,
+            workerDir,
+            workerPid: deadPid,
+          },
+        ],
+      }) + '\n',
+      'utf8',
+    );
+
+    const manager = new ProcessManager({
+      stateFile,
+      workerRoot: path.join(root, 'workers'),
+      exitedRetentionMs: 60_000_000,
+    });
+    await manager.initialize();
+
+    const recovered = manager
+      .list()
+      .find((entry) => entry.sessionId === sessionId);
+    assert.ok(recovered);
+    assert.equal(recovered.status, 'exited');
+    assert.equal(recovered.exitCode, 0);
+    assert.equal(recovered.exitedAt, exitedAt);
+    assert.equal(recovered.recovered, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
