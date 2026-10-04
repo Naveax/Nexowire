@@ -106,7 +106,7 @@
 - [x] Windows one-command self-host bootstrap: hash-only credentials, DPAPI token recovery, Hub Scheduled Task, local Agent loopback enrollment, resumable state, and optional auth-gated Tailscale Funnel
 - [x] live self-hosted Hub + local Agent enrollment on DESKTOP-ONDD84S with authenticated local MCP `devices_list`, `machine_snapshot`, and `machine_health`
 - [x] enable Tailscale Serve/Funnel at the tailnet account level and verify public HTTPS/WSS ingress on `nexowire.tail10f02d.ts.net`
-- [ ] complete ChatGPT-side OAuth MCP connector verification
+- [x] complete ChatGPT-side OAuth MCP connector verification
 
 
 ## Post-v1 - Hosted product control plane
@@ -123,5 +123,5 @@
 - [x] complete Cloudflare browser authorization and first production Worker/D1 deployment
 - [x] complete the live GitHub App Manifest creation during the first production bootstrap
 - [x] complete live Hub protected control-plane service authentication
-- [ ] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
+- [x] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
 - [ ] add subscription/payment provider integration after hosted free-plan acceptance

@@ -102,9 +102,11 @@ At the 2026-10-01 post-release sync, the v1.0 implementation and publication goa
 
 ## Selected post-v1 work
 
-As of 2026-10-04, the private-desktop/isolation slice is complete and the hosted control plane is live. Production bootstrap has completed Cloudflare authorization, D1 migrations through `0006`, Worker deployment, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. OAuth discovery and Hub/Agent restart health checks pass while preserving the stable `work-pc` device identity.
+As of 2026-10-04, the private-desktop/isolation slice, hosted control-plane bootstrap, and ChatGPT Web OAuth MCP connector acceptance are complete. The canonical ChatGPT path is a first-party Nexowire custom MCP App connected by OAuth to `https://nexowire.tail10f02d.ts.net/mcp`; Codex, Remote Desktop Commander, SentinelX, and desktop-only wrapper plugins are not runtime dependencies.
 
-The only active acceptance blocker is ChatGPT-side tool activation: the private `Nexowire` plugin points at `https://nexowire.tail10f02d.ts.net/mcp`, but the current conversation did not hot-load the plugin MCP tools. A plugin-enabled conversation must complete `devices_list`, `machine_snapshot`, and `machine_health`, restart/reconnect, then repeat those checks. Development-tool evidence through RDC/SentinelX is explicitly not the final acceptance proof. Payment-provider work starts only after this hosted Free-plan acceptance succeeds.
+First-party acceptance was performed through Nexowire itself. `devices_list` returned exactly `work-pc` online, `machine_snapshot` and `machine_health` passed, the native Agent was rotated from the self-host bootstrap token to a hosted per-device credential stored in a Windows CurrentUser-DPAPI envelope, Hub and Agent were independently restarted, the stable device ID `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` survived both reconnects, and the same connector checks passed again afterwards.
+
+Remaining hosted work is narrower: verify Free-plan dashboard/device-state presentation, quota/usage accounting, and OAuth refresh-token rotation end-to-end, then add subscription/payment-provider integration for Plus / Pro / Custom without permitting owner-paid automatic overage.
 
 ## Branch and merge discipline
 
