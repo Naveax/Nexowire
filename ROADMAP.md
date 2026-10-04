@@ -125,7 +125,7 @@
 - [x] complete live Hub protected control-plane service authentication
 - [x] complete end-to-end ChatGPT OAuth MCP acceptance against the hosted control plane
 - [x] complete hosted Free-plan production acceptance: live dashboard/device presence, quota/event accounting, and OAuth refresh-token rotation
-- [ ] create the initial least-privilege Cloudflare CI API token in the dashboard, run `npm run cloudflare:ci-provision -- --apply`, and verify the GitHub Actions production deploy path
+- [ ] create the initial least-privilege Cloudflare CI API token in the dashboard, run `npm run cloudflare:ci-provision -- --apply` to sync the token/account plus the three existing DPAPI owner deploy secrets, and verify the GitHub Actions production deploy path
 - [x] add Lemon Squeezy Plus/Pro subscription checkout, signed webhook reconciliation, customer portal, and protected deployment-secret handling
 - [x] add Custom prepaid credit packs with carry-over quota-subject balances, idempotent signed order credits, refund clawback, and refund debt
 - [x] add protected Lemon Squeezy production provisioning: live catalog validation, DPAPI secret persistence, idempotent webhook create/update, and bootstrap auto-discovery
