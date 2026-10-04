@@ -29,7 +29,8 @@
     "release:verify": "node --import tsx scripts/verify-release-candidate.ts",
     "release:tag:check": "node --import tsx scripts/check-release-tag.ts",
     "control-plane:bootstrap": "node --import tsx scripts/bootstrap-cloudflare-control-plane.ts",
-    "billing:provision": "node --import tsx scripts/provision-lemonsqueezy-production.ts"
+    "billing:provision": "node --import tsx scripts/provision-lemonsqueezy-production.ts",
+    "cloudflare:ci-provision": "node --import tsx scripts/provision-cloudflare-github-actions.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",

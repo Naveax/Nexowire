@@ -91,7 +91,7 @@ jobs:
             exit 1
           fi
 
-      - name: Resolve or create D1 database
+      - name: Resolve existing D1 database
         shell: bash
         run: |
           set -euo pipefail
@@ -115,27 +115,7 @@ jobs:
           )"
 
           if [[ -z "$DB_ID" ]]; then
-            npx --yes wrangler@4 d1 create nexowire-control-plane
-            npx --yes wrangler@4 d1 list --json > .wrangler/d1-list.json
-            DB_ID="$(
-              node - <<'NODE'
-          const fs = require('node:fs');
-          const rows = JSON.parse(
-            fs.readFileSync('.wrangler/d1-list.json', 'utf8'),
-          );
-          const row = Array.isArray(rows)
-            ? rows.find((entry) =>
-                entry && entry.name === 'nexowire-control-plane')
-            : undefined;
-          process.stdout.write(
-            String(row?.uuid ?? row?.id ?? ''),
-          );
-          NODE
-            )"
-          fi
-
-          if [[ -z "$DB_ID" ]]; then
-            echo "::error::Could not resolve the nexowire-control-plane D1 database ID."
+            echo "::error::The existing nexowire-control-plane D1 database was not found. CI will not create infrastructure automatically; run the protected owner bootstrap first."
             exit 1
           fi
 

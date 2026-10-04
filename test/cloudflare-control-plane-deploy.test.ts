@@ -396,3 +396,31 @@ test('Cloudflare runtime config generator rejects partial Lemon Squeezy billing 
     });
   }
 });
+
+
+test('GitHub Actions deployment reuses existing D1 and never creates production infrastructure automatically', async () => {
+  const workflow = await fs.readFile(
+    path.join(
+      process.cwd(),
+      '.github',
+      'workflows',
+      'deploy-control-plane.yml',
+    ),
+    'utf8',
+  );
+
+  assert.match(
+    workflow,
+    /Resolve existing D1 database/,
+  );
+  assert.equal(
+    workflow.includes(
+      'wrangler@4 d1 create nexowire-control-plane',
+    ),
+    false,
+  );
+  assert.match(
+    workflow,
+    /CI will not create infrastructure automatically/,
+  );
+});

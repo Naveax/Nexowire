@@ -67,7 +67,7 @@ For later CI-driven deployments, use:
 
 `.github/workflows/deploy-control-plane.yml`
 
-It resolves/creates D1, generates runtime config, applies all migrations, deploys Worker/static assets, and removes temporary deployment material.
+It resolves the existing production D1 database, generates runtime config, applies all migrations, deploys Worker/static assets, and removes temporary deployment material. CI deliberately does not create D1 or other production infrastructure; first-time resource creation remains an explicit owner-bootstrap action.
 
 ## GitHub Actions secrets
 
@@ -78,6 +78,14 @@ Configure these repository secrets only when using the CI deployment workflow:
 - `NEXOWIRE_SESSION_SECRET`
 - `NEXOWIRE_INTERNAL_SERVICE_TOKEN`
 - `NEXOWIRE_CONFIG_ENCRYPTION_KEY`
+
+For the Cloudflare deployment credential, create a narrowly-scoped API token in the Cloudflare dashboard. The existing production path needs Workers Editor access for the existing `nexowire-control-plane` Worker and D1 edit access for the existing `nexowire-control-plane` database. CI deliberately refuses to create a missing D1 database, so broad D1 Admin access is unnecessary for normal deployments. Cloudflare's Wrangler OAuth login cannot mint the initial CI API token.
+
+After creating the token, do not paste it into a shell argument or repository file. Run:
+
+`npm run cloudflare:ci-provision -- --apply`
+
+The helper derives the single accessible Cloudflare account ID from the local Wrangler OAuth session, reads the API token from a hidden prompt/stdin, verifies that the token can read the existing Worker deployment and existing D1 database, then writes `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` directly to GitHub Actions secrets through the authenticated GitHub CLI. The token value is not printed or persisted locally by this helper.
 
 Optional Lemon Squeezy billing secrets, configured together with the billing variables below:
 
