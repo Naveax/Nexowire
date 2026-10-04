@@ -179,8 +179,8 @@ Production hosted deployment is live. `npm run control-plane:bootstrap` complete
 
 ## Immediate next work
 
-1. Finish review/CI and merge `feature/custom-prepaid-billing`. PR #178 already merged the Plus/Pro Lemon Squeezy subscription provider; this branch adds Custom prepaid packs, carry-over credit accounting, signed one-time order reconciliation, partial/full refund clawback, and refund debt.
-2. After merge, provision production Lemon Squeezy store/variant/webhook settings and run live Plus/Pro/Custom billing acceptance. Billing remains disabled fail-closed when provider configuration is absent, while Free-plan behavior remains available.
+1. PR #179 merged `feature/custom-prepaid-billing` as main `0e386f191324b38de4ce13b7238d502c6e40acc6`; exact-main CI run `37222549163` passed all seven jobs. Plus/Pro subscription billing and Custom prepaid/refund-debt accounting are now merged code.
+2. Provision production Lemon Squeezy store/variant/webhook settings, deploy the merged billing migrations/runtime config, and run live Plus/Pro/Custom billing acceptance. Billing remains disabled fail-closed when provider configuration is absent, while Free-plan behavior remains available.
 3. Preserve the financial invariant: custom capacity is prepaid only, refund debt blocks spend until repaid, and quota exhaustion never becomes owner-paid automatic overage.
 4. The GitHub Actions deploy workflow is implemented but the repository is not yet provisioned with a usable `CLOUDFLARE_API_TOKEN`; manual dispatch run `37208026750` failed during configuration validation. Production deployment remains available through the DPAPI-protected local owner bootstrap until Actions credentials or a renewable deployment-auth mechanism is configured.
 
