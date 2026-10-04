@@ -142,3 +142,79 @@ export function createControlPlaneAgentCredentialVerifier(
     }
   };
 }
+
+export interface RemoteAgentPresence {
+  deviceId: string;
+  online: boolean;
+  at: string;
+}
+
+export function createControlPlaneAgentPresenceReporter(
+  options: ControlPlaneAgentVerifierOptions,
+): (presence: RemoteAgentPresence) => Promise<boolean> {
+  const base = normalizeControlPlaneBase(
+    options.controlPlaneUrl,
+  );
+  const serviceToken = validateServiceToken(
+    options.serviceToken,
+  );
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 3_000;
+
+  if (
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs < 250 ||
+    timeoutMs > 10_000
+  ) {
+    throw new Error(
+      'Control-plane agent verifier timeout must be between 250 and 10000 ms.',
+    );
+  }
+
+  return async (
+    presence: RemoteAgentPresence,
+  ): Promise<boolean> => {
+    const deviceId = presence.deviceId.trim();
+    const atMs = Date.parse(presence.at);
+    if (
+      !deviceId ||
+      deviceId.length > 128 ||
+      /[\r\n\0]/.test(deviceId) ||
+      !Number.isFinite(atMs)
+    ) {
+      return false;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      timeoutMs,
+    );
+    timer.unref?.();
+
+    try {
+      const response = await fetchImpl(
+        base + '/api/v1/internal/device/presence',
+        {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+            authorization: 'Bearer ' + serviceToken,
+          },
+          body: JSON.stringify({
+            deviceId,
+            online: presence.online,
+            at: new Date(atMs).toISOString(),
+          }),
+          signal: controller.signal,
+        },
+      );
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}

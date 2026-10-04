@@ -147,3 +147,56 @@ test('internal usage endpoint is service-only', async () => {
   const body = await allowed.json() as { status: string };
   assert.equal(body.status, 'charged');
 });
+
+
+test('device presence endpoint is service-only and updates dashboard state', async () => {
+  const { service, handler } = await setup();
+  const pairing = await service.beginPairing(
+    { accountId: 'acct-1', role: 'user' },
+    'work-pc',
+    '11111111-1111-4111-8111-111111111111',
+  );
+  const consumed = await service.consumePairing({
+    pairingId: pairing.pairingId,
+    token: pairing.token,
+    platform: 'win32',
+    deviceAnchorHash: 'e'.repeat(64),
+  });
+  const init = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      deviceId: consumed.device.id,
+      online: true,
+      at: '2026-10-04T13:36:15.338Z',
+    }),
+  };
+
+  const denied = await handler(
+    request(
+      '/api/v1/internal/device/presence',
+      { accountId: 'acct-1', role: 'user' },
+      init,
+    ),
+  );
+  assert.equal(denied.status, 403);
+
+  const allowed = await handler(
+    request(
+      '/api/v1/internal/device/presence',
+      { accountId: 'svc', role: 'service' },
+      init,
+    ),
+  );
+  assert.equal(allowed.status, 200);
+
+  const dashboard = await service.dashboard({
+    accountId: 'acct-1',
+    role: 'user',
+  });
+  assert.equal(dashboard.devices[0]?.online, true);
+  assert.equal(
+    dashboard.devices[0]?.lastSeenAt,
+    '2026-10-04T13:36:15.338Z',
+  );
+});

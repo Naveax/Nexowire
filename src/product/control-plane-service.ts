@@ -523,6 +523,45 @@ export class ControlPlaneService {
     };
   }
 
+  async setDevicePresence(
+    deviceIdInput: string,
+    online: boolean,
+    atInput: string,
+  ): Promise<boolean> {
+    const deviceId = deviceIdInput.trim();
+    const atMs = Date.parse(atInput);
+    if (
+      !deviceId ||
+      deviceId.length > 128 ||
+      /[\r\n\0]/.test(deviceId) ||
+      !Number.isFinite(atMs)
+    ) {
+      return false;
+    }
+
+    const device = await this.store.getDevice(deviceId);
+    if (!device) return false;
+
+    const normalizedAt = new Date(atMs).toISOString();
+    const previousAt = device.lastSeenAt
+      ? Date.parse(device.lastSeenAt)
+      : Number.NaN;
+    if (
+      Number.isFinite(previousAt) &&
+      previousAt > atMs
+    ) {
+      return true;
+    }
+
+    await this.store.putDevice({
+      ...device,
+      online,
+      lastSeenAt: normalizedAt,
+      updatedAt: normalizedAt,
+    });
+    return true;
+  }
+
   async chargeUsage(input: {
     accountId: string;
     eventId: string;

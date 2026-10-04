@@ -13,10 +13,26 @@ import { CredentialStore } from './security/credential-store.js';
 import { AgentProvider } from './providers/agent-provider.js';
 import { SkillRegistry } from './skills/registry.js';
 import { WorkspaceStore } from './workspace/store.js';
+import { createControlPlaneAgentPresenceReporter } from './hub/control-plane-agent-auth.js';
 
 export async function createRuntime(config: NexowireConfig) {
   const devices = new DeviceDirectory(config.stateDir);
   await devices.initialize();
+
+  const reportControlPlanePresence =
+    config.controlPlaneAgentAuth
+      ? createControlPlaneAgentPresenceReporter({
+          controlPlaneUrl: config.controlPlaneAgentAuth.url,
+          serviceToken:
+            config.controlPlaneAgentAuth.serviceToken,
+          ...(config.controlPlaneAgentAuth.timeoutMs !== undefined
+            ? {
+                timeoutMs:
+                  config.controlPlaneAgentAuth.timeoutMs,
+              }
+            : {}),
+        })
+      : undefined;
 
   const broker = new AgentBroker({
     onDeviceState: async (event) => {
@@ -24,6 +40,13 @@ export async function createRuntime(config: NexowireConfig) {
         await devices.observeConnected(event.device, event.at);
       } else {
         await devices.observeDisconnected(event.device.id, event.at);
+      }
+      if (reportControlPlanePresence) {
+        await reportControlPlanePresence({
+          deviceId: event.device.id,
+          online: event.type === 'connected',
+          at: event.at,
+        });
       }
     },
   });

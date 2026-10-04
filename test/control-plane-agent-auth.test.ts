@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createControlPlaneAgentCredentialVerifier,
+  createControlPlaneAgentPresenceReporter,
 } from '../src/hub/control-plane-agent-auth.js';
 
 test('control-plane agent verifier exchanges a device credential for a bound device id', async () => {
@@ -80,4 +81,76 @@ test('control-plane agent verifier fails closed on remote errors', async () => {
     ),
     undefined,
   );
+});
+
+
+test('control-plane agent presence reporter posts bounded device state', async () => {
+  const reporter = createControlPlaneAgentPresenceReporter({
+    controlPlaneUrl: 'https://control.example.test/',
+    serviceToken: 'service-token-0123456789',
+    fetchImpl: async (input, init) => {
+      assert.equal(
+        String(input),
+        'https://control.example.test/api/v1/internal/device/presence',
+      );
+      const headers = new Headers(init?.headers);
+      assert.equal(
+        headers.get('authorization'),
+        'Bearer service-token-0123456789',
+      );
+      assert.deepEqual(
+        JSON.parse(String(init?.body ?? '{}')),
+        {
+          deviceId:
+            '11111111-1111-4111-8111-111111111111',
+          online: true,
+          at: '2026-10-04T13:36:15.338Z',
+        },
+      );
+      return Response.json({ updated: true });
+    },
+  });
+
+  assert.equal(
+    await reporter({
+      deviceId:
+        '11111111-1111-4111-8111-111111111111',
+      online: true,
+      at: '2026-10-04T13:36:15.338Z',
+    }),
+    true,
+  );
+});
+
+test('control-plane agent presence reporter fails soft on invalid input and remote errors', async () => {
+  let calls = 0;
+  const reporter = createControlPlaneAgentPresenceReporter({
+    controlPlaneUrl: 'https://control.example.test',
+    serviceToken: 'service-token-0123456789',
+    fetchImpl: async () => {
+      calls++;
+      throw new Error('network down');
+    },
+  });
+
+  assert.equal(
+    await reporter({
+      deviceId: '',
+      online: true,
+      at: '2026-10-04T13:36:15.338Z',
+    }),
+    false,
+  );
+  assert.equal(calls, 0);
+
+  assert.equal(
+    await reporter({
+      deviceId:
+        '11111111-1111-4111-8111-111111111111',
+      online: false,
+      at: '2026-10-04T13:36:16.338Z',
+    }),
+    false,
+  );
+  assert.equal(calls, 1);
 });
