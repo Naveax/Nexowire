@@ -119,7 +119,7 @@ The repository is the source of truth. If this file disagrees with current code/
 
 ## Active parallel work
 
-Current verified `main`: `f4657ddcef9ba5ff993565ce2753ce893160a0a0`.
+Current verified `main`: `3a948440a4e495d024ff78e94009f5e0c056df53`.
 
 Verification:
 - local `main` and `origin/main` were synchronized at this SHA before the state sync;
@@ -173,14 +173,14 @@ Hosted product/control-plane code is implemented:
 - automated GitHub Actions deployment;
 - one-command owner bootstrap via `npm run control-plane:bootstrap`.
 
-Production hosted deployment is now live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0006`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. The live MCP protected-resource metadata points to the hosted authorization server, which advertises authorization-code flow, PKCE S256, refresh tokens, and `mcp`/`offline_access` scopes. The remaining blocker is only final ChatGPT-side connector acceptance: the private Nexowire plugin is installed, but the current conversation tool set has not hot-loaded its MCP tools.
+Production hosted deployment is live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0006`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. ChatGPT Web now has a first-party Nexowire custom MCP App using OAuth against `https://nexowire.tail10f02d.ts.net/mcp`. End-to-end connector acceptance passed through Nexowire itself: `devices_list` returned exactly `work-pc` online, `machine_snapshot` and `machine_health` passed, the native Agent was rotated to a DPAPI-protected hosted per-device credential, Hub and Agent were each restarted, the stable device ID remained `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, and the same connector checks passed again after reconnect. RDC/SentinelX were not used as final acceptance evidence.
 
 ## Immediate next work
 
-1. Activate/use the installed private `Nexowire` ChatGPT plugin in a plugin-enabled chat so its MCP tools are present in the conversation tool set.
-2. Complete first-party connector acceptance against `https://nexowire.tail10f02d.ts.net/mcp`: `devices_list` must show exactly `work-pc` online, then `machine_snapshot` and `machine_health` must pass.
-3. Restart Hub + Native Agent once through the established lifecycle, verify reconnect, and repeat the same three Nexowire connector checks. RDC/SentinelX evidence does not count as the final connector proof.
-4. After hosted Free-plan acceptance passes, proceed to subscription/payment-provider integration. Paid capacity must remain prepaid/subscription-funded; owner-paid automatic overage remains forbidden.
+1. Finish the remaining hosted Free-plan product checks that are not covered by connector transport acceptance: dashboard/device presentation, quota/usage accounting, and OAuth refresh-token rotation.
+2. Confirm the hosted device row/dashboard state remains consistent with live Hub routing after reconnects; the MCP route already derives online state from the first-party native-agent registry.
+3. Add subscription/payment-provider integration for Plus / Pro / Custom only after the remaining Free-plan checks pass. Paid capacity must remain prepaid/subscription-funded; owner-paid automatic overage remains forbidden.
+4. Keep the working ChatGPT Web Nexowire custom App + OAuth path as the canonical ChatGPT integration. Codex, RDC, SentinelX, and standalone desktop-only MCP wrappers are not runtime dependencies.
 
 ## Known machine note
 

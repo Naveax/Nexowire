@@ -124,7 +124,7 @@
       "id": "hosted-control-plane",
       "status": "partial",
       "priority": 18,
-      "summary": "Hosted control-plane production deployment is live: Cloudflare authorization completed, D1 migrations through 0006 applied, Worker/static assets deployed, GitHub App Manifest conversion completed, GitHub OAuth client credentials stored encrypted in D1, protected Hub service authentication wired, OAuth metadata live, and Hub/Agent restart acceptance passed. Remaining work is only end-to-end ChatGPT Nexowire OAuth MCP connector acceptance, followed by payment-provider integration after Free-plan acceptance."
+      "summary": "Hosted production control plane and ChatGPT Web OAuth MCP connector acceptance are live. The first-party Nexowire connector returned work-pc online, machine_snapshot and machine_health passed, the Agent was rotated to a DPAPI-protected hosted per-device credential, and Hub/Agent restart-reconnect acceptance passed with the stable device ID preserved. Remaining work is final Free-plan dashboard/quota/refresh-token acceptance and then subscription/payment-provider integration."
     },
     {
       "id": "private-desktop-isolation",
@@ -194,15 +194,15 @@
     "Exact main f4657ddcef9ba5ff993565ce2753ce893160a0a0 passed GitHub Actions CI run 37161335554 and was synchronized locally before the 2026-10-04 state sync. Live Hub/Agent restart acceptance preserved stable device ID aeaa5295-0aa8-4742-bf0c-2a6340dcf187 and local/public health report one connected agent.",
     "PRs #166-#169 complete the post-v1 private desktop slice: private-HWND pointer input, isolated keyboard/text/hotkeys, explicit time-bounded local physical-console grants, bounded hidden screen capture, and a local heartbeat-backed private viewer with local-only desktop entry.",
     "The preferred hosted deployment path is now npm run control-plane:bootstrap. It generates owner secrets into CurrentUser DPAPI, applies D1 migrations through 0006, deploys Cloudflare, opens a protected GitHub App Manifest flow, stores only OAuth client ID/secret encrypted in D1, and wires the protected control-plane service token into the Hub.",
-    "Hosted production bootstrap completed successfully on 2026-10-04: Cloudflare auth, D1 migrations, Worker deployment, GitHub App Manifest conversion, encrypted-D1 OAuth config, protected Hub service-token wiring, OAuth discovery, and restart health checks all passed. Remaining hosted blocker is final ChatGPT-side Nexowire connector acceptance because the current conversation tool set has not hot-loaded the installed private plugin tools."
+    "Hosted production and ChatGPT Web connector acceptance completed successfully on 2026-10-04: Cloudflare auth, D1 migrations, Worker deployment, GitHub App Manifest conversion, encrypted-D1 OAuth config, protected Hub service-token wiring, OAuth discovery, first-party devices_list/machine_snapshot/machine_health, hosted per-device DPAPI Agent credential rotation, and Hub/Agent restart-reconnect checks all passed."
   ],
   "lastStateSync": "2026-10-04",
-  "lastVerifiedMain": "f4657ddcef9ba5ff993565ce2753ce893160a0a0",
+  "lastVerifiedMain": "3a948440a4e495d024ff78e94009f5e0c056df53",
   "activeWork": [
     {
-      "branch": "ops/hosted-acceptance-state-sync",
-      "status": "blocked",
-      "goal": "Sync continuation state after successful hosted production bootstrap, then activate the installed private Nexowire plugin in a plugin-enabled ChatGPT conversation and complete first-party devices_list, machine_snapshot, machine_health, restart/reconnect acceptance."
+      "branch": "ops/connector-acceptance-state-sync",
+      "status": "testing",
+      "goal": "Record completed ChatGPT Web Nexowire connector acceptance, then finish hosted Free-plan dashboard/device-state, quota/usage, and OAuth refresh-token checks before starting subscription/payment-provider integration."
     }
   ]
 }
