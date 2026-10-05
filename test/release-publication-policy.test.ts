@@ -33,7 +33,7 @@ test('authorized release publisher requires an exact version marker and preserve
 
   const authorize = workflow.slice(workflow.indexOf('\n  authorize:\n'));
   assert.match(authorize, /contents: write/);
-  assert.match(authorize, /actions: write/);
+  assert.doesNotMatch(authorize, /actions: write/);
   assert.match(authorize, /\^\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$/);
   assert.match(authorize, /\.github\/releases\/\$\{TAG\}\.authorized/);
   assert.match(authorize, /EXPECTED="authorized-version=\$\{TAG\}"/);

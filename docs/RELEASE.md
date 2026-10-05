@@ -26,6 +26,7 @@ npm run release:verify -- nexowire-<version>.tgz
 - source, tests, GitHub workflow files, handoff state, and environment templates are not accidentally shipped
 - every shipped skill contains its `SKILL.md`
 - package file count and unpacked size remain bounded
+- the Windows user bundle is built with a checksum-verified official Node runtime, and Release Readiness executes the generated `Nexowire-Setup.cmd` end-to-end in an isolated LocalAppData root before upload
 
 ## Windows one-click user distribution
 

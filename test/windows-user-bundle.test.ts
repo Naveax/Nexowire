@@ -87,7 +87,21 @@ test('Windows setup is non-admin, versioned, and checksum-pinned', () => {
     /Nexowire\\versions\\%NX_BUILD_ID%/,
   );
   assert.match(setup, /1\.0\.1-436b84c89454/);
-  assert.match(setup, /Get-FileHash .* SHA256/);
+  assert.match(setup, /System\.Security\.Cryptography\.SHA256/);
+  assert.match(setup, /System\.IO\.Compression\.ZipFile/);
+  assert.match(setup, /System\.Net\.WebClient/);
+  assert.doesNotMatch(
+    setup,
+    /Get-FileHash|Expand-Archive|Invoke-WebRequest/,
+  );
+  const powershellLine = setup
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('powershell.exe '));
+  assert.ok(powershellLine);
+  assert.ok(
+    powershellLine.length < 8_000,
+    'Windows setup PowerShell command must remain below the cmd.exe line-length limit.',
+  );
   assert.match(setup, /Nexowire\.lnk/);
   assert.match(setup, /wscript\.exe/);
   assert.doesNotMatch(
