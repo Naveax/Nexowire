@@ -31,6 +31,7 @@
     "release:windows:user-bundle": "npm run build && node --import tsx scripts/build-windows-user-bundle.ts",
     "release:windows:user-bundle:smoke": "node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows",
     "control-plane:bootstrap": "node --import tsx scripts/bootstrap-cloudflare-control-plane.ts",
+    "billing:status": "node --import tsx scripts/check-lemonsqueezy-production-status.ts",
     "billing:provision": "node --import tsx scripts/provision-lemonsqueezy-production.ts",
     "cloudflare:ci-provision": "node --import tsx scripts/provision-cloudflare-github-actions.ts"
   },
