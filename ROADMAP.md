@@ -86,7 +86,8 @@
 - [x] independently verify generated checksum/manifest/SBOM evidence before candidate upload
 - [x] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs
 - [x] tag-only SLSA build provenance and CycloneDX SBOM attestations after verified candidate download with isolated OIDC/attestation permissions
-- [x] GitHub v1.0.0 published with verified package artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, SLSA provenance, and SBOM attestation; npm publication remains intentionally disabled for the initial self-hosted release\n- [x] GitHub v1.0.1 published with checksum-pinned Windows one-click setup/payload assets, real `cmd.exe` installation smoke, Windows provenance attestations, independent post-publication hash/manifest/setup-pin verification, and duplicate-safe authorized Release Readiness dispatch
+- [x] GitHub v1.0.0 published with verified package artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, SLSA provenance, and SBOM attestation; npm publication remains intentionally disabled for the initial self-hosted release
+- [x] GitHub v1.0.1 published with checksum-pinned Windows one-click setup/payload assets, real `cmd.exe` installation smoke, Windows provenance attestations, independent post-publication hash/manifest/setup-pin verification, and duplicate-safe authorized Release Readiness dispatch
 
 ## Post-v1 - Private desktop and isolated input
 
@@ -132,4 +133,5 @@
 - [x] add Lemon Squeezy Plus/Pro subscription checkout, signed webhook reconciliation, customer portal, and protected deployment-secret handling
 - [x] add Custom prepaid credit packs with carry-over quota-subject balances, idempotent signed order credits, refund clawback, and refund debt
 - [x] add protected Lemon Squeezy production provisioning: live catalog validation, DPAPI secret persistence, idempotent webhook create/update, and bootstrap auto-discovery
-- [ ] supply the live Lemon Squeezy API key and production store/variant IDs, run protected provisioning, redeploy, and complete live Plus/Pro/Custom paid-plan acceptance
+- [x] add secret-safe local Lemon Squeezy provisioning readiness inspection with stable blocker codes and purpose-bound protected-envelope validation without decrypting secrets or contacting the provider
+- [ ] supply the live Lemon Squeezy API key and production store/variant IDs, run protected provisioning until `readyForProvisionedBootstrap=true`, redeploy, and complete live Plus/Pro/Custom paid-plan acceptance
