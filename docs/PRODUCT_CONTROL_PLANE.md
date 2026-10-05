@@ -41,6 +41,22 @@ The command is deliberately non-interactive and local-only. It does not contact 
 
 `readyForProvisionedBootstrap: true` means only that the local Windows provisioning artifacts required by the protected bootstrap are present, their protected envelopes have the expected metadata/purpose, and the non-secret config parses successfully. It is not proof that the live provider catalog, checkout, webhook, refund, quota, or billing flows have passed production acceptance. That separate acceptance still requires the real live-mode provider configuration.
 
+For the owner/source checkout, the next acceptance layer is intentionally one command:
+
+```powershell
+npm run billing:acceptance
+```
+
+This performs a read-only provider/public production preflight. After local provisioning is ready, it decrypts the purpose-bound API-key and webhook-secret envelopes only in memory, validates the live Lemon Squeezy store plus Plus/Pro/prepaid variants, verifies the provisioned webhook ID/store/HTTPS URL/production mode/complete required event set, checks the public control-plane health contract, confirms `ownerPaidSpendAllowed=false`, and confirms that the billing-status endpoint remains authentication-protected. It explicitly reports that production billing deployment is not validated by the read-only run. It never prints protected secret values and never creates a checkout, charges money, updates a webhook, or issues a refund.
+
+To redeploy the already-provisioned billing configuration and run the same read-only acceptance afterward:
+
+```powershell
+npm run billing:acceptance:deploy
+```
+
+The deploy form still fails before any provider or Cloudflare mutation when local billing provisioning is incomplete. Live-money acceptance remains a separate explicit boundary because validating a real checkout, webhook settlement, refund, refund debt, and quota transition can involve real provider-side financial state.
+
 Custom prepaid plans are explicitly provisioned by an administrator. A signed one-time-payment webhook can increase an existing Custom prepaid balance, but it cannot silently convert a Free/Plus/Pro account into Custom or create postpaid debt.
 
 ## Scale target

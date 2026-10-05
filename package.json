@@ -33,6 +33,8 @@
     "control-plane:bootstrap": "node --import tsx scripts/bootstrap-cloudflare-control-plane.ts",
     "billing:status": "node --import tsx scripts/check-lemonsqueezy-production-status.ts",
     "billing:provision": "node --import tsx scripts/provision-lemonsqueezy-production.ts",
+    "billing:acceptance": "node --import tsx scripts/run-paid-plan-production-acceptance.ts",
+    "billing:acceptance:deploy": "node --import tsx scripts/run-paid-plan-production-acceptance.ts --deploy",
     "cloudflare:ci-provision": "node --import tsx scripts/provision-cloudflare-github-actions.ts"
   },
   "dependencies": {
