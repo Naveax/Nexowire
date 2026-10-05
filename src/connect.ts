@@ -17,6 +17,8 @@ import { loadOrCreateAgentIdentity } from './agent/native-agent.js';
 const execFileAsync = promisify(execFile);
 const CONNECT_CALLBACK_PATH = '/nexowire-connect';
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+export const DEFAULT_HOSTED_CONTROL_PLANE_URL =
+  'https://nexowire-control-plane.nexowire-naveax.workers.dev';
 
 export interface ConnectCliOptions {
   controlPlaneUrl: string;
@@ -170,12 +172,8 @@ export function parseConnectArgs(
 
   const configured =
     options.controlPlaneUrl ??
-    env.NEXOWIRE_CONTROL_PLANE_URL?.trim();
-  if (!configured) {
-    throw new Error(
-      'nexowire connect requires --control-plane-url or NEXOWIRE_CONTROL_PLANE_URL until the hosted endpoint is baked into a release.',
-    );
-  }
+    env.NEXOWIRE_CONTROL_PLANE_URL?.trim() ??
+    DEFAULT_HOSTED_CONTROL_PLANE_URL;
 
   return {
     controlPlaneUrl: normalizeControlPlaneUrl(configured),
@@ -345,7 +343,7 @@ export async function startConnectLoopbackReceiver(input: {
         'cache-control': 'no-store',
       });
       response.end(
-        '<!doctype html><meta charset="utf-8"><title>Nexowire</title><body style="font-family:system-ui;background:#090b10;color:#fff;padding:48px"><h1>Nexowire bağlandı</h1><p>Bu sekmeyi kapatabilirsin.</p></body>',
+        '<!doctype html><meta charset="utf-8"><title>Nexowire</title><body style="font-family:system-ui;background:#090b10;color:#fff;padding:48px"><h1>Bağlandı ✓</h1><p>Nexowire hazır. Bu sekmeyi kapatabilirsin.</p><script>setTimeout(()=>window.close(),900)</script></body>',
       );
 
       if (!settled) {

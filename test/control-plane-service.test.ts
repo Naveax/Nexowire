@@ -116,6 +116,55 @@ test('free device limit is enforced before issuing another credential', async ()
   );
 });
 
+test('re-pairing an existing device works even when the device limit is full', async () => {
+  const { store, service } = setup();
+  await service.ensureAccount({ id: 'acct-1' });
+
+  const firstDeviceId =
+    '11111111-1111-4111-8111-111111111111';
+  const secondDeviceId =
+    '22222222-2222-4222-8222-222222222222';
+
+  for (const [name, deviceId, anchor] of [
+    ['pc-1', firstDeviceId, anchorA],
+    ['pc-2', secondDeviceId, anchorB],
+  ] as const) {
+    const pairing = await service.beginPairing(
+      { accountId: 'acct-1', role: 'user' },
+      name,
+      deviceId,
+    );
+    await service.consumePairing({
+      pairingId: pairing.pairingId,
+      token: pairing.token,
+      platform: 'win32',
+      deviceAnchorHash: anchor,
+    });
+  }
+
+  const before = await store.getDevice(firstDeviceId);
+  assert.ok(before);
+
+  const pairing = await service.beginPairing(
+    { accountId: 'acct-1', role: 'user' },
+    'pc-1',
+    firstDeviceId,
+  );
+  const repaired = await service.consumePairing({
+    pairingId: pairing.pairingId,
+    token: pairing.token,
+    platform: 'win32',
+    deviceAnchorHash: anchorA,
+  });
+
+  assert.equal(repaired.device.id, firstDeviceId);
+  assert.equal(repaired.device.ownerAccountId, 'acct-1');
+  assert.notEqual(
+    repaired.device.credentialHash,
+    before?.credentialHash,
+  );
+});
+
 test('usage charging is idempotent and updates dashboard credits', async () => {
   const { service } = setup();
   await service.ensureAccount({ id: 'acct-1' });

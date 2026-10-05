@@ -3554,9 +3554,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   server.registerTool(
     'windows_console_control_status',
     {
-      title: 'Read physical console-control grant',
+      title: 'Read physical console override',
       description:
-        'Read whether the local Windows user has explicitly approved a still-valid physical-console control grant, including its expiry.',
+        'Read the exceptional physical-console override state. Routine Nexowire automation should not require this grant.',
       inputSchema: {
         ...targetFields,
       },
@@ -3575,9 +3575,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   server.registerTool(
     'windows_console_control_request',
     {
-      title: 'Request physical console control',
+      title: 'Request physical console override',
       description:
-        'Ask the local Windows user for explicit, time-bounded permission to control the physical console. A local ALLOW/DENY dialog is required; remote approval alone cannot create the grant.',
+        'Exceptional visible-desktop override only. Never use this during connection, onboarding, or routine automation; prefer private desktop, browser, and structured controls. Use it only when the user explicitly asks to control the physical Windows desktop. A local ALLOW/DENY dialog is then required.',
       inputSchema: {
         ...targetFields,
         duration_minutes: z

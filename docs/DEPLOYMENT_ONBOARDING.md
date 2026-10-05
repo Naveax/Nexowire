@@ -1,5 +1,7 @@
 # Deployment Onboarding
 
+This document is for self-hosted/operator deployment. It is not the normal end-user connection flow. Hosted users should use `nexowire connect`, sign in if needed, and press **BAĞLA**; they do not need to manage tokens, URLs, Tailscale, or capability scopes.
+
 The onboarding command creates a safe deployment starting point without writing plaintext bearer tokens into repository files, launcher arguments, or Nexowire state.
 
 ## Plan

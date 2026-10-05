@@ -469,13 +469,6 @@ export class ControlPlaneService {
 
     const account = await this.requireAccount(record.ownerAccountId);
     const plan = resolvePlan(account);
-    const devices = await this.store.listDevices(account.id);
-    if (
-      plan.maxDevices !== null &&
-      devices.length >= plan.maxDevices
-    ) {
-      throw new Error('DEVICE_LIMIT_REACHED');
-    }
 
     const consumed = consumePairingChallenge(
       record,

@@ -17,6 +17,12 @@ button { font: inherit; }
 .brand { font-weight: 800; letter-spacing: -.02em; }
 .accent { color: var(--accent); }
 .shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 80px; }
+.connect-shell { width: min(680px, calc(100% - 32px)); }
+.connect-card { min-height: 0; gap: 12px; }
+.connect-copy { margin-top: 14px; }
+.connect-copy h2 { margin-bottom: 8px; }
+.connect-copy p:last-child { margin-bottom: 0; }
+.connect-button { width: 100%; min-height: 52px; margin-top: 8px; font-size: 16px; }
 .hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
 h1,h2,p { margin-top: 0; }
 h1 { font-size: clamp(30px, 5vw, 48px); margin-bottom: 8px; letter-spacing: -.04em; }
