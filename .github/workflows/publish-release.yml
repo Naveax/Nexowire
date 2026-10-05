@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -99,3 +100,19 @@ jobs:
             git tag -a "${TAG}" "${GITHUB_SHA}" -m "Nexowire ${TAG#v}"
             git push origin "${TAG}"
           fi
+      - name: Ensure tag-scoped Release Readiness
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RUNS_API="repos/${GITHUB_REPOSITORY}/actions/workflows/release-readiness.yml/runs?branch=${TAG}&event=workflow_dispatch&per_page=100"
+          RUN_FILTER="[.workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\" and .head_branch == \"${TAG}\" and ((.status != \"completed\") or .conclusion == \"success\"))] | length"
+          EXISTING="$(gh api "${RUNS_API}" --jq "${RUN_FILTER}")"
+          if [[ "${EXISTING}" != "0" ]]; then
+            echo "Release Readiness already active or successful for ${TAG} at ${GITHUB_SHA}; not dispatching a duplicate."
+            exit 0
+          fi
+
+          gh workflow run release-readiness.yml --repo "${GITHUB_REPOSITORY}" --ref "${TAG}"
