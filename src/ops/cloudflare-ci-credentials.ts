@@ -1,3 +1,4 @@
+import path from 'node:path';
 import * as z from 'zod';
 
 const AccountIdSchema = z
@@ -13,6 +14,45 @@ const RepositorySlugSchema = z
 export interface WranglerAccount {
   id: string;
   name: string;
+}
+
+export interface CloudflareCliInvocation {
+  executable: string;
+  args: string[];
+}
+
+export interface CloudflareCliRuntime {
+  platform: NodeJS.Platform;
+  nodeExecutable: string;
+  npmExecPath?: string;
+}
+
+export function resolveCloudflareCliInvocation(
+  name: 'npx' | 'gh',
+  args: string[],
+  runtime: CloudflareCliRuntime,
+): CloudflareCliInvocation {
+  if (runtime.platform !== 'win32') {
+    return { executable: name, args: [...args] };
+  }
+
+  if (name === 'gh') {
+    return { executable: 'gh.exe', args: [...args] };
+  }
+
+  const npmExecPath = runtime.npmExecPath?.trim();
+  if (!npmExecPath) {
+    throw new Error('NPM_EXECPATH_MISSING_FOR_NPX');
+  }
+
+  const npxCliPath = path.win32.join(
+    path.win32.dirname(npmExecPath),
+    'npx-cli.js',
+  );
+  return {
+    executable: runtime.nodeExecutable,
+    args: [npxCliPath, ...args],
+  };
 }
 
 export function normalizeCloudflareAccountId(
