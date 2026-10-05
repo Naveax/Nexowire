@@ -134,4 +134,5 @@
 - [x] add Custom prepaid credit packs with carry-over quota-subject balances, idempotent signed order credits, refund clawback, and refund debt
 - [x] add protected Lemon Squeezy production provisioning: live catalog validation, DPAPI secret persistence, idempotent webhook create/update, and bootstrap auto-discovery
 - [x] add secret-safe local Lemon Squeezy provisioning readiness inspection with stable blocker codes and purpose-bound protected-envelope validation without decrypting secrets or contacting the provider
-- [ ] supply the live Lemon Squeezy API key and production store/variant IDs, run protected provisioning until `readyForProvisionedBootstrap=true`, redeploy, and complete live Plus/Pro/Custom paid-plan acceptance
+- [x] add single-command paid-plan production acceptance orchestration: read-only live catalog/webhook preflight, protected deploy mode, public health, zero-owner-spend, billing deployment/auth-boundary validation, and fail-closed no-provider/no-deploy behavior while provisioning is missing
+- [ ] supply the live Lemon Squeezy API key and production store/variant IDs, run protected provisioning until `readyForProvisionedBootstrap=true`, run `npm run billing:acceptance:deploy`, and complete the explicit real-money Plus/Pro/Custom checkout/webhook/refund/debt/quota acceptance
