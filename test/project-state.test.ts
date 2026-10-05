@@ -83,6 +83,91 @@ test('project-state parser rejects duplicate priorities and unsorted priority or
   );
 });
 
+test('continuation validation rejects literal escaped newlines before Markdown structure', async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-continuation-markdown-'),
+  );
+
+  try {
+    await fs.mkdir(path.join(root, 'docs'), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(root, 'docs', 'CONTINUATION.md'),
+      [
+        'docs/CONTINUATION.md',
+        'HANDOFF.md',
+        'ROADMAP.md',
+        'PROJECT_STATE.json',
+        'A code example may mention \\n without creating Markdown structure.',
+      ].join('\n'),
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(root, 'HANDOFF.md'),
+      'Canonical branch: `main`\n## Resume protocol\n',
+      'utf8',
+    );
+    await fs.writeFile(
+      path.join(root, 'ROADMAP.md'),
+      '# roadmap\n- [x] valid item\n',
+      'utf8',
+    );
+
+    const state = {
+      schemaVersion: 1,
+      project: 'Nexowire',
+      canonicalRepository: 'Naveax/Nexowire',
+      canonicalBranch: 'main',
+      runtimeOwnership: 'first-party-only',
+      continuationFiles: [
+        'docs/CONTINUATION.md',
+        'HANDOFF.md',
+        'ROADMAP.md',
+        'PROJECT_STATE.json',
+      ],
+      invariants: ['test'],
+      priorities: [
+        {
+          id: 'one',
+          status: 'partial',
+          priority: 1,
+          summary: 'one',
+        },
+      ],
+      standardVerification: ['npm test'],
+      hotFiles: ['HANDOFF.md'],
+      notes: [],
+      lastStateSync: '2026-10-05',
+      lastVerifiedMain: 'c'.repeat(40),
+      activeWork: [],
+    };
+    await fs.writeFile(
+      path.join(root, 'PROJECT_STATE.json'),
+      JSON.stringify(state, null, 2),
+      'utf8',
+    );
+
+    await validateProjectState(root);
+
+    await fs.writeFile(
+      path.join(root, 'ROADMAP.md'),
+      '# roadmap\n- [x] first\\n- [x] second\n',
+      'utf8',
+    );
+
+    await assert.rejects(
+      () => validateProjectState(root),
+      /literal escaped newline before Markdown structure/,
+    );
+  } finally {
+    await fs.rm(root, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
 test('continuation validation fails when a declared source-of-truth file is missing', async () => {
   const root = await fs.mkdtemp(
     path.join(os.tmpdir(), 'nexowire-continuation-'),
