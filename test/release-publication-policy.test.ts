@@ -4,15 +4,26 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 test('authorized release publisher requires an exact version marker and preserves scoped permissions', async () => {
-  const workflow = await fs.readFile(
-    path.join(
-      process.cwd(),
-      '.github',
-      'workflows',
-      'publish-release.yml',
+  const [workflow, readiness] = await Promise.all([
+    fs.readFile(
+      path.join(
+        process.cwd(),
+        '.github',
+        'workflows',
+        'publish-release.yml',
+      ),
+      'utf8',
     ),
-    'utf8',
-  );
+    fs.readFile(
+      path.join(
+        process.cwd(),
+        '.github',
+        'workflows',
+        'release-readiness.yml',
+      ),
+      'utf8',
+    ),
+  ]);
 
   assert.match(workflow, /paths:\n\s+- "\.github\/releases\/\*\.authorized"/);
   assert.match(workflow, /branches: \["main"\]/);
@@ -30,8 +41,12 @@ test('authorized release publisher requires an exact version marker and preserve
   assert.match(authorize, /npm run release:tag:check/);
   assert.match(authorize, /git rev-list -n 1 "\$\{TAG\}"/);
   assert.match(authorize, /git push origin "\$\{TAG\}"/);
-  assert.match(
+  assert.doesNotMatch(
     authorize,
-    /gh workflow run release-readiness\.yml --ref "\$\{TAG\}"/,
+    /gh workflow run release-readiness\.yml/,
+  );
+  assert.match(
+    readiness,
+    /push:\n\s+tags:\n\s+- "v\*"/,
   );
 });

@@ -100,8 +100,3 @@ jobs:
             git tag -a "${TAG}" "${GITHUB_SHA}" -m "Nexowire ${TAG#v}"
             git push origin "${TAG}"
           fi
-      - name: Dispatch tag-scoped release readiness and publication
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-        run: gh workflow run release-readiness.yml --ref "${TAG}"

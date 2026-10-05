@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
 import {
   checkCurrentReleaseTag,
   checkReleaseTag,
@@ -54,13 +55,20 @@ test('release tag policy accepts only the exact v-prefixed package version', () 
 });
 
 test('current release tag policy reads package.json and GitHub ref environment', async () => {
+  const packageJson = JSON.parse(
+    await fs.readFile(
+      new URL('../package.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { version: string };
+
   const result = await checkCurrentReleaseTag({
     rootDir: process.cwd(),
     env: {
       GITHUB_REF_TYPE: 'tag',
-      GITHUB_REF_NAME: 'v1.0.0',
+      GITHUB_REF_NAME: `v${packageJson.version}`,
     },
   });
   assert.equal(result.checked, true);
-  assert.equal(result.packageVersion, '1.0.0');
+  assert.equal(result.packageVersion, packageJson.version);
 });
