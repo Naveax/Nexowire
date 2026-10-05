@@ -161,8 +161,9 @@ test('durable process recovers terminal status from a completed atomic temp reco
   const workerDir = path.join(root, 'worker');
   const sessionId = '11111111-1111-4111-8111-111111111111';
   const deadPid = 2_147_483_000;
-  const startedAt = '2026-10-04T14:00:00.000Z';
-  const exitedAt = '2026-10-04T14:00:01.000Z';
+  const now = Date.now();
+  const startedAt = new Date(now - 2_000).toISOString();
+  const exitedAt = new Date(now - 1_000).toISOString();
 
   try {
     await fs.mkdir(workerDir, { recursive: true });

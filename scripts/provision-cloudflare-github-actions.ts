@@ -9,6 +9,7 @@ import {
   parseD1DatabaseId,
   parseWranglerWhoamiAccount,
   REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES,
+  resolveCloudflareCliInvocation,
 } from '../src/ops/cloudflare-ci-credentials.js';
 import { readProtectedSecretFile } from '../src/security/protected-secret-files.js';
 
@@ -71,11 +72,6 @@ function parseArgs(argv: string[]): Options {
 
   output.repo = normalizeGitHubRepositorySlug(output.repo);
   return output;
-}
-
-function command(name: 'npx' | 'gh'): string {
-  if (process.platform !== 'win32') return name;
-  return name === 'npx' ? 'npx.cmd' : 'gh.exe';
 }
 
 async function run(
@@ -159,6 +155,31 @@ async function run(
   });
 }
 
+async function runCli(
+  name: 'npx' | 'gh',
+  args: string[],
+  options: {
+    env?: NodeJS.ProcessEnv;
+    input?: string;
+    maxOutputBytes?: number;
+  } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  const invocation = resolveCloudflareCliInvocation(
+    name,
+    args,
+    {
+      platform: process.platform,
+      nodeExecutable: process.execPath,
+      npmExecPath: process.env.npm_execpath,
+    },
+  );
+  return await run(
+    invocation.executable,
+    invocation.args,
+    options,
+  );
+}
+
 async function readHiddenToken(): Promise<string> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     let value = '';
@@ -236,8 +257,8 @@ async function resolveAccount(
   ]) {
     delete oauthEnv[key];
   }
-  const result = await run(
-    command('npx'),
+  const result = await runCli(
+    'npx',
     [
       '--yes',
       'wrangler@4',
@@ -262,8 +283,8 @@ async function preflight(
     CLOUDFLARE_ACCOUNT_ID: accountId,
   };
 
-  await run(
-    command('npx'),
+  await runCli(
+    'npx',
     [
       '--yes',
       'wrangler@4',
@@ -275,8 +296,8 @@ async function preflight(
     { env },
   );
 
-  const d1 = await run(
-    command('npx'),
+  const d1 = await runCli(
+    'npx',
     ['--yes', 'wrangler@4', 'd1', 'list', '--json'],
     { env },
   );
@@ -294,8 +315,8 @@ async function setGitHubSecret(
   name: string,
   value: string,
 ): Promise<void> {
-  await run(
-    command('gh'),
+  await runCli(
+    'gh',
     ['secret', 'set', name, '--repo', repo],
     { input: value },
   );
@@ -323,7 +344,7 @@ function readOwnerDeploymentSecrets(): Array<{
 async function verifyGitHubSecretNames(
   repo: string,
 ): Promise<void> {
-  const result = await run(command('gh'), [
+  const result = await runCli('gh', [
     'secret',
     'list',
     '--repo',
@@ -353,7 +374,7 @@ async function main(): Promise<void> {
   const checked = await preflight(token, account.id);
 
   if (options.apply) {
-    await run(command('gh'), ['auth', 'status']);
+    await runCli('gh', ['auth', 'status']);
 
     const ownerDeploymentSecrets =
       readOwnerDeploymentSecrets();

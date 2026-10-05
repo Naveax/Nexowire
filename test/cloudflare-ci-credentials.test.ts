@@ -7,6 +7,7 @@ import {
   parseD1DatabaseId,
   parseWranglerWhoamiAccount,
   REQUIRED_GITHUB_DEPLOYMENT_SECRET_NAMES,
+  resolveCloudflareCliInvocation,
 } from '../src/ops/cloudflare-ci-credentials.js';
 
 test('parses the only Wrangler account by default', () => {
@@ -115,6 +116,75 @@ test('normalizes account and repository identifiers', () => {
   );
 });
 
+
+test('routes Windows npx through npm npx-cli.js instead of spawning npx.cmd', () => {
+  assert.deepEqual(
+    resolveCloudflareCliInvocation(
+      'npx',
+      ['--yes', 'wrangler@4'],
+      {
+        platform: 'win32',
+        nodeExecutable: 'C:\\Program Files\\nodejs\\node.exe',
+        npmExecPath:
+          'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
+      },
+    ),
+    {
+      executable: 'C:\\Program Files\\nodejs\\node.exe',
+      args: [
+        'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npx-cli.js',
+        '--yes',
+        'wrangler@4',
+      ],
+    },
+  );
+});
+
+test('keeps GitHub CLI and non-Windows npx launches direct', () => {
+  assert.deepEqual(
+    resolveCloudflareCliInvocation(
+      'gh',
+      ['auth', 'status'],
+      {
+        platform: 'win32',
+        nodeExecutable: 'C:\\node.exe',
+      },
+    ),
+    {
+      executable: 'gh.exe',
+      args: ['auth', 'status'],
+    },
+  );
+  assert.deepEqual(
+    resolveCloudflareCliInvocation(
+      'npx',
+      ['--version'],
+      {
+        platform: 'linux',
+        nodeExecutable: '/usr/bin/node',
+      },
+    ),
+    {
+      executable: 'npx',
+      args: ['--version'],
+    },
+  );
+});
+
+test('fails closed when Windows npx cannot locate npm execution metadata', () => {
+  assert.throws(
+    () =>
+      resolveCloudflareCliInvocation(
+        'npx',
+        ['--version'],
+        {
+          platform: 'win32',
+          nodeExecutable: 'C:\\node.exe',
+        },
+      ),
+    /NPM_EXECPATH_MISSING_FOR_NPX/,
+  );
+});
 
 test('GitHub deployment secret contract includes Cloudflare and protected owner secrets', () => {
   assert.deepEqual(
