@@ -112,19 +112,19 @@
       "id": "release-readiness",
       "status": "done",
       "priority": 16,
-      "summary": "Nexowire 1.0.0 release readiness is implemented: installable CLI packaging, bundled-skill lookup, deterministic package audits, clean tarball smoke on Linux/Windows/macOS, SHA256SUMS, release manifest, CycloneDX SBOM, independent verification, exact tag enforcement, SLSA/CycloneDX attestations, and an explicit authorization-marker GitHub Release gate; npm remains disabled for the initial release"
+      "summary": "Nexowire 1.0.1 release readiness is implemented: installable CLI packaging, bundled-skill lookup, deterministic package audits, clean tarball smoke on Linux/Windows/macOS, checksum-pinned Windows one-click setup/payload with real cmd.exe install smoke, SHA256SUMS, release manifest, CycloneDX SBOM, independent verification, exact tag enforcement, SLSA/CycloneDX/Windows attestations, and duplicate-safe explicit authorization-marker GitHub Release dispatch; npm remains disabled"
     },
     {
       "id": "agent-enrollment-tailscale",
-      "status": "partial",
+      "status": "done",
       "priority": 17,
-      "summary": "Live self-host bootstrap is complete on DESKTOP-ONDD84S with Hub+Agent autostart, stable device identity, protected credentials, healthy Tailscale Serve/Funnel, and exact main 594a6a81 running after Hub/Agent restart. Hosted control-plane deployment is now live; remaining work is ChatGPT-side OAuth MCP connector acceptance."
+      "summary": "Live self-host bootstrap, Hub+Agent autostart, stable device identity, protected credentials, Tailscale Serve/Funnel, hosted control-plane wiring, and ChatGPT-side OAuth MCP connector acceptance are complete and verified."
     },
     {
       "id": "hosted-control-plane",
       "status": "partial",
       "priority": 18,
-      "summary": "Hosted production control plane, ChatGPT Web OAuth MCP connector acceptance, Free-plan production acceptance, Plus/Pro subscription billing, Custom prepaid/refund-debt accounting, and protected Lemon Squeezy provisioning are merged and live where configured. PR #185 added a protected Cloudflare CI credential helper and changed CI to reuse the existing D1 database instead of creating infrastructure automatically. Remaining hosted work is externally gated: create the initial least-privilege Cloudflare API token in the dashboard and supply the real Lemon Squeezy live-mode credential/catalog values, then run the corresponding production acceptance paths."
+      "summary": "Hosted production control plane, ChatGPT Web OAuth MCP connector acceptance, Free-plan production acceptance, Plus/Pro subscription billing, Custom prepaid/refund-debt accounting, protected Lemon Squeezy provisioning, and least-privilege Cloudflare CI deployment are merged and live where configured. Cloudflare CI provisioning/deploy acceptance is complete. Remaining hosted work is externally gated only on the real Lemon Squeezy live-mode credential/catalog values, followed by live Plus/Pro/Custom checkout, webhook, refund, debt, quota, and Free-plan non-regression acceptance."
     },
     {
       "id": "private-desktop-isolation",
@@ -207,7 +207,7 @@
     "PR #189 merged the Windows Node 24 Cloudflare CI provisioning fix as main b313025daa3066ebe88480ba004a8ab9a405504b; exact-main CI run 37300920240 passed all seven jobs. Protected provisioning then configured all five required GitHub Actions deployment secret names, and production deploy run 37311611915 succeeded on exact main, deploying Worker version 869f02a1-8ba9-41c6-bafe-40af00db3858. Public Worker and Hub health both returned HTTP 200, ownerPaidSpendAllowed remained false, and work-pc remained online with stable device identity. The Cloudflare CI gate is complete."
   ],
   "lastStateSync": "2026-10-05",
-  "lastVerifiedMain": "b313025daa3066ebe88480ba004a8ab9a405504b",
+  "lastVerifiedMain": "33798a291b0bf2ed7a9dfe81a3dbc859b8ea08b9",
   "activeWork": [
     {
       "branch": "ops/paid-plan-production-acceptance",
