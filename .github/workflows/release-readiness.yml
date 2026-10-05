@@ -14,6 +14,7 @@ on:
       - "test/release-tag.test.ts"
       - "scripts/check-release-package.ts"
       - "scripts/build-windows-user-bundle.ts"
+      - "scripts/smoke-windows-user-setup.ts"
       - "scripts/check-release-tag.ts"
       - "test/windows-user-bundle.test.ts"
       - "scripts/generate-release-metadata.ts"
@@ -62,6 +63,10 @@ jobs:
         shell: pwsh
         run: |
           node --import tsx scripts/build-windows-user-bundle.ts --output-dir release-windows --source-sha "${{ github.sha }}"
+      - name: Smoke Windows one-click setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows
       - name: Upload Windows user bundle
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
