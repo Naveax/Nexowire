@@ -41,7 +41,17 @@ The command is deliberately non-interactive and local-only. It does not contact 
 
 `readyForProvisionedBootstrap: true` means only that the local Windows provisioning artifacts required by the protected bootstrap are present, their protected envelopes have the expected metadata/purpose, and the non-secret config parses successfully. It is not proof that the live provider catalog, checkout, webhook, refund, quota, or billing flows have passed production acceptance. That separate acceptance still requires the real live-mode provider configuration.
 
-For the owner/source checkout, the next acceptance layer is intentionally one command:
+For first-time production billing setup on the owner Windows source checkout, use the guided path:
+
+```powershell
+npm run billing:setup
+```
+
+The guided setup keeps the Lemon Squeezy API key off argv, environment variables, logs, and plaintext configuration. It accepts the key through a hidden terminal prompt unless a purpose-bound DPAPI API-key file already exists, discovers accessible stores and product variants using read-only Lemon Squeezy GET requests, auto-selects a sole store, auto-selects unambiguous live Plus/Pro subscription variants by name, and can infer Custom prepaid credit amounts from explicit variant labels such as `100k credits` or `250,000 kredi`. Ambiguous plan selections or credit amounts are requested interactively instead of guessed. The canonical production webhook URL is derived automatically. After one confirmation, the command reuses the protected `billing:provision -- --apply` implementation, then runs the protected Cloudflare deploy and read-only production acceptance. It does not create a checkout, charge money, issue a refund, or execute the explicit live-money acceptance boundary.
+
+The lower-level `billing:provision` command remains available for deterministic/manual operator input and CI-style troubleshooting.
+
+For an already-provisioned owner/source checkout, the next acceptance layer is intentionally one command:
 
 ```powershell
 npm run billing:acceptance
