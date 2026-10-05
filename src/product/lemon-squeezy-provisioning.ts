@@ -372,6 +372,98 @@ export async function validateLemonSqueezyCatalog(
   };
 }
 
+export async function validateLemonSqueezyWebhookReadiness(
+  input: {
+    apiKey: string;
+    storeId: string;
+    webhookId: string;
+    webhookUrl: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{
+  webhookId: string;
+  webhookUrl: string;
+  requiredEvents: string[];
+  testMode: false;
+}> {
+  NumericIdSchema.parse(input.storeId);
+  const webhookId = NumericIdSchema.parse(
+    input.webhookId.trim(),
+  );
+  const webhookUrl = new URL(input.webhookUrl);
+  if (webhookUrl.protocol !== 'https:') {
+    throw new Error(
+      'Lemon Squeezy webhook URL must use HTTPS.',
+    );
+  }
+
+  const webhook = dataRecord(
+    await apiJson(
+      {
+        apiKey: input.apiKey,
+        path: '/webhooks/' + webhookId,
+      },
+      fetchImpl,
+    ),
+  );
+  if (String(webhook.id ?? '') !== webhookId) {
+    throw new Error(
+      'LEMONSQUEEZY_WEBHOOK_ID_MISMATCH',
+    );
+  }
+
+  const attributes = asRecord(webhook.attributes);
+  if (
+    String(attributes.store_id ?? '') !==
+      input.storeId ||
+    attributes.test_mode === true
+  ) {
+    throw new Error(
+      'LEMONSQUEEZY_WEBHOOK_STATE_MISMATCH:' +
+        webhookId,
+    );
+  }
+  if (
+    String(attributes.url ?? '') !==
+    webhookUrl.toString()
+  ) {
+    throw new Error(
+      'LEMONSQUEEZY_WEBHOOK_URL_MISMATCH:' +
+        webhookId,
+    );
+  }
+
+  const rawEvents = attributes.events;
+  if (!Array.isArray(rawEvents)) {
+    throw new Error(
+      'LEMONSQUEEZY_WEBHOOK_EVENTS_INVALID:' +
+        webhookId,
+    );
+  }
+  const events = new Set(
+    rawEvents.map((event) => String(event)),
+  );
+  const missingEvents =
+    LEMON_SQUEEZY_REQUIRED_WEBHOOK_EVENTS.filter(
+      (event) => !events.has(event),
+    );
+  if (missingEvents.length > 0) {
+    throw new Error(
+      'LEMONSQUEEZY_WEBHOOK_EVENTS_MISSING:' +
+        missingEvents.join(','),
+    );
+  }
+
+  return {
+    webhookId,
+    webhookUrl: webhookUrl.toString(),
+    requiredEvents: [
+      ...LEMON_SQUEEZY_REQUIRED_WEBHOOK_EVENTS,
+    ],
+    testMode: false,
+  };
+}
+
 export async function ensureLemonSqueezyWebhook(
   input: {
     apiKey: string;

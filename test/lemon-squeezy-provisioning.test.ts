@@ -15,6 +15,7 @@ import {
   parsePrepaidPackSpec,
   readLemonSqueezyProvisioningState,
   validateLemonSqueezyCatalog,
+  validateLemonSqueezyWebhookReadiness,
   writeLemonSqueezyProvisioningState,
   type LemonSqueezyProvisioningState,
 } from '../src/product/lemon-squeezy-provisioning.js';
@@ -655,6 +656,92 @@ test('catalog validation rejects duplicate, wrong-kind, draft, or test-mode vari
     ),
     /VARIANT_TEST_MODE/,
   );
+});
+
+test('webhook readiness validates production URL and complete event coverage without mutation', async () => {
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    assert.equal(init?.method ?? 'GET', 'GET');
+    assert.equal(url.pathname, '/v1/webhooks/4001');
+    return json(
+      resource('webhooks', '4001', {
+        store_id: 1001,
+        url:
+          'https://example.test/api/v1/billing/webhook/lemonsqueezy',
+        events: [
+          ...LEMON_SQUEEZY_REQUIRED_WEBHOOK_EVENTS,
+          'license_key_created',
+        ],
+        test_mode: false,
+      }),
+    );
+  };
+
+  assert.deepEqual(
+    await validateLemonSqueezyWebhookReadiness(
+      {
+        apiKey: 'api',
+        storeId: '1001',
+        webhookId: '4001',
+        webhookUrl:
+          'https://example.test/api/v1/billing/webhook/lemonsqueezy',
+      },
+      fetchImpl,
+    ),
+    {
+      webhookId: '4001',
+      webhookUrl:
+        'https://example.test/api/v1/billing/webhook/lemonsqueezy',
+      requiredEvents: [
+        ...LEMON_SQUEEZY_REQUIRED_WEBHOOK_EVENTS,
+      ],
+      testMode: false,
+    },
+  );
+});
+
+test('webhook readiness fails closed on URL drift or missing required events', async () => {
+  for (const attributes of [
+    {
+      store_id: 1001,
+      url:
+        'https://wrong.example.test/api/v1/billing/webhook/lemonsqueezy',
+      events: [
+        ...LEMON_SQUEEZY_REQUIRED_WEBHOOK_EVENTS,
+      ],
+      test_mode: false,
+    },
+    {
+      store_id: 1001,
+      url:
+        'https://example.test/api/v1/billing/webhook/lemonsqueezy',
+      events: [],
+      test_mode: false,
+    },
+  ]) {
+    const fetchImpl: typeof fetch = async () =>
+      json(
+        resource(
+          'webhooks',
+          '4001',
+          attributes,
+        ),
+      );
+
+    await assert.rejects(
+      validateLemonSqueezyWebhookReadiness(
+        {
+          apiKey: 'api',
+          storeId: '1001',
+          webhookId: '4001',
+          webhookUrl:
+            'https://example.test/api/v1/billing/webhook/lemonsqueezy',
+        },
+        fetchImpl,
+      ),
+      /LEMONSQUEEZY_WEBHOOK_(?:URL_MISMATCH|EVENTS_MISSING)/,
+    );
+  }
 });
 
 test('webhook dry-run reports create/update without exposing or requiring a secret', async () => {
