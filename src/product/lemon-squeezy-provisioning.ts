@@ -181,6 +181,371 @@ async function apiJson(
   return await response.json();
 }
 
+function dataRecords(
+  value: unknown,
+): Record<string, unknown>[] {
+  const root = asRecord(value);
+  if (!Array.isArray(root.data)) {
+    throw new Error(
+      'Lemon Squeezy API returned an invalid data list.',
+    );
+  }
+  return root.data.map((item) => asRecord(item));
+}
+
+function lastPage(value: unknown): number {
+  const root = asRecord(value);
+  if (
+    typeof root.meta !== 'object' ||
+    root.meta === null ||
+    Array.isArray(root.meta)
+  ) {
+    return 1;
+  }
+  const meta = asRecord(root.meta);
+  if (
+    typeof meta.page !== 'object' ||
+    meta.page === null ||
+    Array.isArray(meta.page)
+  ) {
+    return 1;
+  }
+  const page = asRecord(meta.page);
+  const raw = page.lastPage ?? page.last_page ?? 1;
+  const parsed = Number(raw);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > 1000
+  ) {
+    throw new Error(
+      'LEMONSQUEEZY_PAGINATION_INVALID',
+    );
+  }
+  return parsed;
+}
+
+async function apiListAll(
+  input: {
+    apiKey: string;
+    path: string;
+  },
+  fetchImpl: typeof fetch,
+): Promise<Record<string, unknown>[]> {
+  const results: Record<string, unknown>[] = [];
+  for (let page = 1; page <= 1000; page += 1) {
+    const separator = input.path.includes('?')
+      ? '&'
+      : '?';
+    const response = await apiJson(
+      {
+        apiKey: input.apiKey,
+        path:
+          input.path +
+          separator +
+          'page[size]=100&page[number]=' +
+          page,
+      },
+      fetchImpl,
+    );
+    results.push(...dataRecords(response));
+    if (page >= lastPage(response)) {
+      return results;
+    }
+  }
+  throw new Error(
+    'LEMONSQUEEZY_PAGINATION_LIMIT_EXCEEDED',
+  );
+}
+
+export interface LemonSqueezyStoreCandidate {
+  id: string;
+  name: string;
+  slug: string;
+  url: string;
+  currency: string;
+}
+
+export interface LemonSqueezyVariantCandidate {
+  id: string;
+  productId: string;
+  productName: string;
+  productStatus: string;
+  productTestMode: boolean;
+  name: string;
+  price: number | null;
+  isSubscription: boolean;
+  interval: string | null;
+  intervalCount: number | null;
+  status: string;
+  testMode: boolean;
+  eligibleForProduction: boolean;
+}
+
+export async function listLemonSqueezyStores(
+  input: {
+    apiKey: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<LemonSqueezyStoreCandidate[]> {
+  const stores = await apiListAll(
+    {
+      apiKey: input.apiKey,
+      path: '/stores',
+    },
+    fetchImpl,
+  );
+  return stores.map((store) => {
+    const id = NumericIdSchema.parse(
+      String(store.id ?? ''),
+    );
+    const attributes = asRecord(store.attributes);
+    return {
+      id,
+      name: String(attributes.name ?? '').trim(),
+      slug: String(attributes.slug ?? '').trim(),
+      url: String(attributes.url ?? '').trim(),
+      currency: String(
+        attributes.currency ?? '',
+      ).trim(),
+    };
+  });
+}
+
+export async function listLemonSqueezyStoreVariants(
+  input: {
+    apiKey: string;
+    storeId: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<LemonSqueezyVariantCandidate[]> {
+  const storeId = NumericIdSchema.parse(
+    input.storeId.trim(),
+  );
+  const products = await apiListAll(
+    {
+      apiKey: input.apiKey,
+      path:
+        '/products?filter[store_id]=' +
+        encodeURIComponent(storeId),
+    },
+    fetchImpl,
+  );
+  const variants: LemonSqueezyVariantCandidate[] =
+    [];
+
+  for (const product of products) {
+    const productId = NumericIdSchema.parse(
+      String(product.id ?? ''),
+    );
+    const productAttributes = asRecord(
+      product.attributes,
+    );
+    if (
+      String(productAttributes.store_id ?? '') !==
+      storeId
+    ) {
+      throw new Error(
+        'LEMONSQUEEZY_PRODUCT_STORE_MISMATCH:' +
+          productId,
+      );
+    }
+    const productName = String(
+      productAttributes.name ?? '',
+    ).trim();
+    const productStatus = String(
+      productAttributes.status ?? '',
+    ).trim();
+    const productTestMode =
+      productAttributes.test_mode === true;
+
+    const productVariants = await apiListAll(
+      {
+        apiKey: input.apiKey,
+        path:
+          '/variants?filter[product_id]=' +
+          encodeURIComponent(productId),
+      },
+      fetchImpl,
+    );
+    for (const variant of productVariants) {
+      const id = NumericIdSchema.parse(
+        String(variant.id ?? ''),
+      );
+      const attributes = asRecord(
+        variant.attributes,
+      );
+      if (
+        String(attributes.product_id ?? '') !==
+        productId
+      ) {
+        throw new Error(
+          'LEMONSQUEEZY_VARIANT_PRODUCT_MISMATCH:' +
+            id,
+        );
+      }
+      const priceValue = attributes.price;
+      const price =
+        typeof priceValue === 'number' &&
+        Number.isFinite(priceValue)
+          ? priceValue
+          : null;
+      const intervalCountValue =
+        attributes.interval_count;
+      const intervalCount =
+        typeof intervalCountValue === 'number' &&
+        Number.isInteger(intervalCountValue)
+          ? intervalCountValue
+          : null;
+      const status = String(
+        attributes.status ?? '',
+      ).trim();
+      const testMode =
+        attributes.test_mode === true;
+      variants.push({
+        id,
+        productId,
+        productName,
+        productStatus,
+        productTestMode,
+        name: String(
+          attributes.name ?? '',
+        ).trim(),
+        price,
+        isSubscription:
+          attributes.is_subscription === true,
+        interval:
+          attributes.interval === null ||
+          attributes.interval === undefined
+            ? null
+            : String(attributes.interval),
+        intervalCount,
+        status,
+        testMode,
+        eligibleForProduction:
+          productStatus !== 'draft' &&
+          !productTestMode &&
+          status !== 'draft' &&
+          !testMode,
+      });
+    }
+  }
+
+  return variants;
+}
+
+function roleNameMatches(
+  candidate: LemonSqueezyVariantCandidate,
+  role: 'plus' | 'pro',
+): boolean {
+  const text =
+    candidate.productName +
+    ' ' +
+    candidate.name;
+  const escaped = role.replace(
+    /[.*+?^$\{\}()|[\]\\]/g,
+    '\\$&',
+  );
+  return new RegExp(
+    '(^|[^a-z0-9])' +
+      escaped +
+      '([^a-z0-9]|$)',
+    'i',
+  ).test(text);
+}
+
+export function recommendLemonSqueezyPlanVariants(
+  candidates: readonly LemonSqueezyVariantCandidate[],
+): {
+  plusVariantId: string | null;
+  proVariantId: string | null;
+  plusMatches: string[];
+  proMatches: string[];
+} {
+  const subscriptions = candidates.filter(
+    (candidate) =>
+      candidate.isSubscription &&
+      candidate.eligibleForProduction,
+  );
+  const plusMatches = subscriptions
+    .filter((candidate) =>
+      roleNameMatches(candidate, 'plus'),
+    )
+    .map((candidate) => candidate.id);
+  const proMatches = subscriptions
+    .filter((candidate) =>
+      roleNameMatches(candidate, 'pro'),
+    )
+    .map((candidate) => candidate.id);
+
+  const plusVariantId =
+    plusMatches.length === 1
+      ? plusMatches[0]!
+      : null;
+  const proVariantId =
+    proMatches.length === 1 &&
+    proMatches[0] !== plusVariantId
+      ? proMatches[0]!
+      : null;
+
+  return {
+    plusVariantId,
+    proVariantId,
+    plusMatches,
+    proMatches,
+  };
+}
+
+export function inferLemonSqueezyPrepaidCredits(
+  candidate: LemonSqueezyVariantCandidate,
+): number | null {
+  if (
+    candidate.isSubscription ||
+    !candidate.eligibleForProduction
+  ) {
+    return null;
+  }
+  const text =
+    candidate.productName +
+    ' ' +
+    candidate.name;
+
+  const compact = text.match(
+    /(?:^|[^0-9])(\d+(?:\.\d+)?)\s*([kmb])\s*(?:credits?|kredi)(?:[^a-z]|$)/i,
+  );
+  if (compact) {
+    const value = Number(compact[1]);
+    const suffix = compact[2]!.toLowerCase();
+    const multiplier =
+      suffix === 'k'
+        ? 1_000
+        : suffix === 'm'
+          ? 1_000_000
+          : 1_000_000_000;
+    const credits = value * multiplier;
+    return Number.isSafeInteger(credits) &&
+      credits > 0 &&
+      credits <= 1_000_000_000
+      ? credits
+      : null;
+  }
+
+  const explicit = text.match(
+    /(?:^|[^0-9])([\d,]+)\s*(?:credits?|kredi)(?:[^a-z]|$)/i,
+  );
+  if (!explicit) {
+    return null;
+  }
+  const credits = Number(
+    explicit[1]!.replace(/,/g, ''),
+  );
+  return Number.isSafeInteger(credits) &&
+    credits > 0 &&
+    credits <= 1_000_000_000
+    ? credits
+    : null;
+}
+
 async function validateVariant(
   input: {
     apiKey: string;

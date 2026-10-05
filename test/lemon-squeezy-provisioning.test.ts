@@ -9,11 +9,15 @@ import {
   ensureLemonSqueezyWebhook,
   evaluateLemonSqueezyProvisioningReadiness,
   generateLemonSqueezyWebhookSecret,
+  inferLemonSqueezyPrepaidCredits,
   lemonSqueezyProvisioningEnvironment,
+  listLemonSqueezyStores,
+  listLemonSqueezyStoreVariants,
   mergeLemonSqueezyProvisioningEnvironment,
   optionalReadLemonSqueezyProvisioningState,
   parsePrepaidPackSpec,
   readLemonSqueezyProvisioningState,
+  recommendLemonSqueezyPlanVariants,
   validateLemonSqueezyCatalog,
   validateLemonSqueezyWebhookReadiness,
   writeLemonSqueezyProvisioningState,
@@ -35,6 +39,26 @@ function resource(
       id,
       attributes,
     },
+  };
+}
+
+function collection(
+  data: Array<{
+    type: string;
+    id: string;
+    attributes: Record<string, unknown>;
+  }>,
+  currentPage = 1,
+  lastPage = 1,
+) {
+  return {
+    meta: {
+      page: {
+        currentPage,
+        lastPage,
+      },
+    },
+    data,
   };
 }
 
@@ -99,6 +123,324 @@ test('prepaid pack spec parses explicit and generated labels', () => {
       parsePrepaidPackSpec(
         '3003:100:' + 'x'.repeat(81),
       ),
+  );
+});
+
+test('store discovery is GET-only and follows Lemon Squeezy pagination', async () => {
+  const requests: string[] = [];
+  const fetchImpl: typeof fetch = async (
+    input,
+    init,
+  ) => {
+    assert.equal(init?.method ?? 'GET', 'GET');
+    assert.equal(
+      new Headers(init?.headers).get('authorization'),
+      'Bearer api',
+    );
+    const url = new URL(String(input));
+    requests.push(url.pathname + url.search);
+    assert.equal(url.pathname, '/v1/stores');
+    const page = Number(
+      url.searchParams.get('page[number]'),
+    );
+    assert.equal(
+      url.searchParams.get('page[size]'),
+      '100',
+    );
+    if (page === 1) {
+      return json(
+        collection(
+          [
+            {
+              type: 'stores',
+              id: '1001',
+              attributes: {
+                name: 'Nexowire',
+                slug: 'nexowire',
+                url: 'https://nexowire.lemonsqueezy.com',
+                currency: 'USD',
+              },
+            },
+          ],
+          1,
+          2,
+        ),
+      );
+    }
+    if (page === 2) {
+      return json(
+        collection(
+          [
+            {
+              type: 'stores',
+              id: '1002',
+              attributes: {
+                name: 'Archive',
+                slug: 'archive',
+                url: 'https://archive.lemonsqueezy.com',
+                currency: 'EUR',
+              },
+            },
+          ],
+          2,
+          2,
+        ),
+      );
+    }
+    throw new Error('unexpected page');
+  };
+
+  assert.deepEqual(
+    await listLemonSqueezyStores(
+      { apiKey: 'api' },
+      fetchImpl,
+    ),
+    [
+      {
+        id: '1001',
+        name: 'Nexowire',
+        slug: 'nexowire',
+        url: 'https://nexowire.lemonsqueezy.com',
+        currency: 'USD',
+      },
+      {
+        id: '1002',
+        name: 'Archive',
+        slug: 'archive',
+        url: 'https://archive.lemonsqueezy.com',
+        currency: 'EUR',
+      },
+    ],
+  );
+  assert.equal(requests.length, 2);
+});
+
+test('variant discovery keeps production eligibility and recommends unambiguous Plus/Pro subscriptions', async () => {
+  const fetchImpl: typeof fetch = async (
+    input,
+    init,
+  ) => {
+    assert.equal(init?.method ?? 'GET', 'GET');
+    const url = new URL(String(input));
+
+    if (url.pathname === '/v1/products') {
+      assert.equal(
+        url.searchParams.get('filter[store_id]'),
+        '1001',
+      );
+      return json(
+        collection([
+          {
+            type: 'products',
+            id: '10',
+            attributes: {
+              store_id: 1001,
+              name: 'Nexowire Plus',
+              status: 'published',
+              test_mode: false,
+            },
+          },
+          {
+            type: 'products',
+            id: '20',
+            attributes: {
+              store_id: 1001,
+              name: 'Nexowire Pro',
+              status: 'published',
+              test_mode: false,
+            },
+          },
+          {
+            type: 'products',
+            id: '30',
+            attributes: {
+              store_id: 1001,
+              name: 'Nexowire Credits',
+              status: 'published',
+              test_mode: false,
+            },
+          },
+          {
+            type: 'products',
+            id: '40',
+            attributes: {
+              store_id: 1001,
+              name: 'Nexowire Plus Legacy',
+              status: 'draft',
+              test_mode: false,
+            },
+          },
+        ]),
+      );
+    }
+
+    if (url.pathname === '/v1/variants') {
+      const productId = url.searchParams.get(
+        'filter[product_id]',
+      );
+      const byProduct: Record<
+        string,
+        Array<{
+          type: string;
+          id: string;
+          attributes: Record<string, unknown>;
+        }>
+      > = {
+        '10': [
+          {
+            type: 'variants',
+            id: '2001',
+            attributes: {
+              product_id: 10,
+              name: 'Monthly',
+              price: 1200,
+              is_subscription: true,
+              interval: 'month',
+              interval_count: 1,
+              status: 'published',
+              test_mode: false,
+            },
+          },
+        ],
+        '20': [
+          {
+            type: 'variants',
+            id: '2002',
+            attributes: {
+              product_id: 20,
+              name: 'Monthly',
+              price: 2900,
+              is_subscription: true,
+              interval: 'month',
+              interval_count: 1,
+              status: 'published',
+              test_mode: false,
+            },
+          },
+        ],
+        '30': [
+          {
+            type: 'variants',
+            id: '3001',
+            attributes: {
+              product_id: 30,
+              name: '100k credits',
+              price: 900,
+              is_subscription: false,
+              interval: null,
+              interval_count: null,
+              status: 'published',
+              test_mode: false,
+            },
+          },
+        ],
+        '40': [
+          {
+            type: 'variants',
+            id: '4001',
+            attributes: {
+              product_id: 40,
+              name: 'Plus old',
+              price: 500,
+              is_subscription: true,
+              interval: 'month',
+              interval_count: 1,
+              status: 'published',
+              test_mode: false,
+            },
+          },
+        ],
+      };
+      if (!productId || !byProduct[productId]) {
+        throw new Error('unexpected product');
+      }
+      return json(collection(byProduct[productId]!));
+    }
+
+    throw new Error('unexpected URL ' + url);
+  };
+
+  const variants =
+    await listLemonSqueezyStoreVariants(
+      {
+        apiKey: 'api',
+        storeId: '1001',
+      },
+      fetchImpl,
+    );
+
+  assert.equal(variants.length, 4);
+  assert.equal(
+    variants.find((item) => item.id === '3001')
+      ?.isSubscription,
+    false,
+  );
+  assert.equal(
+    variants.find((item) => item.id === '4001')
+      ?.eligibleForProduction,
+    false,
+  );
+  assert.deepEqual(
+    recommendLemonSqueezyPlanVariants(variants),
+    {
+      plusVariantId: '2001',
+      proVariantId: '2002',
+      plusMatches: ['2001'],
+      proMatches: ['2002'],
+    },
+  );
+
+  const plus = variants.find(
+    (item) => item.id === '2001',
+  );
+  assert.ok(plus);
+  const ambiguous =
+    recommendLemonSqueezyPlanVariants([
+      ...variants,
+      {
+        ...plus,
+        id: '2003',
+        name: 'Plus annual',
+      },
+    ]);
+  assert.equal(ambiguous.plusVariantId, null);
+  assert.deepEqual(
+    ambiguous.plusMatches.sort(),
+    ['2001', '2003'],
+  );
+  assert.equal(ambiguous.proVariantId, '2002');
+
+  const prepaid = variants.find(
+    (item) => item.id === '3001',
+  );
+  assert.ok(prepaid);
+  assert.equal(
+    inferLemonSqueezyPrepaidCredits(prepaid),
+    100_000,
+  );
+  assert.equal(
+    inferLemonSqueezyPrepaidCredits({
+      ...prepaid,
+      id: '3002',
+      name: '1.5M credits',
+    }),
+    1_500_000,
+  );
+  assert.equal(
+    inferLemonSqueezyPrepaidCredits({
+      ...prepaid,
+      id: '3003',
+      name: '250,000 kredi',
+    }),
+    250_000,
+  );
+  assert.equal(
+    inferLemonSqueezyPrepaidCredits({
+      ...prepaid,
+      id: '3004',
+      name: 'Starter pack',
+    }),
+    null,
   );
 });
 
