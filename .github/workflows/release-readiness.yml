@@ -13,7 +13,9 @@ on:
       - "test/version.test.ts"
       - "test/release-tag.test.ts"
       - "scripts/check-release-package.ts"
+      - "scripts/build-windows-user-bundle.ts"
       - "scripts/check-release-tag.ts"
+      - "test/windows-user-bundle.test.ts"
       - "scripts/generate-release-metadata.ts"
       - "scripts/verify-release-candidate.ts"
       - "test/release-metadata.test.ts"
@@ -55,6 +57,22 @@ jobs:
           npm run typecheck
           npm run build
           node --import tsx scripts/check-release-package.ts
+      - name: Build Windows one-click user bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          node --import tsx scripts/build-windows-user-bundle.ts --output-dir release-windows --source-sha "${{ github.sha }}"
+      - name: Upload Windows user bundle
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexowire-windows-${{ github.run_id }}-${{ github.sha }}
+          path: |
+            release-windows/Nexowire-Windows-x64.zip
+            release-windows/Nexowire-Setup.cmd
+            release-windows/SHA256SUMS-Windows
+          if-no-files-found: error
+          retention-days: 14
       - name: Enforce exact tag/package version match
         if: runner.os == 'Linux'
         run: npm run release:tag:check
@@ -100,13 +118,29 @@ jobs:
         with:
           name: nexowire-${{ github.run_id }}-${{ github.sha }}
           path: release-candidate
+      - name: Download Windows user bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: nexowire-windows-${{ github.run_id }}-${{ github.sha }}
+          path: release-windows
       - name: Re-check downloaded candidate checksum
         working-directory: release-candidate
         run: sha256sum -c SHA256SUMS
+      - name: Re-check Windows user bundle checksums
+        working-directory: release-windows
+        run: sha256sum -c SHA256SUMS-Windows
       - name: Generate SLSA build provenance attestation
         uses: actions/attest@v4
         with:
           subject-path: "release-candidate/nexowire-*.tgz"
+      - name: Generate Windows payload provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: "release-windows/Nexowire-Windows-x64.zip"
+      - name: Generate Windows setup provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: "release-windows/Nexowire-Setup.cmd"
       - name: Generate SBOM attestation
         uses: actions/attest@v4
         with:
@@ -127,9 +161,17 @@ jobs:
         with:
           name: nexowire-${{ github.run_id }}-${{ github.sha }}
           path: release-candidate
+      - name: Download Windows user bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: nexowire-windows-${{ github.run_id }}-${{ github.sha }}
+          path: release-windows
       - name: Re-check release checksum
         working-directory: release-candidate
         run: sha256sum -c SHA256SUMS
+      - name: Re-check Windows user bundle checksums
+        working-directory: release-windows
+        run: sha256sum -c SHA256SUMS-Windows
       - name: Publish GitHub Release
         working-directory: release-candidate
         env:
@@ -140,6 +182,9 @@ jobs:
             SHA256SUMS \
             release-manifest.json \
             nexowire-sbom.cdx.json \
+            ../release-windows/Nexowire-Setup.cmd \
+            ../release-windows/Nexowire-Windows-x64.zip \
+            ../release-windows/SHA256SUMS-Windows \
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
             --title "Nexowire ${GITHUB_REF_NAME#v}" \
