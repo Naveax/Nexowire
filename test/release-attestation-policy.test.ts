@@ -35,12 +35,22 @@ test('release attestation and publication stay isolated to explicit tag-scoped r
   assert.match(attest, /artifact-metadata: write/);
   assert.match(attest, /actions\/download-artifact@v4/);
   assert.match(attest, /sha256sum -c SHA256SUMS/);
+  assert.match(attest, /sha256sum -c SHA256SUMS-Windows/);
+  assert.match(attest, /nexowire-windows-\$\{\{ github\.run_id \}\}-\$\{\{ github\.sha \}\}/);
 
   const uses = attest.match(/uses: actions\/attest@v4/g) ?? [];
-  assert.equal(uses.length, 2);
+  assert.equal(uses.length, 4);
   assert.match(
     attest,
     /subject-path: "release-candidate\/nexowire-\*\.tgz"/,
+  );
+  assert.match(
+    attest,
+    /subject-path: "release-windows\/Nexowire-Windows-x64\.zip"/,
+  );
+  assert.match(
+    attest,
+    /subject-path: "release-windows\/Nexowire-Setup\.cmd"/,
   );
   assert.match(
     attest,
@@ -65,7 +75,10 @@ test('release attestation and publication stay isolated to explicit tag-scoped r
   assert.match(publish, /contents: write/);
   assert.match(publish, /actions\/download-artifact@v4/);
   assert.match(publish, /sha256sum -c SHA256SUMS/);
+  assert.match(publish, /sha256sum -c SHA256SUMS-Windows/);
   assert.match(publish, /gh release create/);
+  assert.match(publish, /Nexowire-Setup\.cmd/);
+  assert.match(publish, /Nexowire-Windows-x64\.zip/);
   assert.match(publish, /--verify-tag/);
   assert.doesNotMatch(publish, /id-token: write/);
   assert.doesNotMatch(publish, /attestations: write/);

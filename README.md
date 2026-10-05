@@ -86,12 +86,17 @@ See `ROADMAP.md` and `HANDOFF.md` as the implementation grows. The ChatGPT-facin
 
 ## Normal user connection
 
-The normal hosted-device path is intentionally small:
+The normal hosted-device path is intentionally small.
 
-1. Install or open Nexowire on the computer.
-2. Run `nexowire connect` (the desktop launcher should invoke the same flow).
-3. Sign in if the browser asks.
-4. Press **BAĞLA** once.
+For a Windows end user:
+
+1. Download **`Nexowire-Setup.cmd`** from the versioned GitHub Release and open it.
+2. Sign in if the browser asks.
+3. Press **BAĞLA** once.
+
+The setup verifies the version-pinned Windows payload SHA-256, installs its bundled Node runtime and Nexowire under the current user's `%LOCALAPPDATA%\\Nexowire\\versions\\...` directory, creates a Start Menu **Nexowire** shortcut, and launches the same hidden `connect` flow. Node/npm and administrator access are not required.
+
+For a developer or an already installed CLI, `nexowire connect` invokes the same flow.
 
 That is the complete user-facing connection flow. A normal user does not enter a Hub URL, bearer token, Tailscale address, PowerShell command, capability list, or per-tool access selection. Nexowire uses the hosted control plane by default, creates the localhost callback, enrolls the native agent, stores the device credential through the platform-protected secret path, and verifies the data-plane credential automatically.
 

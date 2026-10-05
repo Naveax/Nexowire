@@ -2,7 +2,7 @@
 
 Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifacts are the initial distribution path; npm publishing remains disabled by `"private": true` until an explicit publishing decision is made.
 
-## Published stable release\n\nNexowire v1.0.0 was published on 2026-10-01 from tag `v1.0.0` at commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed all package, verification, attestation, and GitHub Release publication jobs. The GitHub Release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, and CycloneDX SBOM. npm publication remains disabled.\n\n## Local release candidate check
+## Published stable release\n\nNexowire v1.0.0 was published on 2026-10-01 from tag `v1.0.0` at commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed all package, verification, attestation, and GitHub Release publication jobs. The original v1.0.0 GitHub Release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, and CycloneDX SBOM. Windows one-click assets are added by the next version-tagged release; the existing v1.0.0 release remains immutable. npm publication remains disabled.\n\n## Local release candidate check
 
 Run:
 
@@ -22,9 +22,23 @@ npm run release:verify -- nexowire-<version>.tgz
 - the built CLI keeps its executable shebang
 - CLI help reports the same version as `package.json`
 - the npm tarball contains the runtime, bundled skills, README, and package metadata
+- the Windows user bundle is built on a Windows runner from a checksum-verified official Node runtime and passes a bundled-runtime smoke test
 - source, tests, GitHub workflow files, handoff state, and environment templates are not accidentally shipped
 - every shipped skill contains its `SKILL.md`
 - package file count and unpacked size remain bounded
+
+## Windows one-click user distribution
+
+The version-tagged GitHub Release also carries a Windows end-user path that does not require a preinstalled Node.js/npm toolchain:
+
+- `Nexowire-Setup.cmd` is the file a normal Windows user opens.
+- `Nexowire-Windows-x64.zip` is the versioned payload containing the built Nexowire runtime, production-only npm dependencies, bundled skills, an official Windows x64 Node runtime, and the Node distribution license.
+- `SHA256SUMS-Windows` binds both Windows release assets.
+- the setup script embeds the exact payload SHA-256, downloads only the matching `v<package-version>` GitHub Release asset, verifies it before extraction, and installs under `%LOCALAPPDATA%\\Nexowire\\versions\\<version>-<source-sha>`.
+- installation requires no administrator elevation. A Start Menu `Nexowire` shortcut launches the connect process hidden through the bundled runtime.
+- the native-agent lifecycle therefore records stable versioned runtime paths instead of a temporary Downloads/extraction path.
+
+The Windows ZIP/setup assets receive their own release provenance attestations on tagged publication. The existing npm tarball remains the canonical developer/self-host artifact and its verification contract is unchanged.
 
 ## Runtime skill lookup
 
