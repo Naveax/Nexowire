@@ -116,6 +116,8 @@
 - [x] Cloudflare Worker + D1 control plane with migrations through MCP OAuth
 - [x] GitHub OAuth sign-in and signed Nexowire sessions
 - [x] one-click browser pairing and per-device agent credentials
+- [x] reduce normal hosted onboarding to `nexowire connect` -> sign in if needed -> **BAĞLA**, with the production control-plane endpoint baked in and no token/URL/Tailscale/capability-selection UI
+- [x] keep physical-console access outside routine onboarding/automation; prefer private desktop, browser, and structured controls unless the user explicitly requests visible-desktop control
 - [x] OAuth 2.1 + PKCE hosted MCP authorization
 - [x] hosted account device isolation and MCP usage metering
 - [x] automated Cloudflare production deployment workflow with generated secret-free runtime config

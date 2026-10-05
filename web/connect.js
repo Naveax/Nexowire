@@ -13,11 +13,14 @@ function setPill(text, stateClass) {
   pill.className = 'pill ' + stateClass;
 }
 
-function showError(message) {
+function showError(message, retryable = false) {
   setPill('Hata', 'bad');
   $('error-message').textContent = message;
   $('error-panel').classList.remove('hidden');
-  $('approve').disabled = true;
+  const approve = $('approve');
+  approve.disabled = !retryable;
+  approve.textContent = retryable ? 'TEKRAR DENE' : 'BAĞLA';
+  approve.dataset.busy = 'false';
 }
 
 function validatedLoopbackCallback() {
@@ -48,16 +51,16 @@ async function loadAccount() {
   const callback = validatedLoopbackCallback();
   if (!callback) {
     $('device-name').textContent = 'Nexowire uygulaması gerekli';
-    $('platform').textContent = 'Bu sayfayı doğrudan açmak yerine uygulamada BAĞLA seç.';
+    $('platform').textContent = 'Bu sayfayı uygulamadaki BAĞLA düğmesi açar.';
     $('status-title').textContent = 'Bağlantı isteği yok';
     $('status-text').textContent =
-      'Nexowire uygulaması güvenli bir localhost callback oluşturduğunda bu sayfa otomatik açılır.';
+      'Nexowire uygulamasını açıp BAĞLA düğmesine bas.';
     setPill('Bekleniyor', 'muted');
     return;
   }
 
   $('device-name').textContent = deviceName;
-  $('platform').textContent = platform || 'unknown';
+  $('platform').textContent = platform || 'Cihaz';
 
   const response = await fetch('/api/v1/me/dashboard', {
     credentials: 'include',
@@ -74,35 +77,27 @@ async function loadAccount() {
   }
 
   if (!response.ok) {
-    throw new Error('Hesap bilgisi alınamadı (HTTP ' + response.status + ').');
+    throw new Error('Hesap doğrulanamadı. Lütfen tekrar dene.');
   }
 
-  const dashboard = await response.json();
-  $('plan').textContent = String(dashboard.planId ?? '—').toUpperCase();
-
-  const usage = dashboard.usage ?? {};
-  if (typeof usage.monthlyCredits === 'number') {
-    $('usage').textContent =
-      String(usage.usedCredits ?? 0) +
-      ' / ' +
-      String(usage.monthlyCredits) +
-      ' kredi';
-  } else {
-    $('usage').textContent =
-      String(usage.prepaidCredits ?? 0) +
-      ' prepaid kredi';
-  }
-
-  $('status-title').textContent = 'Bağlantıya hazır';
+  $('status-title').textContent = 'Hazır';
   $('status-text').textContent =
-    'BAĞLA dediğinde bu bilgisayar hesabına eklenir. Free hesaplarda aynı cihaz anchor kullanan yeni hesaplar aynı kotayı paylaşır.';
+    'Ekstra erişim ayarı gerekmez. BAĞLA dediğinde cihaz hesabına eklenir ve bağlantı otomatik hazırlanır.';
   $('approve').disabled = false;
   setPill('Hazır', 'good');
 
   $('approve').addEventListener('click', async () => {
-    $('approve').disabled = true;
+    const approve = $('approve');
+    if (approve.dataset.busy === 'true') return;
+
+    approve.dataset.busy = 'true';
+    approve.disabled = true;
+    approve.textContent = 'BAĞLANIYOR…';
+    $('error-panel').classList.add('hidden');
     setPill('Bağlanıyor', 'muted');
-    $('status-title').textContent = 'Cihaz kaydı hazırlanıyor';
+    $('status-title').textContent = 'Bağlanıyor';
+    $('status-text').textContent =
+      'Başka bir ayar yapmana gerek yok.';
 
     try {
       const pairing = await fetch('/api/v1/pairing', {
@@ -120,15 +115,11 @@ async function loadAccount() {
         if (pairing.status === 403) {
           throw new Error(
             body.error === 'DEVICE_LIMIT_REACHED'
-              ? 'Bu planın cihaz limiti dolmuş.'
-              : 'Bu hesap bu cihazı bağlayamıyor.',
+              ? 'Bu hesap için cihaz limiti dolu.'
+              : 'Bu cihaz bu hesaba bağlanamadı.',
           );
         }
-        throw new Error(
-          'Pairing oluşturulamadı (HTTP ' +
-            pairing.status +
-            ').',
-        );
+        throw new Error('Bağlantı hazırlanamadı.');
       }
 
       const body = await pairing.json();
@@ -136,7 +127,7 @@ async function loadAccount() {
         typeof body.pairingId !== 'string' ||
         typeof body.token !== 'string'
       ) {
-        throw new Error('Pairing cevabı geçersiz.');
+        throw new Error('Bağlantı cevabı geçersiz.');
       }
 
       callback.searchParams.set('state', state);
@@ -146,13 +137,18 @@ async function loadAccount() {
     } catch (error) {
       showError(
         error instanceof Error ? error.message : String(error),
+        true,
       );
+      $('status-title').textContent = 'Tekrar deneyebilirsin';
+      $('status-text').textContent =
+        'Ayarları değiştirmen gerekmez.';
     }
-  }, { once: true });
+  });
 }
 
 loadAccount().catch((error) => {
   showError(
     error instanceof Error ? error.message : String(error),
+    false,
   );
 });

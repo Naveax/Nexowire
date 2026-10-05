@@ -84,6 +84,21 @@ The first milestones establish shared protocol types, a native execution backend
 
 See `ROADMAP.md` and `HANDOFF.md` as the implementation grows. The ChatGPT-facing compatibility contract is versioned separately as MCP surface v1; `nexowire_surface_info` reports the MCP surface and native-agent protocol versions, and `docs/MCP_SURFACE.md` defines the compatibility rules.
 
+## Normal user connection
+
+The normal hosted-device path is intentionally small:
+
+1. Install or open Nexowire on the computer.
+2. Run `nexowire connect` (the desktop launcher should invoke the same flow).
+3. Sign in if the browser asks.
+4. Press **BAĞLA** once.
+
+That is the complete user-facing connection flow. A normal user does not enter a Hub URL, bearer token, Tailscale address, PowerShell command, capability list, or per-tool access selection. Nexowire uses the hosted control plane by default, creates the localhost callback, enrolls the native agent, stores the device credential through the platform-protected secret path, and verifies the data-plane credential automatically.
+
+Physical-console control is not part of routine connection or automation. Nexowire should prefer private-desktop, browser, and structured controls. The physical-console override remains an exceptional path for cases where the user explicitly asks to control the visible Windows desktop.
+
+Advanced self-hosting, endpoint overrides, credential rotation, and operator policy configuration remain available, but they are not part of the normal user onboarding path.
+
 ## Security
 
 Nexowire supports both first-party revocable credentials and optional external OIDC/JWT identity for MCP clients. External identities still pass through Nexowire tool/device/route/role authorization; they do not bypass policy.

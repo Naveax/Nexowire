@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import {
   buildConnectApprovalUrl,
   connectNexowire,
+  DEFAULT_HOSTED_CONTROL_PLANE_URL,
   normalizeControlPlaneUrl,
   parseConnectArgs,
   startConnectLoopbackReceiver,
@@ -31,7 +32,11 @@ test('control-plane URL requires HTTPS except loopback development', () => {
   );
 });
 
-test('connect CLI accepts env URL and rejects unknown flags', () => {
+test('connect CLI defaults to hosted Nexowire and keeps advanced overrides', () => {
+  assert.deepEqual(parseConnectArgs([], {}), {
+    controlPlaneUrl: DEFAULT_HOSTED_CONTROL_PLANE_URL,
+  });
+
   assert.deepEqual(
     parseConnectArgs([], {
       NEXOWIRE_CONTROL_PLANE_URL: 'https://example.com/',
@@ -41,10 +46,18 @@ test('connect CLI accepts env URL and rejects unknown flags', () => {
     },
   );
 
+  assert.deepEqual(
+    parseConnectArgs(
+      ['--control-plane-url', 'https://override.example/'],
+      { NEXOWIRE_CONTROL_PLANE_URL: 'https://env.example' },
+    ),
+    {
+      controlPlaneUrl: 'https://override.example',
+    },
+  );
+
   assert.throws(
-    () => parseConnectArgs(['--wat'], {
-      NEXOWIRE_CONTROL_PLANE_URL: 'https://example.com',
-    }),
+    () => parseConnectArgs(['--wat'], {}),
     /Unknown connect option/,
   );
 });

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Nexowire cihaz bağla</title>
+  <title>Nexowire'a bağlan</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -13,45 +13,30 @@
     <div id="connect-pill" class="pill muted">Hazırlanıyor</div>
   </header>
 
-  <main class="shell">
+  <main class="shell connect-shell">
     <section class="hero">
       <div>
-        <p class="eyebrow">Cihaz bağlantısı</p>
+        <p class="eyebrow">Nexowire</p>
         <h1>Bu bilgisayarı bağla</h1>
         <p class="subtle">
-          Cihaz yalnız onayından sonra Nexowire hesabına eklenir.
+          Bir kez BAĞLA'ya bas. Kurulum ve güvenli bağlantının geri kalanını Nexowire tamamlar.
         </p>
       </div>
     </section>
 
-    <section class="grid">
-      <article class="card">
-        <span class="label">Cihaz</span>
-        <strong id="device-name">—</strong>
-        <small id="platform">—</small>
-      </article>
-      <article class="card">
-        <span class="label">Hesap planı</span>
-        <strong id="plan">—</strong>
-        <small id="usage">—</small>
-      </article>
-    </section>
+    <section class="card connect-card">
+      <span class="label">Bu cihaz</span>
+      <strong id="device-name">—</strong>
+      <small id="platform">Hazırlanıyor</small>
 
-    <section class="section-head">
-      <div>
-        <p class="eyebrow">Onay</p>
-        <h2 id="status-title">Oturum kontrol ediliyor</h2>
+      <div class="connect-copy">
+        <h2 id="status-title">Hesap kontrol ediliyor</h2>
+        <p id="status-text" class="subtle">
+          Gerekirse giriş ekranı otomatik açılır.
+        </p>
       </div>
-    </section>
 
-    <section class="card">
-      <p id="status-text" class="subtle">
-        Hesap bilgisi alınıyor.
-      </p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:auto">
-        <button id="approve" class="primary" disabled>BAĞLA</button>
-        <a href="/" class="secondary" style="text-decoration:none">İptal</a>
-      </div>
+      <button id="approve" class="primary connect-button" disabled>BAĞLA</button>
     </section>
 
     <section id="error-panel" class="error-panel hidden">
