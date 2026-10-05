@@ -4,6 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import {
+  inspectProtectedSecretFile,
+} from '../security/protected-secret-files.js';
+import {
   LEMON_SQUEEZY_ORDER_EVENT_NAMES,
   LEMON_SQUEEZY_SUBSCRIPTION_EVENT_NAMES,
 } from './lemon-squeezy-billing.js';
@@ -546,6 +549,204 @@ export async function optionalReadLemonSqueezyProvisioningState(
     }
     throw error;
   }
+}
+
+export type LemonSqueezyProvisioningBlocker =
+  | 'WINDOWS_OWNER_DPAPI_REQUIRED'
+  | 'PROVISIONING_CONFIG_MISSING'
+  | 'INVALID_PROVISIONING_CONFIG'
+  | 'API_KEY_PROTECTED_FILE_MISSING'
+  | 'API_KEY_PROTECTED_FILE_INVALID'
+  | 'WEBHOOK_SECRET_PROTECTED_FILE_MISSING'
+  | 'WEBHOOK_SECRET_PROTECTED_FILE_INVALID';
+
+export interface LemonSqueezyProvisioningReadiness {
+  provider: 'lemonsqueezy';
+  platform: NodeJS.Platform;
+  platformSupported: boolean;
+  readyForProvisionedBootstrap: boolean;
+  blockers: LemonSqueezyProvisioningBlocker[];
+  config: {
+    path: string;
+    exists: boolean;
+    valid: boolean;
+    catalog: {
+      storeId: string;
+      plusVariantId: string;
+      proVariantId: string;
+      prepaidPackCount: number;
+      webhookId: string;
+      webhookUrl: string;
+      updatedAt: string;
+    } | null;
+  };
+  protectedSecrets: {
+    apiKey: {
+      path: string;
+      present: boolean;
+      validEnvelope: boolean;
+    };
+    webhookSecret: {
+      path: string;
+      present: boolean;
+      validEnvelope: boolean;
+    };
+  };
+  liveProviderValidated: false;
+}
+
+async function regularFilePresent(file: string): Promise<boolean> {
+  try {
+    return (await fs.stat(file)).isFile();
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function inspectProtectedEnvelope(
+  file: string,
+  expectedPurpose: string,
+): Promise<{
+  present: boolean;
+  validEnvelope: boolean;
+}> {
+  const present = await regularFilePresent(file);
+  if (!present) {
+    return {
+      present: false,
+      validEnvelope: false,
+    };
+  }
+
+  try {
+    const metadata = inspectProtectedSecretFile(file);
+    return {
+      present: true,
+      validEnvelope:
+        metadata.protection ===
+          'windows-dpapi-current-user' &&
+        metadata.purpose === expectedPurpose,
+    };
+  } catch {
+    return {
+      present: true,
+      validEnvelope: false,
+    };
+  }
+}
+
+export async function evaluateLemonSqueezyProvisioningReadiness(
+  input: {
+    homeDir?: string;
+    platform?: NodeJS.Platform;
+  } = {},
+): Promise<LemonSqueezyProvisioningReadiness> {
+  const platform = input.platform ?? process.platform;
+  const paths = defaultLemonSqueezyProvisioningPaths(
+    input.homeDir,
+  );
+  const platformSupported = platform === 'win32';
+  const blockers: LemonSqueezyProvisioningBlocker[] = [];
+
+  if (!platformSupported) {
+    blockers.push('WINDOWS_OWNER_DPAPI_REQUIRED');
+  }
+
+  const [
+    configExists,
+    apiKeyEnvelope,
+    webhookSecretEnvelope,
+  ] = await Promise.all([
+    regularFilePresent(paths.configFile),
+    inspectProtectedEnvelope(
+      paths.apiKeyFile,
+      'billing-lemonsqueezy-api-key',
+    ),
+    inspectProtectedEnvelope(
+      paths.webhookSecretFile,
+      'billing-lemonsqueezy-webhook-secret',
+    ),
+  ]);
+
+  let configState: LemonSqueezyProvisioningState | null = null;
+  let configValid = false;
+
+  if (!configExists) {
+    blockers.push('PROVISIONING_CONFIG_MISSING');
+  } else {
+    try {
+      configState =
+        await readLemonSqueezyProvisioningState(
+          paths.configFile,
+        );
+      configValid = true;
+    } catch {
+      blockers.push('INVALID_PROVISIONING_CONFIG');
+    }
+  }
+
+  if (!apiKeyEnvelope.present) {
+    blockers.push('API_KEY_PROTECTED_FILE_MISSING');
+  } else if (!apiKeyEnvelope.validEnvelope) {
+    blockers.push('API_KEY_PROTECTED_FILE_INVALID');
+  }
+  if (!webhookSecretEnvelope.present) {
+    blockers.push(
+      'WEBHOOK_SECRET_PROTECTED_FILE_MISSING',
+    );
+  } else if (!webhookSecretEnvelope.validEnvelope) {
+    blockers.push(
+      'WEBHOOK_SECRET_PROTECTED_FILE_INVALID',
+    );
+  }
+
+  return {
+    provider: 'lemonsqueezy',
+    platform,
+    platformSupported,
+    readyForProvisionedBootstrap:
+      platformSupported &&
+      configValid &&
+      apiKeyEnvelope.validEnvelope &&
+      webhookSecretEnvelope.validEnvelope,
+    blockers,
+    config: {
+      path: paths.configFile,
+      exists: configExists,
+      valid: configValid,
+      catalog: configState
+        ? {
+            storeId: configState.storeId,
+            plusVariantId: configState.plusVariantId,
+            proVariantId: configState.proVariantId,
+            prepaidPackCount:
+              configState.prepaidPacks.length,
+            webhookId: configState.webhookId,
+            webhookUrl: configState.webhookUrl,
+            updatedAt: configState.updatedAt,
+          }
+        : null,
+    },
+    protectedSecrets: {
+      apiKey: {
+        path: paths.apiKeyFile,
+        ...apiKeyEnvelope,
+      },
+      webhookSecret: {
+        path: paths.webhookSecretFile,
+        ...webhookSecretEnvelope,
+      },
+    },
+    liveProviderValidated: false,
+  };
 }
 
 const PROVISIONING_ENV_KEYS = [

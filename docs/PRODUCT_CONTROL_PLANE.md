@@ -29,6 +29,18 @@ Nexowire is moving from a single-owner self-hosted tool toward a multi-user prod
 
 Prices are deliberately not embedded in the runtime. Subscription and prepaid-pack prices remain provider-side. The runtime maps approved provider variant IDs to technical entitlements or prepaid credit quantities only.
 
+## Production billing provisioning status
+
+Before running live Lemon Squeezy acceptance, an owner can run:
+
+```powershell
+npm run billing:status
+```
+
+The command is deliberately non-interactive and local-only. It does not contact Lemon Squeezy and does not decrypt or print the API key or webhook signing secret. It validates the non-secret provisioning config, checks the two expected protected-secret envelope files and their purpose metadata without decrypting ciphertext, reports the configured store/variant/webhook metadata, and returns stable blocker codes such as `PROVISIONING_CONFIG_MISSING`, `API_KEY_PROTECTED_FILE_MISSING`, or `API_KEY_PROTECTED_FILE_INVALID`.
+
+`readyForProvisionedBootstrap: true` means only that the local Windows provisioning artifacts required by the protected bootstrap are present, their protected envelopes have the expected metadata/purpose, and the non-secret config parses successfully. It is not proof that the live provider catalog, checkout, webhook, refund, quota, or billing flows have passed production acceptance. That separate acceptance still requires the real live-mode provider configuration.
+
 Custom prepaid plans are explicitly provisioned by an administrator. A signed one-time-payment webhook can increase an existing Custom prepaid balance, but it cannot silently convert a Free/Plus/Pro account into Custom or create postpaid debt.
 
 ## Scale target

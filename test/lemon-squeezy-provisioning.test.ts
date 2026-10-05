@@ -7,6 +7,7 @@ import {
   LEMON_SQUEEZY_REQUIRED_WEBHOOK_EVENTS,
   defaultLemonSqueezyProvisioningPaths,
   ensureLemonSqueezyWebhook,
+  evaluateLemonSqueezyProvisioningReadiness,
   generateLemonSqueezyWebhookSecret,
   lemonSqueezyProvisioningEnvironment,
   mergeLemonSqueezyProvisioningEnvironment,
@@ -55,6 +56,15 @@ function state(): LemonSqueezyProvisioningState {
       'https://example.test/api/v1/billing/webhook/lemonsqueezy',
     updatedAt: '2026-10-04T18:00:00.000Z',
   };
+}
+
+function protectedEnvelope(purpose: string): string {
+  return JSON.stringify({
+    version: 1,
+    protection: 'windows-dpapi-current-user',
+    purpose,
+    ciphertext: 'opaque-ciphertext-marker',
+  });
 }
 
 test('generated webhook secret fits Lemon Squeezy signing-secret bounds', () => {
@@ -109,6 +119,304 @@ test('provisioning state round-trips and missing state is optional', async () =>
     );
   } finally {
     await fs.rm(dir, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test('provisioning readiness reports exact missing local artifacts without reading secrets', async () => {
+  const homeDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-lemon-readiness-missing-'),
+  );
+  const paths =
+    defaultLemonSqueezyProvisioningPaths(homeDir);
+
+  try {
+    const readiness =
+      await evaluateLemonSqueezyProvisioningReadiness({
+        homeDir,
+        platform: 'win32',
+      });
+
+    assert.equal(readiness.platformSupported, true);
+    assert.equal(
+      readiness.readyForProvisionedBootstrap,
+      false,
+    );
+    assert.deepEqual(readiness.blockers, [
+      'PROVISIONING_CONFIG_MISSING',
+      'API_KEY_PROTECTED_FILE_MISSING',
+      'WEBHOOK_SECRET_PROTECTED_FILE_MISSING',
+    ]);
+    assert.equal(readiness.config.exists, false);
+    assert.equal(readiness.config.valid, false);
+    assert.equal(readiness.config.catalog, null);
+    assert.deepEqual(
+      readiness.protectedSecrets.apiKey,
+      {
+        path: paths.apiKeyFile,
+        present: false,
+        validEnvelope: false,
+      },
+    );
+    assert.deepEqual(
+      readiness.protectedSecrets.webhookSecret,
+      {
+        path: paths.webhookSecretFile,
+        present: false,
+        validEnvelope: false,
+      },
+    );
+    assert.equal(readiness.liveProviderValidated, false);
+  } finally {
+    await fs.rm(homeDir, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test('provisioning readiness exposes only non-secret catalog metadata when local artifacts are complete', async () => {
+  const homeDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-lemon-readiness-complete-'),
+  );
+  const paths =
+    defaultLemonSqueezyProvisioningPaths(homeDir);
+
+  try {
+    await writeLemonSqueezyProvisioningState(
+      paths.configFile,
+      state(),
+    );
+    await Promise.all([
+      fs.writeFile(
+        paths.apiKeyFile,
+        protectedEnvelope('billing-lemonsqueezy-api-key'),
+      ),
+      fs.writeFile(
+        paths.webhookSecretFile,
+        protectedEnvelope(
+          'billing-lemonsqueezy-webhook-secret',
+        ),
+      ),
+    ]);
+
+    const readiness =
+      await evaluateLemonSqueezyProvisioningReadiness({
+        homeDir,
+        platform: 'win32',
+      });
+
+    assert.equal(
+      readiness.readyForProvisionedBootstrap,
+      true,
+    );
+    assert.deepEqual(readiness.blockers, []);
+    assert.equal(readiness.config.valid, true);
+    assert.deepEqual(readiness.config.catalog, {
+      storeId: '1001',
+      plusVariantId: '2001',
+      proVariantId: '2002',
+      prepaidPackCount: 1,
+      webhookId: '4001',
+      webhookUrl:
+        'https://example.test/api/v1/billing/webhook/lemonsqueezy',
+      updatedAt: '2026-10-04T18:00:00.000Z',
+    });
+    assert.deepEqual(
+      readiness.protectedSecrets.apiKey,
+      {
+        path: paths.apiKeyFile,
+        present: true,
+        validEnvelope: true,
+      },
+    );
+    assert.deepEqual(
+      readiness.protectedSecrets.webhookSecret,
+      {
+        path: paths.webhookSecretFile,
+        present: true,
+        validEnvelope: true,
+      },
+    );
+
+    const serialized = JSON.stringify(readiness);
+    assert.doesNotMatch(
+      serialized,
+      /opaque-ciphertext-marker/,
+    );
+  } finally {
+    await fs.rm(homeDir, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test('provisioning readiness rejects malformed or wrong-purpose protected envelopes without decrypting them', async () => {
+  const homeDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-lemon-readiness-envelope-'),
+  );
+  const paths =
+    defaultLemonSqueezyProvisioningPaths(homeDir);
+
+  try {
+    await writeLemonSqueezyProvisioningState(
+      paths.configFile,
+      state(),
+    );
+    await Promise.all([
+      fs.writeFile(
+        paths.apiKeyFile,
+        protectedEnvelope('wrong-purpose'),
+      ),
+      fs.writeFile(
+        paths.webhookSecretFile,
+        protectedEnvelope(
+          'billing-lemonsqueezy-webhook-secret',
+        ),
+      ),
+    ]);
+
+    const readiness =
+      await evaluateLemonSqueezyProvisioningReadiness({
+        homeDir,
+        platform: 'win32',
+      });
+
+    assert.equal(
+      readiness.readyForProvisionedBootstrap,
+      false,
+    );
+    assert.deepEqual(readiness.blockers, [
+      'API_KEY_PROTECTED_FILE_INVALID',
+    ]);
+    assert.deepEqual(
+      readiness.protectedSecrets.apiKey,
+      {
+        path: paths.apiKeyFile,
+        present: true,
+        validEnvelope: false,
+      },
+    );
+    assert.equal(
+      readiness.protectedSecrets.webhookSecret.validEnvelope,
+      true,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(readiness),
+      /opaque-ciphertext-marker|wrong-purpose/,
+    );
+  } finally {
+    await fs.rm(homeDir, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test('provisioning readiness fails closed on malformed config without echoing its contents', async () => {
+  const homeDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-lemon-readiness-invalid-'),
+  );
+  const paths =
+    defaultLemonSqueezyProvisioningPaths(homeDir);
+  const marker = 'do-not-echo-this-invalid-value';
+
+  try {
+    await fs.mkdir(paths.directory, {
+      recursive: true,
+    });
+    await fs.writeFile(
+      paths.configFile,
+      JSON.stringify({
+        provider: 'lemonsqueezy',
+        unexpected: marker,
+      }),
+    );
+    await Promise.all([
+      fs.writeFile(
+        paths.apiKeyFile,
+        protectedEnvelope('billing-lemonsqueezy-api-key'),
+      ),
+      fs.writeFile(
+        paths.webhookSecretFile,
+        protectedEnvelope(
+          'billing-lemonsqueezy-webhook-secret',
+        ),
+      ),
+    ]);
+
+    const readiness =
+      await evaluateLemonSqueezyProvisioningReadiness({
+        homeDir,
+        platform: 'win32',
+      });
+
+    assert.equal(readiness.config.exists, true);
+    assert.equal(readiness.config.valid, false);
+    assert.equal(readiness.config.catalog, null);
+    assert.equal(
+      readiness.readyForProvisionedBootstrap,
+      false,
+    );
+    assert.deepEqual(readiness.blockers, [
+      'INVALID_PROVISIONING_CONFIG',
+    ]);
+    assert.doesNotMatch(
+      JSON.stringify(readiness),
+      new RegExp(marker),
+    );
+  } finally {
+    await fs.rm(homeDir, {
+      recursive: true,
+      force: true,
+    });
+  }
+});
+
+test('provisioning readiness reports the Windows DPAPI platform gate separately', async () => {
+  const homeDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-lemon-readiness-platform-'),
+  );
+  const paths =
+    defaultLemonSqueezyProvisioningPaths(homeDir);
+
+  try {
+    await writeLemonSqueezyProvisioningState(
+      paths.configFile,
+      state(),
+    );
+    await Promise.all([
+      fs.writeFile(
+        paths.apiKeyFile,
+        protectedEnvelope('billing-lemonsqueezy-api-key'),
+      ),
+      fs.writeFile(
+        paths.webhookSecretFile,
+        protectedEnvelope(
+          'billing-lemonsqueezy-webhook-secret',
+        ),
+      ),
+    ]);
+
+    const readiness =
+      await evaluateLemonSqueezyProvisioningReadiness({
+        homeDir,
+        platform: 'linux',
+      });
+
+    assert.equal(readiness.platformSupported, false);
+    assert.equal(
+      readiness.readyForProvisionedBootstrap,
+      false,
+    );
+    assert.deepEqual(readiness.blockers, [
+      'WINDOWS_OWNER_DPAPI_REQUIRED',
+    ]);
+  } finally {
+    await fs.rm(homeDir, {
       recursive: true,
       force: true,
     });
