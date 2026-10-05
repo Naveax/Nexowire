@@ -2,7 +2,11 @@
 
 Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifacts are the initial distribution path; npm publishing remains disabled by `"private": true` until an explicit publishing decision is made.
 
-## Published stable release\n\nNexowire v1.0.0 was published on 2026-10-01 from tag `v1.0.0` at commit `98d040c284efad7f726c3d3ccaa1771d385ed60d`. Tag-scoped Release Readiness run `36890669730` passed all package, verification, attestation, and GitHub Release publication jobs. The original v1.0.0 GitHub Release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, and CycloneDX SBOM. The v1.0.1 release adds the Windows one-click setup/payload path while the existing v1.0.0 release remains immutable. npm publication remains disabled.\n\n## Local release candidate check
+## Published stable release
+
+Nexowire v1.0.1 was published on 2026-10-05 from tag `v1.0.1` at commit `43779b1de5543146a283ae80771e65c51020bef2`. Authorized publisher run `37324592840` created the exact tag after its final release gate. Because GitHub suppresses recursive workflow triggers from `GITHUB_TOKEN` tag pushes, the tag-scoped Release Readiness run was explicitly dispatched once as run `37324999923`; it passed Linux/macOS/Windows packaging, the real Windows `cmd.exe` setup smoke, provenance/SBOM attestations, and GitHub Release publication. The public release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, CycloneDX SBOM, `Nexowire-Setup.cmd`, `Nexowire-Windows-x64.zip`, and `SHA256SUMS-Windows`. Independent post-publication download/hash/manifest/setup-pin checks and `gh attestation verify` passed for the canonical tarball, Windows payload, and setup script. The original v1.0.0 release remains immutable; npm publication remains disabled.
+
+## Local release candidate check
 
 Run:
 
@@ -55,13 +59,13 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The v1 release line is now versioned as `1.0.0`. GitHub Release is the initial distribution path; npm publication remains intentionally disabled by `"private": true`.
+The current stable v1 release line is versioned as `1.0.1`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
 
 ## Explicit GitHub Release authorization
 
 Official GitHub publication is a separate, auditable mutation. The repository contains a publication workflow that runs only when an exact version authorization marker is merged to `main`. The workflow validates that the marker matches `v<package-version>`, creates or verifies the matching tag, and explicitly dispatches the tag-scoped release-readiness workflow. This explicit dispatch is required because a tag pushed with the workflow `GITHUB_TOKEN` does not recursively start another workflow. Before dispatching, the publisher checks for an already-active or successful Release Readiness run for the same tag and exact SHA, preventing duplicate release runs. The tag-scoped workflow reruns package verification, produces the canonical tarball/checksum/manifest/SBOM set plus Windows user assets, creates provenance/SBOM attestations, and publishes the GitHub Release only after all required jobs succeed.
 
-The initial v1.0.0 release keeps npm publishing disabled. Enabling npm requires a separate package-policy change because the release verifier intentionally requires `"private": true`.
+The v1 release line keeps npm publishing disabled. Enabling npm requires a separate package-policy change because the release verifier intentionally requires `"private": true`.
 
 ## Release provenance metadata
 

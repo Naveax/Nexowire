@@ -86,7 +86,7 @@
 - [x] independently verify generated checksum/manifest/SBOM evidence before candidate upload
 - [x] exact tag/package-version enforcement before canonical packaging on `v*` tag-triggered readiness runs
 - [x] tag-only SLSA build provenance and CycloneDX SBOM attestations after verified candidate download with isolated OIDC/attestation permissions
-- [x] GitHub v1.0.0 published with verified package artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, SLSA provenance, and SBOM attestation; npm publication remains intentionally disabled for the initial self-hosted release
+- [x] GitHub v1.0.0 published with verified package artifacts, SHA256SUMS, release manifest, CycloneDX SBOM, SLSA provenance, and SBOM attestation; npm publication remains intentionally disabled for the initial self-hosted release\n- [x] GitHub v1.0.1 published with checksum-pinned Windows one-click setup/payload assets, real `cmd.exe` installation smoke, Windows provenance attestations, independent post-publication hash/manifest/setup-pin verification, and duplicate-safe authorized Release Readiness dispatch
 
 ## Post-v1 - Private desktop and isolated input
 
