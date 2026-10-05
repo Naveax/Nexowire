@@ -77,6 +77,22 @@ function assertUnique(
   }
 }
 
+const LITERAL_MARKDOWN_LINE_BREAK_ARTIFACT =
+  /\\(?:r\\n|n)(?=(?:#{1,6}\s|[-*+]\s|\d+\.\s))/;
+
+function assertNoLiteralMarkdownLineBreakArtifact(
+  relative: string,
+  content: string,
+): void {
+  if (
+    LITERAL_MARKDOWN_LINE_BREAK_ARTIFACT.test(content)
+  ) {
+    throw new Error(
+      `${relative} contains a literal escaped newline before Markdown structure; use a real line break instead.`,
+    );
+  }
+}
+
 async function assertRegularFile(
   root: string,
   relative: string,
@@ -162,6 +178,19 @@ export async function validateProjectState(
   ];
   for (const relative of [...new Set(checked)]) {
     await assertRegularFile(root, relative);
+  }
+
+  for (const relative of state.continuationFiles) {
+    if (!relative.toLowerCase().endsWith('.md')) {
+      continue;
+    }
+    assertNoLiteralMarkdownLineBreakArtifact(
+      relative,
+      await fs.readFile(
+        path.join(root, relative),
+        'utf8',
+      ),
+    );
   }
 
   const continuation = await fs.readFile(
