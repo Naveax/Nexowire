@@ -25,6 +25,7 @@ import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker
 import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
 
 export interface AgentIdentity {
   id: string;
@@ -349,11 +350,20 @@ export async function runNativeAgent(
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
   const runbooks = new RunbookStore({ stateFile: runbookStateFile });
-  await Promise.all([
-    processes.initialize(),
-    taskGraphs.initialize(),
-    runbooks.initialize(),
-  ]);
+  // Acquire before initializing persisted worker/task state. Two installed
+  // launchers using the same Windows user/device identity must never both
+  // attach to the Hub or mutate the same state files.
+  const singletonLock = await acquireNativeAgentSingleton(identity.id);
+  try {
+    await Promise.all([
+      processes.initialize(),
+      taskGraphs.initialize(),
+      runbooks.initialize(),
+    ]);
+  } catch (error) {
+    await singletonLock?.close();
+    throw error;
+  }
   let reconnectDelay = 1_000;
   let endpointIndex = 0;
 

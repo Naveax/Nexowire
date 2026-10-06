@@ -122,7 +122,8 @@ Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a futu
 - [x] Run cross-device basic Windows shell, WSL2, DNS/HTTPS, allowed file write/read/patch/delete, isolated Edge browser navigation/DOM, visible screenshot, bounded UIA, registry/task enumeration, and 3-stage dependency task graph smoke tests.
 - [x] Prove generic Windows route ambiguity does not silently select either device; exact-ID routes select correctly.
 - [ ] Authenticated production owner dashboard must be checked to explicitly confirm `usage.monthlyCredits === null`; successful MCP requests and simulated D1 tests are not a substitute for this proof.
-- [ ] Conduct controlled agent restart/autostart/reconnect and real production multi-concurrency acceptance without dropping either computer's control session; plan a rollback first.
+- [x] Perform controlled **Naveax Native Agent** stop/start through an independent per-user Scheduled Task with a recovery task; real MCP reconnect passed on the same device ID, and a previously orphaned second agent process was identified and safely removed via guarded PID checks. Ambiguous mutation was not replayed.
+- [ ] Verify full Windows logon autostart, work-pc Hub/Agent restart and genuine production D1 concurrency; the Naveax single-agent restart does not prove these.
 - [ ] Investigate duplicate `Nexowire Stack`/`Nexowire Native Agent` scheduled-task overlap on `Naveax`, and the `work-pc` non-admin firewall rule read returning Windows access-denied. No unsafe privilege grant or task disablement has been applied.
 - [ ] Safely migrate the older `work-pc` self-host Hub/Agent from v1.0.0 after verifying an explicit rollback and its existing Tailscale/control-plane service wiring.
 - [ ] Prepare next signed/checksum-pinned Windows release candidate after the remaining issues are reproducibly fixed; do not auto-publish.
