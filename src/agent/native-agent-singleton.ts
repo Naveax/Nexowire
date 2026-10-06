@@ -21,9 +21,9 @@ export async function acquireNativeAgentSingleton(
   // Include the current Windows user's home as well as the stable device ID.
   // No raw identity or username appears in the IPC name.
   const hash = createHash('sha256')
-    .update('nexowire-agent-singleton-v1\\0')
+    .update('nexowire-agent-singleton-v1\0')
     .update(options.homeDir ?? os.homedir())
-    .update('\\0')
+    .update('\0')
     .update(deviceId)
     .digest('hex')
     .slice(0, 32);
