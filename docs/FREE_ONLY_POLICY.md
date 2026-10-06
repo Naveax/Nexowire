@@ -6,6 +6,11 @@ the date of the owner's birthday or the presence of API keys.
 
 ## Hosted quota
 
+Read-only public policy metadata at GET /api/v1/public/usage-policy
+reports the server's Free monthly limit and standard/skill tool weights
+without login or private account data. This proves the deployed configuration,
+not the remaining quota of any particular authenticated user.
+
 - **Free: 1,000 weighted units per UTC calendar month**, per quota subject.
 - A regular hosted MCP tool invocation costs 1 unit.
 - Direct `skill_*` and `skills_*` tools cost 5 units.

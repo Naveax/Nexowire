@@ -2,7 +2,8 @@ import type {
   ControlPlaneIdentity,
 } from './control-plane-service.js';
 import { ControlPlaneService } from './control-plane-service.js';
-import type { ProductFeature } from './plans.js';
+import { PRODUCT_PLANS, type ProductFeature } from './plans.js';
+import { quoteToolUsage } from './usage-policy.js';
 
 export interface ControlPlaneHttpOptions {
   authenticate(
@@ -190,6 +191,19 @@ export function createControlPlaneHttpHandler(
         return json(200, {
           ...result,
           agentUrl: configuredAgentUrl,
+        });
+      }
+
+      // Safe unauthenticated introspection of public, account-independent
+      // Free-plan limits. This exposes no identity, usage ledger or tokens.
+      if (request.method === 'GET' && path === '/api/v1/public/usage-policy') {
+        const freePlan = PRODUCT_PLANS.free;
+        return json(200, {
+          planId: freePlan.id,
+          monthlyCredits: freePlan.monthlyCredits,
+          normalToolCredits: quoteToolUsage(freePlan, 'machine_health').credits,
+          specialSkillToolCredits: quoteToolUsage(freePlan, 'skill_read').credits,
+          quotaPeriod: 'calendar-month-utc',
         });
       }
 
