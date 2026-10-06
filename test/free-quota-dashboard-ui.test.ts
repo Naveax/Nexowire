@@ -7,7 +7,7 @@ const app = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
 const entry = app.indexOf("$('retry').addEventListener('click', load);");
 assert.ok(entry > 0, 'Dashboard entrypoint must be recognizable');
 
-function renderUsedQuota(usedCredits: number, monthlyCredits = 1_000) {
+function renderUsedQuota(usedCredits: number, monthlyCredits: number | null = 1_000) {
   const nodes = new Map<string, {
     textContent: string;
     innerHTML: string;
@@ -38,6 +38,7 @@ function renderUsedQuota(usedCredits: number, monthlyCredits = 1_000) {
   const snapshot = {
     displayName: 'Quota test',
     planId: 'free',
+    billingMode: 'free',
     privateControlsIncluded: false,
     usage: { usedCredits, monthlyCredits },
     devices: [],
@@ -79,4 +80,12 @@ test('Reduced mid-month Free limit explains legacy usage over the new cap', () =
   assert.match(view.label, /20\.100\s*\/\s*1\.000/);
   assert.match(view.label, /Kota doldu/);
   assert.equal(view.progress, '100%');
+});
+
+test('owner dashboard displays unlimited credit ceiling instead of prepaid balance', () => {
+  const view = renderUsedQuota(2_005, null);
+  assert.match(view.label, /Sınırsız/);
+  assert.match(view.label, /2\.005/);
+  assert.doesNotMatch(view.label, /Kota doldu/);
+  assert.equal(view.progress, '0%');
 });

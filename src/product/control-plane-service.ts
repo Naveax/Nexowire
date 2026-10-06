@@ -50,6 +50,8 @@ export interface ControlPlaneServiceOptions {
   infrastructure?: () => InfrastructureSnapshot;
   /** Keep all users on the free plan and reject paid configuration. */
   freeOnly?: boolean;
+  /** Verified GitHub numeric subject eligible for unmetered Free usage. */
+  ownerGithubId?: string;
 }
 
 function boundedId(name: string, input: string): string {
@@ -133,12 +135,17 @@ export class ControlPlaneService {
   private readonly now: () => Date;
   private readonly infrastructure: () => InfrastructureSnapshot;
   private readonly freeOnly: boolean;
+  private readonly ownerGithubId: string | null;
 
   constructor(
     private readonly store: ControlPlaneStore,
     options: ControlPlaneServiceOptions = {},
   ) {
     this.freeOnly = options.freeOnly ?? false;
+    const ownerId = options.ownerGithubId?.trim() ?? '';
+    // An absent or malformed configuration never grants an exemption.
+    this.ownerGithubId = /^[1-9][0-9]{0,19}$/.test(ownerId)
+      ? ownerId : null;
     this.now = options.now ?? (() => new Date());
     this.infrastructure =
       options.infrastructure ??
@@ -239,11 +246,27 @@ export class ControlPlaneService {
     return { account, identity };
   }
 
+  private async effectivePlan(account: ProductAccountRecord): Promise<ProductPlan> {
+    if (!this.freeOnly) return resolvePlan(account);
+    if (this.ownerGithubId === null) return PRODUCT_PLANS.free;
+
+    // Only a GitHub OAuth identity verified by the sign-in callback qualifies.
+    // Never infer ownership from a display name, role or account.admin flag.
+    const ownerIdentity = await this.store.getExternalIdentity(
+      'github', this.ownerGithubId,
+    );
+    if (ownerIdentity?.accountId !== account.id) return PRODUCT_PLANS.free;
+
+    // Null is an unlimited *tool credit* ceiling; all normal security,
+    // premium-feature and replay checks remain unchanged.
+    return { ...PRODUCT_PLANS.free, monthlyCredits: null };
+  }
+
   async dashboard(
     identity: ControlPlaneIdentity,
   ): Promise<UserDashboardSnapshot> {
     const account = await this.requireAccount(identity.accountId);
-    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
+    const plan = await this.effectivePlan(account);
     const period = monthPeriod(this.now());
     const [usage, devices, prepaidCredits] =
       await Promise.all([
@@ -651,7 +674,7 @@ export class ControlPlaneService {
       | null;
   }> {
     const account = await this.requireAccount(input.accountId);
-    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
+    const plan = await this.effectivePlan(account);
     const quote = quoteToolUsage(
       plan,
       input.toolName,

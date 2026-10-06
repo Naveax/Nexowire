@@ -7,6 +7,66 @@ import { ControlPlaneService } from '../src/product/control-plane-service.js';
 import { enforceHostedMcpMetering } from '../src/mcp/hosted-metering.js';
 import type { ControlPlaneMcpClient } from '../src/hub/control-plane-mcp-auth.js';
 
+test('verified GitHub owner has unlimited Free tool credits without unlocking paid features', async () => {
+  const store = new MemoryControlPlaneStore();
+  const service = new ControlPlaneService(store, {
+    freeOnly: true,
+    ownerGithubId: '79841922',
+    now: () => new Date('2026-10-07T01:20:00.000Z'),
+  });
+  const { account: owner } = await service.loginExternalIdentity({
+    provider: 'github', subject: '79841922', displayName: 'Naveax',
+  });
+  const impersonator = await service.ensureAccount({
+    id: 'another-admin', displayName: 'Naveax', admin: true,
+  });
+
+  const ownerDashboard = await service.dashboard({ accountId: owner.id, role: 'user' });
+  assert.equal(ownerDashboard.planId, 'free');
+  assert.equal(ownerDashboard.billingMode, 'free');
+  assert.equal(ownerDashboard.usage.monthlyCredits, null);
+  assert.equal(ownerDashboard.privateControlsIncluded, false);
+
+  const first = await service.chargeUsage({
+    accountId: owner.id, eventId: 'owner-over-thousand', toolName: 'machine_health',
+    baseCredits: 2_000,
+  });
+  assert.equal(first.status, 'charged');
+  assert.equal(first.remainingCredits, null);
+  assert.equal(first.chargedCredits, 2_000);
+
+  const skill = await service.chargeUsage({
+    accountId: owner.id, eventId: 'owner-skill', toolName: 'skills_list',
+  });
+  assert.equal(skill.status, 'charged');
+  assert.equal(skill.chargedCredits, 5);
+  assert.equal(skill.remainingCredits, null);
+
+  const replay = await service.chargeUsage({
+    accountId: owner.id, eventId: 'owner-skill', toolName: 'skills_list',
+  });
+  assert.equal(replay.status, 'duplicate');
+  assert.equal(replay.chargedCredits, 0);
+
+  const denied = await service.chargeUsage({
+    accountId: owner.id, eventId: 'owner-premium', toolName: 'windows_private_desktop_start',
+  });
+  assert.equal(denied.status, 'denied');
+  assert.equal(denied.reason, 'feature-not-in-plan');
+
+  const otherDashboard = await service.dashboard({ accountId: impersonator.id, role: 'admin' });
+  assert.equal(otherDashboard.usage.monthlyCredits, 1_000);
+  const other = await service.chargeUsage({
+    accountId: impersonator.id, eventId: 'normal-over-limit', toolName: 'machine_health',
+    baseCredits: 1_001,
+  });
+  assert.equal(other.status, 'denied');
+  assert.equal(other.reason, 'quota-exhausted');
+  const unconfigured = new ControlPlaneService(store, { freeOnly: true });
+  const safeDefault = await unconfigured.dashboard({ accountId: owner.id, role: 'admin' });
+  assert.equal(safeDefault.usage.monthlyCredits, 1_000);
+});
+
 test('free-only mode enforces 1,000 weighted calls, idempotency and UTC reset', async () => {
   let clock = new Date('2026-10-31T23:59:59.000Z');
   const store = new MemoryControlPlaneStore();

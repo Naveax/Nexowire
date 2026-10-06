@@ -12,6 +12,17 @@ without login or private account data. This proves the deployed configuration,
 not the remaining quota of any particular authenticated user.
 
 - **Free: 1,000 weighted units per UTC calendar month**, per quota subject.
+- **Repository-owner exception (explicitly requested 2026-10-07):** the Nexowire
+  account linked by GitHub OAuth to immutable GitHub user ID `79841922`
+  (repository owner) has no **hosted MCP tool-credit ceiling** while Free-only
+  is active. The implementation verifies the server-stored `github`
+  external-identity mapping, not an account name, admin flag, client claim or
+  supplied GitHub login string. It returns `monthlyCredits: null` only for
+  this account. Without that verified mapping, the normal Free cap applies.
+- The owner exception does **not** enable premium-only tools, paid billing,
+  additional account/device entitlements or external provider resources. It
+  preserves D1 charge records, 5x skill weighting and 409 replay prevention.
+  Cloudflare/ChatGPT/provider quotas and compute capacity remain independent.
 - A regular hosted MCP tool invocation costs 1 unit.
 - Direct `skill_*` and `skills_*` tools cost 5 units.
 - A call from a special-skill workflow costs 5 units when its authenticated

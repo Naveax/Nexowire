@@ -235,3 +235,43 @@ test('isolated D1 Free quota enforces 999/1000 boundaries, 5x skills, replay and
     db.close();
   }
 });
+
+test('D1-backed verified owner remains unmetered past Free quota; other accounts remain limited', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+  try {
+    const store = new D1ControlPlaneStore(new SqliteD1Database(db));
+    const service = new ControlPlaneService(store, {
+      freeOnly: true,
+      ownerGithubId: '79841922',
+      now: () => new Date('2026-10-07T01:20:00.000Z'),
+    });
+    const { account: owner } = await service.loginExternalIdentity({
+      provider: 'github', subject: '79841922',
+    });
+    const other = await service.ensureAccount({ id: 'not-the-owner' });
+    const charged = await service.chargeUsage({
+      accountId: owner.id, eventId: 'd1-owner-1500',
+      toolName: 'machine_health', baseCredits: 1_500,
+    });
+    assert.equal(charged.status, 'charged');
+    assert.equal(charged.remainingCredits, null);
+    const replay = await service.chargeUsage({
+      accountId: owner.id, eventId: 'd1-owner-1500', toolName: 'machine_health',
+    });
+    assert.equal(replay.status, 'duplicate');
+    const ownerUsage = await store.getUsagePeriod(owner.quotaSubjectId, '2026-10');
+    assert.equal(ownerUsage?.usedCredits, 1_500);
+    const exhausted = await service.chargeUsage({
+      accountId: other.id, eventId: 'd1-other-1500',
+      toolName: 'machine_health', baseCredits: 1_500,
+    });
+    assert.equal(exhausted.status, 'denied');
+    assert.equal(exhausted.reason, 'quota-exhausted');
+    const otherUsage = await store.getUsagePeriod(other.quotaSubjectId, '2026-10');
+    assert.equal(otherUsage?.usedCredits ?? 0, 0);
+  } finally {
+    db.close();
+  }
+});
