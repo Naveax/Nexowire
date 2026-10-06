@@ -85,7 +85,7 @@ test('Reduced mid-month Free limit explains legacy usage over the new cap', () =
 test('owner dashboard displays unlimited credit ceiling instead of prepaid balance', () => {
   const view = renderUsedQuota(2_005, null);
   assert.match(view.label, /Sınırsız/);
-  assert.match(view.label, /2\\.005/);
+  assert.match(view.label, /2\.005/);
   assert.doesNotMatch(view.label, /Kota doldu/);
   assert.equal(view.progress, '0%');
 });
