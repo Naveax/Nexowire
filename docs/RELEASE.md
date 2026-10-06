@@ -6,6 +6,17 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 Nexowire v1.0.1 was published on 2026-10-05 from tag `v1.0.1` at commit `43779b1de5543146a283ae80771e65c51020bef2`. Authorized publisher run `37324592840` created the exact tag after its final release gate. Because GitHub suppresses recursive workflow triggers from `GITHUB_TOKEN` tag pushes, the tag-scoped Release Readiness run was explicitly dispatched once as run `37324999923`; it passed Linux/macOS/Windows packaging, the real Windows `cmd.exe` setup smoke, provenance/SBOM attestations, and GitHub Release publication. The public release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, CycloneDX SBOM, `Nexowire-Setup.cmd`, `Nexowire-Windows-x64.zip`, and `SHA256SUMS-Windows`. Independent post-publication download/hash/manifest/setup-pin checks and `gh attestation verify` passed for the canonical tarball, Windows payload, and setup script. The original v1.0.0 release remains immutable; npm publication remains disabled.
 
+## Unpublished v1.0.2 release candidate (2026-10-07)
+
+The next candidate is `v1.0.2` and is **not yet published or installed** on either live Windows PC. It includes:
+
+- The bounded, ANSI-clean Windows PowerShell `ACCESS_DENIED` diagnostic fix (PR #216).
+- A user/device-scoped OS-owned Windows native-agent singleton lease to reject duplicate `agent run` launchers (PR #217), reproduced by named-pipe exclusivity smoke on Windows 10 and 11.
+- A mandatory **real Windows CI and Windows Release Readiness** singleton test, not just Linux-simulated tests.
+- Versioned Windows x64 payload and installer candidate smoke; existing v1.0.1 is still the published stable release until a separately authorized tag/publication.
+
+Do **not** create the v1.0.2 tag, overwrite the old versioned installation, restart the production `work-pc` Hub/Tailscale gateway, or enable payments as part of candidate preparation. Validate Release Readiness artifacts first, then plan a staggered one-device-at-a-time update with a proven rollback. See `docs/LIVE_ACCEPTANCE_2026-10-07.md` for the live observations.
+
 ## Local release candidate check
 
 Run:
