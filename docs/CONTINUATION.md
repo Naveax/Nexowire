@@ -4,7 +4,7 @@ This file exists so development can continue from a completely new ChatGPT conve
 
 ## Temporary Free-only policy (2026-10-06)
 
-Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a future paid launch after legal/provider verification. Hosted accounts have 1,000 weighted tool units per UTC month; normal tools are 1x, special skill tools and calls marked by the invoking skill workflow are 5x. The quota denies further calls before execution; all billing routes remain 503/BILLING_PAUSED by default, no automatic payments/upgrades. The provider integration is retained but dormant. See docs/FREE_ONLY_POLICY.md. Verify the current main and CI before claiming the policy is deployed; a branch-local implementation is not proof of production rollout.
+Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a future paid launch after legal/provider verification. Normal hosted Free accounts have 1,000 weighted tool units per UTC calendar month; the uniquely GitHub-OAuth-verified repository owner (GitHub numeric subject `79841922`) has `monthlyCredits: null` and therefore no Nexowire-hosted tool-credit ceiling. Both retain 1x normal and 5x special-skill event accounting, device/tool authorization, and idempotent execution. The quota denies further calls before execution; all billing routes remain 503/BILLING_PAUSED by default, no automatic payments/upgrades. The provider integration is retained but dormant. See docs/FREE_ONLY_POLICY.md. Verify the current main and CI before claiming the policy is deployed; a branch-local implementation is not proof of production rollout.
 
 ## Canonical continuation files
 
