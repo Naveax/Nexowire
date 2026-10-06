@@ -29,22 +29,27 @@ function toolCall(
   };
 }
 
-test('hosted metering event id is deterministic for retries and opaque', () => {
-  const body = toolCall(7, 'machine_health');
+test('hosted metering event ID is stable per account and invocation, not JSON-RPC body', () => {
   const first = hostedMcpUsageEventId({
     accountId: 'acct-1',
-    body,
-    toolName: 'machine_health',
     invocationId: 'fixed-invocation-0007',
   });
   const second = hostedMcpUsageEventId({
     accountId: 'acct-1',
-    body,
-    toolName: 'machine_health',
     invocationId: 'fixed-invocation-0007',
+  });
+  const otherAccount = hostedMcpUsageEventId({
+    accountId: 'acct-2',
+    invocationId: 'fixed-invocation-0007',
+  });
+  const newInvocation = hostedMcpUsageEventId({
+    accountId: 'acct-1',
+    invocationId: 'fixed-invocation-0008',
   });
 
   assert.equal(first, second);
+  assert.notEqual(first, otherAccount);
+  assert.notEqual(first, newInvocation);
   assert.match(first, /^mcp-[a-f0-9]{64}$/);
   assert.equal(first.includes('secret-token'), false);
 });
@@ -279,6 +284,47 @@ test('distinct invocation ids charge separately while repeated ids are rejected'
   assert.equal(replay.status, 409);
   assert.equal(replay.code, 'MCP_DUPLICATE_REQUEST');
   assert.equal(seen.size, 2);
+});
+
+test('one explicit invocation id cannot be replayed by changing RPC id, tool, args or skill flag', async () => {
+  const chargedEvents = new Set<string>();
+  const client = {
+    chargeTool: async (input: { eventId: string }) => {
+      const duplicate = chargedEvents.has(input.eventId);
+      if (!duplicate) chargedEvents.add(input.eventId);
+      return {
+        status: duplicate ? 'duplicate' : 'charged',
+        chargedCredits: duplicate ? 0 : 1,
+        remainingCredits: 1000 - chargedEvents.size,
+        reason: null,
+      };
+    },
+  } as unknown as ControlPlaneMcpClient;
+  const first = toolCall(71, 'machine_health');
+  (first.params as Record<string, unknown>)._meta = {
+    'nexowire/invocation-id': 'same-explicit-invocation-0071',
+  };
+  const mutated = toolCall(99, 'skills_list');
+  const mutatedParams = mutated.params as Record<string, unknown>;
+  mutatedParams.arguments = { changed: true };
+  mutatedParams._meta = {
+    'nexowire/invocation-id': 'same-explicit-invocation-0071',
+    'nexowire/special-skill': true,
+  };
+  const meter = (body: Record<string, unknown>) => enforceHostedMcpMetering({
+    authorization, authorizationHeader: 'Bearer nwx_mcp_test', body, client,
+  });
+  let dispatched = 0;
+  for (const body of [first, mutated]) {
+    const decision = await meter(body);
+    if (decision.allowed) dispatched++;
+    else {
+      assert.equal(decision.status, 409);
+      assert.equal(decision.code, 'MCP_DUPLICATE_REQUEST');
+    }
+  }
+  assert.equal(chargedEvents.size, 1);
+  assert.equal(dispatched, 1);
 });
 
 test('reused JSON-RPC id in a new HTTP invocation is metered again', async () => {

@@ -17,20 +17,18 @@ export interface HostedMcpMeteringDecision {
   remainingCredits?: number | null;
 }
 
+// One explicit invocation ID belongs to exactly one tool execution per account.
+// Changing the JSON-RPC id, arguments, tool name or metadata must never make
+// a replay billable/executable again. Calls without an explicit ID get a UUID.
 export function hostedMcpUsageEventId(input: {
   accountId: string;
-  body: unknown;
-  toolName: string;
   invocationId: string;
 }): string {
   const digest = createHash('sha256')
+    .update('nexowire/mcp/invocation/v2\0', 'utf8')
     .update(input.accountId, 'utf8')
     .update('\0')
     .update(input.invocationId, 'utf8')
-    .update('\0')
-    .update(input.toolName, 'utf8')
-    .update('\0')
-    .update(JSON.stringify(input.body), 'utf8')
     .digest('hex');
 
   return 'mcp-' + digest;
@@ -109,8 +107,6 @@ export async function enforceHostedMcpMetering(input: {
       accountId: input.authorization.accountId,
       eventId: hostedMcpUsageEventId({
         accountId: input.authorization.accountId,
-        body: input.body,
-        toolName,
         invocationId,
       }),
       toolName,
