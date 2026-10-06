@@ -34,7 +34,7 @@ This is an observation of **two real connected Windows PCs** through the first-p
 | Firewall rules read | PASS | BLOCKED | Underlying `Get-NetFirewallRule` on work-pc returned Windows `Access denied`. No elevated permissions were granted |
 | Private desktop status | BLOCKED | BLOCKED | Expected `FORBIDDEN` under the current Free entitlements. Not evidence of functioning premium private-desktop tools |
 | Authenticated owner dashboard unlimited indicator | NOT TESTED | NOT TESTED | Requires an existing valid signed owner session or authorized production D1 introspection |
-| Agent restart / loss / reconnect / boot autostart | NOT TESTED | NOT TESTED | Tasks reported running, but a controlled restart, rollback path and reconnect timing were not executed |
+| Controlled Native Agent restart / reconnect | PASS (agent only) | NOT TESTED | Independent scheduled task issued stop/start, stable device ID recovered, actual MCP health returned; boot/logon and work-pc Hub restart still untested |
 | True production D1 concurrent multi-call contention / long soak | NOT TESTED | NOT TESTED | Local isolated D1 concurrency regression passed under PR #212, not a production multi-worker race |
 | Real-money subscription / refund | INTENTIONALLY DISABLED | INTENTIONALLY DISABLED | Financial gateway remains off and must not be silently enabled |
 
@@ -45,11 +45,19 @@ This is an observation of **two real connected Windows PCs** through the first-p
 - work-pc non-admin firewall API access fails closed. Native Hub/agent process and CI behavior are otherwise healthy.
 - Two running `Nexowire*` Scheduled Tasks appear on Naveax (`Nexowire Native Agent` and `Nexowire Stack`). Review whether their agent ownership overlaps before modifying startup registrations. **Do not blindly disable either task.**
 
+## Controlled agent restart findings (Naveax)
+
+The agent's per-user Scheduled Task had RunLevel=Limited, Interactive logon, RestartCount=999, and MultipleInstances=IgnoreNew. To avoid having an agent stop itself before issuing its restart, a separate one-time user-context Task Scheduler helper was created with an independent delayed recovery task. The helper recorded `stopIssued=true`, `startIssued=true`, `error=null`, and completed with Task Scheduler LastTaskResult=0. Nexowire `machine_health` and `machine_snapshot` subsequently succeeded on the **same** stable device ID.
+
+The restart exposed a previously orphaned `agent run` process PID 18548 alongside the new registered-task process PID 20700. PID 18548 had an absent parent and was older; after validating exact command, executable path, parent absence and newer healthy canonical task state, a one-time targeted termination was issued. The agent connection dropped before a mutation acknowledgment, so Nexowire correctly returned `MUTATION_STATE_UNKNOWN`; the action was **not retried**. Read-only postcondition checking confirmed only PID 20700 remained, `Nexowire Native Agent` was Running, and the device passed `machine_health`. The independent temporary recovery/restart Scheduled Tasks and two test files were removed; the user's ordinary tasks and applications were not touched.
+
+A future Windows agent release should fail closed against concurrent `agent run` processes for the same Windows user/device, even when legacy scheduled-task wrappers overlap. This acceptance pass does not claim that the new singleton implementation is installed yet.
+
 ## Next validation gates, in order
 
 1. Read production owner `/api/v1/me/dashboard` under an authorized GitHub OAuth session and verify `usage.monthlyCredits === null`, `planId === free`; ensure another Free identity remains limited to 1000. Do not export session cookies, credentials or full D1 account contents.
 2. Audit Nexowire Stack/Native Agent process ownership on Naveax, and existing self-hosted Hub/Agent service + DPAPI/Tailscale wiring on work-pc; document rollback before restarting either.
-3. Run deliberately bounded reconnect and restart tests on **one** PC while the other remains online and verify stable device ID, single active agent, heartbeat, true server-side presence, no unintended replay.
+3. Naveax agent restart has been exercised and cleaned; repeat a bounded restart/boot-logon validation for the work-pc Hub/Agent **only with out-of-band recovery**. Confirm true server-side presence, stable ID and no unintended replay.
 4. Run a bounded production multi-invocation/parallel usage test only after authorization and quota read are known; preserve idempotent event IDs and distinguish test calls from user activity.
 5. Diagnose work-pc firewall `Access denied` without elevating permissions or claiming those protected rules are readable; improve error classification if reproducible on the supported runtime.
 6. Address owner PC disk headroom without deleting personal files; inventory the source and ask before large destructive cleanup. Keep billing paused and only prepare (do not auto-publish) the next verified Windows release.
