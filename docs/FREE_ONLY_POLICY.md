@@ -18,11 +18,16 @@ the date of the owner's birthday or the presence of API keys.
   marker on every nested call requiring 5x weighting; unmarked ordinary calls
   cost 1. Do not claim otherwise.
 - Existing premium tool entitlements remain gated for Free users.
-- Duplicate event IDs in the same billing period are idempotent in the D1
-  ledger. A repeated identical hosted MCP request returns HTTP 409
+- Each hosted HTTP tool invocation gets a fresh server-generated invocation
+  ID, even if a different MCP session reuses the same JSON-RPC request ID.
+  Thus repeated intentional calls are all metered; no identical-call bypass.
+- To safely identify a real network retry, callers MAY supply a bounded
+  stable params._meta['nexowire/invocation-id'] for that one invocation.
+  D1 records it idempotently, and repeated submissions return HTTP 409
   MCP_DUPLICATE_REQUEST **before tool execution**, not an unmetered
-  second execution. A new intentional call must use a fresh JSON-RPC ID;
-  uncertain mutation retries must not blindly replay.
+  second execution. Fresh logical calls must get fresh invocation IDs.
+- Without an explicit stable invocation ID, each HTTP retry is treated as
+  a new chargeable request. Mutations should not be blindly retried.
 - New periods start on the **first day of each month at 00:00 UTC**.
 - At exhaustion, deny before dispatch (no postpaid charges, no owner-paid overage).
 - Previous usage in the current UTC month stays counted when the new 1,000-unit

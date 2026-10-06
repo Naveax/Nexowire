@@ -35,11 +35,13 @@ test('hosted metering event id is deterministic for retries and opaque', () => {
     accountId: 'acct-1',
     body,
     toolName: 'machine_health',
+    invocationId: 'fixed-invocation-0007',
   });
   const second = hostedMcpUsageEventId({
     accountId: 'acct-1',
     body,
     toolName: 'machine_health',
+    invocationId: 'fixed-invocation-0007',
   });
 
   assert.equal(first, second);
@@ -99,6 +101,9 @@ test('hosted tool call is charged once and duplicate replay is blocked before ex
     },
   } as unknown as ControlPlaneMcpClient;
   const body = toolCall(2, 'machine_health');
+  (body.params as Record<string, unknown>)._meta = {
+    'nexowire/invocation-id': 'stable-retry-0002',
+  };
 
   assert.deepEqual(
     await enforceHostedMcpMetering({
@@ -265,6 +270,8 @@ test('distinct invocation ids charge separately while repeated ids are rejected'
   });
   const first = toolCall(41, 'machine_health');
   const second = toolCall(42, 'machine_health');
+  (first.params as Record<string, unknown>)._meta = { 'nexowire/invocation-id': 'first-invocation-0041' };
+  (second.params as Record<string, unknown>)._meta = { 'nexowire/invocation-id': 'second-invocation-0042' };
   assert.deepEqual(await meter(first), { allowed: true });
   assert.deepEqual(await meter(second), { allowed: true });
   const replay = await meter(first);
@@ -272,4 +279,33 @@ test('distinct invocation ids charge separately while repeated ids are rejected'
   assert.equal(replay.status, 409);
   assert.equal(replay.code, 'MCP_DUPLICATE_REQUEST');
   assert.equal(seen.size, 2);
+});
+
+test('reused JSON-RPC id in a new HTTP invocation is metered again', async () => {
+  const ids: string[] = [];
+  const client = {
+    chargeTool: async (request: { eventId: string }) => {
+      ids.push(request.eventId);
+      return { status: 'charged', chargedCredits: 1, remainingCredits: 1000 - ids.length, reason: null };
+    },
+  } as unknown as ControlPlaneMcpClient;
+  const body = toolCall(42, 'machine_health');
+  for (let index = 0; index < 2; index++) {
+    assert.deepEqual(await enforceHostedMcpMetering({
+      authorization, authorizationHeader: 'Bearer nwx_mcp_test', body, client,
+    }), { allowed: true });
+  }
+  assert.equal(ids.length, 2);
+  assert.notEqual(ids[0], ids[1]);
+});
+
+test('invalid caller invocation id is refused before charging', async () => {
+  let calls = 0;
+  const client = { chargeTool: async () => { calls++; return undefined; } } as unknown as ControlPlaneMcpClient;
+  const body = toolCall(43, 'machine_health');
+  (body.params as Record<string, unknown>)._meta = { 'nexowire/invocation-id': '!' };
+  assert.deepEqual(await enforceHostedMcpMetering({
+    authorization, authorizationHeader: 'Bearer nwx_mcp_test', body, client,
+  }), { allowed: false, status: 400, error: 'invalid_request', code: 'MCP_INVALID_INVOCATION_ID' });
+  assert.equal(calls, 0);
 });
