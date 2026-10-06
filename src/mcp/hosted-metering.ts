@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type {
   ControlPlaneMcpClient,
 } from '../hub/control-plane-mcp-auth.js';
@@ -21,9 +21,12 @@ export function hostedMcpUsageEventId(input: {
   accountId: string;
   body: unknown;
   toolName: string;
+  invocationId: string;
 }): string {
   const digest = createHash('sha256')
     .update(input.accountId, 'utf8')
+    .update('\0')
+    .update(input.invocationId, 'utf8')
     .update('\0')
     .update(input.toolName, 'utf8')
     .update('\0')
@@ -43,6 +46,21 @@ function hasSpecialSkillContext(body: unknown): boolean {
   const meta = (params as Record<string, unknown>)._meta;
   return typeof meta === 'object' && meta !== null && !Array.isArray(meta) &&
     (meta as Record<string, unknown>)['nexowire/special-skill'] === true;
+}
+
+// JSON-RPC ids can be reused by completely separate MCP connections.
+// Only an explicit bounded invocation-id is stable across HTTP retries.
+function requestedInvocationId(body: unknown): string | null | undefined {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return undefined;
+  const params = (body as Record<string, unknown>).params;
+  if (typeof params !== 'object' || params === null || Array.isArray(params)) return undefined;
+  const meta = (params as Record<string, unknown>)._meta;
+  if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return undefined;
+  const object = meta as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(object, 'nexowire/invocation-id')) return undefined;
+  const value = object['nexowire/invocation-id'];
+  return typeof value === 'string' && /^[A-Za-z0-9._:-]{8,128}$/.test(value)
+    ? value : null;
 }
 
 export async function enforceHostedMcpMetering(input: {
@@ -75,6 +93,17 @@ export async function enforceHostedMcpMetering(input: {
     };
   }
 
+  const explicitId = requestedInvocationId(input.body);
+  if (explicitId === null) {
+    return {
+      allowed: false,
+      status: 400,
+      error: 'invalid_request',
+      code: 'MCP_INVALID_INVOCATION_ID',
+    };
+  }
+  const invocationId = explicitId ?? randomUUID();
+
   for (const toolName of requestedTools) {
     const decision = await input.client.chargeTool({
       accountId: input.authorization.accountId,
@@ -82,6 +111,7 @@ export async function enforceHostedMcpMetering(input: {
         accountId: input.authorization.accountId,
         body: input.body,
         toolName,
+        invocationId,
       }),
       toolName,
       ...(hasSpecialSkillContext(input.body) ? { specialSkill: true } : {}),
