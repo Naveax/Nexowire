@@ -30,7 +30,7 @@ export const PRODUCT_PLANS: Readonly<Record<Exclude<ProductPlanId, 'custom'>, Pr
     free: {
       id: 'free',
       billingMode: 'free',
-      monthlyCredits: 20_000,
+      monthlyCredits: 1_000,
       maxDevices: 2,
       maxConcurrentTasks: 1,
       features: features(),

@@ -93,7 +93,7 @@ test('hosted tool call is charged before execution and duplicates are allowed', 
             : 'duplicate',
         chargedCredits:
           invocation === 1 ? 1 : 0,
-        remainingCredits: 19_999,
+        remainingCredits: 999,
         reason: null,
       };
     },
@@ -132,7 +132,7 @@ test('Free premium feature denial happens before tool execution', async () => {
     chargeTool: async () => ({
       status: 'denied',
       chargedCredits: 0,
-      remainingCredits: 20_000,
+      remainingCredits: 1_000,
       reason: 'feature-not-in-plan',
     }),
   } as unknown as ControlPlaneMcpClient;
@@ -153,7 +153,7 @@ test('Free premium feature denial happens before tool execution', async () => {
       status: 403,
       error: 'forbidden',
       code: 'MCP_FEATURE_NOT_IN_PLAN',
-      remainingCredits: 20_000,
+      remainingCredits: 1_000,
     },
   );
 });

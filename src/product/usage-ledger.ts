@@ -14,6 +14,7 @@ export interface UsageChargeRequest {
   eventId: string;
   toolName: string;
   baseCredits?: number;
+  specialSkill?: boolean;
 }
 
 export interface UsageChargeResult {
@@ -85,6 +86,7 @@ export function applyUsageCharge(
     plan,
     request.toolName,
     request.baseCredits ?? 1,
+    request.specialSkill === true,
   );
 
   if (!quote.allowed) {

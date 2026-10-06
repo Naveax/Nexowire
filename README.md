@@ -1,5 +1,7 @@
 # Nexowire
 
+**Temporary Free-only policy:** hosted users have 1,000 weighted tool units per UTC month. Normal tool calls are 1x, dedicated skill tools and marked special-skill workflows are 5x. Paid checkout is paused. See [Free-only policy](docs/FREE_ONLY_POLICY.md).
+
 **AI-native remote computer control for ChatGPT.**
 
 Nexowire is a self-hosted control plane and native-agent runtime that gives ChatGPT a structured, resumable way to work with computers, terminals, files, processes, GUIs, browsers, and project workspaces.

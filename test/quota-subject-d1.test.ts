@@ -115,13 +115,13 @@ test('D1 quota subjects merge prior free usage for the same device anchor', asyn
       accountId: accountA.id,
       eventId: 'd1-event-a',
       toolName: 'machine_health',
-      baseCredits: 7_000,
+      baseCredits: 400,
     });
     await service.chargeUsage({
       accountId: accountB.id,
       eventId: 'd1-event-b',
       toolName: 'machine_health',
-      baseCredits: 5_000,
+      baseCredits: 200,
     });
 
     const anchor = 'e'.repeat(64);
@@ -149,8 +149,8 @@ test('D1 quota subjects merge prior free usage for the same device anchor', asyn
       accountId: accountB.id,
       role: 'user',
     });
-    assert.equal(dashboardA.usage.usedCredits, 12_000);
-    assert.equal(dashboardB.usage.usedCredits, 12_000);
+    assert.equal(dashboardA.usage.usedCredits, 600);
+    assert.equal(dashboardB.usage.usedCredits, 600);
 
     const eventCount = db
       .prepare(
@@ -163,10 +163,10 @@ test('D1 quota subjects merge prior free usage for the same device anchor', asyn
       accountId: accountB.id,
       eventId: 'd1-event-c',
       toolName: 'machine_health',
-      baseCredits: 8_001,
+      baseCredits: 401,
     });
     assert.equal(overQuota.status, 'denied');
-    assert.equal(overQuota.remainingCredits, 8_000);
+    assert.equal(overQuota.remainingCredits, 400);
   } finally {
     db.close();
   }

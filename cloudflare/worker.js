@@ -327,6 +327,8 @@ export default {
     const runtimeConfigStore =
       new D1EncryptedRuntimeConfigStore(env.DB);
     const service = new ControlPlaneService(store, {
+      // Paid checkout stays unavailable until manually enabled after KYC.
+      freeOnly: env.NEXOWIRE_PAID_BILLING_ENABLED !== 'true',
       infrastructure: () => ({
         freeCapacityPercent: boundedCapacity(env),
         prepaidCapacityCredits: 0,
@@ -334,6 +336,9 @@ export default {
     });
 
     if (url.pathname.startsWith('/api/v1/billing/')) {
+      if (env.NEXOWIRE_PAID_BILLING_ENABLED !== 'true') {
+        return Response.json({ error: 'BILLING_PAUSED' }, { status: 503 });
+      }
       let billingConfig;
       try {
         billingConfig = lemonSqueezyConfig(env);

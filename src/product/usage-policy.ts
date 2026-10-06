@@ -28,6 +28,8 @@ export interface UsageRule {
 }
 
 const PREMIUM_USAGE_RULES: readonly UsageRule[] = Object.freeze([
+  { prefix: 'skill_', creditMultiplier: 5 },
+  { prefix: 'skills_', creditMultiplier: 5 },
   {
     prefix: 'windows_virtual_pointer_',
     feature: 'private-pointer',
@@ -81,13 +83,14 @@ export function quoteToolUsage(
   plan: ProductPlan,
   toolName: string,
   baseCredits = 1,
+  specialSkill = false,
 ): UsageQuote {
   if (!Number.isInteger(baseCredits) || baseCredits < 1) {
     throw new Error('baseCredits must be a positive integer.');
   }
 
   const rule = usageRuleForTool(toolName);
-  const multiplier = rule?.creditMultiplier ?? 1;
+  const multiplier = specialSkill ? 5 : (rule?.creditMultiplier ?? 1);
   const requiredFeature = rule?.feature ?? null;
 
   if (

@@ -222,6 +222,10 @@ async function main() {
     migrations_dir: './cloudflare/migrations',
   };
 
+  const billingFlag = optionalEnv('NEXOWIRE_PAID_BILLING_ENABLED');
+  if (billingFlag !== undefined && billingFlag !== 'true' && billingFlag !== 'false') {
+    throw new Error('NEXOWIRE_PAID_BILLING_ENABLED must be true or false.');
+  }
   const billingVars = optionalBillingVars();
 
   template.vars = {
@@ -233,6 +237,7 @@ async function main() {
           'NEXOWIRE_FREE_CAPACITY_PERCENT',
         ),
       ),
+    NEXOWIRE_PAID_BILLING_ENABLED: billingFlag === 'true' ? 'true' : 'false',
     ...billingVars,
     ...(optionalEnv('NEXOWIRE_ADMIN_GITHUB_ID')
       ? {
