@@ -4,6 +4,13 @@ function formatNumber(value) {
   return new Intl.NumberFormat('tr-TR').format(value);
 }
 
+// Free credits renew at midnight UTC on the first day of each month.
+function nextUtcPeriodStart(now = new Date()) {
+  return new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth() + 1, 1,
+  )).toISOString().slice(0, 10);
+}
+
 function setPill(text, state) {
   const pill = $('connection-pill');
   pill.textContent = text;
@@ -243,9 +250,16 @@ function render(snapshot) {
 
   const usage = snapshot.usage;
   if (usage.monthlyCredits !== null) {
-    $('usage').textContent =
+    const usageLabel =
       formatNumber(usage.usedCredits) + ' / ' +
       formatNumber(usage.monthlyCredits);
+    // Explain why tools stop running when a lower Free limit is applied
+    // to an account that may already have more credits used this month.
+    $('usage').textContent =
+      FREE_ONLY_MODE && usage.usedCredits >= usage.monthlyCredits
+        ? usageLabel + ' · Kota doldu. Yenilenme: ' +
+          nextUtcPeriodStart() + ' 00:00 UTC'
+        : usageLabel;
     const percent = Math.min(
       100,
       Math.round((usage.usedCredits / usage.monthlyCredits) * 100),
