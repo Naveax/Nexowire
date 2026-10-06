@@ -121,9 +121,21 @@ A new chat should not depend on conversation memory. Start from GitHub:
 
 The repository is the source of truth. If this file disagrees with current code/CI, trust current `main`, tests, and the latest merged commits, then repair the handoff files. Run `npm run continuation:check` after changing continuation state; normal `npm run check` includes it.
 
+## Current acceptance snapshot (2026-10-07)
+
+Source of truth at the start of this acceptance pass: `main` `c96e7fd14fbded82143f4f56bc66f54a6a8c3756`; exact-main CI run [37541907756](https://github.com/Naveax/Nexowire/actions/runs/37541907756) completed 7/7 SUCCESS; no open PRs/issues before this work.
+- PR #213 merged owner-only unlimited hosted MCP tool-credit allowance keyed to the **verified GitHub OAuth numeric subject 79841922**, retaining normal Free capabilities, 5x skill accounting, server-side replay protection, and no paid billing. Deploy run [37541527113](https://github.com/Naveax/Nexowire/actions/runs/37541527113) SUCCESS; Cloudflare Worker version `85573dfb-3c39-4f1b-bbd6-8a01a34b0d36`. PR #214 removed the temporary auto-deploy hook. Paid routes still return 503 `BILLING_PAUSED`.
+- The first-party connector currently routes to **two distinct online Windows devices**, with stable IDs:
+  - `Naveax` / `adc90bbb-9576-4b4c-b76a-600e5572ad7d`, agent v1.0.1, user-installed versioned binary; tasks `Nexowire Native Agent` and `Nexowire Stack` running.
+  - `work-pc` / `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, agent v1.0.0 with globally installed Hub; tasks `Nexowire Hub` and `Nexowire Native Agent` running.
+- Real tests **on both devices**: `machine_health`, Windows PowerShell commands, real WSL2 `uname` calls, DNS and production HTTPS, first-party file write/read/exact-patch/delete, isolated headless Edge navigation/DOM/cleanup, screenshot, bounded Explorer UIA, registry/task enumeration, exact-device routing, and independent/dependent 3/3 task graphs all succeeded. Generic Windows route with both devices present correctly reported ambiguity; no device was silently selected.
+- Boundaries and outstanding validations: authenticated production dashboard `usage.monthlyCredits === null` not independently read; intentional Free feature gates return `FORBIDDEN` for `windows_private_desktop_status`; `work-pc` firewall-rule read returns underlying Windows `Access denied` under the current user and must not be silently elevated. Full agent restarts, concurrent production contention and long soak are not claimed complete.
+- Disk diagnostics: `Naveax` C: around 96% used / ~79.5 GB free on ~2 TB; `work-pc` latest Win32_LogicalDisk C: around 76% used / ~55 GB free on ~239 GB. An earlier 99.42% work-pc reading did not persist on repeated independent checks; investigate sampling drift before declaring a capacity failure. No user data was removed.
+- All other implementations described in older handoff sections remain historical evidence. For the current next-work backlog read `ROADMAP.md` and [the device acceptance report](docs/LIVE_ACCEPTANCE_2026-10-07.md).
+
 ## Active parallel work
 
-Current verified `main`: `9aed2daf152aff28902ca7948de73aa5a2a62963`.
+Historical snapshot `main` (superseded; details preserved below): `9aed2daf152aff28902ca7948de73aa5a2a62963`.
 
 Verification:
 - local `main` and `origin/main` were synchronized at this SHA before the state sync;
@@ -181,7 +193,7 @@ Hosted product/control-plane code is implemented:
 
 Production hosted deployment is live. `npm run control-plane:bootstrap` completed Cloudflare authorization, D1 resolution/migrations through `0008`, Worker/static deployment, protected owner-secret handling, GitHub App Manifest conversion, encrypted D1 OAuth credential storage, and protected Hub service-token wiring. ChatGPT Web has a first-party Nexowire custom MCP App using OAuth against `https://nexowire.tail10f02d.ts.net/mcp`. End-to-end connector acceptance passed through Nexowire itself, and hosted Free-plan acceptance is now complete: the production dashboard returns `work-pc` online, broker connect/disconnect presence is persisted to D1, October quota metering matched 86 distinct events to 86 applied credits during acceptance, and the live ChatGPT OAuth client showed two successful refresh-token rotations with only one active refresh token remaining. PR #175 fixed stale hosted device presence and merge CI run `37207366849` passed; local owner bootstrap then deployed Worker version `ffafa40c-e7eb-40c7-83bc-6356b347224a` and the global Hub runtime was updated/restarted. The stable device ID remained `aeaa5295-0aa8-4742-bf0c-2a6340dcf187`, with post-update `devices_list`, `machine_snapshot`, and `machine_health` passing. RDC/SentinelX were not used as final acceptance evidence.
 
-## Immediate next work
+## Historical completed deployment milestones
 
 1. PR #181 fixed repeated non-admin owner bootstrap by reusing an already-installed Hub Scheduled Task instead of re-registering it; it merged as main `f1285693db1ee4563402b1da06260aa5963fd2c5`, and exact-main CI run `37224568557` passed all seven jobs.
 2. Production bootstrap then completed end-to-end with exit code 0 and deployed Worker version `d7eedb34-7ad4-4908-a4b8-e9fbef85f1fe`; D1 prepaid/refund migration `0008` is live, public health passes, the Hub/Agent remains authenticated with the stable device ID, and billing remains fail-closed HTTP 503 because Lemon Squeezy provider configuration is not yet provisioned.
