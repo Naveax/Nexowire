@@ -51,7 +51,7 @@ The agent's per-user Scheduled Task had RunLevel=Limited, Interactive logon, Res
 
 The restart exposed a previously orphaned `agent run` process PID 18548 alongside the new registered-task process PID 20700. PID 18548 had an absent parent and was older; after validating exact command, executable path, parent absence and newer healthy canonical task state, a one-time targeted termination was issued. The agent connection dropped before a mutation acknowledgment, so Nexowire correctly returned `MUTATION_STATE_UNKNOWN`; the action was **not retried**. Read-only postcondition checking confirmed only PID 20700 remained, `Nexowire Native Agent` was Running, and the device passed `machine_health`. The independent temporary recovery/restart Scheduled Tasks and two test files were removed; the user's ordinary tasks and applications were not touched.
 
-A future Windows agent release should fail closed against concurrent `agent run` processes for the same Windows user/device, even when legacy scheduled-task wrappers overlap. This acceptance pass does not claim that the new singleton implementation is installed yet.
+A future Windows agent release should fail closed against concurrent `agent run` processes for the same Windows user/device, even when legacy scheduled-task wrappers overlap. Live Node named-pipe smoke tests on **both Windows computers** independently confirmed that a second listener on the same exact pipe is rejected with `EADDRINUSE`; the temporary scripts were removed. PR implementing the kernel-owned singleton is subject to CI and future distribution. This acceptance pass does not claim that the new singleton implementation is installed yet.
 
 ## Next validation gates, in order
 
