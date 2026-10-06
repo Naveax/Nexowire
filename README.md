@@ -6,7 +6,7 @@
 
 Nexowire is a self-hosted control plane and native-agent runtime that gives ChatGPT a structured, resumable way to work with computers, terminals, files, processes, GUIs, browsers, and project workspaces.
 
-> Status: **v1.0.1 released.** The MCP v1 compatibility floor and first-party native runtime are stable. v1.0.1 adds the verified Windows one-click setup/payload distribution path; future domain recipes and capability additions remain backward-compatible incremental work.
+> Status: **v1.0.1 released; v1.0.2 in candidate preparation.** The MCP v1 compatibility floor and first-party native runtime are stable. v1.0.1 adds the verified Windows one-click setup/payload distribution path; future domain recipes and capability additions remain backward-compatible incremental work.
 
 ## Runtime rule
 

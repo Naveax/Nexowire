@@ -58,6 +58,9 @@ jobs:
           npm run typecheck
           npm run build
           node --import tsx scripts/check-release-package.ts
+      - name: Verify Windows native-agent singleton lease
+        if: runner.os == 'Windows'
+        run: node --test --import tsx test/native-agent-singleton.test.ts
       - name: Build Windows one-click user bundle
         if: runner.os == 'Windows'
         shell: pwsh
