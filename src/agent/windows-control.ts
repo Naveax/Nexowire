@@ -128,6 +128,29 @@ interface PowerShellResult {
   exitCode: number | null;
 }
 
+/**
+ * Bound and sanitize PowerShell diagnostics before exposing them to MCP users.
+ * Access-denied failures must be explicit and never trigger automatic elevation.
+ */
+export function normalizePowerShellFailure(
+  result: PowerShellResult,
+): Error {
+  const message = (result.stderr || result.stdout ||
+    `PowerShell exited with code ${result.exitCode ?? 'unknown'}.`)
+    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+    .trim()
+    .slice(0, 4096);
+  if (
+    /access (?:is )?denied|erişim engellendi|unauthorizedaccessexception/i.test(message)
+  ) {
+    return new Error(
+      'ACCESS_DENIED: Windows denied this operation for the current user. ' +
+      'Nexowire did not attempt privilege escalation.',
+    );
+  }
+  return new Error(message);
+}
+
 function findPowerShell(): string {
   const candidates =
     process.platform === 'win32'
@@ -189,13 +212,7 @@ async function runPowerShell(
         return;
       }
       if (exitCode !== 0) {
-        reject(
-          new Error(
-            result.stderr ||
-              result.stdout ||
-              `PowerShell exited with code ${exitCode ?? 'unknown'}.`,
-          ),
-        );
+        reject(normalizePowerShellFailure(result));
         return;
       }
       resolve(result);

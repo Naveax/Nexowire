@@ -1,7 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { executeWindowsCapability } from '../src/agent/windows-control.js';
+import {
+  executeWindowsCapability,
+  normalizePowerShellFailure,
+} from '../src/agent/windows-control.js';
+
+test('Windows PowerShell permission failures are bounded and sanitized', () => {
+  const turkish = normalizePowerShellFailure({
+    stdout: '',
+    stderr: '\x1b[31;1mGet-NetFirewallRule: Erişim engellendi.\x1b[0m',
+    exitCode: 1,
+  });
+  assert.match(turkish.message, /^ACCESS_DENIED:/);
+  assert.match(turkish.message, /did not attempt privilege escalation/);
+  assert.doesNotMatch(turkish.message, /\x1b/);
+
+  const english = normalizePowerShellFailure({
+    stdout: '', stderr: 'Get-NetFirewallRule: Access is denied.', exitCode: 1,
+  });
+  assert.match(english.message, /^ACCESS_DENIED:/);
+
+  const generic = normalizePowerShellFailure({
+    stdout: '', stderr: '\x1b[31mGeneral failure\x1b[0m' + 'X'.repeat(5000), exitCode: 12,
+  });
+  assert.equal(generic.message.length, 4096);
+  assert.doesNotMatch(generic.message, /\x1b/);
+  assert.match(generic.message, /^General failure/);
+});
 
 test(
   'windows structured process/service/network snapshots return JSON',
