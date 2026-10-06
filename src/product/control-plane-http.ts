@@ -134,6 +134,7 @@ function optionalFeatureList(
 }
 
 function errorStatus(message: string): number {
+  if (message === 'BILLING_PAUSED') return 503;
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
     message === 'PAIRING_NOT_FOUND'
@@ -300,6 +301,9 @@ export function createControlPlaneHttpHandler(
           return json(403, { error: 'SERVICE_REQUIRED' });
         }
         const body = await readJsonObject(request);
+        if (body.specialSkill !== undefined && typeof body.specialSkill !== 'boolean') {
+          throw new Error('INVALID_SPECIAL_SKILL');
+        }
         return json(
           200,
           await service.chargeUsage({
@@ -309,6 +313,7 @@ export function createControlPlaneHttpHandler(
             ...(typeof body.baseCredits === 'number'
               ? { baseCredits: body.baseCredits }
               : {}),
+            ...(body.specialSkill === true ? { specialSkill: true } : {}),
           }),
         );
       }

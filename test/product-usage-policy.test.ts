@@ -12,7 +12,7 @@ import {
 } from '../src/product/usage-policy.js';
 
 test('free plan has a hard monthly quota and no private-control entitlements', () => {
-  assert.equal(PRODUCT_PLANS.free.monthlyCredits, 20_000);
+  assert.equal(PRODUCT_PLANS.free.monthlyCredits, 1_000);
   assert.equal(PRODUCT_PLANS.free.maxDevices, 2);
   assert.equal(
     planHasFeature(PRODUCT_PLANS.free, 'private-pointer'),

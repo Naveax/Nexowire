@@ -33,6 +33,18 @@ export function hostedMcpUsageEventId(input: {
   return 'mcp-' + digest;
 }
 
+/** The MCP caller marks tool calls made in a special-skill workflow using
+ * params._meta['nexowire/special-skill'] = true. Dedicated skill tools
+ * are independently classified by their name by quoteToolUsage(). */
+function hasSpecialSkillContext(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
+  const params = (body as Record<string, unknown>).params;
+  if (typeof params !== 'object' || params === null || Array.isArray(params)) return false;
+  const meta = (params as Record<string, unknown>)._meta;
+  return typeof meta === 'object' && meta !== null && !Array.isArray(meta) &&
+    (meta as Record<string, unknown>)['nexowire/special-skill'] === true;
+}
+
 export async function enforceHostedMcpMetering(input: {
   authorization: BearerAuthorization | undefined;
   authorizationHeader: string | undefined;
@@ -72,6 +84,7 @@ export async function enforceHostedMcpMetering(input: {
         toolName,
       }),
       toolName,
+      ...(hasSpecialSkillContext(input.body) ? { specialSkill: true } : {}),
     });
 
     if (!decision) {

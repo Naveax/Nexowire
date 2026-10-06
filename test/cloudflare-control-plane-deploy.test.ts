@@ -54,6 +54,7 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
             'https://relay.example.test/mcp',
           NEXOWIRE_ADMIN_GITHUB_ID: '123456',
           NEXOWIRE_FREE_CAPACITY_PERCENT: '75',
+          NEXOWIRE_PAID_BILLING_ENABLED: 'false',
           NEXOWIRE_LEMONSQUEEZY_STORE_ID: '1001',
           NEXOWIRE_LEMONSQUEEZY_PLUS_VARIANT_ID: '2001',
           NEXOWIRE_LEMONSQUEEZY_PRO_VARIANT_ID: '2002',
@@ -102,6 +103,7 @@ test('Cloudflare runtime config generator injects D1, vars and required secret n
       runtime.vars.NEXOWIRE_FREE_CAPACITY_PERCENT,
       '75',
     );
+    assert.equal(runtime.vars.NEXOWIRE_PAID_BILLING_ENABLED, 'false');
     assert.equal(
       runtime.vars.NEXOWIRE_ADMIN_GITHUB_ID,
       '123456',

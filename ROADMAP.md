@@ -111,6 +111,10 @@
 - [x] complete ChatGPT-side OAuth MCP connector verification
 
 
+## Temporary Free-only policy (2026-10-06)
+
+Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a future paid launch after legal/provider verification. Hosted accounts have 1,000 weighted tool units per UTC month; normal tools are 1x, special skill tools and calls marked by the invoking skill workflow are 5x. The quota denies further calls before execution; all billing routes remain 503/BILLING_PAUSED by default, no automatic payments/upgrades. The provider integration is retained but dormant. See docs/FREE_ONLY_POLICY.md. Verify the current main and CI before claiming the policy is deployed; a branch-local implementation is not proof of production rollout.
+
 ## Post-v1 - Hosted product control plane
 
 - [x] Free / Plus / Pro / Custom plan model with hard-stop zero-owner-spend policy

@@ -36,6 +36,8 @@ function subscriptionLabel(status) {
   return labels[status] ?? status;
 }
 
+const FREE_ONLY_MODE = true;
+
 function renderBilling(status) {
   const panel = $('billing-panel');
   panel.classList.remove('hidden');
@@ -106,6 +108,15 @@ function renderBilling(status) {
 
 async function loadBilling() {
   const panel = $('billing-panel');
+  if (FREE_ONLY_MODE) {
+    panel.classList.remove('hidden');
+    $('upgrade-plus').classList.add('hidden');
+    $('upgrade-pro').classList.add('hidden');
+    $('billing-portal').classList.add('hidden');
+    $('prepaid-packs').classList.add('hidden');
+    $('billing-detail').textContent = 'Herkese ücretsiz: ayda 1.000 ağırlıklı tool çağrısı. Normal çağrı 1, özel skill çağrısı 5 birim. Ödeme kapalı.';
+    return;
+  }
   panel.classList.add('hidden');
 
   const response = await fetch('/api/v1/billing/status', {
@@ -125,6 +136,7 @@ async function loadBilling() {
 }
 
 async function startCheckout(planId) {
+  if (FREE_ONLY_MODE) return;
   setBillingBusy(true);
   try {
     const response = await fetch(
@@ -161,6 +173,7 @@ async function startCheckout(planId) {
 }
 
 async function startPrepaidCheckout(variantId) {
+  if (FREE_ONLY_MODE) return;
   setBillingBusy(true);
   try {
     const response = await fetch(
@@ -192,6 +205,7 @@ async function startPrepaidCheckout(variantId) {
 }
 
 async function openBillingPortal() {
+  if (FREE_ONLY_MODE) return;
   setBillingBusy(true);
   try {
     const response = await fetch(

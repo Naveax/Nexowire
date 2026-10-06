@@ -152,6 +152,7 @@ export class ControlPlaneMcpClient {
     accountId: string;
     eventId: string;
     toolName: string;
+    specialSkill?: boolean;
   }): Promise<RemoteMcpUsageDecision | undefined> {
     const body = await this.post(
       '/api/v1/internal/usage/charge',
@@ -159,6 +160,7 @@ export class ControlPlaneMcpClient {
         accountId: input.accountId,
         eventId: input.eventId,
         toolName: input.toolName,
+        ...(input.specialSkill === true ? { specialSkill: true } : {}),
       },
     );
 

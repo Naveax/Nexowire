@@ -36,7 +36,7 @@ test('new accounts default to free plan and dashboard is empty', async () => {
   });
 
   assert.equal(dashboard.planId, 'free');
-  assert.equal(dashboard.usage.monthlyCredits, 20_000);
+  assert.equal(dashboard.usage.monthlyCredits, 1_000);
   assert.equal(dashboard.devices.length, 0);
   assert.equal(dashboard.privateControlsIncluded, false);
 });
@@ -201,13 +201,13 @@ test('same device anchor merges free quota across different accounts', async () 
     accountId: accountA.id,
     eventId: 'a-before-link',
     toolName: 'machine_health',
-    baseCredits: 7_000,
+    baseCredits: 400,
   });
   const usedByB = await service.chargeUsage({
     accountId: accountB.id,
     eventId: 'b-before-link',
     toolName: 'machine_health',
-    baseCredits: 5_000,
+    baseCredits: 200,
   });
   assert.equal(usedByA.status, 'charged');
   assert.equal(usedByB.status, 'charged');
@@ -251,18 +251,18 @@ test('same device anchor merges free quota across different accounts', async () 
     accountId: accountB.id,
     role: 'user',
   });
-  assert.equal(dashboardA.usage.usedCredits, 12_000);
-  assert.equal(dashboardB.usage.usedCredits, 12_000);
+  assert.equal(dashboardA.usage.usedCredits, 600);
+  assert.equal(dashboardB.usage.usedCredits, 600);
 
   const overQuota = await service.chargeUsage({
     accountId: accountB.id,
     eventId: 'b-after-link',
     toolName: 'machine_health',
-    baseCredits: 8_001,
+    baseCredits: 401,
   });
   assert.equal(overQuota.status, 'denied');
   assert.equal(overQuota.reason, 'quota-exhausted');
-  assert.equal(overQuota.remainingCredits, 8_000);
+  assert.equal(overQuota.remainingCredits, 400);
 });
 
 test('admin overview requires both admin identity and admin account flag', async () => {

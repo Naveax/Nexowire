@@ -48,6 +48,8 @@ export interface AuthenticatedDeviceIdentity {
 export interface ControlPlaneServiceOptions {
   now?: () => Date;
   infrastructure?: () => InfrastructureSnapshot;
+  /** Keep all users on the free plan and reject paid configuration. */
+  freeOnly?: boolean;
 }
 
 function boundedId(name: string, input: string): string {
@@ -130,11 +132,13 @@ export function verifyDeviceCredential(
 export class ControlPlaneService {
   private readonly now: () => Date;
   private readonly infrastructure: () => InfrastructureSnapshot;
+  private readonly freeOnly: boolean;
 
   constructor(
     private readonly store: ControlPlaneStore,
     options: ControlPlaneServiceOptions = {},
   ) {
+    this.freeOnly = options.freeOnly ?? false;
     this.now = options.now ?? (() => new Date());
     this.infrastructure =
       options.infrastructure ??
@@ -239,7 +243,7 @@ export class ControlPlaneService {
     identity: ControlPlaneIdentity,
   ): Promise<UserDashboardSnapshot> {
     const account = await this.requireAccount(identity.accountId);
-    const plan = resolvePlan(account);
+    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
     const period = monthPeriod(this.now());
     const [usage, devices, prepaidCredits] =
       await Promise.all([
@@ -258,7 +262,7 @@ export class ControlPlaneService {
     return {
       accountId: account.id,
       displayName: account.displayName,
-      planId: account.planId,
+      planId: this.freeOnly ? 'free' : account.planId,
       billingMode: plan.billingMode,
       usage: {
         usedCredits: usage?.usedCredits ?? 0,
@@ -319,7 +323,7 @@ export class ControlPlaneService {
       users: {
         total: accounts.length,
         active24h: activeAccountIds.size,
-        paid: accounts.filter(
+        paid: this.freeOnly ? 0 : accounts.filter(
           (account) => account.planId !== 'free',
         ).length,
       },
@@ -350,6 +354,7 @@ export class ControlPlaneService {
       features?: readonly ProductFeature[];
     },
   ): Promise<ProductAccountRecord> {
+    if (this.freeOnly) throw new Error('BILLING_PAUSED');
     const actor = await this.requireAccount(identity.accountId);
     if (identity.role !== 'admin' || !actor.admin) {
       throw new Error('ADMIN_REQUIRED');
@@ -416,7 +421,7 @@ export class ControlPlaneService {
     expiresAt: string;
   }> {
     const account = await this.requireAccount(identity.accountId);
-    const plan = resolvePlan(account);
+    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
     const requestedDeviceId = deviceIdInput?.trim()
       ? boundedId('deviceId', deviceIdInput)
       : undefined;
@@ -468,7 +473,7 @@ export class ControlPlaneService {
     if (!record) throw new Error('PAIRING_NOT_FOUND');
 
     const account = await this.requireAccount(record.ownerAccountId);
-    const plan = resolvePlan(account);
+    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
 
     const consumed = consumePairingChallenge(
       record,
@@ -635,6 +640,7 @@ export class ControlPlaneService {
     eventId: string;
     toolName: string;
     baseCredits?: number;
+    specialSkill?: boolean;
   }): Promise<{
     status: 'charged' | 'duplicate' | 'denied';
     chargedCredits: number;
@@ -645,11 +651,12 @@ export class ControlPlaneService {
       | null;
   }> {
     const account = await this.requireAccount(input.accountId);
-    const plan = resolvePlan(account);
+    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
     const quote = quoteToolUsage(
       plan,
       input.toolName,
       input.baseCredits ?? 1,
+      input.specialSkill === true,
     );
     if (!quote.allowed) {
       return {
