@@ -2,6 +2,12 @@ name: Deploy Nexowire Control Plane
 
 on:
   workflow_dispatch:
+  # One-time self-deploy when the owner-quota PR's main CI succeeds.
+  # All later CI runs trigger a skipped job, not another deployment.
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: nexowire-control-plane-production
@@ -12,6 +18,13 @@ permissions:
 
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_commit.message == 'feat(owner): enable verified account unlimited Free MCP quota (#213)')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -37,6 +50,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Guard against deploying a stale or untested main commit
+        if: github.event_name == 'workflow_run'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.workflow_run.head_sha }}"
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)"
 
       - name: Setup Node
         uses: actions/setup-node@v4
