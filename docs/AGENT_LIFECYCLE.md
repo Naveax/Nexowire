@@ -41,6 +41,8 @@ Windows uses a current-user Scheduled Task triggered at logon with automatic res
 
 A logout ends that interactive session. The agent starts again at the next logon; it is not disguised as a LocalSystem service.
 
+The Windows native agent also acquires a kernel-owned, device/user-scoped named-pipe singleton lease before opening persistent worker/task state or Hub connections. If two historical launchers try to start the same device identity, the second exits with `AGENT_ALREADY_RUNNING`; it must not connect as a duplicate. The kernel releases the lease after normal exit or forced termination, so no stale PID/lockfile reset or credential is needed. Keep launcher ownership unambiguous instead of treating the singleton as a substitute for correct Scheduled Task registration.
+
 ## Linux
 
 Linux uses a systemd user service with `Restart=always` and `WantedBy=default.target`.
