@@ -113,7 +113,7 @@ function renderBilling(status) {
   }
 }
 
-async function loadBilling() {
+async function loadBilling(snapshot) {
   const panel = $('billing-panel');
   if (FREE_ONLY_MODE) {
     panel.classList.remove('hidden');
@@ -121,7 +121,10 @@ async function loadBilling() {
     $('upgrade-pro').classList.add('hidden');
     $('billing-portal').classList.add('hidden');
     $('prepaid-packs').classList.add('hidden');
-    $('billing-detail').textContent = 'Herkese ücretsiz: ayda 1.000 ağırlıklı tool çağrısı. Normal çağrı 1, özel skill çağrısı 5 birim. Ödeme kapalı.';
+    $('billing-detail').textContent =
+      snapshot?.billingMode === 'free' && snapshot.usage?.monthlyCredits === null
+        ? 'Sahip hesabı: MCP tool kullanım kotası sınırsız. Ödeme kapalı.'
+        : 'Herkese ücretsiz: ayda 1.000 ağırlıklı tool çağrısı. Normal çağrı 1, özel skill çağrısı 5 birim. Ödeme kapalı.';
     return;
   }
   panel.classList.add('hidden');
@@ -265,6 +268,9 @@ function render(snapshot) {
       Math.round((usage.usedCredits / usage.monthlyCredits) * 100),
     );
     $('usage-bar').style.width = percent + '%';
+  } else if (snapshot.billingMode === 'free') {
+    $('usage').textContent = 'Sınırsız · ' + formatNumber(usage.usedCredits) + ' birim kullanıldı';
+    $('usage-bar').style.width = '0%';
   } else {
     const remaining = usage.prepaidCredits ?? 0;
     $('usage').textContent = formatNumber(remaining) + ' kredi';
@@ -340,9 +346,10 @@ async function load() {
     if (!response.ok) {
       throw new Error('HTTP ' + response.status);
     }
-    render(await response.json());
+    const snapshot = await response.json();
+    render(snapshot);
     try {
-      await loadBilling();
+      await loadBilling(snapshot);
     } catch (billingError) {
       $('billing-panel').classList.remove('hidden');
       $('billing-detail').textContent =
