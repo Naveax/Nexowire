@@ -329,6 +329,9 @@ export default {
     const service = new ControlPlaneService(store, {
       // Paid checkout stays unavailable until manually enabled after KYC.
       freeOnly: env.NEXOWIRE_PAID_BILLING_ENABLED !== 'true',
+      // GitHub's immutable numeric user ID for the Nexowire repository owner.
+      // This is an application quota exemption, not paid infrastructure access.
+      ownerGithubId: '79841922',
       infrastructure: () => ({
         freeCapacityPercent: boundedCapacity(env),
         prepaidCapacityCredits: 0,
