@@ -71,7 +71,7 @@ test('local and self-hosted authorization bypass hosted billing', async () => {
   assert.equal(calls, 0);
 });
 
-test('hosted tool call is charged before execution and duplicates are allowed', async () => {
+test('hosted tool call is charged once and duplicate replay is blocked before execution', async () => {
   const seen: Array<{
     accountId: string;
     eventId: string;
@@ -118,7 +118,13 @@ test('hosted tool call is charged before execution and duplicates are allowed', 
       body,
       client,
     }),
-    { allowed: true },
+    {
+      allowed: false,
+      status: 409,
+      error: 'duplicate_request',
+      code: 'MCP_DUPLICATE_REQUEST',
+      remainingCredits: 999,
+    },
   );
   assert.equal(seen.length, 2);
   assert.equal(
@@ -238,4 +244,32 @@ test('multi-tool batches are rejected before any charge to avoid partial billing
     },
   );
   assert.equal(calls, 0);
+});
+
+test('distinct invocation ids charge separately while repeated ids are rejected', async () => {
+  const seen = new Set<string>();
+  const client = {
+    chargeTool: async (input: { eventId: string }) => {
+      const duplicate = seen.has(input.eventId);
+      if (!duplicate) seen.add(input.eventId);
+      return {
+        status: duplicate ? 'duplicate' : 'charged',
+        chargedCredits: duplicate ? 0 : 1,
+        remainingCredits: 1000 - seen.size,
+        reason: null,
+      };
+    },
+  } as unknown as ControlPlaneMcpClient;
+  const meter = async (body: Record<string, unknown>) => enforceHostedMcpMetering({
+    authorization, authorizationHeader: 'Bearer nwx_mcp_token', body, client,
+  });
+  const first = toolCall(41, 'machine_health');
+  const second = toolCall(42, 'machine_health');
+  assert.deepEqual(await meter(first), { allowed: true });
+  assert.deepEqual(await meter(second), { allowed: true });
+  const replay = await meter(first);
+  assert.equal(replay.allowed, false);
+  assert.equal(replay.status, 409);
+  assert.equal(replay.code, 'MCP_DUPLICATE_REQUEST');
+  assert.equal(seen.size, 2);
 });

@@ -18,7 +18,11 @@ the date of the owner's birthday or the presence of API keys.
   marker on every nested call requiring 5x weighting; unmarked ordinary calls
   cost 1. Do not claim otherwise.
 - Existing premium tool entitlements remain gated for Free users.
-- Duplicate event IDs in the same billing period are idempotent.
+- Duplicate event IDs in the same billing period are idempotent in the D1
+  ledger. A repeated identical hosted MCP request returns HTTP 409
+  MCP_DUPLICATE_REQUEST **before tool execution**, not an unmetered
+  second execution. A new intentional call must use a fresh JSON-RPC ID;
+  uncertain mutation retries must not blindly replay.
 - New periods start on the **first day of each month at 00:00 UTC**.
 - At exhaustion, deny before dispatch (no postpaid charges, no owner-paid overage).
 - Previous usage in the current UTC month stays counted when the new 1,000-unit

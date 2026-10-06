@@ -96,6 +96,18 @@ export async function enforceHostedMcpMetering(input: {
       };
     }
 
+    // The D1 ledger deduplicates the charge, not tool execution.
+    // Repeated identical calls must not execute again without a charge.
+    if (decision.status === 'duplicate') {
+      return {
+        allowed: false,
+        status: 409,
+        error: 'duplicate_request',
+        code: 'MCP_DUPLICATE_REQUEST',
+        remainingCredits: decision.remainingCredits,
+      };
+    }
+
     if (decision.status === 'denied') {
       const featureDenied =
         decision.reason === 'feature-not-in-plan';
