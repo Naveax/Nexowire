@@ -200,3 +200,28 @@ test('device presence endpoint is service-only and updates dashboard state', asy
     '2026-10-04T13:36:15.338Z',
   );
 });
+
+test('public usage policy reports server-side Free limits without exposing account data', async () => {
+  const { handler } = await setup();
+  const response = await handler(request('/api/v1/public/usage-policy'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const result = await response.json() as Record<string, unknown>;
+  assert.deepEqual(result, {
+    planId: 'free',
+    monthlyCredits: 1_000,
+    normalToolCredits: 1,
+    specialSkillToolCredits: 5,
+    quotaPeriod: 'calendar-month-utc',
+  });
+  assert.equal('accountId' in result, false);
+  assert.equal('usedCredits' in result, false);
+});
+
+test('public policy supports read only; authenticated account data remains protected', async () => {
+  const { handler } = await setup();
+  const rejected = await handler(request('/api/v1/public/usage-policy', undefined, { method: 'POST' }));
+  assert.equal(rejected.status, 401);
+  const privateDashboard = await handler(request('/api/v1/me/dashboard'));
+  assert.equal(privateDashboard.status, 401);
+});
