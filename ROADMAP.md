@@ -113,7 +113,21 @@
 
 ## Temporary Free-only policy (2026-10-06)
 
-Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a future paid launch after legal/provider verification. Hosted accounts have 1,000 weighted tool units per UTC month; normal tools are 1x, special skill tools and calls marked by the invoking skill workflow are 5x. The quota denies further calls before execution; all billing routes remain 503/BILLING_PAUSED by default, no automatic payments/upgrades. The provider integration is retained but dormant. See docs/FREE_ONLY_POLICY.md. Verify the current main and CI before claiming the policy is deployed; a branch-local implementation is not proof of production rollout.
+Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a future paid launch after legal/provider verification. Normal hosted Free accounts have 1,000 weighted tool units per UTC calendar month; the uniquely GitHub-OAuth-verified repository owner (GitHub numeric subject `79841922`) has `monthlyCredits: null` and therefore no Nexowire-hosted tool-credit ceiling. Both retain 1x normal and 5x special-skill event accounting, device/tool authorization, and idempotent execution. The quota denies further calls before execution; all billing routes remain 503/BILLING_PAUSED by default, no automatic payments/upgrades. The provider integration is retained but dormant. See docs/FREE_ONLY_POLICY.md. Verify the current main and CI before claiming the policy is deployed; a branch-local implementation is not proof of production rollout.
+
+## 2026-10-07 two-PC production acceptance
+
+- [x] Owner-only unlimited hosted MCP tool-credit deployment: PR #213, exact-main 7/7 CI `37541360109`, production Worker deploy `37541527113`; paid billing remained disabled. PR #214 restored manual-only deploy and exact-main CI `37541907756` passed.
+- [x] Verify live Nexowire MCP access to two distinct Windows agents: `Naveax` v1.0.1 and `work-pc` v1.0.0.
+- [x] Run cross-device basic Windows shell, WSL2, DNS/HTTPS, allowed file write/read/patch/delete, isolated Edge browser navigation/DOM, visible screenshot, bounded UIA, registry/task enumeration, and 3-stage dependency task graph smoke tests.
+- [x] Prove generic Windows route ambiguity does not silently select either device; exact-ID routes select correctly.
+- [ ] Authenticated production owner dashboard must be checked to explicitly confirm `usage.monthlyCredits === null`; successful MCP requests and simulated D1 tests are not a substitute for this proof.
+- [ ] Conduct controlled agent restart/autostart/reconnect and real production multi-concurrency acceptance without dropping either computer's control session; plan a rollback first.
+- [ ] Investigate duplicate `Nexowire Stack`/`Nexowire Native Agent` scheduled-task overlap on `Naveax`, and the `work-pc` non-admin firewall rule read returning Windows access-denied. No unsafe privilege grant or task disablement has been applied.
+- [ ] Safely migrate the older `work-pc` self-host Hub/Agent from v1.0.0 after verifying an explicit rollback and its existing Tailscale/control-plane service wiring.
+- [ ] Prepare next signed/checksum-pinned Windows release candidate after the remaining issues are reproducibly fixed; do not auto-publish.
+
+Detailed evidence: [docs/LIVE_ACCEPTANCE_2026-10-07.md](docs/LIVE_ACCEPTANCE_2026-10-07.md).
 
 ## Post-v1 - Hosted product control plane
 
