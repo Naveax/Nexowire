@@ -89,6 +89,59 @@ test('pairing creates one device credential and stores only its hash', async () 
   );
 });
 
+test('paired devices default SAFE and only their owner can persist Full Access', async () => {
+  const { service } = setup();
+  await service.ensureAccount({ id: 'acct-access-owner' });
+  await service.ensureAccount({ id: 'acct-access-other' });
+
+  const pairing = await service.beginPairing(
+    { accountId: 'acct-access-owner', role: 'user' },
+    'access-pc',
+  );
+  const consumed = await service.consumePairing({
+    pairingId: pairing.pairingId,
+    token: pairing.token,
+    platform: 'win32',
+    deviceAnchorHash: 'f'.repeat(64),
+  });
+  assert.equal(consumed.device.accessMode, 'safe');
+
+  const initial = await service.dashboard({
+    accountId: 'acct-access-owner',
+    role: 'user',
+  });
+  assert.equal(initial.devices[0]?.accessMode, 'safe');
+
+  const enabled = await service.setDeviceAccessMode(
+    { accountId: 'acct-access-owner', role: 'user' },
+    consumed.device.id,
+    'full',
+  );
+  assert.equal(enabled.accessMode, 'full');
+
+  const persisted = await service.dashboard({
+    accountId: 'acct-access-owner',
+    role: 'user',
+  });
+  assert.equal(persisted.devices[0]?.accessMode, 'full');
+
+  await assert.rejects(
+    service.setDeviceAccessMode(
+      { accountId: 'acct-access-other', role: 'user' },
+      consumed.device.id,
+      'full',
+    ),
+    /DEVICE_NOT_FOUND/,
+  );
+
+  const safe = await service.setDeviceAccessMode(
+    { accountId: 'acct-access-owner', role: 'user' },
+    consumed.device.id,
+    'safe',
+  );
+  assert.equal(safe.accessMode, 'safe');
+});
+
 test('free device limit is enforced before issuing another credential', async () => {
   const { service } = setup();
   await service.ensureAccount({ id: 'acct-1' });
