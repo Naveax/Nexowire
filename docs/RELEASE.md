@@ -4,29 +4,25 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 ## Published stable release
 
-Nexowire v1.0.2 was published on 2026-10-07 from tag `v1.0.2` at commit `68230bc52d3365aa983110512a860ea1a31234f8`. Authorized publisher run `37617454518` passed the final release gate and created the exact tag; tag-scoped Release Readiness run `37617530936` then passed Linux/macOS/Windows packaging, Windows singleton/setup smoke, checksum/manifest/SBOM verification, SLSA and SBOM attestations, and GitHub Release publication. The release contains the canonical tarball, SHA256 sums, release manifest, CycloneDX SBOM, `Nexowire-Setup.cmd`, `Nexowire-Windows-x64.zip`, and Windows SHA256 sums. npm publication remains disabled.
+Nexowire v1.0.3 was published on 2026-10-07 from tag `v1.0.3` at commit `2b0b1f9193dec241998ec31993ff2d3269880690`. Exact-main CI `37633896113`, authorized publisher `37633896191`, and tag-scoped Release Readiness `37634000571` all completed successfully. Linux/macOS/Windows packaging, Windows setup/singleton smoke, checksum/manifest/SBOM verification, provenance/SBOM attestations, and GitHub Release publication passed. npm publication remains disabled.
 
-Live v1.0.2 acceptance after publication:
+v1.0.3 closes the v1.0.2 pre-logon Hub lifecycle gap in the release artifacts:
 
-- `Naveax` was migrated from the v1.0.1 versioned runtime to the checksum-verified v1.0.2 Windows payload at `1.0.2-68230bc52d33`; the old v1.0.1 install remains as rollback. The stale old agent was removed with exact PID/command guards and the canonical Scheduled Task reconnected on the same stable device ID reporting v1.0.2.
-- `work-pc` Hub and Agent were migrated to the checksum-verified versioned v1.0.2 Windows payload at `1.0.2-68230bc52d33`; bounded Hub/Agent restart recovery passed on the same stable device ID. Pre-v1.0.2 launchers remain as rollback copies until final soak closes.
-- Naveax Privileged Broker remains live on loopback `127.0.0.1:43112`. work-pc still requires one initial local administrator approval before its Privileged Broker can be installed.
+- purpose-bound Windows DPAPI `LocalMachine` envelopes coexist with the current-user format;
+- elevated `nexowire hub boot-install` re-seals the existing control-plane service token to LocalMachine DPAPI without persisting plaintext;
+- `Nexowire Hub Boot` is designed to run as SYSTEM at `AtStartup`;
+- failed SYSTEM-Hub health validation rolls back to the prior user Hub;
+- `boot-uninstall` reverses the machine-level change.
 
-## Unpublished v1.0.3 reboot-resilience candidate (2026-10-07)
+The machine-level boot lifecycle and Privileged Broker intentionally require one explicit administrator approval. Nexowire does not bypass UAC.
 
-A real `work-pc` Windows reboot exposed a lifecycle gap in v1.0.2: the public Hub Scheduled Task is `AtLogOn` with an Interactive principal, so after a cold reboot Nexowire can remain unavailable until that Windows user logs in. Calling this merely "autostart" hides an important boundary.
+Live rollout state:
 
-v1.0.3 is the candidate to close that gap:
-
-- Add purpose-bound Windows DPAPI `LocalMachine` envelopes while retaining the existing current-user envelope format and default.
-- Add an elevated `nexowire hub boot-install` path that re-seals the existing control-plane service token from current-user DPAPI to LocalMachine DPAPI without persisting plaintext.
-- Store the machine envelope and boot launcher under `%ProgramData%\\Nexowire\\hub-boot` and harden that tree to SYSTEM and the built-in Administrators group.
-- Register `Nexowire Hub Boot` as a SYSTEM `AtStartup` Scheduled Task so the public Hub can recover before an interactive user logon.
-- Disable the legacy user-logon Hub only after the boot task is registered; if the SYSTEM Hub fails health validation, remove the boot task and restore/restart the previous user Hub.
-- `boot-uninstall` reverses the change and restores the user Hub task.
-- Native Agent remains a per-user/logon component; the pre-logon Hub exists so remote agents and the public MCP entry point do not depend on an interactive login.
-
-The boot lifecycle intentionally requires one elevated installation because LocalMachine secret ACL hardening and a SYSTEM startup task are machine-level changes. It does not attempt to bypass UAC. Do not authorize or publish v1.0.3 until Windows CI proves LocalMachine DPAPI round-trip, cross-platform CI passes, and Release Readiness builds the checksum-pinned Windows candidate.
+- `Naveax` runs the checksum-verified versioned v1.0.3 runtime `1.0.3-2b0b1f9193de`; the canonical Native Agent process was observed from that exact runtime after the old v1.0.2 process was guardedly stopped and Stack restarted the task.
+- `work-pc` runs checksum-verified versioned v1.0.3 Hub and Native Agent processes from `1.0.3-2b0b1f9193de`.
+- Naveax Privileged Broker was previously verified live on loopback `127.0.0.1:43112`.
+- work-pc still has only the user Hub + Native Agent tasks and no broker listener on `127.0.0.1:43112`. The logged-in account is an Administrators-group member but the agent is non-elevated. A parser-validated one-UAC final setup script is staged locally to install Hub Boot + Privileged Broker; it has not been executed yet.
+- A real work-pc cold reboot must be repeated after that one-time machine-level install before pre-logon availability can be marked PASS.
 
 ## Local release candidate check
 
@@ -81,7 +77,7 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The current stable v1 release line is versioned as `1.0.2`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
+The current stable v1 release line is versioned as `1.0.3`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
 
 ## Explicit GitHub Release authorization
 
