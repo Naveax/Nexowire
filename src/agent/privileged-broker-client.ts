@@ -47,6 +47,7 @@ export class PrivilegedBrokerClient {
   async probe(): Promise<{
     reachable: boolean;
     elevated: boolean;
+    version: string | null;
   }> {
     const controller = new AbortController();
     const timer = setTimeout(
@@ -68,22 +69,30 @@ export class PrivilegedBrokerClient {
         return {
           reachable: false,
           elevated: false,
+          version: null,
         };
       }
       const body = await response.json() as {
         ok?: boolean;
         elevated?: boolean;
+        version?: unknown;
       };
       return {
         reachable: body.ok === true,
         elevated:
           body.ok === true &&
           body.elevated === true,
+        version:
+          body.ok === true &&
+          typeof body.version === 'string'
+            ? body.version
+            : null,
       };
     } catch {
       return {
         reachable: false,
         elevated: false,
+        version: null,
       };
     } finally {
       clearTimeout(timer);
