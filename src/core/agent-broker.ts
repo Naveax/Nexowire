@@ -22,6 +22,7 @@ interface PendingRequest {
   deviceId: string;
   capability: string;
   input: unknown;
+  accessMode: 'safe' | 'full';
   sentInstanceId: string;
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
@@ -274,6 +275,7 @@ export class AgentBroker {
     input: unknown,
     timeoutMs = 60_000,
     requestId: string = randomUUID(),
+    accessMode: 'safe' | 'full' = 'safe',
   ): Promise<unknown> {
     const connection = this.agents.get(deviceId);
     if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
@@ -306,6 +308,7 @@ export class AgentBroker {
         deviceId,
         capability,
         input,
+        accessMode,
         sentInstanceId: connection.instanceId,
         resolve,
         reject,
@@ -486,6 +489,7 @@ export class AgentBroker {
         requestId: pending.requestId,
         capability: pending.capability,
         input: pending.input,
+        accessMode: pending.accessMode,
       }),
     );
   }
