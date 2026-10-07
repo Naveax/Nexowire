@@ -13,6 +13,18 @@ export class WindowsDpapiError extends Error {
 const LEGACY_BROKER_ENTROPY = 'Nexowire/privileged-broker/v1';
 const PROTECTED_SECRET_PREFIX = 'Nexowire/protected-secret/v1/';
 
+export type WindowsDpapiScope =
+  | 'current-user'
+  | 'local-machine';
+
+function dpapiScopeExpression(
+  scope: WindowsDpapiScope,
+): 'CurrentUser' | 'LocalMachine' {
+  return scope === 'local-machine'
+    ? 'LocalMachine'
+    : 'CurrentUser';
+}
+
 function assertWindows(): void {
   if (process.platform !== 'win32') {
     throw new WindowsDpapiError(
@@ -65,16 +77,20 @@ function strictBase64(value: string): Buffer {
 
 function powershellScript(
   operation: 'protect' | 'unprotect',
+  scope: WindowsDpapiScope = 'current-user',
 ): string {
   const method =
     operation === 'protect' ? 'Protect' : 'Unprotect';
+  const dataProtectionScope =
+    dpapiScopeExpression(scope);
   return [
     "$ErrorActionPreference='Stop'",
     'Add-Type -AssemblyName System.Security',
     '$payload=[Console]::In.ReadToEnd() | ConvertFrom-Json',
     '$inputBytes=[Convert]::FromBase64String([string]$payload.input)',
     '$entropy=[Convert]::FromBase64String([string]$payload.entropy)',
-    '$scope=[Security.Cryptography.DataProtectionScope]::CurrentUser',
+    '$scope=[Security.Cryptography.DataProtectionScope]::' +
+      dataProtectionScope,
     `$output=[Security.Cryptography.ProtectedData]::${method}($inputBytes,$entropy,$scope)`,
     '[Console]::Out.Write([Convert]::ToBase64String($output))',
   ].join('; ');
@@ -112,6 +128,7 @@ async function runDpapi(
   operation: 'protect' | 'unprotect',
   value: Buffer,
   entropy: string,
+  scope: WindowsDpapiScope = 'current-user',
 ): Promise<Buffer> {
   assertWindows();
 
@@ -123,7 +140,7 @@ async function runDpapi(
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        powershellScript(operation),
+        powershellScript(operation, scope),
       ],
       {
         windowsHide: true,
@@ -166,6 +183,7 @@ function runDpapiSync(
   operation: 'protect' | 'unprotect',
   value: Buffer,
   entropy: string,
+  scope: WindowsDpapiScope = 'current-user',
 ): Buffer {
   assertWindows();
 
@@ -176,7 +194,7 @@ function runDpapiSync(
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      powershellScript(operation),
+      powershellScript(operation, scope),
     ],
     {
       windowsHide: true,
@@ -255,5 +273,43 @@ export function unprotectWindowsUserSecretForPurposeSync(
     'unprotect',
     strictBase64(ciphertext),
     entropyForPurpose(purpose),
+  ).toString('utf8');
+}
+
+export async function protectWindowsMachineSecretForPurpose(
+  plaintext: string,
+  purpose: string,
+): Promise<string> {
+  const protectedBytes = await runDpapi(
+    'protect',
+    Buffer.from(plaintext, 'utf8'),
+    entropyForPurpose(purpose),
+    'local-machine',
+  );
+  return protectedBytes.toString('base64');
+}
+
+export async function unprotectWindowsMachineSecretForPurpose(
+  ciphertext: string,
+  purpose: string,
+): Promise<string> {
+  const plaintext = await runDpapi(
+    'unprotect',
+    strictBase64(ciphertext),
+    entropyForPurpose(purpose),
+    'local-machine',
+  );
+  return plaintext.toString('utf8');
+}
+
+export function unprotectWindowsMachineSecretForPurposeSync(
+  ciphertext: string,
+  purpose: string,
+): string {
+  return runDpapiSync(
+    'unprotect',
+    strictBase64(ciphertext),
+    entropyForPurpose(purpose),
+    'local-machine',
   ).toString('utf8');
 }

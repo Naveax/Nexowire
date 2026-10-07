@@ -3,8 +3,11 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
 import {
+  protectWindowsMachineSecretForPurpose,
   protectWindowsUserSecretForPurpose,
+  unprotectWindowsMachineSecretForPurposeSync,
   unprotectWindowsUserSecretForPurposeSync,
+  type WindowsDpapiScope,
 } from './windows-dpapi.js';
 import {
   readSecretFile,
@@ -19,14 +22,19 @@ const PurposeSchema = z
 
 const EnvelopeSchema = z.object({
   version: z.literal(1),
-  protection: z.literal('windows-dpapi-current-user'),
+  protection: z.enum([
+    'windows-dpapi-current-user',
+    'windows-dpapi-local-machine',
+  ]),
   purpose: PurposeSchema,
   ciphertext: z.string().min(4).max(2_000_000),
 });
 
 export interface ProtectedSecretMetadata {
   version: 1;
-  protection: 'windows-dpapi-current-user';
+  protection:
+    | 'windows-dpapi-current-user'
+    | 'windows-dpapi-local-machine';
   purpose: string;
   file: string;
 }
@@ -108,10 +116,16 @@ export function readProtectedSecretFile(
 
   let plaintext: string;
   try {
-    plaintext = unprotectWindowsUserSecretForPurposeSync(
-      envelope.ciphertext,
-      purpose,
-    );
+    plaintext =
+      envelope.protection === 'windows-dpapi-local-machine'
+        ? unprotectWindowsMachineSecretForPurposeSync(
+            envelope.ciphertext,
+            purpose,
+          )
+        : unprotectWindowsUserSecretForPurposeSync(
+            envelope.ciphertext,
+            purpose,
+          );
   } catch (error) {
     throw new SecretFileError(
       'PROTECTED_SECRET_UNPROTECT_FAILED',
@@ -216,6 +230,7 @@ export async function writeProtectedSecretFile(
   options: {
     allowMultiline?: boolean;
     overwrite?: boolean;
+    scope?: WindowsDpapiScope;
   } = {},
 ): Promise<ProtectedSecretMetadata> {
   const purpose = PurposeSchema.parse(purposeInput);
@@ -255,14 +270,24 @@ export async function writeProtectedSecretFile(
     }
   }
 
+  const scope = options.scope ?? 'current-user';
   const ciphertext =
-    await protectWindowsUserSecretForPurpose(
-      plaintext,
-      purpose,
-    );
+    scope === 'local-machine'
+      ? await protectWindowsMachineSecretForPurpose(
+          plaintext,
+          purpose,
+        )
+      : await protectWindowsUserSecretForPurpose(
+          plaintext,
+          purpose,
+        );
+  const protection =
+    scope === 'local-machine'
+      ? 'windows-dpapi-local-machine'
+      : 'windows-dpapi-current-user';
   const envelope = EnvelopeSchema.parse({
     version: 1,
-    protection: 'windows-dpapi-current-user',
+    protection,
     purpose,
     ciphertext,
   });
@@ -288,7 +313,7 @@ export async function writeProtectedSecretFile(
 
   return {
     version: 1,
-    protection: 'windows-dpapi-current-user',
+    protection,
     purpose,
     file,
   };

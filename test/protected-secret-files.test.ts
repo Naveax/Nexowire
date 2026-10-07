@@ -127,6 +127,54 @@ test(
 );
 
 test(
+  'protected secret files support LocalMachine DPAPI envelopes without plaintext persistence',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'nexowire-machine-secret-'),
+    );
+    const file = path.join(root, 'service.machine.dpapi.json');
+
+    try {
+      const metadata = await writeProtectedSecretFile(
+        file,
+        'control-plane-service-token',
+        'machine-service-token',
+        {
+          scope: 'local-machine',
+        },
+      );
+      assert.equal(
+        metadata.protection,
+        'windows-dpapi-local-machine',
+      );
+      assert.equal(
+        readProtectedSecretFile(
+          file,
+          'control-plane-service-token',
+          'service token',
+        ),
+        'machine-service-token',
+      );
+      const raw = await fs.readFile(file, 'utf8');
+      assert.equal(
+        raw.includes('machine-service-token'),
+        false,
+      );
+      assert.equal(
+        inspectProtectedSecretFile(file).protection,
+        'windows-dpapi-local-machine',
+      );
+    } finally {
+      await fs.rm(root, {
+        recursive: true,
+        force: true,
+      });
+    }
+  },
+);
+
+test(
   'protected rotation-list files normalize newline/comma entries',
   { skip: process.platform !== 'win32' },
   async () => {
