@@ -9,8 +9,8 @@ export const AgentDeviceSchema = z.object({
   arch: z.string().min(1).max(64),
   agentVersion: z.string().min(1).max(64),
   capabilities: z.array(z.string().min(1).max(128)).max(256),
-  privilegeMode: z.enum(['direct', 'broker']).default('direct'),
-  adminBridgeReady: z.boolean().default(false),
+  privilegeMode: z.enum(['direct', 'broker']).optional(),
+  adminBridgeReady: z.boolean().optional(),
 });
 
 export const AgentHelloSchema = z.object({
