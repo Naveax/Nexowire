@@ -121,8 +121,8 @@ export async function startPrivilegedBroker(
 
   const server = createServer(async (request, response) => {
     if (
-      request.method !== 'POST' ||
-      request.url !== '/execute'
+      request.url !== '/execute' &&
+      request.url !== '/health'
     ) {
       response.writeHead(404, {
         'content-type': 'application/json',
@@ -149,6 +149,41 @@ export async function startPrivilegedBroker(
           },
         }),
       );
+      return;
+    }
+
+    if (request.url === '/health') {
+      if (request.method !== 'GET') {
+        response.writeHead(405, {
+          'content-type': 'application/json',
+        });
+        response.end(JSON.stringify({
+          ok: false,
+          error: { code: 'METHOD_NOT_ALLOWED' },
+        }));
+        return;
+      }
+      response.writeHead(200, {
+        'content-type': 'application/json',
+      });
+      response.end(JSON.stringify({
+        ok: true,
+        elevated:
+          options.requireElevation === false
+            ? true
+            : isWindowsProcessElevated(),
+      }));
+      return;
+    }
+
+    if (request.method !== 'POST') {
+      response.writeHead(405, {
+        'content-type': 'application/json',
+      });
+      response.end(JSON.stringify({
+        ok: false,
+        error: { code: 'METHOD_NOT_ALLOWED' },
+      }));
       return;
     }
 
