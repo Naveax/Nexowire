@@ -368,6 +368,11 @@ test('device presence updates dashboard and ignores stale state events', async (
       consumed.device.id,
       true,
       '2026-10-04T13:36:15.338Z',
+      {
+        agentVersion: '1.0.4',
+        privilegeMode: 'broker',
+        adminBridgeReady: true,
+      },
     ),
     true,
   );
@@ -381,6 +386,9 @@ test('device presence updates dashboard and ignores stale state events', async (
     dashboard.devices[0]?.lastSeenAt,
     '2026-10-04T13:36:15.338Z',
   );
+  assert.equal(dashboard.devices[0]?.agentVersion, '1.0.4');
+  assert.equal(dashboard.devices[0]?.privilegeMode, 'broker');
+  assert.equal(dashboard.devices[0]?.adminBridgeReady, true);
 
   assert.equal(
     await service.setDevicePresence(
@@ -395,6 +403,9 @@ test('device presence updates dashboard and ignores stale state events', async (
     role: 'user',
   });
   assert.equal(dashboard.devices[0]?.online, true);
+  assert.equal(dashboard.devices[0]?.agentVersion, '1.0.4');
+  assert.equal(dashboard.devices[0]?.privilegeMode, 'broker');
+  assert.equal(dashboard.devices[0]?.adminBridgeReady, true);
 
   assert.equal(
     await service.setDevicePresence(
@@ -413,4 +424,7 @@ test('device presence updates dashboard and ignores stale state events', async (
     dashboard.devices[0]?.lastSeenAt,
     '2026-10-04T13:36:16.338Z',
   );
+  assert.equal(dashboard.devices[0]?.agentVersion, '1.0.4');
+  assert.equal(dashboard.devices[0]?.privilegeMode, 'broker');
+  assert.equal(dashboard.devices[0]?.adminBridgeReady, true);
 });
