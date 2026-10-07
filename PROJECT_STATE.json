@@ -217,12 +217,12 @@
   "activeWork": [
     {
       "branch": "release/v1.0.4-prep-20261007",
-      "status": "in_progress",
+      "status": "testing",
       "goal": "Publish v1.0.4 containing the merged live side-by-side updater, machine-update bridge, and runtime/Admin Bridge telemetry added after v1.0.3; then migrate both live Windows PCs and verify update/status telemetry."
     },
     {
       "branch": "final-acceptance-live",
-      "status": "in_progress",
+      "status": "testing",
       "goal": "After v1.0.4 rollout, close the remaining manual gates: one explicit work-pc administrator approval for SYSTEM pre-logon Hub Boot plus Privileged Broker, real cold-boot/pre-logon recovery, authenticated owner dashboard unlimited-state proof, bounded production contention/soak, and rollback-safe storage cleanup."
     },
     {
