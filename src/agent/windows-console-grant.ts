@@ -86,6 +86,16 @@ export function requiresPhysicalConsoleGrant(
   return PHYSICAL_CONSOLE_CAPABILITIES.has(capability);
 }
 
+export function needsPhysicalConsoleApproval(
+  capability: string,
+  accessMode: 'safe' | 'full' = 'safe',
+): boolean {
+  return (
+    accessMode !== 'full' &&
+    requiresPhysicalConsoleGrant(capability)
+  );
+}
+
 export function physicalConsoleGrantStatus(
   now: Date = new Date(),
 ): PhysicalConsoleGrantStatus {
