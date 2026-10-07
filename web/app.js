@@ -364,7 +364,7 @@ function render(snapshot) {
         accessMode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
       accessCopy.textContent =
         accessMode === 'full'
-          ? 'Süresiz · işlem başına onay yok'
+          ? 'Süresiz · Nexowire onayı yok · Admin Bridge ilk kurulum UAC\'si ayrıdır'
           : 'Varsayılan güvenli mod';
       accessToggle.addEventListener('click', () => {
         void setDeviceAccessMode(
