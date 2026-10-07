@@ -147,6 +147,9 @@ export interface RemoteAgentPresence {
   deviceId: string;
   online: boolean;
   at: string;
+  agentVersion?: string;
+  privilegeMode?: 'direct' | 'broker';
+  adminBridgeReady?: boolean;
 }
 
 export function createControlPlaneAgentPresenceReporter(
@@ -206,6 +209,18 @@ export function createControlPlaneAgentPresenceReporter(
             deviceId,
             online: presence.online,
             at: new Date(atMs).toISOString(),
+            ...(presence.agentVersion !== undefined
+              ? { agentVersion: presence.agentVersion }
+              : {}),
+            ...(presence.privilegeMode !== undefined
+              ? { privilegeMode: presence.privilegeMode }
+              : {}),
+            ...(presence.adminBridgeReady !== undefined
+              ? {
+                  adminBridgeReady:
+                    presence.adminBridgeReady,
+                }
+              : {}),
           }),
           signal: controller.signal,
         },
