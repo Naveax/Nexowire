@@ -118,7 +118,7 @@ Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a futu
 ## 2026-10-07 two-PC production acceptance
 
 - [x] Owner-only unlimited hosted MCP tool-credit deployment: PR #213, exact-main 7/7 CI `37541360109`, production Worker deploy `37541527113`; paid billing remained disabled. PR #214 restored manual-only deploy and exact-main CI `37541907756` passed.
-- [x] Verify live Nexowire MCP access to two distinct Windows agents and migrate both to runtime v1.0.2: `Naveax` and `work-pc` both run the checksum-verified versioned Windows bundle at `1.0.2-68230bc52d33`; rollback launcher/runtime copies are retained until final soak closes.
+- [x] Verify live Nexowire MCP access to two distinct Windows agents and migrate both through checksum-verified versioned v1.0.3: `Naveax` and `work-pc` now run `1.0.3-2b0b1f9193de`; older runtimes remain rollback material until final soak closes.
 - [x] Run cross-device basic Windows shell, WSL2, DNS/HTTPS, allowed file write/read/patch/delete, isolated Edge browser navigation/DOM, visible screenshot, bounded UIA, registry/task enumeration, and 3-stage dependency task graph smoke tests.
 - [x] After both PCs moved to v1.0.2, run 24 bounded parallel MCP calls across the pair: 12/12 machine-health calls plus 12/12 mixed machine-snapshot/control-plane TCP probes passed with exact device targeting.
 - [x] Prove generic Windows route ambiguity does not silently select either device; exact-ID routes select correctly.
@@ -128,10 +128,12 @@ Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a futu
 - [ ] Fix and re-test cold-boot/pre-logon availability. Real work-pc reboot proved the v1.0.2 Hub is only `AtLogOn`; v1.0.3 adds an elevated SYSTEM `AtStartup` Hub with LocalMachine-DPAPI service token and rollback to the user Hub.
 - [ ] Run genuine production D1 concurrent multi-call contention after authenticated owner entitlement inspection.
 - [x] Resolve `Nexowire Stack`/`Nexowire Native Agent` overlap on `Naveax`: Stack now supervises the canonical Scheduled Task instead of launching a second agent; controlled restart/reconnect confirmed one active agent. The separate `work-pc` non-admin firewall-rule read still returns Windows access-denied and correctly remains fail-closed.
-- [x] Migrate `work-pc` Hub/Agent to the checksum-verified versioned v1.0.2 runtime without breaking its existing self-hosted Hub/Tailscale wiring; controlled cutover rollback worked on the first helper-script failure, and the corrected cutover then completed with Hub/Agent Running.
+- [x] Migrate `work-pc` Hub/Agent through checksum-verified versioned v1.0.2 and v1.0.3 without breaking its self-hosted Hub/Tailscale wiring; current Hub and Agent process paths are `1.0.3-2b0b1f9193de`.
 - [ ] Install/verify the Privileged Broker on `work-pc`. Current official install correctly refuses from the non-elevated agent; one initial local administrator approval is required, after which supported admin operations should not require per-operation UAC.
 - [x] Publish v1.0.2 after Linux/Windows/macOS Release Readiness, Windows setup smoke, checksums, SBOM and attestations: publisher `37617454518`, tag-scoped Release Readiness `37617530936`.
-- [ ] Complete v1.0.3 reboot-resilience CI/Release Readiness, then install its pre-logon Hub on work-pc with one explicit administrator approval and repeat a real cold reboot.
+- [x] Publish v1.0.3 after exact-main CI `37633896113`, publisher `37633896191`, and tag-scoped Release Readiness `37634000571` all passed.
+- [ ] Publish v1.0.4 with the post-v1.0.3 live updater, machine-update bridge, and Admin Bridge/runtime telemetry from PR #230; production control-plane half is already deployed by run `37678901638`.
+- [ ] After v1.0.4 rollout, install the SYSTEM pre-logon Hub + Privileged Broker on work-pc with one explicit administrator approval and repeat the real cold-boot/pre-logon acceptance.
 
 Detailed evidence: [docs/LIVE_ACCEPTANCE_2026-10-07.md](docs/LIVE_ACCEPTANCE_2026-10-07.md).
 
