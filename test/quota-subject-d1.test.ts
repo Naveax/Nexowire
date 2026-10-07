@@ -83,6 +83,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0003_quota_subject_device_anchor.sql',
     '0004_device_credential_lookup.sql',
     '0009_device_access_mode.sql',
+    '0010_device_runtime_telemetry.sql',
   ]) {
     db.exec(
       readFileSync(
