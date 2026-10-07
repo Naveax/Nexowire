@@ -27,6 +27,16 @@ test('privilege classifier routes only elevated Windows mutations', () => {
     'elevated',
   );
   assert.equal(
+    privilegeRequirement(
+      'nexowire.machine_update.apply',
+      {
+        version: '1.0.5',
+        buildId: '1.0.5-012345abcdef',
+      },
+    ),
+    'elevated',
+  );
+  assert.equal(
     privilegeRequirement('windows.registry.set', {
       hive: 'HKLM',
     }),
@@ -57,6 +67,12 @@ test('privilege classifier routes only elevated Windows mutations', () => {
 
   assert.equal(
     isPrivilegedBrokerCapability('windows.firewall.control'),
+    true,
+  );
+  assert.equal(
+    isPrivilegedBrokerCapability(
+      'nexowire.machine_update.apply',
+    ),
     true,
   );
   assert.equal(
