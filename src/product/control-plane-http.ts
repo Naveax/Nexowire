@@ -138,7 +138,8 @@ function errorStatus(message: string): number {
   if (message === 'BILLING_PAUSED') return 503;
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
-    message === 'PAIRING_NOT_FOUND'
+    message === 'PAIRING_NOT_FOUND' ||
+    message === 'DEVICE_NOT_FOUND'
   ) return 404;
   if (
     message === 'ADMIN_REQUIRED' ||
