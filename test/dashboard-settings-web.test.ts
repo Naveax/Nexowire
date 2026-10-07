@@ -22,7 +22,10 @@ test('dashboard persists device Full Access through authenticated API without po
   assert.match(app, /X-Nexowire-Confirm/);
   assert.match(app, /full-access-v1/);
   assert.match(app, /Süresiz · Nexowire onayı yok/);
-  assert.match(app, /Admin Bridge ilk kurulum UAC/);
+  assert.match(app, /Admin Bridge hazır/);
+  assert.match(app, /Admin Bridge ulaşılamıyor/);
+  assert.match(app, /Admin Bridge kurulum bekliyor/);
+  assert.match(app, /ilk kurulumda Windows UAC/);
   assert.match(app, /SAFE moda dön/);
   assert.doesNotMatch(app, /window\.confirm|window\.prompt/);
 });
