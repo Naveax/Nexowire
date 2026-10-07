@@ -67,6 +67,9 @@ jobs:
       - name: Verify Windows native-agent singleton lease
         if: runner.os == 'Windows'
         run: node --test --import tsx test/native-agent-singleton.test.ts
+      - name: Verify Windows DPAPI and pre-logon Hub contracts
+        if: runner.os == 'Windows'
+        run: node --test --import tsx test/windows-dpapi-secret.test.ts test/protected-secret-files.test.ts test/hub-lifecycle.test.ts
       - name: Build Windows one-click user bundle
         if: runner.os == 'Windows'
         shell: pwsh
