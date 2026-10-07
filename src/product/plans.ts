@@ -64,23 +64,6 @@ export const PRODUCT_PLANS: Readonly<Record<Exclude<ProductPlanId, 'custom'>, Pr
     },
   });
 
-export function createOwnerFullAccessFreePlan(): ProductPlan {
-  return {
-    id: 'free',
-    billingMode: 'free',
-    monthlyCredits: null,
-    maxDevices: null,
-    maxConcurrentTasks: null,
-    features: features(
-      'private-pointer',
-      'private-keyboard',
-      'private-screen',
-      'automation',
-      'priority-routing',
-    ),
-  };
-}
-
 export interface CustomPlanInput {
   billingMode: 'subscription' | 'prepaid-metered';
   monthlyCredits?: number | null;
