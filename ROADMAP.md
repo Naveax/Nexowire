@@ -118,17 +118,30 @@ Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a futu
 ## 2026-10-07 two-PC production acceptance
 
 - [x] Owner-only unlimited hosted MCP tool-credit deployment: PR #213, exact-main 7/7 CI `37541360109`, production Worker deploy `37541527113`; paid billing remained disabled. PR #214 restored manual-only deploy and exact-main CI `37541907756` passed.
-- [x] Verify live Nexowire MCP access to two distinct Windows agents: `Naveax` v1.0.1 and `work-pc` v1.0.0.
+- [x] Verify live Nexowire MCP access to two distinct Windows agents: `Naveax` v1.0.1 and `work-pc` v1.0.1.
 - [x] Run cross-device basic Windows shell, WSL2, DNS/HTTPS, allowed file write/read/patch/delete, isolated Edge browser navigation/DOM, visible screenshot, bounded UIA, registry/task enumeration, and 3-stage dependency task graph smoke tests.
 - [x] Prove generic Windows route ambiguity does not silently select either device; exact-ID routes select correctly.
 - [ ] Authenticated production owner dashboard must be checked to explicitly confirm `usage.monthlyCredits === null`; successful MCP requests and simulated D1 tests are not a substitute for this proof.
 - [x] Perform controlled **Naveax Native Agent** stop/start through an independent per-user Scheduled Task with a recovery task; real MCP reconnect passed on the same device ID, and a previously orphaned second agent process was identified and safely removed via guarded PID checks. Ambiguous mutation was not replayed.
 - [ ] Verify full Windows logon autostart, work-pc Hub/Agent restart and genuine production D1 concurrency; the Naveax single-agent restart does not prove these.
-- [ ] Investigate duplicate `Nexowire Stack`/`Nexowire Native Agent` scheduled-task overlap on `Naveax`, and the `work-pc` non-admin firewall rule read returning Windows access-denied. No unsafe privilege grant or task disablement has been applied.
-- [ ] Safely migrate the older `work-pc` self-host Hub/Agent from v1.0.0 after verifying an explicit rollback and its existing Tailscale/control-plane service wiring.
-- [ ] Prepare next signed/checksum-pinned Windows release candidate after the remaining issues are reproducibly fixed; do not auto-publish.
+- [x] Resolve `Nexowire Stack`/`Nexowire Native Agent` overlap on `Naveax`: Stack now supervises the canonical Scheduled Task instead of launching a second agent; controlled restart/reconnect confirmed one active agent. The separate `work-pc` non-admin firewall-rule read still returns Windows access-denied and correctly remains fail-closed.
+- [x] Migrate `work-pc` Hub/Agent to v1.0.1 without breaking its existing self-hosted Hub/Tailscale wiring.
+- [ ] Install/verify the Privileged Broker on `work-pc`. Current official install correctly refuses from the non-elevated agent; one initial local administrator approval is required, after which supported admin operations should not require per-operation UAC.
+- [ ] Complete v1.0.2 Release Readiness on Linux/Windows/macOS and inspect the checksum-pinned Windows candidate artifacts before authorizing publication.
 
 Detailed evidence: [docs/LIVE_ACCEPTANCE_2026-10-07.md](docs/LIVE_ACCEPTANCE_2026-10-07.md).
+
+## Post-final - Nexowire Screen
+
+First major feature after the current FINAL acceptance/release gate. Detailed design: [docs/NEXOWIRE_SCREEN.md](docs/NEXOWIRE_SCREEN.md).
+
+- [ ] Screen S0: stable `nexowire.screen.*` contracts plus deterministic cursor-path simulator.
+- [ ] Screen S1: dedicated AI workspace built on private desktop/screen/viewer primitives; user keeps the physical desktop and real mouse.
+- [ ] Screen S2: smooth AI cursor using cubic Bézier geometry plus minimum-jerk timing, bounded velocity/acceleration, target slowdown, cancellation and replanning.
+- [ ] Screen S3: optional signed Windows IddCx/Indirect Display virtual-monitor track after VM validation and reversible install/uninstall.
+- [ ] Screen S4: dashboard viewer/settings, resolution/DPI/FPS controls, cursor themes and Natural/Precise/Fast motion profiles.
+- [ ] Prove 1,000 AI Screen moves do not move the physical Windows cursor.
+- [ ] Prove two PCs can run independent Screens without cross-device state leakage.
 
 ## Post-v1 - Hosted product control plane
 
