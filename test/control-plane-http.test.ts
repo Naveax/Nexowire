@@ -242,6 +242,9 @@ test('device presence endpoint is service-only and updates dashboard state', asy
       deviceId: consumed.device.id,
       online: true,
       at: '2026-10-04T13:36:15.338Z',
+      agentVersion: '1.0.4',
+      privilegeMode: 'broker',
+      adminBridgeReady: true,
     }),
   };
 
@@ -272,6 +275,27 @@ test('device presence endpoint is service-only and updates dashboard state', asy
     dashboard.devices[0]?.lastSeenAt,
     '2026-10-04T13:36:15.338Z',
   );
+  assert.equal(dashboard.devices[0]?.agentVersion, '1.0.4');
+  assert.equal(dashboard.devices[0]?.privilegeMode, 'broker');
+  assert.equal(dashboard.devices[0]?.adminBridgeReady, true);
+
+  const invalid = await handler(
+    request(
+      '/api/v1/internal/device/presence',
+      { accountId: 'svc', role: 'service' },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          deviceId: consumed.device.id,
+          online: true,
+          at: '2026-10-04T13:36:16.338Z',
+          privilegeMode: 'anything-goes',
+        }),
+      },
+    ),
+  );
+  assert.equal(invalid.status, 400);
 });
 
 test('public usage policy reports server-side Free limits without exposing account data', async () => {
