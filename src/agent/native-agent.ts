@@ -393,7 +393,7 @@ export async function runNativeAgent(
         resolve();
       };
 
-      socket.once('open', () => {
+      socket.once('open', async () => {
         openedAt = Date.now();
         lastPongAt = Date.now();
         socket.on('pong', () => {
@@ -413,6 +413,12 @@ export async function runNativeAgent(
         }, socketHeartbeatMs);
         heartbeatTimer.unref();
 
+        const bridgeProbe = privilegedBroker
+          ? await privilegedBroker.probe()
+          : {
+              reachable: false,
+              elevated: false,
+            };
         socket.send(
           JSON.stringify({
             type: 'hello',
@@ -425,6 +431,11 @@ export async function runNativeAgent(
               arch: process.arch,
               agentVersion: agentVersion(),
               capabilities: advertisedCapabilities,
+              privilegeMode: activePrivilegeMode,
+              adminBridgeReady:
+                activePrivilegeMode === 'broker' &&
+                bridgeProbe.reachable &&
+                bridgeProbe.elevated,
             },
           }),
         );
