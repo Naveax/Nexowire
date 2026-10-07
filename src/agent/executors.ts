@@ -2097,7 +2097,18 @@ export async function executeCapability(
     case 'nexowire.update.status':
     case 'nexowire.update.check':
     case 'nexowire.update.apply':
-      return await executeLiveUpdateCapability(capability, input);
+      return await executeLiveUpdateCapability(
+        capability,
+        input,
+        {
+          ...(context.privilegedBroker
+            ? {
+                privilegedBroker:
+                  context.privilegedBroker,
+              }
+            : {}),
+        },
+      );
     case 'machine.health':
     case 'network.dns.resolve':
     case 'network.tcp.probe':
