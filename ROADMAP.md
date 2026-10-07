@@ -118,16 +118,19 @@ Nexowire is intentionally FREE ONLY until the owner explicitly authorizes a futu
 ## 2026-10-07 two-PC production acceptance
 
 - [x] Owner-only unlimited hosted MCP tool-credit deployment: PR #213, exact-main 7/7 CI `37541360109`, production Worker deploy `37541527113`; paid billing remained disabled. PR #214 restored manual-only deploy and exact-main CI `37541907756` passed.
-- [x] Verify live Nexowire MCP access to two distinct Windows agents: `Naveax` v1.0.1 and `work-pc` v1.0.1.
+- [x] Verify live Nexowire MCP access to two distinct Windows agents and migrate both to runtime v1.0.2: `Naveax` uses the checksum-verified versioned Windows bundle; `work-pc` reports v1.0.2 from its existing npm-global self-host runtime.
 - [x] Run cross-device basic Windows shell, WSL2, DNS/HTTPS, allowed file write/read/patch/delete, isolated Edge browser navigation/DOM, visible screenshot, bounded UIA, registry/task enumeration, and 3-stage dependency task graph smoke tests.
 - [x] Prove generic Windows route ambiguity does not silently select either device; exact-ID routes select correctly.
 - [ ] Authenticated production owner dashboard must be checked to explicitly confirm `usage.monthlyCredits === null`; successful MCP requests and simulated D1 tests are not a substitute for this proof.
 - [x] Perform controlled **Naveax Native Agent** stop/start through an independent per-user Scheduled Task with a recovery task; real MCP reconnect passed on the same device ID, and a previously orphaned second agent process was identified and safely removed via guarded PID checks. Ambiguous mutation was not replayed.
-- [ ] Verify full Windows logon autostart, work-pc Hub/Agent restart and genuine production D1 concurrency; the Naveax single-agent restart does not prove these.
+- [x] Verify bounded work-pc Hub and Agent stop/recovery on the same stable device ID; both recovered and temporary recovery tasks were removed.
+- [ ] Fix and re-test cold-boot/pre-logon availability. Real work-pc reboot proved the v1.0.2 Hub is only `AtLogOn`; v1.0.3 adds an elevated SYSTEM `AtStartup` Hub with LocalMachine-DPAPI service token and rollback to the user Hub.
+- [ ] Run genuine production D1 concurrent multi-call contention after authenticated owner entitlement inspection.
 - [x] Resolve `Nexowire Stack`/`Nexowire Native Agent` overlap on `Naveax`: Stack now supervises the canonical Scheduled Task instead of launching a second agent; controlled restart/reconnect confirmed one active agent. The separate `work-pc` non-admin firewall-rule read still returns Windows access-denied and correctly remains fail-closed.
 - [x] Migrate `work-pc` Hub/Agent to v1.0.1 without breaking its existing self-hosted Hub/Tailscale wiring.
 - [ ] Install/verify the Privileged Broker on `work-pc`. Current official install correctly refuses from the non-elevated agent; one initial local administrator approval is required, after which supported admin operations should not require per-operation UAC.
-- [ ] Complete v1.0.2 Release Readiness on Linux/Windows/macOS and inspect the checksum-pinned Windows candidate artifacts before authorizing publication.
+- [x] Publish v1.0.2 after Linux/Windows/macOS Release Readiness, Windows setup smoke, checksums, SBOM and attestations: publisher `37617454518`, tag-scoped Release Readiness `37617530936`.
+- [ ] Complete v1.0.3 reboot-resilience CI/Release Readiness, then install its pre-logon Hub on work-pc with one explicit administrator approval and repeat a real cold reboot.
 
 Detailed evidence: [docs/LIVE_ACCEPTANCE_2026-10-07.md](docs/LIVE_ACCEPTANCE_2026-10-07.md).
 
