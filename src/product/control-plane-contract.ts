@@ -4,6 +4,9 @@ export interface ProductDeviceSummary {
   online: boolean;
   platform: string;
   accessMode: 'safe' | 'full';
+  agentVersion: string | null;
+  privilegeMode: 'direct' | 'broker' | null;
+  adminBridgeReady: boolean | null;
   lastSeenAt: string | null;
 }
 
