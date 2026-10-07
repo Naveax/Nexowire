@@ -683,6 +683,12 @@ export default {
         allowedDeviceIds: devices.map(
           (device) => device.id,
         ),
+        deviceAccessModes: Object.fromEntries(
+          devices.map((device) => [
+            device.id,
+            device.accessMode,
+          ]),
+        ),
       });
     }
 
