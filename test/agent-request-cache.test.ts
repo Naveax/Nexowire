@@ -81,6 +81,20 @@ test('agent request cache rejects request ID reuse with different input', async 
   );
 });
 
+test('agent request cache treats SAFE and Full Access as different security inputs', () => {
+  const safe = fingerprintAgentRequest(
+    'windows.pointer.click',
+    { x: 10, y: 20 },
+    'safe',
+  );
+  const full = fingerprintAgentRequest(
+    'windows.pointer.click',
+    { x: 10, y: 20 },
+    'full',
+  );
+  assert.notEqual(safe, full);
+});
+
 test('agent request cache expires settled responses after TTL', async () => {
   let now = 1_000;
   const cache = new AgentRequestCache<number>({
