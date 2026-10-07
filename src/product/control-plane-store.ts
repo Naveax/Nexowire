@@ -52,6 +52,7 @@ export interface ProductDeviceRecord {
   name: string;
   platform: string;
   credentialHash: string;
+  accessMode: 'safe' | 'full';
   online: boolean;
   lastSeenAt: string | null;
   createdAt: string;
