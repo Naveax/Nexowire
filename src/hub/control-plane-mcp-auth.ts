@@ -5,6 +5,7 @@ export interface RemoteMcpAuthorization {
   accountId: string;
   role: CredentialRole;
   allowedDeviceIds: string[];
+  deviceAccessModes: Record<string, 'safe' | 'full'>;
 }
 
 export interface RemoteMcpUsageDecision {
@@ -135,16 +136,30 @@ export class ControlPlaneMcpClient {
       return undefined;
     }
 
+    const allowedDeviceIds = [
+      ...new Set(
+        (body.allowedDeviceIds as string[]).map(
+          (value) => value.trim(),
+        ),
+      ),
+    ];
+    const rawModes =
+      typeof body.deviceAccessModes === 'object' &&
+      body.deviceAccessModes !== null &&
+      !Array.isArray(body.deviceAccessModes)
+        ? body.deviceAccessModes as Record<string, unknown>
+        : {};
+    const deviceAccessModes: Record<string, 'safe' | 'full'> = {};
+    for (const deviceId of allowedDeviceIds) {
+      deviceAccessModes[deviceId] =
+        rawModes[deviceId] === 'full' ? 'full' : 'safe';
+    }
+
     return {
       accountId: body.accountId.trim(),
       role: body.role as CredentialRole,
-      allowedDeviceIds: [
-        ...new Set(
-          (body.allowedDeviceIds as string[]).map(
-            (value) => value.trim(),
-          ),
-        ),
-      ],
+      allowedDeviceIds,
+      deviceAccessModes,
     };
   }
 
