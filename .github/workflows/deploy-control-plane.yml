@@ -2,9 +2,6 @@ name: Deploy Nexowire Control Plane
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
 
 concurrency:
   group: nexowire-control-plane-production
@@ -15,15 +12,6 @@ permissions:
 
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        startsWith(github.event.workflow_run.head_commit.message, 'chore(deploy): publish live updater and Admin Bridge telemetry')
-      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
