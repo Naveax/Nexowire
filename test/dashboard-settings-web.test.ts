@@ -4,13 +4,24 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../web/styles.css', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
 
 test('dashboard explains Full Access risk without removing security boundaries', () => {
-  assert.match(html, /Full Access hakkında/);
-  assert.match(html, /Geri alma veya\s+veri kurtarma garantisi yoktur/);
+  assert.match(html, /Kalıcı Full Access/);
+  assert.match(html, /süre dolmaz/);
   assert.match(html, /GitHub OAuth/);
-  assert.match(html, /Agent credential/);
-  assert.match(html, /güvenlik katmanlarını kaldırmaz/);
+  assert.match(html, /cihaz credential/);
+  assert.match(html, /Privileged Broker/);
+  assert.match(html, /UAC'yi kandırmaz/);
+});
+
+test('dashboard persists device Full Access through authenticated API without popup loops', () => {
+  assert.match(app, /\/api\/v1\/me\/devices\/access-mode/);
+  assert.match(app, /X-Nexowire-Confirm/);
+  assert.match(app, /full-access-v1/);
+  assert.match(app, /Süresiz · işlem başına onay yok/);
+  assert.match(app, /SAFE moda dön/);
+  assert.doesNotMatch(app, /window\.confirm|window\.prompt/);
 });
 
 test('dashboard exposes session-local view settings without privileged API mutations', () => {
