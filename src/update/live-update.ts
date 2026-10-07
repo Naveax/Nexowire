@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import { NEXOWIRE_VERSION } from '../version.js';
+import type { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
 
 const REPOSITORY = 'Naveax/Nexowire';
 const LATEST_RELEASE_URL =
@@ -51,6 +52,7 @@ export interface LiveUpdateOptions {
   fetchImpl?: typeof fetch;
   localAppData?: string;
   tempDir?: string;
+  privilegedBroker?: PrivilegedBrokerClient;
 }
 
 function safeVersion(value: string): string {
@@ -522,6 +524,34 @@ export async function applyLatestLiveUpdate(
   }
   try {
     const staged = await stageWindowsRelease(check.release, options);
+    let machineComponentsPending = false;
+    const broker = options.privilegedBroker;
+    if (broker) {
+      const probe = await broker.probe();
+      if (
+        probe.reachable &&
+        probe.elevated &&
+        probe.version !== check.latestVersion
+      ) {
+        machineComponentsPending = true;
+        try {
+          await broker.execute(
+            'nexowire.machine_update.apply',
+            {
+              version: check.latestVersion,
+              buildId: staged.buildId,
+            },
+          );
+        } catch {
+          // v1.0.3 and older brokers do not know the machine
+          // update capability. User-level cutover can still
+          // complete; status remains explicit until the one-time
+          // Admin Bridge upgrade is performed.
+        }
+      } else if (!probe.reachable || !probe.elevated) {
+        machineComponentsPending = true;
+      }
+    }
     const root = updateRoot(options);
     await fs.mkdir(root, { recursive: true });
     const helper = path.join(
@@ -545,7 +575,7 @@ export async function applyLatestLiveUpdate(
       targetVersion: check.latestVersion,
       buildId: staged.buildId,
       targetRoot: staged.targetRoot,
-      machineComponentsPending: false,
+      machineComponentsPending,
       updatedAt: isoNow(),
       error: null,
     });
@@ -593,6 +623,7 @@ export async function applyLatestLiveUpdate(
 export async function executeLiveUpdateCapability(
   capability: string,
   input: unknown,
+  options: LiveUpdateOptions = {},
 ): Promise<unknown> {
   if (
     input !== undefined &&
@@ -602,12 +633,36 @@ export async function executeLiveUpdateCapability(
     throw new Error('Update capability input must be an object.');
   }
   switch (capability) {
-    case 'nexowire.update.status':
-      return { data: await readLiveUpdateState() };
+    case 'nexowire.update.status': {
+      let state = await readLiveUpdateState(options);
+      if (
+        state.machineComponentsPending &&
+        state.targetVersion &&
+        options.privilegedBroker
+      ) {
+        const probe =
+          await options.privilegedBroker.probe();
+        if (
+          probe.reachable &&
+          probe.elevated &&
+          probe.version === state.targetVersion
+        ) {
+          state = {
+            ...state,
+            machineComponentsPending: false,
+            updatedAt: isoNow(),
+          };
+          await writeState(options, state);
+        }
+      }
+      return { data: state };
+    }
     case 'nexowire.update.check':
-      return { data: await checkLiveUpdate() };
+      return { data: await checkLiveUpdate(options) };
     case 'nexowire.update.apply':
-      return { data: await applyLatestLiveUpdate() };
+      return {
+        data: await applyLatestLiveUpdate(options),
+      };
     default:
       throw new Error('Unsupported live update capability: ' + capability);
   }
