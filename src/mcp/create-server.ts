@@ -2083,6 +2083,62 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
 
 
   server.registerTool(
+    'nexowire_update_status',
+    {
+      title: 'Nexowire update status',
+      description:
+        'Read the target device live-update state, staged version, rollback result, and whether machine-level components still require an update.',
+      inputSchema: targetFields,
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'nexowire.update.status',
+        {},
+        device_id,
+        provider_id,
+      ),
+  );
+
+  server.registerTool(
+    'nexowire_update_check',
+    {
+      title: 'Check Nexowire update',
+      description:
+        'Check the official Naveax/Nexowire GitHub Release channel for a newer stable version without changing the target device.',
+      inputSchema: targetFields,
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'nexowire.update.check',
+        {},
+        device_id,
+        provider_id,
+        45_000,
+      ),
+  );
+
+  server.registerTool(
+    'nexowire_update_apply',
+    {
+      title: 'Apply Nexowire live update',
+      description:
+        'Stage the latest official checksum-verified Windows bundle beside the running version and schedule an atomic Agent/Hub cutover with rollback. The target may briefly reconnect after this call returns.',
+      inputSchema: targetFields,
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'nexowire.update.apply',
+        {},
+        device_id,
+        provider_id,
+        120_000,
+      ),
+  );
+
+  server.registerTool(
     'machine_health',
     {
       title: 'Machine health',
