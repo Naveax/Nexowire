@@ -13,7 +13,7 @@ This is an observation of **two real connected Windows PCs** through the first-p
 | Device | Stable Nexowire ID | Native agent | Local install type |
 | --- | --- | --- | --- |
 | Naveax | `adc90bbb-9576-4b4c-b76a-600e5572ad7d` | v1.0.2 | checksum-verified versioned Windows bundle `1.0.2-68230bc52d33`; Native Agent + Stack; v1.0.1 retained for rollback |
-| work-pc | `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` | v1.0.2 | npm-global self-host Hub/agent; checksum-verified v1.0.2 Windows payload also staged for migration/rollback work |
+| work-pc | `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` | v1.0.2 | checksum-verified versioned Windows bundle `1.0.2-68230bc52d33`; self-host Hub + Native Agent tasks; pre-v1.0.2 launcher backups retained for rollback |
 
 ## Actual acceptance results
 
@@ -35,13 +35,14 @@ This is an observation of **two real connected Windows PCs** through the first-p
 | Private desktop status | BLOCKED | BLOCKED | Expected `FORBIDDEN` under the current Free entitlements. Not evidence of functioning premium private-desktop tools |
 | Authenticated owner dashboard unlimited indicator | NOT TESTED | NOT TESTED | Requires an existing valid signed owner session or authorized production D1 introspection |
 | Controlled Native Agent / Hub restart | PASS | PASS | Naveax agent reconnect retained the stable ID. work-pc Agent and Hub were independently stopped/recovered with local one-time recovery tasks; stable ID and v1.0.2 returned; temporary tasks were removed. |
+| Two-PC bounded parallel routing/load | PASS | PASS | After both PCs ran versioned v1.0.2, 12/12 concurrent `machine_health` calls passed (6 per PC), followed by 12/12 mixed `machine_snapshot` + production control-plane TCP/443 probes (6 per PC). Exact device IDs were used throughout. |
 | Real cold reboot / pre-logon Hub availability | NOT YET REPEATED ON v1.0.3 | FAIL ON v1.0.2 | A controlled work-pc reboot caused the public Nexowire Hub/MCP route to disappear before interactive logon. Root cause: v1.0.2 Hub task is `AtLogOn` with an Interactive principal. v1.0.3 candidate adds SYSTEM `AtStartup` + LocalMachine-DPAPI and rollback. |
 | True production D1 concurrent multi-call contention / long soak | NOT TESTED | NOT TESTED | Local isolated D1 concurrency regression passed under PR #212, not a production multi-worker race |
 | Real-money subscription / refund | INTENTIONALLY DISABLED | INTENTIONALLY DISABLED | Financial gateway remains off and must not be silently enabled |
 
 ## Local storage signals
 
-- Naveax C: latest `machine_health` during v1.0.2 acceptance reported total 1,999,394,304,000 bytes, free ~28.5 GB, roughly 98.58% used. **Capacity is now critical enough to justify a non-destructive inventory before further large builds.** No personal files were deleted.
+- Naveax C: latest repeatable `machine_health` during v1.0.2 acceptance reported total 1,999,394,304,000 bytes, free ~33.9 GB, roughly 98.31% used. **Capacity is critical enough to justify a non-destructive inventory before further large builds.** No personal files were deleted.
 - work-pc C: Win32_LogicalDisk: total 239,358,746,624 bytes; free ~55–57 GB; roughly 76% used in the repeatable reading. An earlier `machine_health` sample showed 99.42% but was not reproduced independently or by later agent samples. Do not treat the initial sample as a stable drive-full condition.
 - work-pc non-admin firewall API access fails closed. Native Hub/agent process and CI behavior are otherwise healthy.
 - Two running `Nexowire*` Scheduled Tasks appear on Naveax (`Nexowire Native Agent` and `Nexowire Stack`). Review whether their agent ownership overlaps before modifying startup registrations. **Do not blindly disable either task.**
@@ -52,7 +53,14 @@ The agent's per-user Scheduled Task had RunLevel=Limited, Interactive logon, Res
 
 The restart exposed a previously orphaned `agent run` process PID 18548 alongside the new registered-task process PID 20700. PID 18548 had an absent parent and was older; after validating exact command, executable path, parent absence and newer healthy canonical task state, a one-time targeted termination was issued. The agent connection dropped before a mutation acknowledgment, so Nexowire correctly returned `MUTATION_STATE_UNKNOWN`; the action was **not retried**. Read-only postcondition checking confirmed only PID 20700 remained, `Nexowire Native Agent` was Running, and the device passed `machine_health`. The independent temporary recovery/restart Scheduled Tasks and two test files were removed; the user's ordinary tasks and applications were not touched.
 
-A future Windows agent release should fail closed against concurrent `agent run` processes for the same Windows user/device, even when legacy scheduled-task wrappers overlap. Live Node named-pipe smoke tests on **both Windows computers** independently confirmed that a second listener on the same exact pipe is rejected with `EADDRINUSE`; the temporary scripts were removed. PR implementing the kernel-owned singleton is subject to CI and future distribution. This acceptance pass does not claim that the new singleton implementation is installed yet.
+v1.0.2 now includes the OS-owned Windows named-pipe singleton that fails closed against concurrent `agent run` processes for the same Windows user/device. Live Node named-pipe smoke tests on **both Windows computers** independently confirmed that a second listener on the same exact pipe is rejected with `EADDRINUSE`; both live PCs now report v1.0.2 and run versioned v1.0.2 payloads.
+
+## v1.0.2 staged rollout findings
+
+- The published Windows payload and `SHA256SUMS-Windows` were downloaded from the exact v1.0.2 GitHub Release and verified before extraction on each PC.
+- Naveax moved to `1.0.2-68230bc52d33`; an older orphaned v1.0.1 agent was removed with exact command/parent guards, after which the canonical task reconnected on the same stable device ID as v1.0.2.
+- work-pc's first temporary cutover helper intentionally rolled back when PowerShell rejected a helper parameter named `$pid` because `$PID` is read-only/case-insensitive. That acceptance helper was corrected to dynamically select only the exact old npm-global Nexowire Hub/Agent processes. The second cutover completed with marker `ok=true`, Hub and Agent Running, and both processes executing from `1.0.2-68230bc52d33`.
+- Temporary upgrade Scheduled Tasks, staging payloads and helper scripts were removed after verification. Rollback launch-script/runtime copies remain until final soak closes.
 
 ## Next validation gates, in order
 
