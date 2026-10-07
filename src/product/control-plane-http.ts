@@ -220,6 +220,30 @@ export function createControlPlaneHttpHandler(
       }
 
       if (
+        request.method === 'POST' &&
+        path === '/api/v1/me/devices/access-mode'
+      ) {
+        const body = await readJsonObject(request);
+        const mode = stringField(body, 'mode').trim().toLowerCase();
+        if (
+          mode === 'full' &&
+          request.headers.get('x-nexowire-confirm') !== 'full-access-v1'
+        ) {
+          return json(400, {
+            error: 'FULL_ACCESS_CONFIRMATION_REQUIRED',
+          });
+        }
+        return json(
+          200,
+          await service.setDeviceAccessMode(
+            identity,
+            stringField(body, 'deviceId'),
+            mode,
+          ),
+        );
+      }
+
+      if (
         request.method === 'GET' &&
         path === '/api/v1/admin/overview'
       ) {
