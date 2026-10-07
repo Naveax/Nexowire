@@ -4,18 +4,18 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 ## Published stable release
 
-Nexowire v1.0.3 was published on 2026-10-07 from tag `v1.0.3` at commit `2b0b1f9193dec241998ec31993ff2d3269880690`. Exact-main CI `37633896113`, authorized publisher `37633896191`, and tag-scoped Release Readiness `37634000571` all completed successfully. Linux/macOS/Windows packaging, Windows setup/singleton smoke, checksum/manifest/SBOM verification, provenance/SBOM attestations, and GitHub Release publication passed. npm publication remains disabled.
+Nexowire v1.0.4 was published on 2026-10-07 from tag `v1.0.4` at exact commit `e5f865f4d252406a129a2a5d58a499f68fd09ae5`. Exact-main CI `37685751072`, authorized publisher `37685751071`, and tag-scoped Release Readiness `37685873099` all completed successfully. The annotated tag dereferences to that exact commit; the GitHub Release was published at `2026-10-07T21:01:56Z` with the canonical tarball, CycloneDX SBOM, release manifest, SHA256SUMS, Windows checksum file, Windows ZIP, and setup CMD. npm publication remains disabled.
 
-Live v1.0.3 rollout before v1.0.4 preparation:
+Live Windows rollout state verified 2026-10-08:
 
-- `Naveax` runs checksum-verified versioned runtime `1.0.3-2b0b1f9193de` and its canonical Native Agent process was observed from that exact runtime.
-- `work-pc` runs checksum-verified versioned v1.0.3 Hub and Native Agent processes from `1.0.3-2b0b1f9193de`.
-- v1.0.3 contains the elevated SYSTEM `AtStartup` Hub Boot lifecycle with LocalMachine-DPAPI rollback, but work-pc has not yet performed the required one-time administrator installation/reboot acceptance.
-- Naveax Privileged Broker was previously verified live; work-pc still has no broker listener and requires one explicit administrator approval.
+- `Naveax` remains on checksum-verified versioned runtime `1.0.3-2b0b1f9193de`; its canonical Native Agent process was observed from that exact runtime and loopback broker TCP `127.0.0.1:43112` is reachable.
+- `work-pc` runs v1.0.4 Hub and Native Agent processes from `1.0.4-e5f865f4d252`; its `BUILD.txt` source is exact main `e5f865f4d252406a129a2a5d58a499f68fd09ae5`.
+- work-pc has not completed the one-time machine-level install: `Nexowire Hub Boot` and `Nexowire Privileged Broker` are absent, `final-admin-setup.json` is absent, and TCP `43112` is refused.
+- The staged work-pc setup targets v1.0.4, uses one explicit UAC approval, installs SYSTEM Hub Boot + Privileged Broker, patches the Agent launcher to broker mode, verifies TCP 43112, and rolls back its own changes on failure.
 
-## v1.0.4 release candidate
+## v1.0.4 release details
 
-PR #230 merged **after** the immutable v1.0.3 tag, so its native/runtime changes are intentionally being released as v1.0.4 rather than rewriting v1.0.3.
+PR #230 merged **after** the immutable v1.0.3 tag, so its native/runtime changes shipped as v1.0.4 rather than rewriting v1.0.3. Release-prep PR #234 passed its CI/Release Readiness gates, authorization PR #235 merged as exact main `e5f865f4d252406a129a2a5d58a499f68fd09ae5`, publisher run `37685751071` created the tag/dispatch, and tag-scoped Release Readiness run `37685873099` published the release successfully.
 
 v1.0.4 adds:
 
@@ -27,9 +27,7 @@ v1.0.4 adds:
 - agent hello/runtime telemetry for `agentVersion`, `privilegeMode`, and `adminBridgeReady`;
 - D1 migration `0010_device_runtime_telemetry.sql` and dashboard/control-plane fields for those runtime signals.
 
-The control-plane half of this feature was deployed successfully from main commit `97bbbbbd45294f4a7349b878ada42d48f6582b3b` in production deploy run `37678901638`. Live Windows agents remain on v1.0.3 until the v1.0.4 release artifact passes Release Readiness and is explicitly published.
-
-v1.0.4 must pass normal CI plus Linux/macOS/Windows Release Readiness, Windows setup smoke, checksum/manifest/SBOM verification and tag-scoped attestations before publication. npm remains disabled and paid billing remains paused.
+The control-plane half of this feature was deployed successfully from main commit `97bbbbbd45294f4a7349b878ada42d48f6582b3b` in production deploy run `37678901638`. The final v1.0.4 publication path is independently verified: exact-main CI `37685751072` succeeded, publisher `37685751071` succeeded, tag-scoped Release Readiness `37685873099` succeeded, annotated tag `v1.0.4` dereferences to exact commit `e5f865f4d252406a129a2a5d58a499f68fd09ae5`, and the public GitHub Release exposes seven expected canonical assets. work-pc is live on the matching v1.0.4 runtime; Naveax remains on v1.0.3. npm remains disabled and paid billing remains paused.
 
 ## Local release candidate check
 
@@ -84,7 +82,7 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The current stable v1 release line is versioned as `1.0.3`; v1.0.4 is the unpublished release candidate. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
+The current published-stable v1 release is `1.0.4` at exact commit `e5f865f4d252406a129a2a5d58a499f68fd09ae5`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
 
 ## Explicit GitHub Release authorization
 
