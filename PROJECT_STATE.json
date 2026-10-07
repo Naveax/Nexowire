@@ -207,15 +207,28 @@
     "PR #189 merged the Windows Node 24 Cloudflare CI provisioning fix as main b313025daa3066ebe88480ba004a8ab9a405504b; exact-main CI run 37300920240 passed all seven jobs. Protected provisioning then configured all five required GitHub Actions deployment secret names, and production deploy run 37311611915 succeeded on exact main, deploying Worker version 869f02a1-8ba9-41c6-bafe-40af00db3858. Public Worker and Hub health both returned HTTP 200, ownerPaidSpendAllowed remained false, and work-pc remained online with stable device identity. The Cloudflare CI gate is complete.",
     "Temporary Free-only policy as of 2026-10-06: 1,000 weighted monthly tool units; skill invocations tagged 5x, skill_* and skills_* direct tools 5x; payment routes 503/BILLING_PAUSED and no automatic upgrade. No live KYC/provider request while paused. Skill nested-call weighting needs the explicit MCP _meta marker; arbitrary unmarked calls cannot be inferred.",
     "Two-PC live acceptance on 2026-10-07: Naveax v1.0.1 and work-pc v1.0.0 were simultaneously reachable; shell+WSL2+files+Edge DOM+screenshot+UIA+task graph+DNS/HTTPS+exact-target routing passed. Read docs/LIVE_ACCEPTANCE_2026-10-07.md for evidence and remaining auth/dashboard, reconnect, permission and release gates; do not infer all premium features from healthy-agent status.",
-    "Windows Nexowire native agent singleton protection: after a real 2026-10-07 controlled Naveax task restart exposed two agent run processes and the older orphan was removed via exact guarded PID checks, a named-pipe OS lease was added before worker-state initialization. Two real Windows PCs independently rejected a second same-pipe listener with EADDRINUSE. Singleton code must pass CI and be included in a future versioned Windows release before claiming device rollout."
+    "Windows Nexowire native agent singleton protection: after a real 2026-10-07 controlled Naveax task restart exposed two agent run processes and the older orphan was removed via exact guarded PID checks, a named-pipe OS lease was added before worker-state initialization. Two real Windows PCs independently rejected a second same-pipe listener with EADDRINUSE. Singleton code must pass CI and be included in a future versioned Windows release before claiming device rollout.",
+    "Nexowire v1.0.3 was published on 2026-10-07 from commit 2b0b1f9193dec241998ec31993ff2d3269880690; exact-main CI 37633896113, authorized publisher 37633896191, and tag-scoped Release Readiness 37634000571 passed.",
+    "PR #230 merged after v1.0.3 as main 3106a820cc8e9785a09b594b2612a4837d46a776 and adds official live updater capabilities, machine-level update support through the Privileged Broker, and agentVersion/privilegeMode/adminBridgeReady telemetry. Because this code is post-v1.0.3, it must ship as v1.0.4 rather than mutating the v1.0.3 tag.",
+    "Both live Windows PCs were manually migrated to checksum-verified versioned v1.0.3 runtime 1.0.3-2b0b1f9193de before v1.0.4 preparation. work-pc still has no Privileged Broker listener and still requires one explicit local administrator approval for the machine-level bridge."
   ],
-  "lastStateSync": "2026-10-06",
-  "lastVerifiedMain": "ce690060f767766f5f4824f70b0996885814d593",
+  "lastStateSync": "2026-10-07",
+  "lastVerifiedMain": "97bbbbbd45294f4a7349b878ada42d48f6582b3b",
   "activeWork": [
     {
-      "branch": "feat/free-only-1000-skill-weight",
+      "branch": "release/v1.0.4-prep-20261007",
+      "status": "in_progress",
+      "goal": "Publish v1.0.4 containing the merged live side-by-side updater, machine-update bridge, and runtime/Admin Bridge telemetry added after v1.0.3; then migrate both live Windows PCs and verify update/status telemetry."
+    },
+    {
+      "branch": "final-acceptance-live",
+      "status": "in_progress",
+      "goal": "After v1.0.4 rollout, close the remaining manual gates: one explicit work-pc administrator approval for SYSTEM pre-logon Hub Boot plus Privileged Broker, real cold-boot/pre-logon recovery, authenticated owner dashboard unlimited-state proof, bounded production contention/soak, and rollback-safe storage cleanup."
+    },
+    {
+      "branch": "post-final-nexowire-screen",
       "status": "planned",
-      "goal": "Temporary Free-only rollout: 1,000 weighted hosted tool units per UTC month, skill tools and explicitly marked skill workflows at 5x, no checkout and no automatic owner spend. Validate main/CI, then deploy and run read-only hosted acceptance. Production Lemon Squeezy billing is intentionally parked pending explicit owner/legal/provider approval; do not request KYC or live API keys now."
+      "goal": "After FINAL, implement Nexowire Screen S0/S1 with a dedicated second-screen-like AI workspace and smooth independent AI cursor motion."
     }
   ]
 }
