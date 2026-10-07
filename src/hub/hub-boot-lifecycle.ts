@@ -168,13 +168,12 @@ function runtime(
 }
 
 function psArgument(value: string): string {
-  return (
-    '"' +
-    value
-      .replaceAll('\\', '\\\\')
-      .replaceAll('"', '\"') +
-    '"'
-  );
+  if (value.includes('"')) {
+    throw new Error(
+      'Hub boot process arguments must not contain a double quote.',
+    );
+  }
+  return '"' + value + '"';
 }
 
 export function buildHubBootLauncher(input: {
