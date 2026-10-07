@@ -32,6 +32,7 @@ import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { privilegeRequirement } from '../security/privilege.js';
 import { detectWsl } from './wsl-detection.js';
+import { executeLiveUpdateCapability } from '../update/live-update.js';
 
 const ShellExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
@@ -2093,6 +2094,10 @@ export async function executeCapability(
       return await searchText(input, policy);
     case 'machine.snapshot':
       return await machineSnapshot(policy);
+    case 'nexowire.update.status':
+    case 'nexowire.update.check':
+    case 'nexowire.update.apply':
+      return await executeLiveUpdateCapability(capability, input);
     case 'machine.health':
     case 'network.dns.resolve':
     case 'network.tcp.probe':
