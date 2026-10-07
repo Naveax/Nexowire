@@ -56,20 +56,23 @@
       </div>
       <p class="risk-copy">
         Her cihaz varsayılan olarak SAFE başlar. Full Access cihaz bazında açıldığında
-        süre dolmaz ve fiziksel konsol işlemlerinde tekrar tekrar ALLOW / DENY penceresi
-        gösterilmez; site üzerinden SAFE moda döndürülene kadar açık kalır. Uzaktan yapılan
-        değişikliklerde geri alma veya veri kurtarma garantisi yoktur.
+        süre dolmaz ve Nexowire'ın fiziksel konsol ALLOW / DENY pencereleri tekrar gösterilmez;
+        site üzerinden SAFE moda döndürülene kadar açık kalır. Windows UAC bundan ayrıdır:
+        Privileged Broker / SYSTEM Hub ilk kez kurulurken Windows bir defalık yönetici onayı
+        gösterebilir. Admin Bridge kurulduktan sonra desteklenen yönetici işlemleri broker
+        üzerinden gider ve işlem başına UAC beklenmez.
       </p>
       <div class="policy-grid">
         <div><span>Varsayılan</span><strong>SAFE · onay korumalı</strong></div>
-        <div><span>Full Access</span><strong>Süresiz · tekrar onay yok</strong></div>
+        <div><span>Full Access</span><strong>Süresiz · Nexowire onayı yok</strong></div>
         <div><span>Audit</span><strong>Meta veri kaydı açık</strong></div>
-        <div><span>Yönetici işlemleri</span><strong>Privileged Broker</strong></div>
+        <div><span>Admin Bridge</span><strong>Broker · ilk kurulumda UAC</strong></div>
       </div>
       <p class="local-interlock">
         GitHub OAuth, cihaz credential'ı, audit ve idempotency her iki modda da kalır.
-        Yönetici yetkisi gereken işlemler UAC'yi kandırmaz; önceden yönetici olarak kurulmuş
-        Nexowire Privileged Broker üzerinden çalışır.
+        FULL ACCESS Windows'un UAC güvenlik sınırını taklit ederek geçmez. Bir kez kurulan
+        Admin Bridge, sonraki desteklenen elevated işlemleri ayrı UAC penceresi çıkarmadan
+        yürütür.
       </p>
     </section>
 
@@ -124,6 +127,10 @@
         <span><strong>Gelişmiş güvenlik bilgisi</strong><small>Owner/audit ayrıntılarını göster.</small></span>
         <input id="setting-advanced" type="checkbox" checked>
       </label>
+      <div class="setting-row">
+        <span><strong>Canlı güncelleme</strong><small>Resmi release SHA-256 ile doğrulanır, yeni sürüm side-by-side kurulur ve cutover başarısızsa rollback yapılır.</small></span>
+        <strong>LIVE UPDATE</strong>
+      </div>
     </section>
 
     <section id="error-panel" class="error-panel hidden">
