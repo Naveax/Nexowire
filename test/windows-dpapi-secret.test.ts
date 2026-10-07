@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import {
+  protectWindowsMachineSecretForPurpose,
   protectWindowsUserSecret,
+  unprotectWindowsMachineSecretForPurpose,
   unprotectWindowsUserSecret,
   WindowsDpapiError,
 } from '../src/security/windows-dpapi.js';
@@ -24,6 +26,39 @@ test(
     assert.equal(
       await unprotectWindowsUserSecret(ciphertext),
       plaintext,
+    );
+  },
+);
+
+test(
+  'Windows DPAPI LocalMachine purpose-bound secrets round-trip',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    const plaintext =
+      'nexowire-machine-secret-' + Date.now();
+    const ciphertext =
+      await protectWindowsMachineSecretForPurpose(
+        plaintext,
+        'test-machine-purpose',
+      );
+
+    assert.notEqual(ciphertext, plaintext);
+    assert.equal(
+      await unprotectWindowsMachineSecretForPurpose(
+        ciphertext,
+        'test-machine-purpose',
+      ),
+      plaintext,
+    );
+    await assert.rejects(
+      () =>
+        unprotectWindowsMachineSecretForPurpose(
+          ciphertext,
+          'other-purpose',
+        ),
+      (error: unknown) =>
+        error instanceof WindowsDpapiError &&
+        error.code === 'WINDOWS_DPAPI_FAILED',
     );
   },
 );
