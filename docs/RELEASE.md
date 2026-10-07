@@ -9,7 +9,7 @@ Nexowire v1.0.2 was published on 2026-10-07 from tag `v1.0.2` at commit `68230bc
 Live v1.0.2 acceptance after publication:
 
 - `Naveax` was migrated from the v1.0.1 versioned runtime to the checksum-verified v1.0.2 Windows payload at `1.0.2-68230bc52d33`; the old v1.0.1 install remains as rollback. The stale old agent was removed with exact PID/command guards and the canonical Scheduled Task reconnected on the same stable device ID reporting v1.0.2.
-- `work-pc` Hub and Agent report v1.0.2 and bounded Hub/Agent restart recovery passed on the same stable device ID. Its self-host wiring still uses the npm-global runtime path.
+- `work-pc` Hub and Agent were migrated to the checksum-verified versioned v1.0.2 Windows payload at `1.0.2-68230bc52d33`; bounded Hub/Agent restart recovery passed on the same stable device ID. Pre-v1.0.2 launchers remain as rollback copies until final soak closes.
 - Naveax Privileged Broker remains live on loopback `127.0.0.1:43112`. work-pc still requires one initial local administrator approval before its Privileged Broker can be installed.
 
 ## Unpublished v1.0.3 reboot-resilience candidate (2026-10-07)
