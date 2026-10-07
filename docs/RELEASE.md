@@ -4,28 +4,29 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 ## Published stable release
 
-Nexowire v1.0.1 was published on 2026-10-05 from tag `v1.0.1` at commit `43779b1de5543146a283ae80771e65c51020bef2`. Authorized publisher run `37324592840` created the exact tag after its final release gate. Because GitHub suppresses recursive workflow triggers from `GITHUB_TOKEN` tag pushes, the tag-scoped Release Readiness run was explicitly dispatched once as run `37324999923`; it passed Linux/macOS/Windows packaging, the real Windows `cmd.exe` setup smoke, provenance/SBOM attestations, and GitHub Release publication. The public release contains the canonical `.tgz`, `SHA256SUMS`, `release-manifest.json`, CycloneDX SBOM, `Nexowire-Setup.cmd`, `Nexowire-Windows-x64.zip`, and `SHA256SUMS-Windows`. Independent post-publication download/hash/manifest/setup-pin checks and `gh attestation verify` passed for the canonical tarball, Windows payload, and setup script. The original v1.0.0 release remains immutable; npm publication remains disabled.
+Nexowire v1.0.2 was published on 2026-10-07 from tag `v1.0.2` at commit `68230bc52d3365aa983110512a860ea1a31234f8`. Authorized publisher run `37617454518` passed the final release gate and created the exact tag; tag-scoped Release Readiness run `37617530936` then passed Linux/macOS/Windows packaging, Windows singleton/setup smoke, checksum/manifest/SBOM verification, SLSA and SBOM attestations, and GitHub Release publication. The release contains the canonical tarball, SHA256 sums, release manifest, CycloneDX SBOM, `Nexowire-Setup.cmd`, `Nexowire-Windows-x64.zip`, and Windows SHA256 sums. npm publication remains disabled.
 
-## Unpublished v1.0.2 release candidate (2026-10-07)
+Live v1.0.2 acceptance after publication:
 
-The next candidate is `v1.0.2` and is **not yet formally published or installed as a versioned v1.0.2 Windows bundle** on either live PC. The current production/control-plane and live-runtime acceptance work on main includes:
+- `Naveax` was migrated from the v1.0.1 versioned runtime to the checksum-verified v1.0.2 Windows payload at `1.0.2-68230bc52d33`; the old v1.0.1 install remains as rollback. The stale old agent was removed with exact PID/command guards and the canonical Scheduled Task reconnected on the same stable device ID reporting v1.0.2.
+- `work-pc` Hub and Agent report v1.0.2 and bounded Hub/Agent restart recovery passed on the same stable device ID. Its self-host wiring still uses the npm-global runtime path.
+- Naveax Privileged Broker remains live on loopback `127.0.0.1:43112`. work-pc still requires one initial local administrator approval before its Privileged Broker can be installed.
 
-- The bounded, ANSI-clean Windows PowerShell `ACCESS_DENIED` diagnostic fix (PR #216).
-- A user/device-scoped OS-owned Windows native-agent singleton lease to reject duplicate `agent run` launchers (PR #217), reproduced by named-pipe exclusivity smoke on Windows 10 and 11.
-- Persistent per-device `SAFE` / `FULL ACCESS` control-plane state with fail-closed SAFE default, authenticated dashboard mutation, D1 migration `0009_device_access_mode.sql`, access-mode propagation to MCP/Hub/agent requests, and replay fingerprints that include the access mode (PR #222).
-- Production Full Access deployment and dashboard assets with paid billing still disabled; the temporary auto-deploy gate was removed and deployment returned to manual-only.
-- Naveax Privileged Broker loopback routing validated with real machine-scope environment set/delete. The broker removes repeated per-operation UAC for supported elevated operations after its one-time elevated installation.
-- Naveax Stack/Native-Agent overlap corrected so the Stack supervises the canonical Scheduled Task instead of launching a duplicate agent.
-- A mandatory **real Windows CI and Windows Release Readiness** singleton test, not just Linux-simulated tests.
-- Versioned Windows x64 payload and installer candidate smoke; v1.0.1 remains the published stable release until a separately authorized v1.0.2 tag/publication.
+## Unpublished v1.0.3 reboot-resilience candidate (2026-10-07)
 
-Live-PC state before publication:
+A real `work-pc` Windows reboot exposed a lifecycle gap in v1.0.2: the public Hub Scheduled Task is `AtLogOn` with an Interactive principal, so after a cold reboot Nexowire can remain unavailable until that Windows user logs in. Calling this merely "autostart" hides an important boundary.
 
-- `Naveax`: v1.0.1 versioned install with validated v1.0.2 compiled-runtime overlay for acceptance, rollback copies retained; Privileged Broker is live on loopback `127.0.0.1:43112`.
-- `work-pc`: v1.0.1 Hub/Agent is online; Privileged Broker is not yet installed. The official installer correctly refuses from its non-elevated agent and requires one initial local administrator approval.
-- Neither PC should be called a clean v1.0.2 install until the signed/checksum-pinned v1.0.2 Windows release bundle is produced and installed through the normal versioned installer.
+v1.0.3 is the candidate to close that gap:
 
-Do **not** create/publish the v1.0.2 tag until the branch Release Readiness artifacts pass on Linux/Windows/macOS and the Windows setup/payload/checksum candidate is inspected. Do not enable payments. After readiness passes, use a staggered one-device-at-a-time update with rollback, starting with Naveax and leaving work-pc Hub/Tailscale available as the second control path.
+- Add purpose-bound Windows DPAPI `LocalMachine` envelopes while retaining the existing current-user envelope format and default.
+- Add an elevated `nexowire hub boot-install` path that re-seals the existing control-plane service token from current-user DPAPI to LocalMachine DPAPI without persisting plaintext.
+- Store the machine envelope and boot launcher under `%ProgramData%\\Nexowire\\hub-boot` and harden that tree to SYSTEM and the built-in Administrators group.
+- Register `Nexowire Hub Boot` as a SYSTEM `AtStartup` Scheduled Task so the public Hub can recover before an interactive user logon.
+- Disable the legacy user-logon Hub only after the boot task is registered; if the SYSTEM Hub fails health validation, remove the boot task and restore/restart the previous user Hub.
+- `boot-uninstall` reverses the change and restores the user Hub task.
+- Native Agent remains a per-user/logon component; the pre-logon Hub exists so remote agents and the public MCP entry point do not depend on an interactive login.
+
+The boot lifecycle intentionally requires one elevated installation because LocalMachine secret ACL hardening and a SYSTEM startup task are machine-level changes. It does not attempt to bypass UAC. Do not authorize or publish v1.0.3 until Windows CI proves LocalMachine DPAPI round-trip, cross-platform CI passes, and Release Readiness builds the checksum-pinned Windows candidate.
 
 ## Local release candidate check
 
@@ -80,7 +81,7 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The current stable v1 release line is versioned as `1.0.1`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
+The current stable v1 release line is versioned as `1.0.2`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
 
 ## Explicit GitHub Release authorization
 
