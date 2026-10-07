@@ -541,6 +541,9 @@ export async function installHubBootLifecycle(
   const envForTask = taskEnv(options);
   let switched = false;
   try {
+    // The PowerShell transaction can modify the user task before a later
+    // command fails, so rollback must be armed before the first mutation.
+    switched = true;
     await runPowerShellJson<{ ok: true }>(
       [
         "$ErrorActionPreference='Stop'",
@@ -564,7 +567,6 @@ export async function installHubBootLifecycle(
       ].join('\n'),
       envForTask,
     );
-    switched = true;
     await waitForBootHub(port, p.pid);
     await writeManifest(
       options,
