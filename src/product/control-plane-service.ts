@@ -302,6 +302,7 @@ export class ControlPlaneService {
         name: device.name,
         online: device.online,
         platform: device.platform,
+        accessMode: device.accessMode,
         lastSeenAt: device.lastSeenAt,
       })),
       stability: {
@@ -577,6 +578,7 @@ export class ControlPlaneService {
       name: record.requestedDeviceName,
       platform: boundedText('platform', input.platform, 64),
       credentialHash: secretHash(rawCredential),
+      accessMode: existingDevice?.accessMode ?? 'safe',
       online: false,
       lastSeenAt: null,
       createdAt: existingDevice?.createdAt ?? now,
@@ -656,6 +658,40 @@ export class ControlPlaneService {
       updatedAt: normalizedAt,
     });
     return true;
+  }
+
+  async setDeviceAccessMode(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+    modeInput: string,
+  ): Promise<{
+    deviceId: string;
+    accessMode: 'safe' | 'full';
+    updatedAt: string;
+  }> {
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const mode = modeInput.trim().toLowerCase();
+    if (mode !== 'safe' && mode !== 'full') {
+      throw new Error('INVALID_ACCESS_MODE');
+    }
+
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id) {
+      throw new Error('DEVICE_NOT_FOUND');
+    }
+
+    const updatedAt = this.now().toISOString();
+    await this.store.putDevice({
+      ...device,
+      accessMode: mode,
+      updatedAt,
+    });
+    return {
+      deviceId: device.id,
+      accessMode: mode,
+      updatedAt,
+    };
   }
 
   async chargeUsage(input: {

@@ -115,6 +115,79 @@ test('pairing start plus public token consume returns one device credential', as
   assert.match(body.deviceCredential, /^nwx_dev_/);
 });
 
+test('Full Access enablement requires explicit site confirmation and persists until SAFE', async () => {
+  const { service, handler } = await setup();
+  const pairing = await service.beginPairing(
+    { accountId: 'acct-1', role: 'user' },
+    'access-pc',
+  );
+  const consumed = await service.consumePairing({
+    pairingId: pairing.pairingId,
+    token: pairing.token,
+    platform: 'win32',
+    deviceAnchorHash: '9'.repeat(64),
+  });
+
+  const identity = { accountId: 'acct-1', role: 'user' } as const;
+  const body = JSON.stringify({
+    deviceId: consumed.device.id,
+    mode: 'full',
+  });
+
+  const missingConfirmation = await handler(
+    request('/api/v1/me/devices/access-mode', identity, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    }),
+  );
+  assert.equal(missingConfirmation.status, 400);
+  assert.deepEqual(
+    await missingConfirmation.json(),
+    { error: 'FULL_ACCESS_CONFIRMATION_REQUIRED' },
+  );
+
+  const enabled = await handler(
+    request('/api/v1/me/devices/access-mode', identity, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-nexowire-confirm': 'full-access-v1',
+      },
+      body,
+    }),
+  );
+  assert.equal(enabled.status, 200);
+  assert.equal(
+    (await enabled.json() as { accessMode: string }).accessMode,
+    'full',
+  );
+
+  const dashboard = await handler(
+    request('/api/v1/me/dashboard', identity),
+  );
+  const snapshot = await dashboard.json() as {
+    devices: Array<{ accessMode: string }>;
+  };
+  assert.equal(snapshot.devices[0]?.accessMode, 'full');
+
+  const disabled = await handler(
+    request('/api/v1/me/devices/access-mode', identity, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        deviceId: consumed.device.id,
+        mode: 'safe',
+      }),
+    }),
+  );
+  assert.equal(disabled.status, 200);
+  assert.equal(
+    (await disabled.json() as { accessMode: string }).accessMode,
+    'safe',
+  );
+});
+
 test('internal usage endpoint is service-only', async () => {
   const { handler } = await setup();
   const init = {

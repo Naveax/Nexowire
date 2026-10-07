@@ -34,6 +34,7 @@ export type BearerAuthorization =
       accountId: string;
       role: CredentialRole;
       allowedDeviceIds?: string[];
+      deviceAccessModes?: Record<string, 'safe' | 'full'>;
     };
 
 export function resolveBearerAuthorization(
@@ -169,6 +170,7 @@ export async function resolveMcpAuthorization(
         accountId: string;
         role: CredentialRole;
         allowedDeviceIds?: string[];
+        deviceAccessModes?: Record<string, 'safe' | 'full'>;
       }
     | undefined
   >,
@@ -208,6 +210,13 @@ export async function resolveMcpAuthorization(
           allowedDeviceIds: [
             ...remote.allowedDeviceIds,
           ],
+        }
+      : {}),
+    ...(remote.deviceAccessModes
+      ? {
+          deviceAccessModes: {
+            ...remote.deviceAccessModes,
+          },
         }
       : {}),
   };

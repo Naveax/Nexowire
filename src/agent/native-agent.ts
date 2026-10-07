@@ -445,6 +445,7 @@ export async function runNativeAgent(
             const fingerprint = fingerprintAgentRequest(
               request.data.capability,
               request.data.input,
+              request.data.accessMode,
             );
             response = await requestCache.run(
               request.data.requestId,
@@ -460,6 +461,7 @@ export async function runNativeAgent(
                       taskGraphs,
                       runbooks,
                       privilegeMode: activePrivilegeMode,
+                      accessMode: request.data.accessMode,
                       ...(privilegedBroker
                         ? { privilegedBroker }
                         : {}),

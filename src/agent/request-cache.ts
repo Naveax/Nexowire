@@ -28,9 +28,17 @@ export interface AgentRequestCacheOptions {
 export function fingerprintAgentRequest(
   capability: string,
   input: unknown,
+  accessMode: 'safe' | 'full' = 'safe',
 ): string {
   return createHash('sha256')
-    .update(JSON.stringify({ capability, input }), 'utf8')
+    .update(
+      JSON.stringify({
+        capability,
+        input,
+        accessMode,
+      }),
+      'utf8',
+    )
     .digest('hex');
 }
 

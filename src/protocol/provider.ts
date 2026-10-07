@@ -23,6 +23,7 @@ export interface ProviderExecutionRequest {
   input: unknown;
   timeoutMs?: number;
   requestId?: string;
+  accessMode?: 'safe' | 'full';
 }
 
 export interface Provider {

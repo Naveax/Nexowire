@@ -50,25 +50,26 @@
       <div class="access-head">
         <div>
           <p class="eyebrow">Erişim güvenliği</p>
-          <h2>Full Access hakkında</h2>
+          <h2>Kalıcı Full Access</h2>
         </div>
         <span class="pill muted">GÜVENLİK</span>
       </div>
       <p class="risk-copy">
-        Full Access kullanılan bir Nexowire kurulumu uzaktan komut çalıştırabilir, dosya ve
-        uygulama durumunu değiştirebilir ve otomasyon görevleri yürütebilir. Geri alma veya
-        veri kurtarma garantisi yoktur; yaptığın ve yetkilendirdiğin işlemlerin sonuçlarını
-        kontrol etmek kullanıcı sorumluluğundadır.
+        Her cihaz varsayılan olarak SAFE başlar. Full Access cihaz bazında açıldığında
+        süre dolmaz ve fiziksel konsol işlemlerinde tekrar tekrar ALLOW / DENY penceresi
+        gösterilmez; site üzerinden SAFE moda döndürülene kadar açık kalır. Uzaktan yapılan
+        değişikliklerde geri alma veya veri kurtarma garantisi yoktur.
       </p>
       <div class="policy-grid">
-        <div><span>Owner MCP kotası</span><strong>Doğrulanmış hesapta sınırsız</strong></div>
+        <div><span>Varsayılan</span><strong>SAFE · onay korumalı</strong></div>
+        <div><span>Full Access</span><strong>Süresiz · tekrar onay yok</strong></div>
         <div><span>Audit</span><strong>Meta veri kaydı açık</strong></div>
-        <div><span>Hesap güvenliği</span><strong>GitHub OAuth</strong></div>
-        <div><span>Cihaz güvenliği</span><strong>Agent credential</strong></div>
+        <div><span>Yönetici işlemleri</span><strong>Privileged Broker</strong></div>
       </div>
       <p class="local-interlock">
-        Kimlik doğrulama, audit/idempotency ve görünür fiziksel masaüstü için yerel Windows
-        güvenlik kilidi korunur. Full Access bu güvenlik katmanlarını kaldırmaz.
+        GitHub OAuth, cihaz credential'ı, audit ve idempotency her iki modda da kalır.
+        Yönetici yetkisi gereken işlemler UAC'yi kandırmaz; önceden yönetici olarak kurulmuş
+        Nexowire Privileged Broker üzerinden çalışır.
       </p>
     </section>
 

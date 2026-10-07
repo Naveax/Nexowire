@@ -20,7 +20,7 @@ import { captureWindowsPrivateScreen } from './windows-private-screen.js';
 import {
   assertPhysicalConsoleGrant,
   executeWindowsConsoleControlCapability,
-  requiresPhysicalConsoleGrant,
+  needsPhysicalConsoleApproval,
 } from './windows-console-grant.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
@@ -1996,6 +1996,7 @@ export interface AgentExecutionContext {
   runbooks?: RunbookStore;
   privilegeMode?: 'direct' | 'broker';
   privilegedBroker?: PrivilegedBrokerClient;
+  accessMode?: 'safe' | 'full';
 }
 
 function requireProcesses(context: AgentExecutionContext): ProcessManager {
@@ -2023,7 +2024,12 @@ export async function executeCapability(
   policy: PathPolicy,
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
-  if (requiresPhysicalConsoleGrant(capability)) {
+  if (
+    needsPhysicalConsoleApproval(
+      capability,
+      context.accessMode ?? 'safe',
+    )
+  ) {
     assertPhysicalConsoleGrant(capability);
   }
 

@@ -138,7 +138,8 @@ function errorStatus(message: string): number {
   if (message === 'BILLING_PAUSED') return 503;
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
-    message === 'PAIRING_NOT_FOUND'
+    message === 'PAIRING_NOT_FOUND' ||
+    message === 'DEVICE_NOT_FOUND'
   ) return 404;
   if (
     message === 'ADMIN_REQUIRED' ||
@@ -217,6 +218,30 @@ export function createControlPlaneHttpHandler(
         path === '/api/v1/me/dashboard'
       ) {
         return json(200, await service.dashboard(identity));
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/me/devices/access-mode'
+      ) {
+        const body = await readJsonObject(request);
+        const mode = stringField(body, 'mode').trim().toLowerCase();
+        if (
+          mode === 'full' &&
+          request.headers.get('x-nexowire-confirm') !== 'full-access-v1'
+        ) {
+          return json(400, {
+            error: 'FULL_ACCESS_CONFIRMATION_REQUIRED',
+          });
+        }
+        return json(
+          200,
+          await service.setDeviceAccessMode(
+            identity,
+            stringField(body, 'deviceId'),
+            mode,
+          ),
+        );
       }
 
       if (

@@ -53,6 +53,7 @@ export class AgentProvider implements Provider {
         request.input,
         request.timeoutMs ?? 60_000,
         request.requestId,
+        request.accessMode ?? 'safe',
       )) as AgentOperationResult | undefined;
 
       const result = raw ?? {};

@@ -44,8 +44,13 @@ test('hub sends a capability request through a real WebSocket agent', async (t) 
       capabilities: ['machine.snapshot'],
     },
   }));
+  const observedAccessModes: string[] = [];
   socket.on('message', (raw) => {
-    const request = JSON.parse(raw.toString()) as { requestId: string };
+    const request = JSON.parse(raw.toString()) as {
+      requestId: string;
+      accessMode?: string;
+    };
+    observedAccessModes.push(request.accessMode ?? 'missing');
     socket.send(JSON.stringify({
       type: 'response',
       requestId: request.requestId,
@@ -59,6 +64,18 @@ test('hub sends a capability request through a real WebSocket agent', async (t) 
   assert.equal(broker.has('device-e2e'), true);
   const result = await broker.request('device-e2e', 'machine.snapshot', {}, 2_000);
   assert.deepEqual(result, { data: { hostname: 'e2e-host' } });
+  assert.deepEqual(observedAccessModes, ['safe']);
+
+  const fullResult = await broker.request(
+    'device-e2e',
+    'machine.snapshot',
+    { mode: 'full-test' },
+    2_000,
+    undefined,
+    'full',
+  );
+  assert.deepEqual(fullResult, { data: { hostname: 'e2e-host' } });
+  assert.deepEqual(observedAccessModes, ['safe', 'full']);
 
   socket.send(JSON.stringify({
     type: 'event',

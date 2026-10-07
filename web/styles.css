@@ -54,8 +54,14 @@ h2 { font-size: 24px; margin-bottom: 0; }
 .billing-actions button:disabled { opacity: .45; cursor: not-allowed; }
 .section-head { margin: 42px 0 14px; }
 .device-list { display: grid; gap: 10px; }
-.device { display: grid; grid-template-columns: 1.7fr 1fr 1fr; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+.device { display: grid; grid-template-columns: 1.45fr .8fr 1.35fr 1fr; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
 .device-name { font-weight: 750; }
+.device-access { display: grid; gap: 6px; align-items: start; justify-items: start; }
+.access-mode { font-size: 11px; font-weight: 850; letter-spacing: .08em; border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px; }
+.access-mode.safe { color: var(--good); }
+.access-mode.full { color: var(--bad); border-color: rgba(255,123,135,.4); }
+.access-toggle { padding: 8px 10px; font-size: 12px; }
+.access-copy { line-height: 1.3; }
 .status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #586273; }
 .dot.online { background: var(--good); box-shadow: 0 0 16px rgba(105,217,155,.55); }

@@ -241,6 +241,39 @@ async function openBillingPortal() {
   }
 }
 
+async function setDeviceAccessMode(deviceId, mode, row) {
+  const button = row.querySelector('.access-toggle');
+  const copy = row.querySelector('.access-copy');
+  button.disabled = true;
+  copy.textContent = mode === 'full'
+    ? 'Full Access etkinleştiriliyor…'
+    : 'SAFE moda dönülüyor…';
+  try {
+    const headers = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    };
+    if (mode === 'full') {
+      headers['X-Nexowire-Confirm'] = 'full-access-v1';
+    }
+    const response = await fetch('/api/v1/me/devices/access-mode', {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify({ deviceId, mode }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error || ('HTTP ' + response.status));
+    }
+    await load();
+  } catch (error) {
+    copy.textContent =
+      error instanceof Error ? error.message : String(error);
+    button.disabled = false;
+  }
+}
+
 function render(snapshot) {
   $('welcome').textContent = snapshot.displayName
     ? 'Merhaba, ' + snapshot.displayName
@@ -308,6 +341,11 @@ function render(snapshot) {
           <span class="dot"></span>
           <span class="status-text"></span>
         </div>
+        <div class="device-access">
+          <span class="access-mode"></span>
+          <button type="button" class="secondary access-toggle"></button>
+          <small class="access-copy"></small>
+        </div>
         <small class="last-seen"></small>
       `;
       row.querySelector('.device-name').textContent = device.name;
@@ -315,6 +353,26 @@ function render(snapshot) {
       row.querySelector('.dot').classList.toggle('online', device.online);
       row.querySelector('.status-text').textContent =
         device.online ? 'Online' : 'Offline';
+      const accessMode = device.accessMode === 'full' ? 'full' : 'safe';
+      const accessBadge = row.querySelector('.access-mode');
+      const accessToggle = row.querySelector('.access-toggle');
+      const accessCopy = row.querySelector('.access-copy');
+      accessBadge.textContent =
+        accessMode === 'full' ? 'FULL ACCESS' : 'SAFE';
+      accessBadge.classList.add(accessMode);
+      accessToggle.textContent =
+        accessMode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
+      accessCopy.textContent =
+        accessMode === 'full'
+          ? 'Süresiz · işlem başına onay yok'
+          : 'Varsayılan güvenli mod';
+      accessToggle.addEventListener('click', () => {
+        void setDeviceAccessMode(
+          device.id,
+          accessMode === 'full' ? 'safe' : 'full',
+          row,
+        );
+      });
       row.querySelector('.last-seen').textContent =
         device.lastSeenAt ?? 'Henüz görülmedi';
       root.appendChild(row);
