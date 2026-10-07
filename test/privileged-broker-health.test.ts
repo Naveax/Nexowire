@@ -25,10 +25,14 @@ test(
         },
       });
       assert.equal(allowed.status, 200);
-      assert.deepEqual(await allowed.json(), {
-        ok: true,
-        elevated: true,
-      });
+      const health = await allowed.json() as {
+        ok?: boolean;
+        elevated?: boolean;
+        version?: string;
+      };
+      assert.equal(health.ok, true);
+      assert.equal(health.elevated, true);
+      assert.match(health.version ?? '', /^\d+\.\d+\.\d+$/);
 
       const wrongMethod = await fetch(handle.url + '/health', {
         method: 'POST',
