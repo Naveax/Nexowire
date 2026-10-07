@@ -74,3 +74,23 @@ h2 { font-size: 24px; margin-bottom: 0; }
   .metrics { grid-template-columns: 1fr; }
   .device { grid-template-columns: 1fr; }
 }
+
+.owner-access-panel { margin-top: 24px; padding: 22px; border: 1px solid rgba(138,180,255,.26); border-radius: 18px; background: linear-gradient(135deg, rgba(138,180,255,.075), rgba(105,217,155,.045)); }
+.access-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.risk-copy { margin: 18px 0; max-width: 920px; line-height: 1.62; color: #c8d0dc; }
+.policy-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.policy-grid div { padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(9,11,16,.4); display: grid; gap: 6px; }
+.policy-grid span { color: var(--muted); font-size: 12px; }
+.policy-grid strong { font-size: 14px; line-height: 1.35; }
+.local-interlock { margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; line-height: 1.5; }
+.settings-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); cursor: pointer; }
+.setting-row span { display: grid; gap: 4px; }
+.setting-row small { line-height: 1.35; }
+.setting-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+body:has(#setting-compact:checked) .device { padding: 10px 14px; border-radius: 10px; }
+body:has(#setting-reduce-motion:checked) *, body:has(#setting-reduce-motion:checked) *::before, body:has(#setting-reduce-motion:checked) *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+body:has(#setting-advanced:not(:checked)) .policy-grid,
+body:has(#setting-advanced:not(:checked)) .local-interlock { display: none; }
+@media (max-width: 820px) { .policy-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .settings-grid { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .policy-grid { grid-template-columns: 1fr; } }

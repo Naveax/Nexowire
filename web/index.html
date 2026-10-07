@@ -46,6 +46,32 @@
       </article>
     </section>
 
+    <section id="owner-access-panel" class="owner-access-panel">
+      <div class="access-head">
+        <div>
+          <p class="eyebrow">Erişim güvenliği</p>
+          <h2>Full Access hakkında</h2>
+        </div>
+        <span class="pill muted">GÜVENLİK</span>
+      </div>
+      <p class="risk-copy">
+        Full Access kullanılan bir Nexowire kurulumu uzaktan komut çalıştırabilir, dosya ve
+        uygulama durumunu değiştirebilir ve otomasyon görevleri yürütebilir. Geri alma veya
+        veri kurtarma garantisi yoktur; yaptığın ve yetkilendirdiğin işlemlerin sonuçlarını
+        kontrol etmek kullanıcı sorumluluğundadır.
+      </p>
+      <div class="policy-grid">
+        <div><span>Owner MCP kotası</span><strong>Doğrulanmış hesapta sınırsız</strong></div>
+        <div><span>Audit</span><strong>Meta veri kaydı açık</strong></div>
+        <div><span>Hesap güvenliği</span><strong>GitHub OAuth</strong></div>
+        <div><span>Cihaz güvenliği</span><strong>Agent credential</strong></div>
+      </div>
+      <p class="local-interlock">
+        Kimlik doğrulama, audit/idempotency ve görünür fiziksel masaüstü için yerel Windows
+        güvenlik kilidi korunur. Full Access bu güvenlik katmanlarını kaldırmaz.
+      </p>
+    </section>
+
     <section id="billing-panel" class="billing-panel hidden">
       <div>
         <p class="eyebrow">Kullanım planı</p>
@@ -76,6 +102,27 @@
     </section>
     <section id="devices" class="device-list">
       <div class="empty">Control plane bağlantısı kurulmadı.</div>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Settings</p>
+        <h2>Görünüm tercihleri</h2>
+      </div>
+    </section>
+    <section class="settings-grid">
+      <label class="setting-row">
+        <span><strong>Kompakt cihaz listesi</strong><small>Daha az dikey alan kullan.</small></span>
+        <input id="setting-compact" type="checkbox">
+      </label>
+      <label class="setting-row">
+        <span><strong>Hareketleri azalt</strong><small>Arayüz animasyonlarını kapat.</small></span>
+        <input id="setting-reduce-motion" type="checkbox">
+      </label>
+      <label class="setting-row">
+        <span><strong>Gelişmiş güvenlik bilgisi</strong><small>Owner/audit ayrıntılarını göster.</small></span>
+        <input id="setting-advanced" type="checkbox" checked>
+      </label>
     </section>
 
     <section id="error-panel" class="error-panel hidden">
