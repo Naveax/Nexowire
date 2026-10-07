@@ -279,6 +279,10 @@ async function execute(
   try {
     targetId = await resolveDevice(ctx, deviceId);
     await ctx.policies?.assertAllowed(targetId, capability);
+    const accessMode =
+      ctx.toolAuthorization?.kind === 'control-plane'
+        ? ctx.toolAuthorization.deviceAccessModes?.[targetId] ?? 'safe'
+        : 'safe';
 
     if (idempotencyKey) {
       if (!ctx.idempotency) {
@@ -398,6 +402,7 @@ async function execute(
         capability,
         input,
         requestId: operationId,
+        accessMode,
         ...(timeoutMs ? { timeoutMs } : {}),
       },
       providerId,
