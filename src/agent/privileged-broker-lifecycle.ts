@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
 import {
@@ -56,10 +56,54 @@ function taskName(
 function rootDir(
   options: PrivilegedBrokerTaskOptions,
 ): string {
-  return (
-    options.rootDir ??
-    path.join(os.homedir(), '.nexowire', 'privileged-broker')
+  if (options.rootDir) return options.rootDir;
+  if (process.platform === 'win32') {
+    const base =
+      options.env?.ProgramData ??
+      process.env.ProgramData ??
+      'C:\\ProgramData';
+    return path.join(
+      base,
+      'Nexowire',
+      'privileged-broker',
+    );
+  }
+  return path.join(
+    os.homedir(),
+    '.nexowire',
+    'privileged-broker',
   );
+}
+
+function hardenPrivilegedBrokerAcl(root: string): void {
+  if (process.platform !== 'win32') return;
+  const result = spawnSync(
+    'icacls.exe',
+    [
+      root,
+      '/inheritance:r',
+      '/grant:r',
+      '*S-1-5-18:(OI)(CI)F',
+      '*S-1-5-32-544:(OI)(CI)F',
+      '/remove:g',
+      '*S-1-5-32-545',
+      '/T',
+      '/C',
+      '/Q',
+    ],
+    {
+      windowsHide: true,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      result.stderr.trim() ||
+      result.stdout.trim() ||
+      'Failed to harden privileged broker ProgramData ACL.',
+    );
+  }
 }
 
 function launcherPath(
@@ -306,6 +350,7 @@ export async function installPrivilegedBrokerTask(
       mode: 0o600,
     },
   );
+  hardenPrivilegedBrokerAcl(directory);
 
   const installScript = `
 $ErrorActionPreference='Stop'
@@ -340,6 +385,7 @@ Start-ScheduledTask -TaskName $name
     ) + '\n',
     { encoding: 'utf8', mode: 0o600 },
   );
+  hardenPrivilegedBrokerAcl(directory);
 
   return {
     status: await privilegedBrokerTaskStatus(options),
