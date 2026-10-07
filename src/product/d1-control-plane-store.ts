@@ -84,6 +84,7 @@ type DbDeviceRow = {
   name: string;
   platform: string;
   credential_hash: string;
+  access_mode: 'safe' | 'full';
   online: number;
   last_seen_at: string | null;
   created_at: string;
@@ -194,6 +195,7 @@ function deviceFromRow(row: DbDeviceRow): ProductDeviceRecord {
     name: row.name,
     platform: row.platform,
     credentialHash: row.credential_hash,
+    accessMode: row.access_mode,
     online: row.online === 1,
     lastSeenAt: row.last_seen_at,
     createdAt: row.created_at,
@@ -468,7 +470,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   async getDevice(id: string): Promise<ProductDeviceRecord | null> {
     const row = await this.db
       .prepare(
-        'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE id = ?',
+        'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, access_mode, online, last_seen_at, created_at, updated_at FROM devices WHERE id = ?',
       )
       .bind(id)
       .first<DbDeviceRow>();
@@ -480,7 +482,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
   ): Promise<ProductDeviceRecord | null> {
     const row = await this.db
       .prepare(
-        'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE credential_hash = ?',
+        'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, access_mode, online, last_seen_at, created_at, updated_at FROM devices WHERE credential_hash = ?',
       )
       .bind(credentialHash)
       .first<DbDeviceRow>();
@@ -491,14 +493,15 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     await this.db
       .prepare(
         `INSERT INTO devices
-          (id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, owner_account_id, device_anchor_hash, name, platform, credential_hash, access_mode, online, last_seen_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            owner_account_id = excluded.owner_account_id,
            device_anchor_hash = excluded.device_anchor_hash,
            name = excluded.name,
            platform = excluded.platform,
            credential_hash = excluded.credential_hash,
+           access_mode = excluded.access_mode,
            online = excluded.online,
            last_seen_at = excluded.last_seen_at,
            updated_at = excluded.updated_at`,
@@ -510,6 +513,7 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
         record.name,
         record.platform,
         record.credentialHash,
+        record.accessMode,
         record.online ? 1 : 0,
         record.lastSeenAt,
         record.createdAt,
@@ -524,11 +528,11 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     const statement =
       ownerAccountId === undefined
         ? this.db.prepare(
-            'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices ORDER BY created_at ASC',
+            'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, access_mode, online, last_seen_at, created_at, updated_at FROM devices ORDER BY created_at ASC',
           )
         : this.db
             .prepare(
-              'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, online, last_seen_at, created_at, updated_at FROM devices WHERE owner_account_id = ? ORDER BY created_at ASC',
+              'SELECT id, owner_account_id, device_anchor_hash, name, platform, credential_hash, access_mode, online, last_seen_at, created_at, updated_at FROM devices WHERE owner_account_id = ? ORDER BY created_at ASC',
             )
             .bind(ownerAccountId);
     const result = await statement.all<DbDeviceRow>();
