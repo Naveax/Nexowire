@@ -23,6 +23,7 @@ export const HubRequestSchema = z.object({
   requestId: z.string().uuid(),
   capability: z.string().min(1).max(128),
   input: z.unknown(),
+  accessMode: z.enum(['safe', 'full']).default('safe'),
 });
 
 export const AgentResponseSchema = z.object({
