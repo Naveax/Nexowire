@@ -3,6 +3,7 @@ export interface ProductDeviceSummary {
   name: string;
   online: boolean;
   platform: string;
+  accessMode: 'safe' | 'full';
   lastSeenAt: string | null;
 }
 
