@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertPhysicalConsoleGrant,
+  needsPhysicalConsoleApproval,
   physicalConsoleGrantStatus,
   requestPhysicalConsoleGrant,
   requiresPhysicalConsoleGrant,
@@ -76,6 +77,35 @@ test('physical console mutations are default-denied while private input stays is
       remainingMs: 0,
       durationMinutes: null,
     },
+  );
+});
+
+test('SAFE remains prompt-protected while Full Access suppresses repeated console approval', () => {
+  const physical = [
+    'windows.pointer.click',
+    'windows.keyboard.type',
+    'windows.window.focus',
+  ];
+  for (const capability of physical) {
+    assert.equal(
+      needsPhysicalConsoleApproval(capability, 'safe'),
+      true,
+      capability + ':safe',
+    );
+    assert.equal(
+      needsPhysicalConsoleApproval(capability, 'full'),
+      false,
+      capability + ':full',
+    );
+  }
+
+  assert.equal(
+    needsPhysicalConsoleApproval('windows.screenshot', 'safe'),
+    false,
+  );
+  assert.equal(
+    needsPhysicalConsoleApproval('windows.screenshot', 'full'),
+    false,
   );
 });
 
