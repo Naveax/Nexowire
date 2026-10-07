@@ -7,7 +7,7 @@ const css = readFileSync(new URL('../web/styles.css', import.meta.url), 'utf8');
 
 test('dashboard explains Full Access risk without removing security boundaries', () => {
   assert.match(html, /Full Access hakkında/);
-  assert.match(html, /Geri alma veya veri kurtarma garantisi yoktur/);
+  assert.match(html, /Geri alma veya\s+veri kurtarma garantisi yoktur/);
   assert.match(html, /GitHub OAuth/);
   assert.match(html, /Agent credential/);
   assert.match(html, /güvenlik katmanlarını kaldırmaz/);
