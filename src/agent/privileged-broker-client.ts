@@ -44,6 +44,52 @@ export class PrivilegedBrokerClient {
     );
   }
 
+  async probe(): Promise<{
+    reachable: boolean;
+    elevated: boolean;
+  }> {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.min(this.timeoutMs, 5_000),
+    );
+    try {
+      const response = await fetch(
+        new URL('/health', this.url),
+        {
+          method: 'GET',
+          headers: {
+            authorization: 'Bearer ' + this.token,
+          },
+          signal: controller.signal,
+        },
+      );
+      if (!response.ok) {
+        return {
+          reachable: false,
+          elevated: false,
+        };
+      }
+      const body = await response.json() as {
+        ok?: boolean;
+        elevated?: boolean;
+      };
+      return {
+        reachable: body.ok === true,
+        elevated:
+          body.ok === true &&
+          body.elevated === true,
+      };
+    } catch {
+      return {
+        reachable: false,
+        elevated: false,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async execute(
     capability: string,
     input: unknown,
