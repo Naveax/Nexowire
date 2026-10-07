@@ -257,9 +257,17 @@ export class ControlPlaneService {
     );
     if (ownerIdentity?.accountId !== account.id) return PRODUCT_PLANS.free;
 
-    // Null is an unlimited *tool credit* ceiling; all normal security,
-    // premium-feature and replay checks remain unchanged.
-    return { ...PRODUCT_PLANS.free, monthlyCredits: null };
+    // Owner Full Access is still authenticated and audited. It removes
+    // product-plan quota/feature/device limits only for the verified GitHub
+    // owner; replay protection and the local physical-console interlock stay.
+    return {
+      ...PRODUCT_PLANS.pro,
+      id: 'free',
+      billingMode: 'free',
+      monthlyCredits: null,
+      maxDevices: null,
+      maxConcurrentTasks: null,
+    };
   }
 
   async dashboard(
@@ -444,7 +452,7 @@ export class ControlPlaneService {
     expiresAt: string;
   }> {
     const account = await this.requireAccount(identity.accountId);
-    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
+    const plan = await this.effectivePlan(account);
     const requestedDeviceId = deviceIdInput?.trim()
       ? boundedId('deviceId', deviceIdInput)
       : undefined;
@@ -496,7 +504,7 @@ export class ControlPlaneService {
     if (!record) throw new Error('PAIRING_NOT_FOUND');
 
     const account = await this.requireAccount(record.ownerAccountId);
-    const plan = this.freeOnly ? PRODUCT_PLANS.free : resolvePlan(account);
+    const plan = await this.effectivePlan(account);
 
     const consumed = consumePairingChallenge(
       record,
