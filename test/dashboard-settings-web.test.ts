@@ -11,17 +11,27 @@ test('dashboard explains Full Access risk without removing security boundaries',
   assert.match(html, /süre dolmaz/);
   assert.match(html, /GitHub OAuth/);
   assert.match(html, /cihaz credential/);
-  assert.match(html, /Privileged Broker/);
-  assert.match(html, /UAC'yi kandırmaz/);
+  assert.match(html, /Admin Bridge/);
+  assert.match(html, /Windows UAC/);
+  assert.match(html, /ilk kez kurulurken/);
+  assert.match(html, /işlem başına UAC beklenmez/);
 });
 
 test('dashboard persists device Full Access through authenticated API without popup loops', () => {
   assert.match(app, /\/api\/v1\/me\/devices\/access-mode/);
   assert.match(app, /X-Nexowire-Confirm/);
   assert.match(app, /full-access-v1/);
-  assert.match(app, /Süresiz · işlem başına onay yok/);
+  assert.match(app, /Süresiz · Nexowire onayı yok/);
+  assert.match(app, /Admin Bridge ilk kurulum UAC/);
   assert.match(app, /SAFE moda dön/);
   assert.doesNotMatch(app, /window\.confirm|window\.prompt/);
+});
+
+test('dashboard advertises checksum-verified side-by-side live update', () => {
+  assert.match(html, /Canlı güncelleme/);
+  assert.match(html, /SHA-256/);
+  assert.match(html, /side-by-side/);
+  assert.match(html, /rollback/);
 });
 
 test('dashboard exposes session-local view settings without privileged API mutations', () => {
