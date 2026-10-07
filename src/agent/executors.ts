@@ -1996,6 +1996,7 @@ export interface AgentExecutionContext {
   runbooks?: RunbookStore;
   privilegeMode?: 'direct' | 'broker';
   privilegedBroker?: PrivilegedBrokerClient;
+  accessMode?: 'safe' | 'full';
 }
 
 function requireProcesses(context: AgentExecutionContext): ProcessManager {
@@ -2023,7 +2024,10 @@ export async function executeCapability(
   policy: PathPolicy,
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
-  if (requiresPhysicalConsoleGrant(capability)) {
+  if (
+    requiresPhysicalConsoleGrant(capability) &&
+    context.accessMode !== 'full'
+  ) {
     assertPhysicalConsoleGrant(capability);
   }
 
