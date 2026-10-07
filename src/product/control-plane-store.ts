@@ -53,6 +53,9 @@ export interface ProductDeviceRecord {
   platform: string;
   credentialHash: string;
   accessMode: 'safe' | 'full';
+  agentVersion: string | null;
+  privilegeMode: 'direct' | 'broker' | null;
+  adminBridgeReady: boolean | null;
   online: boolean;
   lastSeenAt: string | null;
   createdAt: string;
