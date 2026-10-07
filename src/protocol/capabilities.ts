@@ -1,6 +1,9 @@
 export const CORE_CAPABILITIES = [
   'machine.snapshot',
   'machine.health',
+  'nexowire.update.status',
+  'nexowire.update.check',
+  'nexowire.update.apply',
   'network.dns.resolve',
   'network.tcp.probe',
   'network.http.probe',
@@ -126,6 +129,8 @@ export function capabilitiesForPlatform(platform: NodeJS.Platform): string[] {
 export const READ_ONLY_CAPABILITIES = new Set<string>([
   'machine.snapshot',
   'machine.health',
+  'nexowire.update.status',
+  'nexowire.update.check',
   'network.dns.resolve',
   'network.tcp.probe',
   'network.http.probe',

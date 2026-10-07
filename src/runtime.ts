@@ -46,6 +46,14 @@ export async function createRuntime(config: NexowireConfig) {
           deviceId: event.device.id,
           online: event.type === 'connected',
           at: event.at,
+          ...(event.type === 'connected'
+            ? {
+                agentVersion: event.device.agentVersion,
+                privilegeMode: event.device.privilegeMode,
+                adminBridgeReady:
+                  event.device.adminBridgeReady,
+              }
+            : {}),
         });
       }
     },

@@ -303,6 +303,9 @@ export class ControlPlaneService {
         online: device.online,
         platform: device.platform,
         accessMode: device.accessMode,
+        agentVersion: device.agentVersion,
+        privilegeMode: device.privilegeMode,
+        adminBridgeReady: device.adminBridgeReady,
         lastSeenAt: device.lastSeenAt,
       })),
       stability: {
@@ -579,6 +582,10 @@ export class ControlPlaneService {
       platform: boundedText('platform', input.platform, 64),
       credentialHash: secretHash(rawCredential),
       accessMode: existingDevice?.accessMode ?? 'safe',
+      agentVersion: existingDevice?.agentVersion ?? null,
+      privilegeMode: existingDevice?.privilegeMode ?? null,
+      adminBridgeReady:
+        existingDevice?.adminBridgeReady ?? null,
       online: false,
       lastSeenAt: null,
       createdAt: existingDevice?.createdAt ?? now,
@@ -625,6 +632,11 @@ export class ControlPlaneService {
     deviceIdInput: string,
     online: boolean,
     atInput: string,
+    runtime: {
+      agentVersion?: string;
+      privilegeMode?: 'direct' | 'broker';
+      adminBridgeReady?: boolean;
+    } = {},
   ): Promise<boolean> {
     const deviceId = deviceIdInput.trim();
     const atMs = Date.parse(atInput);
@@ -651,8 +663,28 @@ export class ControlPlaneService {
       return true;
     }
 
+    const agentVersion =
+      runtime.agentVersion === undefined
+        ? device.agentVersion
+        : boundedText(
+            'agentVersion',
+            runtime.agentVersion,
+            64,
+          );
+    const privilegeMode =
+      runtime.privilegeMode === undefined
+        ? device.privilegeMode
+        : runtime.privilegeMode;
+    const adminBridgeReady =
+      runtime.adminBridgeReady === undefined
+        ? device.adminBridgeReady
+        : runtime.adminBridgeReady;
+
     await this.store.putDevice({
       ...device,
+      agentVersion,
+      privilegeMode,
+      adminBridgeReady,
       online,
       lastSeenAt: normalizedAt,
       updatedAt: normalizedAt,

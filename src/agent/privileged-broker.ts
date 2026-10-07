@@ -9,6 +9,8 @@ import { executeWindowsCapability } from './windows-control.js';
 import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { normalizeAgentError } from './executors.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
+import { scheduleOfficialMachineUpdate } from '../update/machine-update.js';
+import { NEXOWIRE_VERSION } from '../version.js';
 
 export interface PrivilegedBrokerServerOptions {
   host?: string;
@@ -121,8 +123,8 @@ export async function startPrivilegedBroker(
 
   const server = createServer(async (request, response) => {
     if (
-      request.method !== 'POST' ||
-      request.url !== '/execute'
+      request.url !== '/execute' &&
+      request.url !== '/health'
     ) {
       response.writeHead(404, {
         'content-type': 'application/json',
@@ -149,6 +151,42 @@ export async function startPrivilegedBroker(
           },
         }),
       );
+      return;
+    }
+
+    if (request.url === '/health') {
+      if (request.method !== 'GET') {
+        response.writeHead(405, {
+          'content-type': 'application/json',
+        });
+        response.end(JSON.stringify({
+          ok: false,
+          error: { code: 'METHOD_NOT_ALLOWED' },
+        }));
+        return;
+      }
+      response.writeHead(200, {
+        'content-type': 'application/json',
+      });
+      response.end(JSON.stringify({
+        ok: true,
+        version: NEXOWIRE_VERSION,
+        elevated:
+          options.requireElevation === false
+            ? true
+            : isWindowsProcessElevated(),
+      }));
+      return;
+    }
+
+    if (request.method !== 'POST') {
+      response.writeHead(405, {
+        'content-type': 'application/json',
+      });
+      response.end(JSON.stringify({
+        ok: false,
+        error: { code: 'METHOD_NOT_ALLOWED' },
+      }));
       return;
     }
 
@@ -208,15 +246,20 @@ export async function startPrivilegedBroker(
           requestedCapability: string,
           requestedInput: unknown,
         ) =>
-          requestedCapability.startsWith('windows.environment.')
-            ? await executeWindowsEnvironmentCapability(
-                requestedCapability,
+          requestedCapability ===
+          'nexowire.machine_update.apply'
+            ? await scheduleOfficialMachineUpdate(
                 requestedInput,
               )
-            : await executeWindowsCapability(
-                requestedCapability,
-                requestedInput,
-              ));
+            : requestedCapability.startsWith('windows.environment.')
+              ? await executeWindowsEnvironmentCapability(
+                  requestedCapability,
+                  requestedInput,
+                )
+              : await executeWindowsCapability(
+                  requestedCapability,
+                  requestedInput,
+                ));
 
       const data = await execute(
         capability,

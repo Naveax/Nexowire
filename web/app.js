@@ -349,7 +349,11 @@ function render(snapshot) {
         <small class="last-seen"></small>
       `;
       row.querySelector('.device-name').textContent = device.name;
-      row.querySelector('.platform').textContent = device.platform;
+      row.querySelector('.platform').textContent =
+        device.platform +
+        (device.agentVersion
+          ? ' · v' + device.agentVersion
+          : '');
       row.querySelector('.dot').classList.toggle('online', device.online);
       row.querySelector('.status-text').textContent =
         device.online ? 'Online' : 'Offline';
@@ -362,10 +366,19 @@ function render(snapshot) {
       accessBadge.classList.add(accessMode);
       accessToggle.textContent =
         accessMode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
+      const bridgeState =
+        device.adminBridgeReady === true
+          ? 'Admin Bridge hazır'
+          : device.privilegeMode === 'broker'
+            ? 'Admin Bridge ulaşılamıyor'
+            : device.adminBridgeReady === null ||
+                device.adminBridgeReady === undefined
+              ? 'Admin Bridge durumu reconnect sonrası doğrulanacak'
+              : 'Admin Bridge kurulum bekliyor · ilk kurulumda Windows UAC';
       accessCopy.textContent =
         accessMode === 'full'
-          ? 'Süresiz · işlem başına onay yok'
-          : 'Varsayılan güvenli mod';
+          ? 'Süresiz · Nexowire onayı yok · ' + bridgeState
+          : 'Varsayılan güvenli mod · ' + bridgeState;
       accessToggle.addEventListener('click', () => {
         void setDeviceAccessMode(
           device.id,

@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  renderMachineCutoverScript,
+} from '../src/update/machine-update.js';
+
+test('machine cutover updates only Nexowire machine launchers and rolls back on failed health', () => {
+  const script = renderMachineCutoverScript({
+    version: '1.0.5',
+    buildId: '1.0.5-012345abcdef',
+    targetRoot:
+      'C:\\ProgramData\\Nexowire\\versions\\1.0.5-012345abcdef',
+  });
+
+  assert.match(script, /Nexowire Privileged Broker/);
+  assert.match(script, /Nexowire Hub Boot/);
+  assert.match(script, /privileged-broker run/);
+  assert.match(script, /cli\\\.js http/);
+  assert.match(script, /Updated SYSTEM Hub did not listen/);
+  assert.match(script, /Updated Admin Bridge did not listen/);
+  assert.match(script, /\.update-rollback/);
+  assert.match(script, /Restore/);
+  assert.match(script, /rolled_back/);
+  assert.match(
+    script,
+    /C:\\ProgramData\\Nexowire\\versions\\1\.0\.5-012345abcdef/,
+  );
+  assert.doesNotMatch(
+    script,
+    /Invoke-Expression|iex\s|Start-Process.+cmd\.exe/i,
+  );
+});

@@ -319,13 +319,43 @@ export function createControlPlaneHttpHandler(
           return json(403, { error: 'SERVICE_REQUIRED' });
         }
         const body = await readJsonObject(request);
-        if (typeof body.online !== 'boolean') {
+        if (
+          typeof body.online !== 'boolean' ||
+          (
+            body.agentVersion !== undefined &&
+            typeof body.agentVersion !== 'string'
+          ) ||
+          (
+            body.privilegeMode !== undefined &&
+            body.privilegeMode !== 'direct' &&
+            body.privilegeMode !== 'broker'
+          ) ||
+          (
+            body.adminBridgeReady !== undefined &&
+            typeof body.adminBridgeReady !== 'boolean'
+          )
+        ) {
           return json(400, { error: 'INVALID_REQUEST' });
         }
         const updated = await service.setDevicePresence(
           stringField(body, 'deviceId'),
           body.online,
           stringField(body, 'at'),
+          {
+            ...(typeof body.agentVersion === 'string'
+              ? { agentVersion: body.agentVersion }
+              : {}),
+            ...(body.privilegeMode === 'direct' ||
+            body.privilegeMode === 'broker'
+              ? { privilegeMode: body.privilegeMode }
+              : {}),
+            ...(typeof body.adminBridgeReady === 'boolean'
+              ? {
+                  adminBridgeReady:
+                    body.adminBridgeReady,
+                }
+              : {}),
+          },
         );
         return updated
           ? json(200, { updated: true })

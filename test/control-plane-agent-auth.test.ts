@@ -105,6 +105,9 @@ test('control-plane agent presence reporter posts bounded device state', async (
             '11111111-1111-4111-8111-111111111111',
           online: true,
           at: '2026-10-04T13:36:15.338Z',
+          agentVersion: '1.0.4',
+          privilegeMode: 'broker',
+          adminBridgeReady: true,
         },
       );
       return Response.json({ updated: true });
@@ -117,6 +120,9 @@ test('control-plane agent presence reporter posts bounded device state', async (
         '11111111-1111-4111-8111-111111111111',
       online: true,
       at: '2026-10-04T13:36:15.338Z',
+      agentVersion: '1.0.4',
+      privilegeMode: 'broker',
+      adminBridgeReady: true,
     }),
     true,
   );

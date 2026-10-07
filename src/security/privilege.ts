@@ -16,6 +16,7 @@ export function privilegeRequirement(
     case 'windows.service.control':
     case 'windows.task.control':
     case 'windows.firewall.control':
+    case 'nexowire.machine_update.apply':
       return 'elevated';
 
     case 'windows.registry.set':
@@ -46,5 +47,6 @@ export function isPrivilegedBrokerCapability(
     'windows.firewall.control',
     'windows.environment.set',
     'windows.environment.delete',
+    'nexowire.machine_update.apply',
   ].includes(capability);
 }
