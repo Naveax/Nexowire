@@ -9,6 +9,8 @@ import { executeWindowsCapability } from './windows-control.js';
 import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { normalizeAgentError } from './executors.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
+import { scheduleOfficialMachineUpdate } from '../update/machine-update.js';
+import { NEXOWIRE_VERSION } from '../version.js';
 
 export interface PrivilegedBrokerServerOptions {
   host?: string;
@@ -168,6 +170,7 @@ export async function startPrivilegedBroker(
       });
       response.end(JSON.stringify({
         ok: true,
+        version: NEXOWIRE_VERSION,
         elevated:
           options.requireElevation === false
             ? true
@@ -243,15 +246,20 @@ export async function startPrivilegedBroker(
           requestedCapability: string,
           requestedInput: unknown,
         ) =>
-          requestedCapability.startsWith('windows.environment.')
-            ? await executeWindowsEnvironmentCapability(
-                requestedCapability,
+          requestedCapability ===
+          'nexowire.machine_update.apply'
+            ? await scheduleOfficialMachineUpdate(
                 requestedInput,
               )
-            : await executeWindowsCapability(
-                requestedCapability,
-                requestedInput,
-              ));
+            : requestedCapability.startsWith('windows.environment.')
+              ? await executeWindowsEnvironmentCapability(
+                  requestedCapability,
+                  requestedInput,
+                )
+              : await executeWindowsCapability(
+                  requestedCapability,
+                  requestedInput,
+                ));
 
       const data = await execute(
         capability,
