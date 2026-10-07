@@ -6,6 +6,10 @@ import {
   planHubInstall,
   shouldRestartHubAfterInstall,
 } from '../src/hub/hub-lifecycle.js';
+import {
+  buildHubBootLauncher,
+  parsePersistedHubLauncherEnvironment,
+} from '../src/hub/hub-boot-lifecycle.js';
 
 test('Hub launcher persists only non-secret self-host configuration', () => {
   const env = {
@@ -212,3 +216,51 @@ test('Hub lifecycle persists control-plane secret references but never the servi
     false,
   );
 });
+
+test('pre-logon Hub parser recovers persisted environment from the user launcher', () => {
+  const launcher = [
+    "$env:NEXOWIRE_HTTP_HOST='127.0.0.1'",
+    "$env:NEXOWIRE_HTTP_PORT='43110'",
+    "$env:NEXOWIRE_CONTROL_PLANE_URL='https://control.example.test'",
+    "$env:NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE='C:\\Users\\User\\service.dpapi.json'",
+    "& 'node.exe' 'cli.js' 'http'",
+  ].join('\r\n');
+
+  assert.deepEqual(
+    parsePersistedHubLauncherEnvironment(launcher),
+    {
+      NEXOWIRE_HTTP_HOST: '127.0.0.1',
+      NEXOWIRE_HTTP_PORT: '43110',
+      NEXOWIRE_CONTROL_PLANE_URL:
+        'https://control.example.test',
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
+        'C:\\Users\\User\\service.dpapi.json',
+    },
+  );
+});
+
+test('pre-logon Hub launcher tracks the SYSTEM child pid and protected secret reference', () => {
+  const launcher = buildHubBootLauncher({
+    env: {
+      NEXOWIRE_HTTP_HOST: '127.0.0.1',
+      NEXOWIRE_HTTP_PORT: '43110',
+      NEXOWIRE_CONTROL_PLANE_URL:
+        'https://control.example.test',
+      NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE:
+        'C:\\ProgramData\\Nexowire\\hub-boot\\service.machine.dpapi.json',
+    },
+    executable: 'C:\\Program Files\\Nexowire\\node.exe',
+    args: [
+      'C:\\Program Files\\Nexowire\\cli.js',
+      'http',
+    ],
+    pidFile:
+      'C:\\ProgramData\\Nexowire\\hub-boot\\hub.pid',
+  });
+
+  assert.match(launcher, /service\.machine\.dpapi\.json/);
+  assert.match(launcher, /Start-Process/);
+  assert.match(launcher, /hub\.pid/);
+  assert.match(launcher, /WaitForExit/);
+});
+
