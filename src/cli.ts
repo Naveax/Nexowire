@@ -25,6 +25,7 @@ import {
   runSelfHostedNodeCommand,
   selfHostedConnectorInfo,
 } from './self-host-bootstrap.js';
+import { runLiveUpdateCommand } from './update/live-update.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -65,6 +66,11 @@ async function main(): Promise<void> {
 
   if (command === 'connect') {
     await runConnectCommand(process.argv.slice(3));
+    return;
+  }
+
+  if (command === 'update') {
+    await runLiveUpdateCommand(process.argv.slice(3));
     return;
   }
 
