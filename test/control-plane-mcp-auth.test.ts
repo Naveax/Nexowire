@@ -32,6 +32,11 @@ test('control-plane MCP client authenticates account and device scope', async ()
           'device-b',
           'device-a',
         ],
+        deviceAccessModes: {
+          'device-a': 'full',
+          'device-b': 'unexpected-value',
+          'device-not-allowed': 'full',
+        },
       });
     },
   });
@@ -47,6 +52,10 @@ test('control-plane MCP client authenticates account and device scope', async ()
         'device-a',
         'device-b',
       ],
+      deviceAccessModes: {
+        'device-a': 'full',
+        'device-b': 'safe',
+      },
     },
   );
   assert.deepEqual(requests, [
@@ -61,6 +70,25 @@ test('control-plane MCP client authenticates account and device scope', async ()
       },
     },
   ]);
+});
+
+test('control-plane MCP access mode fails closed to SAFE when server omits mode data', async () => {
+  const client = new ControlPlaneMcpClient({
+    controlPlaneUrl: 'https://control.example.test',
+    serviceToken: 'service-token-0123456789',
+    fetchImpl: async () => Response.json({
+      authenticated: true,
+      accountId: 'acct-safe',
+      role: 'user',
+      allowedDeviceIds: ['device-safe'],
+    }),
+  });
+  const authorization = await client.authenticate(
+    'Bearer nwx_mcp_access-token-1234567890',
+  );
+  assert.deepEqual(authorization?.deviceAccessModes, {
+    'device-safe': 'safe',
+  });
 });
 
 test('control-plane MCP auth becomes a normal target-restricted authorization grant', async () => {
