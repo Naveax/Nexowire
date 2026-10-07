@@ -20,7 +20,7 @@ import { captureWindowsPrivateScreen } from './windows-private-screen.js';
 import {
   assertPhysicalConsoleGrant,
   executeWindowsConsoleControlCapability,
-  requiresPhysicalConsoleGrant,
+  needsPhysicalConsoleApproval,
 } from './windows-console-grant.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
@@ -2025,8 +2025,10 @@ export async function executeCapability(
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
   if (
-    requiresPhysicalConsoleGrant(capability) &&
-    context.accessMode !== 'full'
+    needsPhysicalConsoleApproval(
+      capability,
+      context.accessMode ?? 'safe',
+    )
   ) {
     assertPhysicalConsoleGrant(capability);
   }
