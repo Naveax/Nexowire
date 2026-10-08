@@ -73,6 +73,8 @@ async function assertPreapprovedInstaller(
     '$acl=Get-Acl -LiteralPath $file -ErrorAction Stop',
     'if(-not $acl.AreAccessRulesProtected){throw "Approval file ACL inheritance must be disabled"}',
     "$allowed=@('S-1-5-18','S-1-5-32-544')",
+    'try{$ownerSid=([System.Security.Principal.NTAccount]$acl.Owner).Translate([System.Security.Principal.SecurityIdentifier]).Value}catch{$ownerSid=$acl.Owner}',
+    'if($ownerSid -notin $allowed){throw "Approval file must be owned by SYSTEM or Administrators"}',
     'foreach($ace in $acl.Access){',
     '  $sid=$ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value',
     '  if($sid -notin $allowed){throw "Approval file ACL permits unexpected identity"}',

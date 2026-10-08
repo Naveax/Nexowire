@@ -11,6 +11,7 @@ import type { PrivilegedBrokerClient } from '../src/agent/privileged-broker-clie
 import {
   validateInstallerInput,
   installerApprovalMatches,
+  scheduleVerifiedInstaller,
   renderVerifiedInstallerRunner,
 } from '../src/agent/windows-installer-job.js';
 import {
@@ -262,4 +263,28 @@ test('machine approval is separate from the unprivileged FULL request and pins e
     }),
     /unrecognized|Unrecognized|unrecognized_key|Unrecognized key/,
   );
+});
+
+
+test('Windows Broker installer rejects an unapproved hash before creating elevated job', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const dir = await fs.mkdtemp(path.join(os.homedir(), '.nexowire-approved-installer-denial-'));
+  try {
+    const source = path.join(dir, 'unapproved.cmd');
+    const bytes = Buffer.from('@echo off\r\nexit /b 0\r\n');
+    await fs.writeFile(source, bytes);
+    const request = {
+      file_path: source,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      allow_unsigned: true,
+      arguments: [],
+    };
+    await assert.rejects(
+      () => scheduleVerifiedInstaller(request),
+      /approval policy is missing or not protected|not preapproved/,
+    );
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 6, retryDelay: 50 });
+  }
 });
