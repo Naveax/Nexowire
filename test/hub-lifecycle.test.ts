@@ -326,5 +326,8 @@ test('pre-logon Hub launcher tracks the SYSTEM child pid and protected secret re
   assert.match(launcher, /Start-Process/);
   assert.match(launcher, /hub\.pid/);
   assert.match(launcher, /WaitForExit/);
+  const cleanup=launcher.indexOf('Remove-Item -Path Env:NODE_OPTIONS,Env:NODE_PATH');
+  assert.ok(cleanup>=0,'Node preload environment must be scrubbed');
+  assert.ok(cleanup < launcher.indexOf('Start-Process'),'Node preloads must be removed before SYSTEM child starts');
 });
 
