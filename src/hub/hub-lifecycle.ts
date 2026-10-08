@@ -291,27 +291,95 @@ export function legacyStackSupervisorBlocksHubLifecycle(
   return taskState?.trim().toLowerCase() === 'running';
 }
 
-/** Read-only Windows task inventory; neither starts nor modifies a task. */
+export type HubHandoffBlocker =
+  | 'LEGACY_STACK_SUPERVISOR_RUNNING'
+  | 'UNOWNED_HUB_LISTENER';
+
+export function hubHandoffBlockers(input: {
+  legacyStackTaskState: string | null;
+  standaloneHubTaskState: string | null;
+  listenerPid: number | null;
+}): HubHandoffBlocker[] {
+  const blockers: HubHandoffBlocker[] = [];
+  if (legacyStackSupervisorBlocksHubLifecycle(input.legacyStackTaskState)) {
+    blockers.push('LEGACY_STACK_SUPERVISOR_RUNNING');
+  }
+  // Never adopt a port occupied by a process that cannot even be attributed
+  // to a Running managed Hub task. A Running task alone is not proof of
+  // process identity; a separate approved cutover must still verify it.
+  if (
+    input.listenerPid !== null &&
+    input.standaloneHubTaskState?.toLowerCase() !== 'running'
+  ) {
+    blockers.push('UNOWNED_HUB_LISTENER');
+  }
+  return blockers;
+}
+
+function configuredHubPort(env: NodeJS.ProcessEnv): number {
+  const raw = env.NEXOWIRE_HTTP_PORT?.trim() ?? '43110';
+  const parsed = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isInteger(parsed) ||
+      parsed < 1 || parsed > 65535) {
+    throw new Error('NEXOWIRE_HTTP_PORT must be an integer from 1 to 65535.');
+  }
+  return parsed;
+}
+
+/** Read-only Windows task and port inventory; never alters a task or process. */
 export async function inspectLegacyStackHubSupervisor(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<{
   legacyStackTaskState: string | null;
+  standaloneHubTaskState: string | null;
+  hubPort: number;
+  hubListenerPid: number | null;
+  blockers: HubHandoffBlocker[];
   standaloneHubLifecycleBlocked: boolean;
+  safeToCutover: false;
   mode: 'inspection-only';
 }> {
   assertWindows();
-  const found = await runPowerShellJson<{state:string|null}>(
+  const port = configuredHubPort(env);
+  const found = await runPowerShellJson<{
+    state: string | null;
+    standaloneState: string | null;
+    listenerPid: number | null;
+  }>(
     [
       "$ErrorActionPreference='Stop'",
-      "$task=Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq 'Nexowire Stack' -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
-      "$state=if($null -eq $task){$null}else{[string]$task.State}",
-      '[pscustomobject]@{state=$state} | ConvertTo-Json -Compress',
+      "$tasks=@(Get-ScheduledTask -ErrorAction Stop)",
+      "$legacy=$tasks | Where-Object { $_.TaskName -eq 'Nexowire Stack' -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
+      "$standaloneName=if($env:NEXOWIRE_HUB_TASK_NAME){$env:NEXOWIRE_HUB_TASK_NAME}else{'Nexowire Hub'}",
+      "$standalone=$tasks | Where-Object { $_.TaskName -eq $standaloneName -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
+      "$portNumber=[int]$env:NEXOWIRE_HUB_PREFLIGHT_PORT",
+      "$listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $portNumber })",
+      "if($listeners.Count -gt 1 -and @($listeners | Select-Object -ExpandProperty OwningProcess -Unique).Count -ne 1){ throw 'MULTIPLE_HUB_PORT_OWNERS' }",
+      "$pidValue=if($listeners.Count){[int]$listeners[0].OwningProcess}else{$null}",
+      "[pscustomobject]@{state=if($legacy){[string]$legacy.State}else{$null};standaloneState=if($standalone){[string]$standalone.State}else{$null};listenerPid=$pidValue} | ConvertTo-Json -Compress",
     ].join('\n'),
-    env,
+    {
+      ...env,
+      NEXOWIRE_HUB_PREFLIGHT_PORT: String(port),
+    },
   );
+  if (found.listenerPid !== null &&
+      (!Number.isInteger(found.listenerPid) || found.listenerPid <= 0)) {
+    throw new Error('Hub port listener returned an invalid PID.');
+  }
+  const blockers = hubHandoffBlockers({
+    legacyStackTaskState: found.state,
+    standaloneHubTaskState: found.standaloneState,
+    listenerPid: found.listenerPid,
+  });
   return {
     legacyStackTaskState: found.state,
-    standaloneHubLifecycleBlocked: legacyStackSupervisorBlocksHubLifecycle(found.state),
+    standaloneHubTaskState: found.standaloneState,
+    hubPort: port,
+    hubListenerPid: found.listenerPid,
+    blockers,
+    standaloneHubLifecycleBlocked: blockers.length > 0,
+    safeToCutover: false,
     mode: 'inspection-only',
   };
 }
@@ -322,8 +390,8 @@ export async function assertNoLegacyStackSupervisor(
   const status = await inspectLegacyStackHubSupervisor(env);
   if (status.standaloneHubLifecycleBlocked) {
     throw new Error(
-      'LEGACY_STACK_SUPERVISOR_CONFLICT: The running Nexowire Stack supervises its own Hub. ' +
-      'A second Hub task could bind the same port or be replaced by legacy code. ' +
+      'HUB_LIFECYCLE_CONFLICT: Existing Hub ownership cannot be safely transferred (' +
+      status.blockers.join(', ') + '). ' +
       'Use an owner-approved, reversible supervisor migration; no tasks were changed.',
     );
   }
