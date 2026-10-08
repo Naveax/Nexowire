@@ -226,3 +226,14 @@ test('Windows update patches only the versioned runtime root and also updates th
   assert.match(script, /\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+-\[a-f0-9\]\{12\}/);
   assert.doesNotMatch(script, /versions\\\[\^''/);
 });
+
+
+test('reinstall cannot override the owners explicit disabled updater state', async () => {
+  const { renderAutoUpdateTaskInstallScript } = await import('../src/update/auto-update.js');
+  const script = renderAutoUpdateTaskInstallScript('C:\\Users\\test\\.nexowire\\auto-update\\launch.ps1');
+  const disableCheck = script.indexOf("State -eq \"Disabled\"");
+  const registration = script.indexOf('Register-ScheduledTask');
+  assert.ok(disableCheck >= 0 && registration > disableCheck);
+  assert.match(script, /ownerDisabled=\$true/);
+  assert.match(script, /exit 0/);
+});

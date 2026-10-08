@@ -151,6 +151,8 @@ export function renderAutoUpdateTaskInstallScript(
     '$name=' + psLiteral(AUTO_UPDATE_TASK_NAME),
     '$launcher=' + psLiteral(launcher),
     '$user=[Security.Principal.WindowsIdentity]::GetCurrent().Name',
+    '$existing=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
+    'if($existing -and [string]$existing.State -eq "Disabled"){[pscustomobject]@{installed=$true;ownerDisabled=$true;taskName=$name}|ConvertTo-Json -Compress;exit 0}',
     "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $launcher.Replace('\"','\"\"') + '\"')",
     '$logon=New-ScheduledTaskTrigger -AtLogOn -User $user',
     '$hour=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 60) -RepetitionDuration (New-TimeSpan -Days 3650)',
@@ -338,11 +340,14 @@ export async function runAutoUpdateCommand(
     case 'status':
       output = await autoUpdateTaskStatus();
       break;
+    case 'enable':
     case 'disable':
     case 'uninstall': {
       const command = action === 'disable'
         ? 'Disable-ScheduledTask -TaskName $name -ErrorAction Stop|Out-Null'
-        : 'Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop';
+        : action === 'enable'
+          ? 'Enable-ScheduledTask -TaskName $name -ErrorAction Stop|Out-Null;Start-ScheduledTask -TaskName $name'
+          : 'Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop';
       output = await runPowerShellJson([
         "$ErrorActionPreference='Stop'",
         '$name=' + psLiteral(AUTO_UPDATE_TASK_NAME),
@@ -353,7 +358,7 @@ export async function runAutoUpdateCommand(
     }
     default:
       throw new Error(
-        'Usage: nexowire update auto [install|run|status|disable|uninstall]',
+        'Usage: nexowire update auto [install|run|status|enable|disable|uninstall]',
       );
   }
   process.stdout.write(JSON.stringify(output, null, 2) + '\n');

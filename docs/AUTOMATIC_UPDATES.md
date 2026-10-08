@@ -18,11 +18,12 @@
 nexowire update auto status
 nexowire update auto run
 nexowire update auto disable
+nexowire update auto enable
 nexowire update auto install
 nexowire update auto uninstall
 ```
 
-Run these from the **installed release**. A source checkout is not an eligible installation path for registering the task. `disable` prevents further scheduled checks without deleting status or launcher history; `uninstall` removes only the dedicated scheduled task.
+Run these from the **installed release**. A source checkout is not an eligible installation path for registering the task. `disable` prevents further scheduled checks without deleting status or launcher history; a subsequent app reinstall preserves that explicit disabled state. `enable` reactivates the task on the same user account; `uninstall` removes only the dedicated scheduled task.
 
 ## Boundaries and remaining acceptance
 

@@ -41,7 +41,7 @@ Usage:
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
   nexowire update [status|check|apply]   Check or apply verified official releases
-  nexowire update auto [install|run|status|disable|uninstall]
+  nexowire update auto [install|run|status|enable|disable|uninstall]
                    Manage the lightweight hourly Windows auto-updater
   nexowire version Show the installed Nexowire version
   nexowire help    Show this help
