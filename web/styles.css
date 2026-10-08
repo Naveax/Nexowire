@@ -301,3 +301,33 @@ body:has(#setting-reduce-motion:checked) *,body:has(#setting-reduce-motion:check
 .auto-confirm-panel input { width:100%; padding:10px 12px; border-radius:10px; background:#0c1727; border:1px solid #5b7296; color:#eef4ff; }
 .auto-actions { display:flex; flex-wrap:wrap; gap:9px; }
 .auto-selection-control .subtle { font-size:11px; }
+
+/* P0: Controls stay aligned with the device identity, never at the far-right edge. */
+.pc-settings { display:flex; flex-direction:column; align-items:flex-start; width:100%; }
+.pc-settings .device-meta { align-self:stretch; margin:14px 0 10px; }
+.pc-settings .pc-settings-button { margin:0; width:auto; flex:none; min-width:172px; justify-content:flex-start; }
+.pc-settings .pc-settings-panel { align-self:stretch; width:100%; }
+.device-list.list-view .device .pc-settings-button { margin:0; }
+
+/* Scan-friendly security rows, preserving the exact underlying access semantics. */
+.policy-steps { display:grid; gap:0; border:1px solid #2e405b; border-radius:12px; overflow:hidden; }
+.policy-line { display:grid; grid-template-columns:74px minmax(0,1fr); gap:13px;
+  padding:12px 13px; align-items:start; background:rgba(20,32,50,.56); }
+.policy-line+.policy-line { border-top:1px solid #2a3a52; }
+.policy-line>span:last-child { font-size:12px; line-height:1.55; color:#c0d0e7; overflow-wrap:anywhere; }
+.policy-tag { display:inline-flex; justify-content:center; align-items:center; min-height:27px;
+  border:1px solid #455a78; border-radius:8px; font-weight:800; font-size:11px; letter-spacing:.02em; }
+.policy-tag.safe { color:#96e4ba; border-color:rgba(93,213,150,.35); background:rgba(93,213,150,.07); }
+.policy-tag.full { color:#b6caff; border-color:rgba(132,159,242,.38); background:rgba(132,159,242,.07); }
+.policy-tag.root { color:#ffb5a3; border-color:rgba(235,120,110,.4); background:rgba(235,120,110,.07); }
+.auto-selection-control { margin-top:13px; padding:14px; gap:9px; }
+.auto-selection-heading { align-items:flex-start; flex-direction:column; gap:11px; }
+.auto-selection-heading span { min-width:0; }
+.auto-selection-heading button { align-self:flex-start; min-height:38px; }
+#auto-status { margin:0; line-height:1.5; }
+.utility-content .interlock { max-width:100%; }
+@media (max-width:620px) {
+  .pc-settings .pc-settings-button { width:auto; min-width:172px; margin:0; }
+  .policy-line { grid-template-columns:60px minmax(0,1fr); gap:10px; padding:11px; }
+  .policy-line>span:last-child { font-size:11px; }
+}
