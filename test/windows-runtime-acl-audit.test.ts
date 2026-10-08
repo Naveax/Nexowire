@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -49,4 +49,53 @@ test('Windows ACL audit recognizes untrusted code path and validates PowerShell 
   }finally{
     rmSync(dir,{recursive:true,force:true});
   }
+});
+
+test('full tree ACL scan includes siblings, outer parents and bounded results without certifying imports',{
+  skip:process.platform!=='win32',
+},()=>{
+  const parent=mkdtempSync(join(tmpdir(),'nexowire-acl-fulltree-'));
+  const root=join(parent,'package');
+  mkdirSync(root);
+  mkdirSync(join(root,'dist'));
+  mkdirSync(join(root,'other'));
+  const entry=join(root,'dist','cli.js');
+  writeFileSync(entry,'// cli\n','utf8');
+  writeFileSync(join(root,'other','unrelated.js'),'// sibling\n','utf8');
+  // This file is beneath an ancestor already seen on the entrypoint chain.
+  // FullTree must still enumerate that directory's children.
+  writeFileSync(join(root,'dist','sibling.js'),'// must be scanned\n','utf8');
+  try{
+    const out=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
+      '-RuntimeRoot',root,'-Entrypoint',entry,'-FullTree','-MaxReportedFindings','2'],
+      {encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.equal(out.status,0,out.stderr+' '+out.stdout);
+    const r=JSON.parse(out.stdout);
+    assert.equal(r.schemaVersion,2);
+    assert.equal(r.scope,'ROOT_TREE_AND_PARENTS');
+    assert.equal(r.packageTreeAudited,true);
+    assert.equal(r.dependenciesRecursivelyAudited,false);
+    assert.equal(r.ownerApprovedElevatedExecution,false);
+    assert.ok(r.runtimeTreeComponentsAudited>=3);
+    assert.ok(r.outerParentComponentsAudited>=1);
+    assert.ok(r.componentsAudited>=6);
+    assert.ok(r.issues.length<=2);
+    assert.ok(r.totalFindings>=r.issues.length);
+    assert.equal(r.omittedFindings,r.totalFindings-r.issues.length);
+    assert.equal(r.riskyCodePath,true);
+    assert.equal(r.productionFilesChanged,false);
+
+    const uncapped=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
+      '-RuntimeRoot',root,'-Entrypoint',entry,'-FullTree','-MaxReportedFindings','200'],
+      {encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.equal(uncapped.status,0,uncapped.stderr+' '+uncapped.stdout);
+    assert.ok(JSON.parse(uncapped.stdout).issues.some((i:{component:string})=>i.component.startsWith('dist')&&i.component.endsWith('sibling.js')),
+      'full tree must enumerate files beneath an already-audited entrypoint ancestor');
+
+    const capped=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
+      '-RuntimeRoot',root,'-Entrypoint',entry,'-FullTree','-MaxObjects','2'],
+      {encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.notEqual(capped.status,0,'incomplete inventory must fail closed');
+    assert.match(capped.stderr+capped.stdout,/MAX_OBJECTS_EXCEEDED/);
+  } finally {rmSync(parent,{recursive:true,force:true})}
 });
