@@ -2,6 +2,17 @@ import {spawnSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 
+export const PRIVILEGED_NODE_INJECTION_ENV = [
+  'NODE_OPTIONS','NODE_PATH','NODE_REPL_EXTERNAL_MODULE',
+  'NODE_ICU_DATA','NODE_EXTRA_CA_CERTS',
+] as const;
+
+export function assertNoPrivilegedNodeStartupFlags(args:readonly string[]):void {
+  if(args.length!==0){
+    throw new Error('PRIVILEGED_RUNTIME_NODE_FLAGS: Node startup flags are forbidden for SYSTEM Hub.');
+  }
+}
+
 export interface PrivilegedRuntimeSource {
   executable: string;
   cliEntrypoint: string;

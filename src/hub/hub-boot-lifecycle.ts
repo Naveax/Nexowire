@@ -5,7 +5,11 @@ import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
 import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
-import { assertWindowsPrivilegedRuntimeTrusted } from '../security/windows-privileged-runtime-trust.js';
+import {
+  assertNoPrivilegedNodeStartupFlags,
+  assertWindowsPrivilegedRuntimeTrusted,
+  PRIVILEGED_NODE_INJECTION_ENV,
+} from '../security/windows-privileged-runtime-trust.js';
 import {
   inspectProtectedSecretFile,
   readProtectedSecretFile,
@@ -197,6 +201,11 @@ export function buildHubBootLauncher(input: {
       '$env:' + name + '=' + psLiteral(value),
     );
   }
+
+  // SYSTEM tasks must not inherit caller/user/machine Node preload hooks.
+  lines.push('Remove-Item -Path ' +
+    PRIVILEGED_NODE_INJECTION_ENV.map(name=>`Env:${name}`).join(',') +
+    ' -ErrorAction SilentlyContinue');
 
   const argumentList =
     '@(' +
@@ -440,6 +449,7 @@ export async function installHubBootLifecycle(
   // package. Validate the executable and complete local code tree before
   // unsealing or writing any control-plane/DPAPI secrets.
   const rt = runtime(options);
+  assertNoPrivilegedNodeStartupFlags(options.execArgv ?? process.execArgv);
   assertWindowsPrivilegedRuntimeTrusted({
     executable: rt.executable,
     cliEntrypoint: options.cliEntrypoint ?? process.argv[1]!,

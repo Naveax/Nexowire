@@ -23,6 +23,10 @@ The preflight:
   owners, untrusted allow-write ACEs and reparse points
 - also enumerates all files/directories in the resolved code package tree and
   the executable's directory tree (up to 20,000 distinct audited objects)
+- forbids Node startup `execArgv` flags (such as `--require`, `--import`,
+  `--loader`) and removes inherited `NODE_OPTIONS`, `NODE_PATH` and
+  related Node preload/certificate/ICU configuration from the SYSTEM child
+  launcher before executing the protected runtime.
 - refuses the protected task installation if any file/ACL enumeration fails
   or the runtime tree exceeds the safety cap.
 

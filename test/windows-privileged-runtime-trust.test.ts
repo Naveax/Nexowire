@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths} from '../src/security/windows-privileged-runtime-trust.js';
+import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths} from '../src/security/windows-privileged-runtime-trust.js';
 
 const env={
   USERPROFILE:'C:\\Users\\testuser',
@@ -25,6 +25,13 @@ test('highest privilege runtime gate never trusts user AppData or arbitrary stag
   for(const [executable,cliEntrypoint] of targets){
     assert.throws(()=>validatePrivilegedRuntimePaths({executable:executable!,cliEntrypoint:cliEntrypoint!,env}),
       /PRIVILEGED_RUNTIME_/);
+  }
+});
+
+test('protected Hub cannot inherit Node preload/import/loader flags',()=>{
+  assert.doesNotThrow(()=>assertNoPrivilegedNodeStartupFlags([]));
+  for(const flags of [['--require','C:\\Users\\testuser\\hook.js'],['--import','file:///C:/Temp/hook.js'],['--inspect'],['--loader','unsafe.mjs']]){
+    assert.throws(()=>assertNoPrivilegedNodeStartupFlags(flags),/PRIVILEGED_RUNTIME_NODE_FLAGS/);
   }
 });
 
