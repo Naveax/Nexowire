@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildPrivilegedBrokerLauncher,
   privilegedBrokerTaskStatus,
+  PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS,
 } from '../src/agent/privileged-broker-lifecycle.js';
 
 test('broker task launcher preserves runtime args and never persists plaintext broker tokens', () => {
@@ -44,3 +45,16 @@ test(
     );
   },
 );
+
+test('elevated broker task has unattended crash/recovery policy without system elevation', () => {
+  const script = PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS;
+  assert.match(script, /New-ScheduledTaskSettingsSet/);
+  assert.match(script, /-RestartCount 999/);
+  assert.match(script, /-RestartInterval \(New-TimeSpan -Minutes 1\)/);
+  assert.match(script, /-ExecutionTimeLimit \(New-TimeSpan -Seconds 0\)/);
+  assert.match(script, /-StartWhenAvailable/);
+  assert.match(script, /-MultipleInstances IgnoreNew/);
+  assert.match(script, /-AllowStartIfOnBatteries/);
+  assert.match(script, /-DontStopIfGoingOnBatteries/);
+  assert.doesNotMatch(script, /-UserId|SYSTEM|ServiceAccount/);
+});

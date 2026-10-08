@@ -14,6 +14,10 @@ On 2026-10-08 work-pc v1.0.4 had a running SYSTEM/AtStartup/Highest Hub Boot in 
 
 **Do not conflate these live v1.0.4 installation results with deployment of this candidate's code changes.** The new no-popup and ACL source fixes remain absent from the immutable v1.0.4 runtime.
 
+## Live broker recovery regression
+
+A subsequent live check on work-pc found the v1.0.4 Privileged Broker stopped (Task Scheduler last result `0xC000013A`) with no listening TCP/43112; its original logon task had `RestartCount: 0`, a 72-hour execution limit and battery restrictions. PR follow-up in this release candidate adds one-minute scheduled-task restarts (up to 999), unlimited execution time, battery readiness and singleton policy while retaining the interactive elevated owner principal. An attempted live policy adjustment has **unknown postcondition** because both remote management channels went offline during the operation. On reconnection, inspect task settings and active ports read-only first; never blindly replay the mutation. The live crash/recovery gate remains open.
+
 ## Candidate gates
 
 - [ ] Check exact candidate SHA, clean PR CI and Release Readiness on Linux/Windows/macOS.
