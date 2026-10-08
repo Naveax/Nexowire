@@ -1,7 +1,71 @@
 const $ = (id) => document.getElementById(id);
 const formatNumber = (value) => new Intl.NumberFormat('tr-TR').format(value);
+const formatCompact = (value) => Number.isFinite(value)
+  ? new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+    .format(value).replace(/K\b/g, 'k').replace(/M\b/g, 'm').replace(/B\b/g, 'b')
+  : '—';
 const FREE_ONLY_MODE = true;
 const openPcSettings = new Set();
+let currentSnapshot = null;
+let selectedDeviceFilter = 'all';
+let selectedDeviceLayout = 'grid';
+let selectedFolder = 'all';
+
+async function postFolderAction(action, body) {
+  const response = await fetch('/api/v1/me/device-folders/' + action, {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type':'application/json', 'Accept':'application/json', 'X-Nexowire-Confirm':'device-folder-v1'},
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Klasör işlemi başarısız.');
+  return result;
+}
+
+function syncFolders(folders) {
+  const select = $('folder-filter');
+  select.replaceChildren(new Option('Tüm klasörler', 'all'), new Option('Klasörsüz', 'unassigned'));
+  for (const folder of folders) select.add(new Option(folder.name, folder.id));
+  if (selectedFolder !== 'all' && selectedFolder !== 'unassigned' &&
+      !folders.some(folder => folder.id === selectedFolder)) selectedFolder = 'all';
+  select.value = selectedFolder;
+  $('folder-delete').disabled = selectedFolder === 'all' || selectedFolder === 'unassigned';
+}
+
+function getDeviceTier(device) {
+  if (device.persistentMaintenance?.active === true) return 'persistent';
+  if (device.rootMode?.active === true &&
+      Date.parse(device.rootMode.expiresAt ?? '') > Date.now()) return 'root';
+  return device.accessMode === 'full' ? 'full' : 'safe';
+}
+
+function syncDeviceToolbar(devices) {
+  for (const button of document.querySelectorAll('[data-filter]')) {
+    const tier = button.dataset.filter;
+    const selected = tier === selectedDeviceFilter;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    button.querySelector('.filter-count').textContent = String(
+      tier === 'all' ? devices.length : devices.filter((device) => getDeviceTier(device) === tier).length,
+    );
+  }
+  for (const button of document.querySelectorAll('[data-layout]')) {
+    const selected = button.dataset.layout === selectedDeviceLayout;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
+  $('devices').classList.toggle('list-view', selectedDeviceLayout === 'list');
+}
+
+function updateRootCountdowns() {
+  for (const clock of document.querySelectorAll('.root-clock[data-expires-at]')) {
+    const remaining = Math.max(0, Date.parse(clock.dataset.expiresAt) - Date.now());
+    const seconds = Math.ceil(remaining / 1000);
+    const mm = Math.floor(seconds / 60);
+    const ss = String(seconds % 60).padStart(2, '0');
+    clock.textContent = remaining ? `${mm}:${ss}` : 'Süre doldu';
+  }
+}
 
 function nextUtcPeriodStart(now = new Date()) {
   return new Date(Date.UTC(
@@ -98,6 +162,7 @@ async function setDeviceRootMode(deviceId, enabled, row) {
 }
 
 function render(snapshot) {
+  currentSnapshot = snapshot;
   $('welcome').textContent = snapshot.displayName
     ? 'Hoş geldin, ' + snapshot.displayName
     : 'Kontrol merkezi';
@@ -107,34 +172,52 @@ function render(snapshot) {
 
   const usage = snapshot.usage;
   if (usage.monthlyCredits !== null) {
-    const usageLabel = formatNumber(usage.usedCredits) + ' / ' +
-      formatNumber(usage.monthlyCredits);
-    $('usage').textContent = FREE_ONLY_MODE && usage.usedCredits >= usage.monthlyCredits
-      ? usageLabel + ' · Kota doldu. Yenilenme: ' + nextUtcPeriodStart() + ' 00:00 UTC'
-      : usageLabel;
+    $('usage').textContent = formatCompact(usage.usedCredits) + ' / ' +
+      formatCompact(usage.monthlyCredits);
+    $('usage').title = formatNumber(usage.usedCredits) + ' / ' + formatNumber(usage.monthlyCredits);
+    $('usage-detail').textContent = FREE_ONLY_MODE && usage.usedCredits >= usage.monthlyCredits
+      ? 'Kota doldu · Yenilenme: ' + nextUtcPeriodStart() + ' 00:00 UTC'
+      : 'Bu ay kullanılan / toplam kredi';
     $('usage-bar').style.width = Math.min(
       100, Math.round((usage.usedCredits / usage.monthlyCredits) * 100),
     ) + '%';
   } else if (snapshot.billingMode === 'free') {
-    $('usage').textContent = 'Sınırsız · ' + formatNumber(usage.usedCredits) +
-      ' birim kullanıldı';
+    $('usage').textContent = formatCompact(usage.usedCredits);
+    $('usage').title = formatNumber(usage.usedCredits);
+    $('usage-detail').textContent = 'Sınırsız kullanım · kullanılan birim';
     $('usage-bar').style.width = '0%';
   } else {
-    $('usage').textContent = formatNumber(usage.prepaidCredits ?? 0) + ' kredi';
+    $('usage').textContent = formatCompact(usage.prepaidCredits ?? 0);
+    $('usage').title = formatNumber(usage.prepaidCredits ?? 0);
+    $('usage-detail').textContent = 'Kalan kredi';
     $('usage-bar').style.width = '0%';
   }
 
   const devices = snapshot.devices ?? [];
   const onlineCount = devices.filter((device) => device.online).length;
-  $('devices-count').textContent = String(devices.length);
-  $('devices-detail').textContent = onlineCount + ' çevrimiçi';
+  $('devices-count').textContent = formatCompact(devices.length);
+  $('devices-count').title = formatNumber(devices.length);
+  $('devices-detail').textContent = formatCompact(onlineCount) + ' çevrimiçi';
+  syncDeviceToolbar(devices);
+  syncFolders(snapshot.folders ?? []);
+  const filteredByMode = selectedDeviceFilter === 'all'
+    ? devices : devices.filter((device) => getDeviceTier(device) === selectedDeviceFilter);
+  const visibleDevices = filteredByMode.filter(device => selectedFolder === 'all' ||
+    (selectedFolder === 'unassigned' ? !device.folderId : device.folderId === selectedFolder));
 
   const root = $('devices');
   root.textContent = '';
-  if (!devices.length) {
-    root.innerHTML = '<div class="empty">Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.</div>';
+  if (!visibleDevices.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = !devices.length
+      ? 'Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.'
+      : selectedDeviceFilter === 'persistent'
+        ? 'ROOT+ şu anda uygulanmış bir yetki değil. Sunucu ve Broker doğrulaması eklenmeden etkin gösterilmez.'
+        : 'Bu erişim düzeyinde cihaz bulunmuyor.';
+    root.appendChild(empty);
   } else {
-    for (const device of devices) {
+    for (const device of visibleDevices) {
       const row = document.createElement('article');
       row.className = 'device' + (device.online ? '' : ' offline');
       row.innerHTML = [
@@ -146,10 +229,11 @@ function render(snapshot) {
         ' <div class="status"><span class="dot"></span><span class="status-text"></span></div>',
         '</div>',
         '<div class="device-meta">',
-        ' <span class="meta-chip version-chip"></span><span class="meta-chip bridge-chip"></span>',
+        ' <span class="meta-chip version-chip"></span><span class="meta-chip bridge-chip"></span><span class="meta-chip mode-chip"></span>',
         '</div>',
         '<details class="pc-settings">',
-        '<summary class="pc-settings-summary"><span class="pc-settings-title">PC Settings</span><span class="pc-settings-status"></span></summary>',
+        '<summary class="pc-settings-summary"><span class="pc-settings-title">PC Settings</span><span class="pc-settings-status">Yönet</span></summary>',
+        '<div class="device-folder-manage"><label>Klasör <select class="folder-assign" aria-label="Cihaz klasörünü değiştir"></select></label><small class="folder-assign-status"></small></div>',
         '<div class="device-access">',
         ' <div class="access-heading"><span class="access-title">Erişim düzeyi</span><span class="access-mode"></span></div>',
         ' <button type="button" class="secondary access-toggle"></button>',
@@ -171,6 +255,23 @@ function render(snapshot) {
       ].join('');
       row.querySelector('.device-name').textContent = device.name;
       row.querySelector('.platform').textContent = device.platform;
+      const folderSelect = row.querySelector('.folder-assign');
+      folderSelect.add(new Option('Klasörsüz', ''));
+      for (const folder of snapshot.folders ?? []) folderSelect.add(new Option(folder.name, folder.id));
+      folderSelect.value = device.folderId ?? '';
+      folderSelect.addEventListener('change', async () => {
+        folderSelect.disabled = true;
+        const feedback = row.querySelector('.folder-assign-status');
+        feedback.textContent = 'Kaydediliyor…';
+        try {
+          await postFolderAction('assign', {deviceId: device.id, folderId: folderSelect.value || null});
+          await load();
+        } catch (error) {
+          folderSelect.value = device.folderId ?? '';
+          feedback.textContent = error.message;
+          folderSelect.disabled = false;
+        }
+      });
       row.querySelector('.version-chip').textContent = device.agentVersion
         ? 'Agent v' + device.agentVersion : 'Agent sürümü bilinmiyor';
       const ready = device.privilegeMode === 'broker' &&
@@ -189,7 +290,12 @@ function render(snapshot) {
       const pcSettings = row.querySelector('.pc-settings');
       const pcSettingsStatus = row.querySelector('.pc-settings-status');
       pcSettings.open = openPcSettings.has(device.id);
-      pcSettingsStatus.textContent = mode === 'full' ? 'FULL ACCESS' : 'SAFE';
+      pcSettingsStatus.textContent = 'Ayarları yönet';
+      const tier = getDeviceTier(device);
+      const modeChip = row.querySelector('.mode-chip');
+      const tierLabels = { safe: 'SAFE açık', full: 'Full Access açık', root: 'ROOT izni açık', persistent: 'ROOT+ etkin' };
+      modeChip.textContent = tierLabels[tier];
+      modeChip.classList.add(tier === 'root' || tier === 'persistent' ? 'elevated' : tier);
       pcSettings.addEventListener('toggle', () => {
         if (pcSettings.open) openPcSettings.add(device.id);
         else openPcSettings.delete(device.id);
@@ -219,6 +325,11 @@ function render(snapshot) {
           (active ? 'aktif' : 'beklemede') + ' · ' +
           new Date(expiresAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) +
           ' bitiş. ' + (ready ? 'Admin Bridge hazır.' : 'Yönetici işlemleri için Admin Bridge gerekli.');
+        const clock = document.createElement('strong');
+        clock.className = 'root-clock';
+        clock.dataset.expiresAt = expiresAt;
+        rootCopy.append(' · Kalan süre: ', clock);
+        updateRootCountdowns();
         const delay = Date.parse(expiresAt) - Date.now();
         if (delay > 0) setTimeout(() => { void load(); }, Math.min(delay + 300, 900_000));
       } else if (!device.online) {
@@ -287,6 +398,63 @@ async function load() {
   }
 }
 
+$('folder-filter').addEventListener('change', () => {
+  selectedFolder = $('folder-filter').value;
+  if (currentSnapshot) render(currentSnapshot);
+});
+$('folder-create-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const input = $('folder-name');
+  const status = $('folder-status');
+  const name = input.value.trim();
+  if (!name) return;
+  status.textContent = 'Oluşturuluyor…';
+  try {
+    const folder = await postFolderAction('create', {name});
+    selectedFolder = folder.id;
+    input.value = '';
+    await load();
+    status.textContent = 'Klasör oluşturuldu.';
+  } catch (error) { status.textContent = error.message; }
+});
+$('folder-delete').addEventListener('click', async () => {
+  if (selectedFolder === 'all' || selectedFolder === 'unassigned') return;
+  const status = $('folder-status');
+  $('folder-delete').disabled = true;
+  try {
+    await postFolderAction('delete', {folderId: selectedFolder});
+    selectedFolder = 'all';
+    await load();
+    status.textContent = 'Klasör silindi. Cihazlar klasörsüz kaldı.';
+  } catch (error) { status.textContent = error.message; $('folder-delete').disabled = false; }
+});
+$('device-filters').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-filter]');
+  if (!button || !currentSnapshot) return;
+  selectedDeviceFilter = button.dataset.filter;
+  render(currentSnapshot);
+});
+document.querySelector('.device-layout').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-layout]');
+  if (!button || !currentSnapshot) return;
+  selectedDeviceLayout = button.dataset.layout;
+  render(currentSnapshot);
+});
+for (const panel of document.querySelectorAll('.utility-panel')) {
+  panel.addEventListener('toggle', () => {
+    if (panel.open) for (const other of document.querySelectorAll('.utility-panel')) {
+      if (other !== panel) other.open = false;
+    }
+  });
+}
+for (const key of ['compact', 'reduce-motion']) {
+  const checkbox = $('setting-' + key);
+  try { checkbox.checked = localStorage.getItem('nexowire-view-' + key) === 'true'; } catch { /* Storage may be blocked */ }
+  checkbox.addEventListener('change', () => {
+    try { localStorage.setItem('nexowire-view-' + key, String(checkbox.checked)); } catch { /* Prefer functional UI */ }
+  });
+}
+setInterval(updateRootCountdowns, 1000);
 $('retry').addEventListener('click', load);
 $('login').addEventListener('click', () => {
   window.location.href = '/auth/github/start?next=' +

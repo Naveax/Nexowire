@@ -2,6 +2,8 @@ import type { PairingRecord } from './pairing.js';
 import type {
   ControlPlaneStore,
   DeviceAnchorRecord,
+  DeviceFolderRecord,
+  DeviceFolderAssignmentRecord,
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
@@ -60,6 +62,8 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
   private readonly rootModeLeases = new Map<string, RootModeLeaseRecord>();
+  private readonly deviceFolders = new Map<string, DeviceFolderRecord>();
+  private readonly deviceFolderAssignments = new Map<string, string>();
   private readonly pairings = new Map<string, PairingRecord>();
   private readonly usage = new Map<string, ProductUsagePeriodRecord>();
   private readonly events = new Map<string, UsageEventRecord>();
@@ -243,6 +247,34 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
           record.ownerAccountId === ownerAccountId,
       )
       .map(clone);
+  }
+
+  async listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]> {
+    return [...this.deviceFolders.values()]
+      .filter(folder => folder.ownerAccountId === ownerAccountId).map(clone);
+  }
+
+  async listDeviceFolderAssignments(ownerAccountId: string): Promise<DeviceFolderAssignmentRecord[]> {
+    return [...this.deviceFolderAssignments.entries()]
+      .filter(([id]) => this.devices.get(id)?.ownerAccountId === ownerAccountId)
+      .map(([deviceId, folderId]) => ({ deviceId, folderId }));
+  }
+
+  async putDeviceFolder(record: DeviceFolderRecord): Promise<void> {
+    this.deviceFolders.set(record.id, clone(record));
+  }
+
+  async deleteDeviceFolder(ownerAccountId: string, folderId: string): Promise<void> {
+    if (this.deviceFolders.get(folderId)?.ownerAccountId !== ownerAccountId) return;
+    this.deviceFolders.delete(folderId);
+    for (const [deviceId, id] of this.deviceFolderAssignments) {
+      if (id === folderId) this.deviceFolderAssignments.delete(deviceId);
+    }
+  }
+
+  async assignDeviceFolder(deviceId: string, folderId: string | null): Promise<void> {
+    if (folderId === null) this.deviceFolderAssignments.delete(deviceId);
+    else this.deviceFolderAssignments.set(deviceId, folderId);
   }
 
   async getPairing(id: string): Promise<PairingRecord | null> {

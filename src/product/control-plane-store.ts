@@ -52,6 +52,18 @@ export interface RootModeLeaseRecord {
   updatedAt: string;
 }
 
+export interface DeviceFolderRecord {
+  id: string;
+  ownerAccountId: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface DeviceFolderAssignmentRecord {
+  deviceId: string;
+  folderId: string;
+}
+
 export interface ProductDeviceRecord {
   id: string;
   ownerAccountId: string;
@@ -191,6 +203,11 @@ export interface ControlPlaneStore {
   getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null>;
   putRootModeLease(record: RootModeLeaseRecord): Promise<void>;
   listDevices(ownerAccountId?: string): Promise<ProductDeviceRecord[]>;
+  listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]>;
+  listDeviceFolderAssignments(ownerAccountId: string): Promise<DeviceFolderAssignmentRecord[]>;
+  putDeviceFolder(record: DeviceFolderRecord): Promise<void>;
+  deleteDeviceFolder(ownerAccountId: string, folderId: string): Promise<void>;
+  assignDeviceFolder(deviceId: string, folderId: string | null): Promise<void>;
 
   getPairing(id: string): Promise<PairingRecord | null>;
   putPairing(record: PairingRecord): Promise<void>;

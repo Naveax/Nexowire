@@ -1,6 +1,8 @@
 import type {
   ControlPlaneStore,
   DeviceAnchorRecord,
+  DeviceFolderRecord,
+  DeviceFolderAssignmentRecord,
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
@@ -580,6 +582,44 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
             .bind(ownerAccountId);
     const result = await statement.all<DbDeviceRow>();
     return (result.results ?? []).map(deviceFromRow);
+  }
+
+  async listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]> {
+    const result = await this.db.prepare(
+      'SELECT id, owner_account_id, name, created_at FROM device_folders WHERE owner_account_id = ? ORDER BY name COLLATE NOCASE',
+    ).bind(ownerAccountId).all<{id:string;owner_account_id:string;name:string;created_at:string}>();
+    return (result.results ?? []).map(row => ({
+      id: row.id, ownerAccountId: row.owner_account_id, name: row.name, createdAt: row.created_at,
+    }));
+  }
+
+  async listDeviceFolderAssignments(ownerAccountId: string): Promise<DeviceFolderAssignmentRecord[]> {
+    const result = await this.db.prepare(
+      'SELECT a.device_id, a.folder_id FROM device_folder_assignments a JOIN devices d ON d.id = a.device_id JOIN device_folders f ON f.id = a.folder_id WHERE d.owner_account_id = ? AND f.owner_account_id = ?',
+    ).bind(ownerAccountId, ownerAccountId).all<{device_id:string;folder_id:string}>();
+    return (result.results ?? []).map(row => ({deviceId: row.device_id, folderId: row.folder_id}));
+  }
+
+  async putDeviceFolder(record: DeviceFolderRecord): Promise<void> {
+    await this.db.prepare(
+      'INSERT INTO device_folders(id, owner_account_id, name, created_at) VALUES (?, ?, ?, ?)',
+    ).bind(record.id, record.ownerAccountId, record.name, record.createdAt).run();
+  }
+
+  async deleteDeviceFolder(ownerAccountId: string, folderId: string): Promise<void> {
+    await this.db.prepare(
+      'DELETE FROM device_folders WHERE id = ? AND owner_account_id = ?',
+    ).bind(folderId, ownerAccountId).run();
+  }
+
+  async assignDeviceFolder(deviceId: string, folderId: string | null): Promise<void> {
+    if (folderId === null) {
+      await this.db.prepare('DELETE FROM device_folder_assignments WHERE device_id = ?').bind(deviceId).run();
+    } else {
+      await this.db.prepare(
+        'INSERT INTO device_folder_assignments(device_id, folder_id) VALUES (?, ?) ON CONFLICT(device_id) DO UPDATE SET folder_id = excluded.folder_id',
+      ).bind(deviceId, folderId).run();
+    }
   }
 
   async getPairing(id: string): Promise<PairingRecord | null> {

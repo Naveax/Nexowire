@@ -9,6 +9,7 @@ export interface ProductDeviceSummary {
   privilegeMode: 'direct' | 'broker' | null;
   adminBridgeReady: boolean | null;
   lastSeenAt: string | null;
+  folderId: string | null;
 }
 
 export interface ProductUsageSummary {
@@ -32,6 +33,7 @@ export interface UserDashboardSnapshot {
   billingMode: 'free' | 'subscription' | 'prepaid-metered';
   usage: ProductUsageSummary;
   devices: ProductDeviceSummary[];
+  folders: { id: string; name: string }[];
   stability: ProductStabilitySummary;
   privateControlsIncluded: boolean;
 }

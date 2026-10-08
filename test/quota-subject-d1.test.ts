@@ -85,6 +85,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0009_device_access_mode.sql',
     '0010_device_runtime_telemetry.sql',
     '0011_device_root_mode_leases.sql',
+    '0012_owner_device_folders.sql',
   ]) {
     db.exec(
       readFileSync(
@@ -274,6 +275,46 @@ test('D1-backed verified owner remains unmetered past Free quota; other accounts
     assert.equal(exhausted.reason, 'quota-exhausted');
     const otherUsage = await store.getUsagePeriod(other.quotaSubjectId, '2026-10');
     assert.equal(otherUsage?.usedCredits ?? 0, 0);
+  } finally {
+    db.close();
+  }
+});
+
+test('D1 owner folders retain empty folders and cascade device assignments on deletion', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+  try {
+    const store = new D1ControlPlaneStore(new SqliteD1Database(db));
+    const timestamp = '2026-10-08T17:00:00.000Z';
+    await store.putQuotaSubject({
+      id: 'folder-subject', kind: 'free-cluster',
+      createdAt: timestamp, updatedAt: timestamp,
+    });
+    await store.putAccount({
+      id: 'folder-owner', quotaSubjectId: 'folder-subject',
+      displayName: null, planId: 'free', customPlan: null, admin: false,
+      createdAt: timestamp, updatedAt: timestamp,
+    });
+    await store.putDevice({
+      id: 'folder-device', ownerAccountId: 'folder-owner',
+      deviceAnchorHash: null, name: 'Test PC', platform: 'win32',
+      credentialHash: 'hash-folder', accessMode: 'safe',
+      agentVersion: null, privilegeMode: null, adminBridgeReady: null,
+      online: false, lastSeenAt: null, createdAt: timestamp, updatedAt: timestamp,
+    });
+    await store.putDeviceFolder({
+      id:'folder-maxi', ownerAccountId:'folder-owner', name:'Maxi', createdAt:timestamp,
+    });
+    assert.equal((await store.listDeviceFolders('folder-owner')).length, 1);
+    assert.equal((await store.listDeviceFolders('other-owner')).length, 0);
+    await store.assignDeviceFolder('folder-device', 'folder-maxi');
+    assert.deepEqual(await store.listDeviceFolderAssignments('folder-owner'),
+      [{ deviceId:'folder-device', folderId:'folder-maxi' }]);
+    await store.deleteDeviceFolder('other-owner', 'folder-maxi');
+    assert.equal((await store.listDeviceFolders('folder-owner')).length, 1);
+    await store.deleteDeviceFolder('folder-owner', 'folder-maxi');
+    assert.equal((await store.listDeviceFolderAssignments('folder-owner')).length, 0);
   } finally {
     db.close();
   }
