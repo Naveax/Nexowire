@@ -21,6 +21,18 @@ The SHA-256 value is calculated **once when the Hub starts** using the actual MC
 
 Old v1.0.0 hubs do not emit the `runtime` field. A staged v1.0.5 Hub will emit `ownerAutoRoutingContract: owner-auto-v1` whether or not the owner OAuth is configured, making support distinguishable from activation.
 
+## Legacy supervisor conflict check
+
+Before attempting to register **any** new Hub Scheduled Task, run the read-only CLI:
+
+```powershell
+nexowire hub preflight
+```
+
+It reports `legacyStackTaskState`, `standaloneHubLifecycleBlocked` and `mode: inspection-only`. If the old `Nexowire Stack` Scheduled Task is `Running`, the CLI **refuses** `hub install`, `hub start`, `hub restart` and elevated `hub boot-install` before creating or modifying a task or protected secret. The old supervisor uses a fixed v1.0.0 CLI path and will respawn its own Hub if that mode exits; adding an independent Hub task on the same port is an unsafe competing lifecycle.
+
+`standaloneHubLifecycleBlocked: false` does **not** authorize deployment: it only says this specific old Stack task was not reported as running. It is not an assertion that port 43110 is free, a different supervisor is absent, or owner OAuth/rollback have been accepted. Full owner-approved coordinated migration and verification remain necessary. Existing Hub `stop`/`uninstall` cleanup commands are not gated by the old supervisor guard, so erroneous extra tasks can still be removed.
+
 ## Required production gates
 
 1. **Stage and fingerprint** the release in an approved, admin-protected install path; compare `mcpRouterSha256` to the hash of the *same verified staged compiled file*.
