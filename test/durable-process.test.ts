@@ -149,7 +149,19 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
   } finally {
     await second?.stopAll().catch(() => undefined);
     await first.stopAll().catch(() => undefined);
-    await fs.rm(root, { recursive: true, force: true });
+    // stopAll may observe the durable session as exited while the detached
+    // worker is still closing its control socket and flushing atomic files.
+    // Clear both manager monitors and await queued state persistence first.
+    await second?.shutdown().catch(() => undefined);
+    await first.shutdown().catch(() => undefined);
+    // Windows/Unix filesystem teardown can still race a just-closed worker.
+    // Only retry transient filesystem removal errors, with a strict bound.
+    await fs.rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 12,
+      retryDelay: 100,
+    });
   }
 });
 
