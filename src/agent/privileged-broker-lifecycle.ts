@@ -280,6 +280,14 @@ export async function privilegedBrokerTaskStatus(
  */
 export const PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS = String.raw`
 $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+# ScheduledTask.RestartOnFailure alone did not relaunch a terminated broker on the
+# live v1.0.4 task. Pair the logon trigger with a one-minute repeating trigger.
+# IgnoreNew prevents duplicate brokers while the current instance is running.
+$minuteTrigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
+# An omitted Duration is indefinite. The temporary duration above only
+# satisfies New-ScheduledTaskTrigger parameter validation.
+$minuteTrigger.Repetition.Duration=$null
+$minuteTrigger.Repetition.StopAtDurationEnd=$false
 `;
 
 export async function installPrivilegedBrokerTask(
@@ -347,7 +355,7 @@ $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument
 $trigger=New-ScheduledTaskTrigger -AtLogOn -User $user
 $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
 ${PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS}
-Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire elevated privileged broker' -Force | Out-Null
+Register-ScheduledTask -TaskName $name -Action $action -Trigger @($trigger, $minuteTrigger) -Principal $principal -Settings $settings -Description 'Nexowire elevated privileged broker' -Force | Out-Null
 Start-ScheduledTask -TaskName $name
 [pscustomobject]@{ ok=$true } | ConvertTo-Json -Compress
 `;
