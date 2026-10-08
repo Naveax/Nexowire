@@ -20,14 +20,30 @@ identity.
 ```powershell
 powershell.exe -NoProfile -File scripts/audit-windows-runtime-acl.ps1 `
   -RuntimeRoot 'C:\ProgramData\NexowireStack\nexowire\node_modules\nexowire' `
-  -Entrypoint 'C:\ProgramData\NexowireStack\nexowire\node_modules\nexowire\dist\src\cli.js'
+  -Entrypoint 'C:\ProgramData\NexowireStack\nexowire\node_modules\nexowire\dist\src\cli.js' `
+  -FullTree -MaxObjects 10000 -MaxReportedFindings 80
 ```
 
-The diagnostic validates absolute scope and walks the entrypoint, its parents,
-and the specified root. It reports unsafe owner SIDs, untrusted allow-write
-ACEs (including ACL takeover, delete, and data modifications) and reparse
-points. Output shows only relative component names, generic identity classes
-and reasons, not secret values or the full absolute runtime path.
+By default the diagnostic walks only the entrypoint-to-package-root chain.
+With **`-FullTree`**, it additionally inspects *every* file and directory
+beneath that root without following junctions/reparse points, plus the runtime
+root's parent directories up to the volume root. It reports unexpected owner
+SIDs, untrusted allow-write ACEs (including ACL takeover, delete and data
+modifications) and reparse points. An enumeration, ACL read or object-limit
+failure terminates with an error; it never reports an incomplete inventory as
+safe. Results are bounded using `-MaxObjects` (default 10,000, maximum
+20,000) and `-MaxReportedFindings` (default 80, maximum 200); the report
+includes `totalFindings` and `omittedFindings` so abbreviated evidence is
+visible. Output shows relative component names and redacted outer-parent
+indices, generic identity classes and reasons, never secret values or the full
+absolute runtime path.
+
+`packageTreeAudited:true` means the bounded tree scan completed, **not** that
+imports outside the runtime root, external Node executable or task launcher
+were checked. `dependenciesRecursivelyAudited:false` is unconditional.
+The conservative check identifies allow-write grants and does not calculate a
+full effective Windows access token or deny-ACE evaluation. Every elevated
+entrypoint and updater path requires independent verification.
 
 It never updates permissions, task registrations, files, accounts or process
 state. `ownerApprovedElevatedExecution` is always **false**;

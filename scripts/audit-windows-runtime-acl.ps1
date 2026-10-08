@@ -3,14 +3,18 @@
 .SYNOPSIS
   Read-only Windows ACL audit for an elevated Nexowire runtime code path.
 .DESCRIPTION
-  Audits effective owner and allow-write grants along the entrypoint-to-root
-  chain. Does not modify DACLs, read secrets or authorize privileged execution.
-  This is a prerequisite diagnostic, NOT a complete recursive dependency audit.
+  By default, audits the entrypoint-to-runtime-root chain. -FullTree also
+  inventories all children under RuntimeRoot and its parent directories up to
+  the volume root, without following reparse points. It does NOT prove imported
+  dependencies outside that tree are safe. No DACL/task/process mutations.
 #>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string]$RuntimeRoot,
-  [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string]$Entrypoint
+  [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][string]$Entrypoint,
+  [switch]$FullTree,
+  [ValidateRange(2,20000)][int]$MaxObjects=10000,
+  [ValidateRange(1,200)][int]$MaxReportedFindings=80
 )
 $ErrorActionPreference='Stop'
 $rootFull=[System.IO.Path]::GetFullPath($RuntimeRoot).TrimEnd('\')
@@ -30,7 +34,6 @@ $trusted=@{
   'S-1-5-32-544'=$true             # Administrators
   'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true # TrustedInstaller
 }
-# Rights to mutate executable code, remove/rewrite it or change its ACL.
 $rights=[System.Security.AccessControl.FileSystemRights]
 $writeMask=([int]$rights::WriteData -bor
             [int]$rights::AppendData -bor
@@ -40,27 +43,41 @@ $writeMask=([int]$rights::WriteData -bor
             [int]$rights::DeleteSubdirectoriesAndFiles -bor
             [int]$rights::ChangePermissions -bor
             [int]$rights::TakeOwnership)
+$visited=New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 $problems=New-Object System.Collections.ArrayList
-$current=$entryFull
+$totalFindings=0
 $components=0
-while ($true) {
-  $item=Get-Item -LiteralPath $current -Force -ErrorAction Stop
-  $acl=Get-Acl -LiteralPath $current -ErrorAction Stop
-  $relative=if($current -ieq $rootFull){'.'}else{$current.Substring($rootFull.Length).TrimStart('\')}
-  $components++
+$treeComponents=0
+$parentComponents=0
+function Add-Finding([string]$Component,[string]$Reason,[string]$PrincipalClass) {
+  $script:totalFindings++
+  if ($script:problems.Count -lt $MaxReportedFindings) {
+    [void]$script:problems.Add([ordered]@{
+      component=$Component;reason=$Reason;principalClass=$PrincipalClass
+    })
+  }
+}
+function Inspect-Path([string]$Path,[string]$Label,[string]$Category) {
+  if (-not $script:visited.Add($Path)) {return $false}
+  if ($script:components -ge $MaxObjects) {throw 'MAX_OBJECTS_EXCEEDED: ACL inventory did not complete'}
+  $script:components++
+  if ($Category -eq 'tree') {$script:treeComponents++}
+  if ($Category -eq 'parent') {$script:parentComponents++}
+  $item=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+  $acl=Get-Acl -LiteralPath $Path -ErrorAction Stop
   if (([int]$item.Attributes -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-    [void]$problems.Add([ordered]@{component=$relative;reason='REPARSE_POINT';principalClass=$null})
+    Add-Finding $Label 'REPARSE_POINT' $null
   }
   $ownerSid=$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
   if (-not $trusted.ContainsKey($ownerSid)) {
-    [void]$problems.Add([ordered]@{component=$relative;reason='UNTRUSTED_OWNER';principalClass='Other'})
+    Add-Finding $Label 'UNTRUSTED_OWNER' 'Other'
   }
   $rules=$acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])
   foreach($rule in $rules) {
-    if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { continue }
-    if ((([int]$rule.FileSystemRights -band $writeMask) -eq 0)) { continue }
+    if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {continue}
+    if ((([int]$rule.FileSystemRights -band $writeMask) -eq 0)) {continue}
     $sid=$rule.IdentityReference.Value
-    if ($trusted.ContainsKey($sid)) { continue }
+    if ($trusted.ContainsKey($sid)) {continue}
     $classification=switch($sid) {
       'S-1-5-11' {'Authenticated Users';break}
       'S-1-5-32-545' {'Users';break}
@@ -68,20 +85,61 @@ while ($true) {
       'S-1-5-4' {'Interactive';break}
       default {'Other'}
     }
-    [void]$problems.Add([ordered]@{component=$relative;reason='UNTRUSTED_WRITE_GRANT';principalClass=$classification})
+    Add-Finding $Label 'UNTRUSTED_WRITE_GRANT' $classification
   }
+  return (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)
+}
+function Relative-Path([string]$Path) {
+  if($Path -ieq $rootFull) {return '.'}
+  return $Path.Substring($rootFull.Length).TrimStart('\')
+}
+# Exact entrypoint and all ancestor components up to the declared package root.
+$current=$entryFull
+while ($true) {
+  [void](Inspect-Path $current (Relative-Path $current) 'entry')
   if ($current -ieq $rootFull) {break}
   $parent=[System.IO.Path]::GetDirectoryName($current)
   if (-not $parent -or $parent.Length -ge $current.Length) {throw 'UNEXPECTED_RUNTIME_ANCESTRY'}
   $current=$parent
-  if ($components -gt 256) {throw 'UNBOUNDED_RUNTIME_ANCESTRY'}
+}
+if ($FullTree) {
+  # Enumerate every file/directory under the declared root without descending
+  # into junctions/symlinks (their presence is itself a blocking finding).
+  $pending=New-Object 'System.Collections.Generic.Stack[string]'
+  $pending.Push($rootFull)
+  while ($pending.Count -gt 0) {
+    $dir=$pending.Pop()
+    $children=@(Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)
+    foreach($child in $children) {
+      $allowed=Inspect-Path $child.FullName (Relative-Path $child.FullName) 'tree'
+      if ($child.PSIsContainer -and $allowed) {$pending.Push($child.FullName)}
+    }
+  }
+  # Also check replacement/rename capabilities of directories outside the
+  # package root, up to the volume root. Redact their actual filesystem names.
+  $ancestor=[System.IO.Path]::GetDirectoryName($rootFull)
+  $outerDepth=0
+  while($ancestor) {
+    $outerDepth++
+    [void](Inspect-Path $ancestor ('@parent/'+$outerDepth) 'parent')
+    $up=[System.IO.Path]::GetDirectoryName($ancestor.TrimEnd('\'))
+    if (-not $up -or $up -ieq $ancestor) {break}
+    if ($outerDepth -ge 128) {throw 'UNBOUNDED_ROOT_PARENTS'}
+    $ancestor=$up
+  }
 }
 [pscustomobject]@{
-  schemaVersion=1
+  schemaVersion=2
   mode='READ_ONLY'
+  scope=if($FullTree){'ROOT_TREE_AND_PARENTS'}else{'ENTRYPOINT_CHAIN'}
   componentsAudited=$components
+  runtimeTreeComponentsAudited=$treeComponents
+  outerParentComponentsAudited=$parentComponents
   issues=@($problems.ToArray())
-  riskyCodePath=($problems.Count -gt 0)
+  totalFindings=$totalFindings
+  omittedFindings=($totalFindings-$problems.Count)
+  riskyCodePath=($totalFindings -gt 0)
+  packageTreeAudited=[bool]$FullTree
   dependenciesRecursivelyAudited=$false
   ownerApprovedElevatedExecution=$false
   productionFilesChanged=$false
