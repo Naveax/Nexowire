@@ -45,6 +45,13 @@ export interface ExternalIdentityRecord {
   lastLoginAt: string;
 }
 
+export interface RootModeLeaseRecord {
+  deviceId: string;
+  ownerAccountId: string;
+  expiresAt: string;
+  updatedAt: string;
+}
+
 export interface ProductDeviceRecord {
   id: string;
   ownerAccountId: string;
@@ -181,6 +188,8 @@ export interface ControlPlaneStore {
     credentialHash: string,
   ): Promise<ProductDeviceRecord | null>;
   putDevice(record: ProductDeviceRecord): Promise<void>;
+  getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null>;
+  putRootModeLease(record: RootModeLeaseRecord): Promise<void>;
   listDevices(ownerAccountId?: string): Promise<ProductDeviceRecord[]>;
 
   getPairing(id: string): Promise<PairingRecord | null>;

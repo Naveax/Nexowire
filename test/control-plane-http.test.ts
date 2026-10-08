@@ -322,3 +322,60 @@ test('public policy supports read only; authenticated account data remains prote
   const privateDashboard = await handler(request('/api/v1/me/dashboard'));
   assert.equal(privateDashboard.status, 401);
 });
+
+test('ROOT site activation denies missing confirmation and unsafe devices', async () => {
+  const { service, handler } = await setup();
+  const owner = { accountId: 'acct-1', role: 'user' } as const;
+  const challenge = await service.beginPairing(owner, 'root-http-test');
+  const paired = await service.consumePairing({
+    pairingId: challenge.pairingId, token: challenge.token,
+    platform: 'win32', deviceAnchorHash: '4'.repeat(64),
+  });
+  const id = paired.device.id;
+  const route = '/api/v1/me/devices/root-mode';
+  const enable = JSON.stringify({
+    deviceId: id, enabled: true, confirmation: 'ROOT DANGER',
+  });
+  const unauthenticated = await handler(request(route, undefined, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: enable,
+  }));
+  assert.equal(unauthenticated.status, 401);
+  const denied = await handler(request(route, owner, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: enable,
+  }));
+  assert.equal(denied.status, 400);
+  assert.deepEqual(await denied.json(), { error: 'ROOT_DANGER_CONFIRMATION_REQUIRED' });
+  const cannotElevate = await handler(request(route, owner, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json', 'x-nexowire-confirm': 'root-danger-v1',
+    },
+    body: enable,
+  }));
+  assert.equal(cannotElevate.status, 409);
+  assert.deepEqual(await cannotElevate.json(), { error: 'ROOT_REQUIRES_FULL_ONLINE_BROKER' });
+  await service.setDeviceAccessMode(owner, id, 'full');
+  await service.setDevicePresence(id, true, '2026-10-02T12:00:00.000Z', {
+    privilegeMode: 'broker', adminBridgeReady: true,
+  });
+  const enabled = await handler(request(route, owner, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json', 'x-nexowire-confirm': 'root-danger-v1',
+    },
+    body: enable,
+  }));
+  assert.equal(enabled.status, 200);
+  assert.equal((await enabled.json() as { rootMode: { active: boolean } }).rootMode.active, true);
+  const current = await handler(request('/api/v1/me/dashboard', owner));
+  assert.equal((await current.json() as {
+    devices: Array<{ rootMode: { active: boolean } }>;
+  }).devices[0]?.rootMode.active, true);
+  const off = await handler(request(route, owner, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ deviceId: id, enabled: false }),
+  }));
+  assert.equal(off.status, 200);
+  assert.equal((await off.json() as { rootMode: { active: boolean } }).rootMode.active, false);
+});

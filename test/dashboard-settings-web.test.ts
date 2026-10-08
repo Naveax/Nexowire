@@ -46,3 +46,16 @@ test('dashboard exposes session-local view settings without privileged API mutat
   assert.match(css, /#setting-advanced:not\(:checked\)/);
   assert.doesNotMatch(html, /disable authentication|kimlik doğrulamayı kapat/i);
 });
+
+test('ROOT MODE DANGER requires site confirmation, full mode and online Broker', () => {
+  assert.match(html, /ROOT MODE · DANGER/);
+  assert.match(html, /15 dakikalık/);
+  assert.match(html, /Windows UAC'yi/);
+  assert.match(app, /\/api\/v1\/me\/devices\/root-mode/);
+  assert.match(app, /root-danger-v1/);
+  assert.match(app, /confirmation: 'ROOT DANGER'/);
+  assert.match(app, /accessMode !== 'full'/);
+  assert.match(app, /device\.adminBridgeReady !== true/);
+  assert.match(css, /\.root-mode-warning/);
+  assert.doesNotMatch(app, /window\.confirm|window\.prompt/);
+});

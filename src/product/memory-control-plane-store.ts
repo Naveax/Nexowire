@@ -5,6 +5,7 @@ import type {
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
+  RootModeLeaseRecord,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   PrepaidCreditInput,
@@ -58,6 +59,7 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly accounts = new Map<string, ProductAccountRecord>();
   private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
+  private readonly rootModeLeases = new Map<string, RootModeLeaseRecord>();
   private readonly pairings = new Map<string, PairingRecord>();
   private readonly usage = new Map<string, ProductUsagePeriodRecord>();
   private readonly events = new Map<string, UsageEventRecord>();
@@ -220,6 +222,15 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
 
   async putDevice(record: ProductDeviceRecord): Promise<void> {
     this.devices.set(record.id, clone(record));
+  }
+
+  async getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null> {
+    const value = this.rootModeLeases.get(deviceId);
+    return value ? clone(value) : null;
+  }
+
+  async putRootModeLease(record: RootModeLeaseRecord): Promise<void> {
+    this.rootModeLeases.set(record.deviceId, clone(record));
   }
 
   async listDevices(

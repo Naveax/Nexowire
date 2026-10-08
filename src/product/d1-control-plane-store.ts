@@ -4,6 +4,7 @@ import type {
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
+  RootModeLeaseRecord,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   PrepaidCreditInput,
@@ -539,6 +540,29 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
         record.updatedAt,
       )
       .run();
+  }
+
+  async getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null> {
+    const row = await this.db.prepare(
+      'SELECT device_id, owner_account_id, expires_at, updated_at FROM device_root_mode_leases WHERE device_id = ?',
+    ).bind(deviceId).first<{
+      device_id: string;
+      owner_account_id: string;
+      expires_at: string;
+      updated_at: string;
+    }>();
+    return row ? {
+      deviceId: row.device_id,
+      ownerAccountId: row.owner_account_id,
+      expiresAt: row.expires_at,
+      updatedAt: row.updated_at,
+    } : null;
+  }
+
+  async putRootModeLease(record: RootModeLeaseRecord): Promise<void> {
+    await this.db.prepare(
+      'INSERT INTO device_root_mode_leases (device_id, owner_account_id, expires_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET owner_account_id = excluded.owner_account_id, expires_at = excluded.expires_at, updated_at = excluded.updated_at',
+    ).bind(record.deviceId, record.ownerAccountId, record.expiresAt, record.updatedAt).run();
   }
 
   async listDevices(

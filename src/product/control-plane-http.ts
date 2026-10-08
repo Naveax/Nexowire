@@ -143,9 +143,11 @@ function errorStatus(message: string): number {
   ) return 404;
   if (
     message === 'ADMIN_REQUIRED' ||
+    message === 'ROOT_REQUIRES_OWNER_LOGIN' ||
     message === 'DEVICE_LIMIT_REACHED'
   ) return 403;
   if (
+    message === 'ROOT_REQUIRES_FULL_ONLINE_BROKER' ||
     message.startsWith('PAIRING_') ||
     message === 'DEVICE_ALREADY_BOUND'
   ) return 409;
@@ -240,6 +242,30 @@ export function createControlPlaneHttpHandler(
             identity,
             stringField(body, 'deviceId'),
             mode,
+          ),
+        );
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/me/devices/root-mode'
+      ) {
+        const body = await readJsonObject(request);
+        if (typeof body.enabled !== 'boolean') {
+          return json(400, { error: 'INVALID_ROOT_MODE_ENABLED' });
+        }
+        if (body.enabled === true && (
+          request.headers.get('x-nexowire-confirm') !== 'root-danger-v1' ||
+          body.confirmation !== 'ROOT DANGER'
+        )) {
+          return json(400, { error: 'ROOT_DANGER_CONFIRMATION_REQUIRED' });
+        }
+        return json(
+          200,
+          await service.setDeviceRootMode(
+            identity,
+            stringField(body, 'deviceId'),
+            body.enabled,
           ),
         );
       }
