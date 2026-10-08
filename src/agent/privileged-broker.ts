@@ -10,6 +10,10 @@ import { executeWindowsEnvironmentCapability } from './windows-environment.js';
 import { normalizeAgentError } from './executors.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import { scheduleOfficialMachineUpdate } from '../update/machine-update.js';
+import {
+  readVerifiedInstallerStatus,
+  scheduleVerifiedInstaller,
+} from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 
 export interface PrivilegedBrokerServerOptions {
@@ -251,7 +255,11 @@ export async function startPrivilegedBroker(
             ? await scheduleOfficialMachineUpdate(
                 requestedInput,
               )
-            : requestedCapability.startsWith('windows.environment.')
+            : requestedCapability === 'windows.installer.apply'
+              ? await scheduleVerifiedInstaller(requestedInput)
+              : requestedCapability === 'windows.installer.status'
+                ? await readVerifiedInstallerStatus(requestedInput)
+                : requestedCapability.startsWith('windows.environment.')
               ? await executeWindowsEnvironmentCapability(
                   requestedCapability,
                   requestedInput,

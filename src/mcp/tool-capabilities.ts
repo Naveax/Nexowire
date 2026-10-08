@@ -73,6 +73,8 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_environment_read: 'windows.environment.read',
   windows_environment_set: 'windows.environment.set',
   windows_environment_delete: 'windows.environment.delete',
+  windows_installer_apply: 'windows.installer.apply',
+  windows_installer_status: 'windows.installer.status',
   shell_exec: 'shell.exec',
   process_start: 'process.start',
   process_read: 'process.read',

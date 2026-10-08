@@ -2034,6 +2034,27 @@ export async function executeCapability(
     assertPhysicalConsoleGrant(capability);
   }
 
+  // A pre-authorized elevated Broker may start a pinned installer only
+  // under an authenticated owner FULL request. SAFE is fail-closed.
+  if (capability === 'windows.installer.apply') {
+    if (
+      context.accessMode !== 'full' ||
+      context.privilegeMode !== 'broker'
+    ) {
+      const error = new Error(
+        'Verified elevated installers require owner FULL mode and a pre-authorized Broker.',
+      ) as Error & { code?: string };
+      error.code = 'OWNER_FULL_BROKER_REQUIRED';
+      throw error;
+    }
+  }
+  if (
+    capability === 'windows.installer.status' &&
+    context.privilegeMode !== 'broker'
+  ) {
+    throw new Error('Installer status requires an existing privileged Broker.');
+  }
+
   if (
     context.privilegeMode === 'broker' &&
     privilegeRequirement(capability, input) === 'elevated'
