@@ -30,6 +30,7 @@ import type { ProcessManager } from './process-manager.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
 import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
+import { inspectWindowsUacStatus } from './windows-uac-status.js';
 import { privilegeRequirement } from '../security/privilege.js';
 import { detectWsl } from './wsl-detection.js';
 import { executeLiveUpdateCapability } from '../update/live-update.js';
@@ -2221,6 +2222,13 @@ export async function executeCapability(
         }),
       };
     }
+    case 'windows.uac.status':
+      return { data: await inspectWindowsUacStatus({
+        accessMode: context.accessMode ?? 'safe',
+        ...(context.privilegedBroker
+          ? { broker: context.privilegedBroker }
+          : {}),
+      }) };
     case 'windows.processes':
     case 'windows.services':
     case 'windows.network.snapshot':
