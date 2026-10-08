@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertPhysicalConsoleGrant,
+  executeWindowsConsoleControlCapability,
   needsPhysicalConsoleApproval,
   physicalConsoleGrantStatus,
   requestPhysicalConsoleGrant,
@@ -108,6 +109,32 @@ test('SAFE remains prompt-protected while Full Access suppresses repeated consol
     false,
   );
 });
+
+test(
+  'owner FULL ACCESS acknowledges console requests without a second prompt',
+  { skip: process.platform !== 'win32' },
+  async () => {
+    revokePhysicalConsoleGrant();
+    const response = await executeWindowsConsoleControlCapability(
+      'windows.console_control.request',
+      { duration_minutes: 5, reason: 'already authorized by owner' },
+      'full',
+    ) as {
+      data: {
+        approved: boolean;
+        approvalRequired: boolean;
+        authorization: string;
+        status: { active: boolean };
+      };
+    };
+
+    assert.equal(response.data.approved, true);
+    assert.equal(response.data.approvalRequired, false);
+    assert.equal(response.data.authorization, 'owner-full-access');
+    assert.equal(response.data.status.active, false);
+    assert.equal(physicalConsoleGrantStatus().active, false);
+  },
+);
 
 test('console-control status is read-only and Windows advertises grant capabilities', () => {
   assert.equal(

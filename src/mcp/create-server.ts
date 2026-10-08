@@ -3638,7 +3638,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Request physical console override',
       description:
-        'Exceptional visible-desktop override only. Never use this during connection, onboarding, or routine automation; prefer private desktop, browser, and structured controls. Use it only when the user explicitly asks to control the physical Windows desktop. A local ALLOW/DENY dialog is then required.',
+        'Exceptional visible-desktop override only. Never use this during connection, onboarding, or routine automation; prefer private desktop, browser, and structured controls. In SAFE mode, an explicit local ALLOW/DENY dialog is required. When the owner has enabled FULL ACCESS for this device, approval is already authorized and this call does not display a dialog.',
       inputSchema: {
         ...targetFields,
         duration_minutes: z
