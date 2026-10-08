@@ -12,6 +12,7 @@ import {
   validateInstallerInput,
   installerApprovalMatches,
   scheduleVerifiedInstaller,
+  preflightVerifiedInstaller,
   renderVerifiedInstallerRunner,
 } from '../src/agent/windows-installer-job.js';
 import {
@@ -286,5 +287,63 @@ test('Windows Broker installer rejects an unapproved hash before creating elevat
     );
   } finally {
     await fs.rm(dir, { recursive: true, force: true, maxRetries: 6, retryDelay: 50 });
+  }
+});
+
+
+test('preflight cannot dispatch without Broker and authenticated FULL mode', async () => {
+  const policy = new PathPolicy(['*']);
+  const input = {
+    file_path: 'C:\\Users\\Example\\Downloads\\app.exe',
+    sha256: 'a'.repeat(64),
+  };
+  let dispatched = 0;
+  const broker = {
+    execute: async (capability: string) => {
+      dispatched++;
+      assert.equal(capability, 'windows.installer.preflight');
+      return { eligible: true, state: 'ready' };
+    },
+  } as unknown as PrivilegedBrokerClient;
+  await assert.rejects(
+    () => executeCapability('windows.installer.preflight', input, policy, {
+      accessMode: 'safe', privilegeMode: 'broker', privilegedBroker: broker,
+    }),
+    /owner FULL mode/,
+  );
+  await assert.rejects(
+    () => executeCapability('windows.installer.preflight', input, policy, {
+      accessMode: 'full', privilegeMode: 'direct', privilegedBroker: broker,
+    }),
+    /owner FULL mode/,
+  );
+  assert.equal(dispatched, 0);
+  const result = await executeCapability(
+    'windows.installer.preflight', input, policy, {
+      accessMode: 'full', privilegeMode: 'broker', privilegedBroker: broker,
+    },
+  );
+  assert.deepEqual(result, { eligible: true, state: 'ready' });
+  assert.equal(dispatched, 1);
+});
+
+test('readiness check cannot start unapproved installer or mutate protected jobs', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const dir = await fs.mkdtemp(path.join(os.homedir(), '.nexowire-preflight-test-'));
+  try {
+    const file = path.join(dir, 'test.cmd');
+    const bytes = Buffer.from('@echo off\r\nexit /b 0\r\n');
+    await fs.writeFile(file, bytes);
+    const result = await preflightVerifiedInstaller({
+      file_path: file,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      allow_unsigned: true,
+    });
+    assert.equal(result.eligible, false);
+    assert.equal(result.state, 'not_approved');
+    assert.equal(result.requiresUacConsent, false);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
   }
 });

@@ -13,6 +13,7 @@ import { scheduleOfficialMachineUpdate } from '../update/machine-update.js';
 import {
   readVerifiedInstallerStatus,
   scheduleVerifiedInstaller,
+  preflightVerifiedInstaller,
 } from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 
@@ -255,7 +256,9 @@ export async function startPrivilegedBroker(
             ? await scheduleOfficialMachineUpdate(
                 requestedInput,
               )
-            : requestedCapability === 'windows.installer.apply'
+            : requestedCapability === 'windows.installer.preflight'
+              ? await preflightVerifiedInstaller(requestedInput)
+              : requestedCapability === 'windows.installer.apply'
               ? await scheduleVerifiedInstaller(requestedInput)
               : requestedCapability === 'windows.installer.status'
                 ? await readVerifiedInstallerStatus(requestedInput)

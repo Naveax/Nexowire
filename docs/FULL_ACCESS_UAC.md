@@ -21,3 +21,8 @@ FULL mode is **not** permission to disable Windows UAC or automatically click \`
 ## Acceptance gates
 
 Source feature still needs focused Windows, CI, release and deployed acceptance. **Neither** this read-only UAC inspection nor the existing signed/approved Broker execution removes the operating system's UAC protection. Source changes are not active on the installed v1.0.4/v1.0.3 agents until the next authorized release and rollout. Pre-login SYSTEM Hub and authenticated production load/recovery gates remain open.
+
+
+## Installer preflight (added after initial UAC status support)
+
+Before trying to run a *new* installer, FULL mode can invoke `windows_installer_preflight` with exactly the same file SHA-256, arguments and signing requirements as `windows_installer_apply`. The already elevated Broker verifies the actual file bytes and checks the administrator-owned machine approval. The result is `ready`, `not_approved`, `invalid_input` or `invalid_source`; this **does not execute** the installer or make a UAC dialog disappear. Only a `ready` result should lead to a subsequent `windows_installer_apply` request with those same pinned inputs. The execution path independently revalidates all conditions and checks the protected staged payload. SAFE mode cannot use preflight to infer or extend elevated permissions.
