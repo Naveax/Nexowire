@@ -24,6 +24,82 @@ export type VerifiedInstallerInput = z.infer<
 
 const supportedExtensions = new Set(['.exe', '.msi', '.ps1', '.cmd']);
 
+const ApprovalSchema = z.object({
+  sha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
+  arguments: z.array(z.string().max(512).regex(/^[^"\r\n]*$/)).max(16),
+  allow_unsigned: z.boolean(),
+  publisher_thumbprint: z.string().regex(/^[a-fA-F0-9]{40}$/).nullable(),
+}).strict();
+const ApprovalFileSchema = z.object({
+  version: z.literal(1),
+  approvals: z.array(ApprovalSchema).max(128),
+}).strict();
+
+/**
+ * Approval records are provisioned by the device administrator in
+ * protected ProgramData, NEVER by an unprivileged request or this API.
+ * Hash, exact argument vector and signer policy must all match.
+ */
+export function installerApprovalMatches(
+  input: VerifiedInstallerInput,
+  file: unknown,
+): boolean {
+  const parsed = ApprovalFileSchema.parse(file);
+  return parsed.approvals.some((approval) =>
+    approval.sha256.toLowerCase() === input.sha256.toLowerCase() &&
+    approval.allow_unsigned === input.allow_unsigned &&
+    (approval.publisher_thumbprint?.toLowerCase() ?? null) ===
+      (input.publisher_thumbprint?.toLowerCase() ?? null) &&
+    approval.arguments.length === input.arguments.length &&
+    approval.arguments.every((arg, i) => arg === input.arguments[i])
+  );
+}
+
+function approvalFile(): string {
+  return path.join(
+    process.env.ProgramData ?? 'C:\\ProgramData',
+    'Nexowire',
+    'installer-approvals.json',
+  );
+}
+
+async function assertPreapprovedInstaller(
+  input: VerifiedInstallerInput,
+): Promise<void> {
+  const file = approvalFile();
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    '$file=' + psLiteral(file),
+    '$acl=Get-Acl -LiteralPath $file -ErrorAction Stop',
+    'if(-not $acl.AreAccessRulesProtected){throw "Approval file ACL inheritance must be disabled"}',
+    "$allowed=@('S-1-5-18','S-1-5-32-544')",
+    'foreach($ace in $acl.Access){',
+    '  $sid=$ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value',
+    '  if($sid -notin $allowed){throw "Approval file ACL permits unexpected identity"}',
+    '}',
+  ].join('\n');
+  const acl = spawnSync('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass', '-Command', script,
+  ], {
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (acl.status !== 0) {
+    throw new Error(
+      'Installer approval policy is missing or not protected by machine ACL.',
+    );
+  }
+  const body: unknown = JSON.parse(await fs.readFile(file, 'utf8'));
+  if (!installerApprovalMatches(input, body)) {
+    throw new Error(
+      'Installer payload, exact arguments, and signer policy are not preapproved by this device administrator.',
+    );
+  }
+}
+
+
 export function validateInstallerInput(input: unknown): VerifiedInstallerInput {
   const parsed = VerifiedInstallerInputSchema.parse(input);
   if (
@@ -196,6 +272,10 @@ export async function scheduleVerifiedInstaller(
   if (await digest(source) !== expectedSha) {
     throw new Error('Submitted installer SHA-256 does not match the file.');
   }
+
+  // Crucial boundary: a caller-provided SHA alone never authorizes
+  // arbitrary elevated code. Approval must preexist outside user control.
+  await assertPreapprovedInstaller(input);
 
   const root = installerProgramDataRoot();
   await fs.mkdir(root, { recursive: true });

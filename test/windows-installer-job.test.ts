@@ -10,6 +10,7 @@ import { executeCapability } from '../src/agent/executors.js';
 import type { PrivilegedBrokerClient } from '../src/agent/privileged-broker-client.js';
 import {
   validateInstallerInput,
+  installerApprovalMatches,
   renderVerifiedInstallerRunner,
 } from '../src/agent/windows-installer-job.js';
 import {
@@ -211,4 +212,54 @@ test('Windows installer helper rejects a modified payload before execution', {
   } finally {
     await fs.rm(root, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
   }
+});
+
+
+test('machine approval is separate from the unprivileged FULL request and pins exact arguments', () => {
+  const approved = {
+    file_path: 'C:\\Users\\Example\\Downloads\\setup.exe',
+    sha256: 'b'.repeat(64),
+    arguments: ['/quiet', '/norestart'],
+    allow_unsigned: false,
+    publisher_thumbprint: 'c'.repeat(40),
+    timeout_seconds: 600,
+  };
+  const policy = {
+    version: 1,
+    approvals: [{
+      sha256: 'b'.repeat(64),
+      arguments: ['/quiet', '/norestart'],
+      allow_unsigned: false,
+      publisher_thumbprint: 'c'.repeat(40),
+    }],
+  };
+  assert.equal(installerApprovalMatches(approved, policy), true);
+  assert.equal(
+    installerApprovalMatches({
+      ...approved, arguments: ['/quiet', '/force'],
+    }, policy), false,
+  );
+  assert.equal(
+    installerApprovalMatches({
+      ...approved, sha256: 'd'.repeat(64),
+    }, policy), false,
+  );
+  assert.equal(
+    installerApprovalMatches({
+      ...approved, allow_unsigned: true,
+    }, policy), false,
+  );
+  assert.equal(
+    installerApprovalMatches({
+      ...approved, publisher_thumbprint: 'e'.repeat(40),
+    }, policy), false,
+  );
+  assert.throws(
+    () => installerApprovalMatches(approved, {
+      version: 1, approvals: [{
+        ...policy.approvals[0], admin: 'anyone',
+      }],
+    }),
+    /unrecognized|Unrecognized|unrecognized_key|Unrecognized key/,
+  );
 });
