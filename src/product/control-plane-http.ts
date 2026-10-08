@@ -226,6 +226,24 @@ export function createControlPlaneHttpHandler(
         return json(200, await service.dashboard(identity));
       }
 
+      if (request.method === 'POST' && path === '/api/v1/me/devices/resolve-target') {
+        if (request.headers.get('x-nexowire-confirm') !== 'device-target-v1') {
+          return json(403, {error: 'TARGET_CONFIRMATION_REQUIRED'});
+        }
+        const body = await readJsonObject(request);
+        const query: {
+          deviceId?: string; deviceName?: string; folderId?: string; folderName?: string;
+        } = {};
+        for (const key of ['deviceId', 'deviceName', 'folderId', 'folderName'] as const) {
+          const value = body[key];
+          if (value !== undefined) {
+            if (typeof value !== 'string') return json(400, {error: 'INVALID_DEVICE_TARGET'});
+            query[key] = value;
+          }
+        }
+        return json(200, await service.resolveDeviceTarget(identity, query));
+      }
+
       if (request.method === 'POST' && path.startsWith('/api/v1/me/device-folders/')) {
         if (request.headers.get('x-nexowire-confirm') !== 'device-folder-v1') {
           return json(403, {error: 'FOLDER_CONFIRMATION_REQUIRED'});
