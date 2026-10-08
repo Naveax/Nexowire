@@ -181,14 +181,21 @@ test('direct device scopes filter discovery metadata and execution targets', asy
         [{ alias: 'main-pc', deviceId: 'desktop' }],
       );
 
+      // Credential scope is a restriction, not user approval to auto-select.
       const auto = await client.callTool({
         name: 'machine_snapshot',
         arguments: {},
       });
+      assert.equal('isError' in auto ? auto.isError : false, true);
       assert.equal(
-        (auto.structuredContent as {
-          data?: { executedTargetId?: string };
-        }).data?.executedTargetId,
+        (auto.structuredContent as {error?: {code?: string}}).error?.code,
+        'MCP_TARGET_NOT_AUTHORIZED',
+      );
+      const explicit = await client.callTool({
+        name: 'machine_snapshot', arguments: {device_id: 'desktop'},
+      });
+      assert.equal(
+        (explicit.structuredContent as {data?: {executedTargetId?: string}}).data?.executedTargetId,
         'desktop',
       );
 
@@ -282,14 +289,21 @@ test('deterministic route scopes grant only the currently selected route target'
         'MCP_ROUTE_NOT_AUTHORIZED',
       );
 
+      // Credential scope is a restriction, not user approval to auto-select.
       const auto = await client.callTool({
         name: 'machine_snapshot',
         arguments: {},
       });
+      assert.equal('isError' in auto ? auto.isError : false, true);
       assert.equal(
-        (auto.structuredContent as {
-          data?: { executedTargetId?: string };
-        }).data?.executedTargetId,
+        (auto.structuredContent as {error?: {code?: string}}).error?.code,
+        'MCP_TARGET_NOT_AUTHORIZED',
+      );
+      const explicit = await client.callTool({
+        name: 'machine_snapshot', arguments: {device_id: 'laptop'},
+      });
+      assert.equal(
+        (explicit.structuredContent as {data?: {executedTargetId?: string}}).data?.executedTargetId,
         'laptop',
       );
 

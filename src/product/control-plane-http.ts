@@ -226,6 +226,20 @@ export function createControlPlaneHttpHandler(
         return json(200, await service.dashboard(identity));
       }
 
+      if (request.method === 'POST' && path === '/api/v1/me/device-selection/auto') {
+        const body = await readJsonObject(request);
+        if (typeof body.enabled !== 'boolean') {
+          return json(400, {error: 'INVALID_AUTO_SELECTION_ENABLED'});
+        }
+        if (body.enabled && (
+          request.headers.get('x-nexowire-confirm') !== 'auto-device-selection-v1' ||
+          body.confirmation !== 'AUTO DEVICE ACCESS'
+        )) {
+          return json(400, {error: 'AUTO_SELECTION_CONFIRMATION_REQUIRED'});
+        }
+        return json(200, await service.setAutoDeviceSelection(identity, body.enabled));
+      }
+
       if (request.method === 'POST' && path === '/api/v1/me/devices/resolve-target') {
         if (request.headers.get('x-nexowire-confirm') !== 'device-target-v1') {
           return json(403, {error: 'TARGET_CONFIRMATION_REQUIRED'});

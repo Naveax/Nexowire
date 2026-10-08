@@ -86,6 +86,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0010_device_runtime_telemetry.sql',
     '0011_device_root_mode_leases.sql',
     '0012_owner_device_folders.sql',
+    '0013_owner_device_selection.sql',
   ]) {
     db.exec(
       readFileSync(
@@ -306,6 +307,12 @@ test('D1 owner folders retain empty folders and cascade device assignments on de
     await store.putDeviceFolder({
       id:'folder-maxi', ownerAccountId:'folder-owner', name:'Maxi', createdAt:timestamp,
     });
+    assert.equal(await store.getAutoDeviceSelection('folder-owner'), false);
+    await store.putAutoDeviceSelection('folder-owner', true);
+    assert.equal(await store.getAutoDeviceSelection('folder-owner'), true);
+    assert.equal(await store.getAutoDeviceSelection('other-owner'), false);
+    await store.putAutoDeviceSelection('folder-owner', false);
+    assert.equal(await store.getAutoDeviceSelection('folder-owner'), false);
     assert.equal((await store.listDeviceFolders('folder-owner')).length, 1);
     assert.equal((await store.listDeviceFolders('other-owner')).length, 0);
     await store.assignDeviceFolder('folder-device', 'folder-maxi');

@@ -25,8 +25,8 @@ Example requests:
 ```
 
 The response is one of:
-- `selected`: exact device, a folder with exactly one device, or the sole device of the account.
-- `selection_required`: multiple eligible devices; returns the account-owned devices and **all folders including empty folders**. A caller must ask the user to choose an exact device before attempting any mutation.
+- `selected`: exact user-specified device, or implicit selection of the only eligible device **only when the owner explicitly enabled Auto**.
+- `selection_required`: any unnamed device target while Auto is disabled, even with just one device; also multiple eligible devices regardless of Auto. Returns candidate devices and **all folders including empty folders**. A caller must ask for explicit device selection before mutations.
 - `empty_folder`: the folder exists but has no device; never fall back to another folder.
 - `no_devices`: no eligible devices.
 
@@ -45,6 +45,4 @@ device ID against the live Nexowire device registry and require an explicit
 selection when the result is ambiguous. In particular, it must not use a
 workspace-local folder name as proof of device ownership.
 
-Prefer asking even for two ambiguous devices. If a folder contains exactly one
-eligible device, no additional selection is needed. A named offline device
-remains a resolved identity but must not be claimed connected.
+For unnamed requests, ask for explicit device selection by default, even if only one device exists. A folder name alone is not an explicit device selection. Auto can only be enabled by the signed-in owner through `POST /api/v1/me/device-selection/auto`, using the exact `AUTO DEVICE ACCESS` phrase and the `auto-device-selection-v1` confirmation header. D1 migration 0013 persists the owner preference; missing records mean OFF. Once enabled, the sole eligible device or sole device in a named folder can be selected, but two or more candidates **always** require explicit selection. The ChatGPT-facing MCP router has not yet been connected to these control-plane checks. A named offline device remains a resolved identity but must not be claimed connected.

@@ -272,7 +272,7 @@ export class ControlPlaneService {
     const account = await this.requireAccount(identity.accountId);
     const plan = await this.effectivePlan(account);
     const period = monthPeriod(this.now());
-    const [usage, devices, prepaidCredits, folders, folderAssignments] =
+    const [usage, devices, prepaidCredits, folders, folderAssignments, autoSelectDevices] =
       await Promise.all([
         this.store.getUsagePeriod(
           account.quotaSubjectId,
@@ -286,6 +286,7 @@ export class ControlPlaneService {
           : Promise.resolve(0),
         this.store.listDeviceFolders(account.id),
         this.store.listDeviceFolderAssignments(account.id),
+        this.store.getAutoDeviceSelection(account.id),
       ]);
     const deviceFolders = new Map(folderAssignments.map(a => [a.deviceId, a.folderId]));
 
@@ -305,6 +306,7 @@ export class ControlPlaneService {
         periodEnd: period.end,
       },
       folders: folders.map(({id, name}) => ({id, name})),
+      autoSelectDevices,
       devices: await Promise.all(devices.map(async (device) => {
         const lease = await this.store.getRootModeLease(device.id);
         const unexpiredLease =
@@ -734,10 +736,11 @@ export class ControlPlaneService {
         throw new Error('INVALID_DEVICE_TARGET_NAME');
       }
     }
-    const [devices, folders, assignments] = await Promise.all([
+    const [devices, folders, assignments, allowImplicitSelection] = await Promise.all([
       this.store.listDevices(account.id),
       this.store.listDeviceFolders(account.id),
       this.store.listDeviceFolderAssignments(account.id),
+      this.store.getAutoDeviceSelection(account.id),
     ]);
     const foldersByDevice = new Map(assignments.map(item => [item.deviceId, item.folderId]));
     return resolveOwnerDeviceTarget(
@@ -747,7 +750,15 @@ export class ControlPlaneService {
       })),
       folders.map(folder => ({id: folder.id, name: folder.name})),
       query,
+      allowImplicitSelection,
     );
+  }
+
+  async setAutoDeviceSelection(identity: ControlPlaneIdentity, enabled: boolean): Promise<{enabled: boolean}> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    await this.store.putAutoDeviceSelection(account.id, enabled);
+    return {enabled};
   }
 
   async createDeviceFolder(identity: ControlPlaneIdentity, nameInput: string): Promise<DeviceFolderRecord> {

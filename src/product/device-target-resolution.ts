@@ -21,7 +21,7 @@ export type TargetResolution =
     }
   | {
       status: 'selection_required';
-      reason: 'ambiguous-device' | 'ambiguous-folder' | 'multiple-devices';
+      reason: 'ambiguous-device' | 'ambiguous-folder' | 'multiple-devices' | 'explicit-selection-required';
       devices: RoutableDevice[];
       folders: RoutableFolder[];
     }
@@ -39,13 +39,14 @@ export function resolveOwnerDeviceTarget(
   devices: readonly RoutableDevice[],
   folders: readonly RoutableFolder[],
   query: DeviceTargetQuery = {},
+  allowImplicitSelection = false,
 ): TargetResolution {
   const orderedDevices = [...devices].sort((a, b) =>
     a.name.localeCompare(b.name, 'tr-TR') || a.id.localeCompare(b.id));
   const orderedFolders = [...folders].sort((a, b) =>
     a.name.localeCompare(b.name, 'tr-TR') || a.id.localeCompare(b.id));
   const choices = (
-    reason: 'ambiguous-device' | 'ambiguous-folder' | 'multiple-devices',
+    reason: 'ambiguous-device' | 'ambiguous-folder' | 'multiple-devices' | 'explicit-selection-required',
     candidates: RoutableDevice[] = orderedDevices,
   ): TargetResolution => ({
     status: 'selection_required', reason, devices: candidates, folders: orderedFolders,
@@ -76,6 +77,9 @@ export function resolveOwnerDeviceTarget(
     status: folder ? 'empty_folder' : 'no_devices',
     devices: scopedDevices, folders: orderedFolders,
   };
+  if (scopedDevices.length === 1 && !allowImplicitSelection) {
+    return choices('explicit-selection-required', scopedDevices);
+  }
   if (scopedDevices.length === 1) return {
     status:'selected', reason: folder ? 'one-in-folder' : 'only-device',
     device: scopedDevices[0]!,

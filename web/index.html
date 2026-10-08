@@ -69,7 +69,7 @@
         <button type="button" class="filter-button" data-filter="safe" aria-pressed="false">SAFE <span class="filter-count">0</span></button>
         <button type="button" class="filter-button" data-filter="full" aria-pressed="false">FULL <span class="filter-count">0</span></button>
         <button type="button" class="filter-button" data-filter="root" aria-pressed="false">ROOT <span class="filter-count">0</span></button>
-        <button type="button" class="filter-button" data-filter="persistent" aria-pressed="false">ROOT+ <span class="filter-count">0</span></button>
+        <button type="button" class="filter-button" data-filter="persistent" aria-pressed="false">CORE <span class="filter-count">0</span></button>
       </div>
       <div class="device-layout" role="group" aria-label="Cihaz liste düzeni">
         <button type="button" class="layout-button selected" data-layout="grid" aria-label="Kutucuk görünümü" aria-pressed="true" title="Kutucuk görünümü">▦</button>
@@ -103,6 +103,16 @@
             <p><strong>SAFE</strong> Varsayılan, onaylı ve kısıtlı erişim.</p>
             <p><strong>FULL</strong> Kalıcı Full Access. SAFE moda dönülene kadar devam eder; desteklenen kontrol işlemlerinde Nexowire onay tekrarını azaltır.</p>
             <p><strong>ROOT MODE · DANGER</strong> 15 dakikalık bakım izni. Etkinleştirme için FULL ve çevrimiçi cihaz gerekir. Yükseltilmiş işlemler için ayrıca hazır Admin Bridge ve makine onayı şarttır.</p>
+          </div>
+          <div class="auto-selection-control">
+            <div class="auto-selection-heading"><span><strong>Otomatik cihaz seçimi</strong><small>Varsayılan kapalı. Bu ayar kontrol panelinin hedef çözümlemesini yönetir; AI araç yönlendirmesine entegrasyon ayrıdır.</small></span><button type="button" class="secondary" id="auto-toggle" disabled>Kontrol ediliyor…</button></div>
+            <p id="auto-status" role="status" aria-live="polite" class="subtle"></p>
+            <div id="auto-confirm-panel" class="auto-confirm-panel" hidden>
+              <p class="subtle">Tek uygun cihaz varsa otomatik seçime izin verilir. Birden fazla cihaz varsa yine seçim istenir. Windows ve Broker izinleri değişmez.</p>
+              <label for="auto-phrase">Onay için AUTO DEVICE ACCESS yaz</label>
+              <input type="text" id="auto-phrase" spellcheck="false" autocomplete="off" maxlength="32" placeholder="AUTO DEVICE ACCESS">
+              <div class="auto-actions"><button type="button" id="auto-approve" class="primary">Onayla ve aç</button><button type="button" id="auto-cancel" class="secondary">Vazgeç</button></div>
+            </div>
           </div>
           <p class="interlock">GitHub OAuth, cihaz kimliği, audit ve Windows UAC korunur. ROOT izni sınırsız SYSTEM erişimi vermez. Admin Bridge ilk kurulumunda Windows yönetici onayı gerekebilir.</p>
         </div>

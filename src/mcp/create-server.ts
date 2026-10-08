@@ -247,8 +247,9 @@ async function resolveDevice(
   }
 
   const ids = [...onlineIds];
-  if (ids.length === 1 && ids[0]) return ids[0];
-
+  // Never infer device consent from the count of online machines.
+  // A panel-approved owner Auto policy must be bound to this MCP identity
+  // before implicit selection can be allowed. Until then require device_id.
   if (ids.length === 0) {
     throw new McpTargetAuthorizationError(
       hasMcpTargetRestrictions(ctx.toolAuthorization)
@@ -257,8 +258,8 @@ async function resolveDevice(
     );
   }
 
-  throw new Error(
-    'Multiple Nexowire devices are available; device_id or a device alias is required.',
+  throw new McpTargetAuthorizationError(
+    'DEVICE_SELECTION_REQUIRED: Select an exact Nexowire device in the user request and pass device_id or an authorized alias. Device count is not permission.',
   );
 }
 

@@ -584,6 +584,19 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     return (result.results ?? []).map(deviceFromRow);
   }
 
+  async getAutoDeviceSelection(ownerAccountId: string): Promise<boolean> {
+    const row = await this.db.prepare(
+      'SELECT enabled FROM owner_device_selection_settings WHERE owner_account_id = ?',
+    ).bind(ownerAccountId).first<{enabled: number}>();
+    return row?.enabled === 1;
+  }
+
+  async putAutoDeviceSelection(ownerAccountId: string, enabled: boolean): Promise<void> {
+    await this.db.prepare(
+      'INSERT INTO owner_device_selection_settings(owner_account_id, enabled) VALUES(?, ?) ON CONFLICT(owner_account_id) DO UPDATE SET enabled = excluded.enabled',
+    ).bind(ownerAccountId, enabled ? 1 : 0).run();
+  }
+
   async listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]> {
     const result = await this.db.prepare(
       'SELECT id, owner_account_id, name, created_at FROM device_folders WHERE owner_account_id = ? ORDER BY name COLLATE NOCASE',

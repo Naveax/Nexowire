@@ -4,44 +4,72 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Nexowire'a bağlan</title>
+  <meta name="theme-color" content="#090d17">
+  <title>Nexowire · Yeni cihaz bağla</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">Nexowire</div>
-    <div id="connect-pill" class="pill muted">Hazırlanıyor</div>
+    <a class="brand" href="/" aria-label="Nexowire ana sayfa">
+      <span class="brand-symbol" aria-hidden="true"><span></span></span>
+      <span>NEXO<span class="accent">WIRE</span></span>
+      <span class="brand-divider" aria-hidden="true"></span>
+      <span class="brand-subtitle">Control Center</span>
+    </a>
+    <div class="topbar-right">
+      <a class="secondary connect-back" href="/" aria-label="Kontrol paneline geri dön">← Geri dön</a>
+      <span id="connect-pill" class="pill muted" role="status">Hazırlanıyor</span>
+    </div>
   </header>
 
   <main class="shell connect-shell">
+    <nav class="connect-breadcrumb"><a href="/">Kontrol Merkezi</a><span aria-hidden="true">›</span><span>Yeni cihaz bağla</span></nav>
     <section class="hero">
       <div>
-        <p class="eyebrow">Nexowire</p>
-        <h1>Bu bilgisayarı bağla</h1>
-        <p class="subtle">
-          Bir kez BAĞLA'ya bas. Kurulum ve güvenli bağlantının geri kalanını Nexowire tamamlar.
-        </p>
+        <p class="eyebrow">CİHAZ KURULUMU</p>
+        <h1>Yeni cihaz bağla</h1>
+        <p class="subtle">İşletim sistemini seç. Kurulum tamamlandığında cihazı hesabına güvenli biçimde bağlayabilirsin.</p>
       </div>
     </section>
 
-    <section class="card connect-card">
-      <span class="label">Bu cihaz</span>
+    <section class="card connect-card" id="install-panel" aria-label="Nexowire kurulum rehberi">
+      <div class="connect-title-row"><div><span class="label">Kurulum</span><h2>Bu bilgisayara Nexowire kur</h2></div><span class="pill muted">v1.0.5</span></div>
+      <div class="os-tabs" role="tablist" aria-label="İşletim sistemi">
+        <button type="button" role="tab" id="tab-windows" aria-controls="install-content" data-os="windows" aria-selected="false">Windows</button>
+        <button type="button" role="tab" id="tab-macos" aria-controls="install-content" data-os="macos" aria-selected="false">macOS</button>
+        <button type="button" role="tab" id="tab-linux" aria-controls="install-content" data-os="linux" aria-selected="false">Linux</button>
+      </div>
+      <div id="install-content" role="tabpanel" aria-live="polite">
+        <h3 id="install-heading">Kurulum adımları</h3>
+        <p id="install-description" class="subtle"></p>
+        <label class="command-heading" for="install-command">Kurulum komutu</label>
+        <div class="install-command-row"><input id="install-command" readonly spellcheck="false" aria-label="Kurulum komutu"><button id="copy-command" type="button" class="secondary">Kopyala</button></div>
+        <div class="install-actions">
+          <a id="download-installer" class="primary" href="https://github.com/Naveax/Nexowire/releases/tag/v1.0.5" target="_blank" rel="noopener noreferrer">Resmî kurulumu indir ↗</a>
+          <a id="verify-installer" class="secondary" href="https://github.com/Naveax/Nexowire/releases/tag/v1.0.5" target="_blank" rel="noopener noreferrer">Sürüm ve SHA-256 ↗</a>
+        </div>
+        <p class="interlock" id="install-note"></p>
+        <p id="copy-status" class="subtle" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="card connect-card hidden" id="pair-panel" aria-label="Cihaz eşleştirme onayı">
+      <span class="label">Bağlanmak isteyen cihaz</span>
       <strong id="device-name">—</strong>
       <small id="platform">Hazırlanıyor</small>
-
       <div class="connect-copy">
         <h2 id="status-title">Hesap kontrol ediliyor</h2>
-        <p id="status-text" class="subtle">
-          Gerekirse giriş ekranı otomatik açılır.
-        </p>
+        <p id="status-text" class="subtle">Gerekirse giriş ekranı otomatik açılır.</p>
       </div>
-
+      <p class="subtle">Kurulum ve güvenli bağlantının geri kalanını Nexowire tamamlar. Ekstra erişim ayarı gerekmez.</p>
       <button id="approve" class="primary connect-button" disabled>BAĞLA</button>
+      <a class="secondary connect-cancel" href="/">Vazgeç ve panele dön</a>
     </section>
 
-    <section id="error-panel" class="error-panel hidden">
+    <section id="error-panel" class="error-panel hidden" role="alert">
       <strong>Bağlantı tamamlanamadı.</strong>
       <p id="error-message"></p>
+      <a href="/" class="secondary connect-cancel">Kontrol paneline dön</a>
     </section>
   </main>
 
