@@ -133,6 +133,8 @@ export function verifyDeviceCredential(
 
 export class ControlPlaneService {
   private readonly now: () => Date;
+  /** A ROOT lease is a short-lived policy signal, never an OS elevation grant. */
+  private static readonly ROOT_LEASE_MS = 15 * 60 * 1000;
   private readonly infrastructure: () => InfrastructureSnapshot;
   private readonly freeOnly: boolean;
   private readonly ownerGithubId: string | null;
@@ -297,16 +299,30 @@ export class ControlPlaneService {
         periodStart: period.start,
         periodEnd: period.end,
       },
-      devices: devices.map((device) => ({
+      devices: await Promise.all(devices.map(async (device) => {
+        const lease = await this.store.getRootModeLease(device.id);
+        const active =
+          device.accessMode === 'full' &&
+          device.online &&
+          device.privilegeMode === 'broker' &&
+          device.adminBridgeReady === true &&
+          lease?.ownerAccountId === account.id &&
+          Date.parse(lease.expiresAt) > this.now().getTime();
+        return {
         id: device.id,
         name: device.name,
         online: device.online,
         platform: device.platform,
         accessMode: device.accessMode,
+        rootMode: {
+          active: Boolean(active),
+          expiresAt: active && lease ? lease.expiresAt : null,
+        },
         agentVersion: device.agentVersion,
         privilegeMode: device.privilegeMode,
         adminBridgeReady: device.adminBridgeReady,
         lastSeenAt: device.lastSeenAt,
+        };
       })),
       stability: {
         successRate: null,
@@ -593,6 +609,13 @@ export class ControlPlaneService {
     };
 
     await this.store.putDevice(device);
+    // A newly paired credential never inherits an earlier ROOT lease.
+    await this.store.putRootModeLease({
+      deviceId: device.id,
+      ownerAccountId: effectiveAccount.id,
+      expiresAt: new Date(0).toISOString(),
+      updatedAt: now,
+    });
     await this.store.putPairing(consumed.record);
 
     return {
@@ -719,10 +742,59 @@ export class ControlPlaneService {
       accessMode: mode,
       updatedAt,
     });
+    if (mode === 'safe') {
+      await this.store.putRootModeLease({
+        deviceId: device.id,
+        ownerAccountId: account.id,
+        expiresAt: new Date(0).toISOString(),
+        updatedAt,
+      });
+    }
     return {
       deviceId: device.id,
       accessMode: mode,
       updatedAt,
+    };
+  }
+
+  async setDeviceRootMode(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+    enabled: boolean,
+  ): Promise<{
+    deviceId: string;
+    rootMode: { active: boolean; expiresAt: string | null };
+  }> {
+    if (identity.role === 'service') {
+      throw new Error('ROOT_REQUIRES_OWNER_LOGIN');
+    }
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id) {
+      throw new Error('DEVICE_NOT_FOUND');
+    }
+    if (enabled && (
+      device.accessMode !== 'full' ||
+      !device.online ||
+      device.privilegeMode !== 'broker' ||
+      device.adminBridgeReady !== true
+    )) {
+      throw new Error('ROOT_REQUIRES_FULL_ONLINE_BROKER');
+    }
+    const now = this.now();
+    const expiresAt = enabled
+      ? new Date(now.getTime() + ControlPlaneService.ROOT_LEASE_MS).toISOString()
+      : new Date(0).toISOString();
+    await this.store.putRootModeLease({
+      deviceId,
+      ownerAccountId: account.id,
+      expiresAt,
+      updatedAt: now.toISOString(),
+    });
+    return {
+      deviceId,
+      rootMode: { active: enabled, expiresAt: enabled ? expiresAt : null },
     };
   }
 

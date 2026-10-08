@@ -241,6 +241,48 @@ async function openBillingPortal() {
   }
 }
 
+async function setDeviceRootMode(deviceId, enabled, row) {
+  const action = row.querySelector('.root-toggle');
+  const panel = row.querySelector('.root-confirm-panel');
+  const input = row.querySelector('.root-phrase');
+  const status = row.querySelector('.root-copy');
+  if (enabled && panel.hidden) {
+    panel.hidden = false;
+    input.value = '';
+    status.textContent = 'DANGER: Etkinleştirmek için ROOT DANGER yaz.';
+    input.focus();
+    return;
+  }
+  if (enabled && input.value.trim() !== 'ROOT DANGER') {
+    status.textContent = 'Onay ifadesi tam olarak ROOT DANGER olmalı.';
+    return;
+  }
+  action.disabled = true;
+  status.textContent = enabled ? 'ROOT bakım izni açılıyor…' : 'ROOT kapatılıyor…';
+  try {
+    const headers = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    };
+    if (enabled) headers['X-Nexowire-Confirm'] = 'root-danger-v1';
+    const response = await fetch('/api/v1/me/devices/root-mode', {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      body: JSON.stringify({
+        deviceId, enabled,
+        ...(enabled ? { confirmation: 'ROOT DANGER' } : {}),
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || ('HTTP ' + response.status));
+    await load();
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    action.disabled = false;
+  }
+}
+
 async function setDeviceAccessMode(deviceId, mode, row) {
   const button = row.querySelector('.access-toggle');
   const copy = row.querySelector('.access-copy');
@@ -345,6 +387,16 @@ function render(snapshot) {
           <span class="access-mode"></span>
           <button type="button" class="secondary access-toggle"></button>
           <small class="access-copy"></small>
+          <div class="root-access">
+            <span class="root-label">ROOT MODE · DANGER</span>
+            <button type="button" class="secondary root-toggle"></button>
+            <div class="root-confirm-panel" hidden>
+              <label>Etkinleştirme onayı:
+                <input class="root-phrase" maxlength="32" autocomplete="off" placeholder="ROOT DANGER">
+              </label>
+            </div>
+            <small class="root-copy"></small>
+          </div>
         </div>
         <small class="last-seen"></small>
       `;
@@ -379,6 +431,29 @@ function render(snapshot) {
         accessMode === 'full'
           ? 'Süresiz · Nexowire onayı yok · ' + bridgeState
           : 'Varsayılan güvenli mod · ' + bridgeState;
+      const rootActive = device.rootMode?.active === true;
+      const rootButton = row.querySelector('.root-toggle');
+      const rootPanel = row.querySelector('.root-confirm-panel');
+      const rootCopy = row.querySelector('.root-copy');
+      rootButton.textContent = rootActive ? 'ROOT kapat' : 'ROOT MODE aç';
+      rootButton.disabled = !rootActive && (
+        accessMode !== 'full' || !device.online ||
+        device.privilegeMode !== 'broker' || device.adminBridgeReady !== true
+      );
+      rootPanel.hidden = true;
+      rootCopy.textContent = rootActive
+        ? 'DANGER · 15 dakika sonra otomatik kapanır · ' +
+          new Date(device.rootMode.expiresAt).toLocaleTimeString('tr-TR')
+        : 'FULL + çevrimiçi Broker gerekir. OS güvenliği korunur.';
+      rootButton.addEventListener('click', () => {
+        void setDeviceRootMode(device.id, !rootActive, row);
+      });
+      if (rootActive) {
+        const expiresInMs = Date.parse(device.rootMode.expiresAt) - Date.now();
+        if (expiresInMs > 0) {
+          setTimeout(() => { void load(); }, Math.min(expiresInMs + 250, 900_000));
+        }
+      }
       accessToggle.addEventListener('click', () => {
         void setDeviceAccessMode(
           device.id,

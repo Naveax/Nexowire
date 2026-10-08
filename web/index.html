@@ -68,6 +68,14 @@
         <div><span>Audit</span><strong>Meta veri kaydı açık</strong></div>
         <div><span>Admin Bridge</span><strong>Broker · ilk kurulumda UAC</strong></div>
       </div>
+      <div class="root-mode-warning" role="note">
+        <strong>ROOT MODE · DANGER</strong>
+        <p>15 dakikalık yüksek riskli bakım yetkisi. FULL ACCESS ve çevrimiçi
+          Admin Bridge şarttır. ROOT MODE, Windows UAC'yi, OAuth'u,
+          audit'i veya cihaz kimliğini devre dışı bırakmaz.
+          Henüz ek işletim sistemi yetkisi sağlamaz; ROOT bakım yetkisi
+          gerektiren ayrıcalıklı araçlar ayrıca onaylanmalıdır.</p>
+      </div>
       <p class="local-interlock">
         GitHub OAuth, cihaz credential'ı, audit ve idempotency her iki modda da kalır.
         FULL ACCESS Windows'un UAC güvenlik sınırını taklit ederek geçmez. Bir kez kurulan

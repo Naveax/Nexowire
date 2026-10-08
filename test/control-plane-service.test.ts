@@ -428,3 +428,42 @@ test('device presence updates dashboard and ignores stale state events', async (
   assert.equal(dashboard.devices[0]?.privilegeMode, 'broker');
   assert.equal(dashboard.devices[0]?.adminBridgeReady, true);
 });
+
+test('ROOT DANGER lease needs FULL online Broker, expires at server time and SAFE revokes it', async () => {
+  let clock = new Date('2026-10-02T12:00:00.000Z');
+  const store = new MemoryControlPlaneStore();
+  const service = new ControlPlaneService(store, { now: () => clock });
+  const owner = { accountId: 'root-owner', role: 'user' } as const;
+  const other = { accountId: 'other-user', role: 'user' } as const;
+  await service.ensureAccount({ id: owner.accountId });
+  await service.ensureAccount({ id: other.accountId });
+  const challenge = await service.beginPairing(owner, 'test-pc');
+  const paired = await service.consumePairing({
+    pairingId: challenge.pairingId, token: challenge.token,
+    platform: 'win32', deviceAnchorHash: '1'.repeat(64),
+  });
+  const id = paired.device.id;
+  await assert.rejects(service.setDeviceRootMode(owner, id, true), /ROOT_REQUIRES_FULL_ONLINE_BROKER/);
+  await service.setDeviceAccessMode(owner, id, 'full');
+  await assert.rejects(service.setDeviceRootMode(owner, id, true), /ROOT_REQUIRES_FULL_ONLINE_BROKER/);
+  const record = await store.getDevice(id);
+  assert.ok(record);
+  await store.putDevice({
+    ...record, online: true, privilegeMode: 'broker', adminBridgeReady: true,
+  });
+  await assert.rejects(service.setDeviceRootMode(other, id, true), /DEVICE_NOT_FOUND/);
+  const granted = await service.setDeviceRootMode(owner, id, true);
+  assert.equal(granted.rootMode.active, true);
+  assert.equal(granted.rootMode.expiresAt, '2026-10-02T12:15:00.000Z');
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, true);
+  clock = new Date('2026-10-02T12:15:01.000Z');
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
+  await service.setDeviceRootMode(owner, id, true);
+  await service.setDeviceAccessMode(owner, id, 'safe');
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
+  await service.setDeviceAccessMode(owner, id, 'full');
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
+  await service.setDeviceRootMode(owner, id, true);
+  await service.setDeviceRootMode(owner, id, false);
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
+});
