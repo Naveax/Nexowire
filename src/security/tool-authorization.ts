@@ -24,6 +24,7 @@ export const ADMIN_MCP_TOOLS = new Set<string>([
   'device_group_delete',
   'device_alias_set',
   'device_alias_delete',
+  'windows_installer_preflight',
   'windows_installer_apply',
 ]);
 
