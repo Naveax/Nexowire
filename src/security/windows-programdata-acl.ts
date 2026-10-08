@@ -19,7 +19,10 @@ export function windowsProgramDataAclArguments(
     '*S-1-5-18:' + permission,
     '*S-1-5-32-544:' + permission,
     '/remove:g',
-    '*S-1-5-32-545',
+    '*S-1-5-32-545', // Users
+    '*S-1-5-11',     // Authenticated Users
+    '*S-1-1-0',      // Everyone
+    '*S-1-5-4',      // INTERACTIVE
   ];
 }
 
@@ -40,6 +43,49 @@ function applyAcl(target: string, directory: boolean): void {
       result.stdout.trim() ||
       'Failed to harden Windows ProgramData ACL: ' + target,
     );
+  }
+}
+
+/**
+ * Read-only integrity check AFTER a protected ACL operation.
+ * Broad /remove:g cleanup is necessary but insufficient if an unknown
+ * explicit SID remains. A user-owned file is untrusted even with a private DACL.
+ */
+export function verifyWindowsPrivateAcl(target:string):void {
+  if(process.platform!=='win32'){
+    throw new Error('Protected Windows ACL verification requires Windows.');
+  }
+  const script=String.raw`
+$ErrorActionPreference='Stop'
+$target=$env:NEXOWIRE_PROTECTED_ACL_TARGET
+$item=Get-Item -LiteralPath $target -Force -ErrorAction Stop
+if(($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0){throw 'REPARSE_POINT'}
+$acl=Get-Acl -LiteralPath $target -ErrorAction Stop
+$allowed=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
+if(-not $allowed.ContainsKey($acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value)){throw 'UNTRUSTED_OWNER'}
+$rights=[System.Security.AccessControl.FileSystemRights]
+$writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+foreach($ace in $acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){
+  if($ace.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+     ([int]$ace.FileSystemRights -band $writeMask) -ne 0 -and
+     -not $allowed.ContainsKey($ace.IdentityReference.Value)){throw 'UNTRUSTED_WRITE_ACE'}
+}
+Write-Output 'PRIVATE_ACL_VERIFIED'
+`;
+  // Never select a privileged interpreter from caller-controlled PATH/SystemRoot.
+  const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const result=spawnSync(powershell,[
+    '-NoLogo','-NoProfile','-NonInteractive',
+    '-EncodedCommand',Buffer.from(script,'utf16le').toString('base64'),
+  ],{
+    windowsHide:true,encoding:'utf8',stdio:['ignore','pipe','pipe'],
+    env:{...process.env,NEXOWIRE_PROTECTED_ACL_TARGET:target},
+    timeout:20000,
+    maxBuffer:512*1024,
+  });
+  if(result.error||result.status!==0||
+     !result.stdout.includes('PRIVATE_ACL_VERIFIED')){
+    throw new Error('PROTECTED_ACL_INTEGRITY_FAILURE: Windows protected runtime has unsafe owner or write permissions.');
   }
 }
 
@@ -70,7 +116,10 @@ export function hardenWindowsProgramDataAcl(
   }
 
   applyAcl(root, true);
+  verifyWindowsPrivateAcl(root);
   for (const entry of entries) {
-    applyAcl(path.join(root, entry.name), false);
+    const child=path.join(root,entry.name);
+    applyAcl(child, false);
+    verifyWindowsPrivateAcl(child);
   }
 }
