@@ -35,6 +35,9 @@ export type BearerAuthorization =
       role: CredentialRole;
       allowedDeviceIds?: string[];
       deviceAccessModes?: Record<string, 'safe' | 'full'>;
+      autoSelectDevices?: boolean;
+      ownerDevices?: Array<{id:string;name:string;folderId:string|null}>;
+      ownerFolders?: Array<{id:string;name:string}>;
     };
 
 export function resolveBearerAuthorization(
@@ -171,6 +174,9 @@ export async function resolveMcpAuthorization(
         role: CredentialRole;
         allowedDeviceIds?: string[];
         deviceAccessModes?: Record<string, 'safe' | 'full'>;
+        autoSelectDevices?: boolean;
+        ownerDevices?: Array<{id:string;name:string;folderId:string|null}>;
+        ownerFolders?: Array<{id:string;name:string}>;
       }
     | undefined
   >,
@@ -219,5 +225,8 @@ export async function resolveMcpAuthorization(
           },
         }
       : {}),
+    autoSelectDevices: remote.autoSelectDevices === true,
+    ownerDevices: remote.ownerDevices?.map(item => ({...item})) ?? [],
+    ownerFolders: remote.ownerFolders?.map(item => ({...item})) ?? [],
   };
 }

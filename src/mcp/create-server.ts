@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
@@ -235,21 +236,66 @@ async function resolveDevice(
     devices.filter((device) => device.online).map((device) => device.id),
   );
 
+  const owner = ctx.toolAuthorization?.kind === 'control-plane'
+    ? ctx.toolAuthorization
+    : undefined;
+  const ownerAuto = owner?.autoSelectDevices === true;
+  const ownerIds = owner?.allowedDeviceIds ?? [];
+  const ownerDirectory = owner?.ownerDevices ?? [];
+  const ownerFolders = owner?.ownerFolders ?? [];
+  const nameKey = (name: string) => name.normalize('NFKC').trim().toLowerCase();
+
   if (requested) {
     if (onlineIds.has(requested)) return requested;
 
     const aliased = await ctx.aliases?.resolve(requested);
     if (aliased && onlineIds.has(aliased)) return aliased;
 
+    if (owner) {
+      const safeDirectory = ownerDirectory.filter(item => ownerIds.includes(item.id));
+      if (requested.startsWith('folder:')) {
+        if (!ownerAuto) {
+          throw new McpTargetAuthorizationError(
+            'DEVICE_SELECTION_REQUIRED: Folder-only routing requires owner-approved AUTO access.',
+          );
+        }
+        // Folder name comes from user-provided device_id, but membership
+        // and the AUTO policy are provided by the authenticated owner account.
+        const folderName = requested.slice('folder:'.length).trim();
+        const matchingFolders = ownerFolders.filter(item => nameKey(item.name) === nameKey(folderName));
+        if (folderName && matchingFolders.length === 1) {
+          const selected = resolveOwnerDeviceTarget(
+            safeDirectory.map(item => ({...item,online:onlineIds.has(item.id)})),
+            ownerFolders,
+            {folderId:matchingFolders[0]!.id},
+            true,
+          );
+          if (selected.status === 'selected' && onlineIds.has(selected.device.id)) {
+            return selected.device.id;
+          }
+        }
+        throw new McpTargetAuthorizationError(
+          'DEVICE_SELECTION_REQUIRED: No unique online authorized device exists in the requested folder.',
+        );
+      }
+      const nameMatches = safeDirectory.filter(item => nameKey(item.name) === nameKey(requested));
+      if (nameMatches.length === 1 && onlineIds.has(nameMatches[0]!.id)) {
+        return nameMatches[0]!.id;
+      }
+    }
+
     throw new McpTargetAuthorizationError(
-      'Requested Nexowire device is offline, unknown, or outside this credential scope.',
+      'Requested Nexowire device is offline, ambiguous, unknown, or outside this credential scope.',
     );
   }
 
   const ids = [...onlineIds];
-  // Never infer device consent from the count of online machines.
-  // A panel-approved owner Auto policy must be bound to this MCP identity
-  // before implicit selection can be allowed. Until then require device_id.
+  // A bound, freshly verified control-plane OAuth owner may opt into AUTO.
+  // Require exactly ONE registered owner device, not merely one online device;
+  // an offline second device must not accidentally authorize a guess.
+  if (ownerAuto && ownerIds.length === 1 && onlineIds.has(ownerIds[0]!)) {
+    return ownerIds[0]!;
+  }
   if (ids.length === 0) {
     throw new McpTargetAuthorizationError(
       hasMcpTargetRestrictions(ctx.toolAuthorization)
@@ -259,7 +305,7 @@ async function resolveDevice(
   }
 
   throw new McpTargetAuthorizationError(
-    'DEVICE_SELECTION_REQUIRED: Select an exact Nexowire device in the user request and pass device_id or an authorized alias. Device count is not permission.',
+    'DEVICE_SELECTION_REQUIRED: Call devices_list to show eligible devices and folders, then ask the user to pick an exact device. Device count is not permission.',
   );
 }
 
@@ -780,18 +826,33 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List Nexowire devices',
       description:
-        'List known Nexowire devices with online state, capabilities, aliases, last-seen metadata, and available first-party routes.',
+        'List permitted Nexowire devices with online state and routes. Hosted OAuth owners also see their folders (including empty folders), current AUTO selection policy and exact names for explicit selection.',
       inputSchema: {
         online_only: z.boolean().optional(),
       },
     },
     async ({ online_only }) => {
       const devices = await routingEntries(ctx);
+      const visible = online_only === true
+        ? devices.filter(device => device.online)
+        : devices;
+      const hostedOwner = ctx.toolAuthorization?.kind === 'control-plane'
+        ? ctx.toolAuthorization
+        : undefined;
+      const visibleIds = new Set(visible.map(device => device.id));
+      const ownerDirectory = hostedOwner?.ownerDevices ?? [];
       return toolResult({
-        devices:
-          online_only === true
-            ? devices.filter((device) => device.online)
-            : devices,
+        devices: visible,
+        ...(hostedOwner ? {
+          autoSelectionEnabled: hostedOwner.autoSelectDevices === true,
+          folders: (hostedOwner.ownerFolders ?? []).map(folder => ({
+            id:folder.id,
+            name:folder.name,
+            deviceIds:ownerDirectory.filter(device =>
+              device.folderId === folder.id && visibleIds.has(device.id),
+            ).map(device => device.id),
+          })),
+        } : {}),
       });
     },
   );
