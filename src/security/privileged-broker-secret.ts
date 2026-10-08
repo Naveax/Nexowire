@@ -57,6 +57,16 @@ async function acquireLock(lockFile: string): Promise<FileHandle> {
   );
 }
 
+/** Read-only: never creates a token or changes the protected secret file. */
+export async function readExistingPrivilegedBrokerToken(
+  options: PrivilegedBrokerSecretOptions = {},
+): Promise<string> {
+  if (process.platform !== 'win32') {
+    throw new Error('Protected broker token inspection requires Windows DPAPI.');
+  }
+  return await readSecret(options.file ?? defaultPrivilegedBrokerSecretFile());
+}
+
 export async function loadOrCreatePrivilegedBrokerToken(
   options: PrivilegedBrokerSecretOptions = {},
 ): Promise<string> {

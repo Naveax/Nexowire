@@ -4,10 +4,13 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
+import { PrivilegedBrokerClient } from './privileged-broker-client.js';
+import { NEXOWIRE_VERSION } from '../version.js';
 import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
 import {
   defaultPrivilegedBrokerSecretFile,
   loadOrCreatePrivilegedBrokerToken,
+  readExistingPrivilegedBrokerToken,
 } from '../security/privileged-broker-secret.js';
 
 const TASK_NAME_DEFAULT = 'Nexowire Privileged Broker';
@@ -470,6 +473,61 @@ if ($null -ne $task) {
   };
 }
 
+export interface PrivilegedBrokerHealthReport {
+  expectedVersion: string;
+  version: string | null;
+  reachable: boolean;
+  elevated: boolean;
+  ready: boolean;
+  status: 'READY' | 'SECRET_UNAVAILABLE' | 'HEALTH_UNAVAILABLE' | 'NOT_ELEVATED' | 'VERSION_MISMATCH';
+}
+
+/** Read-only authenticated health check; secret bytes are never printed. */
+export async function probePrivilegedBrokerHealth(options: {
+  env?: NodeJS.ProcessEnv;
+  readToken?: () => Promise<string>;
+} = {}): Promise<PrivilegedBrokerHealthReport> {
+  const env = options.env ?? process.env;
+  if (env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN?.trim() ||
+      env.NEXOWIRE_PRIVILEGED_BROKER_TOKENS?.trim()) {
+    throw new Error('BROKER_PROBE_REQUIRES_PROTECTED_SECRET');
+  }
+  const baseline = {
+    expectedVersion: NEXOWIRE_VERSION,
+    version: null,
+    reachable: false,
+    elevated: false,
+    ready: false,
+  };
+  let token: string;
+  try {
+    token = await (options.readToken ?? (() => readExistingPrivilegedBrokerToken({
+      ...(env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim()
+        ? {file: env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE.trim()}
+        : {}),
+    })))();
+  } catch {
+    return {...baseline, status: 'SECRET_UNAVAILABLE'};
+  }
+  const broker = new PrivilegedBrokerClient({
+    url: env.NEXOWIRE_PRIVILEGED_BROKER_URL?.trim() || 'http://127.0.0.1:43112',
+    token,
+    timeoutMs: 5000,
+  });
+  const result = await broker.probe();
+  const status = !result.reachable ? 'HEALTH_UNAVAILABLE'
+    : !result.elevated ? 'NOT_ELEVATED'
+    : result.version !== NEXOWIRE_VERSION ? 'VERSION_MISMATCH' : 'READY';
+  return {
+    expectedVersion: NEXOWIRE_VERSION,
+    version: result.version,
+    reachable: result.reachable,
+    elevated: result.elevated,
+    ready: status === 'READY',
+    status,
+  };
+}
+
 export async function runPrivilegedBrokerLifecycleCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -485,6 +543,9 @@ export async function runPrivilegedBrokerLifecycleCommand(
     case 'status':
       result = await privilegedBrokerTaskStatus(options);
       break;
+    case 'probe':
+      result = await probePrivilegedBrokerHealth({env});
+      break;
     case 'start':
       result = await startPrivilegedBrokerTask(options);
       break;
@@ -496,9 +557,15 @@ export async function runPrivilegedBrokerLifecycleCommand(
       break;
     default:
       throw new Error(
-        'Usage: nexowire privileged-broker [run|install|status|start|stop|uninstall]',
+        'Usage: nexowire privileged-broker [run|install|status|probe|start|stop|uninstall]',
       );
   }
 
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+  // Ensure scripts cannot treat a failed authentication, missing elevation,
+  // or mismatched Broker version as a successful readiness check.
+  if (command === 'probe' &&
+      (result as PrivilegedBrokerHealthReport).ready !== true) {
+    process.exitCode = 2;
+  }
 }

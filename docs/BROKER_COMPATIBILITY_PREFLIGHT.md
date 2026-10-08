@@ -13,7 +13,7 @@ Do not confuse the 15-minute **ROOT MODE** server lease with verified Windows el
 | Unauthenticated `GET /health` | HTTP 404, `NOT_FOUND` | HTTP 401, `UNAUTHORIZED` |
 | Unauthenticated `GET /execute` | HTTP 404, `NOT_FOUND` | HTTP 401, `UNAUTHORIZED` |
 | Legacy Stack package | **v1.0.0** | Not installed at legacy location |
-| Legacy Stack Broker code | Only `/execute`; **no `/health`** | Current Broker understands `/health` |
+| Legacy Stack Broker code | Only `/execute`; **no `/health`** | Broker supports `/health` |
 | Broker task | Ready, last result 1 | Running |
 | Stack task | Running (Highest) | Not used |
 
@@ -28,6 +28,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\diagnose-broke
 ```
 
 The tool reports JSON and never reads Bearer tokens or protected launchers, performs elevated mutation, or restarts software. Classification `ROUTE_COMPATIBLE_AUTH_REQUIRED` means **only** that the HTTP route exists. It deliberately does not infer elevation, correct secrets, or owner OAuth readiness.
+
+### Authenticated, read-only probe (new CLI)
+
+Once a current CLI is installed for the **same signed-in Windows user** as the Native Agent, run:
+
+```powershell
+nexowire privileged-broker probe
+```
+
+The command reads only the **existing current-user DPAPI-protected token** (it does not create a missing token), calls loopback `GET /health` with an in-memory Bearer header, and outputs only `expectedVersion`, `version`, `reachable`, `elevated`, `ready`, and a status classification. The token is never logged. Exit status is `2` unless the authenticated broker is reachable, elevated, and matches the CLI version.
+
+**Live work-pc finding:** an authenticated probe with a v1.0.5 CLI confirmed Broker `version=1.0.4`, `reachable=true`, `elevated=true`. This is a **VERSION_MISMATCH** against expected v1.0.5, despite work-pc's current Native Agent displaying Admin Bridge ready. Do not misrepresent this as a failed privileged probe: its authentication and elevation passed; it is the strict release match that failed. The Native Agent's existing `adminBridgeReady` flag does not compare package versions. Naveax remains confirmed missing `/health` and cannot be marked ready until a real Broker switchover and authenticated probe pass.
 
 ### Protected switchover acceptance (not yet performed)
 
