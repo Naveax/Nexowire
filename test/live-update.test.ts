@@ -186,6 +186,9 @@ test('automatic Windows task is hourly, indefinite, user-limited and singleton',
   assert.match(script, /\$hour\.Repetition\.Duration=\$null/);
   assert.match(script, /-MultipleInstances IgnoreNew/);
   assert.match(script, /-RunLevel Limited/);
+  assert.match(script, /\$expectedSid=\[Security\.Principal\.WindowsIdentity\]::GetCurrent\(\)\.User\.Value/);
+  assert.match(script, /\$actualSid=/);
+  assert.doesNotMatch(script, /\$task\.Principal\.UserId -ne \$user/);
   assert.match(script, /Start-ScheduledTask/);
   assert.doesNotMatch(script, /ServiceAccount|RunLevel Highest|RunLevel SYSTEM/i);
   const launcher = renderAutoUpdateLauncher('C:\\Runtime\\node.exe', 'C:\\Runtime\\cli.js');
