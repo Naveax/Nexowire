@@ -20,7 +20,8 @@ import {
   isPrivilegedBrokerCapability,
 } from '../src/security/privilege.js';
 import { capabilitiesForPlatform } from '../src/protocol/capabilities.js';
-import { isMcpToolAuthorized } from '../src/security/tool-authorization.js';
+import { ADMIN_MCP_TOOLS } from '../src/security/tool-authorization.js';
+import { isReadOnlyCapability } from '../src/protocol/capabilities.js';
 
 const sha256 = 'a'.repeat(64);
 
@@ -346,4 +347,12 @@ test('readiness check cannot start unapproved installer or mutate protected jobs
   } finally {
     await fs.rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
   }
+});
+
+
+test('installer preflight uses admin-scoped MCP permission and read-only audit classification', () => {
+  assert.equal(ADMIN_MCP_TOOLS.has('windows_installer_preflight'), true);
+  assert.equal(ADMIN_MCP_TOOLS.has('windows_installer_apply'), true);
+  assert.equal(isReadOnlyCapability('windows.installer.preflight'), true);
+  assert.equal(isReadOnlyCapability('windows.installer.apply'), false);
 });

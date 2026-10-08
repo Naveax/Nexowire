@@ -164,6 +164,7 @@ export const READ_ONLY_CAPABILITIES = new Set<string>([
   'windows.firewall.rules',
   'windows.environment.list',
   'windows.environment.read',
+  'windows.installer.preflight',
   'windows.installer.status',
   'windows.window.list',
   'windows.screenshot',
