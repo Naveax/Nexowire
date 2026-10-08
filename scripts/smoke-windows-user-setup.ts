@@ -202,7 +202,7 @@ async function main(): Promise<void> {
     // The setup smoke must not register a real task on the host.
     smokeSetup = smokeSetup.replace(
       '& $autoNode $autoCli update auto install | Out-Null;',
-      "Write-Output 'hourly-updater-simulated';",
+      "$global:LASTEXITCODE=0; Write-Output 'hourly-updater-simulated';",
     );
     smokeSetup = smokeSetup.replace(
       /^pause$/m,
