@@ -278,9 +278,9 @@ export async function privilegedBrokerTaskStatus(
  * stays Interactive/Highest under its existing Windows user; it does not
  * grant SYSTEM rights or elevate arbitrary capabilities.
  */
-export const PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS = String.raw\`
+export const PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS = String.raw`
 $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-\`;
+`;
 
 export async function installPrivilegedBrokerTask(
   options: PrivilegedBrokerTaskOptions = {},
