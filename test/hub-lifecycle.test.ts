@@ -8,6 +8,7 @@ import {
   shouldRestartHubAfterInstall,
   legacyStackSupervisorBlocksHubLifecycle,
   inspectLegacyStackHubSupervisor,
+  hubHandoffBlockers,
 } from '../src/hub/hub-lifecycle.js';
 import {
   buildHubBootLauncher,
@@ -31,13 +32,47 @@ test('running legacy Stack supervisor blocks independent Hub lifecycle setup', (
   }
 });
 
+test('hub handoff refuses an unowned listener even when the Stack task is not Running',()=>{
+  assert.deepEqual(hubHandoffBlockers({
+    legacyStackTaskState:'Ready',
+    standaloneHubTaskState:null,
+    listenerPid:8324,
+  }),['UNOWNED_HUB_LISTENER']);
+  assert.deepEqual(hubHandoffBlockers({
+    legacyStackTaskState:'Running',
+    standaloneHubTaskState:null,
+    listenerPid:8324,
+  }),['LEGACY_STACK_SUPERVISOR_RUNNING','UNOWNED_HUB_LISTENER']);
+  assert.deepEqual(hubHandoffBlockers({
+    legacyStackTaskState:'Running',
+    standaloneHubTaskState:'Running',
+    listenerPid:8324,
+  }),['LEGACY_STACK_SUPERVISOR_RUNNING']);
+  assert.deepEqual(hubHandoffBlockers({
+    legacyStackTaskState:null,
+    standaloneHubTaskState:'Running',
+    listenerPid:1201,
+  }),[]);
+  assert.deepEqual(hubHandoffBlockers({
+    legacyStackTaskState:null,
+    standaloneHubTaskState:null,
+    listenerPid:null,
+  }),[]);
+});
+
 test('read-only legacy Stack preflight reports observed task state on Windows',{
   skip:process.platform!=='win32',
 },async()=>{
   const status=await inspectLegacyStackHubSupervisor();
   assert.equal(status.mode,'inspection-only');
-  assert.equal(status.standaloneHubLifecycleBlocked,
-    legacyStackSupervisorBlocksHubLifecycle(status.legacyStackTaskState));
+  assert.equal(status.standaloneHubLifecycleBlocked,status.blockers.length>0);
+  assert.deepEqual(status.blockers,hubHandoffBlockers({
+    legacyStackTaskState:status.legacyStackTaskState,
+    standaloneHubTaskState:status.standaloneHubTaskState,
+    listenerPid:status.hubListenerPid,
+  }));
+  assert.equal(status.safeToCutover,false);
+  assert.ok(Number.isInteger(status.hubPort) && status.hubPort>0);
 });
 
 test('Hub launcher persists only non-secret self-host configuration', () => {
