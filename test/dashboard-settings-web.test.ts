@@ -28,8 +28,9 @@ test('dashboard persists FULL and supports SAFE without untrusted confirmation p
 });
 
 test('ROOT DANGER displays exact approval, 15 minute scope and bridge readiness separately', () => {
-  assert.match(html, /ROOT MODE · DANGER/);
-  assert.match(html, /15 dakikalık/);
+  assert.match(html, /class="policy-tag root">ROOT<\/span>/);
+  assert.match(html, /FULL ve çevrimiçi cihaz gerekir/);
+  assert.match(html, /15 dakika/);
   assert.match(html, /GitHub OAuth/);
   assert.match(app, /\/api\/v1\/me\/devices\/root-mode/);
   assert.match(app, /root-danger-v1/);

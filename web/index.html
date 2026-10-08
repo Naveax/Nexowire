@@ -99,13 +99,13 @@
       <details class="utility-panel" id="owner-access-panel">
         <summary><span class="utility-icon">◈</span><span><strong>Güvenlik ve yetkiler</strong><small>SAFE, FULL, ROOT ve Windows UAC ayrımı</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
         <div class="utility-content">
-          <div class="policy-steps">
-            <p><strong>SAFE</strong> Varsayılan, onaylı ve kısıtlı erişim.</p>
-            <p><strong>FULL</strong> Kalıcı Full Access. SAFE moda dönülene kadar devam eder; desteklenen kontrol işlemlerinde Nexowire onay tekrarını azaltır.</p>
-            <p><strong>ROOT MODE · DANGER</strong> 15 dakikalık bakım izni. Etkinleştirme için FULL ve çevrimiçi cihaz gerekir. Yükseltilmiş işlemler için ayrıca hazır Admin Bridge ve makine onayı şarttır.</p>
+          <div class="policy-steps" role="list" aria-label="Erişim düzeyleri">
+            <div class="policy-line" role="listitem"><span class="policy-tag safe">SAFE</span><span>Varsayılan erişim. Riskli işlemler onay gerektirir.</span></div>
+            <div class="policy-line" role="listitem"><span class="policy-tag full">FULL</span><span>Genişletilmiş kontrol. SAFE'e dönene kadar etkin.</span></div>
+            <div class="policy-line" role="listitem"><span class="policy-tag root">ROOT</span><span>15 dakika · FULL ve çevrimiçi cihaz gerekir. Yönetici işlemleri için ayrıca Admin Bridge ve Windows onayı şarttır.</span></div>
           </div>
           <div class="auto-selection-control">
-            <div class="auto-selection-heading"><span><strong>Otomatik cihaz seçimi</strong><small>Varsayılan kapalı. Bu ayar kontrol panelinin hedef çözümlemesini yönetir; AI araç yönlendirmesine entegrasyon ayrıdır.</small></span><button type="button" class="secondary" id="auto-toggle" disabled>Kontrol ediliyor…</button></div>
+            <div class="auto-selection-heading"><span><strong>Otomatik cihaz seçimi</strong><small>Varsayılan kapalı · Yalnız kontrol paneli hedef seçiminde geçerli.</small></span><button type="button" class="secondary" id="auto-toggle" disabled>Kontrol ediliyor…</button></div>
             <p id="auto-status" role="status" aria-live="polite" class="subtle"></p>
             <div id="auto-confirm-panel" class="auto-confirm-panel" hidden>
               <p class="subtle">Tek uygun cihaz varsa otomatik seçime izin verilir. Birden fazla cihaz varsa yine seçim istenir. Windows ve Broker izinleri değişmez.</p>
@@ -114,7 +114,7 @@
               <div class="auto-actions"><button type="button" id="auto-approve" class="primary">Onayla ve aç</button><button type="button" id="auto-cancel" class="secondary">Vazgeç</button></div>
             </div>
           </div>
-          <p class="interlock">GitHub OAuth, cihaz kimliği, audit ve Windows UAC korunur. ROOT izni sınırsız SYSTEM erişimi vermez. Admin Bridge ilk kurulumunda Windows yönetici onayı gerekebilir.</p>
+          <p class="interlock">GitHub OAuth, denetim kayıtları ve Windows UAC korunur. ROOT izni işletim sistemi yetkilerini artırmaz; AI araçları için ayrıca açık cihaz seçimi gerekir.</p>
         </div>
       </details>
       <details class="utility-panel" id="view-settings">

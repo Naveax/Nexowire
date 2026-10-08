@@ -17,6 +17,15 @@ test('PC Settings uses an actual reachable button with unique per-device panel',
   assert.match(css, /\.pc-settings\.is-open \.pc-settings-panel/);
 });
 
+test('PC Settings stays below the badges and is left aligned on desktop and mobile',()=>{
+  assert.match(app, /root-state-chip[^\n]+[\s\S]*?'\<\/div\>',\s*' <button type="button" class="pc-settings-button"/);
+  assert.match(css, /\.pc-settings \.pc-settings-button \{ margin:0; width:auto;/);
+  assert.match(css, /@media \(max-width:620px\)[\s\S]*?\.pc-settings \.pc-settings-button \{ width:auto;/);
+  assert.match(html, /class="policy-steps" role="list"/);
+  assert.match(html, /class="policy-line" role="listitem"/);
+  assert.match(css, /\.auto-selection-heading \{ align-items:flex-start; flex-direction:column;/);
+});
+
 test('FULL and ROOT are shown independently beside Agent/Bridge and Core is not represented as real privilege',()=>{
   assert.match(app, /Full Access açık/);
   assert.match(app, /ROOT kapalı/);
