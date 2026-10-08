@@ -284,6 +284,51 @@ export async function hubLifecycleStatus(
   });
 }
 
+/** Never allow a second lifecycle task to compete with a running legacy Stack supervisor. */
+export function legacyStackSupervisorBlocksHubLifecycle(
+  taskState: string | null | undefined,
+): boolean {
+  return taskState?.trim().toLowerCase() === 'running';
+}
+
+/** Read-only Windows task inventory; neither starts nor modifies a task. */
+export async function inspectLegacyStackHubSupervisor(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{
+  legacyStackTaskState: string | null;
+  standaloneHubLifecycleBlocked: boolean;
+  mode: 'inspection-only';
+}> {
+  assertWindows();
+  const found = await runPowerShellJson<{state:string|null}>(
+    [
+      "$ErrorActionPreference='Stop'",
+      "$task=Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq 'Nexowire Stack' -and $_.TaskPath -eq '\\' } | Select-Object -First 1",
+      "$state=if($null -eq $task){$null}else{[string]$task.State}",
+      '[pscustomobject]@{state=$state} | ConvertTo-Json -Compress',
+    ].join('\n'),
+    env,
+  );
+  return {
+    legacyStackTaskState: found.state,
+    standaloneHubLifecycleBlocked: legacyStackSupervisorBlocksHubLifecycle(found.state),
+    mode: 'inspection-only',
+  };
+}
+
+export async function assertNoLegacyStackSupervisor(
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const status = await inspectLegacyStackHubSupervisor(env);
+  if (status.standaloneHubLifecycleBlocked) {
+    throw new Error(
+      'LEGACY_STACK_SUPERVISOR_CONFLICT: The running Nexowire Stack supervises its own Hub. ' +
+      'A second Hub task could bind the same port or be replaced by legacy code. ' +
+      'Use an owner-approved, reversible supervisor migration; no tasks were changed.',
+    );
+  }
+}
+
 async function writeManifest(options: HubLifecycleOptions): Promise<void> {
   const env = persistedHubEnvironment(options.env ?? process.env);
   await fs.mkdir(rootDir(options), { recursive: true, mode: 0o700 });
@@ -308,6 +353,7 @@ export async function installHubLifecycle(
 ): Promise<HubLifecycleStatus> {
   assertWindows();
   persistedHubEnvironment(options.env ?? process.env);
+  await assertNoLegacyStackSupervisor(options.env ?? process.env);
   const root = rootDir(options);
   const launcher = launcherPath(options);
   const nextLauncher = buildHubLauncher(options);
@@ -421,6 +467,9 @@ async function controlHub(
   options: HubLifecycleOptions,
 ): Promise<HubLifecycleStatus> {
   assertWindows();
+  if (action !== 'stop') {
+    await assertNoLegacyStackSupervisor(options.env ?? process.env);
+  }
   const commands =
     action === 'restart'
       ? [
@@ -500,6 +549,9 @@ export async function runHubLifecycleCommand(
     case 'status':
       result = await hubLifecycleStatus(options);
       break;
+    case 'preflight':
+      result = await inspectLegacyStackHubSupervisor(env);
+      break;
     case 'start':
       result = await startHubLifecycle(options);
       break;
@@ -514,7 +566,7 @@ export async function runHubLifecycleCommand(
       break;
     default:
       throw new Error(
-        'Usage: nexowire hub [install|status|start|stop|restart|uninstall]',
+        'Usage: nexowire hub [preflight|install|status|start|stop|restart|uninstall]',
       );
   }
 

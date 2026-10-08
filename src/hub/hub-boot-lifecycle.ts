@@ -12,6 +12,7 @@ import {
 } from '../security/protected-secret-files.js';
 import {
   persistedHubEnvironment,
+  assertNoLegacyStackSupervisor,
   type HubLifecycleOptions,
 } from './hub-lifecycle.js';
 
@@ -430,6 +431,9 @@ export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
   assertElevated();
+  // Fail before reading/writing protected DPAPI secrets or touching tasks:
+  // a running legacy Stack would respawn its old Hub on the same port.
+  await assertNoLegacyStackSupervisor(options.env ?? process.env);
 
   const currentLauncher =
     currentUserHubLauncher(options);

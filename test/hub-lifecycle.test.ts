@@ -1,15 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {
   buildHubLauncher,
   persistedHubEnvironment,
   planHubInstall,
   shouldRestartHubAfterInstall,
+  legacyStackSupervisorBlocksHubLifecycle,
+  inspectLegacyStackHubSupervisor,
 } from '../src/hub/hub-lifecycle.js';
 import {
   buildHubBootLauncher,
   parsePersistedHubLauncherEnvironment,
 } from '../src/hub/hub-boot-lifecycle.js';
+
+test('boot-install fails before privileged secret writes when a legacy Stack supervisor is active',()=>{
+  const source=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const begin=source.indexOf('export async function installHubBootLifecycle(');
+  const guard=source.indexOf('await assertNoLegacyStackSupervisor(',begin);
+  const protectedWrite=source.indexOf('writeProtectedSecretFile(',begin);
+  assert.ok(begin>=0 && guard>begin && protectedWrite>guard);
+});
+
+test('running legacy Stack supervisor blocks independent Hub lifecycle setup', () => {
+  assert.equal(legacyStackSupervisorBlocksHubLifecycle('Running'), true);
+  assert.equal(legacyStackSupervisorBlocksHubLifecycle('running'), true);
+  assert.equal(legacyStackSupervisorBlocksHubLifecycle(' Running '), true);
+  for(const state of ['Ready','Disabled','Queued','not-installed',null,undefined]) {
+    assert.equal(legacyStackSupervisorBlocksHubLifecycle(state),false);
+  }
+});
+
+test('read-only legacy Stack preflight reports observed task state on Windows',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const status=await inspectLegacyStackHubSupervisor();
+  assert.equal(status.mode,'inspection-only');
+  assert.equal(status.standaloneHubLifecycleBlocked,
+    legacyStackSupervisorBlocksHubLifecycle(status.legacyStackTaskState));
+});
 
 test('Hub launcher persists only non-secret self-host configuration', () => {
   const env = {
