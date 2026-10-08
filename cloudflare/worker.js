@@ -673,7 +673,13 @@ export default {
         });
       }
 
-      const devices = await store.listDevices(account.id);
+      const [devices, folders, assignments, autoSelectDevices] = await Promise.all([
+        store.listDevices(account.id),
+        store.listDeviceFolders(account.id),
+        store.listDeviceFolderAssignments(account.id),
+        store.getAutoDeviceSelection(account.id),
+      ]);
+      const folderByDevice = new Map(assignments.map(item => [item.deviceId, item.folderId]));
 
       return Response.json({
         authenticated: true,
@@ -689,6 +695,9 @@ export default {
             device.accessMode,
           ]),
         ),
+        autoSelectDevices,
+        ownerDevices: devices.map(({id, name}) => ({id, name, folderId: folderByDevice.get(id) ?? null})),
+        ownerFolders: folders.map(({id, name}) => ({id, name})),
       });
     }
 

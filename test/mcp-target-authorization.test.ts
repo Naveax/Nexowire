@@ -315,3 +315,125 @@ test('deterministic route scopes grant only the currently selected route target'
     },
   );
 });
+
+test('owner AUTO is denied by default even when the only provisioned device is online', async () => {
+  await withScopedClient({
+    kind:'control-plane',scope:'mcp',accountId:'owner-1',role:'user',
+    allowedDeviceIds:['desktop'],autoSelectDevices:false,
+    ownerDevices:[{id:'desktop',name:'Naveax',folderId:null}],ownerFolders:[],
+  },async client=>{
+    const denied=await client.callTool({name:'machine_snapshot',arguments:{}});
+    assert.equal(denied.isError,true);
+    assert.equal((denied.structuredContent as {error?:{code:string}}).error?.code,'MCP_TARGET_NOT_AUTHORIZED');
+    const named=await client.callTool({name:'machine_snapshot',arguments:{device_id:'Naveax'}});
+    assert.equal((named.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'desktop');
+  });
+});
+
+test('fresh owner-approved AUTO selects only the single provisioned device',async()=>{
+  await withScopedClient({
+    kind:'control-plane',scope:'mcp',accountId:'owner-1',role:'user',
+    allowedDeviceIds:['desktop'],autoSelectDevices:true,
+    ownerDevices:[{id:'desktop',name:'Naveax',folderId:'f1'}],
+    ownerFolders:[{id:'f1',name:'Naveax'}],
+  },async client=>{
+    const directory=await client.callTool({name:'devices_list',arguments:{}});
+    assert.equal((directory.structuredContent as {autoSelectionEnabled?:boolean}).autoSelectionEnabled,true);
+    assert.deepEqual((directory.structuredContent as {folders?:unknown[]}).folders,[{id:'f1',name:'Naveax',deviceIds:['desktop']}]);
+    const selected=await client.callTool({name:'machine_snapshot',arguments:{}});
+    assert.equal((selected.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'desktop');
+    const folderSelected=await client.callTool({name:'machine_snapshot',arguments:{device_id:'folder:Naveax'}});
+    assert.equal((folderSelected.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'desktop');
+    const foreign=await client.callTool({name:'machine_snapshot',arguments:{device_id:'folder:Foreign'}});
+    assert.equal(foreign.isError,true);
+    assert.equal((foreign.structuredContent as {error?:{code:string}}).error?.code,'MCP_TARGET_NOT_AUTHORIZED');
+  });
+});
+
+test('owner AUTO never guesses with two registered devices; named single-device folder resolves',async()=>{
+  const auth: BearerAuthorization={
+    kind:'control-plane',scope:'mcp',accountId:'owner-1',role:'user',
+    allowedDeviceIds:['desktop','laptop'],autoSelectDevices:true,
+    ownerDevices:[
+      {id:'desktop',name:'Naveax',folderId:'f1'},
+      {id:'laptop',name:'work-pc',folderId:'f2'},
+    ],
+    ownerFolders:[{id:'f1',name:'Naveax'},{id:'f2',name:'Work'}],
+  };
+  await withScopedClient(auth,async client=>{
+    const noTarget=await client.callTool({name:'machine_snapshot',arguments:{}});
+    assert.equal(noTarget.isError,true);
+    const folder=await client.callTool({name:'machine_snapshot',arguments:{device_id:'folder:Work'}});
+    assert.equal((folder.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'laptop');
+    const explicit=await client.callTool({name:'machine_snapshot',arguments:{device_id:'NAVEAX'}});
+    assert.equal((explicit.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'desktop');
+  });
+});
+
+test('folder-only selection remains denied when AUTO is off, including a unique folder',async()=>{
+  await withScopedClient({
+    kind:'control-plane',scope:'mcp',accountId:'owner-1',role:'user',
+    allowedDeviceIds:['desktop','laptop'],autoSelectDevices:false,
+    ownerDevices:[
+      {id:'desktop',name:'Naveax',folderId:'f1'},
+      {id:'laptop',name:'work-pc',folderId:'f2'},
+    ],
+    ownerFolders:[{id:'f1',name:'Naveax'},{id:'f2',name:'Work'}],
+  },async client=>{
+    const denied=await client.callTool({name:'machine_snapshot',arguments:{device_id:'folder:Work'}});
+    assert.equal(denied.isError,true);
+    const explicit=await client.callTool({name:'machine_snapshot',arguments:{device_id:'work-pc'}});
+    assert.equal((explicit.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'laptop');
+  });
+});
+
+test('ambiguous folder names, foreign devices and unexpected name collisions fail closed',async()=>{
+  await withScopedClient({
+    kind:'control-plane',scope:'mcp',accountId:'owner-1',role:'user',
+    allowedDeviceIds:['desktop','laptop'],autoSelectDevices:true,
+    ownerDevices:[
+      {id:'desktop',name:'Same',folderId:'f1'},
+      {id:'laptop',name:'same',folderId:'f2'},
+      {id:'foreign-device',name:'foreign',folderId:'f1'},
+    ],
+    ownerFolders:[{id:'f1',name:'Maxi'},{id:'f2',name:'maxi'}],
+  },async client=>{
+    for(const identifier of ['Same','folder:Maxi','foreign','folder:Unknown']){
+      const denied=await client.callTool({name:'machine_snapshot',arguments:{device_id:identifier}});
+      assert.equal(denied.isError,true,identifier);
+      assert.equal((denied.structuredContent as {error?:{code:string}}).error?.code,
+        'MCP_TARGET_NOT_AUTHORIZED',identifier);
+    }
+  });
+});
+
+test('hosted OAuth devices_list includes account-owned empty folders without leaking foreign devices',async()=>{
+  await withScopedClient({
+    kind:'control-plane',scope:'mcp',accountId:'owner-1',role:'user',
+    allowedDeviceIds:['desktop','laptop'],autoSelectDevices:true,
+    ownerDevices:[
+      {id:'desktop',name:'Naveax',folderId:'f1'},
+      {id:'laptop',name:'work-pc',folderId:'f2'},
+      {id:'foreign-device',name:'Other',folderId:'f1'},
+    ],
+    ownerFolders:[
+      {id:'f1',name:'Naveax'},
+      {id:'f2',name:'Work'},
+      {id:'empty',name:'Empty'},
+    ],
+  },async client=>{
+    const listed=await client.callTool({name:'devices_list',arguments:{}});
+    assert.equal((listed.structuredContent as {autoSelectionEnabled?:boolean}).autoSelectionEnabled,true);
+    assert.deepEqual((listed.structuredContent as {folders?:unknown[]}).folders,[
+      {id:'f1',name:'Naveax',deviceIds:['desktop']},
+      {id:'f2',name:'Work',deviceIds:['laptop']},
+      {id:'empty',name:'Empty',deviceIds:[]},
+    ]);
+    const online=await client.callTool({name:'devices_list',arguments:{online_only:true}});
+    assert.deepEqual((online.structuredContent as {folders?:unknown[]}).folders,[
+      {id:'f1',name:'Naveax',deviceIds:['desktop']},
+      {id:'f2',name:'Work',deviceIds:['laptop']},
+      {id:'empty',name:'Empty',deviceIds:[]},
+    ]);
+  });
+});

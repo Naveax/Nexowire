@@ -6,6 +6,9 @@ export interface RemoteMcpAuthorization {
   role: CredentialRole;
   allowedDeviceIds: string[];
   deviceAccessModes: Record<string, 'safe' | 'full'>;
+  autoSelectDevices: boolean;
+  ownerDevices: Array<{id: string; name: string; folderId: string | null}>;
+  ownerFolders: Array<{id: string; name: string}>;
 }
 
 export interface RemoteMcpUsageDecision {
@@ -155,11 +158,40 @@ export class ControlPlaneMcpClient {
         rawModes[deviceId] === 'full' ? 'full' : 'safe';
     }
 
+    const allowed = new Set(allowedDeviceIds);
+    const validText = (value: unknown): value is string =>
+      typeof value === 'string' && value.trim().length > 0 &&
+      value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value);
+    const rawDevices = Array.isArray(body.ownerDevices) ? body.ownerDevices : [];
+    const ownerDevices: Array<{id:string;name:string;folderId:string|null}> = [];
+    const seenDeviceIds = new Set<string>();
+    for (const value of rawDevices) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const item = value as Record<string, unknown>;
+      if (!validText(item.id) || !allowed.has(item.id) ||
+          !validText(item.name) || seenDeviceIds.has(item.id) ||
+          !(item.folderId === null || validText(item.folderId))) continue;
+      seenDeviceIds.add(item.id);
+      ownerDevices.push({id:item.id,name:item.name,folderId:item.folderId as string|null});
+    }
+    const rawFolders = Array.isArray(body.ownerFolders) ? body.ownerFolders : [];
+    const ownerFolders: Array<{id:string;name:string}> = [];
+    const seenFolderIds = new Set<string>();
+    for (const value of rawFolders) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const item = value as Record<string, unknown>;
+      if (!validText(item.id) || !validText(item.name) || seenFolderIds.has(item.id)) continue;
+      seenFolderIds.add(item.id);
+      ownerFolders.push({id:item.id,name:item.name});
+    }
     return {
       accountId: body.accountId.trim(),
       role: body.role as CredentialRole,
       allowedDeviceIds,
       deviceAccessModes,
+      autoSelectDevices: body.autoSelectDevices === true,
+      ownerDevices,
+      ownerFolders,
     };
   }
 

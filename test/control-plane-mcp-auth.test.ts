@@ -37,6 +37,13 @@ test('control-plane MCP client authenticates account and device scope', async ()
           'device-b': 'unexpected-value',
           'device-not-allowed': 'full',
         },
+        autoSelectDevices: true,
+        ownerDevices: [
+          {id:'device-a',name:'Naveax',folderId:'folder-n'},
+          {id:'device-b',name:'work-pc',folderId:null},
+          {id:'device-not-allowed',name:'Other',folderId:null},
+        ],
+        ownerFolders: [{id:'folder-n',name:'Naveax'}],
       });
     },
   });
@@ -56,6 +63,12 @@ test('control-plane MCP client authenticates account and device scope', async ()
         'device-a': 'full',
         'device-b': 'safe',
       },
+      autoSelectDevices: true,
+      ownerDevices: [
+        {id:'device-a',name:'Naveax',folderId:'folder-n'},
+        {id:'device-b',name:'work-pc',folderId:null},
+      ],
+      ownerFolders: [{id:'folder-n',name:'Naveax'}],
     },
   );
   assert.deepEqual(requests, [
@@ -89,6 +102,9 @@ test('control-plane MCP access mode fails closed to SAFE when server omits mode 
   assert.deepEqual(authorization?.deviceAccessModes, {
     'device-safe': 'safe',
   });
+  assert.equal(authorization?.autoSelectDevices,false);
+  assert.deepEqual(authorization?.ownerDevices,[]);
+  assert.deepEqual(authorization?.ownerFolders,[]);
 });
 
 test('control-plane MCP auth becomes a normal target-restricted authorization grant', async () => {
@@ -181,4 +197,57 @@ test('malformed hosted bearer never reaches control plane', async () => {
     undefined,
   );
   assert.equal(calls, 0);
+});
+
+test('AUTO consent and revocation are read on each independent OAuth authentication request',async()=>{
+  let enabled = false;
+  let requests = 0;
+  const client = new ControlPlaneMcpClient({
+    controlPlaneUrl:'https://control.example.test',
+    serviceToken:'service-token-0123456789',
+    fetchImpl:async()=>{
+      requests++;
+      return Response.json({
+        authenticated:true,accountId:'owner-1',role:'user',
+        allowedDeviceIds:['device-a'],
+        autoSelectDevices:enabled,
+        ownerDevices:[{id:'device-a',name:'Naveax',folderId:null}],
+        ownerFolders:[],
+      });
+    },
+  });
+  const credential='Bearer nwx_mcp_access-token-1234567890';
+  assert.equal((await client.authenticate(credential))?.autoSelectDevices,false);
+  enabled=true;
+  assert.equal((await client.authenticate(credential))?.autoSelectDevices,true);
+  enabled=false;
+  assert.equal((await client.authenticate(credential))?.autoSelectDevices,false);
+  assert.equal(requests,3);
+});
+
+test('AUTO and owner folder payloads fail closed against malformed or foreign metadata',async()=>{
+  const client=new ControlPlaneMcpClient({
+    controlPlaneUrl:'https://control.example.test',
+    serviceToken:'service-token-0123456789',
+    fetchImpl:async()=>Response.json({
+      authenticated:true,accountId:'owner-1',role:'user',
+      allowedDeviceIds:['device-a'],
+      autoSelectDevices:'true',
+      ownerDevices:[
+        {id:'device-a',name:'Naveax',folderId:'allowed-folder'},
+        {id:'other-owner-device',name:'Secret',folderId:null},
+        {id:'device-a',name:'Duplicate',folderId:'allowed-folder'},
+        {id:'device-bad',name:'Invalid\u0000',folderId:null},
+      ],
+      ownerFolders:[
+        {id:'allowed-folder',name:'Maxi'},
+        {id:'allowed-folder',name:'Duplicate'},
+        {id:'evil',name:'Injected\u000aFolder'},
+      ],
+    }),
+  });
+  const auth=await client.authenticate('Bearer nwx_mcp_access-token-1234567890');
+  assert.equal(auth?.autoSelectDevices,false);
+  assert.deepEqual(auth?.ownerDevices,[{id:'device-a',name:'Naveax',folderId:'allowed-folder'}]);
+  assert.deepEqual(auth?.ownerFolders,[{id:'allowed-folder',name:'Maxi'}]);
 });
