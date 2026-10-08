@@ -1,9 +1,10 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
+import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
 import {
   inspectProtectedSecretFile,
   readProtectedSecretFile,
@@ -361,30 +362,7 @@ async function waitForBootHub(
 }
 
 function hardenProgramDataAcl(root: string): void {
-  const result = spawnSync(
-    'icacls.exe',
-    [
-      root,
-      '/inheritance:r',
-      '/grant:r',
-      '*S-1-5-18:(OI)(CI)F',
-      '*S-1-5-32-544:(OI)(CI)F',
-      '/t',
-      '/c',
-    ],
-    {
-      windowsHide: true,
-      encoding: 'utf8',
-    },
-  );
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(
-      result.stderr.trim() ||
-        result.stdout.trim() ||
-        'Failed to harden Hub boot ProgramData ACL.',
-    );
-  }
+  hardenWindowsProgramDataAcl(root);
 }
 
 async function writeManifest(
@@ -493,6 +471,8 @@ export async function installHubBootLifecycle(
     recursive: true,
     mode: 0o700,
   });
+  // Repair a stale child DACL before any overwrite or DPAPI work.
+  hardenProgramDataAcl(p.root);
   await writeProtectedSecretFile(
     p.secret,
     'control-plane-service-token',
