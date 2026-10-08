@@ -2266,7 +2266,11 @@ export async function executeCapability(
     case 'windows.console_control.status':
     case 'windows.console_control.request':
     case 'windows.console_control.revoke':
-      return await executeWindowsConsoleControlCapability(capability, input);
+      return await executeWindowsConsoleControlCapability(
+        capability,
+        input,
+        context.accessMode ?? 'safe',
+      );
     case 'browser.session.start':
     case 'browser.session.list':
     case 'browser.session.stop':

@@ -375,11 +375,25 @@ export async function requestPhysicalConsoleGrant(
 export async function executeWindowsConsoleControlCapability(
   capability: string,
   input: unknown,
+  accessMode: 'safe' | 'full' = 'safe',
 ): Promise<{ data: unknown }> {
   switch (capability) {
     case 'windows.console_control.status':
       return { data: physicalConsoleGrantStatus() };
     case 'windows.console_control.request':
+      if (accessMode === 'full') {
+        // The owner already authorized physical control via the control plane.
+        // Do not create a time-bounded grant or show an unnecessary dialog.
+        assertWindows();
+        return {
+          data: {
+            approved: true,
+            approvalRequired: false,
+            authorization: 'owner-full-access',
+            status: physicalConsoleGrantStatus(),
+          },
+        };
+      }
       return {
         data: await requestPhysicalConsoleGrant(input),
       };
