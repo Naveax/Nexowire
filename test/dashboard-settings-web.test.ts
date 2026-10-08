@@ -42,6 +42,24 @@ test('ROOT DANGER displays exact approval, 15 minute scope and bridge readiness 
   assert.doesNotMatch(app, /device\.adminBridgeReady !== true/);
 });
 
+test('dashboard filters real device access tiers and offers owner folder management', () => {
+  for (const mode of ['all', 'safe', 'full', 'root', 'persistent']) {
+    assert.match(html, new RegExp('data-filter="' + mode + '"'));
+  }
+  assert.match(html, /id="folder-filter"/);
+  assert.match(html, /id="folder-create-form"/);
+  assert.match(html, /id="folder-delete"/);
+  assert.match(html, /data-layout="grid"/);
+  assert.match(html, /data-layout="list"/);
+  assert.match(app, /postFolderAction\('assign'/);
+  assert.match(app, /X-Nexowire-Confirm':'device-folder-v1'/);
+  assert.match(app, /formatCompact/);
+  assert.match(app, /root-clock/);
+  assert.doesNotMatch(app, /persistentMaintenance\.active = true/);
+  assert.match(css, /\.device-list\.list-view/);
+  assert.match(css, /\.folder-toolbar/);
+});
+
 test('dashboard keeps live-update details and optional appearance controls out of primary cards', () => {
   assert.match(html, /Canlı güncelleme/);
   assert.match(html, /SHA-256/);

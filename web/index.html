@@ -50,6 +50,7 @@
         <span class="metric-icon metric-icon-violet" aria-hidden="true">▤</span>
         <span class="label">Aylık kullanım</span>
         <strong id="usage">—</strong>
+        <small id="usage-detail">Kullanım bilgisi bekleniyor</small>
         <div class="bar"><span id="usage-bar"></span></div>
       </article>
     </section>
@@ -60,7 +61,35 @@
         <h2>Cihazların</h2>
         <p class="subtle">Bir cihaz seç, yetki düzeyini değiştir veya ROOT bakım iznini yönet.</p>
       </div>
-      <span class="section-chip">SAFE / FULL / ROOT</span>
+      <span class="section-chip">Cihaz erişimi</span>
+    </section>
+    <nav class="device-toolbar" aria-label="Cihaz filtreleri ve görünüm">
+      <div class="device-filters" id="device-filters" role="group" aria-label="Erişim moduna göre filtrele">
+        <button type="button" class="filter-button selected" data-filter="all" aria-pressed="true">Tümü <span class="filter-count">0</span></button>
+        <button type="button" class="filter-button" data-filter="safe" aria-pressed="false">SAFE <span class="filter-count">0</span></button>
+        <button type="button" class="filter-button" data-filter="full" aria-pressed="false">FULL <span class="filter-count">0</span></button>
+        <button type="button" class="filter-button" data-filter="root" aria-pressed="false">ROOT <span class="filter-count">0</span></button>
+        <button type="button" class="filter-button" data-filter="persistent" aria-pressed="false">ROOT+ <span class="filter-count">0</span></button>
+      </div>
+      <div class="device-layout" role="group" aria-label="Cihaz liste düzeni">
+        <button type="button" class="layout-button selected" data-layout="grid" aria-label="Kutucuk görünümü" aria-pressed="true" title="Kutucuk görünümü">▦</button>
+        <button type="button" class="layout-button" data-layout="list" aria-label="Yatay liste görünümü" aria-pressed="false" title="Yatay liste görünümü">☰</button>
+      </div>
+    </nav>
+    <section class="folder-toolbar" aria-label="Cihaz klasörleri">
+      <label class="folder-select-label">Klasör
+        <select id="folder-filter" aria-label="Cihaz klasörünü seç">
+          <option value="all">Tüm klasörler</option>
+          <option value="unassigned">Klasörsüz</option>
+        </select>
+      </label>
+      <form id="folder-create-form" class="folder-create-form">
+        <label class="sr-only" for="folder-name">Yeni klasör adı</label>
+        <input id="folder-name" type="text" maxlength="48" autocomplete="off" placeholder="Yeni klasör adı" required>
+        <button type="submit" class="secondary">Klasör oluştur</button>
+      </form>
+      <button type="button" class="secondary" id="folder-delete" disabled>Klasörü sil</button>
+      <small class="folder-feedback" id="folder-status" role="status" aria-live="polite"></small>
     </section>
     <section id="devices" class="device-list" aria-live="polite">
       <div class="empty">Cihaz listesi yükleniyor…</div>
@@ -83,7 +112,7 @@
         <div class="utility-content">
           <label class="setting-row"><span>Kompakt cihaz kartları</span><input id="setting-compact" type="checkbox"></label>
           <label class="setting-row"><span>Animasyonları azalt</span><input id="setting-reduce-motion" type="checkbox"></label>
-          <p class="interlock">Canlı güncelleme: saatlik sürüm kontrolü, SHA-256 doğrulaması, side-by-side kurulum ve hata durumunda rollback. Görev durumu cihaz üzerinden doğrulanır.</p>
+          <p class="interlock">Tercihler bu tarayıcıda saklanır. Canlı güncelleme: saatlik sürüm kontrolü, SHA-256 doğrulaması, side-by-side kurulum ve hata durumunda rollback. Görev durumu cihaz üzerinden doğrulanır.</p>
         </div>
       </details>
     </section>

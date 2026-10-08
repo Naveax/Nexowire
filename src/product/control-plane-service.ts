@@ -13,6 +13,7 @@ import type {
   ExternalIdentityRecord,
   ProductAccountRecord,
   ProductDeviceRecord,
+  DeviceFolderRecord,
 } from './control-plane-store.js';
 import {
   consumePairingChallenge,
@@ -270,7 +271,7 @@ export class ControlPlaneService {
     const account = await this.requireAccount(identity.accountId);
     const plan = await this.effectivePlan(account);
     const period = monthPeriod(this.now());
-    const [usage, devices, prepaidCredits] =
+    const [usage, devices, prepaidCredits, folders, folderAssignments] =
       await Promise.all([
         this.store.getUsagePeriod(
           account.quotaSubjectId,
@@ -282,7 +283,10 @@ export class ControlPlaneService {
               account.quotaSubjectId,
             )
           : Promise.resolve(0),
+        this.store.listDeviceFolders(account.id),
+        this.store.listDeviceFolderAssignments(account.id),
       ]);
+    const deviceFolders = new Map(folderAssignments.map(a => [a.deviceId, a.folderId]));
 
     return {
       accountId: account.id,
@@ -299,6 +303,7 @@ export class ControlPlaneService {
         periodStart: period.start,
         periodEnd: period.end,
       },
+      folders: folders.map(({id, name}) => ({id, name})),
       devices: await Promise.all(devices.map(async (device) => {
         const lease = await this.store.getRootModeLease(device.id);
         const unexpiredLease =
@@ -323,6 +328,7 @@ export class ControlPlaneService {
         privilegeMode: device.privilegeMode,
         adminBridgeReady: device.adminBridgeReady,
         lastSeenAt: device.lastSeenAt,
+        folderId: deviceFolders.get(device.id) ?? null,
         };
       })),
       stability: {
@@ -714,6 +720,46 @@ export class ControlPlaneService {
       updatedAt: normalizedAt,
     });
     return true;
+  }
+
+  async createDeviceFolder(identity: ControlPlaneIdentity, nameInput: string): Promise<DeviceFolderRecord> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    const name = nameInput.trim();
+    if (name.length < 1 || name.length > 48 || /[\u0000-\u001f\u007f]/.test(name)) {
+      throw new Error('INVALID_FOLDER_NAME');
+    }
+    const existing = await this.store.listDeviceFolders(account.id);
+    if (existing.length >= 50) throw new Error('FOLDER_LIMIT_REACHED');
+    if (existing.some(folder => folder.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      throw new Error('FOLDER_ALREADY_EXISTS');
+    }
+    const record = { id: randomUUID(), ownerAccountId: account.id, name, createdAt: this.now().toISOString() };
+    await this.store.putDeviceFolder(record);
+    return record;
+  }
+
+  async assignDeviceToFolder(identity: ControlPlaneIdentity, deviceIdInput: string, folderId: string | null): Promise<void> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id) throw new Error('DEVICE_NOT_FOUND');
+    if (folderId !== null) {
+      const folders = await this.store.listDeviceFolders(account.id);
+      if (!folders.some(folder => folder.id === folderId)) throw new Error('FOLDER_NOT_FOUND');
+    }
+    await this.store.assignDeviceFolder(deviceId, folderId);
+  }
+
+  async deleteDeviceFolder(identity: ControlPlaneIdentity, folderIdInput: string): Promise<void> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    const folderId = boundedId('folderId', folderIdInput);
+    if (!(await this.store.listDeviceFolders(account.id)).some(folder => folder.id === folderId)) {
+      throw new Error('FOLDER_NOT_FOUND');
+    }
+    await this.store.deleteDeviceFolder(account.id, folderId);
   }
 
   async setDeviceAccessMode(

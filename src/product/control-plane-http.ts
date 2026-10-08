@@ -139,15 +139,19 @@ function errorStatus(message: string): number {
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
     message === 'PAIRING_NOT_FOUND' ||
-    message === 'DEVICE_NOT_FOUND'
+    message === 'DEVICE_NOT_FOUND' ||
+    message === 'FOLDER_NOT_FOUND'
   ) return 404;
   if (
     message === 'ADMIN_REQUIRED' ||
+    message === 'OWNER_LOGIN_REQUIRED' ||
     message === 'ROOT_REQUIRES_OWNER_LOGIN' ||
     message === 'DEVICE_LIMIT_REACHED'
   ) return 403;
   if (
     message === 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' ||
+    message === 'FOLDER_ALREADY_EXISTS' ||
+    message === 'FOLDER_LIMIT_REACHED' ||
     message.startsWith('PAIRING_') ||
     message === 'DEVICE_ALREADY_BOUND'
   ) return 409;
@@ -220,6 +224,27 @@ export function createControlPlaneHttpHandler(
         path === '/api/v1/me/dashboard'
       ) {
         return json(200, await service.dashboard(identity));
+      }
+
+      if (request.method === 'POST' && path.startsWith('/api/v1/me/device-folders/')) {
+        if (request.headers.get('x-nexowire-confirm') !== 'device-folder-v1') {
+          return json(403, {error: 'FOLDER_CONFIRMATION_REQUIRED'});
+        }
+        const body = await readJsonObject(request);
+        if (path === '/api/v1/me/device-folders/create') {
+          return json(201, await service.createDeviceFolder(identity, stringField(body, 'name')));
+        }
+        if (path === '/api/v1/me/device-folders/assign') {
+          if (body.folderId !== null && typeof body.folderId !== 'string') {
+            return json(400, {error: 'INVALID_FOLDER_ID'});
+          }
+          await service.assignDeviceToFolder(identity, stringField(body, 'deviceId'), body.folderId as string | null);
+          return json(200, {assigned: true});
+        }
+        if (path === '/api/v1/me/device-folders/delete') {
+          await service.deleteDeviceFolder(identity, stringField(body, 'folderId'));
+          return json(200, {deleted: true});
+        }
       }
 
       if (
