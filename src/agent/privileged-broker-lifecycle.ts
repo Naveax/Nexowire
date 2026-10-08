@@ -1,9 +1,10 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
+import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
 import {
   defaultPrivilegedBrokerSecretFile,
   loadOrCreatePrivilegedBrokerToken,
@@ -76,34 +77,7 @@ function rootDir(
 }
 
 function hardenPrivilegedBrokerAcl(root: string): void {
-  if (process.platform !== 'win32') return;
-  const result = spawnSync(
-    'icacls.exe',
-    [
-      root,
-      '/inheritance:r',
-      '/grant:r',
-      '*S-1-5-18:(OI)(CI)F',
-      '*S-1-5-32-544:(OI)(CI)F',
-      '/remove:g',
-      '*S-1-5-32-545',
-      '/T',
-      '/C',
-      '/Q',
-    ],
-    {
-      windowsHide: true,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      result.stderr.trim() ||
-      result.stdout.trim() ||
-      'Failed to harden privileged broker ProgramData ACL.',
-    );
-  }
+  hardenWindowsProgramDataAcl(root);
 }
 
 function launcherPath(
@@ -262,7 +236,7 @@ function lifecycleEnv(
   };
 }
 
-const statusScript = `
+export const privilegedBrokerStatusScript = `
 $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
@@ -282,9 +256,9 @@ $info=$task | Get-ScheduledTaskInfo
   installed=$true
   taskName=$name
   state=[string]$task.State
-  lastRunTime=if ($info.LastRunTime -eq [datetime]::MinValue) {$null} else {$info.LastRunTime.ToString('o')}
+  lastRunTime=if ($null -eq $info.LastRunTime -or $info.LastRunTime -eq [datetime]::MinValue) {$null} else {$info.LastRunTime.ToString('o')}
   lastTaskResult=[int]$info.LastTaskResult
-  nextRunTime=if ($info.NextRunTime -eq [datetime]::MinValue) {$null} else {$info.NextRunTime.ToString('o')}
+  nextRunTime=if ($null -eq $info.NextRunTime -or $info.NextRunTime -eq [datetime]::MinValue) {$null} else {$info.NextRunTime.ToString('o')}
 } | ConvertTo-Json -Compress
 `;
 
@@ -293,7 +267,7 @@ export async function privilegedBrokerTaskStatus(
 ): Promise<PrivilegedBrokerTaskStatus> {
   const name = taskName(options);
   const decoded = await runPowerShellJson<unknown>(
-    statusScript,
+    privilegedBrokerStatusScript,
     lifecycleEnv(name, launcherPath(options)),
   );
   return TaskStatusSchema.parse(decoded);
@@ -342,6 +316,8 @@ export async function installPrivilegedBrokerTask(
     recursive: true,
     mode: 0o700,
   });
+  // Repair a stale launcher DACL before overwriting an existing install.
+  hardenPrivilegedBrokerAcl(directory);
   await fs.writeFile(
     launcher,
     buildPrivilegedBrokerLauncher(options),
