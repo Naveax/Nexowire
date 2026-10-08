@@ -5,6 +5,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
 import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
+import { assertWindowsPrivilegedRuntimeTrusted } from '../security/windows-privileged-runtime-trust.js';
 import {
   inspectProtectedSecretFile,
   readProtectedSecretFile,
@@ -434,6 +435,16 @@ export async function installHubBootLifecycle(
   // Fail before reading/writing protected DPAPI secrets or touching tasks:
   // a running legacy Stack would respawn its old Hub on the same port.
   await assertNoLegacyStackSupervisor(options.env ?? process.env);
+  // A protected task must NEVER persist a Node/CLI command pointing into
+  // user-writable AppData, a staging directory, or an untrusted ProgramData
+  // package. Validate the executable and complete local code tree before
+  // unsealing or writing any control-plane/DPAPI secrets.
+  const rt = runtime(options);
+  assertWindowsPrivilegedRuntimeTrusted({
+    executable: rt.executable,
+    cliEntrypoint: options.cliEntrypoint ?? process.argv[1]!,
+    env: options.env ?? process.env,
+  });
 
   const currentLauncher =
     currentUserHubLauncher(options);
@@ -495,7 +506,6 @@ export async function installHubBootLifecycle(
   delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_FILE;
   delete env.NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_PLATFORM_NAME;
 
-  const rt = runtime(options);
   await fs.writeFile(
     p.launcher,
     buildHubBootLauncher({
