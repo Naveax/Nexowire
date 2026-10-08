@@ -152,7 +152,7 @@ export function renderAutoUpdateTaskInstallScript(
     '$launcher=' + psLiteral(launcher),
     '$user=[Security.Principal.WindowsIdentity]::GetCurrent().Name',
     '$existing=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
-    'if($existing -and [string]$existing.State -eq "Disabled"){[pscustomobject]@{installed=$true;ownerDisabled=$true;taskName=$name}|ConvertTo-Json -Compress;exit 0}',
+    'if($existing -and (($existing.Settings.Enabled -eq $false) -or ([string]$existing.State -eq "Disabled"))){[pscustomobject]@{installed=$true;ownerDisabled=$true;taskName=$name}|ConvertTo-Json -Compress;exit 0}',
     "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $launcher.Replace('\"','\"\"') + '\"')",
     '$logon=New-ScheduledTaskTrigger -AtLogOn -User $user',
     '$hour=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 60) -RepetitionDuration (New-TimeSpan -Days 3650)',

@@ -238,5 +238,6 @@ test('reinstall cannot override the owners explicit disabled updater state', asy
   const registration = script.indexOf('Register-ScheduledTask');
   assert.ok(disableCheck >= 0 && registration > disableCheck);
   assert.match(script, /ownerDisabled=\$true/);
+  assert.match(script, /\$existing\.Settings\.Enabled -eq \$false/);
   assert.match(script, /exit 0/);
 });
