@@ -275,13 +275,14 @@ async function launchProtectedInstaller(script: string): Promise<void> {
   });
 }
 
-export async function scheduleVerifiedInstaller(
-  raw: unknown,
-): Promise<{
-  scheduled: boolean;
-  jobId: string;
-  state: 'queued';
-  expectedSha256: string;
+/**
+ * This is a dry-run readiness check. It does not create jobs, start
+ * processes, modify UAC or change the device approval policy.
+ */
+async function requireInstallerApproval(raw: unknown): Promise<{
+  input: VerifiedInstallerInput;
+  source: string;
+  expectedSha: string;
 }> {
   if (process.platform !== 'win32') {
     throw new Error('Trusted elevated installer jobs require Windows.');
@@ -309,6 +310,60 @@ export async function scheduleVerifiedInstaller(
   // Crucial boundary: a caller-provided SHA alone never authorizes
   // arbitrary elevated code. Approval must preexist outside user control.
   await assertPreapprovedInstaller(input);
+
+  return { input, source, expectedSha };
+}
+
+export async function preflightVerifiedInstaller(raw: unknown): Promise<{
+  eligible: boolean;
+  state: 'ready' | 'not_approved' | 'invalid_input' | 'invalid_source';
+  requiresUacConsent: false;
+  authorization: 'machine_approved_only';
+  detail: string;
+}> {
+  try {
+    await requireInstallerApproval(raw);
+    return {
+      eligible: true,
+      state: 'ready',
+      requiresUacConsent: false,
+      authorization: 'machine_approved_only',
+      detail: 'Existing elevated Broker may run this exact admin-preapproved installer without a new UAC prompt.',
+    };
+  } catch (error) {
+    const text = error instanceof Error ? error.message : '';
+    const state =
+      /not preapproved|approval policy is missing or not protected/i.test(text)
+        ? 'not_approved' as const
+        : /Zod|Invalid input|must be an|Do not specify both/i.test(text)
+          ? 'invalid_input' as const
+          : 'invalid_source' as const;
+    return {
+      eligible: false,
+      state,
+      requiresUacConsent: false,
+      authorization: 'machine_approved_only',
+      detail: state === 'not_approved'
+        ? 'The device administrator has not approved this exact payload, arguments and signer policy.'
+        : state === 'invalid_input'
+          ? 'Installer request does not match accepted format or bounds.'
+          : 'Installer file is unavailable, changed, unsigned when not permitted, or cannot be checked.',
+    };
+  }
+}
+
+export async function scheduleVerifiedInstaller(
+  raw: unknown,
+): Promise<{
+  scheduled: boolean;
+  jobId: string;
+  state: 'queued';
+  expectedSha256: string;
+}> {
+  if (process.platform !== 'win32') {
+    throw new Error('Trusted elevated installer jobs require Windows.');
+  }
+  const { input, source, expectedSha } = await requireInstallerApproval(raw);
 
   const root = installerProgramDataRoot();
   await fs.mkdir(root, { recursive: true });

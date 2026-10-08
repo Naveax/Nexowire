@@ -57,6 +57,7 @@ export const CORE_CAPABILITIES = [
   'windows.environment.read',
   'windows.environment.set',
   'windows.environment.delete',
+  'windows.installer.preflight',
   'windows.installer.apply',
   'windows.installer.status',
   'windows.window.list',

@@ -2037,7 +2037,8 @@ export async function executeCapability(
 
   // A pre-authorized elevated Broker may start a pinned installer only
   // under an authenticated owner FULL request. SAFE is fail-closed.
-  if (capability === 'windows.installer.apply') {
+  if (capability === 'windows.installer.apply' ||
+      capability === 'windows.installer.preflight') {
     if (
       context.accessMode !== 'full' ||
       context.privilegeMode !== 'broker'

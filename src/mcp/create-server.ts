@@ -4155,6 +4155,40 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_installer_preflight',
+    {
+      title: 'Check UAC-free Broker installer eligibility',
+      description:
+        'Read-only FULL-owner check for one exact installer. The pre-authorized elevated Broker verifies the file hash and protected machine approval, without starting a process, touching Secure Desktop, or prompting for UAC. Returns explicit ready/not_approved/invalid states.',
+      inputSchema: {
+        ...targetFields,
+        file_path: z.string().min(1).max(4096),
+        sha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
+        arguments: z.array(z.string().max(512).regex(/^[^"\r\n]*$/)).max(16).optional(),
+        allow_unsigned: z.boolean().optional(),
+        publisher_thumbprint: z.string().regex(/^[a-fA-F0-9]{40}$/).optional(),
+        timeout_seconds: z.number().int().min(10).max(1800).optional(),
+      },
+    },
+    async ({
+      device_id, provider_id, file_path, sha256,
+      arguments: args, allow_unsigned, publisher_thumbprint,
+      timeout_seconds,
+    }) => await execute(
+      ctx,
+      'windows.installer.preflight',
+      {
+        file_path, sha256,
+        ...(args ? { arguments: args } : {}),
+        ...(allow_unsigned !== undefined ? { allow_unsigned } : {}),
+        ...(publisher_thumbprint ? { publisher_thumbprint } : {}),
+        ...(timeout_seconds !== undefined ? { timeout_seconds } : {}),
+      },
+      device_id, provider_id, 45_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_installer_apply',
     {
       title: 'Run verified installer through authorized Windows Broker',
