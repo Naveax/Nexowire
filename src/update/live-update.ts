@@ -53,6 +53,8 @@ export interface LiveUpdateOptions {
   localAppData?: string;
   tempDir?: string;
   privilegedBroker?: PrivilegedBrokerClient;
+  /** Automatic mode refuses a partial user-only cutover if the machine Broker is unavailable. */
+  requireMachineUpdate?: boolean;
 }
 
 function safeVersion(value: string): string {
@@ -444,6 +446,7 @@ export function renderWindowsCutoverScript(input: {
     '$StatusFile=' + psLiteral(statusFile),
     '$AgentLauncher=' + psLiteral(agentLauncher),
     '$HubLauncher=' + psLiteral(hubLauncher),
+    '$AutoLauncher=' + psLiteral(path.join(home, '.nexowire', 'auto-update', 'launch.ps1')),
     '$AgentTask=\'Nexowire Native Agent\'',
     '$HubTask=\'Nexowire Hub\'',
     '$backups=@{}',
@@ -458,7 +461,7 @@ export function renderWindowsCutoverScript(input: {
     '  if(-not (Test-Path -LiteralPath $file)){return}',
     '  $text=Get-Content -LiteralPath $file -Raw',
     '  if($text.Contains($NewRoot)){return}',
-    "  $pattern=[regex]::Escape((Join-Path $env:LOCALAPPDATA 'Nexowire\\versions'))+'\\\\[^''\"\\r\\n]+'",
+    "  $pattern=[regex]::Escape((Join-Path $env:LOCALAPPDATA 'Nexowire\\versions'))+'\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}'",
     '  $match=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
     '  if(-not $match.Success){throw (\'Could not find versioned Nexowire runtime in launcher: \'+$file)}',
     '  $backup=$file+\'.update-rollback\'',
@@ -483,6 +486,7 @@ export function renderWindowsCutoverScript(input: {
     '  Start-Sleep -Seconds 1',
     '  Patch-Launcher $AgentLauncher',
     '  Patch-Launcher $HubLauncher',
+    '  Patch-Launcher $AutoLauncher',
     '  if($hadHub){Start-ScheduledTask -TaskName $HubTask; if(-not (Wait-Port 43110 25)){throw \'Updated Hub did not become healthy on 43110\'}}',
     '  if($hadAgent){Start-ScheduledTask -TaskName $AgentTask; if(-not (Wait-Agent 25)){throw \'Updated Agent did not start from the new runtime\'}}',
     '  $machinePending=(Task-Exists \'Nexowire Hub Boot\') -or (Task-Exists \'Nexowire Privileged Broker\')',
@@ -528,6 +532,9 @@ export async function applyLatestLiveUpdate(
     const staged = await stageWindowsRelease(check.release, options);
     let machineComponentsPending = false;
     const broker = options.privilegedBroker;
+    if (!broker && options.requireMachineUpdate) {
+      throw new Error('Automatic update deferred: elevated Broker not provided.');
+    }
     if (broker) {
       const probe = await broker.probe();
       if (
@@ -537,20 +544,29 @@ export async function applyLatestLiveUpdate(
       ) {
         machineComponentsPending = true;
         try {
-          await broker.execute(
+          const applied = await broker.execute(
             'nexowire.machine_update.apply',
             {
               version: check.latestVersion,
               buildId: staged.buildId,
             },
           );
-        } catch {
-          // v1.0.3 and older brokers do not know the machine
-          // update capability. User-level cutover can still
-          // complete; status remains explicit until the one-time
-          // Admin Bridge upgrade is performed.
+          if (
+            options.requireMachineUpdate &&
+            (!applied || typeof applied !== 'object' ||
+              (applied as { scheduled?: unknown }).scheduled !== true)
+          ) {
+            throw new Error('Elevated machine update was not scheduled.');
+          }
+        } catch (error) {
+          if (options.requireMachineUpdate) throw error;
+          // Older brokers may not support this capability; the
+          // explicit pending flag still records a partial update.
         }
       } else if (!probe.reachable || !probe.elevated) {
+        if (options.requireMachineUpdate) {
+          throw new Error('Automatic update deferred: elevated Broker is unavailable.');
+        }
         machineComponentsPending = true;
       }
     }

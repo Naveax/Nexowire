@@ -199,12 +199,19 @@ async function main(): Promise<void> {
       "Start-Process -FilePath $shortcut.TargetPath -ArgumentList $shortcut.Arguments -WorkingDirectory $env:NX_INSTALL;",
       "Write-Output 'launcher-ready';",
     );
+    // The setup smoke must not register a real task on the host.
+    smokeSetup = smokeSetup.replace(
+      '& $autoNode $autoCli update auto install | Out-Null;',
+      "$global:LASTEXITCODE=0; Write-Output 'hourly-updater-simulated';",
+    );
     smokeSetup = smokeSetup.replace(
       /^pause$/m,
       'rem smoke-no-pause',
     );
 
     assert.match(smokeSetup, /launcher-ready/);
+    assert.match(smokeSetup, /hourly-updater-simulated/);
+    assert.doesNotMatch(smokeSetup, /& \$autoNode \$autoCli update auto install/);
     assert.doesNotMatch(
       smokeSetup,
       /GetFolderPath\('Programs'\)/,
@@ -247,6 +254,7 @@ async function main(): Promise<void> {
       ].join('\n'),
     );
     assert.match(installed.stdout, /launcher-ready/);
+    assert.match(installed.stdout, /hourly-updater-simulated/);
 
     const installRoot = path.join(
       fakeLocalAppData,

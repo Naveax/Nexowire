@@ -304,7 +304,7 @@ export function renderMachineCutoverScript(input: {
     '  if(-not(Test-Path -LiteralPath $file)){return}',
     '  $text=Get-Content -LiteralPath $file -Raw',
     '  if($text.Contains($NewRoot)){return}',
-    "  $pattern='[A-Za-z]:\\\\[^''\"\\r\\n]*Nexowire\\\\versions\\\\[^''\"\\r\\n]+'",
+    "  $pattern='[A-Za-z]:\\\\[^''\"\\r\\n]*Nexowire\\\\versions\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}'",
     '  $match=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
     '  if(-not $match.Success){throw (\'Versioned runtime not found in machine launcher: \'+$file)}',
     '  $backup=$file+\'.update-rollback\'',

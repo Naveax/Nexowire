@@ -232,6 +232,10 @@ export function renderSetupScript(input: {
     "$shortcut.WorkingDirectory = $env:NX_INSTALL;",
     "$shortcut.Description = 'Connect this PC to Nexowire';",
     "$shortcut.Save();",
+    "$autoNode = Join-Path $env:NX_INSTALL 'runtime\\node.exe';",
+    "$autoCli = Join-Path $env:NX_INSTALL 'app\\dist\\src\\cli.js';",
+    "& $autoNode $autoCli update auto install | Out-Null;",
+    "if ($LASTEXITCODE -ne 0) { throw 'Nexowire hourly auto-update task registration failed.' };",
     "Start-Process -FilePath $shortcut.TargetPath -ArgumentList $shortcut.Arguments -WorkingDirectory $env:NX_INSTALL;",
     "Remove-Item -LiteralPath $env:NX_TMP -Recurse -Force -ErrorAction SilentlyContinue;",
   ].join(' ');
