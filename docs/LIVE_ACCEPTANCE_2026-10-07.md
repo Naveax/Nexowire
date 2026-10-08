@@ -13,7 +13,7 @@ This is an observation of **two real connected Windows PCs** through the first-p
 | Device | Stable Nexowire ID | Native agent | Local install type |
 | --- | --- | --- | --- |
 | Naveax | `adc90bbb-9576-4b4c-b76a-600e5572ad7d` | v1.0.3 | versioned runtime `1.0.3-2b0b1f9193de`; canonical Agent observed from the exact path; loopback broker TCP 43112 reachable |
-| work-pc | `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` | v1.0.4 | Hub + Agent observed from `1.0.4-e5f865f4d252`; BUILD source `e5f865f4d252406a129a2a5d58a499f68fd09ae5`; machine-level Hub Boot/Broker still pending |
+| work-pc | `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` | v1.0.4 | Versioned Hub + Agent from `1.0.4-e5f865f4d252`; SYSTEM AtStartup Hub Boot Running in Session 0, LocalMachine DPAPI, Broker Running on TCP 43112, Agent in broker mode; **cold-reboot pre-login retest pending** |
 
 ## Actual acceptance results
 
@@ -36,7 +36,7 @@ This is an observation of **two real connected Windows PCs** through the first-p
 | Authenticated owner dashboard unlimited indicator | NOT TESTED | NOT TESTED | Requires an existing valid signed owner session or authorized production D1 introspection |
 | Controlled Native Agent / Hub restart | PASS | PASS | Naveax agent reconnect retained the stable ID. work-pc Agent and Hub were independently stopped/recovered with local one-time recovery tasks; stable ID and v1.0.2 returned; temporary tasks were removed. |
 | Two-PC bounded parallel routing/load | PASS | PASS | After both PCs ran versioned v1.0.2, 12/12 concurrent `machine_health` calls passed (6 per PC), followed by 12/12 mixed `machine_snapshot` + production control-plane TCP/443 probes (6 per PC). Exact device IDs were used throughout. |
-| Real cold reboot / pre-logon Hub availability | NOT REQUIRED FOR NAVEAX FINAL GATE | PENDING ONE-TIME ADMIN INSTALL ON v1.0.4 | work-pc is live on v1.0.4, but `Nexowire Hub Boot` and `Nexowire Privileged Broker` are still absent and TCP 43112 is refused. Cold-boot/pre-logon acceptance remains blocked until the single explicit UAC install completes. |
+| Real cold reboot / pre-logon Hub availability | NOT REQUIRED FOR NAVEAX FINAL GATE | INSTALLED; POST-REBOOT TEST PENDING | SYSTEM `Nexowire Hub Boot` task AtStartup/Highest is Running in Session 0, protected LocalMachine DPAPI is confirmed, and Broker TCP 43112 is reachable; the actual next boot **before interactive login** has not been observed yet. |
 | True production D1 concurrent multi-call contention / long soak | NOT TESTED | NOT TESTED | Local isolated D1 concurrency regression passed under PR #212, not a production multi-worker race |
 | Real-money subscription / refund | INTENTIONALLY DISABLED | INTENTIONALLY DISABLED | Financial gateway remains off and must not be silently enabled |
 
@@ -69,9 +69,19 @@ v1.0.2 now includes the OS-owned Windows named-pipe singleton that fails closed 
 - The staged v1.0.4 one-UAC setup script was inspected and launched once at 2026-10-08 00:28 TRT. Read-only postconditions after launch remained unchanged: no `final-admin-setup.json`, no `Nexowire Hub Boot`, no `Nexowire Privileged Broker`, and TCP 43112 refused. The mutation was not replayed.
 - main is `e5f865f4d252406a129a2a5d58a499f68fd09ae5` (`release: authorize v1.0.4 (#235)`) and open PR count was 0 at the start of this sync. v1.0.4 publication was independently read back as PASS via publisher `37685751071`, exact-main CI `37685751072`, tag-scoped Release Readiness `37685873099`, exact tag target, and release assets.
 
+## 2026-10-08 elevated bridge and SYSTEM Hub Boot acceptance delta
+
+- Existing non-admin Nexowire Agent could not click invisible Windows Secure Desktop UAC. Windows UAC was not disabled or bypassed. An independently enrolled, owner-authorized temporary SYSTEM maintenance agent was used only to register one-time elevated **interactive `umut`** tasks; the final runtime has no SentinelX/Desktop Commander dependency.
+- Initial v1.0.4 script attempts exposed two reproducible defects: recursive `icacls /inheritance:r /T` left ProgramData child files with zero DACL ACEs (EPERM on launchers and machine token); broker TaskScheduler status called `NextRunTime.ToString()` despite Windows reporting null.
+- Repaired only the known zero-ACL child files using guarded SYSTEM/Administrators ACEs. `Nexowire Privileged Broker` task now Running as elevated interactive `umut`, `127.0.0.1:43112` reachable. Agent launcher contains broker mode + loopback broker URL, task was restarted, stable device ID reconnected. First-party `windows.task.control` on an already enabled running Agent returned `verified:true`.
+- Source PR #237 removed redundant FULL-owner `windows.console_control.request` modal; GitHub CI 7/7 succeeded and the PR merged to main `22b22737284ce094a4b96778739a36f66234c9fe`. PR #238 replaced recursive ACL erasure, repaired stale children, and handled null TaskScheduler status; CI 7/7 and Windows/Linux/macOS Release Readiness all passed. It merged to main `ae015ff4dc52b78f57774e7de0182bc3ec49a049`. A live Windows scratch directory with an intentionally zero-ACL child was recovered to exactly two permitted ACEs with readback PASS.
+- Used that reviewed/compiled patched ACL lifecycle from exact main to install the existing v1.0.4 SYSTEM Hub task. The one-shot elevated installer returned exit 0 at **2026-10-08 09:43 TRT**; task `Nexowire Hub Boot` is `Running`, principal `SYSTEM`, `ServiceAccount`, `Highest`, trigger `AtStartup`; Hub process PID 19324 in Session 0 listens on 43110. Source token was migrated to a `windows-dpapi-local-machine` envelope, and all four Hub Boot files have explicit SYSTEM/Administrators-only ACLs. The old logon Hub task was disabled to prevent duplicate listeners. Agent and Broker remained Running.
+- Removed four failed/diagnostic elevated tasks, the successful one-shot Hub installer task, and executable bootstrap scripts; only protected diagnostic results/logs remain. `consent.exe` count returned 0. Independent maintenance agent is Automatic/Running for recovery but is not used for Nexowire runtime.
+- **Not yet complete:** actual OS cold restart with Hub reachability before login; authenticated owner dashboard `monthlyCredits:null` and `planId:free`; longer production D1 contention/soak and recovery; official versioned rollout of post-v1.0.4 patches, not just source merge. Avoid restarting a user-active workstation merely to tick a checklist.
+
 ## Next validation gates, in order
 
-1. On work-pc, complete the already-staged one-time elevated Hub Boot + Privileged Broker setup with one explicit local UAC approval. Because the first launch produced no completion postcondition, do not replay it blindly; first establish the local UAC outcome. Then verify SYSTEM Hub Boot, LocalMachine DPAPI, broker health/TCP 43112 and Agent broker mode.
+1. **DONE for live installation, not cold boot:** work-pc now has SYSTEM Hub Boot and elevated per-logon Broker installed without Secure Desktop bypass; explicit ACL/DPAPI and first-party privileged task-control postconditions passed.
 2. Repeat a real work-pc cold reboot. Acceptance requires the Hub/control path to recover before interactive logon, then the Agent to return on the same stable ID after login, with no duplicate Hub/Agent processes.
 3. Read production owner `/api/v1/me/dashboard` under an authorized GitHub OAuth session and verify `usage.monthlyCredits === null`, `planId === free`; ensure another Free identity remains limited to 1000. Do not export session cookies, credentials or full D1 account contents.
 4. Run bounded genuine production D1 concurrent multi-call contention after the authenticated entitlement read; preserve idempotent event IDs and distinguish test calls from user activity.
