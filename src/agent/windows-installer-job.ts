@@ -130,6 +130,36 @@ export function installerProgramDataRoot(
   return path.join(programData, 'Nexowire', 'verified-installers');
 }
 
+/**
+ * A same-user, non-elevated process could otherwise rewrite an NTFS ACL
+ * using implicit owner WRITE_DAC even when all explicit user ACEs were
+ * stripped. Machine-owned job objects must have an Administrators owner.
+ */
+function setProtectedOwner(target: string, recursive = false): void {
+  const result = spawnSync(
+    'icacls.exe',
+    [
+      target,
+      '/setowner',
+      '*S-1-5-32-544',
+      ...(recursive ? ['/T', '/C'] : []),
+      '/Q',
+    ],
+    {
+      windowsHide: true,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      result.stderr.trim() || result.stdout.trim() ||
+      'Failed to assign protected installer object owner.',
+    );
+  }
+}
+
 function hardenContainerAcl(directory: string): void {
   const result = spawnSync(
     'icacls.exe',
@@ -147,6 +177,7 @@ function hardenContainerAcl(directory: string): void {
       'Failed to protect verified installer directory.',
     );
   }
+  setProtectedOwner(directory);
 }
 
 async function digest(file: string): Promise<string> {
@@ -325,6 +356,7 @@ export async function scheduleVerifiedInstaller(
     'utf8',
   );
   hardenWindowsProgramDataAcl(jobDirectory);
+  setProtectedOwner(jobDirectory, true);
   await launchProtectedInstaller(runner);
   return {
     scheduled: true,
