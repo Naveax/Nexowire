@@ -429,7 +429,7 @@ test('device presence updates dashboard and ignores stale state events', async (
   assert.equal(dashboard.devices[0]?.adminBridgeReady, true);
 });
 
-test('ROOT DANGER lease needs FULL online Broker, expires at server time and SAFE revokes it', async () => {
+test('ROOT DANGER lease needs FULL online device, works without Broker, expires and SAFE revokes', async () => {
   let clock = new Date('2026-10-02T12:00:00.000Z');
   const store = new MemoryControlPlaneStore();
   const service = new ControlPlaneService(store, { now: () => clock });
@@ -443,19 +443,20 @@ test('ROOT DANGER lease needs FULL online Broker, expires at server time and SAF
     platform: 'win32', deviceAnchorHash: '1'.repeat(64),
   });
   const id = paired.device.id;
-  await assert.rejects(service.setDeviceRootMode(owner, id, true), /ROOT_REQUIRES_FULL_ONLINE_BROKER/);
+  await assert.rejects(service.setDeviceRootMode(owner, id, true), /ROOT_REQUIRES_FULL_ONLINE_DEVICE/);
   await service.setDeviceAccessMode(owner, id, 'full');
-  await assert.rejects(service.setDeviceRootMode(owner, id, true), /ROOT_REQUIRES_FULL_ONLINE_BROKER/);
+  await assert.rejects(service.setDeviceRootMode(owner, id, true), /ROOT_REQUIRES_FULL_ONLINE_DEVICE/);
   const record = await store.getDevice(id);
   assert.ok(record);
   await store.putDevice({
-    ...record, online: true, privilegeMode: 'broker', adminBridgeReady: true,
+    ...record, online: true, privilegeMode: 'direct', adminBridgeReady: false,
   });
   await assert.rejects(service.setDeviceRootMode(other, id, true), /DEVICE_NOT_FOUND/);
   const granted = await service.setDeviceRootMode(owner, id, true);
   assert.equal(granted.rootMode.active, true);
   assert.equal(granted.rootMode.expiresAt, '2026-10-02T12:15:00.000Z');
   assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, true);
+  assert.equal((await service.dashboard(owner)).devices[0]?.adminBridgeReady, false);
   const withBroker = await store.getDevice(id);
   assert.ok(withBroker);
   await store.putDevice({ ...withBroker, online: false, adminBridgeReady: false });

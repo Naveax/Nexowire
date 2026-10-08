@@ -147,7 +147,7 @@ function errorStatus(message: string): number {
     message === 'DEVICE_LIMIT_REACHED'
   ) return 403;
   if (
-    message === 'ROOT_REQUIRES_FULL_ONLINE_BROKER' ||
+    message === 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' ||
     message.startsWith('PAIRING_') ||
     message === 'DEVICE_ALREADY_BOUND'
   ) return 409;

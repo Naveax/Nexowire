@@ -305,11 +305,10 @@ export class ControlPlaneService {
           lease?.ownerAccountId === account.id &&
           device.accessMode === 'full' &&
           Date.parse(lease.expiresAt) > this.now().getTime();
-        const active =
-          unexpiredLease &&
-          device.online &&
-          device.privilegeMode === 'broker' &&
-          device.adminBridgeReady === true;
+        // Lease issuance is distinct from actually executing elevated work.
+        // Every elevated operation still requires the existing Broker and its
+        // protected machine approval independently of this lease.
+        const active = Boolean(unexpiredLease && device.online);
         return {
         id: device.id,
         name: device.name,
@@ -776,13 +775,11 @@ export class ControlPlaneService {
     if (!device || device.ownerAccountId !== account.id) {
       throw new Error('DEVICE_NOT_FOUND');
     }
-    if (enabled && (
-      device.accessMode !== 'full' ||
-      !device.online ||
-      device.privilegeMode !== 'broker' ||
-      device.adminBridgeReady !== true
-    )) {
-      throw new Error('ROOT_REQUIRES_FULL_ONLINE_BROKER');
+    // A ROOT maintenance lease is NOT itself elevation. Naveax can opt
+    // into the lease without a Broker, but privileged operations still
+    // fail closed until their separate Broker/ACL approval checks pass.
+    if (enabled && (device.accessMode !== 'full' || !device.online)) {
+      throw new Error('ROOT_REQUIRES_FULL_ONLINE_DEVICE');
     }
     const now = this.now();
     const expiresAt = enabled
