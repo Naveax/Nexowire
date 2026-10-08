@@ -100,6 +100,10 @@ async function withScopedClient(
   ]);
   await aliases.set('main-pc', 'desktop');
   await aliases.set('linux-box', 'laptop');
+  // A workspace alias may collide with an actual OAuth owner's device name.
+  // Reserved folder syntax is already rejected by DeviceAliasStore's regex.
+  await aliases.set('Naveax', 'laptop');
+  await aliases.set('work-pc', 'desktop');
   await routingPolicies.set('windows-route', {
     selection: 'unique_only',
     platform: 'win32',
@@ -178,7 +182,7 @@ test('direct device scopes filter discovery metadata and execution targets', asy
           alias: entry.alias,
           deviceId: entry.deviceId,
         })),
-        [{ alias: 'main-pc', deviceId: 'desktop' }],
+        [{ alias: 'main-pc', deviceId: 'desktop' }, { alias: 'work-pc', deviceId: 'desktop' }],
       );
 
       // Credential scope is a restriction, not user approval to auto-select.
@@ -382,6 +386,7 @@ test('folder-only selection remains denied when AUTO is off, including a unique 
   },async client=>{
     const denied=await client.callTool({name:'machine_snapshot',arguments:{device_id:'folder:Work'}});
     assert.equal(denied.isError,true);
+    assert.equal((denied.structuredContent as {error?:{code:string}}).error?.code,'MCP_TARGET_NOT_AUTHORIZED');
     const explicit=await client.callTool({name:'machine_snapshot',arguments:{device_id:'work-pc'}});
     assert.equal((explicit.structuredContent as {data?:{executedTargetId:string}}).data?.executedTargetId,'laptop');
   });

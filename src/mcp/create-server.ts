@@ -248,9 +248,9 @@ async function resolveDevice(
   if (requested) {
     if (onlineIds.has(requested)) return requested;
 
-    const aliased = await ctx.aliases?.resolve(requested);
-    if (aliased && onlineIds.has(aliased)) return aliased;
-
+    // Account-owned names and reserved folder syntax take precedence over
+    // workspace-local aliases. An alias must never shadow an owner device or
+    // bypass an explicit owner's AUTO-off folder policy.
     if (owner) {
       const safeDirectory = ownerDirectory.filter(item => ownerIds.includes(item.id));
       if (requested.startsWith('folder:')) {
@@ -279,9 +279,19 @@ async function resolveDevice(
         );
       }
       const nameMatches = safeDirectory.filter(item => nameKey(item.name) === nameKey(requested));
-      if (nameMatches.length === 1 && onlineIds.has(nameMatches[0]!.id)) {
-        return nameMatches[0]!.id;
+      if (nameMatches.length > 0) {
+        if (nameMatches.length === 1 && onlineIds.has(nameMatches[0]!.id)) {
+          return nameMatches[0]!.id;
+        }
+        throw new McpTargetAuthorizationError(
+          'DEVICE_SELECTION_REQUIRED: Owner device name is ambiguous or offline.',
+        );
       }
+    }
+
+    if (!requested.startsWith('folder:')) {
+      const aliased = await ctx.aliases?.resolve(requested);
+      if (aliased && onlineIds.has(aliased)) return aliased;
     }
 
     throw new McpTargetAuthorizationError(
