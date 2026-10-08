@@ -461,7 +461,7 @@ export function renderWindowsCutoverScript(input: {
     '  if(-not (Test-Path -LiteralPath $file)){return}',
     '  $text=Get-Content -LiteralPath $file -Raw',
     '  if($text.Contains($NewRoot)){return}',
-    "  $pattern=[regex]::Escape((Join-Path $env:LOCALAPPDATA 'Nexowire\\versions'))+'\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}',
+    "  $pattern=[regex]::Escape((Join-Path $env:LOCALAPPDATA 'Nexowire\\versions'))+'\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}'",
     '  $match=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
     '  if(-not $match.Success){throw (\'Could not find versioned Nexowire runtime in launcher: \'+$file)}',
     '  $backup=$file+\'.update-rollback\'',
