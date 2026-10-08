@@ -432,23 +432,27 @@ function render(snapshot) {
           ? 'Süresiz · Nexowire onayı yok · ' + bridgeState
           : 'Varsayılan güvenli mod · ' + bridgeState;
       const rootActive = device.rootMode?.active === true;
+      // The user must still be able to revoke a temporary lease
+      // when its Broker goes offline. Never trap a DANGER grant.
+      const rootPending = Boolean(device.rootMode?.expiresAt);
       const rootButton = row.querySelector('.root-toggle');
       const rootPanel = row.querySelector('.root-confirm-panel');
       const rootCopy = row.querySelector('.root-copy');
-      rootButton.textContent = rootActive ? 'ROOT kapat' : 'ROOT MODE aç';
-      rootButton.disabled = !rootActive && (
+      rootButton.textContent = rootPending ? 'ROOT kapat' : 'ROOT MODE aç';
+      rootButton.disabled = !rootPending && (
         accessMode !== 'full' || !device.online ||
         device.privilegeMode !== 'broker' || device.adminBridgeReady !== true
       );
       rootPanel.hidden = true;
-      rootCopy.textContent = rootActive
-        ? 'DANGER · 15 dakika sonra otomatik kapanır · ' +
-          new Date(device.rootMode.expiresAt).toLocaleTimeString('tr-TR')
+      rootCopy.textContent = rootPending
+        ? (rootActive ? 'DANGER · ROOT aktif · ' : 'DANGER · Broker yok, izin beklemede · ') +
+          new Date(device.rootMode.expiresAt).toLocaleTimeString('tr-TR') +
+          ' tarihinde/saatinde biter · İptal edilebilir'
         : 'FULL + çevrimiçi Broker gerekir. OS güvenliği korunur.';
       rootButton.addEventListener('click', () => {
-        void setDeviceRootMode(device.id, !rootActive, row);
+        void setDeviceRootMode(device.id, !rootPending, row);
       });
-      if (rootActive) {
+      if (rootPending) {
         const expiresInMs = Date.parse(device.rootMode.expiresAt) - Date.now();
         if (expiresInMs > 0) {
           setTimeout(() => { void load(); }, Math.min(expiresInMs + 250, 900_000));

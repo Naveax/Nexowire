@@ -301,13 +301,15 @@ export class ControlPlaneService {
       },
       devices: await Promise.all(devices.map(async (device) => {
         const lease = await this.store.getRootModeLease(device.id);
-        const active =
+        const unexpiredLease =
+          lease?.ownerAccountId === account.id &&
           device.accessMode === 'full' &&
+          Date.parse(lease.expiresAt) > this.now().getTime();
+        const active =
+          unexpiredLease &&
           device.online &&
           device.privilegeMode === 'broker' &&
-          device.adminBridgeReady === true &&
-          lease?.ownerAccountId === account.id &&
-          Date.parse(lease.expiresAt) > this.now().getTime();
+          device.adminBridgeReady === true;
         return {
         id: device.id,
         name: device.name,
@@ -316,7 +318,7 @@ export class ControlPlaneService {
         accessMode: device.accessMode,
         rootMode: {
           active: Boolean(active),
-          expiresAt: active && lease ? lease.expiresAt : null,
+          expiresAt: unexpiredLease && lease ? lease.expiresAt : null,
         },
         agentVersion: device.agentVersion,
         privilegeMode: device.privilegeMode,

@@ -456,6 +456,20 @@ test('ROOT DANGER lease needs FULL online Broker, expires at server time and SAF
   assert.equal(granted.rootMode.active, true);
   assert.equal(granted.rootMode.expiresAt, '2026-10-02T12:15:00.000Z');
   assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, true);
+  const withBroker = await store.getDevice(id);
+  assert.ok(withBroker);
+  await store.putDevice({ ...withBroker, online: false, adminBridgeReady: false });
+  const paused = (await service.dashboard(owner)).devices[0]?.rootMode;
+  assert.equal(paused?.active, false);
+  assert.equal(paused?.expiresAt, '2026-10-02T12:15:00.000Z');
+  await service.setDeviceRootMode(owner, id, false);
+  await store.putDevice({ ...withBroker, online: true, adminBridgeReady: true });
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
+  await assert.rejects(
+    service.setDeviceRootMode({ accountId: 'root-owner', role: 'service' }, id, true),
+    /ROOT_REQUIRES_OWNER_LOGIN/,
+  );
+  await service.setDeviceRootMode(owner, id, true);
   clock = new Date('2026-10-02T12:15:01.000Z');
   assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
   await service.setDeviceRootMode(owner, id, true);
