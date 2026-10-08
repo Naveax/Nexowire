@@ -4,151 +4,100 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Nexowire</title>
+  <meta name="theme-color" content="#090d17">
+  <meta name="description" content="Nexowire cihaz yönetimi, erişim izinleri ve bağlantı durumu.">
+  <title>Nexowire · Kontrol Merkezi</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">Nexowire</div>
-    <div id="connection-pill" class="pill muted">Control plane bekleniyor</div>
+    <a class="brand" href="/" aria-label="Nexowire ana sayfa">
+      <span class="brand-symbol" aria-hidden="true"><span></span></span>
+      <span>NEXO<span class="accent">WIRE</span></span>
+      <span class="brand-divider" aria-hidden="true"></span>
+      <span class="brand-subtitle">Control Center</span>
+    </a>
+    <div class="topbar-right">
+      <span class="header-hint">Güvenli cihaz yönetimi</span>
+      <span id="connection-pill" class="pill muted" role="status">Bağlanıyor</span>
+    </div>
   </header>
 
-  <main class="shell">
+  <main class="shell" id="main-content">
     <section class="hero">
       <div>
-        <p class="eyebrow">Dashboard</p>
-        <h1 id="welcome">Hesap yükleniyor…</h1>
-        <p class="subtle">Cihazlar, kullanım kotası ve bağlantı sağlığı tek yerde.</p>
+        <p class="eyebrow"><span class="eyebrow-dot"></span> GENEL BAKIŞ / SİSTEM DURUMU</p>
+        <h1 id="welcome">Kontrol merkezi</h1>
+        <p class="subtle">Cihazların, bağlantıların ve erişim izinlerin tek bir yerde.</p>
       </div>
-      <button id="connect-device" class="primary" disabled>Yeni cihaz bağla</button>
+      <button id="connect-device" class="primary" disabled><span aria-hidden="true">＋</span> Yeni cihaz bağla</button>
     </section>
 
-    <section class="grid metrics">
-      <article class="card">
-        <span class="label">Plan</span>
+    <section class="metrics" aria-label="Hesap ve sistem özeti">
+      <article class="card metric-card">
+        <span class="metric-icon metric-icon-green" aria-hidden="true">◎</span>
+        <span class="label">Bağlı cihazlar</span>
+        <strong id="devices-count">—</strong>
+        <small id="devices-detail">Durum yükleniyor</small>
+      </article>
+      <article class="card metric-card">
+        <span class="metric-icon metric-icon-blue" aria-hidden="true">◈</span>
+        <span class="label">Hesap planı</span>
         <strong id="plan">—</strong>
         <small id="plan-detail">—</small>
       </article>
-      <article class="card">
-        <span class="label">Kullanım</span>
+      <article class="card metric-card usage-card">
+        <span class="metric-icon metric-icon-violet" aria-hidden="true">▤</span>
+        <span class="label">Aylık kullanım</span>
         <strong id="usage">—</strong>
         <div class="bar"><span id="usage-bar"></span></div>
       </article>
-      <article class="card">
-        <span class="label">Cihazlar</span>
-        <strong id="devices-count">—</strong>
-        <small id="devices-detail">—</small>
-      </article>
-      <article class="card">
-        <span class="label">Stabilite</span>
-        <strong id="stability">—</strong>
-        <small id="latency">—</small>
-      </article>
     </section>
 
-    <section id="owner-access-panel" class="owner-access-panel">
-      <div class="access-head">
-        <div>
-          <p class="eyebrow">Erişim güvenliği</p>
-          <h2>Kalıcı Full Access</h2>
+    <section class="section-head" id="device-section">
+      <div>
+        <p class="eyebrow">CİHAZ YÖNETİMİ</p>
+        <h2>Cihazların</h2>
+        <p class="subtle">Bir cihaz seç, yetki düzeyini değiştir veya ROOT bakım iznini yönet.</p>
+      </div>
+      <span class="section-chip">SAFE / FULL / ROOT</span>
+    </section>
+    <section id="devices" class="device-list" aria-live="polite">
+      <div class="empty">Cihaz listesi yükleniyor…</div>
+    </section>
+
+    <section class="utility-grid" aria-label="Ek bilgiler ve tercihler">
+      <details class="utility-panel" id="owner-access-panel">
+        <summary><span class="utility-icon">◈</span><span><strong>Güvenlik ve yetkiler</strong><small>SAFE, FULL, ROOT ve Windows UAC ayrımı</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+        <div class="utility-content">
+          <div class="policy-steps">
+            <p><strong>SAFE</strong> Varsayılan, onaylı ve kısıtlı erişim.</p>
+            <p><strong>FULL</strong> Kalıcı Full Access. SAFE moda dönülene kadar devam eder; desteklenen kontrol işlemlerinde Nexowire onay tekrarını azaltır.</p>
+            <p><strong>ROOT MODE · DANGER</strong> 15 dakikalık bakım izni. Etkinleştirme için FULL ve çevrimiçi cihaz gerekir. Yükseltilmiş işlemler için ayrıca hazır Admin Bridge ve makine onayı şarttır.</p>
+          </div>
+          <p class="interlock">GitHub OAuth, cihaz kimliği, audit ve Windows UAC korunur. ROOT izni sınırsız SYSTEM erişimi vermez. Admin Bridge ilk kurulumunda Windows yönetici onayı gerekebilir.</p>
         </div>
-        <span class="pill muted">GÜVENLİK</span>
-      </div>
-      <p class="risk-copy">
-        Her cihaz varsayılan olarak SAFE başlar. Full Access cihaz bazında açıldığında
-        süre dolmaz ve Nexowire'ın fiziksel konsol ALLOW / DENY pencereleri tekrar gösterilmez;
-        site üzerinden SAFE moda döndürülene kadar açık kalır. Windows UAC bundan ayrıdır:
-        Privileged Broker / SYSTEM Hub ilk kez kurulurken Windows bir defalık yönetici onayı
-        gösterebilir. Admin Bridge kurulduktan sonra desteklenen yönetici işlemleri broker
-        üzerinden gider ve işlem başına UAC beklenmez.
-      </p>
-      <div class="policy-grid">
-        <div><span>Varsayılan</span><strong>SAFE · onay korumalı</strong></div>
-        <div><span>Full Access</span><strong>Süresiz · Nexowire onayı yok</strong></div>
-        <div><span>Audit</span><strong>Meta veri kaydı açık</strong></div>
-        <div><span>Admin Bridge</span><strong>Broker · ilk kurulumda UAC</strong></div>
-      </div>
-      <div class="root-mode-warning" role="note">
-        <strong>ROOT MODE · DANGER</strong>
-        <p>15 dakikalık yüksek riskli bakım yetkisi. FULL ACCESS ve çevrimiçi
-          Admin Bridge şarttır. ROOT MODE, Windows UAC'yi, OAuth'u,
-          audit'i veya cihaz kimliğini devre dışı bırakmaz.
-          Henüz ek işletim sistemi yetkisi sağlamaz; ROOT bakım yetkisi
-          gerektiren ayrıcalıklı araçlar ayrıca onaylanmalıdır.</p>
-      </div>
-      <p class="local-interlock">
-        GitHub OAuth, cihaz credential'ı, audit ve idempotency her iki modda da kalır.
-        FULL ACCESS Windows'un UAC güvenlik sınırını taklit ederek geçmez. Bir kez kurulan
-        Admin Bridge, sonraki desteklenen elevated işlemleri ayrı UAC penceresi çıkarmadan
-        yürütür.
-      </p>
+      </details>
+      <details class="utility-panel" id="view-settings">
+        <summary><span class="utility-icon">☷</span><span><strong>Arayüz tercihleri</strong><small>İki küçük tercih, bir otomatik güncelleme sistemi</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+        <div class="utility-content">
+          <label class="setting-row"><span>Kompakt cihaz kartları</span><input id="setting-compact" type="checkbox"></label>
+          <label class="setting-row"><span>Animasyonları azalt</span><input id="setting-reduce-motion" type="checkbox"></label>
+          <p class="interlock">Canlı güncelleme: saatlik sürüm kontrolü, SHA-256 doğrulaması, side-by-side kurulum ve hata durumunda rollback. Görev durumu cihaz üzerinden doğrulanır.</p>
+        </div>
+      </details>
     </section>
 
-    <section id="billing-panel" class="billing-panel hidden">
-      <div>
-        <p class="eyebrow">Kullanım planı</p>
-        <h2>Ücretsiz plan</h2>
-        <p id="billing-detail" class="subtle">
-          Faturalama durumu yükleniyor…
-        </p>
-      </div>
-      <div class="billing-actions">
-        <div id="prepaid-packs" class="prepaid-packs hidden"></div>
-        <button id="upgrade-plus" class="secondary hidden">
-          Plus'a geç
-        </button>
-        <button id="upgrade-pro" class="primary hidden">
-          Pro'ya geç
-        </button>
-        <button id="billing-portal" class="secondary hidden">
-          Aboneliği yönet
-        </button>
+    <section id="error-panel" class="error-panel hidden" role="alert">
+      <strong>Kontrol paneline bağlanılamadı.</strong>
+      <p id="error-message">Lütfen tekrar dene.</p>
+      <div class="error-actions">
+        <button id="retry" class="secondary">Yeniden dene</button>
+        <button id="login" class="primary hidden">GitHub ile giriş</button>
       </div>
     </section>
-
-    <section class="section-head">
-      <div>
-        <p class="eyebrow">Cihazlar</p>
-        <h2>Bağlı makineler</h2>
-      </div>
-    </section>
-    <section id="devices" class="device-list">
-      <div class="empty">Control plane bağlantısı kurulmadı.</div>
-    </section>
-
-    <section class="section-head">
-      <div>
-        <p class="eyebrow">Settings</p>
-        <h2>Görünüm tercihleri</h2>
-      </div>
-    </section>
-    <section class="settings-grid">
-      <label class="setting-row">
-        <span><strong>Kompakt cihaz listesi</strong><small>Daha az dikey alan kullan.</small></span>
-        <input id="setting-compact" type="checkbox">
-      </label>
-      <label class="setting-row">
-        <span><strong>Hareketleri azalt</strong><small>Arayüz animasyonlarını kapat.</small></span>
-        <input id="setting-reduce-motion" type="checkbox">
-      </label>
-      <label class="setting-row">
-        <span><strong>Gelişmiş güvenlik bilgisi</strong><small>Owner/audit ayrıntılarını göster.</small></span>
-        <input id="setting-advanced" type="checkbox" checked>
-      </label>
-      <div class="setting-row">
-        <span><strong>Canlı güncelleme</strong><small>Resmi release SHA-256 ile doğrulanır, yeni sürüm side-by-side kurulur ve cutover başarısızsa rollback yapılır.</small></span>
-        <strong>LIVE UPDATE</strong>
-      </div>
-    </section>
-
-    <section id="error-panel" class="error-panel hidden">
-      <strong>Dashboard verisi alınamadı.</strong>
-      <p id="error-message"></p>
-      <button id="retry" class="secondary">Tekrar dene</button>
-      <button id="login" class="primary hidden">GitHub ile giriş</button>
-    </section>
+    <footer class="page-footer"><span>NEXOWIRE <span class="accent">/</span> CONTROL CENTER</span><span>Güvenlik sınırları aktif · Yetkiler cihaz bazında</span></footer>
   </main>
-
   <script type="module" src="./app.js"></script>
 </body>
 </html>

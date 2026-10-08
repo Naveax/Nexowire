@@ -353,10 +353,10 @@ test('ROOT site activation denies missing confirmation and unsafe devices', asyn
     body: enable,
   }));
   assert.equal(cannotElevate.status, 409);
-  assert.deepEqual(await cannotElevate.json(), { error: 'ROOT_REQUIRES_FULL_ONLINE_BROKER' });
+  assert.deepEqual(await cannotElevate.json(), { error: 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' });
   await service.setDeviceAccessMode(owner, id, 'full');
   await service.setDevicePresence(id, true, '2026-10-02T12:00:00.000Z', {
-    privilegeMode: 'broker', adminBridgeReady: true,
+    privilegeMode: 'direct', adminBridgeReady: false,
   });
   const enabled = await handler(request(route, owner, {
     method: 'POST',

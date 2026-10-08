@@ -1,472 +1,258 @@
 const $ = (id) => document.getElementById(id);
+const formatNumber = (value) => new Intl.NumberFormat('tr-TR').format(value);
+const FREE_ONLY_MODE = true;
+const openPcSettings = new Set();
 
-function formatNumber(value) {
-  return new Intl.NumberFormat('tr-TR').format(value);
-}
-
-// Free credits renew at midnight UTC on the first day of each month.
 function nextUtcPeriodStart(now = new Date()) {
   return new Date(Date.UTC(
     now.getUTCFullYear(), now.getUTCMonth() + 1, 1,
   )).toISOString().slice(0, 10);
 }
 
-function setPill(text, state) {
+function setPill(label, tone) {
   const pill = $('connection-pill');
-  pill.textContent = text;
-  pill.className = 'pill ' + state;
+  pill.textContent = label;
+  pill.className = 'pill ' + tone;
 }
 
-function setBillingBusy(busy) {
-  for (const id of [
-    'upgrade-plus',
-    'upgrade-pro',
-    'billing-portal',
-  ]) {
-    $(id).disabled = busy;
-  }
-  for (const button of $('prepaid-packs').querySelectorAll('button')) {
-    button.disabled = busy;
-  }
-}
-
-function subscriptionLabel(status) {
+function explainApiError(code) {
   const labels = {
-    on_trial: 'Deneme',
-    active: 'Aktif',
-    paused: 'Duraklatıldı',
-    past_due: 'Ödeme bekleniyor',
-    unpaid: 'Ödenmedi',
-    cancelled: 'İptal edildi',
-    expired: 'Sona erdi',
+    ROOT_REQUIRES_FULL_ONLINE_DEVICE:
+      'Önce cihazı FULL ACCESS moduna al ve çevrimiçi olduğundan emin ol.',
+    ROOT_REQUIRES_FULL_ONLINE_BROKER:
+      'Eski sunucu yapılandırması Broker istiyor. Sayfayı yenileyip tekrar dene.',
+    ROOT_DANGER_CONFIRMATION_REQUIRED:
+      'ROOT DANGER onay ifadesi doğrulanamadı.',
+    ROOT_REQUIRES_OWNER_LOGIN:
+      'Bu işlem için cihazın sahibi olan hesapla giriş yap.',
+    DEVICE_NOT_FOUND: 'Cihaz bu hesaba bağlı değil.',
+    UNAUTHENTICATED: 'Oturum süresi doldu. GitHub ile tekrar giriş yap.',
   };
-  return labels[status] ?? status;
+  return labels[code] || code || 'İşlem gerçekleştirilemedi.';
 }
 
-const FREE_ONLY_MODE = true;
-
-function renderBilling(status) {
-  const panel = $('billing-panel');
-  panel.classList.remove('hidden');
-
-  $('upgrade-plus').classList.add('hidden');
-  $('upgrade-pro').classList.add('hidden');
-  $('billing-portal').classList.add('hidden');
-  const prepaidRoot = $('prepaid-packs');
-  prepaidRoot.classList.add('hidden');
-  prepaidRoot.textContent = '';
-
-  if (status.prepaid) {
-    const refundDebt =
-      Number(status.prepaid.refundDebt ?? 0);
-    $('billing-detail').textContent =
-      'Custom prepaid · ' +
-      formatNumber(status.prepaid.balance) +
-      ' kredi bakiye' +
-      (refundDebt > 0
-        ? ' · ' +
-          formatNumber(refundDebt) +
-          ' kredi iade borcu; yeni paket önce bu borcu kapatır'
-        : '');
-    if (Array.isArray(status.prepaid.packs) && status.prepaid.packs.length) {
-      prepaidRoot.classList.remove('hidden');
-      for (const pack of status.prepaid.packs) {
-        const button = document.createElement('button');
-        button.className = 'secondary';
-        button.textContent = pack.label ||
-          formatNumber(pack.credits) + ' kredi';
-        button.addEventListener('click', () => {
-          void startPrepaidCheckout(pack.variantId);
-        });
-        prepaidRoot.appendChild(button);
-      }
-    } else {
-      $('billing-detail').textContent +=
-        ' · Satın alınabilir kredi paketi yapılandırılmamış.';
-    }
-    return;
-  }
-
-  if (status.subscription) {
-    $('billing-detail').textContent =
-      status.subscription.planId.toUpperCase() +
-      ' · ' +
-      subscriptionLabel(status.subscription.status);
-    $('billing-portal').classList.remove('hidden');
-    return;
-  }
-
-  if (status.planId === 'custom') {
-    $('billing-detail').textContent =
-      'Custom planın yönetilen faturalama akışını kullanıyor.';
-    return;
-  }
-
-  $('billing-detail').textContent =
-    status.planId === 'free'
-      ? 'İhtiyacına göre Plus veya Pro planına geçebilirsin.'
-      : status.planId.toUpperCase() + ' planı aktif.';
-
-  if (status.planId === 'free') {
-    $('upgrade-plus').classList.remove('hidden');
-    $('upgrade-pro').classList.remove('hidden');
-  }
-}
-
-async function loadBilling(snapshot) {
-  const panel = $('billing-panel');
-  if (FREE_ONLY_MODE) {
-    panel.classList.remove('hidden');
-    $('upgrade-plus').classList.add('hidden');
-    $('upgrade-pro').classList.add('hidden');
-    $('billing-portal').classList.add('hidden');
-    $('prepaid-packs').classList.add('hidden');
-    $('billing-detail').textContent =
-      snapshot?.billingMode === 'free' && snapshot.usage?.monthlyCredits === null
-        ? 'Sahip hesabı: MCP tool kullanım kotası sınırsız. Ödeme kapalı.'
-        : 'Herkese ücretsiz: ayda 1.000 ağırlıklı tool çağrısı. Normal çağrı 1, özel skill çağrısı 5 birim. Ödeme kapalı.';
-    return;
-  }
-  panel.classList.add('hidden');
-
-  const response = await fetch('/api/v1/billing/status', {
+async function postDeviceMode(endpoint, deviceId, body, confirmToken) {
+  const headers = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (confirmToken) headers['X-Nexowire-Confirm'] = confirmToken;
+  const response = await fetch(endpoint, {
+    method: 'POST',
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers,
+    body: JSON.stringify({ deviceId, ...body }),
   });
-  if (response.status === 503) {
-    return;
-  }
-  if (response.status === 401) {
-    return;
-  }
+  let result;
+  try { result = await response.json(); } catch { result = {}; }
   if (!response.ok) {
-    throw new Error('Billing HTTP ' + response.status);
+    throw new Error(explainApiError(result.error || ('HTTP ' + response.status)));
   }
-  renderBilling(await response.json());
+  return result;
 }
 
-async function startCheckout(planId) {
-  if (FREE_ONLY_MODE) return;
-  setBillingBusy(true);
+async function setDeviceAccessMode(deviceId, mode, row) {
+  const button = row.querySelector('.access-toggle');
+  const status = row.querySelector('.access-copy');
+  button.disabled = true;
+  status.textContent = mode === 'full'
+    ? 'Full Access etkinleştiriliyor…' : 'SAFE moda dönülüyor…';
   try {
-    const response = await fetch(
-      '/api/v1/billing/checkout',
-      {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ planId }),
-      },
+    await postDeviceMode(
+      '/api/v1/me/devices/access-mode',
+      deviceId, { mode }, mode === 'full' ? 'full-access-v1' : null,
     );
-    const body = await response.json();
-    if (response.status === 409 &&
-        body.error === 'BILLING_PORTAL_REQUIRED') {
-      await openBillingPortal();
-      return;
-    }
-    if (!response.ok || typeof body.url !== 'string') {
-      throw new Error(
-        body.error || 'Checkout açılamadı.',
-      );
-    }
-    window.location.assign(body.url);
+    await load();
   } catch (error) {
-    $('billing-detail').textContent =
-      error instanceof Error
-        ? error.message
-        : String(error);
-    setBillingBusy(false);
-  }
-}
-
-async function startPrepaidCheckout(variantId) {
-  if (FREE_ONLY_MODE) return;
-  setBillingBusy(true);
-  try {
-    const response = await fetch(
-      '/api/v1/billing/prepaid/checkout',
-      {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ variantId }),
-      },
-    );
-    const body = await response.json();
-    if (!response.ok || typeof body.url !== 'string') {
-      throw new Error(
-        body.error || 'Kredi checkout açılamadı.',
-      );
-    }
-    window.location.assign(body.url);
-  } catch (error) {
-    $('billing-detail').textContent =
-      error instanceof Error
-        ? error.message
-        : String(error);
-    setBillingBusy(false);
-  }
-}
-
-async function openBillingPortal() {
-  if (FREE_ONLY_MODE) return;
-  setBillingBusy(true);
-  try {
-    const response = await fetch(
-      '/api/v1/billing/portal',
-      {
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      },
-    );
-    const body = await response.json();
-    if (!response.ok || typeof body.url !== 'string') {
-      throw new Error(
-        body.error || 'Abonelik portalı açılamadı.',
-      );
-    }
-    window.location.assign(body.url);
-  } catch (error) {
-    $('billing-detail').textContent =
-      error instanceof Error
-        ? error.message
-        : String(error);
-    setBillingBusy(false);
+    status.textContent = error.message;
+    button.disabled = false;
   }
 }
 
 async function setDeviceRootMode(deviceId, enabled, row) {
   const action = row.querySelector('.root-toggle');
+  const approve = row.querySelector('.root-approve');
   const panel = row.querySelector('.root-confirm-panel');
   const input = row.querySelector('.root-phrase');
   const status = row.querySelector('.root-copy');
-  if (enabled && panel.hidden) {
-    panel.hidden = false;
-    input.value = '';
-    status.textContent = 'DANGER: Etkinleştirmek için ROOT DANGER yaz.';
+  if (enabled && !panel.hidden && input.value.trim() !== 'ROOT DANGER') {
+    status.textContent = 'Etkinleştirmek için tam olarak ROOT DANGER yaz.';
     input.focus();
     return;
   }
-  if (enabled && input.value.trim() !== 'ROOT DANGER') {
-    status.textContent = 'Onay ifadesi tam olarak ROOT DANGER olmalı.';
-    return;
-  }
   action.disabled = true;
+  approve.disabled = true;
   status.textContent = enabled ? 'ROOT bakım izni açılıyor…' : 'ROOT kapatılıyor…';
   try {
-    const headers = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-    if (enabled) headers['X-Nexowire-Confirm'] = 'root-danger-v1';
-    const response = await fetch('/api/v1/me/devices/root-mode', {
-      method: 'POST',
-      credentials: 'include',
-      headers,
-      body: JSON.stringify({
-        deviceId, enabled,
-        ...(enabled ? { confirmation: 'ROOT DANGER' } : {}),
-      }),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || ('HTTP ' + response.status));
+    await postDeviceMode(
+      '/api/v1/me/devices/root-mode', deviceId,
+      { enabled, ...(enabled ? { confirmation: 'ROOT DANGER' } : {}) },
+      enabled ? 'root-danger-v1' : null,
+    );
     await load();
   } catch (error) {
-    status.textContent = error instanceof Error ? error.message : String(error);
+    status.textContent = error.message;
     action.disabled = false;
-  }
-}
-
-async function setDeviceAccessMode(deviceId, mode, row) {
-  const button = row.querySelector('.access-toggle');
-  const copy = row.querySelector('.access-copy');
-  button.disabled = true;
-  copy.textContent = mode === 'full'
-    ? 'Full Access etkinleştiriliyor…'
-    : 'SAFE moda dönülüyor…';
-  try {
-    const headers = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-    if (mode === 'full') {
-      headers['X-Nexowire-Confirm'] = 'full-access-v1';
-    }
-    const response = await fetch('/api/v1/me/devices/access-mode', {
-      method: 'POST',
-      credentials: 'include',
-      headers,
-      body: JSON.stringify({ deviceId, mode }),
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      throw new Error(body.error || ('HTTP ' + response.status));
-    }
-    await load();
-  } catch (error) {
-    copy.textContent =
-      error instanceof Error ? error.message : String(error);
-    button.disabled = false;
+    approve.disabled = false;
   }
 }
 
 function render(snapshot) {
   $('welcome').textContent = snapshot.displayName
-    ? 'Merhaba, ' + snapshot.displayName
-    : 'Nexowire hesabın';
-
+    ? 'Hoş geldin, ' + snapshot.displayName
+    : 'Kontrol merkezi';
   $('plan').textContent = snapshot.planId.toUpperCase();
-  $('plan-detail').textContent = snapshot.privateControlsIncluded
-    ? 'Özel ekran / klavye / pointer dahil'
-    : 'Temel özellikler';
+  $('plan-detail').textContent = snapshot.billingMode === 'free'
+    ? 'Ücretsiz plan · ödeme gerekmez' : 'Hesap planın';
 
   const usage = snapshot.usage;
   if (usage.monthlyCredits !== null) {
-    const usageLabel =
-      formatNumber(usage.usedCredits) + ' / ' +
+    const usageLabel = formatNumber(usage.usedCredits) + ' / ' +
       formatNumber(usage.monthlyCredits);
-    // Explain why tools stop running when a lower Free limit is applied
-    // to an account that may already have more credits used this month.
-    $('usage').textContent =
-      FREE_ONLY_MODE && usage.usedCredits >= usage.monthlyCredits
-        ? usageLabel + ' · Kota doldu. Yenilenme: ' +
-          nextUtcPeriodStart() + ' 00:00 UTC'
-        : usageLabel;
-    const percent = Math.min(
-      100,
-      Math.round((usage.usedCredits / usage.monthlyCredits) * 100),
-    );
-    $('usage-bar').style.width = percent + '%';
+    $('usage').textContent = FREE_ONLY_MODE && usage.usedCredits >= usage.monthlyCredits
+      ? usageLabel + ' · Kota doldu. Yenilenme: ' + nextUtcPeriodStart() + ' 00:00 UTC'
+      : usageLabel;
+    $('usage-bar').style.width = Math.min(
+      100, Math.round((usage.usedCredits / usage.monthlyCredits) * 100),
+    ) + '%';
   } else if (snapshot.billingMode === 'free') {
-    $('usage').textContent = 'Sınırsız · ' + formatNumber(usage.usedCredits) + ' birim kullanıldı';
+    $('usage').textContent = 'Sınırsız · ' + formatNumber(usage.usedCredits) +
+      ' birim kullanıldı';
     $('usage-bar').style.width = '0%';
   } else {
-    const remaining = usage.prepaidCredits ?? 0;
-    $('usage').textContent = formatNumber(remaining) + ' kredi';
+    $('usage').textContent = formatNumber(usage.prepaidCredits ?? 0) + ' kredi';
     $('usage-bar').style.width = '0%';
   }
 
-  const online = snapshot.devices.filter((d) => d.online).length;
-  $('devices-count').textContent = String(snapshot.devices.length);
-  $('devices-detail').textContent = online + ' online';
-
-  const stability = snapshot.stability;
-  $('stability').textContent =
-    stability.successRate === null
-      ? '—'
-      : stability.successRate.toFixed(2) + '%';
-  $('latency').textContent =
-    stability.medianLatencyMs === null
-      ? 'Latency verisi yok'
-      : 'Medyan ' + Math.round(stability.medianLatencyMs) + ' ms';
+  const devices = snapshot.devices ?? [];
+  const onlineCount = devices.filter((device) => device.online).length;
+  $('devices-count').textContent = String(devices.length);
+  $('devices-detail').textContent = onlineCount + ' çevrimiçi';
 
   const root = $('devices');
   root.textContent = '';
-  if (!snapshot.devices.length) {
-    root.innerHTML = '<div class="empty">Henüz bağlı cihaz yok.</div>';
+  if (!devices.length) {
+    root.innerHTML = '<div class="empty">Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.</div>';
   } else {
-    for (const device of snapshot.devices) {
+    for (const device of devices) {
       const row = document.createElement('article');
-      row.className = 'device';
-      row.innerHTML = `
-        <div>
-          <div class="device-name"></div>
-          <small class="platform"></small>
-        </div>
-        <div class="status">
-          <span class="dot"></span>
-          <span class="status-text"></span>
-        </div>
-        <div class="device-access">
-          <span class="access-mode"></span>
-          <button type="button" class="secondary access-toggle"></button>
-          <small class="access-copy"></small>
-          <div class="root-access">
-            <span class="root-label">ROOT MODE · DANGER</span>
-            <button type="button" class="secondary root-toggle"></button>
-            <div class="root-confirm-panel" hidden>
-              <label>Etkinleştirme onayı:
-                <input class="root-phrase" maxlength="32" autocomplete="off" placeholder="ROOT DANGER">
-              </label>
-            </div>
-            <small class="root-copy"></small>
-          </div>
-        </div>
-        <small class="last-seen"></small>
-      `;
+      row.className = 'device' + (device.online ? '' : ' offline');
+      row.innerHTML = [
+        '<div class="device-header">',
+        ' <div class="device-identity">',
+        '  <span class="device-icon" aria-hidden="true">▣</span>',
+        '  <div><div class="device-name"></div><small class="platform"></small></div>',
+        ' </div>',
+        ' <div class="status"><span class="dot"></span><span class="status-text"></span></div>',
+        '</div>',
+        '<div class="device-meta">',
+        ' <span class="meta-chip version-chip"></span><span class="meta-chip bridge-chip"></span>',
+        '</div>',
+        '<details class="pc-settings">',
+        '<summary class="pc-settings-summary"><span class="pc-settings-title">PC Settings</span><span class="pc-settings-status"></span></summary>',
+        '<div class="device-access">',
+        ' <div class="access-heading"><span class="access-title">Erişim düzeyi</span><span class="access-mode"></span></div>',
+        ' <button type="button" class="secondary access-toggle"></button>',
+        ' <small class="access-copy"></small>',
+        ' <div class="root-access">',
+        '  <div class="root-head"><span class="root-label">ROOT MODE</span><span class="danger-chip">DANGER</span></div>',
+        '  <small class="root-copy"></small>',
+        '  <button type="button" class="danger-button root-toggle"></button>',
+        '  <div class="root-confirm-panel" hidden>',
+        '   <span class="root-alert">15 dakikalık bakım izni. Bu izin tek başına SYSTEM erişimi vermez.</span>',
+        '   <label>Onaylamak için ROOT DANGER yaz',
+        '    <input class="root-phrase" maxlength="32" autocomplete="off" placeholder="ROOT DANGER"></label>',
+        '   <button type="button" class="danger-button root-approve">15 dakikalık izni aç</button>',
+        '  </div>',
+        ' </div>',
+        '</div>',
+        '</details>',
+        '<div class="device-foot"><small class="last-seen"></small><small class="device-security">Kimlik korumalı</small></div>',
+      ].join('');
       row.querySelector('.device-name').textContent = device.name;
-      row.querySelector('.platform').textContent =
-        device.platform +
-        (device.agentVersion
-          ? ' · v' + device.agentVersion
-          : '');
+      row.querySelector('.platform').textContent = device.platform;
+      row.querySelector('.version-chip').textContent = device.agentVersion
+        ? 'Agent v' + device.agentVersion : 'Agent sürümü bilinmiyor';
+      const ready = device.privilegeMode === 'broker' &&
+        device.adminBridgeReady === true;
+      const bridge = row.querySelector('.bridge-chip');
+      bridge.textContent = ready ? 'Admin Bridge hazır' : 'Admin Bridge gerekli';
+      bridge.classList.add(ready ? 'healthy' : 'needs-bridge');
       row.querySelector('.dot').classList.toggle('online', device.online);
       row.querySelector('.status-text').textContent =
-        device.online ? 'Online' : 'Offline';
-      const accessMode = device.accessMode === 'full' ? 'full' : 'safe';
-      const accessBadge = row.querySelector('.access-mode');
-      const accessToggle = row.querySelector('.access-toggle');
-      const accessCopy = row.querySelector('.access-copy');
-      accessBadge.textContent =
-        accessMode === 'full' ? 'FULL ACCESS' : 'SAFE';
-      accessBadge.classList.add(accessMode);
-      accessToggle.textContent =
-        accessMode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
-      const bridgeState =
-        device.adminBridgeReady === true
-          ? 'Admin Bridge hazır'
-          : device.privilegeMode === 'broker'
-            ? 'Admin Bridge ulaşılamıyor'
-            : device.adminBridgeReady === null ||
-                device.adminBridgeReady === undefined
-              ? 'Admin Bridge durumu reconnect sonrası doğrulanacak'
-              : 'Admin Bridge kurulum bekliyor · ilk kurulumda Windows UAC';
-      accessCopy.textContent =
-        accessMode === 'full'
-          ? 'Süresiz · Nexowire onayı yok · ' + bridgeState
-          : 'Varsayılan güvenli mod · ' + bridgeState;
-      const rootActive = device.rootMode?.active === true;
-      // The user must still be able to revoke a temporary lease
-      // when its Broker goes offline. Never trap a DANGER grant.
-      const rootPending = Boolean(device.rootMode?.expiresAt);
-      const rootButton = row.querySelector('.root-toggle');
+        device.online ? 'Çevrimiçi' : 'Çevrimdışı';
+
+      const mode = device.accessMode === 'full' ? 'full' : 'safe';
+      const badge = row.querySelector('.access-mode');
+      badge.textContent = mode === 'full' ? 'FULL ACCESS' : 'SAFE';
+      badge.classList.add(mode);
+      const pcSettings = row.querySelector('.pc-settings');
+      const pcSettingsStatus = row.querySelector('.pc-settings-status');
+      pcSettings.open = openPcSettings.has(device.id);
+      pcSettingsStatus.textContent = mode === 'full' ? 'FULL ACCESS' : 'SAFE';
+      pcSettings.addEventListener('toggle', () => {
+        if (pcSettings.open) openPcSettings.add(device.id);
+        else openPcSettings.delete(device.id);
+      });
+      const toggle = row.querySelector('.access-toggle');
+      toggle.textContent = mode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
+      toggle.addEventListener('click', () => {
+        void setDeviceAccessMode(device.id, mode === 'full' ? 'safe' : 'full', row);
+      });
+      row.querySelector('.access-copy').textContent =
+        mode === 'full'
+          ? 'Kalıcı Full Access etkin. Desteklenen işlemler için gereksiz Nexowire onayları tekrarlanmaz.'
+          : 'Varsayılan güvenli erişim. ROOT bakım izni için önce FULL aç.';
+
+      const expiresAt = device.rootMode?.expiresAt;
+      const pending = Boolean(expiresAt && Date.parse(expiresAt) > Date.now());
+      const active = pending && device.rootMode?.active === true;
       const rootPanel = row.querySelector('.root-confirm-panel');
+      const rootButton = row.querySelector('.root-toggle');
+      const rootApprove = row.querySelector('.root-approve');
       const rootCopy = row.querySelector('.root-copy');
-      rootButton.textContent = rootPending ? 'ROOT kapat' : 'ROOT MODE aç';
-      rootButton.disabled = !rootPending && (
-        accessMode !== 'full' || !device.online ||
-        device.privilegeMode !== 'broker' || device.adminBridgeReady !== true
-      );
-      rootPanel.hidden = true;
-      rootCopy.textContent = rootPending
-        ? (rootActive ? 'DANGER · ROOT aktif · ' : 'DANGER · Broker yok, izin beklemede · ') +
-          new Date(device.rootMode.expiresAt).toLocaleTimeString('tr-TR') +
-          ' tarihinde/saatinde biter · İptal edilebilir'
-        : 'FULL + çevrimiçi Broker gerekir. OS güvenliği korunur.';
-      rootButton.addEventListener('click', () => {
-        void setDeviceRootMode(device.id, !rootPending, row);
-      });
-      if (rootPending) {
-        const expiresInMs = Date.parse(device.rootMode.expiresAt) - Date.now();
-        if (expiresInMs > 0) {
-          setTimeout(() => { void load(); }, Math.min(expiresInMs + 250, 900_000));
-        }
+      const rootContainer = row.querySelector('.root-access');
+      rootContainer.classList.toggle('active', active);
+      rootButton.textContent = pending ? 'ROOT kapat' : 'ROOT MODE aç';
+      if (pending) {
+        rootCopy.textContent = '15 dakikalık bakım izni ' +
+          (active ? 'aktif' : 'beklemede') + ' · ' +
+          new Date(expiresAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) +
+          ' bitiş. ' + (ready ? 'Admin Bridge hazır.' : 'Yönetici işlemleri için Admin Bridge gerekli.');
+        const delay = Date.parse(expiresAt) - Date.now();
+        if (delay > 0) setTimeout(() => { void load(); }, Math.min(delay + 300, 900_000));
+      } else if (!device.online) {
+        rootCopy.textContent = 'Cihaz çevrimdışı. Bağlantı gelince bakım izni açılabilir.';
+      } else if (mode !== 'full') {
+        rootCopy.textContent = 'Önce Full Access açmalısın.';
+      } else {
+        rootCopy.textContent = ready
+          ? '15 dakikalık bakım izni hazır. İstediğin zaman iptal edilebilir.'
+          : 'Bakım izni açılabilir. Yükseltilmiş işlemler için Admin Bridge henüz hazır değil.';
       }
-      accessToggle.addEventListener('click', () => {
-        void setDeviceAccessMode(
-          device.id,
-          accessMode === 'full' ? 'safe' : 'full',
-          row,
-        );
+      rootPanel.hidden = true;
+      rootButton.addEventListener('click', () => {
+        if (pending) {
+          void setDeviceRootMode(device.id, false, row);
+        } else if (mode !== 'full') {
+          rootCopy.textContent = 'Önce yukarıdaki Full Access aç düğmesine bas.';
+          toggle.focus();
+        } else if (!device.online) {
+          rootCopy.textContent = 'Cihaz çevrimdışı olduğu için ROOT izni açılamıyor.';
+        } else {
+          rootPanel.hidden = !rootPanel.hidden;
+          if (!rootPanel.hidden) row.querySelector('.root-phrase').focus();
+        }
       });
+      rootApprove.addEventListener('click', () => {
+        void setDeviceRootMode(device.id, true, row);
+      });
+
       row.querySelector('.last-seen').textContent =
-        device.lastSeenAt ?? 'Henüz görülmedi';
+        device.lastSeenAt ? 'Son bağlantı: ' +
+          new Date(device.lastSeenAt).toLocaleString('tr-TR', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+          }) : 'Henüz görülmedi';
       root.appendChild(row);
     }
   }
@@ -478,37 +264,23 @@ function render(snapshot) {
 async function load() {
   $('error-panel').classList.add('hidden');
   $('login').classList.add('hidden');
-  setPill('Bağlanıyor', 'muted');
-
+  setPill('Kontrol ediliyor', 'muted');
   try {
     const response = await fetch('/api/v1/me/dashboard', {
       credentials: 'include',
       headers: { Accept: 'application/json' },
     });
     if (response.status === 401) {
-      setPill('Oturum yok', 'muted');
-      $('error-message').textContent =
-        'Dashboard için hesabınla giriş yap.';
+      setPill('Oturum gerekli', 'muted');
+      $('error-message').textContent = 'Kontrol paneli için GitHub hesabınla giriş yap.';
       $('login').classList.remove('hidden');
       $('error-panel').classList.remove('hidden');
       return;
     }
-    if (!response.ok) {
-      throw new Error('HTTP ' + response.status);
-    }
-    const snapshot = await response.json();
-    render(snapshot);
-    try {
-      await loadBilling(snapshot);
-    } catch (billingError) {
-      $('billing-panel').classList.remove('hidden');
-      $('billing-detail').textContent =
-        billingError instanceof Error
-          ? billingError.message
-          : String(billingError);
-    }
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    render(await response.json());
   } catch (error) {
-    setPill('Offline', 'bad');
+    setPill('Bağlantı hatası', 'bad');
     $('error-message').textContent =
       error instanceof Error ? error.message : String(error);
     $('error-panel').classList.remove('hidden');
@@ -517,21 +289,10 @@ async function load() {
 
 $('retry').addEventListener('click', load);
 $('login').addEventListener('click', () => {
-  window.location.href =
-    '/auth/github/start?next=' +
+  window.location.href = '/auth/github/start?next=' +
     encodeURIComponent(window.location.pathname);
 });
 $('connect-device').addEventListener('click', () => {
   window.location.href = '/connect.html';
 });
-$('upgrade-plus').addEventListener('click', () => {
-  void startCheckout('plus');
-});
-$('upgrade-pro').addEventListener('click', () => {
-  void startCheckout('pro');
-});
-$('billing-portal').addEventListener('click', () => {
-  void openBillingPortal();
-});
-
 load();
