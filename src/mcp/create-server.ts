@@ -3693,6 +3693,27 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_uac_status',
+    {
+      title: 'Inspect Windows UAC and authorized Broker readiness',
+      description:
+        'Read-only UAC status. Detect consent.exe in the native agent session and check whether an elevated Broker can accept a machine-preapproved installer in owner FULL mode. Never click Secure Desktop. On inaccessible process information, report unknown, not clear.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.uac.status',
+        {},
+        device_id,
+        provider_id,
+        15_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_processes',
     {
       title: 'List Windows processes',

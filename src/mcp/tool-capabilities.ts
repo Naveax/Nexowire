@@ -57,6 +57,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_console_control_status: 'windows.console_control.status',
   windows_console_control_request: 'windows.console_control.request',
   windows_console_control_revoke: 'windows.console_control.revoke',
+  windows_uac_status: 'windows.uac.status',
   windows_processes: 'windows.processes',
   windows_services: 'windows.services',
   windows_network_snapshot: 'windows.network.snapshot',
