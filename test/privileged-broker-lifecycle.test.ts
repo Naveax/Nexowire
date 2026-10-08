@@ -56,5 +56,9 @@ test('elevated broker task has unattended crash/recovery policy without system e
   assert.match(script, /-MultipleInstances IgnoreNew/);
   assert.match(script, /-AllowStartIfOnBatteries/);
   assert.match(script, /-DontStopIfGoingOnBatteries/);
+  assert.match(script, /New-ScheduledTaskTrigger -Once/);
+  assert.match(script, /-RepetitionInterval \(New-TimeSpan -Minutes 1\)/);
+  assert.match(script, /\$minuteTrigger\.Repetition\.Duration=\$null/);
+  assert.match(script, /\$minuteTrigger\.Repetition\.StopAtDurationEnd=\$false/);
   assert.doesNotMatch(script, /-UserId|SYSTEM|ServiceAccount/);
 });
