@@ -28,6 +28,10 @@ This candidate adds a separate **indefinite 1-minute repeating Task Scheduler tr
 
 Read-only Windows event logs from the 2026-10-08 boot show kernel startup around 11:57:38 TRT, first user interactive logon at 11:57:54, SYSTEM Hub task start at 11:57:57, and Hub node process at 11:58:24. Thus the same reboot confirms recovery **after login**, not independent pre-login remote availability. Do not declare this gate passed without a dedicated no-login network probe.
 
+## Source candidate: hourly automatic updates (PR pending)
+
+The Windows user setup now registers a separate once-per-hour `Nexowire Automatic Update` limited-user TaskScheduler entry, with AtLogOn and an indefinite hourly repetition. It is a small check-only job when no newer stable published release is available, and a Broker-gated auto-updater when a release is available. Machine updates use the existing previously elevated Privileged Broker, not UAC prompt automation. Broker absence defers the entire automatic cutover, and user/broker launchers must preserve executable suffixes when changing version directories. `docs/AUTOMATIC_UPDATES.md` specifies owner controls and limits. This is **source candidate only** until CI, publication, and real installed runtime acceptance.
+
 ## Candidate gates
 
 - [ ] Check exact candidate SHA, clean PR CI and Release Readiness on Linux/Windows/macOS.
