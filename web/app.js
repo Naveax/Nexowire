@@ -6,6 +6,7 @@ const formatCompact = (value) => Number.isFinite(value)
   : '—';
 const FREE_ONLY_MODE = true;
 const openPcSettings = new Set();
+// Core Access remains display-only until server-side owner approval and Broker enforcement exist.
 let currentSnapshot = null;
 let selectedDeviceFilter = 'all';
 let selectedDeviceLayout = 'grid';
@@ -161,6 +162,29 @@ async function setDeviceRootMode(deviceId, enabled, row) {
   }
 }
 
+async function updateAutoSelection(enabled) {
+  const status = $('auto-status');
+  const button = enabled ? $('auto-approve') : $('auto-toggle');
+  button.disabled = true;
+  status.textContent = enabled ? 'Otomatik cihaz seçimi açılıyor…' : 'Otomatik cihaz seçimi kapatılıyor…';
+  try {
+    const response = await fetch('/api/v1/me/device-selection/auto', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json', 'Accept':'application/json',
+        ...(enabled ? {'X-Nexowire-Confirm':'auto-device-selection-v1'} : {})},
+      body: JSON.stringify({enabled, ...(enabled ? {confirmation:'AUTO DEVICE ACCESS'} : {})}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(explainApiError(data.error || 'HTTP ' + response.status));
+    $('auto-confirm-panel').hidden = true;
+    $('auto-phrase').value = '';
+    await load();
+  } catch(error) {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    button.disabled = false;
+  }
+}
+
 function render(snapshot) {
   currentSnapshot = snapshot;
   $('welcome').textContent = snapshot.displayName
@@ -200,6 +224,13 @@ function render(snapshot) {
   $('devices-detail').textContent = formatCompact(onlineCount) + ' çevrimiçi';
   syncDeviceToolbar(devices);
   syncFolders(snapshot.folders ?? []);
+  const autoEnabled = snapshot.autoSelectDevices === true;
+  $('auto-toggle').disabled = false;
+  $('auto-toggle').textContent = autoEnabled ? 'Otomatik seçimi kapat' : 'Otomatik seçimi aç';
+  $('auto-status').textContent = autoEnabled
+    ? 'Açık · kontrol panelinde yalnızca tek uygun cihaz seçilebilir. MCP entegrasyonu ayrıca doğrulanmalıdır.'
+    : 'Kapalı · cihaz belirtilmediyse seçim zorunlu.';
+  if (autoEnabled) $('auto-confirm-panel').hidden = true;
   const filteredByMode = selectedDeviceFilter === 'all'
     ? devices : devices.filter((device) => getDeviceTier(device) === selectedDeviceFilter);
   const visibleDevices = filteredByMode.filter(device => selectedFolder === 'all' ||
@@ -213,7 +244,7 @@ function render(snapshot) {
     empty.textContent = !devices.length
       ? 'Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.'
       : selectedDeviceFilter === 'persistent'
-        ? 'ROOT+ şu anda uygulanmış bir yetki değil. Sunucu ve Broker doğrulaması eklenmeden etkin gösterilmez.'
+        ? 'Core Access henüz etkinleştirilebilir değil. Sunucu, özel onay ve Broker kontrolleri tamamlanmalı.'
         : 'Bu erişim düzeyinde cihaz bulunmuyor.';
     root.appendChild(empty);
   } else {
@@ -228,11 +259,16 @@ function render(snapshot) {
         ' </div>',
         ' <div class="status"><span class="dot"></span><span class="status-text"></span></div>',
         '</div>',
+        '<section class="pc-settings">',
         '<div class="device-meta">',
-        ' <span class="meta-chip version-chip"></span><span class="meta-chip bridge-chip"></span><span class="meta-chip mode-chip"></span>',
+        ' <span class="meta-chip version-chip"></span><span class="meta-chip bridge-chip"></span><span class="meta-chip mode-chip"></span><span class="meta-chip root-state-chip"></span>',
+        ' <button type="button" class="pc-settings-button" aria-expanded="false">',
+        '  <span class="pc-settings-icon" aria-hidden="true">⚙</span>',
+        '  <span class="pc-settings-label"><strong>PC Settings</strong><small>Ayarları yönet</small></span>',
+        '  <span class="pc-settings-arrow" aria-hidden="true">⌄</span>',
+        ' </button>',
         '</div>',
-        '<details class="pc-settings">',
-        '<summary class="pc-settings-summary"><span class="pc-settings-title">PC Settings</span><span class="pc-settings-status">Yönet</span></summary>',
+        '<div class="pc-settings-panel"><div class="pc-settings-inner">',
         '<div class="device-folder-manage"><label>Klasör <select class="folder-assign" aria-label="Cihaz klasörünü değiştir"></select></label><small class="folder-assign-status"></small></div>',
         '<div class="device-access">',
         ' <div class="access-heading"><span class="access-title">Erişim düzeyi</span><span class="access-mode"></span></div>',
@@ -250,7 +286,7 @@ function render(snapshot) {
         '  </div>',
         ' </div>',
         '</div>',
-        '</details>',
+        '</div></div></section>',
         '<div class="device-foot"><small class="last-seen"></small><small class="device-security">Kimlik korumalı</small></div>',
       ].join('');
       row.querySelector('.device-name').textContent = device.name;
@@ -288,18 +324,27 @@ function render(snapshot) {
       badge.textContent = mode === 'full' ? 'FULL ACCESS' : 'SAFE';
       badge.classList.add(mode);
       const pcSettings = row.querySelector('.pc-settings');
-      const pcSettingsStatus = row.querySelector('.pc-settings-status');
-      pcSettings.open = openPcSettings.has(device.id);
-      pcSettingsStatus.textContent = 'Ayarları yönet';
-      const tier = getDeviceTier(device);
-      const modeChip = row.querySelector('.mode-chip');
-      const tierLabels = { safe: 'SAFE açık', full: 'Full Access açık', root: 'ROOT izni açık', persistent: 'ROOT+ etkin' };
-      modeChip.textContent = tierLabels[tier];
-      modeChip.classList.add(tier === 'root' || tier === 'persistent' ? 'elevated' : tier);
-      pcSettings.addEventListener('toggle', () => {
-        if (pcSettings.open) openPcSettings.add(device.id);
+      const pcButton = row.querySelector('.pc-settings-button');
+      const pcPanel = row.querySelector('.pc-settings-panel');
+      pcPanel.id = 'pc-settings-' + devices.indexOf(device);
+      pcButton.setAttribute('aria-controls', pcPanel.id);
+      const setSettingsOpen = (open) => {
+        pcSettings.classList.toggle('is-open', open);
+        pcButton.setAttribute('aria-expanded', String(open));
+        pcPanel.inert = !open;
+        if (open) openPcSettings.add(device.id);
         else openPcSettings.delete(device.id);
-      });
+      };
+      setSettingsOpen(openPcSettings.has(device.id));
+      pcButton.addEventListener('click', () => setSettingsOpen(!pcSettings.classList.contains('is-open')));
+      const modeChip = row.querySelector('.mode-chip');
+      modeChip.textContent = mode === 'full' ? 'Full Access açık' : 'SAFE açık';
+      modeChip.classList.add(mode);
+      const rootStateChip = row.querySelector('.root-state-chip');
+      const rootLeaseActive = device.rootMode?.active === true &&
+        Date.parse(device.rootMode?.expiresAt ?? '') > Date.now();
+      rootStateChip.textContent = rootLeaseActive ? 'ROOT izni açık' : 'ROOT kapalı';
+      if (rootLeaseActive) rootStateChip.classList.add('elevated');
       const toggle = row.querySelector('.access-toggle');
       toggle.textContent = mode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
       toggle.addEventListener('click', () => {
@@ -455,6 +500,26 @@ for (const key of ['compact', 'reduce-motion']) {
   });
 }
 setInterval(updateRootCountdowns, 1000);
+$('auto-toggle').addEventListener('click', () => {
+  if (currentSnapshot?.autoSelectDevices === true) {
+    void updateAutoSelection(false);
+    return;
+  }
+  $('auto-confirm-panel').hidden = false;
+  $('auto-phrase').focus();
+});
+$('auto-cancel').addEventListener('click', () => {
+  $('auto-confirm-panel').hidden = true;
+  $('auto-phrase').value = '';
+});
+$('auto-approve').addEventListener('click', () => {
+  if ($('auto-phrase').value.trim() !== 'AUTO DEVICE ACCESS') {
+    $('auto-status').textContent = 'Tam olarak AUTO DEVICE ACCESS yazmalısın.';
+    $('auto-phrase').focus();
+    return;
+  }
+  void updateAutoSelection(true);
+});
 $('retry').addEventListener('click', load);
 $('login').addEventListener('click', () => {
   window.location.href = '/auth/github/start?next=' +

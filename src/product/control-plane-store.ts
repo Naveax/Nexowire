@@ -208,6 +208,8 @@ export interface ControlPlaneStore {
   putDeviceFolder(record: DeviceFolderRecord): Promise<void>;
   deleteDeviceFolder(ownerAccountId: string, folderId: string): Promise<void>;
   assignDeviceFolder(deviceId: string, folderId: string | null): Promise<void>;
+  getAutoDeviceSelection(ownerAccountId: string): Promise<boolean>;
+  putAutoDeviceSelection(ownerAccountId: string, enabled: boolean): Promise<void>;
 
   getPairing(id: string): Promise<PairingRecord | null>;
   putPairing(record: PairingRecord): Promise<void>;

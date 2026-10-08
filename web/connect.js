@@ -6,6 +6,86 @@ const state = params.get('state') ?? '';
 const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
+const RELEASE = 'https://github.com/Naveax/Nexowire/releases/download/v1.0.5/';
+const ARCHIVE = RELEASE + 'nexowire-1.0.5.tgz';
+
+function detectedOS(ua = navigator.userAgent) {
+  if (/windows/i.test(ua)) return 'windows';
+  if (/macintosh|mac os|iphone|ipad/i.test(ua)) return 'macos';
+  return 'linux';
+}
+
+const installers = {
+  windows: {
+    heading: 'Windows kurulumu',
+    description: 'Resmî Nexowire v1.0.5 Windows kurulum dosyasını indir, çalıştır ve uygulamadaki BAĞLA düğmesini kullan.',
+    command: "Invoke-WebRequest -Uri '" + RELEASE + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
+    url: RELEASE + 'Nexowire-Setup.cmd',
+    label: 'Windows kurulumunu indir ↗',
+    checksum: RELEASE + 'SHA256SUMS-Windows',
+    note: 'Komut yalnızca indirir; güvenliğin için tarayıcıdan sessiz komut çalıştırılmaz. Dosyayı çalıştırmadan önce SHA-256 değerini doğrula.',
+  },
+  macos: {
+    heading: 'macOS kurulumu',
+    description: 'Node.js 22 veya üzeri ve npm gerekli. Resmî arşivden CLI kurulumu sonrası Nexowire bağlantı akışını başlat.',
+    command: 'npm install -g ' + ARCHIVE + ' && nexowire connect',
+    url: ARCHIVE,
+    label: 'Resmî CLI arşivi ↗',
+    checksum: RELEASE + 'SHA256SUMS',
+    note: 'macOS için tek tıklamalı kurulum paketi henüz doğrulanmış değil. Terminal komutunu yalnızca kendi cihazında çalıştır.',
+  },
+  linux: {
+    heading: 'Linux kurulumu',
+    description: 'Node.js 22 veya üzeri ve npm gerekli. Resmî arşivden CLI kurulumu sonrası Nexowire bağlantı akışını başlat.',
+    command: 'npm install -g ' + ARCHIVE + ' && nexowire connect',
+    url: ARCHIVE,
+    label: 'Resmî CLI arşivi ↗',
+    checksum: RELEASE + 'SHA256SUMS',
+    note: 'Linux için tek tıklamalı kurulum paketi henüz doğrulanmış değil. Terminal komutunu yalnızca kendi cihazında çalıştır.',
+  },
+};
+
+function selectInstallOS(os) {
+  const selected = installers[os] ? os : 'windows';
+  const setup = installers[selected];
+  for (const tab of document.querySelectorAll('.os-tabs [role="tab"]')) {
+    const active = tab.dataset.os === selected;
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+  }
+  $('install-heading').textContent = setup.heading;
+  $('install-description').textContent = setup.description;
+  $('install-command').value = setup.command;
+  $('download-installer').href = setup.url;
+  $('download-installer').textContent = setup.label;
+  $('verify-installer').href = setup.checksum;
+  $('install-note').textContent = setup.note;
+  $('copy-status').textContent = '';
+}
+for (const tab of document.querySelectorAll('.os-tabs [role="tab"]')) {
+  tab.addEventListener('click', () => selectInstallOS(tab.dataset.os));
+  tab.addEventListener('keydown', (event) => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const names = Object.keys(installers);
+    const index = names.indexOf(tab.dataset.os);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : names.length - 1)) % names.length;
+    selectInstallOS(names[next]);
+    document.getElementById('tab-' + names[next]).focus();
+  });
+}
+$('copy-command').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('install-command').value);
+    $('copy-status').textContent = 'Komut kopyalandı.';
+  } catch {
+    $('install-command').focus();
+    $('install-command').select();
+    $('copy-status').textContent = 'Kopyalama engellendi. Komutu seçip Ctrl+C veya Cmd+C ile kopyala.';
+  }
+});
+selectInstallOS(detectedOS());
 
 function setPill(text, stateClass) {
   const pill = $('connect-pill');
@@ -50,14 +130,13 @@ function validatedLoopbackCallback() {
 async function loadAccount() {
   const callback = validatedLoopbackCallback();
   if (!callback) {
-    $('device-name').textContent = 'Nexowire uygulaması gerekli';
-    $('platform').textContent = 'Bu sayfayı uygulamadaki BAĞLA düğmesi açar.';
-    $('status-title').textContent = 'Bağlantı isteği yok';
-    $('status-text').textContent =
-      'Nexowire uygulamasını açıp BAĞLA düğmesine bas.';
-    setPill('Bekleniyor', 'muted');
+    $('install-panel').classList.remove('hidden');
+    $('pair-panel').classList.add('hidden');
+    setPill('Kurulum', 'muted');
     return;
   }
+  $('install-panel').classList.add('hidden');
+  $('pair-panel').classList.remove('hidden');
 
   $('device-name').textContent = deviceName;
   $('platform').textContent = platform || 'Cihaz';

@@ -249,6 +249,16 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
       .map(clone);
   }
 
+  private readonly autoDeviceSelection = new Map<string, boolean>();
+
+  async getAutoDeviceSelection(ownerAccountId: string): Promise<boolean> {
+    return this.autoDeviceSelection.get(ownerAccountId) === true;
+  }
+
+  async putAutoDeviceSelection(ownerAccountId: string, enabled: boolean): Promise<void> {
+    this.autoDeviceSelection.set(ownerAccountId, enabled);
+  }
+
   async listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]> {
     return [...this.deviceFolders.values()]
       .filter(folder => folder.ownerAccountId === ownerAccountId).map(clone);

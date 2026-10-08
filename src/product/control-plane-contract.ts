@@ -34,6 +34,7 @@ export interface UserDashboardSnapshot {
   usage: ProductUsageSummary;
   devices: ProductDeviceSummary[];
   folders: { id: string; name: string }[];
+  autoSelectDevices: boolean;
   stability: ProductStabilitySummary;
   privateControlsIncluded: boolean;
 }

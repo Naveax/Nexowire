@@ -16,14 +16,16 @@ const folders = [
   {id:'fn',name:'Naveax'}, {id:'fm',name:'Maxi'}, {id:'fe',name:'Buğra'},
 ];
 
-test('explicit device name and folder+single device resolve deterministically', () => {
+test('explicit device resolves; folder-only targets require opted-in Auto', () => {
   const named = resolveOwnerDeviceTarget(devices, folders, {deviceName:' Maxiwillanwelltman '});
   assert.equal(named.status, 'selected');
   if (named.status === 'selected') {
     assert.equal(named.device.id, 'c');
     assert.equal(named.device.online, false);
   }
-  const scoped = resolveOwnerDeviceTarget(devices, folders, {folderName:'MAXI'});
+  const denied = resolveOwnerDeviceTarget(devices, folders, {folderName:'MAXI'});
+  assert.equal(denied.status, 'selection_required');
+  const scoped = resolveOwnerDeviceTarget(devices, folders, {folderName:'MAXI'}, true);
   assert.equal(scoped.status, 'selected');
   if (scoped.status === 'selected') {
     assert.equal(scoped.reason, 'one-in-folder');
@@ -47,7 +49,8 @@ test('ambiguous targets require a choice; empty folders remain visible', () => {
   }
   const empty = resolveOwnerDeviceTarget(devices, folders, {folderName:'Buğra'});
   assert.equal(empty.status, 'empty_folder');
-  assert.equal(resolveOwnerDeviceTarget(devices.slice(0,1), folders).status, 'selected');
+  assert.equal(resolveOwnerDeviceTarget(devices.slice(0,1), folders).status, 'selection_required');
+  assert.equal(resolveOwnerDeviceTarget(devices.slice(0,1), folders, {}, true).status, 'selected');
   assert.equal(resolveOwnerDeviceTarget([], folders).status, 'no_devices');
 });
 
@@ -62,9 +65,17 @@ test('owner service routing restricts account devices and folder membership', as
   });
   const group = await service.createDeviceFolder(owner, 'Maxi');
   await service.assignDeviceToFolder(owner, consumed.device.id, group.id);
+  assert.equal((await service.dashboard(owner)).autoSelectDevices, false);
+  const blocked = await service.resolveDeviceTarget(owner, {folderName:'Maxi'});
+  assert.equal(blocked.status, 'selection_required');
+  await service.setAutoDeviceSelection(owner, true);
   const selected = await service.resolveDeviceTarget(owner, {folderName:'Maxi'});
   assert.equal(selected.status, 'selected');
   if(selected.status === 'selected') assert.equal(selected.device.id, consumed.device.id);
+  assert.equal((await service.dashboard(owner)).autoSelectDevices, true);
+  assert.equal((await service.dashboard(outsider)).autoSelectDevices, false);
+  await service.setAutoDeviceSelection(owner, false);
+  assert.equal((await service.resolveDeviceTarget(owner, {})).status, 'selection_required');
   await assert.rejects(service.resolveDeviceTarget(outsider,{folderId:group.id}),/FOLDER_NOT_FOUND/);
   await assert.rejects(service.resolveDeviceTarget(outsider,{deviceId:consumed.device.id}),/DEVICE_NOT_FOUND/);
   await assert.rejects(service.resolveDeviceTarget({accountId:owner.accountId,role:'service'},{}),/OWNER_LOGIN_REQUIRED/);
@@ -92,4 +103,18 @@ test('target API requires OAuth owner and confirmation header, never executes a 
   const result = await handler(request('owner'));
   assert.equal(result.status,200);
   assert.deepEqual((await result.json() as {status:string}).status, 'no_devices');
+
+  const autoUrl = 'https://control.test/api/v1/me/device-selection/auto';
+  const update = (account:string, enabled:boolean, approved:boolean) => new Request(autoUrl, {
+    method:'POST',headers:{'content-type':'application/json','x-account':account,
+      ...(approved?{'x-nexowire-confirm':'auto-device-selection-v1'}:{})},
+    body:JSON.stringify({enabled, ...(approved?{confirmation:'AUTO DEVICE ACCESS'}:{})}),
+  });
+  assert.equal((await handler(update('owner',true,false))).status,400);
+  assert.equal((await service.dashboard(owner)).autoSelectDevices,false);
+  assert.equal((await handler(update('service',true,true))).status,403);
+  assert.equal((await handler(update('owner',true,true))).status,200);
+  assert.equal((await service.dashboard(owner)).autoSelectDevices,true);
+  assert.equal((await handler(update('owner',false,false))).status,200);
+  assert.equal((await service.dashboard(owner)).autoSelectDevices,false);
 });
