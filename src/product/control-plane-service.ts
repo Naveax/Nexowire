@@ -28,6 +28,7 @@ import {
   type ProductPlan,
 } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
+import { resolveOwnerDeviceTarget, type DeviceTargetQuery, type TargetResolution } from './device-target-resolution.js';
 
 export interface ControlPlaneIdentity {
   accountId: string;
@@ -720,6 +721,33 @@ export class ControlPlaneService {
       updatedAt: normalizedAt,
     });
     return true;
+  }
+
+  async resolveDeviceTarget(identity: ControlPlaneIdentity, query: DeviceTargetQuery): Promise<TargetResolution> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    for (const id of [query.deviceId, query.folderId]) {
+      if (id !== undefined) boundedId('target', id);
+    }
+    for (const name of [query.deviceName, query.folderName]) {
+      if (name !== undefined && (!name.trim() || name.length > 128 || /[\u0000-\u001f\u007f]/.test(name))) {
+        throw new Error('INVALID_DEVICE_TARGET_NAME');
+      }
+    }
+    const [devices, folders, assignments] = await Promise.all([
+      this.store.listDevices(account.id),
+      this.store.listDeviceFolders(account.id),
+      this.store.listDeviceFolderAssignments(account.id),
+    ]);
+    const foldersByDevice = new Map(assignments.map(item => [item.deviceId, item.folderId]));
+    return resolveOwnerDeviceTarget(
+      devices.map(device => ({
+        id: device.id, name: device.name, online: device.online,
+        folderId: foldersByDevice.get(device.id) ?? null,
+      })),
+      folders.map(folder => ({id: folder.id, name: folder.name})),
+      query,
+    );
   }
 
   async createDeviceFolder(identity: ControlPlaneIdentity, nameInput: string): Promise<DeviceFolderRecord> {
