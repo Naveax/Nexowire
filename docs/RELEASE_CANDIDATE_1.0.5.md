@@ -22,7 +22,11 @@ A subsequent live check on work-pc found the v1.0.4 Privileged Broker stopped (T
 
 On 2026-10-08 at 12:16 TRT, work-pc had the upgraded `RestartCount=999` / 1-minute TaskScheduler failure-restart settings. A controlled abnormal Broker child termination nevertheless left the task `Ready`, `LastTaskResult=0xFFFFFFFF` and TCP 43112 closed for over a minute; the failure-restart setting alone is **insufficient on that installed task**. A manual start successfully restored Broker functionality.
 
-This candidate adds a separate **indefinite 1-minute repeating Task Scheduler trigger**, alongside AtLogOn, and keeps `MultipleInstances=IgnoreNew` so an already running Broker is not duplicated. Disabling the scheduled task remains the explicit maintenance/owner-off path. This change must pass Windows CI and live controlled-restart acceptance before it can be described as verified. The installed v1.0.4 binary is not automatically upgraded by merging source.
+This candidate adds a separate **indefinite 1-minute repeating Task Scheduler trigger**, alongside AtLogOn, and keeps `MultipleInstances=IgnoreNew` so an already running Broker is not duplicated. Disabling the scheduled task remains the explicit maintenance/owner-off path. PR #245 passed CI 7/7 and was merged. The live work-pc task configuration (separate from installed v1.0.4 source) passed a forced-exit recovery test: old PID 10848 was stopped at 12:21:05 TRT, and one new Broker PID 8108 was listening by 12:21:17. An idempotent first-party privileged scheduled-task operation returned verified=true; a singleton process/listener was confirmed. The installed v1.0.4 binary is not automatically upgraded by merging source.
+
+## Restart ordering caveat
+
+Read-only Windows event logs from the 2026-10-08 boot show kernel startup around 11:57:38 TRT, first user interactive logon at 11:57:54, SYSTEM Hub task start at 11:57:57, and Hub node process at 11:58:24. Thus the same reboot confirms recovery **after login**, not independent pre-login remote availability. Do not declare this gate passed without a dedicated no-login network probe.
 
 ## Candidate gates
 
