@@ -112,3 +112,102 @@ test('Windows live cutover is side-by-side, health checked and rollback capable'
   assert.match(script, /machineComponentsPending/);
   assert.doesNotMatch(script, /Remove-Item.+versions.+Recurse/i);
 });
+
+
+test('automatic update requires elevated Broker and skips absent/unreachable authority', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  const release = {
+    currentVersion: '1.0.5',
+    latestVersion: '1.0.6',
+    updateAvailable: true,
+    release: {
+      version: '1.0.6',
+      tag: 'v1.0.6',
+      htmlUrl: 'https://github.com/Naveax/Nexowire/releases/tag/v1.0.6',
+      publishedAt: '2026-10-08T00:00:00Z',
+    },
+  };
+  let calls = 0;
+  const absent = await executeAutomaticUpdate({
+    check: async () => release,
+    broker: async () => null,
+    apply: async () => { calls++; return { scheduled: true }; },
+  });
+  assert.equal(absent.action, 'broker_unavailable');
+  assert.equal(calls, 0);
+
+  const offline = await executeAutomaticUpdate({
+    check: async () => release,
+    broker: async () => ({
+      probe: async () => ({ reachable: false, elevated: false, version: '1.0.5' }),
+    }) as never,
+    apply: async () => { calls++; return { scheduled: true }; },
+  });
+  assert.equal(offline.action, 'broker_unavailable');
+  assert.equal(calls, 0);
+
+  const healthy = await executeAutomaticUpdate({
+    check: async () => release,
+    broker: async () => ({
+      probe: async () => ({ reachable: true, elevated: true, version: '1.0.5' }),
+    }) as never,
+    apply: async () => { calls++; return { scheduled: true }; },
+  });
+  assert.equal(healthy.action, 'update_scheduled');
+  assert.equal(calls, 1);
+});
+
+test('automatic update skips already-current releases without Broker or writes', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  const result = await executeAutomaticUpdate({
+    check: async () => ({
+      currentVersion: '1.0.5',
+      latestVersion: '1.0.5',
+      updateAvailable: false,
+      release: { version: '1.0.5', tag: 'v1.0.5', htmlUrl: '', publishedAt: null },
+    }),
+    broker: async () => { throw new Error('should not request broker'); },
+    apply: async () => { throw new Error('should not apply'); },
+  });
+  assert.equal(result.action, 'up_to_date');
+});
+
+test('automatic Windows task is hourly, indefinite, user-limited and singleton', async () => {
+  const {
+    AUTO_UPDATE_INTERVAL_MINUTES,
+    renderAutoUpdateTaskInstallScript,
+    renderAutoUpdateLauncher,
+  } = await import('../src/update/auto-update.js');
+  assert.equal(AUTO_UPDATE_INTERVAL_MINUTES, 60);
+  const script = renderAutoUpdateTaskInstallScript('C:\\Users\\test\\.nexowire\\auto-update\\launch.ps1');
+  assert.match(script, /New-ScheduledTaskTrigger -AtLogOn/);
+  assert.match(script, /New-ScheduledTaskTrigger -Once/);
+  assert.match(script, /-RepetitionInterval \(New-TimeSpan -Minutes 60\)/);
+  assert.match(script, /\$hour\.Repetition\.Duration=\$null/);
+  assert.match(script, /-MultipleInstances IgnoreNew/);
+  assert.match(script, /-RunLevel Limited/);
+  assert.match(script, /Start-ScheduledTask/);
+  assert.doesNotMatch(script, /ServiceAccount|RunLevel Highest|RunLevel SYSTEM/i);
+  const launcher = renderAutoUpdateLauncher('C:\\Runtime\\node.exe', 'C:\\Runtime\\cli.js');
+  assert.match(launcher, /'update' 'auto' 'run'/);
+  assert.doesNotMatch(launcher, /password|authorization|Bearer/i);
+});
+
+test('automatic strict Broker requirement is opt-in and preserves old manual behavior', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  // A rejected official machine update must propagate rather than marking a
+  // partially-installed runtime as a successful automatic rollout.
+  await assert.rejects(
+    () => executeAutomaticUpdate({
+      check: async () => ({
+        currentVersion: '1.0.5', latestVersion: '1.0.6', updateAvailable: true,
+        release: { version: '1.0.6', tag: 'v1.0.6', htmlUrl: '', publishedAt: null },
+      }),
+      broker: async () => ({
+        probe: async () => ({ reachable: true, elevated: true, version: '1.0.5' }),
+      }) as never,
+      apply: async () => { throw new Error('MACHINE_UPDATE_FAILED'); },
+    }),
+    /MACHINE_UPDATE_FAILED/,
+  );
+});

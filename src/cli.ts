@@ -26,6 +26,7 @@ import {
   selfHostedConnectorInfo,
 } from './self-host-bootstrap.js';
 import { runLiveUpdateCommand } from './update/live-update.js';
+import { runAutoUpdateCommand } from './update/auto-update.js';
 
 function printHelp(): void {
   process.stdout.write(`
@@ -39,6 +40,9 @@ Usage:
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
+  nexowire update [status|check|apply]   Check or apply verified official releases
+  nexowire update auto [install|run|status|disable|uninstall]
+                   Manage the lightweight hourly Windows auto-updater
   nexowire version Show the installed Nexowire version
   nexowire help    Show this help
 
@@ -70,7 +74,11 @@ async function main(): Promise<void> {
   }
 
   if (command === 'update') {
-    await runLiveUpdateCommand(process.argv.slice(3));
+    if (process.argv[3] === 'auto') {
+      await runAutoUpdateCommand(process.argv.slice(4));
+    } else {
+      await runLiveUpdateCommand(process.argv.slice(3));
+    }
     return;
   }
 

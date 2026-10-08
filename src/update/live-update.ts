@@ -53,6 +53,8 @@ export interface LiveUpdateOptions {
   localAppData?: string;
   tempDir?: string;
   privilegedBroker?: PrivilegedBrokerClient;
+  /** Automatic mode refuses a partial user-only cutover if the machine Broker is unavailable. */
+  requireMachineUpdate?: boolean;
 }
 
 function safeVersion(value: string): string {
@@ -528,6 +530,9 @@ export async function applyLatestLiveUpdate(
     const staged = await stageWindowsRelease(check.release, options);
     let machineComponentsPending = false;
     const broker = options.privilegedBroker;
+    if (!broker && options.requireMachineUpdate) {
+      throw new Error('Automatic update deferred: elevated Broker not provided.');
+    }
     if (broker) {
       const probe = await broker.probe();
       if (
@@ -537,20 +542,29 @@ export async function applyLatestLiveUpdate(
       ) {
         machineComponentsPending = true;
         try {
-          await broker.execute(
+          const applied = await broker.execute(
             'nexowire.machine_update.apply',
             {
               version: check.latestVersion,
               buildId: staged.buildId,
             },
           );
-        } catch {
-          // v1.0.3 and older brokers do not know the machine
-          // update capability. User-level cutover can still
-          // complete; status remains explicit until the one-time
-          // Admin Bridge upgrade is performed.
+          if (
+            options.requireMachineUpdate &&
+            (!applied || typeof applied !== 'object' ||
+              (applied as { scheduled?: unknown }).scheduled !== true)
+          ) {
+            throw new Error('Elevated machine update was not scheduled.');
+          }
+        } catch (error) {
+          if (options.requireMachineUpdate) throw error;
+          // Older brokers may not support this capability; the
+          // explicit pending flag still records a partial update.
         }
       } else if (!probe.reachable || !probe.elevated) {
+        if (options.requireMachineUpdate) {
+          throw new Error('Automatic update deferred: elevated Broker is unavailable.');
+        }
         machineComponentsPending = true;
       }
     }
