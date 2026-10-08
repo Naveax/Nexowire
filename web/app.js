@@ -216,7 +216,7 @@ function render(snapshot) {
       rootButton.textContent = pending ? 'ROOT kapat' : 'ROOT MODE aç';
       if (pending) {
         rootCopy.textContent = '15 dakikalık bakım izni ' +
-          (device.online ? 'aktif' : 'askıda') + ' · ' +
+          (active ? 'aktif' : 'beklemede') + ' · ' +
           new Date(expiresAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) +
           ' bitiş. ' + (ready ? 'Admin Bridge hazır.' : 'Yönetici işlemleri için Admin Bridge gerekli.');
         const delay = Date.parse(expiresAt) - Date.now();
