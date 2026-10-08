@@ -30,3 +30,14 @@ test('machine cutover updates only Nexowire machine launchers and rolls back on 
     /Invoke-Expression|iex\s|Start-Process.+cmd\.exe/i,
   );
 });
+
+
+test('machine cutover replaces only official version-directory component not the executable suffix', () => {
+  const script = renderMachineCutoverScript({
+    version: '1.0.6',
+    buildId: '1.0.6-012345abcdef',
+    targetRoot: 'C:\\ProgramData\\Nexowire\\versions\\1.0.6-012345abcdef',
+  });
+  assert.match(script, /\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+-\[a-f0-9\]\{12\}/);
+  assert.doesNotMatch(script, /versions\\\[\^''/);
+});

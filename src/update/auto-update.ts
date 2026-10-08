@@ -223,8 +223,8 @@ async function writeAutoStatus(
 async function runAutoUpdateOnce(): Promise<AutomaticUpdateResult> {
   const directory = updaterDir();
   await fs.mkdir(directory, { recursive: true });
-  // wx locking prevents a user-initiated update and timer overlap
-  // while the scheduled task is still staging the same release.
+  // wx locking prevents overlapping hourly task instances and
+  // explicit 'update auto run' calls for the same Windows user.
   const lockFile = path.join(directory, 'run.lock');
   let lock;
   try {

@@ -211,3 +211,18 @@ test('automatic strict Broker requirement is opt-in and preserves old manual beh
     /MACHINE_UPDATE_FAILED/,
   );
 });
+
+
+test('Windows update patches only the versioned runtime root and also updates the hourly launcher', () => {
+  const script = renderWindowsCutoverScript({
+    targetVersion: '1.0.6',
+    buildId: '1.0.6-012345abcdef',
+    targetRoot:
+      'C:\\Users\\test\\AppData\\Local\\Nexowire\\versions\\1.0.6-012345abcdef',
+    localAppData: 'C:\\Users\\test\\AppData\\Local',
+  });
+  assert.match(script, /AutoLauncher/);
+  assert.match(script, /Patch-Launcher \$AutoLauncher/);
+  assert.match(script, /\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+-\[a-f0-9\]\{12\}/);
+  assert.doesNotMatch(script, /versions\\\[\^''/);
+});

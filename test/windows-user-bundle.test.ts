@@ -103,6 +103,8 @@ test('Windows setup is non-admin, versioned, and checksum-pinned', () => {
     'Windows setup PowerShell command must remain below the cmd.exe line-length limit.',
   );
   assert.match(setup, /Nexowire\.lnk/);
+  assert.match(setup, /update auto install/);
+  assert.match(setup, /Nexowire hourly auto-update task registration failed/);
   assert.match(setup, /wscript\.exe/);
   assert.doesNotMatch(
     setup,
