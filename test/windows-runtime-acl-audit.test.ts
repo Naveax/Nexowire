@@ -62,6 +62,9 @@ test('full tree ACL scan includes siblings, outer parents and bounded results wi
   const entry=join(root,'dist','cli.js');
   writeFileSync(entry,'// cli\n','utf8');
   writeFileSync(join(root,'other','unrelated.js'),'// sibling\n','utf8');
+  // This file is beneath an ancestor already seen on the entrypoint chain.
+  // FullTree must still enumerate that directory's children.
+  writeFileSync(join(root,'dist','sibling.js'),'// must be scanned\n','utf8');
   try{
     const out=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
       '-RuntimeRoot',root,'-Entrypoint',entry,'-FullTree','-MaxReportedFindings','2'],
@@ -73,7 +76,7 @@ test('full tree ACL scan includes siblings, outer parents and bounded results wi
     assert.equal(r.packageTreeAudited,true);
     assert.equal(r.dependenciesRecursivelyAudited,false);
     assert.equal(r.ownerApprovedElevatedExecution,false);
-    assert.ok(r.runtimeTreeComponentsAudited>=2);
+    assert.ok(r.runtimeTreeComponentsAudited>=3);
     assert.ok(r.outerParentComponentsAudited>=1);
     assert.ok(r.componentsAudited>=6);
     assert.ok(r.issues.length<=2);
@@ -81,6 +84,13 @@ test('full tree ACL scan includes siblings, outer parents and bounded results wi
     assert.equal(r.omittedFindings,r.totalFindings-r.issues.length);
     assert.equal(r.riskyCodePath,true);
     assert.equal(r.productionFilesChanged,false);
+
+    const uncapped=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
+      '-RuntimeRoot',root,'-Entrypoint',entry,'-FullTree','-MaxReportedFindings','200'],
+      {encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.equal(uncapped.status,0,uncapped.stderr+' '+uncapped.stdout);
+    assert.ok(JSON.parse(uncapped.stdout).issues.some((i:{component:string})=>i.component.startsWith('dist')&&i.component.endsWith('sibling.js')),
+      'full tree must enumerate files beneath an already-audited entrypoint ancestor');
 
     const capped=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,
       '-RuntimeRoot',root,'-Entrypoint',entry,'-FullTree','-MaxObjects','2'],

@@ -58,7 +58,13 @@ function Add-Finding([string]$Component,[string]$Reason,[string]$PrincipalClass)
   }
 }
 function Inspect-Path([string]$Path,[string]$Label,[string]$Category) {
-  if (-not $script:visited.Add($Path)) {return $false}
+  if (-not $script:visited.Add($Path)) {
+    # Previously audited ancestors still need their children traversed during
+    # FullTree enumeration. Do not count the ACL twice, but never prune the
+    # directory solely because its own ACL was already checked.
+    $known=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    return (($known.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)
+  }
   if ($script:components -ge $MaxObjects) {throw 'MAX_OBJECTS_EXCEEDED: ACL inventory did not complete'}
   $script:components++
   if ($Category -eq 'tree') {$script:treeComponents++}
@@ -103,6 +109,10 @@ while ($true) {
   $current=$parent
 }
 if ($FullTree) {
+  $rootItem=Get-Item -LiteralPath $rootFull -Force -ErrorAction Stop
+  if (($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'REPARSE_RUNTIME_ROOT: Cannot fully enumerate a linked root.'
+  }
   # Enumerate every file/directory under the declared root without descending
   # into junctions/symlinks (their presence is itself a blocking finding).
   $pending=New-Object 'System.Collections.Generic.Stack[string]'
