@@ -126,7 +126,11 @@ export function renderVerifiedInstallerRunner(
     '    $program=$pkg',
     '  }',
     '  $argumentsText=(@($arguments)|ForEach-Object{([char]34+([string]$_)+[char]34)}) -join " "',
-    '  $process=Start-Process -FilePath $program -ArgumentList $argumentsText -PassThru -WorkingDirectory $JobDir -WindowStyle Hidden',
+    '  if($argumentsText){',
+    '    $process=Start-Process -FilePath $program -ArgumentList $argumentsText -PassThru -WorkingDirectory $JobDir -WindowStyle Hidden',
+    '  }else{',
+    '    $process=Start-Process -FilePath $program -PassThru -WorkingDirectory $JobDir -WindowStyle Hidden',
+    '  }',
     '  if(-not $process.WaitForExit([int]$m.timeoutMs)){',
     '    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue',
     '    throw "Verified installer exceeded the bounded timeout"',
@@ -261,6 +265,6 @@ export async function readVerifiedInstallerStatus(
   );
   return {
     jobId: parsed.job_id,
-    status: JSON.parse(await fs.readFile(file, 'utf8')) as unknown,
+    status: JSON.parse((await fs.readFile(file, 'utf8')).replace(/^\uFEFF/, '')) as unknown,
   };
 }

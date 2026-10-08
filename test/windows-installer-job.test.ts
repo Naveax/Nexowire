@@ -1,4 +1,9 @@
 import test from 'node:test';
+import os from 'node:os';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { PathPolicy } from '../src/agent/path-policy.js';
 import { executeCapability } from '../src/agent/executors.js';
@@ -130,4 +135,80 @@ test('SAFE mode may inspect existing installer job only through Broker', async (
     ),
     /existing privileged Broker/,
   );
+});
+
+
+test('Windows installer helper runs a benign pinned .cmd without UAC and records exit', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-installer-helper-smoke-'),
+  );
+  try {
+    const installerBytes = Buffer.from('@echo off\r\nexit /b 0\r\n', 'utf8');
+    const file = path.join(root, 'package.cmd');
+    await fs.writeFile(file, installerBytes);
+    await fs.writeFile(
+      path.join(root, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        sha256: createHash('sha256').update(installerBytes).digest('hex'),
+        extension: '.cmd',
+        arguments: [],
+        allow_unsigned: true,
+        publisher_thumbprint: null,
+        timeoutMs: 10_000,
+      }),
+    );
+    const runner = path.join(root, 'run.ps1');
+    await fs.writeFile(
+      runner, renderVerifiedInstallerRunner(root), 'utf8',
+    );
+    const process = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', runner],
+      { windowsHide: true, encoding: 'utf8', timeout: 20_000 },
+    );
+    assert.equal(process.status, 0, process.stderr || process.stdout);
+    const saved = JSON.parse(
+      (await fs.readFile(path.join(root, 'status.json'), 'utf8'))
+        .replace(/^\uFEFF/, ''),
+    ) as { state: string; exitCode: number };
+    assert.equal(saved.state, 'succeeded');
+    assert.equal(saved.exitCode, 0);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
+  }
+});
+
+test('Windows installer helper rejects a modified payload before execution', {
+  skip: process.platform !== 'win32',
+}, async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'nexowire-installer-hash-fail-'),
+  );
+  try {
+    await fs.writeFile(path.join(root, 'package.cmd'), '@echo off\r\nexit /b 0\r\n');
+    await fs.writeFile(path.join(root, 'manifest.json'), JSON.stringify({
+      version: 1, sha256: 'f'.repeat(64), extension: '.cmd',
+      arguments: [], allow_unsigned: true, publisher_thumbprint: null,
+      timeoutMs: 10_000,
+    }));
+    const runner = path.join(root, 'run.ps1');
+    await fs.writeFile(runner, renderVerifiedInstallerRunner(root), 'utf8');
+    const process = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', runner],
+      { windowsHide: true, encoding: 'utf8', timeout: 20_000 },
+    );
+    assert.equal(process.status, 1);
+    const saved = JSON.parse(
+      (await fs.readFile(path.join(root, 'status.json'), 'utf8')).replace(/^\uFEFF/, ''),
+    ) as { state: string; error: string };
+    assert.equal(saved.state, 'failed');
+    assert.match(saved.error, /SHA-256 mismatch/);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
+  }
 });
