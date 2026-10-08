@@ -1,4 +1,8 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
@@ -24,6 +28,29 @@ import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 import { enforceHostedMcpMetering } from './hosted-metering.js';
 import { onlineCapabilityUnion } from './tool-capabilities.js';
+import { NEXOWIRE_VERSION } from '../version.js';
+
+/** Fingerprint the actual MCP router file loaded beside this HTTP module. */
+export function loadedMcpRouterSha256(): string {
+  const loadedExtension = extname(fileURLToPath(import.meta.url));
+  if (loadedExtension !== '.ts' && loadedExtension !== '.js') {
+    throw new Error('Unable to fingerprint the active MCP router module.');
+  }
+  const loadedRouter = new URL(`./create-server${loadedExtension}`, import.meta.url);
+  return createHash('sha256')
+    .update(readFileSync(loadedRouter))
+    .digest('hex');
+}
+
+/** Metadata only: configured OAuth is not proof of a successful owner acceptance test. */
+export function hubRuntimeIdentity(ownerOauthConfigured: boolean) {
+  return {
+    packageVersion: NEXOWIRE_VERSION,
+    mcpRouterSha256: loadedMcpRouterSha256(),
+    ownerAutoRoutingContract: 'owner-auto-v1',
+    ownerOauthConfigured,
+  };
+}
 
 export function configuredHttpAllowedHosts(
   env: NodeJS.ProcessEnv = process.env,
@@ -122,6 +149,7 @@ export async function runHttpServer(
   });
   const tlsEnabled = hasDirectTls(config);
   const scheme = tlsEnabled ? 'https' : 'http';
+  const runtimeIdentity = hubRuntimeIdentity(Boolean(remoteMcpClient));
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
@@ -130,6 +158,7 @@ export async function runHttpServer(
       transport: scheme,
       agents: broker.list().length,
       time: new Date().toISOString(),
+      runtime: runtimeIdentity,
     });
   });
 
