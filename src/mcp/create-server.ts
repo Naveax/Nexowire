@@ -4134,6 +4134,74 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_installer_apply',
+    {
+      title: 'Run verified installer through authorized Windows Broker',
+      description:
+        'FULL owner access only. Hash-pin one local .exe/.msi/.ps1/.cmd from the current user profile and schedule it under the already elevated Nexowire Broker, without clicking UAC. Signed Authenticode payloads required by default; unsigned use must be explicit. Returns a job id; it does not claim installation success.',
+      inputSchema: {
+        ...targetFields,
+        ...idempotencyField,
+        file_path: z.string().min(1).max(4096),
+        sha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
+        arguments: z.array(z.string().max(512).regex(/^[^"\r\n]*$/)).max(16).optional(),
+        allow_unsigned: z.boolean().optional(),
+        publisher_thumbprint: z.string().regex(/^[a-fA-F0-9]{40}$/).optional(),
+        timeout_seconds: z.number().int().min(10).max(1800).optional(),
+      },
+    },
+    async ({
+      device_id,
+      provider_id,
+      idempotency_key,
+      file_path,
+      sha256,
+      arguments: args,
+      allow_unsigned,
+      publisher_thumbprint,
+      timeout_seconds,
+    }) =>
+      await execute(
+        ctx,
+        'windows.installer.apply',
+        {
+          file_path,
+          sha256,
+          ...(args ? { arguments: args } : {}),
+          ...(allow_unsigned !== undefined ? { allow_unsigned } : {}),
+          ...(publisher_thumbprint ? { publisher_thumbprint } : {}),
+          ...(timeout_seconds !== undefined ? { timeout_seconds } : {}),
+        },
+        device_id,
+        provider_id,
+        120_000,
+        idempotency_key,
+      ),
+  );
+
+  server.registerTool(
+    'windows_installer_status',
+    {
+      title: 'Inspect verified elevated installer job',
+      description:
+        'Read the queued, running, succeeded, or failed state for one previously issued installer job id. Never asserts successful installation before verified exit.',
+      inputSchema: {
+        ...targetFields,
+        job_id: z.string().uuid(),
+      },
+    },
+    async ({ device_id, provider_id, job_id }) =>
+      await execute(
+        ctx,
+        'windows.installer.status',
+        { job_id },
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_firewall_control',
     {
       title: 'Control exact Windows firewall rule',
