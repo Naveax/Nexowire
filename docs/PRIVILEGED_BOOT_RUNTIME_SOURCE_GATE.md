@@ -60,6 +60,22 @@ checkout, even with a valid source Git SHA, is **not** a valid privileged
 runtime. These checks are a fail-closed barrier, not a complete trusted
 installer or permission-migration implementation.
 
+## Protected Hub Boot directory scope
+
+Privileged Hub Boot status, installation and removal must resolve their managed
+directory to exactly `C:\ProgramData\Nexowire\hub-boot`. Relative,
+UNC, arbitrary drive, caller-selected temporary or user-profile `ProgramData`
+overrides fail closed. Installation verifies this before any protected token
+unseal, directory creation or task mutation.
+
+Before the uninstall task operation and recursive directory removal, the
+existing protected root must also be a real directory (not a symlink or
+junction) and contain only expected flat lifecycle files: `launch.ps1`,
+`lifecycle.json`, `hub.pid`, and the machine-scoped service token envelope.
+Unknown files, directories or linked children fail closed. This guard is
+not an ACL verifier, does not prove the root/ancestors cannot be renamed
+after validation, and does not grant permission for a live cutover.
+
 ## Real installation implications
 
 The existing Naveax v1.0.0 Stack supervisor executes writable code in

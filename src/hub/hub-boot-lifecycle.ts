@@ -53,6 +53,43 @@ export function protectedHubTaskShellEnvironment(input:NodeJS.ProcessEnv):NodeJS
   return result;
 }
 
+const PROTECTED_HUB_BOOT_ROOT='C:\\ProgramData\\Nexowire\\hub-boot';
+
+/**
+ * A SYSTEM task lifecycle may only create or recursively delete its exact
+ * protected own directory. Caller supplied ProgramData overrides must never
+ * redirect those privileged filesystem operations.
+ */
+export function assertProtectedHubBootRoot(value:string):void {
+  if(!value||!path.win32.isAbsolute(value)||
+     value.startsWith('\\\\')||value.startsWith('\\\\?\\')||
+     path.win32.resolve(value).toLowerCase()!==PROTECTED_HUB_BOOT_ROOT.toLowerCase()){
+    throw new Error('HUB_BOOT_UNTRUSTED_PROTECTED_ROOT');
+  }
+}
+
+/** Preflight: never recursively delete unknown or linked objects. */
+async function assertHubBootRootSafeToRemove(root:string):Promise<void>{
+  assertProtectedHubBootRoot(root);
+  let stat;
+  try{stat=await fs.lstat(root)}catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return;
+    throw error;
+  }
+  if(!stat.isDirectory()||stat.isSymbolicLink()){
+    throw new Error('HUB_BOOT_UNSAFE_REMOVAL_ROOT');
+  }
+  const allowed=new Set([
+    'launch.ps1','control-plane-service-token.machine.dpapi.json',
+    'lifecycle.json','hub.pid',
+  ]);
+  for(const item of await fs.readdir(root,{withFileTypes:true})){
+    if(!item.isFile()||item.isSymbolicLink()||!allowed.has(item.name)){
+      throw new Error('HUB_BOOT_UNEXPECTED_REMOVAL_ENTRY');
+    }
+  }
+}
+
 const BOOT_TASK_DEFAULT = 'Nexowire Hub Boot';
 const USER_TASK_DEFAULT = 'Nexowire Hub';
 
@@ -440,6 +477,7 @@ export async function hubBootLifecycleStatus(
 ): Promise<HubBootLifecycleStatus> {
   assertWindows();
   const p = pathsFor(options);
+  assertProtectedHubBootRoot(p.root);
   const result = await runPowerShellJson<{
     installed: boolean;
     state: string;
@@ -474,6 +512,7 @@ export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
   assertElevated();
+  assertProtectedHubBootRoot(pathsFor(options).root);
   // Fail before reading/writing protected DPAPI secrets or touching tasks:
   // a running legacy Stack would respawn its old Hub on the same port.
   await assertNoLegacyStackSupervisor(options.env ?? process.env);
@@ -648,6 +687,7 @@ export async function uninstallHubBootLifecycle(
 }> {
   assertElevated();
   const p = pathsFor(options);
+  await assertHubBootRootSafeToRemove(p.root);
   const result = await runPowerShellJson<{
     removed: boolean;
     userHubRestored: boolean;
