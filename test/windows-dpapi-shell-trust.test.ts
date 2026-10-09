@@ -23,19 +23,51 @@ test('DPAPI subprocess environment excludes poisoned PATH/module/preload/user ho
     process.env.PSModulePath='C:\\untrusted\\modules';
     process.env.NODE_OPTIONS='--require C:\\untrusted\\inject.js';
     const env=windowsDpapiChildEnvironment();
-    assert.deepEqual(env,{
+    for(const [key,value] of Object.entries({
       SystemRoot:'C:\\Windows',
       windir:'C:\\Windows',
       ComSpec:'C:\\Windows\\System32\\cmd.exe',
       PATH:'C:\\Windows\\System32;C:\\Windows',
       PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
-    });
+    }))assert.equal(env[key],value,key);
+    assert.ok(Object.keys(env).every(key=>[
+      'SystemRoot','windir','ComSpec','PATH','PSModulePath',
+      'USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP',
+    ].includes(key)));
+    assert.equal(env.NODE_OPTIONS,undefined);
+    assert.equal(env.NODE_PATH,undefined);
   }finally{
     if(oldPath===undefined)delete process.env.PATH;else process.env.PATH=oldPath;
     if(oldModulePath===undefined)delete process.env.PSModulePath;else process.env.PSModulePath=oldModulePath;
     if(oldNodeOptions===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=oldNodeOptions;
   }
 });
+test('DPAPI profile and temp directory hints must be local absolute Windows paths',()=>{
+  const before=Object.fromEntries(['USERPROFILE','APPDATA','TEMP'].map(
+    key=>[key,process.env[key]],
+  ));
+  try{
+    process.env.USERPROFILE='\\\\attacker\\profiles\\runner';
+    process.env.APPDATA='C:\\Users\\runner\\AppData\\..\\roaming';
+    process.env.TEMP='C:\\Users\\runner\\AppData\\Local\\Temp;C:\\malicious';
+    const rejected=windowsDpapiChildEnvironment();
+    assert.equal(rejected.USERPROFILE,undefined);
+    assert.equal(rejected.APPDATA,undefined);
+    assert.equal(rejected.TEMP,undefined);
+    process.env.USERPROFILE='C:\\Users\\runneradmin';
+    process.env.APPDATA='C:\\Users\\runneradmin\\AppData\\Roaming';
+    process.env.TEMP='C:\\Users\\runneradmin\\AppData\\Local\\Temp';
+    const accepted=windowsDpapiChildEnvironment();
+    assert.equal(accepted.USERPROFILE,process.env.USERPROFILE);
+    assert.equal(accepted.APPDATA,process.env.APPDATA);
+    assert.equal(accepted.TEMP,process.env.TEMP);
+  }finally{
+    for(const [key,value] of Object.entries(before)){
+      if(value===undefined)delete process.env[key];else process.env[key]=value;
+    }
+  }
+});
+
 test('DPAPI secret subprocess pins system PowerShell for sync and async calls',()=>{
   const source=readFileSync(new URL('../src/security/windows-dpapi.ts',import.meta.url),'utf8');
   assert.ok(source.includes("const DPAPI_POWERSHELL = DPAPI_WINDOWS_SYSTEM32 + '\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe'"));

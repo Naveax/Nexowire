@@ -22,13 +22,26 @@ const DPAPI_MAX_BYTES = 2 * 1024 * 1024;
 /** DPAPI payloads are sent on stdin. The subprocess must not inherit a
  * caller-controlled executable search path, PSModulePath or Node hooks. */
 export function windowsDpapiChildEnvironment():NodeJS.ProcessEnv {
-  return {
+  const env:NodeJS.ProcessEnv={
     SystemRoot:'C:\\Windows',
     windir:'C:\\Windows',
     ComSpec:DPAPI_WINDOWS_SYSTEM32+'\\cmd.exe',
     PATH:DPAPI_WINDOWS_SYSTEM32+';C:\\Windows',
     PSModulePath:DPAPI_WINDOWS_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules',
   };
+  // DPAPI CurrentUser and WindowsPowerShell need Windows user profile/temp
+  // directories on some hosted/service accounts. They do NOT select an
+  // executable, module, profile script (NoProfile) or current directory.
+  // Never copy the whole environment or trust remote/relative paths.
+  for(const key of ['USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP'] as const){
+    const value=process.env[key];
+    if(!value || value.length>1024 ||
+       !/^[A-Za-z]:\\/.test(value) ||
+       /[;"'\r\n\0]/.test(value) ||
+       value.split(/[\\/]/).includes('..'))continue;
+    env[key]=value;
+  }
+  return env;
 }
 
 
