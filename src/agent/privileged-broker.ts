@@ -17,6 +17,20 @@ import {
 } from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 
+const BROKER_ELEVATION_SYSTEM32='C:\\Windows\\System32';
+const BROKER_ELEVATION_POWERSHELL=BROKER_ELEVATION_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+/** Inspect the real process token only via Windows-owned binaries, not a
+ * caller-supplied PATH or untrusted PowerShell module search directory. */
+export function brokerElevationShellEnvironment():NodeJS.ProcessEnv{
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:BROKER_ELEVATION_SYSTEM32+'\\cmd.exe',
+    PATH:BROKER_ELEVATION_SYSTEM32+';C:\\Windows',
+    PSModulePath:BROKER_ELEVATION_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules',
+  };
+}
+
 export interface PrivilegedBrokerServerOptions {
   host?: string;
   port?: number;
@@ -37,7 +51,7 @@ export function isWindowsProcessElevated(): boolean {
     ' | ForEach-Object { $_.IsInRole(' +
     '[Security.Principal.WindowsBuiltInRole]::Administrator) }';
   const result = spawnSync(
-    'powershell.exe',
+    BROKER_ELEVATION_POWERSHELL,
     [
       '-NoLogo',
       '-NoProfile',
@@ -47,7 +61,12 @@ export function isWindowsProcessElevated(): boolean {
     ],
     {
       windowsHide: true,
+      shell:false,
+      cwd:BROKER_ELEVATION_SYSTEM32,
+      env:brokerElevationShellEnvironment(),
       encoding: 'utf8',
+      timeout:15_000,
+      maxBuffer:64*1024,
       stdio: ['ignore', 'pipe', 'ignore'],
     },
   );
