@@ -14,6 +14,51 @@ import {
 } from '../security/privileged-broker-secret.js';
 
 const TASK_NAME_DEFAULT = 'Nexowire Privileged Broker';
+const PROTECTED_BROKER_TASK_ROOT='C:\\ProgramData\\Nexowire\\privileged-broker';
+/** Enforce the same fixed ProgramData source boundary as protected Hub Boot.
+ * Never let an elevated installer or recursive uninstaller select user dirs. */
+export function assertProtectedBrokerTaskRoot(root:string):void {
+  if(!root||!path.win32.isAbsolute(root)||
+     root.startsWith('\\\\')||root.startsWith('\\\\?\\')||
+     path.win32.resolve(root).toLowerCase()!==PROTECTED_BROKER_TASK_ROOT.toLowerCase()){
+    throw new Error('PRIVILEGED_BROKER_UNTRUSTED_PROTECTED_ROOT');
+  }
+}
+const BROKER_ALLOWED_ROOT_FILES=new Set(['launch.ps1','task.json']);
+export function assertBrokerRootEntriesFlat(
+  entries:readonly {name:string;isFile:boolean;isSymbolicLink:boolean}[],
+):void {
+  for(const entry of entries){
+    if(!entry.isFile||entry.isSymbolicLink||
+       !BROKER_ALLOWED_ROOT_FILES.has(entry.name)){
+      throw new Error('PRIVILEGED_BROKER_UNSAFE_ROOT_CONTENTS');
+    }
+  }
+}
+/** Read-only check performed BEFORE task revocation AND before recursive rm.
+ * A TOCTOU remains possible; no production cutover is authorized by this. */
+async function assertBrokerRootSafeToRemove(root:string):Promise<void>{
+  assertProtectedBrokerTaskRoot(root);
+  for(const target of [path.win32.dirname(root),root]){
+    let info;
+    try{info=await fs.lstat(target)}catch(error){
+      if((error as NodeJS.ErrnoException).code==='ENOENT')continue;
+      throw error;
+    }
+    if(!info.isDirectory()||info.isSymbolicLink()){
+      throw new Error('PRIVILEGED_BROKER_UNSAFE_REMOVAL_ROOT');
+    }
+  }
+  let entries;
+  try{entries=await fs.readdir(root,{withFileTypes:true})}catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return;
+    throw error;
+  }
+  assertBrokerRootEntriesFlat(entries.map(entry=>({
+    name:entry.name,isFile:entry.isFile(),isSymbolicLink:entry.isSymbolicLink(),
+  })));
+}
+
 const BROKER_TASK_SYSTEM32='C:\\Windows\\System32';
 const BROKER_TASK_POWERSHELL=BROKER_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
 const BROKER_TASK_MODULE_DIR=BROKER_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
@@ -90,22 +135,15 @@ function taskName(
 function rootDir(
   options: PrivilegedBrokerTaskOptions,
 ): string {
-  if (options.rootDir) return options.rootDir;
-  if (process.platform === 'win32') {
-    const base =
-      options.env?.ProgramData ??
-      process.env.ProgramData ??
-      'C:\\ProgramData';
-    return path.join(
-      base,
-      'Nexowire',
-      'privileged-broker',
-    );
+  if(process.platform==='win32'){
+    const base=options.env?.ProgramData??process.env.ProgramData??'C:\\ProgramData';
+    const candidate=options.rootDir??
+      path.win32.join(base,'Nexowire','privileged-broker');
+    assertProtectedBrokerTaskRoot(candidate);
+    return PROTECTED_BROKER_TASK_ROOT;
   }
-  return path.join(
-    os.homedir(),
-    '.nexowire',
-    'privileged-broker',
+  return options.rootDir??path.join(
+    os.homedir(),'.nexowire','privileged-broker',
   );
 }
 
@@ -352,6 +390,7 @@ export async function installPrivilegedBrokerTask(
   }
 
   const directory = rootDir(options);
+  await assertBrokerRootSafeToRemove(directory);
   const launcher = launcherPath(options);
   const name = taskName(options);
   const secretFile =
@@ -477,6 +516,8 @@ export async function uninstallPrivilegedBrokerTask(
   }
 
   const name = taskName(options);
+  const protectedRoot=rootDir(options);
+  await assertBrokerRootSafeToRemove(protectedRoot);
   const script = `
 $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
@@ -493,7 +534,8 @@ if ($null -ne $task) {
     script,
     lifecycleEnv(name, launcherPath(options)),
   );
-  await fs.rm(rootDir(options), {
+  await assertBrokerRootSafeToRemove(protectedRoot);
+  await fs.rm(protectedRoot, {
     recursive: true,
     force: true,
   });
