@@ -18,6 +18,10 @@ A tag or checksum copied from the same untrusted release folder is not an indepe
 
 Requires a trusted installation of GitHub CLI gh, online GitHub artifact attestations, and Node.js with tsx in this repository.
 
+On Windows, trusted GitHub CLI resolution is **not PATH-based**. The verifier calls exactly `C:\Program Files\GitHub CLI\gh.exe`; the OS-built-in Windows PowerShell preflight verifies that the file and its GitHub CLI / Program Files ancestor directories are not reparse points, are owned by trusted Windows system identities, and have no untrusted allow-write ACEs. It then requires a `Valid` Windows Authenticode signature with the pinned GitHub, Inc. certificate subject. The CLI runs without inherited executable/module search paths or shell evaluation. An unsupported CLI location, changed publisher/chain or permissive ownership/ACL fails closed; these restrictions may require review when GitHub legitimately changes its code-signing certificate or installation method.
+
+On Linux/macOS the CLI still resolves through the caller's environment, so this Windows executable integrity preflight does **not** claim to protect those platforms. This script is non-elevated and always reports `safeToElevate=false`. A valid signed GitHub CLI authenticates the attestation *verifier*, not Nexowire's own executable publisher or installation permission. The user must trust the pinned release values and the installed Node.js/tsx code as separate dependencies.
+
 ~~~powershell
 node --import tsx scripts/verify-pinned-release-provenance.ts 'C:\path\to\nexowire-1.0.5.tgz' 'a5c42cd8e25b698d4e6dead4bb25102217362ca639e91040d55dec389bafc314' 'v1.0.5' 'a75d0d6c040bae2cd7d259a49521f33d56656fa4'
 ~~~

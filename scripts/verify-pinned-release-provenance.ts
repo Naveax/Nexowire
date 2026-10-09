@@ -11,6 +11,84 @@ const OIDC_ISSUER='https://token.actions.githubusercontent.com';
 const PREDICATE='https://slsa.dev/provenance/v1';
 const MAX_ARCHIVE_BYTES=32*1024*1024;
 const MAX_VERIFICATION_BYTES=2*1024*1024;
+const WINDOWS_GH_EXE='C:\\Program Files\\GitHub CLI\\gh.exe';
+const WINDOWS_PS='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+const WINDOWS_SYSTEM32='C:\\Windows\\System32';
+const TRUSTED_GH_MARKER='NEXOWIRE_TRUSTED_GH_EXECUTABLE';
+/**
+ * A caller-controlled PATH may contain an executable that fakes successful
+ * gh attestation verification. On Windows, never resolve gh from PATH.
+ */
+export function pinnedGithubCliExecutable(platform=process.platform):string{
+  return platform==='win32'?WINDOWS_GH_EXE:'gh';
+}
+export function isolatedGithubCliEnvironment(platform=process.platform):NodeJS.ProcessEnv{
+  if(platform!=='win32')return {...process.env};
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:WINDOWS_SYSTEM32+'\\cmd.exe',
+    PATH:[WINDOWS_SYSTEM32,'C:\\Windows'].join(';'),
+    // GitHub CLI can read its per-user token/config. These variables never
+    // select an executable, module search directory, GH_HOST or signing root.
+    ...(process.env.USERPROFILE?{USERPROFILE:process.env.USERPROFILE}:{}),
+    ...(process.env.APPDATA?{APPDATA:process.env.APPDATA}:{}),
+    ...(process.env.LOCALAPPDATA?{LOCALAPPDATA:process.env.LOCALAPPDATA}:{}),
+  };
+}
+/** Signature/owner/ACL preflight for the fixed Program Files gh.exe. */
+export function assertTrustedWindowsGithubCli():void {
+  if(process.platform!=='win32')return;
+  const script=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1' -ErrorAction Stop
+$targets=@('C:\Program Files','C:\Program Files\GitHub CLI','C:\Program Files\GitHub CLI\gh.exe')
+$trusted=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
+$rights=[System.Security.AccessControl.FileSystemRights]
+$mask=[int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership
+foreach($path in $targets){
+ $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+ if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'GH_REPARSE_POINT'}
+ $acl=Get-Acl -LiteralPath $path -ErrorAction Stop
+ $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+ if(-not $trusted.ContainsKey($owner)){throw 'GH_UNTRUSTED_OWNER'}
+ foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+  if($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow){continue}
+  if(([int]$ace.FileSystemRights -band $mask) -eq 0){continue}
+  if(-not $trusted.ContainsKey($ace.IdentityReference.Value)){throw 'GH_UNTRUSTED_WRITE_ACE'}
+ }
+}
+if((Get-Item -LiteralPath $targets[2] -Force -ErrorAction Stop).PSIsContainer){
+ throw 'GH_NOT_A_FILE'
+}
+$signature=Get-AuthenticodeSignature -LiteralPath $targets[2] -ErrorAction Stop
+if($signature.Status -ne 'Valid' -or
+   $signature.SignerCertificate.Subject -cne 'CN="GitHub, Inc.", O="GitHub, Inc.", L=San Francisco, S=California, C=US'){
+ throw 'GH_UNTRUSTED_AUTHENTICODE_PUBLISHER'
+}
+Write-Output 'NEXOWIRE_TRUSTED_GH_EXECUTABLE'
+`;
+  const run=spawnSync(WINDOWS_PS,[
+    '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+    Buffer.from(script,'utf16le').toString('base64'),
+  ],{
+    encoding:'utf8',shell:false,windowsHide:true,
+    cwd:WINDOWS_SYSTEM32,
+    env:{
+      SystemRoot:'C:\\Windows',windir:'C:\\Windows',
+      ComSpec:WINDOWS_SYSTEM32+'\\cmd.exe',
+      PATH:[WINDOWS_SYSTEM32,'C:\\Windows'].join(';'),
+      PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
+    },
+    timeout:30000,maxBuffer:256*1024,
+  });
+  if(run.error||run.status!==0||run.stdout.trim()!==TRUSTED_GH_MARKER){
+    fail('GH_EXECUTABLE_UNTRUSTED');
+  }
+}
+
 const hex64=/^[a-f0-9]{64}$/;
 const hex40=/^[a-f0-9]{40}$/;
 const tagPattern=/^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
@@ -153,9 +231,16 @@ export async function verifyPinnedReleaseProvenance(
   }
   const digest=createHash('sha256').update(await fs.readFile(archivePath)).digest('hex');
   if(!fixedEqual(digest,pins.archiveSha256))fail('ARCHIVE_DIGEST_MISMATCH');
-  const run=spawnSync('gh',buildAttestationArgs(archivePath,pins),{
+  // The Windows gh.exe and its parent ACLs are checked, and its GitHub, Inc.
+  // Authenticode chain must be valid. This is a prerequisite, NOT proof that
+  // the Nexowire package has an independent publisher signature.
+  assertTrustedWindowsGithubCli();
+  const executable=pinnedGithubCliExecutable();
+  const run=spawnSync(executable,buildAttestationArgs(archivePath,pins),{
     encoding:'utf8',shell:false,windowsHide:true,timeout:90000,
     maxBuffer:MAX_VERIFICATION_BYTES,
+    ...(process.platform==='win32'?{cwd:WINDOWS_SYSTEM32}:{}),
+    env:isolatedGithubCliEnvironment(),
   });
   // Never echo gh stderr; auth errors can contain endpoint details.
   if(run.error||run.status!==0||!run.stdout||run.stdout.length>=MAX_VERIFICATION_BYTES){
