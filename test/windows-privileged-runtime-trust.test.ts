@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths,buildPrivilegedPowerShellAuditEnv} from '../src/security/windows-privileged-runtime-trust.js';
+import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths,buildPrivilegedPowerShellAuditEnv,privilegedRuntimeAuditSucceeded} from '../src/security/windows-privileged-runtime-trust.js';
 
 const env={
   USERPROFILE:'C:\\Users\\testuser',
@@ -99,6 +99,60 @@ test('boot-install applies read-only runtime guard before touching DPAPI or laun
   const write=file.indexOf('writeProtectedSecretFile(',fn);
   assert.ok(fn>=0 && guard>fn && sourceFile>guard && secret>sourceFile && write>secret);
   assert.match(file,/await assertNoLegacyStackSupervisor/);
+});
+
+test('runtime trust gate rejects partial/fake markers and unsuccessful commands',()=>{
+  assert.equal(privilegedRuntimeAuditSucceeded({
+    status:0,stdout:'TRUSTED_RUNTIME_CODE_TREE\r\n',
+  }),true);
+  for(const outcome of [
+    {status:0,stdout:'prefix TRUSTED_RUNTIME_CODE_TREE'},
+    {status:0,stdout:'TRUSTED_RUNTIME_CODE_TREE\nUNSAFE'},
+    {status:0,stdout:'TRUSTED_RUNTIME_CODE_TREE_EXTRA'},
+    {status:0,stdout:''},
+    {status:1,stdout:'TRUSTED_RUNTIME_CODE_TREE'},
+    {status:null,stdout:'TRUSTED_RUNTIME_CODE_TREE'},
+    {status:0,stdout:'TRUSTED_RUNTIME_CODE_TREE',error:new Error('spoof')},
+  ]){
+    assert.equal(privilegedRuntimeAuditSucceeded(outcome),false);
+  }
+});
+
+test('runtime trust gate pins native Node host to Valid OpenJS Foundation publisher',()=>{
+  const src=readFileSync(new URL('../src/security/windows-privileged-runtime-trust.ts',import.meta.url),'utf8');
+  assert.match(src,/Get-AuthenticodeSignature -LiteralPath \$exe\.FullName -ErrorAction Stop/);
+  assert.match(src,/RUNTIME_NODE_EXE_UNSAFE_TYPE/);
+  assert.match(src,/RUNTIME_NODE_SIGNER_UNTRUSTED/);
+  assert.match(src,/CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US/);
+  assert.match(src,/\$signature\.Status -ne 'Valid'/);
+  assert.ok(src.indexOf("Get-AuthenticodeSignature")<src.indexOf("Write-Output 'TRUSTED_RUNTIME_CODE_TREE'"));
+  assert.ok(src.includes('if(!privilegedRuntimeAuditSucceeded(result))'));
+});
+
+test('installed official Windows Node.js host has a validated OpenJS publisher',{
+  skip:process.platform!=='win32'||!existsSync('C:\\Program Files\\nodejs\\node.exe'),
+},()=>{
+  const sys='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const source=[
+    "$ErrorActionPreference='Stop'",
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop",
+    "$s=Get-AuthenticodeSignature -LiteralPath 'C:\\Program Files\\nodejs\\node.exe' -ErrorAction Stop",
+    "if($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -cne 'CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US'){throw 'INVALID_NODE_PUBLISHER'}",
+    "Write-Output 'NODE_HOST_SIGNER_OK'",
+  ].join(';');
+  const res=spawnSync(sys,['-NoLogo','-NoProfile','-NonInteractive',
+    '-EncodedCommand',Buffer.from(source,'utf16le').toString('base64')],{
+    encoding:'utf8',shell:false,windowsHide:true,timeout:20000,
+    cwd:'C:\\Windows\\System32',
+    env:buildPrivilegedPowerShellAuditEnv({
+      executable:'C:\\Program Files\\nodejs\\node.exe',
+      cliEntrypoint:'C:\\ProgramData\\Nexowire\\runtime\\cli.js',
+      codeRoot:'C:\\ProgramData\\Nexowire\\runtime',
+    }),
+  });
+  assert.equal(res.status,0,res.stderr+' '+res.stdout);
+  assert.equal(res.stdout.trim(),'NODE_HOST_SIGNER_OK');
 });
 
 test('trust inspector never writes DACLs, spawns agents or publishes protected values',()=>{
