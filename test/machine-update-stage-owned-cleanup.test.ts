@@ -44,7 +44,7 @@ test('staging extraction always cleans on success and thrown errors, with a safe
   const tryStart=source.indexOf('  try {',stage);
   const writeZip=source.indexOf('await fs.writeFile(zipFile, zipBuffer)',stage);
   const extraction=source.indexOf('renderBoundedWindowsArchiveExtraction(zipFile,extract)',stage);
-  const promotion=source.indexOf('await fs.rename(source, target)',stage);
+  const promotion=source.search(/await fs\.rename\(source,\s*target\)/);
   const cleanupFinally=source.indexOf('  } finally {',promotion);
   const cleanupGuard=source.indexOf('assertMachineUpdateOwnedStage(root,staging)',cleanupFinally);
   const trustRecheck=source.indexOf('assertMachineUpdateTreeProtectedBeforeWrite()',cleanupFinally);
