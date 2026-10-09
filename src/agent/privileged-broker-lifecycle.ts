@@ -14,6 +14,36 @@ import {
 } from '../security/privileged-broker-secret.js';
 
 const TASK_NAME_DEFAULT = 'Nexowire Privileged Broker';
+const BROKER_TASK_SYSTEM32='C:\\Windows\\System32';
+const BROKER_TASK_POWERSHELL=BROKER_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const BROKER_TASK_MODULE_DIR=BROKER_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+const BROKER_TASK_SCRIPT_HEADER=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
+`;
+
+/** Do not let a caller-controlled search path or process hooks select
+ * executable code in the Highest/Interactive broker task controller. */
+export function isolatedPrivilegedBrokerTaskEnvironment(
+  input:NodeJS.ProcessEnv,
+):NodeJS.ProcessEnv{
+  const name=input.NEXOWIRE_BROKER_TASK_NAME;
+  const launcher=input.NEXOWIRE_BROKER_LAUNCHER;
+  if(!name||name.length>128||!launcher||launcher.length>4096){
+    throw new Error('PRIVILEGED_BROKER_TASK_ENV_INVALID');
+  }
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:BROKER_TASK_SYSTEM32+'\\cmd.exe',
+    PATH:BROKER_TASK_SYSTEM32+';C:\\Windows',
+    PSModulePath:BROKER_TASK_MODULE_DIR,
+    NEXOWIRE_BROKER_TASK_NAME:name,
+    NEXOWIRE_BROKER_LAUNCHER:launcher,
+  };
+}
+
 
 const TaskStatusSchema = z.object({
   installed: z.boolean(),
@@ -107,7 +137,7 @@ async function runPowerShellJson<T>(
 
   return await new Promise<T>((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      BROKER_TASK_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -115,14 +145,14 @@ async function runPowerShellJson<T>(
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        script,
+        BROKER_TASK_SCRIPT_HEADER+'\n'+script,
       ],
       {
         windowsHide: true,
-        env: {
-          ...process.env,
-          ...env,
-        },
+        shell:false,
+        cwd:BROKER_TASK_SYSTEM32,
+        timeout:120_000,
+        env:isolatedPrivilegedBrokerTaskEnvironment(env),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -354,7 +384,7 @@ $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $launcher=$env:NEXOWIRE_BROKER_LAUNCHER
 $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name
 $argument='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher.Replace('"','""') + '"'
-$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument
+$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument
 $trigger=New-ScheduledTaskTrigger -AtLogOn -User $user
 $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
 ${PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS}
