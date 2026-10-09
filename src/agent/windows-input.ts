@@ -1,6 +1,29 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
+const INPUT_SYSTEM32='C:\\Windows\\System32';
+const INPUT_POWERSHELL=INPUT_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const INPUT_MODULES=INPUT_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+/** A clipboard/keyboard payload travels through child stdin. Never send it
+ * to an interpreter selected by caller PATH or a poisoned module path.
+ * Profile/temp hints are accepted only as safe local absolute paths because
+ * System.Windows.Forms/Add-Type need temp/profile storage on some hosts. */
+export function windowsInputPowerShellEnvironment():NodeJS.ProcessEnv {
+  const env:NodeJS.ProcessEnv={
+    SystemRoot:'C:\\Windows',windir:'C:\\Windows',
+    ComSpec:INPUT_SYSTEM32+'\\cmd.exe',
+    PATH:INPUT_SYSTEM32+';C:\\Windows',
+    PSModulePath:INPUT_MODULES,
+  };
+  for(const key of ['USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP'] as const){
+    const value=process.env[key];
+    if(!value||value.length>1024||!/^[A-Za-z]:\\/.test(value)||
+       /[;"'\r\n\0]/.test(value)||value.split(/[\\/]/).includes('..'))continue;
+    env[key]=value;
+  }
+  return env;
+}
+
 
 const WindowHandleSchema = z
   .string()
@@ -415,8 +438,11 @@ async function runPowerShellJson<T>(
       '-Command',
       script,
     ];
-    const child = spawn('powershell.exe', args, {
+    const child = spawn(INPUT_POWERSHELL, args, {
       windowsHide: true,
+      shell:false,
+      cwd:INPUT_SYSTEM32,
+      env:windowsInputPowerShellEnvironment(),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -424,8 +450,15 @@ async function runPowerShellJson<T>(
     const stderr: Buffer[] = [];
     let timedOut = false;
 
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+    let totalBytes=0;
+    let overflow=false;
+    const collect=(chunk:Buffer,target:Buffer[])=>{
+      totalBytes+=chunk.length;
+      if(totalBytes>2*1024*1024){overflow=true;child.kill();}
+      else target.push(chunk);
+    };
+    child.stdout.on('data', (chunk: Buffer) => collect(chunk,stdout));
+    child.stderr.on('data', (chunk: Buffer) => collect(chunk,stderr));
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -442,6 +475,10 @@ async function runPowerShellJson<T>(
       const out = Buffer.concat(stdout).toString('utf8').trim();
       const err = Buffer.concat(stderr).toString('utf8').trim();
 
+      if(overflow){
+        reject(new WindowsInputError('WINDOWS_INPUT_OUTPUT_LIMIT','Windows input output exceeded bound.'));
+        return;
+      }
       if (timedOut) {
         reject(
           new WindowsInputError(
