@@ -279,6 +279,21 @@ export function renderBoundedWindowsArchiveExtraction(
   ].join('\r\n');
 }
 
+/** Only this updater's randomly named child of the protected update root
+ * may ever be passed to recursive staging cleanup. */
+export function assertMachineUpdateOwnedStage(root:string,staging:string):void{
+  const trusted=path.win32.join(TRUSTED_MACHINE_PROGRAMDATA,'Nexowire');
+  const parent=path.win32.join(trusted,'update');
+  const base=typeof staging==='string'?path.win32.basename(staging):'';
+  if(root!==trusted ||
+     typeof staging!=='string' ||
+     path.win32.dirname(staging)!==parent ||
+     staging!==path.win32.join(parent,base) ||
+     !/^stage-\d+\.\d+\.\d+-[a-f0-9]{12}-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(base)){
+    throw new Error('MACHINE_UPDATE_UNTRUSTED_STAGING_PATH');
+  }
+}
+
 async function extractVerifiedRuntime(
   input: MachineUpdateInput,
 ): Promise<string> {
@@ -357,8 +372,11 @@ async function extractVerifiedRuntime(
     'Nexowire-Windows-x64.zip',
   );
   const extract = path.join(staging, 'extract');
-  await fs.mkdir(extract, { recursive: true });
-  await fs.writeFile(zipFile, zipBuffer);
+  assertMachineUpdateOwnedStage(root,staging);
+  let stageError:unknown;
+  try {
+    await fs.mkdir(extract, { recursive: true });
+    await fs.writeFile(zipFile, zipBuffer);
 
   const script = renderBoundedWindowsArchiveExtraction(zipFile,extract);
   const result = spawnSync(
@@ -406,9 +424,27 @@ async function extractVerifiedRuntime(
       throw error;
     }
   }
-  hardenAcl(target);
-  await fs.rm(staging, { recursive: true, force: true });
-  return target;
+    hardenAcl(target);
+    return target;
+  } catch(error) {
+    stageError=error;
+    throw error;
+  } finally {
+    // Remove the uniquely owned staging subtree on success OR failure.
+    // Refuse recursion if the protected tree has become unsafe, including
+    // a reparse/junction entry introduced after the initial preflight.
+    try {
+      assertMachineUpdateOwnedStage(root,staging);
+      assertMachineUpdateTreeProtectedBeforeWrite();
+      await fs.rm(staging,{recursive:true,force:true,maxRetries:2,retryDelay:200});
+    } catch(cleanupError) {
+      if(stageError!==undefined){
+        throw new AggregateError([stageError,cleanupError],
+          'MACHINE_UPDATE_STAGE_AND_CLEANUP_FAILED');
+      }
+      throw cleanupError;
+    }
+  }
 }
 
 export function trustedMachineUpdateCutoverTarget(input: {
