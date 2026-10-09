@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {existsSync,mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {
   buildAttestationArgs,evaluateVerifiedReleaseProvenance,
+  pinnedGithubCliExecutable,isolatedGithubCliEnvironment,assertTrustedWindowsGithubCli,
   type ProvenancePins,
 } from '../scripts/verify-pinned-release-provenance.js';
 
@@ -116,4 +120,45 @@ test('skips unrelated attestation and accepts exact subsequent SLSA record',()=>
   unrelated.verificationResult.statement.subject[0]!.name='different.tgz';
   const ok=evaluateVerifiedReleaseProvenance([unrelated,...fixture()],pins);
   assert.equal(ok.safeToElevate,false);
+});
+
+test('Windows preflight picks fixed GitHub CLI instead of search-path executable',()=>{
+  assert.equal(pinnedGithubCliExecutable('win32'),'C:\\Program Files\\GitHub CLI\\gh.exe');
+  assert.equal(pinnedGithubCliExecutable('linux'),'gh');
+  const env=isolatedGithubCliEnvironment('win32');
+  assert.equal(env.PATH,'C:\\Windows\\System32;C:\\Windows');
+  assert.equal(env.SystemRoot,'C:\\Windows');
+  for(const dangerous of [
+    'NODE_OPTIONS','NODE_PATH','PSModulePath','GH_HOST','GH_CONFIG_DIR',
+    'GH_ENTERPRISE_TOKEN','GIT_CONFIG_GLOBAL','GIT_SSH_COMMAND','COMSPEC',
+  ])assert.equal(env[dangerous],undefined,dangerous);
+});
+test('PATH-injected fake gh cannot replace fixed, signed Windows GitHub CLI',{
+  skip:process.platform!=='win32'||!existsSync('C:\\Program Files\\GitHub CLI\\gh.exe'),
+},()=>{
+  const tmp=mkdtempSync(path.join(tmpdir(),'nx-gh-spoof-'));
+  const fake=path.join(tmp,'gh.exe');
+  const before=process.env.PATH;
+  writeFileSync(fake,'malicious gh.exe stub that must never execute');
+  try{
+    process.env.PATH=tmp+';'+(before||'');
+    assert.equal(pinnedGithubCliExecutable(),'C:\\Program Files\\GitHub CLI\\gh.exe');
+    assert.ok(!isolatedGithubCliEnvironment().PATH?.includes(tmp));
+    assert.doesNotThrow(()=>assertTrustedWindowsGithubCli());
+    assert.equal(readFileSync(fake,'utf8'),'malicious gh.exe stub that must never execute');
+  }finally{
+    if(before===undefined)delete process.env.PATH;else process.env.PATH=before;
+    rmSync(tmp,{recursive:true,force:true});
+  }
+});
+test('Windows trust check fails closed with unsigned/mutable executable paths in source',()=>{
+  const source=readFileSync(new URL('../scripts/verify-pinned-release-provenance.ts',import.meta.url),'utf8');
+  assert.ok(source.includes("WINDOWS_GH_EXE='C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'"));
+  assert.ok(source.includes("'GH_UNTRUSTED_OWNER'"));
+  assert.ok(source.includes("'GH_UNTRUSTED_WRITE_ACE'"));
+  assert.ok(source.includes("'GH_UNTRUSTED_AUTHENTICODE_PUBLISHER'"));
+  assert.ok(source.includes('Get-AuthenticodeSignature'));
+  assert.ok(source.includes('GH_EXECUTABLE_UNTRUSTED'));
+  assert.ok(source.includes("const run=spawnSync(executable,buildAttestationArgs"));
+  assert.ok(!source.includes("spawnSync('gh',buildAttestationArgs"));
 });
