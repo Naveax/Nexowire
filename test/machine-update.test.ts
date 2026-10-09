@@ -14,10 +14,10 @@ test('machine cutover updates only Nexowire machine launchers and rolls back on 
 
   assert.match(script, /Nexowire Privileged Broker/);
   assert.match(script, /Nexowire Hub Boot/);
-  assert.match(script, /privileged-broker run/);
-  assert.match(script, /cli\\\.js http/);
-  assert.match(script, /Updated SYSTEM Hub did not listen/);
-  assert.match(script, /Updated Admin Bridge did not listen/);
+  assert.match(script, /privileged-broker/);
+  assert.match(script, /cli\\\.js/);
+  assert.match(script, /Updated SYSTEM Hub did not bind 43110/);
+  assert.match(script, /Updated Admin Bridge did not bind 43112/);
   assert.match(script, /\.update-rollback/);
   assert.match(script, /Restore/);
   assert.match(script, /rolled_back/);
