@@ -36,7 +36,7 @@ test('machine updater render refuses caller-selected ProgramData paths',()=>{
       version:'1.0.5',buildId:'1.0.5-012345abcdef',
       targetRoot:'C:\\ProgramData\\Nexowire\\versions\\1.0.5-012345abcdef',
     });
-    assert.match(script,/C:\\ProgramData\\Nexowire\\update/);
+    assert.match(script,/C:\\ProgramData\\Nexowire[\\/]update/);
     assert.doesNotMatch(script,/Users\\Public\\Writable/);
   }finally{
     if(old===undefined)delete process.env.ProgramData;
