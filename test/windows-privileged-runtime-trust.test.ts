@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths} from '../src/security/windows-privileged-runtime-trust.js';
+import {assertNoPrivilegedNodeStartupFlags,assertWindowsPrivilegedRuntimeTrusted,validatePrivilegedRuntimePaths,buildPrivilegedPowerShellAuditEnv} from '../src/security/windows-privileged-runtime-trust.js';
 
 const env={
   USERPROFILE:'C:\\Users\\testuser',
@@ -12,6 +13,53 @@ const env={
   ProgramFiles:'C:\\Program Files',
   ProgramData:'C:\\ProgramData',
 };
+
+test('highest audit uses only pinned Windows environment, not caller module/preload paths',()=>{
+  const out=buildPrivilegedPowerShellAuditEnv({
+    executable:'C:\\Program Files\\Nexowire\\node.exe',
+    cliEntrypoint:'C:\\ProgramData\\Nexowire\\runtime\\cli.js',
+    codeRoot:'C:\\ProgramData\\Nexowire\\runtime',
+  });
+  assert.deepEqual(Object.keys(out).sort(),[
+    'SystemRoot','windir','ComSpec','PATH','PSModulePath',
+    'NEXOWIRE_TRUST_EXE','NEXOWIRE_TRUST_CLI','NEXOWIRE_TRUST_ROOT',
+  ].sort());
+  assert.equal(out.PSModulePath,'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules');
+  assert.equal(out.PATH,'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0');
+  for(const key of [
+    'APPDATA','LOCALAPPDATA','USERPROFILE','TEMP','TMP',
+    'NODE_OPTIONS','NODE_PATH','NODE_EXTRA_CA_CERTS',
+    'PSExecutionPolicyPreference','PSModuleAnalysisCachePath',
+    'POWERSHELL_UPDATECHECK','HOME',
+  ])assert.equal(out[key],undefined,key);
+  assert.equal(out.NEXOWIRE_TRUST_CLI,'C:\\ProgramData\\Nexowire\\runtime\\cli.js');
+});
+
+test('Windows inbox PowerShell Security module works with isolated audit environment',{
+  skip:process.platform!=='win32',
+},()=>{
+  const sys='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  assert.equal(existsSync(sys),true);
+  const env=buildPrivilegedPowerShellAuditEnv({
+    executable:'C:\\Windows\\System32\\cmd.exe',
+    cliEntrypoint:'C:\\Windows\\System32\\cmd.exe',
+    codeRoot:'C:\\Windows\\System32',
+  });
+  const source=[
+    "$ErrorActionPreference='Stop'",
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop",
+    "if(-not (Get-Acl -LiteralPath 'C:\\Windows\\System32\\cmd.exe' -ErrorAction Stop)){exit 4}",
+    "Write-Output 'INBOX_SECURITY_MODULE_OK'",
+  ].join(';');
+  const result=spawnSync(sys,['-NoLogo','-NoProfile','-NonInteractive',
+    '-EncodedCommand',Buffer.from(source,'utf16le').toString('base64')],{
+    encoding:'utf8',shell:false,env,cwd:'C:\\Windows\\System32',
+    timeout:20000,windowsHide:true,
+  });
+  assert.equal(result.status,0,result.stderr+' '+result.stdout);
+  assert.match(result.stdout,/INBOX_SECURITY_MODULE_OK/);
+});
 
 test('highest privilege runtime gate never trusts user AppData or arbitrary staging roots',()=>{
   const targets=[

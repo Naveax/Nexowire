@@ -19,6 +19,12 @@ The preflight:
   from an unverified location.
 - identifies the CLI package root and, for installed node_modules packages,
   includes all sibling packages under the outermost node_modules parent
+- launches its fixed Windows PowerShell executable from the trusted System32
+  working directory with a narrowly allowlisted environment, instead of
+  inheriting caller-controlled PSModulePath, PATH, APPDATA, TEMP, or Node hooks.
+  The diagnostic pins the built-in WindowsPowerShell module directory and
+  imports the inbox Microsoft.PowerShell.Security module by an absolute path,
+  preventing caller-injected module lookup before Get-Acl.
 - checks the executable, CLI and their ancestor directories for unexpected
   owners, untrusted allow-write ACEs and reparse points
 - also enumerates all files/directories in the resolved code package tree and
