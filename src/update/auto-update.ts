@@ -13,6 +13,25 @@ import {
 
 export const AUTO_UPDATE_TASK_NAME = 'Nexowire Automatic Update';
 export const AUTO_UPDATE_INTERVAL_MINUTES = 60;
+const AUTO_UPDATE_SYSTEM32='C:\\Windows\\System32';
+const AUTO_UPDATE_POWERSHELL=AUTO_UPDATE_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const AUTO_UPDATE_MODULE_DIR=AUTO_UPDATE_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+const AUTO_UPDATE_TASK_HEADER=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
+`;
+
+/** Task status/registration need no caller-controlled process variables. */
+export function isolatedAutoUpdateTaskEnvironment():NodeJS.ProcessEnv{
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:AUTO_UPDATE_SYSTEM32+'\\cmd.exe',
+    PATH:AUTO_UPDATE_SYSTEM32+';C:\\Windows',
+    PSModulePath:AUTO_UPDATE_MODULE_DIR,
+  };
+}
 
 type AutomaticUpdateAction =
   | 'up_to_date'
@@ -153,7 +172,7 @@ export function renderAutoUpdateTaskInstallScript(
     '$user=[Security.Principal.WindowsIdentity]::GetCurrent().Name',
     '$existing=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
     'if($existing -and (($existing.Settings.Enabled -eq $false) -or ([string]$existing.State -eq "Disabled"))){[pscustomobject]@{installed=$true;ownerDisabled=$true;taskName=$name}|ConvertTo-Json -Compress;exit 0}',
-    "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $launcher.Replace('\"','\"\"') + '\"')",
+    "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $launcher.Replace('\"','\"\"') + '\"')",
     '$logon=New-ScheduledTaskTrigger -AtLogOn -User $user',
     '$hour=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 60) -RepetitionDuration (New-TimeSpan -Days 3650)',
     '$hour.Repetition.Duration=$null',
@@ -175,14 +194,18 @@ async function runPowerShellJson(
   script: string,
 ): Promise<unknown> {
   return await new Promise((resolve, reject) => {
-    const child = spawn('powershell.exe', [
+    const child = spawn(AUTO_UPDATE_POWERSHELL, [
       '-NoLogo',
       '-NoProfile',
       '-NonInteractive',
       '-ExecutionPolicy', 'Bypass',
-      '-Command', script,
+      '-Command', AUTO_UPDATE_TASK_HEADER+'\n'+script,
     ], {
       windowsHide: true,
+      shell:false,
+      cwd:AUTO_UPDATE_SYSTEM32,
+      timeout:120_000,
+      env:isolatedAutoUpdateTaskEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const stdout: Buffer[] = [];
@@ -299,8 +322,9 @@ async function installAutoUpdateTask(): Promise<unknown> {
   );
 }
 
-async function autoUpdateTaskStatus(): Promise<unknown> {
-  const result = await runPowerShellJson([
+/** Read-only real Windows task inventory for status and adversarial tests. */
+export async function readAutoUpdateScheduledTask():Promise<unknown> {
+  return await runPowerShellJson([
     "$ErrorActionPreference='Stop'",
     '$name=' + psLiteral(AUTO_UPDATE_TASK_NAME),
     '$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue',
@@ -308,6 +332,10 @@ async function autoUpdateTaskStatus(): Promise<unknown> {
     '$info=Get-ScheduledTaskInfo -TaskName $name',
     '[pscustomobject]@{installed=$true;state=[string]$task.State;runLevel=[string]$task.Principal.RunLevel;lastResult=$info.LastTaskResult;lastRun=$info.LastRunTime.ToString("o");intervalMinutes=60}|ConvertTo-Json -Compress',
   ].join('\n'));
+}
+
+async function autoUpdateTaskStatus(): Promise<unknown> {
+  const result=await readAutoUpdateScheduledTask();
   let lastCheck: unknown = null;
   try {
     lastCheck = JSON.parse(
