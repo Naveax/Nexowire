@@ -58,10 +58,25 @@ function validateInput(input: unknown): MachineUpdateInput {
   return { version, buildId };
 }
 
+const TRUSTED_MACHINE_PROGRAMDATA='C:\\ProgramData';
+/** Never let an elevated updater stage/recurse ACLs in caller-selected roots.
+ * ProgramData is an environment variable, not a trusted path capability. */
+export function trustedMachineUpdateRoot(programData:string):string {
+  if(!programData ||
+     programData.startsWith('\\\\') ||
+     programData.includes('\0') ||
+     programData.split(/[\\\\/]/).includes('..') ||
+     !/^[A-Za-z]:\\/.test(programData) ||
+     !path.win32.isAbsolute(programData) ||
+     path.win32.resolve(programData).toLowerCase()!==TRUSTED_MACHINE_PROGRAMDATA.toLowerCase()){
+    throw new Error('MACHINE_UPDATE_UNTRUSTED_PROGRAMDATA_ROOT');
+  }
+  return path.win32.join(TRUSTED_MACHINE_PROGRAMDATA,'Nexowire');
+}
+
 function programDataRoot(): string {
-  return path.resolve(
-    process.env.ProgramData ?? 'C:\\ProgramData',
-    'Nexowire',
+  return trustedMachineUpdateRoot(
+    process.env.ProgramData ?? TRUSTED_MACHINE_PROGRAMDATA,
   );
 }
 
