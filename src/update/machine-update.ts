@@ -307,11 +307,31 @@ async function extractVerifiedRuntime(
   return target;
 }
 
+export function trustedMachineUpdateCutoverTarget(input: {
+  targetRoot: string;
+  version: string;
+  buildId: string;
+}): string {
+  const parsed=validateInput(input);
+  if(parsed.version!==input.version || parsed.buildId!==input.buildId){
+    throw new Error('MACHINE_UPDATE_CUTOVER_ID_MISMATCH');
+  }
+  const expected=path.win32.join(programDataRoot(),'versions',parsed.buildId);
+  // Only the exact staged version path produced by this updater is eligible.
+  // Reject case tricks, traversal, aliases, device/UNC syntax, extra
+  // descendants and other build ids before rendering any launcher mutation.
+  if(typeof input.targetRoot!=='string' || input.targetRoot!==expected){
+    throw new Error('MACHINE_UPDATE_UNTRUSTED_CUTOVER_TARGET');
+  }
+  return expected;
+}
+
 export function renderMachineCutoverScript(input: {
   targetRoot: string;
   version: string;
   buildId: string;
 }): string {
+  const targetRoot=trustedMachineUpdateCutoverTarget(input);
   const root = programDataRoot();
   const status = path.join(
     root,
@@ -330,7 +350,7 @@ export function renderMachineCutoverScript(input: {
   );
   return [
     "$ErrorActionPreference='Stop'",
-    '$NewRoot=' + psLiteral(input.targetRoot),
+    '$NewRoot=' + psLiteral(targetRoot),
     '$Version=' + psLiteral(input.version),
     '$BuildId=' + psLiteral(input.buildId),
     '$Status=' + psLiteral(status),
