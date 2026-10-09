@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { BrowserManager } from '../src/agent/browser-manager.js';
+import { BrowserControlError, BrowserManager } from '../src/agent/browser-manager.js';
 
 test(
   'native browser manager drives a real local Edge page end-to-end',
@@ -42,15 +42,29 @@ test(
     assert.ok(address && typeof address === 'object');
     const url = 'http://127.0.0.1:' + address.port + '/';
 
-    const started = await manager.start({
+    const launch = () => manager.start({
       browser: 'edge',
       headless: true,
       initialUrl: url,
       width: 800,
       height: 600,
     });
-
-    const tabs = await manager.tabs(started.id);
+    let started = await launch();
+    let tabs;
+    try {
+      tabs = await manager.tabs(started.id);
+    } catch (error) {
+      // Hosted Windows runners occasionally report DevToolsActivePort before
+      // Edge's target-list HTTP server becomes responsive. Replace the
+      // failed isolated browser session once; never loop indefinitely.
+      if (!(error instanceof BrowserControlError) ||
+          !['BROWSER_DEVTOOLS_TIMEOUT','BROWSER_DEVTOOLS_UNAVAILABLE'].includes(error.code)) {
+        throw error;
+      }
+      await manager.stop(started.id);
+      started = await launch();
+      tabs = await manager.tabs(started.id);
+    }
     assert.ok(tabs.tabs.length >= 1);
     const page = tabs.tabs.find((tab) => tab.url === url) ?? tabs.tabs[0];
     assert.ok(page);
