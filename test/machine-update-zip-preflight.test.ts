@@ -70,7 +70,13 @@ test('generated extraction script includes count, byte, path and symlink bounds'
   assert.match(script,/maxTotalBytes=\[long\]\(1024MB\)/);
   assert.match(script,/MACHINE_UPDATE_ARCHIVE_UNSAFE_ENTRY/);
   assert.match(script,/MACHINE_UPDATE_ARCHIVE_SYMLINK/);
-  assert.ok(script.indexOf('foreach($entry')<script.indexOf('ExtractToDirectory'));
+  assert.ok(script.includes('$actualEntry+=[long]$read'));
+  assert.ok(script.includes('$actualTotal+=[long]$read'));
+  assert.ok(script.includes('MACHINE_UPDATE_ARCHIVE_ACTUAL_ENTRY_TOO_LARGE'));
+  assert.ok(script.includes('MACHINE_UPDATE_ARCHIVE_ACTUAL_TOTAL_TOO_LARGE'));
+  assert.ok(script.includes('MACHINE_UPDATE_ARCHIVE_LENGTH_MISMATCH'));
+  assert.ok(script.includes('[IO.FileMode]::CreateNew'));
+  assert.doesNotMatch(script,/ExtractToDirectory/);
 });
 test('normal small ZIP extracts inside requested test directory',{
   skip:!isWindows,
@@ -79,6 +85,34 @@ test('normal small ZIP extracts inside requested test directory',{
   assert.equal(result.status,0,result.stderr);
   assert.equal(readFileSync(path.join(f.extract,'Nexowire','safe.txt'),'utf8'),'test');
 }));
+test('actual entry byte counter refuses extraction beyond a post-preflight synthetic limit',{
+  skip:!isWindows,
+},()=>withFixture(['Nexowire/data.txt'],f=>{
+  const source=renderBoundedWindowsArchiveExtraction(f.zip,f.extract);
+  const bounded=source.replace('  $actualTotal=[long]0',
+    '  $maxEntryBytes=[long]3\r\n  $actualTotal=[long]0');
+  assert.notEqual(source,bounded);
+  const result=invoke(bounded);
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/MACHINE_UPDATE_ARCHIVE_ACTUAL_ENTRY_TOO_LARGE/);
+}));
+test('actual total byte counter rejects sum beyond a post-preflight synthetic limit',{
+  skip:!isWindows,
+},()=>withFixture(['Nexowire/a.txt','Nexowire/b.txt'],f=>{
+  const source=renderBoundedWindowsArchiveExtraction(f.zip,f.extract);
+  const bounded=source.replace('  $actualTotal=[long]0',
+    '  $maxTotalBytes=[long]6\r\n  $actualTotal=[long]0');
+  assert.notEqual(source,bounded);
+  const result=invoke(bounded);
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/MACHINE_UPDATE_ARCHIVE_ACTUAL_TOTAL_TOO_LARGE/);
+}));
+test('file contents mismatch from central metadata is refused',{
+  skip:!isWindows,
+},()=>withFixture(['Nexowire/data.txt'],f=>{
+  const result=invoke(renderBoundedWindowsArchiveExtraction(f.zip,f.extract));
+  assert.notEqual(result.status,0);
+},zip=>rewriteCentral(zip,(data,offset)=>data.writeUInt32LE(3,offset+24))));
 test('Windows case-insensitive duplicate extraction paths are refused before writing',{
   skip:!isWindows,
 },()=>withFixture(['Nexowire/data.txt','nexowire/DATA.TXT'],f=>{
