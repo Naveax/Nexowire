@@ -36,6 +36,18 @@ The preflight:
 - refuses the protected task installation if any file/ACL enumeration fails
   or the runtime tree exceeds the safety cap.
 
+The Hub Boot Scheduled Task lifecycle also invokes a fixed
+`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` for
+status, registration and removal, rather than resolving `powershell.exe`
+from the caller's PATH. Lifecycle task invocations use a strict system
+environment containing only pinned Windows system paths/module root and
+the three required boot task name/user task name/protected launcher path
+variables. The registered task action also references that exact trusted
+PowerShell binary. This reduces executable-search and user-module-loading
+risk when the lifecycle operation is authorized to run elevated. It does
+not grant consent or change the requirement for an administrator-approved
+protected installation.
+
 It never changes a live permission, decrypts a token or runs the candidate CLI
 during validation. A failed preflight does not rewrite an existing Hub task.
 

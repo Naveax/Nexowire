@@ -21,6 +21,38 @@ import {
   type HubLifecycleOptions,
 } from './hub-lifecycle.js';
 
+const TRUSTED_SYSTEM32='C:\\Windows\\System32';
+const TRUSTED_POWERSHELL=TRUSTED_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const TRUSTED_POWERSHELL_DIR=TRUSTED_SYSTEM32+'\\WindowsPowerShell\\v1.0';
+
+/**
+ * Task lifecycle scripts need only task names and protected launcher path.
+ * Never propagate a caller-controlled PATH/PSModulePath or process hooks to
+ * the elevated PowerShell task registration process.
+ */
+export function protectedHubTaskShellEnvironment(input:NodeJS.ProcessEnv):NodeJS.ProcessEnv {
+  const taskVariables=[
+    'NEXOWIRE_HUB_BOOT_TASK_NAME',
+    'NEXOWIRE_HUB_TASK_NAME',
+    'NEXOWIRE_HUB_BOOT_LAUNCHER',
+  ] as const;
+  const result:NodeJS.ProcessEnv={
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:TRUSTED_SYSTEM32+'\\cmd.exe',
+    PATH:[TRUSTED_SYSTEM32,'C:\\Windows',TRUSTED_POWERSHELL_DIR].join(';'),
+    PSModulePath:TRUSTED_POWERSHELL_DIR+'\\Modules',
+  };
+  for(const name of taskVariables){
+    const value=input[name];
+    if(!value||typeof value!=='string'||value.length>4096){
+      throw new Error('HUB_BOOT_TASK_ENV_INVALID: '+name);
+    }
+    result[name]=value;
+  }
+  return result;
+}
+
 const BOOT_TASK_DEFAULT = 'Nexowire Hub Boot';
 const USER_TASK_DEFAULT = 'Nexowire Hub';
 
@@ -241,7 +273,7 @@ async function runPowerShellJson<T>(
   assertWindows();
   return await new Promise<T>((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      TRUSTED_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -253,7 +285,8 @@ async function runPowerShellJson<T>(
       ],
       {
         windowsHide: true,
-        env: { ...process.env, ...env },
+        shell:false,cwd:TRUSTED_SYSTEM32,
+        env: protectedHubTaskShellEnvironment(env),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -555,7 +588,7 @@ export async function installHubBootLifecycle(
         '$user=$env:NEXOWIRE_HUB_TASK_NAME',
         '$launcher=$env:NEXOWIRE_HUB_BOOT_LAUNCHER',
         '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
-        "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument",
+        "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
         '$trigger=New-ScheduledTaskTrigger -AtStartup',
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
         '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
