@@ -5,6 +5,43 @@ import path from 'node:path';
 import * as z from 'zod';
 
 const WINDOWS_TASK_DEFAULT = 'Nexowire Hub';
+const HUB_SYSTEM32 = 'C:\\Windows\\System32';
+const HUB_POWERSHELL = HUB_SYSTEM32 + '\\WindowsPowerShell\\v1.0\\powershell.exe';
+const HUB_MODULE_ROOT = HUB_SYSTEM32 + '\\WindowsPowerShell\\v1.0\\Modules';
+
+/** Separate the task command context from caller PATH, PowerShell modules
+ * and Node.js preload hooks. Safe env data for the launcher is handled by
+ * persistedHubEnvironment separately, not by the task subprocess. */
+export function isolatedHubLifecycleTaskEnv(input:NodeJS.ProcessEnv):NodeJS.ProcessEnv {
+  const selected:NodeJS.ProcessEnv={
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:HUB_SYSTEM32+'\\cmd.exe',
+    PATH:HUB_SYSTEM32+';C:\\Windows;'+HUB_SYSTEM32+'\\WindowsPowerShell\\v1.0',
+    PSModulePath:HUB_MODULE_ROOT,
+  };
+  for(const key of [
+    'NEXOWIRE_HUB_TASK_NAME',
+    'NEXOWIRE_HUB_LAUNCHER',
+    'NEXOWIRE_HUB_PREFLIGHT_PORT',
+    'NEXOWIRE_HUB_RESTART_REQUIRED',
+  ] as const){
+    const value=input[key];
+    if(value===undefined)continue;
+    if(typeof value!=='string'||value.length===0||value.length>4096){
+      throw new Error('HUB_TASK_ENV_INVALID: '+key);
+    }
+    selected[key]=value;
+  }
+  return selected;
+}
+const HUB_TASK_POWERSHELL_HEADER=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\NetTCPIP\NetTCPIP.psd1' -ErrorAction Stop
+`;
+
 
 const SAFE_ENV_NAMES = [
   'NEXOWIRE_STATE_DIR',
@@ -207,7 +244,7 @@ async function runPowerShellJson<T>(
 ): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      HUB_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -215,11 +252,14 @@ async function runPowerShellJson<T>(
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        script,
+        HUB_TASK_POWERSHELL_HEADER+'\n'+script,
       ],
       {
         windowsHide: true,
-        env: { ...process.env, ...env },
+        shell:false,
+        cwd:HUB_SYSTEM32,
+        timeout:60_000,
+        env: isolatedHubLifecycleTaskEnv(env),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -505,7 +545,7 @@ export async function installHubLifecycle(
       '$restartRequired=$env:NEXOWIRE_HUB_RESTART_REQUIRED -eq \'1\'',
       '$user=[Security.Principal.WindowsIdentity]::GetCurrent().Name',
       '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
-      "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument",
+      "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
       '$trigger=New-ScheduledTaskTrigger -AtLogOn -User $user',
       '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
       '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
