@@ -11,6 +11,11 @@ test('legacy backup only encrypts task XML in memory and never invokes task muta
   assert.match(source,/ProtectedData\]::Protect/);
   assert.match(source,/ProtectedData\]::Unprotect/);
   assert.match(source,/CurrentUser/);
+  assert.match(source,/ValidateSet\('Inspect','Backup','Verify','Rehearse'\)/);
+  assert.match(source,/RECOVERY_MANIFEST_IDENTITY_MISMATCH/);
+  assert.match(source,/RECOVERY_MANIFEST_DIGEST_INVALID/);
+  assert.match(source,/activeTaskMatchesBackup=\$activeMatch/);
+  assert.match(source,/rollbackRestorationTested=\$false/);
   assert.match(source,/FileMode\]::CreateNew/);
   assert.match(source,/RECOVERY_UNTRUSTED_WRITE_GRANT/);
   assert.match(source,/safeToCutover=\$false/);
@@ -38,6 +43,12 @@ test('recovery script syntax and invalid backup traversal fail closed on Windows
   });
   assert.notEqual(bad.status,0);
   assert.doesNotMatch(bad.stdout,/xml version|Actions|Arguments|Password/i);
+  const badRehearsal=spawnSync(powershell,['-NoProfile','-NonInteractive','-File',script,
+    '-Mode','Rehearse','-BackupFile','..\\secret.xml'],{
+    encoding:'utf8',timeout:15000,windowsHide:true,
+  });
+  assert.notEqual(badRehearsal.status,0);
+  assert.doesNotMatch(badRehearsal.stdout,/xml version|Actions|Arguments|Password/i);
 });
 
 test('current-user DPAPI encrypts and verifies without persistence on Windows',{

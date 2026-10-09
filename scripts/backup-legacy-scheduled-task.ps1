@@ -8,7 +8,7 @@
 #>
 [CmdletBinding()]
 param(
- [ValidateSet('Inspect','Backup','Verify')][string]$Mode='Inspect',
+ [ValidateSet('Inspect','Backup','Verify','Rehearse')][string]$Mode='Inspect',
  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9 ._-]{0,126}$')][string]$TaskName='Nexowire Stack',
  [string]$BackupFile
 )
@@ -74,7 +74,7 @@ function WriteNew([string]$file,[byte[]]$bytes){
  try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}
  finally{$stream.Dispose()}
 }
-function ReadBackup([string]$file){
+function ReadBackup([string]$file,[bool]$CompareCurrent=$false){
  if(-not (Test-Path -LiteralPath $root -PathType Container)){throw 'RECOVERY_BACKUP_NOT_FOUND'}
  Check-Root
  $name=[IO.Path]::GetFileName($file)
@@ -85,6 +85,18 @@ function ReadBackup([string]$file){
  $manifestFile=$blob+'.json'
  Check-SafePath $manifestFile
  $metadata=(Get-Content -LiteralPath $manifestFile -Raw -ErrorAction Stop |ConvertFrom-Json -ErrorAction Stop)
+ # Manifest identity must not be used to retarget restoration to a different task.
+ if([int]$metadata.schemaVersion -ne 1 -or
+    [string]$metadata.taskName -cne $TaskName -or
+    [string]$metadata.taskPath -cne '\' -or
+    [string]$metadata.purpose -cne 'Nexowire.LegacyTask.Recovery.CurrentUser.v1' -or
+    [string]$metadata.encryption -cne 'windows-dpapi-current-user'){
+  throw 'RECOVERY_MANIFEST_IDENTITY_MISMATCH'
+ }
+ if([string]$metadata.sourceXmlSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+    [string]$metadata.encryptedSha256 -cnotmatch '^[0-9a-f]{64}$'){
+  throw 'RECOVERY_MANIFEST_DIGEST_INVALID'
+ }
  $cipher=[IO.File]::ReadAllBytes($blob)
  if($cipher.Length -lt 60 -or $cipher.Length -gt 3MB -or (Digest $cipher) -ne $metadata.encryptedSha256){throw 'RECOVERY_CIPHERTEXT_INTEGRITY_FAILURE'}
  $plain=$null
@@ -98,16 +110,29 @@ function ReadBackup([string]$file){
   if($plain){[array]::Clear($plain,0,$plain.Length)}
   [array]::Clear($cipher,0,$cipher.Length)
  }
- return [pscustomobject]@{mode='VERIFY';taskName=[string]$metadata.taskName;backupFile=$name;ciphertextIntegrityVerified=$true;dpapiCurrentUserRoundtrip=$true;taskRestored=$false;safeToCutover=$false;plaintextWrittenToDisk=$false}
+ $activeMatch=$null
+ if($CompareCurrent){
+  # Read-only rehearsal: compare current registered task with backup, only in memory.
+  $currentBytes=[Text.Encoding]::UTF8.GetBytes((Current-Task-Xml))
+  try{$activeMatch=((Digest $currentBytes) -ceq [string]$metadata.sourceXmlSha256)}
+  finally{[array]::Clear($currentBytes,0,$currentBytes.Length)}
+ }
+ return [pscustomobject]@{
+  mode=if($CompareCurrent){'REHEARSE'}else{'VERIFY'}
+  taskName=[string]$metadata.taskName;backupFile=$name
+  ciphertextIntegrityVerified=$true;dpapiCurrentUserRoundtrip=$true
+  activeTaskMatchesBackup=$activeMatch;rollbackRestorationTested=$false
+  taskRestored=$false;safeToCutover=$false;plaintextWrittenToDisk=$false
+ }
 }
 if($Mode -eq 'Inspect'){
  $task=Read-Task
  [pscustomobject]@{mode='INSPECT';taskName=$TaskName;state=[string]$task.State;runLevel=[string]$task.Principal.RunLevel;taskDefinitionObserved=$true;taskRestored=$false;safeToCutover=$false;secretUnsealPerformed=$false}|ConvertTo-Json -Compress
  exit 0
 }
-if($Mode -eq 'Verify'){
+if($Mode -eq 'Verify' -or $Mode -eq 'Rehearse'){
  if(!$BackupFile){throw 'RECOVERY_BACKUP_FILE_REQUIRED'}
- ReadBackup $BackupFile|ConvertTo-Json -Compress
+ ReadBackup $BackupFile ($Mode -eq 'Rehearse') | ConvertTo-Json -Compress
  exit 0
 }
 if($BackupFile){throw 'RECOVERY_BACKUP_FILE_NOT_ALLOWED_IN_BACKUP_MODE'}
