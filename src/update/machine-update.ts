@@ -121,7 +121,50 @@ function hardenAcl(root: string): void {
   }
 }
 
-async function fetchBuffer(url: string): Promise<Buffer> {
+const MAX_RELEASE_CHECKSUM_BYTES=128*1024;
+const MAX_RELEASE_SETUP_BYTES=2*1024*1024;
+const MAX_RELEASE_ZIP_BYTES=256*1024*1024;
+
+/** Consume HTTP bodies with a hard size limit even if Content-Length is
+ * absent, falsified, or describes only compressed transfer bytes. */
+export async function readBoundedReleaseResponse(
+  response:Response,
+  maxBytes:number,
+):Promise<Buffer>{
+  if(!Number.isSafeInteger(maxBytes)||maxBytes<1){
+    throw new Error('MACHINE_UPDATE_ASSET_LIMIT_INVALID');
+  }
+  const declared=response.headers.get('content-length');
+  if(declared!==null && /^\d+$/.test(declared) && BigInt(declared)>BigInt(maxBytes)){
+    throw new Error('MACHINE_UPDATE_ASSET_TOO_LARGE');
+  }
+  if(!response.body){
+    throw new Error('MACHINE_UPDATE_ASSET_BODY_MISSING');
+  }
+  const chunks:Buffer[]=[];
+  let total=0;
+  const reader=response.body.getReader();
+  try{
+    while(true){
+      const item=await reader.read();
+      if(item.done)break;
+      if(!(item.value instanceof Uint8Array)){
+        throw new Error('MACHINE_UPDATE_ASSET_INVALID_CHUNK');
+      }
+      total+=item.value.byteLength;
+      if(total>maxBytes){
+        await reader.cancel().catch(()=>{});
+        throw new Error('MACHINE_UPDATE_ASSET_TOO_LARGE');
+      }
+      chunks.push(Buffer.from(item.value));
+    }
+  }finally{
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks,total);
+}
+
+async function fetchBuffer(url: string,maxBytes:number): Promise<Buffer> {
   const response = await fetch(url, {
     headers: {
       accept: 'application/octet-stream',
@@ -136,7 +179,7 @@ async function fetchBuffer(url: string): Promise<Buffer> {
         response.status,
     );
   }
-  return Buffer.from(await response.arrayBuffer());
+  return readBoundedReleaseResponse(response,maxBytes);
 }
 
 function sha256(data: Buffer): string {
@@ -180,9 +223,9 @@ async function extractVerifiedRuntime(
     input.version;
   const [sumsBuffer, setupBuffer, zipBuffer] =
     await Promise.all([
-      fetchBuffer(base + '/SHA256SUMS-Windows'),
-      fetchBuffer(base + '/Nexowire-Setup.cmd'),
-      fetchBuffer(base + '/Nexowire-Windows-x64.zip'),
+      fetchBuffer(base + '/SHA256SUMS-Windows',MAX_RELEASE_CHECKSUM_BYTES),
+      fetchBuffer(base + '/Nexowire-Setup.cmd',MAX_RELEASE_SETUP_BYTES),
+      fetchBuffer(base + '/Nexowire-Windows-x64.zip',MAX_RELEASE_ZIP_BYTES),
     ]);
 
   const expected = checksums(sumsBuffer.toString('utf8'));
