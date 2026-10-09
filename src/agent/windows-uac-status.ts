@@ -1,6 +1,20 @@
 import { spawn } from 'node:child_process';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 
+const UAC_SYSTEM32='C:\\Windows\\System32';
+const UAC_POWERSHELL=UAC_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const UAC_MODULES=UAC_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+/** UAC observation is not an authorization decision and must not trust
+ * caller-controlled interpreter or PowerShell module search paths. */
+export function isolatedWindowsUacEnvironment():NodeJS.ProcessEnv {
+  return {
+    SystemRoot:'C:\\Windows',windir:'C:\\Windows',
+    ComSpec:UAC_SYSTEM32+'\\cmd.exe',
+    PATH:UAC_SYSTEM32+';C:\\Windows',
+    PSModulePath:UAC_MODULES,
+  };
+}
+
 export type UacObservation = 'pending' | 'clear' | 'unknown';
 
 export interface WindowsUacStatus {
@@ -29,12 +43,14 @@ export interface WindowsUacStatusOptions {
 async function enumerateConsentProcesses(): Promise<number> {
   const script = [
     "$ErrorActionPreference='Stop'",
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\CimCmdlets\\CimCmdlets.psd1' -ErrorAction Stop",
     '$session=[System.Diagnostics.Process]::GetCurrentProcess().SessionId',
     '$c=@(Get-CimInstance Win32_Process -Filter "Name=\'consent.exe\'" | Where-Object { [int]$_.SessionId -eq $session })',
     '[Console]::Out.Write($c.Count)',
   ].join(';');
   return await new Promise<number>((resolve, reject) => {
-    const child = spawn('powershell.exe', [
+    const child = spawn(UAC_POWERSHELL, [
       '-NoLogo',
       '-NoProfile',
       '-NonInteractive',
@@ -42,6 +58,9 @@ async function enumerateConsentProcesses(): Promise<number> {
       script,
     ], {
       windowsHide: true,
+      shell:false,
+      cwd:UAC_SYSTEM32,
+      env:isolatedWindowsUacEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const chunks: Buffer[] = [];
@@ -51,14 +70,22 @@ async function enumerateConsentProcesses(): Promise<number> {
       reject(new Error('Timed out inspecting UAC consent process.'));
     }, 8_000);
     limit.unref?.();
-    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
+    let outputBytes=0;
+    let exceeded=false;
+    const collect=(chunk:Buffer,target:Buffer[])=>{
+      outputBytes+=chunk.length;
+      if(outputBytes>64*1024){exceeded=true;child.kill();}
+      else target.push(chunk);
+    };
+    child.stdout.on('data', (chunk: Buffer) => collect(chunk,chunks));
+    child.stderr.on('data', (chunk: Buffer) => collect(chunk,errors));
     child.once('error', (error) => {
       clearTimeout(limit);
       reject(error);
     });
     child.once('close', (code) => {
       clearTimeout(limit);
+      if(exceeded){reject(new Error('UAC process inspection output exceeded bound.'));return;}
       if (code !== 0) {
         reject(new Error(
           Buffer.concat(errors).toString('utf8').trim() ||
