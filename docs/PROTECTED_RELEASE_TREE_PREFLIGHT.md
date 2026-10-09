@@ -21,6 +21,7 @@ The optional sixth argument pins `dist/src/cli.js` by a separately known SHA-256
 
 - tarball digest against the **separate pin** and exact canonical one-line SHA256SUMS entry; package archive name and package.json version/name/bin are checked
 - tar/gzip size and entry bounds, tar header checksums, ustar format, regular files and directories only, no symlink/hardlink/special entries, traversal, Windows reserved names, duplicate case-insensitive member names or unexpected top-level paths
+- the extracted tree has a cumulative 64 MiB file-byte read limit (not just 64 MiB per file), failing before oversized extra files are read; a file that changes size while being read is refused
 - extracted tree must be a real directory with ordinary files and directories only (no symlinks/junctions), case-sensitive matching paths, no missing, modified or extra files
 - every byte is hashed; a sorted name/size/file SHA-256 inventory digest summarizes the complete matched code tree
 
