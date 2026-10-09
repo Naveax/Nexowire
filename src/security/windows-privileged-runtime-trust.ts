@@ -82,8 +82,35 @@ export function validatePrivilegedRuntimePaths(input:PrivilegedRuntimeSource):{
   return {executable:exe,cliEntrypoint:cli,codeRoot};
 }
 
+/**
+ * Fixed environment for the privileged read-only Windows ACL audit.
+ * Never inherit PSModulePath, PATH, profile, preload hooks or app vars from
+ * the caller: PowerShell module auto-loading can execute module code.
+ */
+export function buildPrivilegedPowerShellAuditEnv(paths:{
+  executable:string;cliEntrypoint:string;codeRoot:string;
+}):NodeJS.ProcessEnv{
+  const windows='C:\\Windows';
+  const system32=windows+'\\System32';
+  const powershellDir=system32+'\\WindowsPowerShell\\v1.0';
+  return {
+    SystemRoot:windows,
+    windir:windows,
+    ComSpec:system32+'\\cmd.exe',
+    PATH:[system32,windows,powershellDir].join(';'),
+    PSModulePath:powershellDir+'\\Modules',
+    NEXOWIRE_TRUST_EXE:paths.executable,
+    NEXOWIRE_TRUST_CLI:paths.cliEntrypoint,
+    NEXOWIRE_TRUST_ROOT:paths.codeRoot,
+  };
+}
+
 const auditScript=String.raw`
 $ErrorActionPreference='Stop'
+# PowerShell may add machine/global module paths on startup. Reassert the
+# Windows inbox module root before any module lookup. No user modules.
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
 $allow=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
 $rights=[System.Security.AccessControl.FileSystemRights]
 $mask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
@@ -145,12 +172,8 @@ export function assertWindowsPrivilegedRuntimeTrusted(input:PrivilegedRuntimeSou
   }
   const command=Buffer.from(auditScript,'utf16le').toString('base64');
   const result=spawnSync(powershell,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',command],{
-    env:{
-      ...process.env,...input.env,
-      NEXOWIRE_TRUST_EXE:paths.executable,
-      NEXOWIRE_TRUST_CLI:paths.cliEntrypoint,
-      NEXOWIRE_TRUST_ROOT:paths.codeRoot,
-    },
+    env:buildPrivilegedPowerShellAuditEnv(paths),
+    cwd:'C:\\Windows\\System32',
     windowsHide:true,timeout:120000,maxBuffer:1024*1024,
     encoding:'utf8',stdio:['ignore','pipe','pipe'],
   });
