@@ -2,6 +2,22 @@ import { spawnSync } from 'node:child_process';
 import { lstatSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
+const WINDOWS_SYSTEM32='C:\\Windows\\System32';
+const WINDOWS_POWERSHELL=WINDOWS_SYSTEM32+'\\WindowsPowerShell\\v1.0';
+const WINDOWS_ICACLS=WINDOWS_SYSTEM32+'\\icacls.exe';
+
+/** Deliberately exclude inherited caller-controlled PATH and module hooks. */
+export function protectedWindowsAclEnvironment(target?:string):NodeJS.ProcessEnv {
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:WINDOWS_SYSTEM32+'\\cmd.exe',
+    PATH:[WINDOWS_SYSTEM32,'C:\\Windows',WINDOWS_POWERSHELL].join(';'),
+    PSModulePath:WINDOWS_POWERSHELL+'\\Modules',
+    ...(target?{NEXOWIRE_PROTECTED_ACL_TARGET:target}:{}),
+  };
+}
+
 /**
  * Apply a private Windows ProgramData DACL without recursively stripping
  * inherited ACEs from children. An icacls /inheritance:r /T combination
@@ -28,11 +44,16 @@ export function windowsProgramDataAclArguments(
 
 function applyAcl(target: string, directory: boolean): void {
   const result = spawnSync(
-    'icacls.exe',
+    WINDOWS_ICACLS,
     windowsProgramDataAclArguments(target, directory),
     {
       windowsHide: true,
       encoding: 'utf8',
+      shell:false,
+      cwd:WINDOWS_SYSTEM32,
+      env:protectedWindowsAclEnvironment(),
+      timeout:20000,
+      maxBuffer:512*1024,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
@@ -57,6 +78,9 @@ export function verifyWindowsPrivateAcl(target:string):void {
   }
   const script=String.raw`
 $ErrorActionPreference='Stop'
+# Load only trusted Windows inbox modules, not user-provided PSModulePath.
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
 $target=$env:NEXOWIRE_PROTECTED_ACL_TARGET
 $item=Get-Item -LiteralPath $target -Force -ErrorAction Stop
 if(($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0){throw 'REPARSE_POINT'}
@@ -73,18 +97,19 @@ foreach($ace in $acl.GetAccessRules($true,$true,[System.Security.Principal.Secur
 Write-Output 'PRIVATE_ACL_VERIFIED'
 `;
   // Never select a privileged interpreter from caller-controlled PATH/SystemRoot.
-  const powershell='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const powershell=WINDOWS_POWERSHELL+'\\powershell.exe';
   const result=spawnSync(powershell,[
     '-NoLogo','-NoProfile','-NonInteractive',
     '-EncodedCommand',Buffer.from(script,'utf16le').toString('base64'),
   ],{
     windowsHide:true,encoding:'utf8',stdio:['ignore','pipe','pipe'],
-    env:{...process.env,NEXOWIRE_PROTECTED_ACL_TARGET:target},
+    shell:false,cwd:WINDOWS_SYSTEM32,
+    env:protectedWindowsAclEnvironment(target),
     timeout:20000,
     maxBuffer:512*1024,
   });
   if(result.error||result.status!==0||
-     !result.stdout.includes('PRIVATE_ACL_VERIFIED')){
+     result.stdout.trim()!=='PRIVATE_ACL_VERIFIED'){
     throw new Error('PROTECTED_ACL_INTEGRITY_FAILURE: Windows protected runtime has unsafe owner or write permissions.');
   }
 }

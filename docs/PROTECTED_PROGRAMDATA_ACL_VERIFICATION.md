@@ -20,6 +20,15 @@ When the authorized elevated `hub boot-install` workflow invokes
 - rejects unexpected owner SIDs, reparse points, or any remaining untrusted
   allow-write ACE, including unrecognized local group/user principals.
 
+Both `icacls.exe` and the read-only verifier are invoked via fixed Windows
+System32 executable paths. They do not inherit caller-supplied `PATH`,
+`PSModulePath`, user profile locations, or Node preload settings. The
+PowerShell verifier imports the Windows inbox Security module using its
+absolute manifest path and accepts only the exact expected success marker.
+Unknown or unsupported Windows layouts fail closed. These checks prevent
+untrusted executable/module lookup during an authorized elevated ACL
+operation; they do not themselves authorize elevation.
+
 A failed verification throws `PROTECTED_ACL_INTEGRITY_FAILURE`.
 It is intentionally not treated as a successful protected install. The
 verification is read-only; only the existing authorized installation
