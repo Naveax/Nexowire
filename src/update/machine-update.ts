@@ -294,6 +294,19 @@ export function assertMachineUpdateOwnedStage(root:string,staging:string):void{
   }
 }
 
+/** A pre-existing versioned directory has no proven relationship to the
+ * verified official release ZIP. Refuse silent reuse rather than upgrading
+ * permissions on and executing arbitrary/stale installed JavaScript. */
+export async function assertFreshMachineUpdateTarget(target:string):Promise<void>{
+  try{
+    await fs.lstat(target);
+  }catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return;
+    throw error;
+  }
+  throw new Error('MACHINE_UPDATE_EXISTING_TARGET_UNATTESTED');
+}
+
 async function extractVerifiedRuntime(
   input: MachineUpdateInput,
 ): Promise<string> {
@@ -340,26 +353,9 @@ async function extractVerifiedRuntime(
   const root = programDataRoot();
   const versions = path.join(root, 'versions');
   const target = path.join(versions, input.buildId);
-  const targetNode = path.join(
-    target,
-    'runtime',
-    'node.exe',
-  );
-  const targetCli = path.join(
-    target,
-    'app',
-    'dist',
-    'src',
-    'cli.js',
-  );
-  try {
-    await fs.access(targetNode);
-    await fs.access(targetCli);
-    hardenAcl(target);
-    return target;
-  } catch {
-    // Continue with a clean official extraction.
-  }
+  // A valid node.exe and cli.js pathname does not attest the full JS tree
+  // to the downloaded/verified archive. Never silently reuse it.
+  await assertFreshMachineUpdateTarget(target);
 
   await fs.mkdir(versions, { recursive: true });
   const staging = path.join(
@@ -414,16 +410,10 @@ async function extractVerifiedRuntime(
   await fs.access(
     path.join(source, 'app', 'dist', 'src', 'cli.js'),
   );
-  try {
-    await fs.rename(source, target);
-  } catch (error) {
-    try {
-      await fs.access(targetNode);
-      await fs.access(targetCli);
-    } catch {
-      throw error;
-    }
-  }
+  // A concurrent target creation is a collision, not proof that some
+  // already present runtime is the same official release. Fail closed.
+  await assertFreshMachineUpdateTarget(target);
+  await fs.rename(source,target);
     hardenAcl(target);
     return target;
   } catch(error) {
