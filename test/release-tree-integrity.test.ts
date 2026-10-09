@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtempSync,mkdirSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,rmSync,truncateSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {gzipSync} from 'node:zlib';
@@ -95,6 +95,19 @@ test('archive traversal, symlink and duplicate casing are rejected before extrac
       writeFileSync(f.checksum,hash(tgz)+'  nexowire-1.0.5.tgz\n');
       await assert.rejects(verifyReleaseTree({...options(f),expectedArchiveSha256:hash(tgz)}),new RegExp('RELEASE_TREE_'+code));
     }
+  }finally{rmSync(f.root,{recursive:true,force:true})}
+});
+test('extracted extra files cannot exceed the aggregate tar safety budget',async()=>{
+  const f=makeFixture();
+  try{
+    const a=path.join(f.extracted,'oversized-extra-1.bin');
+    const b=path.join(f.extracted,'oversized-extra-2.bin');
+    writeFileSync(a,'');
+    writeFileSync(b,'');
+    // Sparse files; only read the first file, then reject at the second stat.
+    truncateSync(a,33*1024*1024);
+    truncateSync(b,33*1024*1024);
+    await assert.rejects(verifyReleaseTree(options(f)),/RELEASE_TREE_EXTRACTED_TOTAL_BYTES_LIMIT/);
   }finally{rmSync(f.root,{recursive:true,force:true})}
 });
 test('archive with valid pinned digest still rejects incorrect CLI pin',async()=>{

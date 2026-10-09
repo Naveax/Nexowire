@@ -111,6 +111,7 @@ async function inspectExtracted(root:string):Promise<Map<string,{relative:string
   if(!rootStats.isDirectory()||rootStats.isSymbolicLink())fail('EXTRACTED_ROOT_UNSAFE');
   const files=new Map<string,{relative:string;digest:string;size:number}>();
   const all=new Set<string>();
+  let totalFileBytes=0;
   async function descend(dir:string,prefix:string,depth:number):Promise<void>{
     if(depth>64)fail('EXTRACTED_DEPTH_LIMIT');
     const entries=await fs.readdir(dir,{withFileTypes:true});
@@ -128,8 +129,35 @@ async function inspectExtracted(root:string):Promise<Map<string,{relative:string
         await descend(full,relative,depth+1);
       }else{
         if(stat.size>MAX_TAR_BYTES)fail('EXTRACTED_FILE_TOO_LARGE');
-        const bytes=await fs.readFile(full);
-        files.set(key,{relative,digest:sha256(bytes),size:bytes.length});
+        // Cap total disk reads, not merely each individual file. Extra files
+        // may be attacker-controlled even when the pinned tarball is tiny.
+        if(totalFileBytes>MAX_TAR_BYTES-stat.size)fail('EXTRACTED_TOTAL_BYTES_LIMIT');
+        totalFileBytes+=stat.size;
+        // Read through a pinned handle in small chunks. A concurrent file
+        // growth must not turn a bounded stat into an unbounded readFile.
+        const handle=await fs.open(full,'r');
+        try{
+          const opened=await handle.stat();
+          if(!opened.isFile()||opened.size!==stat.size||
+             (stat.ino!==0&&opened.ino!==0&&
+              (opened.ino!==stat.ino||opened.dev!==stat.dev))){
+            fail('EXTRACTED_FILE_CHANGED_DURING_READ');
+          }
+          const hasher=createHash('sha256');
+          const buffer=Buffer.allocUnsafe(64*1024);
+          let bytes=0;
+          while(true){
+            // One extra byte distinguishes clean EOF from concurrent growth.
+            const limit=Math.max(1,Math.min(buffer.length,stat.size-bytes+1));
+            const part=await handle.read(buffer,0,limit,null);
+            if(part.bytesRead===0)break;
+            bytes+=part.bytesRead;
+            if(bytes>stat.size)fail('EXTRACTED_FILE_CHANGED_DURING_READ');
+            hasher.update(buffer.subarray(0,part.bytesRead));
+          }
+          if(bytes!==stat.size)fail('EXTRACTED_FILE_CHANGED_DURING_READ');
+          files.set(key,{relative,digest:hasher.digest('hex'),size:bytes});
+        }finally{await handle.close()}
       }
     }
   }
