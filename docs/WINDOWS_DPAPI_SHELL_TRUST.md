@@ -6,7 +6,7 @@ Tracking P0 #271. The Nexowire Windows DPAPI adapter supports CurrentUser and Lo
 
 - DPAPI helpers now invoke the fixed inbox `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe` with `shell:false` and the Windows System32 working directory.
 - Child environment is restricted to OS-owned `SystemRoot`, `windir`, `ComSpec`, a fixed Windows system `PATH` and inbox-only `PSModulePath`. User PATH, AppData/TEMP, `NODE_OPTIONS`, `NODE_PATH` and other caller-controlled hook variables are not passed to the process.
-- Sync calls have a 30-second timeout and a 2 MiB output bound. Async calls have a timeout, combined stdout/stderr byte bound and terminate the child if the bound is exceeded.
+- Sync calls have a 180-second timeout and a 2 MiB output bound. Async calls have a timeout, combined stdout/stderr byte bound and terminate the child if the bound is exceeded.
 - Failures return generic error messages instead of forwarding raw child stderr, which might accidentally contain plaintext or diagnostic data. Ciphertext parsing remains strict and canonical.
 - All existing DPAPI entropy/purpose formats, CurrentUser/LocalMachine scope semantics, and public function contracts remain compatible.
 

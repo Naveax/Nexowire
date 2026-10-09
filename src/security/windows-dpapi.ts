@@ -14,7 +14,9 @@ const LEGACY_BROKER_ENTROPY = 'Nexowire/privileged-broker/v1';
 const PROTECTED_SECRET_PREFIX = 'Nexowire/protected-secret/v1/';
 const DPAPI_WINDOWS_SYSTEM32 = 'C:\\Windows\\System32';
 const DPAPI_POWERSHELL = DPAPI_WINDOWS_SYSTEM32 + '\\WindowsPowerShell\\v1.0\\powershell.exe';
-const DPAPI_TIMEOUT_MS = 30_000;
+// Hosted Windows runners can be heavily contended (PowerShell/DPAPI initialization
+// sometimes takes well over 30s). Stay bounded without rejecting valid envelopes.
+const DPAPI_TIMEOUT_MS = 180_000;
 const DPAPI_MAX_BYTES = 2 * 1024 * 1024;
 
 /** DPAPI payloads are sent on stdin. The subprocess must not inherit a

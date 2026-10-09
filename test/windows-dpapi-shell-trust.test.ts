@@ -42,6 +42,7 @@ test('DPAPI secret subprocess pins system PowerShell for sync and async calls',(
   assert.equal((source.match(/DPAPI_POWERSHELL,/g)||[]).length,2);
   assert.ok(source.includes("      DPAPI_POWERSHELL,"));
   assert.ok(source.includes('env:windowsDpapiChildEnvironment()'));
+  assert.ok(source.includes('const DPAPI_TIMEOUT_MS = 180_000;'));
   assert.ok(source.includes('timeout:DPAPI_TIMEOUT_MS'));
   assert.ok(source.includes('maxBuffer:DPAPI_MAX_BYTES'));
   assert.ok(source.includes('child.kill()'));
