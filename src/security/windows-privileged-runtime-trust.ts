@@ -114,6 +114,12 @@ Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsof
 $allow=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
 $rights=[System.Security.AccessControl.FileSystemRights]
 $mask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+# Common Windows ancestors permit non-admin creation of OTHER children.
+# Creating a sibling cannot replace a protected existing child without
+# DELETE_CHILD, DELETE, WriteDac or ownership privileges on its ancestry.
+# Do not relax any permission on a runtime executable, code root or descendant.
+$ancestorMask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$protectedTargets=@($env:NEXOWIRE_TRUST_EXE,$env:NEXOWIRE_TRUST_CLI,$env:NEXOWIRE_TRUST_ROOT)
 $seen=New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 $scanned=0
 function CheckItem([string]$p){
@@ -124,9 +130,21 @@ function CheckItem([string]$p){
   if(($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0){throw 'RUNTIME_REPARSE_POINT'}
   $acl=Get-Acl -LiteralPath $p -ErrorAction Stop
   if(-not $allow.ContainsKey($acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value)){throw 'RUNTIME_OWNER_UNTRUSTED'}
+  $sharedAncestor=(($p -match '^[A-Za-z]:\\$') -or
+                   ($p -match '^[A-Za-z]:\\(?:ProgramData|Program Files|Program Files \\(x86\\))$')) -and
+                  (-not ($protectedTargets -contains $p))
+  $effectiveMask=$mask
+  if($sharedAncestor){$effectiveMask=$ancestorMask}
   foreach($ace in $acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){
+    # An INHERIT_ONLY ACE on a shared OS ancestor does not apply to that
+    # ancestor. Every descendant in the protected runtime is scanned with
+    # the full write mask, including inheritable ACEs for future children.
+    if($sharedAncestor -and
+       (([int]$ace.PropagationFlags -band [int][System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){
+      continue
+    }
     if($ace.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
-       ([int]$ace.FileSystemRights -band $mask) -ne 0 -and
+       ([int]$ace.FileSystemRights -band $effectiveMask) -ne 0 -and
        -not $allow.ContainsKey($ace.IdentityReference.Value)){throw 'RUNTIME_UNTRUSTED_WRITE_ACE'}
   }
 }
