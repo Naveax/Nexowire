@@ -22,7 +22,8 @@ test('machine update health requires listener and requested runtime to share a P
   assert.match(script,/Get-NetTCPConnection -LocalPort \$port -State Listen/);
   assert.match(script,/Get-CimInstance Win32_Process -Filter \("ProcessId="\+\[int\]\$socket.OwningProcess\)/);
   assert.match(script,/\$p\.Name -ieq "node\.exe"/);
-  assert.match(script,/\$p\.CommandLine -match \[regex\]::Escape\(\$NewRoot\)/);
+  assert.match(script,/\$p\.ExecutablePath -ieq \$expectedExe/);
+  assert.match(script,/\$p\.CommandLine -match \[regex\]::Escape\(\$expectedCli\)/);
   assert.ok(script.includes("Wait-Service 43110 'cli\\.js\"?\\s+http(?:\\s|$)' 30"));
   assert.ok(script.includes("Wait-Service 43112 'privileged-broker\\s+run(?:\\s|$)' 20"));
   assert.doesNotMatch(script,/Wait-Port\(/);
@@ -32,7 +33,7 @@ test('machine update health requires listener and requested runtime to share a P
 
 type Scenario={
   socketOwner:number;
-  process:Record<number,{name:string;commandLine:string}>;
+  process:Record<number,{name:string;commandLine:string;executablePath?:string}>;
   port:number;
   mode:string;
   expected:boolean;
@@ -62,6 +63,14 @@ const scenarios:Record<string,Scenario>={
     socketOwner:202,process:{202:{name:'powershell.exe',commandLine:cliCmd}},
     port:43110,mode:'cli\\.js"?\\s+http(?:\\s|$)',expected:false,
   },
+  'foreign node binary cannot impersonate the new installed runtime':{
+    socketOwner:202,process:{202:{name:'node.exe',commandLine:cliCmd,executablePath:'C:\\Users\\Public\\node.exe'}},
+    port:43110,mode:'cli\\.js"?\\s+http(?:\\s|$)',expected:false,
+  },
+  'new runtime binary with unrelated CLI and spoofed root argument is rejected':{
+    socketOwner:202,process:{202:{name:'node.exe',commandLine:'"'+root+'\\runtime\\node.exe" "C:\\Other\\untrusted.js" --root "'+root+'" cli.js http'}},
+    port:43110,mode:'cli\\.js"?\\s+http(?:\\s|$)',expected:false,
+  },
   'new process owns Broker listener with correct mode':{
     socketOwner:203,process:{203:{name:'node.exe',commandLine:brokerCmd}},
     port:43112,mode:'privileged-broker\\s+run(?:\\s|$)',expected:true,
@@ -75,7 +84,7 @@ const scenarios:Record<string,Scenario>={
 for(const [name,scenario] of Object.entries(scenarios)){
   test(name,{skip:process.platform!=='win32'},()=>{
     const switchCases=Object.entries(scenario.process).map(([pid,p])=>
-      '    '+pid+" { return [pscustomobject]@{Name='"+p.name+"';CommandLine='"+p.commandLine.replaceAll("'","''")+"'}}"
+      '    '+pid+" { return [pscustomobject]@{Name='"+p.name+"';ExecutablePath='"+(p.executablePath||(p.name==='node.exe'?root+'\\runtime\\node.exe':'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'))+"';CommandLine='"+p.commandLine.replaceAll("'","''")+"'}}"
     );
     const psScript=[
       "$ErrorActionPreference='Stop'",
