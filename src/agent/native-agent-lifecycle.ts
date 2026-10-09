@@ -5,6 +5,32 @@ import { spawn } from 'node:child_process';
 import * as z from 'zod';
 
 const WINDOWS_TASK_DEFAULT = 'Nexowire Native Agent';
+const AGENT_TASK_SYSTEM32='C:\\Windows\\System32';
+const AGENT_TASK_POWERSHELL=AGENT_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const AGENT_TASK_MODULES=AGENT_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+const AGENT_TASK_SCRIPT_HEADER=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
+`;
+
+/** Native-agent task controller, never pass caller PATH/modules/Node hooks. */
+export function isolatedNativeAgentTaskEnv(input:NodeJS.ProcessEnv):NodeJS.ProcessEnv {
+  const name=input.NEXOWIRE_AGENT_TASK_NAME;
+  const launcher=input.NEXOWIRE_AGENT_LAUNCHER;
+  if(!name||name.length>128||!launcher||launcher.length>4096){
+    throw new Error('NATIVE_AGENT_TASK_ENV_INVALID');
+  }
+  return {
+    SystemRoot:'C:\\Windows',windir:'C:\\Windows',
+    ComSpec:AGENT_TASK_SYSTEM32+'\\cmd.exe',
+    PATH:AGENT_TASK_SYSTEM32+';C:\\Windows',
+    PSModulePath:AGENT_TASK_MODULES,
+    NEXOWIRE_AGENT_TASK_NAME:name,
+    NEXOWIRE_AGENT_LAUNCHER:launcher,
+  };
+}
+
 const LINUX_UNIT_DEFAULT = 'nexowire-agent.service';
 const MAC_LABEL_DEFAULT = 'com.nexowire.agent';
 
@@ -347,11 +373,14 @@ async function runCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
   allowFailure = false,
+  trustedWindowsTask = false,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, [...args], {
       windowsHide: true,
-      env: { ...process.env, ...env },
+      shell:false,
+      ...(trustedWindowsTask?{cwd:AGENT_TASK_SYSTEM32,timeout:60_000}:{}),
+      env: trustedWindowsTask?env:{ ...process.env, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const stdout: Buffer[] = [];
@@ -385,7 +414,7 @@ async function runPowerShellJson<T>(
   env: NodeJS.ProcessEnv,
 ): Promise<T> {
   const result = await runCommand(
-    'powershell.exe',
+    AGENT_TASK_POWERSHELL,
     [
       '-NoLogo',
       '-NoProfile',
@@ -393,9 +422,11 @@ async function runPowerShellJson<T>(
       '-ExecutionPolicy',
       'Bypass',
       '-Command',
-      script,
+      AGENT_TASK_SCRIPT_HEADER+'\n'+script,
     ],
-    env,
+    isolatedNativeAgentTaskEnv(env),
+    false,
+    true,
   );
   try {
     return JSON.parse(result.stdout) as T;
@@ -468,7 +499,7 @@ async function installWindows(
     '$launcher=$env:NEXOWIRE_AGENT_LAUNCHER',
     '$user=[Security.Principal.WindowsIdentity]::GetCurrent().Name',
     '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
-    "$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument",
+    "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
     '$trigger=New-ScheduledTaskTrigger -AtLogOn -User $user',
     '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
     '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
