@@ -23,6 +23,27 @@ export type VerifiedInstallerInput = z.infer<
 >;
 
 const supportedExtensions = new Set(['.exe', '.msi', '.ps1', '.cmd']);
+const INSTALLER_SYSTEM32='C:\\Windows\\System32';
+const INSTALLER_POWERSHELL=INSTALLER_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const INSTALLER_ICACLS=INSTALLER_SYSTEM32+'\\icacls.exe';
+const INSTALLER_MODULE_ROOT=INSTALLER_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+const PROTECTED_INSTALLER_ROOT='C:\\ProgramData\\Nexowire\\verified-installers';
+const INSTALLER_ACL_HEADER=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+`;
+/** Never allow arbitrary caller PATH/PowerShell module preloads into a
+ * high-integrity approval check, DACL change or installer child. */
+export function protectedInstallerChildEnvironment():NodeJS.ProcessEnv{
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:INSTALLER_SYSTEM32+'\\cmd.exe',
+    PATH:INSTALLER_SYSTEM32+';C:\\Windows',
+    PSModulePath:INSTALLER_MODULE_ROOT,
+  };
+}
 
 const ApprovalSchema = z.object({
   sha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
@@ -56,9 +77,8 @@ export function installerApprovalMatches(
 }
 
 function approvalFile(): string {
-  return path.join(
-    process.env.ProgramData ?? 'C:\\ProgramData',
-    'Nexowire',
+  return path.win32.join(
+    path.win32.dirname(installerProgramDataRoot()),
     'installer-approvals.json',
   );
 }
@@ -80,12 +100,17 @@ async function assertPreapprovedInstaller(
     '  if($sid -notin $allowed){throw "Approval file ACL permits unexpected identity"}',
     '}',
   ].join('\n');
-  const acl = spawnSync('powershell.exe', [
+  const acl = spawnSync(INSTALLER_POWERSHELL, [
     '-NoLogo', '-NoProfile', '-NonInteractive',
-    '-ExecutionPolicy', 'Bypass', '-Command', script,
+    '-ExecutionPolicy', 'Bypass', '-Command', INSTALLER_ACL_HEADER+'\n'+script,
   ], {
     encoding: 'utf8',
     windowsHide: true,
+    shell:false,
+    cwd:INSTALLER_SYSTEM32,
+    timeout:20_000,
+    maxBuffer:512*1024,
+    env:protectedInstallerChildEnvironment(),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (acl.status !== 0) {
@@ -127,7 +152,12 @@ export function validateInstallerInput(input: unknown): VerifiedInstallerInput {
 export function installerProgramDataRoot(
   programData: string = process.env.ProgramData ?? 'C:\\ProgramData',
 ): string {
-  return path.join(programData, 'Nexowire', 'verified-installers');
+  if (!programData||!path.win32.isAbsolute(programData)||
+      programData.startsWith('\\\\')||programData.startsWith('\\\\?\\')||
+      path.win32.resolve(programData).toLowerCase()!=='c:\\programdata'){
+    throw new Error('PROTECTED_INSTALLER_UNTRUSTED_PROGRAMDATA');
+  }
+  return PROTECTED_INSTALLER_ROOT;
 }
 
 /**
@@ -137,7 +167,7 @@ export function installerProgramDataRoot(
  */
 function setProtectedOwner(target: string, recursive = false): void {
   const result = spawnSync(
-    'icacls.exe',
+    INSTALLER_ICACLS,
     [
       target,
       '/setowner',
@@ -148,6 +178,11 @@ function setProtectedOwner(target: string, recursive = false): void {
     {
       windowsHide: true,
       encoding: 'utf8',
+      shell:false,
+      cwd:INSTALLER_SYSTEM32,
+      env:protectedInstallerChildEnvironment(),
+      timeout:20_000,
+      maxBuffer:512*1024,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
@@ -162,11 +197,16 @@ function setProtectedOwner(target: string, recursive = false): void {
 
 function hardenContainerAcl(directory: string): void {
   const result = spawnSync(
-    'icacls.exe',
+    INSTALLER_ICACLS,
     windowsProgramDataAclArguments(directory, true),
     {
       windowsHide: true,
       encoding: 'utf8',
+      shell:false,
+      cwd:INSTALLER_SYSTEM32,
+      env:protectedInstallerChildEnvironment(),
+      timeout:20_000,
+      maxBuffer:512*1024,
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
@@ -258,12 +298,15 @@ export function renderVerifiedInstallerRunner(
 async function launchProtectedInstaller(script: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      INSTALLER_POWERSHELL,
       ['-NoLogo', '-NoProfile', '-NonInteractive',
         '-ExecutionPolicy', 'Bypass', '-File', script],
       {
         detached: true,
         windowsHide: true,
+        shell:false,
+        cwd:INSTALLER_SYSTEM32,
+        env:protectedInstallerChildEnvironment(),
         stdio: 'ignore',
       },
     );
