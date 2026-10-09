@@ -16,7 +16,19 @@ $ErrorActionPreference='Stop'
 # Caller-provided PSModulePath may point at executable untrusted modules.
 # Resolve inbox Windows cmdlets only from the pinned Windows system module root.
 $env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
-Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+# PowerShell 7 has its own inbox Security module. Importing WindowsPowerShell
+# 5.1's copy through implicit remoting can fail due command shadowing.
+# Always pin the native inbox manifest for the selected PowerShell engine.
+$securityManifest=if($PSVersionTable.PSEdition -eq 'Core'){
+ Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1'
+}else{
+ 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1'
+}
+if(-not [IO.Path]::IsPathRooted($securityManifest) -or
+   -not (Test-Path -LiteralPath $securityManifest -PathType Leaf)){
+ throw 'P0_TRUSTED_SECURITY_MODULE_MISSING'
+}
+Import-Module -Name $securityManifest -ErrorAction Stop
 Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
 Add-Type -AssemblyName System.Security
 $entropy=[Text.Encoding]::UTF8.GetBytes('Nexowire.LegacyTask.Recovery.CurrentUser.v1')

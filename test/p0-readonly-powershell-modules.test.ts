@@ -19,6 +19,14 @@ test('P0 Windows helper scripts pin inbox module lookup before any inspection',(
     const errorPreference=content.indexOf("$ErrorActionPreference='Stop'");
     assert.ok(errorPreference>=0&&index>errorPreference, name);
     for(const mod of modules){
+      if(mod==='Microsoft.PowerShell.Security'){
+        assert.ok(content.includes("$PSVersionTable.PSEdition -eq 'Core'"),name);
+        assert.ok(content.includes("Join-Path $PSHOME 'Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1'"),name);
+        assert.ok(content.includes("'"+SYSTEM_MODULES+"\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1'"),name);
+        assert.ok(content.includes('Import-Module -Name $securityManifest -ErrorAction Stop'),name);
+        assert.ok(content.indexOf('Import-Module -Name $securityManifest')>index,name);
+        continue;
+      }
       const expected="Import-Module -Name '"+SYSTEM_MODULES+"\\"+mod+"\\"+mod+".psd1' -ErrorAction Stop";
       assert.ok(content.includes(expected),name+': '+mod);
       assert.ok(content.indexOf(expected)>index,name+': order');
