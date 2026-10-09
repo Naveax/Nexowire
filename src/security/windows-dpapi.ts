@@ -12,6 +12,38 @@ export class WindowsDpapiError extends Error {
 
 const LEGACY_BROKER_ENTROPY = 'Nexowire/privileged-broker/v1';
 const PROTECTED_SECRET_PREFIX = 'Nexowire/protected-secret/v1/';
+const DPAPI_WINDOWS_SYSTEM32 = 'C:\\Windows\\System32';
+const DPAPI_POWERSHELL = DPAPI_WINDOWS_SYSTEM32 + '\\WindowsPowerShell\\v1.0\\powershell.exe';
+// Hosted Windows runners can be heavily contended (PowerShell/DPAPI initialization
+// sometimes takes well over 30s). Stay bounded without rejecting valid envelopes.
+const DPAPI_TIMEOUT_MS = 180_000;
+const DPAPI_MAX_BYTES = 2 * 1024 * 1024;
+
+/** DPAPI payloads are sent on stdin. The subprocess must not inherit a
+ * caller-controlled executable search path, PSModulePath or Node hooks. */
+export function windowsDpapiChildEnvironment():NodeJS.ProcessEnv {
+  const env:NodeJS.ProcessEnv={
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:DPAPI_WINDOWS_SYSTEM32+'\\cmd.exe',
+    PATH:DPAPI_WINDOWS_SYSTEM32+';C:\\Windows',
+    PSModulePath:DPAPI_WINDOWS_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules',
+  };
+  // DPAPI CurrentUser and WindowsPowerShell need Windows user profile/temp
+  // directories on some hosted/service accounts. They do NOT select an
+  // executable, module, profile script (NoProfile) or current directory.
+  // Never copy the whole environment or trust remote/relative paths.
+  for(const key of ['USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP'] as const){
+    const value=process.env[key];
+    if(!value || value.length>1024 ||
+       !/^[A-Za-z]:\\/.test(value) ||
+       /[;"'\r\n\0]/.test(value) ||
+       value.split(/[\\/]/).includes('..'))continue;
+    env[key]=value;
+  }
+  return env;
+}
+
 
 export type WindowsDpapiScope =
   | 'current-user'
@@ -134,7 +166,7 @@ async function runDpapi(
 
   return await new Promise<Buffer>((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      DPAPI_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -144,29 +176,50 @@ async function runDpapi(
       ],
       {
         windowsHide: true,
+        shell:false,
+        cwd:DPAPI_WINDOWS_SYSTEM32,
+        env:windowsDpapiChildEnvironment(),
+        timeout:DPAPI_TIMEOUT_MS,
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
 
     const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+    let collected = 0;
+    let exceededLimit = false;
+    child.stdout.on('data', (chunk: Buffer) => {
+      collected += chunk.length;
+      if (collected > DPAPI_MAX_BYTES) {
+        exceededLimit = true;
+        child.kill();
+      } else {
+        stdout.push(chunk);
+      }
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      collected += chunk.length;
+      if (collected > DPAPI_MAX_BYTES) {
+        exceededLimit = true;
+        child.kill();
+      }
+    });
 
-    child.once('error', (error) => reject(error));
-    child.once('close', (code) => {
-      const out = Buffer.concat(stdout).toString('utf8');
-      const err = Buffer.concat(stderr).toString('utf8').trim();
-
-      if (code !== 0) {
-        reject(
-          new WindowsDpapiError(
-            'WINDOWS_DPAPI_FAILED',
-            err || `Windows DPAPI ${operation} failed.`,
-          ),
-        );
+    child.once('error', () => reject(
+      new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI child could not start.'),
+    ));
+    child.stdin.on('error', () => reject(
+      new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI input transport failed.'),
+    ));
+    child.once('close', (code, signal) => {
+      if (exceededLimit) {
+        reject(new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI output exceeded bound.'));
         return;
       }
+      if (code !== 0 || signal !== null) {
+        reject(new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI child failed or timed out.'));
+        return;
+      }
+      const out = Buffer.concat(stdout).toString('utf8');
 
       try {
         resolve(decodeOutput(operation, out));
@@ -188,7 +241,7 @@ function runDpapiSync(
   assertWindows();
 
   const result = spawnSync(
-    'powershell.exe',
+    DPAPI_POWERSHELL,
     [
       '-NoLogo',
       '-NoProfile',
@@ -198,18 +251,23 @@ function runDpapiSync(
     ],
     {
       windowsHide: true,
+      shell:false,
+      cwd:DPAPI_WINDOWS_SYSTEM32,
+      env:windowsDpapiChildEnvironment(),
       input: stdinPayload(value, entropy),
       encoding: 'utf8',
-      maxBuffer: 2 * 1024 * 1024,
+      timeout:DPAPI_TIMEOUT_MS,
+      maxBuffer:DPAPI_MAX_BYTES,
     },
   );
 
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw new WindowsDpapiError('WINDOWS_DPAPI_FAILED', 'Windows DPAPI child failed or timed out.');
+  }
   if (result.status !== 0) {
     throw new WindowsDpapiError(
       'WINDOWS_DPAPI_FAILED',
-      result.stderr.trim() ||
-        `Windows DPAPI ${operation} failed.`,
+      `Windows DPAPI ${operation} failed.`,
     );
   }
   return decodeOutput(operation, result.stdout);
