@@ -24,6 +24,10 @@ The optional sixth argument pins `dist/src/cli.js` by a separately known SHA-256
 - extracted tree must be a real directory with ordinary files and directories only (no symlinks/junctions), case-sensitive matching paths, no missing, modified or extra files
 - every byte is hashed; a sorted name/size/file SHA-256 inventory digest summarizes the complete matched code tree
 
+### Complementary signed provenance gate
+
+See docs/PINNED_RELEASE_PROVENANCE.md and scripts/verify-pinned-release-provenance.ts for read-only GitHub/Sigstore provenance pinned to a specific SLSA workflow, tag, source commit and archive SHA-256. Both gates are prerequisites only; neither grants privileged execution authority.
+
 ### Security boundary
 
 A matching tree **does not prove the release is signed by Nexowire**, that the digest pin came from a trustworthy publisher, that the Node executable and dependency tree outside this package are trusted, that Windows ACLs prevent replacing it, or that any elevated task/secret is safe to migrate. `safeToElevate`, `codeSignatureVerified`, `protectedAclVerified`, and `authorizedInstallerVerified` intentionally remain `false`. This is a read-only prerequisite, not a trusted installer.
