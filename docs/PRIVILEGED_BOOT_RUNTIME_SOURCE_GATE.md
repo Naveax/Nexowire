@@ -29,6 +29,14 @@ The preflight:
   owners, untrusted allow-write ACEs and reparse points
 - also enumerates all files/directories in the resolved code package tree and
   the executable's directory tree (up to 20,000 distinct audited objects)
+- validates the Windows Node executable's `Valid` Authenticode signature and
+  pins the expected `OpenJS Foundation` code-signing publisher identity. A
+  Microsoft-signed or third-party-signed but otherwise unknown executable
+  is not accepted as the privileged Node host. A changed legitimate Node
+  signing identity must be independently reviewed before updating this policy.
+- accepts only the exact `TRUSTED_RUNTIME_CODE_TREE` result marker from the
+  isolated Windows PowerShell preflight. Partial, appended or failed-command
+  output never satisfies the protected runtime trust gate.
 - forbids Node startup `execArgv` flags (such as `--require`, `--import`,
   `--loader`) and removes inherited `NODE_OPTIONS`, `NODE_PATH` and
   related Node preload/certificate/ICU configuration from the SYSTEM child
@@ -52,7 +60,9 @@ It never changes a live permission, decrypts a token or runs the candidate CLI
 during validation. A failed preflight does not rewrite an existing Hub task.
 
 **Limitations:** the audit is deliberately conservative and does not compute
-Windows effective-token/deny-ACE semantics or attest Authenticode signatures.
+Windows effective-token/deny-ACE semantics or independently attest the
+Nexowire JavaScript package's own publisher/signature. The Node executable's
+OpenJS Foundation signature is checked, but this does not sign the JS package.
 It does not guarantee all dynamic imports or DLL search paths resolve within
 the scanned roots, prevent post-check time-of-check/time-of-use races or assert
 production ownership and rollback. In particular a user-writable staging

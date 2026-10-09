@@ -152,6 +152,19 @@ while($pending.Count -gt 0){
     if($item.PSIsContainer){$pending.Push($item.FullName)}
   }
 }
+# Protected ACLs alone cannot authenticate the native host publisher.
+# Require trusted OpenJS Foundation Node.exe, not an arbitrary signed binary.
+$exe=Get-Item -LiteralPath $env:NEXOWIRE_TRUST_EXE -Force -ErrorAction Stop
+if($exe.PSIsContainer -or
+   ($exe.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0){
+  throw 'RUNTIME_NODE_EXE_UNSAFE_TYPE'
+}
+$signature=Get-AuthenticodeSignature -LiteralPath $exe.FullName -ErrorAction Stop
+if($signature.Status -ne 'Valid' -or
+   $null -eq $signature.SignerCertificate -or
+   $signature.SignerCertificate.Subject -cne 'CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US'){
+  throw 'RUNTIME_NODE_SIGNER_UNTRUSTED'
+}
 Write-Output 'TRUSTED_RUNTIME_CODE_TREE'
 `;
 
@@ -160,6 +173,16 @@ Write-Output 'TRUSTED_RUNTIME_CODE_TREE'
  * Read-only ACL preflight, performed BEFORE reading/storing DPAPI secrets.
  * This does not attest a code signature or immunize against post-check races.
  */
+/** Exactly one success marker from the fixed Windows PowerShell ACL+signer audit. */
+export function privilegedRuntimeAuditSucceeded(input:{
+  error?:Error|null;
+  status:number|null;
+  stdout:string|null;
+}):boolean {
+  return !input.error && input.status===0 &&
+    input.stdout?.trim()==='TRUSTED_RUNTIME_CODE_TREE';
+}
+
 export function assertWindowsPrivilegedRuntimeTrusted(input:PrivilegedRuntimeSource):void {
   if(process.platform!=='win32'){
     throw new Error('Privileged Windows runtime preflight requires Windows.');
@@ -177,7 +200,7 @@ export function assertWindowsPrivilegedRuntimeTrusted(input:PrivilegedRuntimeSou
     windowsHide:true,timeout:120000,maxBuffer:1024*1024,
     encoding:'utf8',stdio:['ignore','pipe','pipe'],
   });
-  if(result.error || result.status!==0 || !result.stdout.includes('TRUSTED_RUNTIME_CODE_TREE')){
-    throw new Error('PRIVILEGED_RUNTIME_ACL_UNTRUSTED: Protected runtime tree and ancestors did not pass read-only Windows ACL validation.');
+  if(!privilegedRuntimeAuditSucceeded(result)){
+    throw new Error('PRIVILEGED_RUNTIME_ACL_UNTRUSTED: Protected runtime tree, Node publisher and ancestors did not pass read-only Windows trust validation.');
   }
 }
