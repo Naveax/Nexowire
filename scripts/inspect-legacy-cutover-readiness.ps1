@@ -16,6 +16,12 @@ param(
  [ValidateRange(10,20000)][int]$MaxObjects=20000
 )
 $ErrorActionPreference='Stop'
+# Caller-provided PSModulePath may point at executable untrusted modules.
+# Resolve inbox Windows cmdlets only from the pinned Windows system module root.
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\NetTCPIP\NetTCPIP.psd1' -ErrorAction Stop
 $psExe='C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 $audit=Join-Path $PSScriptRoot 'audit-windows-runtime-acl.ps1'
 if(!(Test-Path -LiteralPath $audit -PathType Leaf) -or !(Test-Path -LiteralPath $psExe -PathType Leaf)){throw 'READONLY_AUDITOR_UNAVAILABLE'}

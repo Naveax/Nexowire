@@ -17,6 +17,11 @@ param(
   [ValidateRange(1,200)][int]$MaxReportedFindings=80
 )
 $ErrorActionPreference='Stop'
+# Caller-provided PSModulePath may point at executable untrusted modules.
+# Resolve inbox Windows cmdlets only from the pinned Windows system module root.
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1' -ErrorAction Stop
 $rootFull=[System.IO.Path]::GetFullPath($RuntimeRoot).TrimEnd('\')
 $entryFull=[System.IO.Path]::GetFullPath($Entrypoint)
 if (-not [System.IO.Path]::IsPathRooted($RuntimeRoot) -or

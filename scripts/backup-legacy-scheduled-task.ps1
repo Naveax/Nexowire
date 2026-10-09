@@ -13,6 +13,11 @@ param(
  [string]$BackupFile
 )
 $ErrorActionPreference='Stop'
+# Caller-provided PSModulePath may point at executable untrusted modules.
+# Resolve inbox Windows cmdlets only from the pinned Windows system module root.
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\ScheduledTasks\ScheduledTasks.psd1' -ErrorAction Stop
 Add-Type -AssemblyName System.Security
 $entropy=[Text.Encoding]::UTF8.GetBytes('Nexowire.LegacyTask.Recovery.CurrentUser.v1')
 $scope=[System.Security.Cryptography.DataProtectionScope]::CurrentUser
