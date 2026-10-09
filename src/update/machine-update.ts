@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { assertMachineUpdateTreeProtectedBeforeWrite } from '../security/windows-machine-update-tree-trust.js';
+import { assertWindowsPrivilegedRuntimeTrusted } from '../security/windows-privileged-runtime-trust.js';
 
 const REPOSITORY = 'Naveax/Nexowire';
 const UPDATE_SYSTEM32='C:\\Windows\\System32';
@@ -415,7 +417,15 @@ export async function scheduleOfficialMachineUpdate(
     throw new Error('Machine update requires Windows.');
   }
   const input = validateInput(rawInput);
+  // Never stage or recursively change ACLs under a user-writable root.
+  assertMachineUpdateTreeProtectedBeforeWrite();
   const targetRoot = await extractVerifiedRuntime(input);
+  // Post-stage read-only recheck plus signed native host/import-tree audit.
+  assertMachineUpdateTreeProtectedBeforeWrite();
+  assertWindowsPrivilegedRuntimeTrusted({
+    executable:path.win32.join(targetRoot,'runtime','node.exe'),
+    cliEntrypoint:path.win32.join(targetRoot,'app','dist','src','cli.js'),
+  });
   const updateDir = path.join(
     programDataRoot(),
     'update',
@@ -436,6 +446,8 @@ export async function scheduleOfficialMachineUpdate(
     'utf8',
   );
   hardenAcl(programDataRoot());
+  // No detached cutover can start if the root was substituted after staging.
+  assertMachineUpdateTreeProtectedBeforeWrite();
 
   const child = spawn(
     UPDATE_POWERSHELL,
