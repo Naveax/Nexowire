@@ -4,6 +4,21 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 const REPOSITORY = 'Naveax/Nexowire';
+const UPDATE_SYSTEM32='C:\\Windows\\System32';
+const UPDATE_POWERSHELL=UPDATE_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const UPDATE_ICACLS=UPDATE_SYSTEM32+'\\icacls.exe';
+/** Machine update may mutate ACLs and start a detached cutover. Do not let
+ * the invoking process select binaries or PowerShell modules via PATH. */
+export function isolatedMachineUpdateChildEnvironment():NodeJS.ProcessEnv {
+  return {
+    SystemRoot:'C:\\Windows',
+    windir:'C:\\Windows',
+    ComSpec:UPDATE_SYSTEM32+'\\cmd.exe',
+    PATH:UPDATE_SYSTEM32+';C:\\Windows',
+    PSModulePath:UPDATE_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules',
+  };
+}
+
 
 interface MachineUpdateInput {
   version: string;
@@ -56,7 +71,7 @@ function psLiteral(value: string): string {
 
 function hardenAcl(root: string): void {
   const result = spawnSync(
-    'icacls.exe',
+    UPDATE_ICACLS,
     [
       root,
       '/inheritance:r',
@@ -71,6 +86,11 @@ function hardenAcl(root: string): void {
     ],
     {
       windowsHide: true,
+      shell:false,
+      cwd:UPDATE_SYSTEM32,
+      env:isolatedMachineUpdateChildEnvironment(),
+      timeout:180_000,
+      maxBuffer:2*1024*1024,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -223,7 +243,7 @@ async function extractVerifiedRuntime(
     psLiteral(extract) +
     ');';
   const result = spawnSync(
-    'powershell.exe',
+    UPDATE_POWERSHELL,
     [
       '-NoLogo',
       '-NoProfile',
@@ -235,6 +255,11 @@ async function extractVerifiedRuntime(
     ],
     {
       windowsHide: true,
+      shell:false,
+      cwd:UPDATE_SYSTEM32,
+      env:isolatedMachineUpdateChildEnvironment(),
+      timeout:180_000,
+      maxBuffer:2*1024*1024,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -378,7 +403,7 @@ export async function scheduleOfficialMachineUpdate(
   hardenAcl(programDataRoot());
 
   const child = spawn(
-    'powershell.exe',
+    UPDATE_POWERSHELL,
     [
       '-NoLogo',
       '-NoProfile',
@@ -391,6 +416,9 @@ export async function scheduleOfficialMachineUpdate(
     {
       detached: true,
       windowsHide: true,
+      shell:false,
+      cwd:UPDATE_SYSTEM32,
+      env:isolatedMachineUpdateChildEnvironment(),
       stdio: 'ignore',
     },
   );
