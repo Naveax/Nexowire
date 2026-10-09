@@ -14,6 +14,7 @@ import {
   scheduleVerifiedInstaller,
   preflightVerifiedInstaller,
   renderVerifiedInstallerRunner,
+  protectedInstallerChildEnvironment,
 } from '../src/agent/windows-installer-job.js';
 import {
   privilegeRequirement,
@@ -169,10 +170,12 @@ test('Windows installer helper runs a benign pinned .cmd without UAC and records
       runner, renderVerifiedInstallerRunner(root), 'utf8',
     );
     const process = spawnSync(
-      'powershell.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
         '-File', runner],
-      { windowsHide: true, encoding: 'utf8', timeout: 20_000 },
+      { windowsHide: true, encoding: 'utf8', timeout: 20_000,
+        shell:false, cwd:'C:\\Windows\\System32',
+        env:protectedInstallerChildEnvironment() },
     );
     assert.equal(process.status, 0, process.stderr || process.stdout);
     const saved = JSON.parse(
@@ -202,9 +205,11 @@ test('Windows installer helper rejects a modified payload before execution', {
     const runner = path.join(root, 'run.ps1');
     await fs.writeFile(runner, renderVerifiedInstallerRunner(root), 'utf8');
     const process = spawnSync(
-      'powershell.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', runner],
-      { windowsHide: true, encoding: 'utf8', timeout: 20_000 },
+      { windowsHide: true, encoding: 'utf8', timeout: 20_000,
+        shell:false, cwd:'C:\\Windows\\System32',
+        env:protectedInstallerChildEnvironment() },
     );
     assert.equal(process.status, 1);
     const saved = JSON.parse(
