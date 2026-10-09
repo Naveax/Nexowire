@@ -213,6 +213,45 @@ function setupMetadata(text: string): {
   return { version, buildId };
 }
 
+export function renderBoundedWindowsArchiveExtraction(
+  zipFile:string,extract:string,
+):string{
+  return [
+    "$ErrorActionPreference='Stop'",
+    'Add-Type -AssemblyName System.IO.Compression',
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+    '$archivePath='+psLiteral(zipFile),
+    '$extractPath='+psLiteral(extract),
+    'if(-not [IO.File]::Exists($archivePath)){throw "MACHINE_UPDATE_ARCHIVE_MISSING"}',
+    'if(-not [IO.Directory]::Exists($extractPath)){throw "MACHINE_UPDATE_EXTRACT_ROOT_MISSING"}',
+    '$destination=[IO.Path]::GetFullPath($extractPath).TrimEnd([char]92)+[char]92',
+    '$archive=[IO.Compression.ZipFile]::OpenRead($archivePath)',
+    '$maxEntries=25000',
+    '$maxEntryBytes=[long](128MB)',
+    '$maxTotalBytes=[long](1024MB)',
+    '$count=0',
+    '$total=[long]0',
+    '$targets=New-Object \'System.Collections.Generic.HashSet[string]\' ([StringComparer]::OrdinalIgnoreCase)',
+    'try {',
+    '  foreach($entry in $archive.Entries){',
+    '    $count++',
+    '    if($count -gt $maxEntries){throw "MACHINE_UPDATE_ARCHIVE_TOO_MANY_ENTRIES"}',
+    "    $n=$entry.FullName.Replace('/',[char]92)",
+    '    if([string]::IsNullOrWhiteSpace($n) -or $n.StartsWith([string][char]92) -or $n.Contains(":") -or @($n.Split([char]92)|Where-Object{$_ -eq ".."}).Count -gt 0){throw "MACHINE_UPDATE_ARCHIVE_UNSAFE_ENTRY"}',
+    '    foreach($part in $n.Split([char]92)){if(!$part){continue};if($part.EndsWith(".") -or $part.EndsWith(" ") -or $part -match "^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?$" ){throw "MACHINE_UPDATE_ARCHIVE_WINDOWS_PATH_ALIAS"}}',
+    '    $full=[IO.Path]::GetFullPath([IO.Path]::Combine($destination,$n))',
+    '    if(-not $full.StartsWith($destination,[StringComparison]::OrdinalIgnoreCase)){throw "MACHINE_UPDATE_ARCHIVE_ESCAPE"}',
+    '    if(-not $targets.Add($full.TrimEnd([char]92))){throw "MACHINE_UPDATE_ARCHIVE_DUPLICATE_TARGET"}',
+    '    if($entry.Length -lt 0 -or $entry.Length -gt $maxEntryBytes){throw "MACHINE_UPDATE_ARCHIVE_ENTRY_TOO_LARGE"}',
+    '    $total+=[long]$entry.Length',
+    '    if($total -gt $maxTotalBytes){throw "MACHINE_UPDATE_ARCHIVE_TOTAL_TOO_LARGE"}',
+    '    if((([int]$entry.ExternalAttributes -shr 16) -band 61440) -eq 40960){throw "MACHINE_UPDATE_ARCHIVE_SYMLINK"}',
+    '  }',
+    '} finally { $archive.Dispose() }',
+    '[IO.Compression.ZipFile]::ExtractToDirectory($archivePath,$extractPath)',
+  ].join('\r\n');
+}
+
 async function extractVerifiedRuntime(
   input: MachineUpdateInput,
 ): Promise<string> {
@@ -294,14 +333,7 @@ async function extractVerifiedRuntime(
   await fs.mkdir(extract, { recursive: true });
   await fs.writeFile(zipFile, zipBuffer);
 
-  const script =
-    "$ErrorActionPreference='Stop'; " +
-    'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
-    '[System.IO.Compression.ZipFile]::ExtractToDirectory(' +
-    psLiteral(zipFile) +
-    ', ' +
-    psLiteral(extract) +
-    ');';
+  const script = renderBoundedWindowsArchiveExtraction(zipFile,extract);
   const result = spawnSync(
     UPDATE_POWERSHELL,
     [
