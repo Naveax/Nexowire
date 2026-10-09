@@ -4,6 +4,27 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 
+const PRIVATE_DESKTOP_SYSTEM32='C:\\Windows\\System32';
+const PRIVATE_DESKTOP_POWERSHELL=PRIVATE_DESKTOP_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+const PRIVATE_DESKTOP_MODULES=PRIVATE_DESKTOP_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
+/** Every internally launched host, GUI shell and helper uses a fixed system
+ * interpreter. This environment is not used for arbitrary user-launched apps. */
+export function privateDesktopPowerShellEnvironment():NodeJS.ProcessEnv {
+  const env:NodeJS.ProcessEnv={
+    SystemRoot:'C:\\Windows',windir:'C:\\Windows',
+    ComSpec:PRIVATE_DESKTOP_SYSTEM32+'\\cmd.exe',
+    PATH:PRIVATE_DESKTOP_SYSTEM32+';C:\\Windows',
+    PSModulePath:PRIVATE_DESKTOP_MODULES,
+  };
+  for(const key of ['USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP'] as const){
+    const value=process.env[key];
+    if(!value||value.length>1024||!/^[A-Za-z]:\\/.test(value)||
+       /[;"'\r\n\0]/.test(value)||value.split(/[\\/]/).includes('..'))continue;
+    env[key]=value;
+  }
+  return env;
+}
+
 const DESKTOP_NAME = 'NexowirePrivate';
 const StartSchema = z.object({ create_shortcut: z.boolean().default(true) });
 const LaunchSchema = z.object({
@@ -413,7 +434,7 @@ async function ensureScripts(): Promise<void> {
 
 async function psJson(args: string[], timeout = 15_000): Promise<unknown> {
   return await new Promise((resolve, reject) => {
-    const child = spawn('powershell.exe', ['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass',...args], { windowsHide:true, stdio:['ignore','pipe','pipe'] });
+    const child = spawn(PRIVATE_DESKTOP_POWERSHELL, ['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass',...args], { windowsHide:true,shell:false,cwd:PRIVATE_DESKTOP_SYSTEM32,env:privateDesktopPowerShellEnvironment(),stdio:['ignore','pipe','pipe'] });
     const out: Buffer[]=[]; const err: Buffer[]=[]; let bytes=0;
     const collect=(a:Buffer[],c:Buffer)=>{bytes+=c.length;if(bytes<=2*1024*1024)a.push(c);};
     child.stdout.on('data',(c:Buffer)=>collect(out,c));child.stderr.on('data',(c:Buffer)=>collect(err,c));
@@ -468,7 +489,7 @@ async function privateInputRequest(
   let pid: number | undefined;
   try {
     pid = await launch(
-      'powershell.exe',
+      PRIVATE_DESKTOP_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -618,14 +639,14 @@ async function inputDesktop():Promise<string>{return z.object({inputDesktop:z.st
 
 async function shortcut():Promise<string|null>{
   if(process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT==='1')return null;const p=paths();const app=process.env.APPDATA||path.join(os.homedir(),'AppData','Roaming');const dir=path.join(app,'Microsoft','Windows','Start Menu','Programs');const link=path.join(dir,'Nexowire Private Desktop.lnk');await fs.mkdir(dir,{recursive:true});
-  const f=path.join(p.root,'shortcut-'+process.pid+'.ps1');const q=(v:string)=>v.replace(/'/g,"''");const s=["$ErrorActionPreference='Stop'","$w=New-Object -ComObject WScript.Shell","$s=$w.CreateShortcut('"+q(link)+"')","$s.TargetPath='powershell.exe'","$s.Arguments='-NoLogo -NoProfile -ExecutionPolicy Bypass -File \""+q(p.switcher)+"\"'","$s.WorkingDirectory=[Environment]::GetFolderPath('UserProfile')","$s.Description='Open Nexowire Private Desktop'","$s.Hotkey='CTRL+ALT+N'",'$s.Save()'].join('\n');await fs.writeFile(f,s,'utf8');try{await psJson(['-File',f]);}finally{await fs.rm(f,{force:true});}return link;
+  const f=path.join(p.root,'shortcut-'+process.pid+'.ps1');const q=(v:string)=>v.replace(/'/g,"''");const s=["$ErrorActionPreference='Stop'","$w=New-Object -ComObject WScript.Shell","$s=$w.CreateShortcut('"+q(link)+"')","$s.TargetPath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'","$s.Arguments='-NoLogo -NoProfile -ExecutionPolicy Bypass -File \""+q(p.switcher)+"\"'","$s.WorkingDirectory=[Environment]::GetFolderPath('UserProfile')","$s.Description='Open Nexowire Private Desktop'","$s.Hotkey='CTRL+ALT+N'",'$s.Save()'].join('\n');await fs.writeFile(f,s,'utf8');try{await psJson(['-File',f]);}finally{await fs.rm(f,{force:true});}return link;
 }
 
 async function start(input:unknown):Promise<{data:unknown}>{
   assertWindows();const parsed=StartSchema.parse(input);await ensureScripts();const p=paths();const old=await readState();if(old&&alive(old.hostPid)&&alive(old.shellPid))return{data:{running:true,reused:true,desktopName:DESKTOP_NAME,hostPid:old.hostPid,shellPid:old.shellPid,inputDesktop:await inputDesktop(),visibleDesktopChanged:false}};
-  await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.ready,{force:true}),fs.rm(p.shellPid,{force:true})]);const host=spawn('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',p.host,'-Name',DESKTOP_NAME,'-Ready',p.ready,'-ShellPid',p.shellPid],{detached:false,windowsHide:true,cwd:p.root,stdio:'ignore'});if(!host.pid)throw new PrivateDesktopError('HOST_START_FAILED','No PID for private desktop host.');host.unref();
+  await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.ready,{force:true}),fs.rm(p.shellPid,{force:true})]);const host=spawn(PRIVATE_DESKTOP_POWERSHELL,['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',p.host,'-Name',DESKTOP_NAME,'-Ready',p.ready,'-ShellPid',p.shellPid],{detached:false,windowsHide:true,shell:false,cwd:p.root,env:privateDesktopPowerShellEnvironment(),stdio:'ignore'});if(!host.pid)throw new PrivateDesktopError('HOST_START_FAILED','No PID for private desktop host.');host.unref();
   const end=Date.now()+8000;let ready=false;while(Date.now()<end){if(!alive(host.pid))break;try{await fs.access(p.ready);ready=true;break;}catch{await new Promise(r=>setTimeout(r,100));}}if(!ready){if(alive(host.pid))process.kill(host.pid);throw new PrivateDesktopError('NOT_READY','Private desktop host did not become ready.');}
-  let shellPid:number|undefined;try{shellPid=await launch('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',p.shell],p.root);await fs.writeFile(p.shellPid,String(shellPid)+'\n','utf8');await new Promise(r=>setTimeout(r,800));if(!alive(shellPid))throw new PrivateDesktopError('SHELL_START_FAILED','Private desktop shell exited during startup.');const state:PrivateDesktopState={version:1,desktopName:DESKTOP_NAME,hostPid:host.pid,shellPid,launchedPids:[],startedAt:new Date().toISOString()};await writeState(state);const link=parsed.create_shortcut?await shortcut():null;const v=await view();return{data:{running:true,reused:false,desktopName:DESKTOP_NAME,hostPid:host.pid,shellPid,windowCount:v.windows.length,inputDesktop:v.inputDesktop,visibleDesktopChanged:false,shortcut:link,manualSwitchHotkey:link?'Ctrl+Alt+N':null}};}catch(e){if(shellPid&&alive(shellPid)){try{process.kill(shellPid);await waitExit(shellPid);}catch{}}if(alive(host.pid)){try{process.kill(host.pid);await waitExit(host.pid);}catch{}}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);throw e;}
+  let shellPid:number|undefined;try{shellPid=await launch(PRIVATE_DESKTOP_POWERSHELL,['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',p.shell],p.root);await fs.writeFile(p.shellPid,String(shellPid)+'\n','utf8');await new Promise(r=>setTimeout(r,800));if(!alive(shellPid))throw new PrivateDesktopError('SHELL_START_FAILED','Private desktop shell exited during startup.');const state:PrivateDesktopState={version:1,desktopName:DESKTOP_NAME,hostPid:host.pid,shellPid,launchedPids:[],startedAt:new Date().toISOString()};await writeState(state);const link=parsed.create_shortcut?await shortcut():null;const v=await view();return{data:{running:true,reused:false,desktopName:DESKTOP_NAME,hostPid:host.pid,shellPid,windowCount:v.windows.length,inputDesktop:v.inputDesktop,visibleDesktopChanged:false,shortcut:link,manualSwitchHotkey:link?'Ctrl+Alt+N':null}};}catch(e){if(shellPid&&alive(shellPid)){try{process.kill(shellPid);await waitExit(shellPid);}catch{}}if(alive(host.pid)){try{process.kill(host.pid);await waitExit(host.pid);}catch{}}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);throw e;}
 }
 
 async function killTree(pid:number):Promise<void>{if(!alive(pid))return;await new Promise<void>(resolve=>{const c=spawn('taskkill.exe',['/PID',String(pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});c.once('error',()=>resolve());c.once('exit',()=>resolve());});await waitExit(pid);}
