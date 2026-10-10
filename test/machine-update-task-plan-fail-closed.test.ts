@@ -51,6 +51,7 @@ for(const c of cases){
       "  if($LiteralPath -eq $BrokerLauncher){return "+(c.brokerFile?'$true':'$false')+'}',
       '  return $false',
       '}',
+      'function Assert-TaskIdentity { param([string]$name,[string]$launcher,[bool]$mustBeSystem) }',
       planFunction,
       "try { Assert-CutoverPlan; [Console]::WriteLine('PASS') }",
       'catch { [Console]::WriteLine($_.Exception.Message) }',
