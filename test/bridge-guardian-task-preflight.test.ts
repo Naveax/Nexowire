@@ -83,6 +83,12 @@ test('recovery must be scheduled separately for the expected user logon',()=>{
     {...t,triggers:[{type:'Logon',userSid:SID,enabled:false}]},
     {...t,triggers:[{type:'Logon',userSid:'S-1-5-21-1-2-3-1002',enabled:true}]},
     {...t,triggers:[{type:'Time',userSid:null,enabled:true}]},
+    {...t,triggers:[...t.triggers,{type:'Time',userSid:null,enabled:true}]},
+    {...t,triggers:[...t.triggers,{type:'Other',userSid:null,enabled:true}]},
+    {...t,triggers:[...t.triggers,{type:'Logon',userSid:SID,enabled:true}]},
+    {...t,triggers:[...t.triggers,{type:'Logon',userSid:SID,enabled:false}]},
+    {...t,triggers:[{type:'Other',userSid:null,enabled:false},...t.triggers]},
+    {...t,triggers:[{type:'Logon',userSid:null,enabled:true},...t.triggers]},
   ]) {
     assert.throws(
       ()=>verifyBridgeGuardianTaskSnapshot(modified,SID),
