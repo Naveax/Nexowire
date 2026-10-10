@@ -24,6 +24,10 @@ test('rollback only bounces tasks when the cutover phase has started',()=>{
   assert.match(script,/if\(\$cutoverStarted -and \$hasBoot\)\{try\{Start-ScheduledTask/);
   assert.match(script,/if\(\$cutoverStarted -and \$hasBroker\)\{try\{Start-ScheduledTask/);
   assert.match(script,/if\(\$rollbackErrors.Count -gt 0\)/);
+  assert.match(script,/\$previousRoots\[\$file\]=\$oldRoot/);
+  assert.match(script,/MACHINE_UPDATE_HUB_ROLLBACK_UNHEALTHY/);
+  assert.match(script,/MACHINE_UPDATE_BROKER_ROLLBACK_UNHEALTHY/);
+  assert.match(script,/\$runtimeRoot=\$NewRoot/);
 });
 
 type Scenario ={
@@ -31,6 +35,7 @@ type Scenario ={
   failPhase:'plan'|'secondPatch'|'health'|'none';
   restoreFails?:boolean;
   expectedStatus:'rolled_back'|'rollback_failed'|'succeeded';
+  restoredListenerFails?:boolean;
   expectedStops:number;
   expectedStarts:number;
   expectedRestores:number;
@@ -45,6 +50,8 @@ const cases:Scenario[]=[
    failPhase:'secondPatch',restoreFails:true,expectedStatus:'rollback_failed',expectedStops:0,expectedStarts:0,expectedRestores:1,expectedExit:2},
   {name:'failed live cutover still stops and restarts both tasks during rollback',
    failPhase:'health',expectedStatus:'rolled_back',expectedStops:4,expectedStarts:3,expectedRestores:1,expectedExit:1},
+  {name:'rollback fails when prior runtime never regains its listener',
+   failPhase:'health',restoredListenerFails:true,expectedStatus:'rollback_failed',expectedStops:4,expectedStarts:3,expectedRestores:1,expectedExit:2},
   {name:'successful cutover starts both planned tasks and claims success',
    failPhase:'none',expectedStatus:'succeeded',expectedStops:2,expectedStarts:2,expectedRestores:0,expectedExit:0},
 ];
@@ -61,19 +68,20 @@ for(const scenario of cases){
       '$script:starts=0',
       '$script:patches=0',
       '$script:restores=0',
+      '$script:previousRoots=@{}',
       'function Start-Sleep {param([int]$Seconds)}',
       'function Task-Exists {param([string]$name) return $true}',
       'function Assert-CutoverPlan {',
       scenario.failPhase==='plan'?"  throw 'PLAN_FAILED'":'  return',
       '}',
-      'function Patch-Launcher {param([string]$file) $script:patches++;'+(
+      'function Patch-Launcher {param([string]$file) $script:patches++; $script:previousRoots[$file]="C:\\ProgramData\\Nexowire\\versions\\1.0.4-012345abcdef";'+(
         scenario.failPhase==='secondPatch'?
         " if($script:patches -eq 2){throw 'BROKER_PATCH_FAILED'}":''
       )+'}',
       'function Stop-ScheduledTask {param([string]$TaskName,[string]$ErrorAction) $script:stops++}',
       'function Start-ScheduledTask {param([string]$TaskName,[string]$ErrorAction) $script:starts++}',
       'function Restore { $script:restores++;'+(scenario.restoreFails?"throw 'RESTORE_FAILED'":'')+'}',
-      'function Wait-Service {param([int]$port,[string]$needle,[int]$seconds) return '+(
+      'function Wait-Service {param([int]$port,[string]$needle,[int]$seconds,[string]$runtimeRoot) if($runtimeRoot){return '+(scenario.restoredListenerFails?'$false':'$true')+'}; return '+(
         scenario.failPhase==='health'?'$false':'$true'
       )+'}',
       'function Write-Status {param([string]$state,[string]$message)',

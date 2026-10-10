@@ -41,6 +41,7 @@ function invoke(content:string){
       "$ErrorActionPreference='Stop'",
       '$NewRoot='+"'"+newer+"'",
       '$backups=@{}',
+      '$previousRoots=@{}',
       '$file='+("'"+file.replaceAll("'","''")+"'"),
       fn,
       "try { Patch-Launcher $file; [Console]::WriteLine('PASS') }",
