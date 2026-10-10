@@ -104,6 +104,23 @@ const RegistryDeleteInputSchema = z.object({
   recursive: z.boolean().default(false),
 });
 
+/**
+ * General task mutations must not bypass dedicated Nexowire privileged-task
+ * identity/ACL preflights and the separately accepted Stack cutover.
+ * All task paths are refused for these reserved names to prevent confusion.
+ */
+export function assertGenericTaskActivationAllowed(
+  name: string, action: 'start' | 'stop' | 'enable' | 'disable',
+): void {
+  // Emergency STOP/DISABLE must remain available under normal OS ACLs.
+  if (action !== 'start' && action !== 'enable') return;
+  const normalized = name.trim().toLowerCase();
+  if (normalized === 'nexowire privileged broker' ||
+      normalized === 'nexowire stack') {
+    throw new Error('NEXOWIRE_RESERVED_TASK_REQUIRES_PROTECTED_LIFECYCLE');
+  }
+}
+
 const ScheduledTaskControlInputSchema = z.object({
   name: z.string().min(1).max(512).refine((value) => !/[\*?\[\]]/.test(value), {
     message: 'Task control requires an exact task name without wildcard characters.',
@@ -904,6 +921,10 @@ try {
 }
 $name = [string]$inputData.name
 $taskPath = [string]$inputData.path
+if (([string]$inputData.action -in @('start','enable')) -and
+    (@('Nexowire Privileged Broker','Nexowire Stack') -icontains $name.Trim())) {
+  throw 'NEXOWIRE_RESERVED_TASK_REQUIRES_PROTECTED_LIFECYCLE'
+}
 $matches = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq $name -and $_.TaskPath -eq $taskPath })
 if ($matches.Count -ne 1) { throw ('Expected exactly one scheduled task, found ' + $matches.Count + '.') }
 $task = $matches[0]
@@ -1080,6 +1101,7 @@ export async function executeWindowsCapability(
     }
     case 'windows.task.control': {
       const parsed = ScheduledTaskControlInputSchema.parse(input);
+      assertGenericTaskActivationAllowed(parsed.name,parsed.action);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           scheduledTaskControlScript,
