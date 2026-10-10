@@ -661,6 +661,8 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
            SELECT 1 FROM devices d WHERE d.id=device_bridge_commands.device_id
              AND d.owner_account_id=device_bridge_commands.owner_account_id
              AND d.credential_hash=device_bridge_commands.credential_binding
+             AND d.access_mode='full' AND d.online=1
+             AND d.platform='win32' AND d.privilege_mode='broker'
          )
          AND EXISTS (SELECT 1 FROM device_bridge_preferences p
            WHERE p.device_id=device_bridge_commands.device_id
@@ -693,6 +695,8 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
            SELECT 1 FROM devices d WHERE d.id=device_bridge_commands.device_id
              AND d.owner_account_id=device_bridge_commands.owner_account_id
              AND d.credential_hash=device_bridge_commands.credential_binding
+             AND d.access_mode='full' AND d.online=1
+             AND d.platform='win32' AND d.privilege_mode='broker'
          )
          AND EXISTS (SELECT 1 FROM device_bridge_preferences p
            WHERE p.device_id=device_bridge_commands.device_id

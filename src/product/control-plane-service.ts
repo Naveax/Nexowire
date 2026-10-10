@@ -28,6 +28,7 @@ import {
   type ProductPlan,
 } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
+import { AdminBridgeModeReceiptSchema, verifyAdminBridgeModeReceipt, type AdminBridgeModeIntent } from '../protocol/admin-bridge-intent.js';
 import { resolveOwnerDeviceTarget, type DeviceTargetQuery, type TargetResolution } from './device-target-resolution.js';
 
 export interface ControlPlaneIdentity {
@@ -962,6 +963,126 @@ export class ControlPlaneService {
       deviceId, ownerAccountId: account.id, desiredMode: mode, updatedAt,
     });
     return {deviceId, bridgePreference: { desiredMode: mode, applied: false, updatedAt }};
+  }
+
+  /**
+   * Explicit owner-approved command creation. A saved UI preference is NOT
+   * automatically an executable intent. No privileged work happens here.
+   */
+  async issueBridgeModeCommand(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+    mode: 'auto' | 'on' | 'off',
+  ): Promise<{ requestId: string; deviceId: string; desiredMode: 'auto' | 'on' | 'off'; expiresAt: string; status: 'queued' }> {
+    if (identity.role === 'service') throw new Error('BRIDGE_COMMAND_OWNER_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId',deviceIdInput);
+    if (mode !== 'auto' && mode !== 'on' && mode !== 'off') {
+      throw new Error('INVALID_BRIDGE_MODE');
+    }
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id) throw new Error('DEVICE_NOT_FOUND');
+    // These are policy gates, not proof of local elevation/authorization.
+    if (!device.online || device.accessMode !== 'full' ||
+        device.platform !== 'win32' || device.privilegeMode !== 'broker') {
+      throw new Error('BRIDGE_COMMAND_DEVICE_NOT_READY');
+    }
+    const preference = await this.store.getDeviceBridgePreference(deviceId);
+    const now = this.now();
+    if (!preference || preference.ownerAccountId !== account.id ||
+        preference.desiredMode !== mode ||
+        Date.parse(preference.updatedAt) > now.getTime()) {
+      throw new Error('BRIDGE_COMMAND_PREFERENCE_MISMATCH');
+    }
+    const requestId = randomUUID();
+    const expiresAt = new Date(now.getTime() + 120_000).toISOString();
+    const ok = await this.store.queueBridgeCommand({
+      requestId,deviceId,ownerAccountId:account.id,
+      credentialBinding:device.credentialHash,desiredMode:mode,
+      issuedAt:now.toISOString(),expiresAt,
+    });
+    if (!ok) throw new Error('BRIDGE_COMMAND_QUEUE_REJECTED');
+    return {requestId,deviceId,desiredMode:mode,expiresAt,status:'queued'};
+  }
+
+  /**
+   * The Hub must authenticate as service AND present the paired Agent's
+   * current credential. Only one caller can claim an intent.
+   */
+  async claimBridgeModeCommand(
+    credential: string, requestId: string,
+  ): Promise<AdminBridgeModeIntent | null> {
+    const agent = await this.authenticateDeviceCredential(credential);
+    if (!agent) throw new Error('BRIDGE_COMMAND_DEVICE_UNAUTHENTICATED');
+    if (!/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error('INVALID_REQUEST_ID');
+    const record = await this.store.getBridgeCommand(requestId);
+    if (!record || record.deviceId !== agent.deviceId ||
+        record.ownerAccountId !== agent.ownerAccountId ||
+        record.credentialBinding !== secretHash(credential)) {
+      return null;
+    }
+    const ok = await this.store.claimBridgeCommand(
+      requestId,agent.deviceId,secretHash(credential),this.now().toISOString(),
+    );
+    if (!ok) return null;
+    return {
+      type:'admin-bridge.mode-intent',version:1,
+      requestId:record.requestId,deviceId:record.deviceId,
+      ownerAccountId:record.ownerAccountId,
+      credentialBinding:record.credentialBinding,
+      desiredMode:record.desiredMode,
+      issuedAt:record.issuedAt,expiresAt:record.expiresAt,
+    };
+  }
+
+  /** Receipt validation is independent of claimed/queued state. */
+  async completeBridgeModeCommand(
+    credential: string, rawReceipt: unknown,
+  ): Promise<{requestId:string;status:'applied'|'failed'}> {
+    const agent = await this.authenticateDeviceCredential(credential);
+    if (!agent) throw new Error('BRIDGE_COMMAND_DEVICE_UNAUTHENTICATED');
+    const receipt = AdminBridgeModeReceiptSchema.parse(rawReceipt);
+    if (receipt.deviceId !== agent.deviceId ||
+        receipt.credentialBinding !== secretHash(credential)) {
+      throw new Error('BRIDGE_RECEIPT_IDENTITY_MISMATCH');
+    }
+    const command = await this.store.getBridgeCommand(receipt.requestId);
+    if (!command || command.deviceId !== agent.deviceId ||
+        command.ownerAccountId !== agent.ownerAccountId ||
+        command.credentialBinding !== receipt.credentialBinding ||
+        command.status !== 'claimed') {
+      throw new Error('BRIDGE_COMMAND_NOT_CLAIMED');
+    }
+    const intent: AdminBridgeModeIntent = {
+      type:'admin-bridge.mode-intent',version:1,
+      requestId:command.requestId,deviceId:command.deviceId,
+      ownerAccountId:command.ownerAccountId,credentialBinding:command.credentialBinding,
+      desiredMode:command.desiredMode,issuedAt:command.issuedAt,expiresAt:command.expiresAt,
+    };
+    const verification = verifyAdminBridgeModeReceipt(receipt,intent);
+    const status = verification.applied ? 'applied' : 'failed';
+    const committed = await this.store.completeBridgeCommand(
+      command.requestId,agent.deviceId,command.credentialBinding,
+      status,this.now().toISOString(),verification.receipt.failureCode,
+    );
+    if (!committed) throw new Error('BRIDGE_COMMAND_COMPLETION_REJECTED');
+    return {requestId:command.requestId,status};
+  }
+
+  /** Owner-only inspection: never include device credential digests in HTTP. */
+  async bridgeCommandStatus(
+    identity: ControlPlaneIdentity, requestId: string,
+  ): Promise<{requestId:string;deviceId:string;desiredMode:'auto'|'on'|'off';status:'queued'|'claimed'|'applied'|'failed';failureCode:string|null;expiresAt:string}> {
+    if (identity.role === 'service') throw new Error('BRIDGE_COMMAND_OWNER_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    if (!/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error('INVALID_REQUEST_ID');
+    const record = await this.store.getBridgeCommand(requestId);
+    if (!record || record.ownerAccountId !== account.id) throw new Error('BRIDGE_COMMAND_NOT_FOUND');
+    const current = await this.store.getDevice(record.deviceId);
+    if (!current || current.ownerAccountId !== account.id) throw new Error('BRIDGE_COMMAND_NOT_FOUND');
+    return {requestId:record.requestId,deviceId:record.deviceId,
+      desiredMode:record.desiredMode,status:record.status,
+      failureCode:record.failureCode,expiresAt:record.expiresAt};
   }
 
   async chargeUsage(input: {
