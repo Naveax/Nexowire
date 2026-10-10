@@ -1072,7 +1072,7 @@ export class ControlPlaneService {
   /** Owner-only inspection: never include device credential digests in HTTP. */
   async bridgeCommandStatus(
     identity: ControlPlaneIdentity, requestId: string,
-  ): Promise<{requestId:string;deviceId:string;desiredMode:'auto'|'on'|'off';status:'queued'|'claimed'|'applied'|'failed';failureCode:string|null;expiresAt:string}> {
+  ): Promise<{requestId:string;deviceId:string;desiredMode:'auto'|'on'|'off';status:'queued'|'claimed'|'applied'|'failed'|'expired';failureCode:string|null;expiresAt:string}> {
     if (identity.role === 'service') throw new Error('BRIDGE_COMMAND_OWNER_REQUIRED');
     const account = await this.requireAccount(identity.accountId);
     if (!/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error('INVALID_REQUEST_ID');
@@ -1080,8 +1080,13 @@ export class ControlPlaneService {
     if (!record || record.ownerAccountId !== account.id) throw new Error('BRIDGE_COMMAND_NOT_FOUND');
     const current = await this.store.getDevice(record.deviceId);
     if (!current || current.ownerAccountId !== account.id) throw new Error('BRIDGE_COMMAND_NOT_FOUND');
+    // Derived-only projection: never mutate durable audit history or allow
+    // an expired queued/claimed command to look actionable in the owner UI.
+    const now=this.now().getTime();
+    const expired=(record.status==='queued'||record.status==='claimed') &&
+      Number.isFinite(now) && now>=Date.parse(record.expiresAt);
     return {requestId:record.requestId,deviceId:record.deviceId,
-      desiredMode:record.desiredMode,status:record.status,
+      desiredMode:record.desiredMode,status:expired?'expired':record.status,
       failureCode:record.failureCode,expiresAt:record.expiresAt};
   }
 
