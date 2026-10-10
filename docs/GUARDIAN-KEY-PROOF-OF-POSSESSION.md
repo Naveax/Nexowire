@@ -1,0 +1,11 @@
+# Guardian signing-key proof of possession (unenrolled; non-actuating)
+
+A remotely supplied Ed25519 public key must **never** automatically become a trusted Guardian signing key. Any attacker can generate a legitimate keypair and sign a challenge, so self-signing alone does not prove Guardian identity, protected local key storage or ownership of a Windows device.
+
+`verifyGuardianKeyEnrollmentProof` checks a **bounded, one-time owner-approved enrollment challenge** containing a request UUID, exact device/owner IDs, current pairing credential SHA-256 binding, 32-byte nonce, fixed purpose `bridge-mode-receipts`, and 120-second canonical UTC lifetime. The proof must include a valid canonical Ed25519 SPKI DER public key and a domain-separated signature over every challenge field and the exact SPKI bytes. Tampering with nonce, pairing, owner, device, request, key or signature fails.
+
+The caller supplies the authoritative current device/owner/pairing context, approved request UUID and an existing replay-check hook. Its result deliberately reports `possessionVerified:true` but `enrollmentAuthorized:false`. **The code never stores a signing key, accepts a key rotation, writes a secret or updates a database.** A nonce cannot be cryptographically guaranteed to be random by verification alone; the future challenge issuer must generate it using a CSPRNG and atomically record/consume it.
+
+Production enrollment still requires all of the following separate trust boundaries: owner confirmation distinct from UI preference, authenticated paired-device session, genuine elevated Guardian process and protected source attestation, private-key creation in protected Windows storage, atomic durable nonce/request-ID consumption, encrypted/ACL-protected registry keyed by device and current pairing, explicit key rotation/revocation, and audit logs with no private-key leakage. A self-signed key proof by an unauthenticated Hub client must never satisfy those requirements.
+
+There is no Cloudflare/Hub route or Agent code wired to enroll a key. This source-only module never runs a Scheduled Task, modifies ACLs or changes P0 #271. Tests use ephemeral in-memory private keys and avoid disk secret storage.
