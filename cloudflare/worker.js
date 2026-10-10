@@ -33,6 +33,12 @@ import {
   exchangeGitHubAppManifestCode,
 } from '../dist/src/product/github-app-manifest.js';
 
+// Production deployment must not enable OS task control based on a UI
+// preference, an environment variable, or a service-supplied receipt.
+// Review P0 #271, protected local Guardian enrollment and verified
+// device attestation before deliberately changing this build-time gate.
+const PRODUCTION_BRIDGE_COMMAND_TRANSPORT_ENABLED = false;
+
 function boundedCapacity(env) {
   const raw = Number(env.NEXOWIRE_FREE_CAPACITY_PERCENT ?? '0');
   return Number.isFinite(raw)
@@ -707,6 +713,7 @@ export default {
       ).trim();
       const handler = createControlPlaneHttpHandler(service, {
         authenticate: (req) => authenticate(req, env),
+        enableBridgeCommandTransport: PRODUCTION_BRIDGE_COMMAND_TRANSPORT_ENABLED,
         ...(agentUrl ? { agentUrl } : {}),
       });
       return handler(request);
