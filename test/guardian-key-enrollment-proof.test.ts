@@ -100,7 +100,7 @@ test('tampered device fields, different public key and wrong private key invalid
     {...p,challenge:{...p.challenge,ownerAccountId:'owner-2'}},
     {...p,challenge:{...p.challenge,nonce:randomBytes(32).toString('base64url')}},
     {...p,publicKeySpki:other.publicKey.export({format:'der',type:'spki'}).toString('base64url')},
-    {...p,signature:'A'+p.signature.slice(1)},
+    {...p,signature:(p.signature.startsWith('A')?'B':'A')+p.signature.slice(1)},
     {...p,signature:'abc'},
   ];
   for(const candidate of mutated){
