@@ -6,7 +6,7 @@ import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { NEXOWIRE_VERSION } from '../version.js';
-import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
+import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import {
   defaultPrivilegedBrokerSecretFile,
   loadOrCreatePrivilegedBrokerToken,
@@ -482,9 +482,21 @@ $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($registeredSid -ine $currentSid){throw 'BROKER_TASK_OWNER_MISMATCH'}
 `;
 
+/** Refuse to start an elevated task from user-writable source files. No ACL mutation. */
+async function verifyBrokerTaskStartFiles(options: PrivilegedBrokerTaskOptions): Promise<void> {
+  if (process.platform !== 'win32') {
+    throw new Error('Privileged broker task control is available only on Windows.');
+  }
+  const trustedRoot = rootDir(options);
+  await assertBrokerRootSafeToRemove(trustedRoot);
+  verifyWindowsPrivateAcl(trustedRoot);
+  verifyWindowsPrivateAcl(launcherPath(options));
+}
+
 export async function startPrivilegedBrokerTask(
   options: PrivilegedBrokerTaskOptions = {},
 ): Promise<PrivilegedBrokerTaskStatus> {
+  await verifyBrokerTaskStartFiles(options);
   const name = taskName(options);
   const script = `
 $ErrorActionPreference='Stop'
@@ -505,6 +517,9 @@ Start-ScheduledTask -TaskName $name -ErrorAction Stop
 export async function stopPrivilegedBrokerTask(
   options: PrivilegedBrokerTaskOptions = {},
 ): Promise<PrivilegedBrokerTaskStatus> {
+  // Do not require a clean runtime ACL when trying to stop an already-running
+  // potentially compromised task. Keep the task-identity guard below.
+
   const name = taskName(options);
   const script = `
 $ErrorActionPreference='Stop'
