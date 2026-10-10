@@ -187,6 +187,9 @@ small,.subtle,.label { color: var(--muted); }
 .bridge-toggle-label{min-width:34px;text-align:center}
 .bridge-mode-options{align-items:center}
 .bridge-mode-options small{color:var(--muted);font-size:11px;line-height:1.35}
+.bridge-mode-feedback.bridge-warning{color:#f1bb8e;font-weight:650}
+.bridge-quick-toggle[data-mode="off"] .bridge-quick-state{background:rgba(146,161,187,.12);color:#c2cedd;border-color:rgba(146,161,187,.4)}
+.bridge-quick-toggle[data-mode="auto"] .bridge-quick-state{background:rgba(132,156,220,.12);color:#c0d2fb;border-color:rgba(132,156,220,.4)}
 @media(max-width:620px){.device-header-actions{justify-content:flex-start}.core-shortcut,.bridge-quick-toggle{min-height:42px}.core-access,.bridge-access{padding:12px}.bridge-mode-options button{flex:0 0 auto}.bridge-switch-row{align-items:center}.bridge-toggle{min-height:46px}}
 
 .last-seen { font-size: 11px; color: #7f90a8; margin-top: 3px; }

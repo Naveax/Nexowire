@@ -21,8 +21,8 @@ test('Admin Bridge has a visible one-click ON/OFF card shortcut and an accessibl
 test('AUTO remains optional, selected preference is not falsely presented as applied broker state',()=>{
   assert.match(app,/class="secondary bridge-mode" data-bridge="auto"/);
   assert.match(app,/bridgeCard\.dataset\.desiredMode = bridgeDesired/);
-  assert.match(app,/Broker doğrulanamadı/);
-  assert.match(app,/Yerel aç\/kapat komutları henüz bağlı değil/);
+  assert.match(app,/Broker doğrulanmadı/);
+  assert.match(app,/Bu anahtar şimdilik yalnızca tercihi kaydeder/);
   assert.match(app,/Broker durumu henüz değiştirilmez/);
   assert.match(app,/row\.querySelector\('\.bridge-live-status'\)/);
   assert.doesNotMatch(app,/bridgePreference\.applied\s*=\s*true/);
