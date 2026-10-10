@@ -59,6 +59,30 @@ export interface DeviceBridgePreferenceRecord {
   updatedAt: string;
 }
 
+/**
+ * A queued privileged command is NOT permission to execute it. A future
+ * authenticated transport must verify owner consent and the pairing first.
+ */
+export interface BridgeCommandRecord {
+  requestId: string;
+  deviceId: string;
+  ownerAccountId: string;
+  credentialBinding: string;
+  desiredMode: 'auto' | 'on' | 'off';
+  issuedAt: string;
+  expiresAt: string;
+  status: 'queued' | 'claimed' | 'applied' | 'failed';
+  claimedAt: string | null;
+  completedAt: string | null;
+  failureCode: string | null;
+}
+
+export type BridgeQueuedCommand = Pick<
+  BridgeCommandRecord,
+  'requestId' | 'deviceId' | 'ownerAccountId' | 'credentialBinding' |
+  'desiredMode' | 'issuedAt' | 'expiresAt'
+>;
+
 export interface DeviceMaintenancePreferenceRecord {
   deviceId: string;
   ownerAccountId: string;
@@ -220,6 +244,18 @@ export interface ControlPlaneStore {
   putDeviceMaintenancePreference(record: DeviceMaintenancePreferenceRecord): Promise<void>;
   getDeviceBridgePreference(deviceId: string): Promise<DeviceBridgePreferenceRecord | null>;
   putDeviceBridgePreference(record: DeviceBridgePreferenceRecord): Promise<void>;
+  /** Atomic, pairing-bound create. No automatic enrollment from preferences. */
+  queueBridgeCommand(record: BridgeQueuedCommand): Promise<boolean>;
+  getBridgeCommand(requestId: string): Promise<BridgeCommandRecord | null>;
+  /** Atomic one-time claim; stale, expired and re-paired requests fail. */
+  claimBridgeCommand(
+    requestId: string, deviceId: string, credentialBinding: string, at: string,
+  ): Promise<boolean>;
+  /** Call ONLY after an authenticated, verified device receipt. */
+  completeBridgeCommand(
+    requestId: string, deviceId: string, credentialBinding: string,
+    result: 'applied' | 'failed', at: string, failureCode: string | null,
+  ): Promise<boolean>;
   listDevices(ownerAccountId?: string): Promise<ProductDeviceRecord[]>;
   listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]>;
   listDeviceFolderAssignments(ownerAccountId: string): Promise<DeviceFolderAssignmentRecord[]>;

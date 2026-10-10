@@ -9,6 +9,8 @@ import type {
   RootModeLeaseRecord,
   DeviceMaintenancePreferenceRecord,
   DeviceBridgePreferenceRecord,
+  BridgeCommandRecord,
+  BridgeQueuedCommand,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   PrepaidCreditInput,
@@ -21,6 +23,7 @@ import type {
   UsageAtomicChargeResult,
 } from './control-plane-store.js';
 import type { PairingRecord } from './pairing.js';
+import { isValidBridgeQueuedCommand, isCanonicalBridgeTimestamp } from './bridge-command-ledger.js';
 import type { CustomPlanInput, ProductPlanId } from './plans.js';
 
 export interface D1ResultMetaLike {
@@ -600,6 +603,86 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     await this.db.prepare(
       'INSERT INTO device_bridge_preferences (device_id, owner_account_id, desired_mode, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET owner_account_id = excluded.owner_account_id, desired_mode = excluded.desired_mode, updated_at = excluded.updated_at',
     ).bind(record.deviceId, record.ownerAccountId, record.desiredMode, record.updatedAt).run();
+  }
+
+  async queueBridgeCommand(record: BridgeQueuedCommand): Promise<boolean> {
+    if (!isValidBridgeQueuedCommand(record)) return false;
+    const result = await this.db.prepare(
+      `INSERT INTO device_bridge_commands
+        (request_id,device_id,owner_account_id,credential_binding,desired_mode,issued_at,expires_at,status)
+       SELECT ?,d.id,d.owner_account_id,d.credential_hash,?,?,?,'queued'
+       FROM devices d
+       WHERE d.id=? AND d.owner_account_id=? AND d.credential_hash=?
+       ON CONFLICT(request_id) DO NOTHING`,
+    ).bind(
+      record.requestId, record.desiredMode, record.issuedAt,
+      record.expiresAt, record.deviceId, record.ownerAccountId,
+      record.credentialBinding,
+    ).run();
+    return result.meta?.changes === 1;
+  }
+
+  async getBridgeCommand(requestId: string): Promise<BridgeCommandRecord | null> {
+    const row = await this.db.prepare(
+      `SELECT request_id,device_id,owner_account_id,credential_binding,desired_mode,
+       issued_at,expires_at,status,claimed_at,completed_at,failure_code
+       FROM device_bridge_commands WHERE request_id=?`,
+    ).bind(requestId).first<{
+      request_id: string; device_id: string; owner_account_id: string;
+      credential_binding: string; desired_mode: BridgeCommandRecord['desiredMode'];
+      issued_at: string; expires_at: string; status: BridgeCommandRecord['status'];
+      claimed_at: string | null; completed_at: string | null; failure_code: string | null;
+    }>();
+    return row ? {
+      requestId:row.request_id,deviceId:row.device_id,
+      ownerAccountId:row.owner_account_id,credentialBinding:row.credential_binding,
+      desiredMode:row.desired_mode,issuedAt:row.issued_at,expiresAt:row.expires_at,
+      status:row.status,claimedAt:row.claimed_at,
+      completedAt:row.completed_at,failureCode:row.failure_code,
+    } : null;
+  }
+
+  async claimBridgeCommand(
+    requestId: string, deviceId: string, credentialBinding: string, at: string,
+  ): Promise<boolean> {
+    if (!isCanonicalBridgeTimestamp(at)) return false;
+    const result = await this.db.prepare(
+      `UPDATE device_bridge_commands SET status='claimed',claimed_at=?
+       WHERE request_id=? AND device_id=? AND credential_binding=?
+         AND status='queued' AND issued_at<=? AND expires_at>?
+         AND EXISTS (
+           SELECT 1 FROM devices d WHERE d.id=device_bridge_commands.device_id
+             AND d.owner_account_id=device_bridge_commands.owner_account_id
+             AND d.credential_hash=device_bridge_commands.credential_binding
+         )`,
+    ).bind(at,requestId,deviceId,credentialBinding,at,at).run();
+    return result.meta?.changes === 1;
+  }
+
+  async completeBridgeCommand(
+    requestId: string, deviceId: string, credentialBinding: string,
+    result: 'applied' | 'failed', at: string, failureCode: string | null,
+  ): Promise<boolean> {
+    if (!isCanonicalBridgeTimestamp(at) ||
+        (result !== 'applied' && result !== 'failed') ||
+        (result === 'applied' && failureCode !== null) ||
+        (result === 'failed' && !/^[A-Z0-9_]{1,80}$/.test(failureCode ?? ''))) {
+      return false;
+    }
+    const update = await this.db.prepare(
+      `UPDATE device_bridge_commands SET
+         status=?,completed_at=?,failure_code=?
+       WHERE request_id=? AND device_id=? AND credential_binding=?
+         AND status='claimed' AND claimed_at<=? AND expires_at>?
+         AND EXISTS (
+           SELECT 1 FROM devices d WHERE d.id=device_bridge_commands.device_id
+             AND d.owner_account_id=device_bridge_commands.owner_account_id
+             AND d.credential_hash=device_bridge_commands.credential_binding
+         )`,
+    ).bind(
+      result,at,failureCode,requestId,deviceId,credentialBinding,at,at,
+    ).run();
+    return update.meta?.changes === 1;
   }
 
   async listDevices(

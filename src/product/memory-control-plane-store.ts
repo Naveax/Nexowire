@@ -1,4 +1,5 @@
 import type { PairingRecord } from './pairing.js';
+import { isValidBridgeQueuedCommand, validBridgeTransitionTime } from './bridge-command-ledger.js';
 import type {
   ControlPlaneStore,
   DeviceAnchorRecord,
@@ -10,6 +11,8 @@ import type {
   RootModeLeaseRecord,
   DeviceMaintenancePreferenceRecord,
   DeviceBridgePreferenceRecord,
+  BridgeCommandRecord,
+  BridgeQueuedCommand,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   PrepaidCreditInput,
@@ -66,6 +69,7 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly rootModeLeases = new Map<string, RootModeLeaseRecord>();
   private readonly maintenancePreferences = new Map<string, DeviceMaintenancePreferenceRecord>();
   private readonly bridgePreferences = new Map<string, DeviceBridgePreferenceRecord>();
+  private readonly bridgeCommands = new Map<string, BridgeCommandRecord>();
   private readonly deviceFolders = new Map<string, DeviceFolderRecord>();
   private readonly deviceFolderAssignments = new Map<string, string>();
   private readonly pairings = new Map<string, PairingRecord>();
@@ -257,6 +261,63 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
 
   async putDeviceBridgePreference(record: DeviceBridgePreferenceRecord): Promise<void> {
     this.bridgePreferences.set(record.deviceId, clone(record));
+  }
+
+  async queueBridgeCommand(record: BridgeQueuedCommand): Promise<boolean> {
+    if (this.bridgeCommands.has(record.requestId)) return false;
+    const device = this.devices.get(record.deviceId);
+    if (!device || device.ownerAccountId !== record.ownerAccountId ||
+        device.credentialHash !== record.credentialBinding ||
+        !isValidBridgeQueuedCommand(record)) return false;
+    this.bridgeCommands.set(record.requestId,{
+      ...clone(record),status:'queued',claimedAt:null,
+      completedAt:null,failureCode:null,
+    });
+    return true;
+  }
+
+  async getBridgeCommand(requestId: string): Promise<BridgeCommandRecord | null> {
+    const record = this.bridgeCommands.get(requestId);
+    return record ? clone(record) : null;
+  }
+
+  async claimBridgeCommand(
+    requestId: string, deviceId: string, credentialBinding: string, at: string,
+  ): Promise<boolean> {
+    const record = this.bridgeCommands.get(requestId);
+    const device = this.devices.get(deviceId);
+    if (!record || !device || record.status !== 'queued' ||
+        record.deviceId !== deviceId || record.credentialBinding !== credentialBinding ||
+        record.ownerAccountId !== device.ownerAccountId ||
+        device.credentialHash !== credentialBinding ||
+        !validBridgeTransitionTime(at,record.issuedAt,record.expiresAt)) return false;
+    this.bridgeCommands.set(requestId,{
+      ...record,status:'claimed',claimedAt:at,
+    });
+    return true;
+  }
+
+  async completeBridgeCommand(
+    requestId: string, deviceId: string, credentialBinding: string,
+    result: 'applied' | 'failed', at: string, failureCode: string | null,
+  ): Promise<boolean> {
+    const record = this.bridgeCommands.get(requestId);
+    const device = this.devices.get(deviceId);
+    if (!record || !device || record.status !== 'claimed' ||
+        record.deviceId !== deviceId || record.credentialBinding !== credentialBinding ||
+        record.ownerAccountId !== device.ownerAccountId ||
+        device.credentialHash !== credentialBinding ||
+        !record.claimedAt || Date.parse(at) < Date.parse(record.claimedAt) ||
+        !validBridgeTransitionTime(at,record.issuedAt,record.expiresAt) ||
+        (result !== 'applied' && result !== 'failed') ||
+        (result === 'applied' && failureCode !== null) ||
+        (result === 'failed' && !/^[A-Z0-9_]{1,80}$/.test(failureCode ?? ''))) {
+      return false;
+    }
+    this.bridgeCommands.set(requestId,{
+      ...record,status:result,completedAt:at,failureCode,
+    });
+    return true;
   }
 
   async listDevices(
