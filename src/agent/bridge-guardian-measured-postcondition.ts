@@ -149,12 +149,47 @@ export async function measureGuardianBrokerPostcondition(
         'BROKER_HEALTH_UNVERIFIED',state);
     }
   }
+  // Read the independent task and port inventory AGAIN immediately before
+  // any applied receipt. A task can change while the first process/health
+  // probe is running; one early snapshot must never certify a later state.
+  let finalTask:LocalBridgeTaskEvidence;
+  try {
+    finalTask=task.parse(await collectors.readTask());
+  } catch {
+    return unsuccessful(intent,observedAt,'TASK_AUDIT_UNAVAILABLE','Unknown');
+  }
+  let finalProcess:LocalBridgeProcessEvidence;
+  try {
+    finalProcess=processAudit.parse(await collectors.readProcessAndPort());
+  } catch {
+    return unsuccessful(intent,observedAt,
+      'BROKER_PROCESS_AUDIT_UNVERIFIED',finalTask.state);
+  }
+  if (!finalProcess.complete || !finalProcess.trustedCollector) {
+    return unsuccessful(intent,observedAt,
+      'BROKER_PROCESS_AUDIT_UNVERIFIED',finalTask.state);
+  }
+  if (JSON.stringify(taskData)!==JSON.stringify(finalTask) ||
+      JSON.stringify(processData)!==JSON.stringify(finalProcess)) {
+    return unsuccessful(intent,observedAt,
+      'BROKER_MODE_NOT_APPLIED',finalTask.state);
+  }
+
+  // Long-running collectors can outlive the signed owner-approved window.
+  // Do not stamp success with the earlier clock sample.
+  const completedAt=collectors.now();
+  const completedTime=completedAt.getTime();
+  if (!Number.isFinite(completedTime) ||
+      completedTime<Date.parse(intent.issuedAt) ||
+      completedTime>=Date.parse(intent.expiresAt)) {
+    throw new Error('GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID');
+  }
   const receipt=AdminBridgeModeReceiptSchema.parse({
     type:'admin-bridge.mode-receipt',version:1,
     requestId:intent.requestId,deviceId:intent.deviceId,
     credentialBinding:intent.credentialBinding,
-    desiredMode:intent.desiredMode,observedAt,
-    result:'applied',taskState:state,taskVerified:true,
+    desiredMode:intent.desiredMode,observedAt:completedAt.toISOString(),
+    result:'applied',taskState:finalTask.state,taskVerified:true,
     brokerHealth:intent.desiredMode==='off'?'absent':'authenticated-ready',
     failureCode:null,
   });
