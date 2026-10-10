@@ -460,6 +460,28 @@ Start-ScheduledTask -TaskName $name
   };
 }
 
+/** Fail closed before operating on an elevated scheduled task.
+ * Future remote control must additionally prove owner-authorized provenance. */
+export const privilegedBrokerTaskControlPreflightScript = String.raw`
+$launcher=$env:NEXOWIRE_BROKER_LAUNCHER
+$expectedExe='C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+$expectedArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher.Replace('"','""') + '"'
+$actions=@($task.Actions)
+if($actions.Count -ne 1){throw 'BROKER_TASK_ACTION_COUNT_MISMATCH'}
+if(([string]$actions[0].Execute).Trim('"') -ine $expectedExe){throw 'BROKER_TASK_EXECUTABLE_MISMATCH'}
+if(([string]$actions[0].Arguments) -cne $expectedArgs){throw 'BROKER_TASK_ARGUMENTS_MISMATCH'}
+if([string]$task.Principal.RunLevel -cne 'Highest'){throw 'BROKER_TASK_RUNLEVEL_MISMATCH'}
+if([string]$task.Principal.LogonType -cne 'Interactive'){throw 'BROKER_TASK_LOGON_MISMATCH'}
+$userId=[string]$task.Principal.UserId
+try {
+  $registeredSid=(New-Object System.Security.Principal.NTAccount($userId)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+} catch {
+  $registeredSid=$userId
+}
+$currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+if($registeredSid -ine $currentSid){throw 'BROKER_TASK_OWNER_MISMATCH'}
+`;
+
 export async function startPrivilegedBrokerTask(
   options: PrivilegedBrokerTaskOptions = {},
 ): Promise<PrivilegedBrokerTaskStatus> {
@@ -468,7 +490,8 @@ export async function startPrivilegedBrokerTask(
 $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $task=Get-ScheduledTask -TaskName $name -ErrorAction Stop
-Start-ScheduledTask -TaskName $name
+${privilegedBrokerTaskControlPreflightScript}
+Start-ScheduledTask -TaskName $name -ErrorAction Stop
 [pscustomobject]@{ ok=$true } | ConvertTo-Json -Compress
 `;
   await runPowerShellJson<{ ok: boolean }>(
@@ -487,7 +510,8 @@ export async function stopPrivilegedBrokerTask(
 $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $task=Get-ScheduledTask -TaskName $name -ErrorAction Stop
-Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+${privilegedBrokerTaskControlPreflightScript}
+Stop-ScheduledTask -TaskName $name -ErrorAction Stop
 [pscustomobject]@{ ok=$true } | ConvertTo-Json -Compress
 `;
   await runPowerShellJson<{ ok: boolean }>(
