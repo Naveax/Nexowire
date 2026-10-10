@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {mkdtempSync,readdirSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -111,6 +111,48 @@ process.exit(ok?0:6);
       const reserve=createGuardianSqliteReplayReserve(f.options(resumed));
       assert.equal(await reserve(request,deviceId,binding,revision),false);
     } finally {resumed.close()}
+  } finally {f.cleanup()}
+});
+
+test('four independent OS processes competing for one command produce exactly one winner',async()=>{
+  const f=fixture();
+  try {
+    const library=new URL('../src/agent/guardian-sqlite-replay-ledger.ts',import.meta.url).href;
+    const code=`
+const {DatabaseSync}=await import('node:sqlite');
+const {createGuardianSqliteReplayReserve}=await import(${JSON.stringify(library)});
+const db=new DatabaseSync(process.argv[1]);
+const reserve=createGuardianSqliteReplayReserve({
+  database:db,assertProtected:()=>{},
+  readCurrentPairing:async()=>({
+    deviceId:'device-1',credentialBinding:'a'.repeat(64),
+    preferenceRevision:'owner-revision-1',currentlyAuthorized:true,
+  }),
+});
+const won=await reserve('11111111-1111-4111-8111-111111111111',
+  'device-1','a'.repeat(64),'owner-revision-1');
+db.close();
+process.stdout.write(won?'WIN':'REJECT');
+`;
+    const attempt=()=>new Promise<string>((resolve,reject)=>{
+      const child=spawn(process.execPath,[
+        '--import','tsx','--input-type=module','-e',code,f.filename,
+      ],{windowsHide:true,timeout:25000});
+      let stdout='';
+      let stderr='';
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data',chunk=>stdout+=chunk);
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data',chunk=>stderr+=chunk);
+      child.on('error',reject);
+      child.on('close',exit=>{
+        if(exit!==0)return reject(new Error('child exit '+exit+': '+stderr));
+        resolve(stdout.trim());
+      });
+    });
+    const outcomes=await Promise.all(Array.from({length:4},()=>attempt()));
+    assert.equal(outcomes.filter(x=>x==='WIN').length,1);
+    assert.equal(outcomes.filter(x=>x==='REJECT').length,3);
   } finally {f.cleanup()}
 });
 
