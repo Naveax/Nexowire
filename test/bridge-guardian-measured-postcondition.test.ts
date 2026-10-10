@@ -133,6 +133,66 @@ test('receipt cannot be measured past the short-lived command expiry or before i
   }
 });
 
+test('OFF cannot claim success when the task or listener changes before the final read',async()=>{
+  for(const variant of ['task-restarted','process-restarted','listener-reappears'] as const){
+    let tasks=0,probes=0;
+    const result=await measureGuardianBrokerPostcondition(intent('off'),collectors({
+      readTask:async()=>++tasks===1?task('Disabled'):
+        variant==='task-restarted'?task('Running'):task('Disabled'),
+      readProcessAndPort:async()=>{
+        probes++;
+        if(probes===1)return processState(false);
+        if(variant==='process-restarted')
+          return {...processState(false),brokerProcessCount:1};
+        if(variant==='listener-reappears')
+          return {...processState(false),brokerListenerCount:1};
+        return processState(false);
+      },
+    }));
+    assert.equal(result.receipt.result,'failed',variant);
+    assert.equal(result.locallyMeasured,false,variant);
+    assert.equal(tasks,2);
+    assert.equal(probes,2);
+  }
+});
+
+test('ON rejects a task disappearing or failing the second authenticated process inventory',async()=>{
+  for(const broken of ['changed-task','untrusted-inventory'] as const){
+    let tasks=0,probes=0;
+    const answer=await measureGuardianBrokerPostcondition(intent('on'),collectors({
+      readTask:async()=>++tasks===1?task('Running'):broken==='changed-task'?
+        task('Ready'):task('Running'),
+      readProcessAndPort:async()=>++probes===1?processState():
+        broken==='untrusted-inventory'?
+          {...processState(),trustedCollector:false}:processState(),
+    }));
+    assert.equal(answer.receipt.result,'failed');
+    assert.equal(answer.locallyMeasured,false);
+  }
+});
+
+test('time expiry during slow collector never generates an applied receipt',async()=>{
+  let reads=0;
+  await assert.rejects(measureGuardianBrokerPostcondition(intent('on'),collectors({
+    now:()=>new Date(++reads===1?
+      '2026-10-10T15:01:59.000Z':'2026-10-10T15:02:00.000Z'),
+  })),/GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID/);
+  assert.equal(reads,2);
+});
+
+test('applied receipt uses final clock sample after independent second read',async()=>{
+  let reads=0;
+  const result=await measureGuardianBrokerPostcondition(intent('off'),collectors({
+    now:()=>new Date(++reads===1?
+      '2026-10-10T15:01:00.000Z':'2026-10-10T15:01:07.000Z'),
+    readTask:async()=>task('Disabled'),
+    readProcessAndPort:async()=>processState(false),
+  }));
+  assert.equal(result.receipt.result,'applied');
+  assert.equal(result.receipt.observedAt,'2026-10-10T15:01:07.000Z');
+  assert.equal(reads,2);
+});
+
 test('failed evidence is a failed receipt, never forged applied success',async()=>{
   const answer=await measureGuardianBrokerPostcondition(intent(),collectors({
     readHealth:async()=>({...health(),status:'NOT_ELEVATED'}),
