@@ -74,10 +74,25 @@ export function createGuardianSqliteReplayReserve(
   if (app?.application_id !== APP_ID) {
     throw new Error('GUARDIAN_SQLITE_LEDGER_UNPROVISIONED');
   }
-  const table = db.prepare(
-    "SELECT sql FROM sqlite_master WHERE type='table' AND name='guardian_used_requests'",
-  ).get() as {sql?:string}|undefined;
-  if (!table?.sql || !/STRICT\s*$/i.test(table.sql.trim())) {
+  // A STRICT table by itself does not prove a UNIQUE request key. A
+  // fabricated table, trigger or view can silently defeat replay protection.
+  // Require the EXACT reviewed DDL and no extra application schema objects.
+  const normalizeDdl=(sql:string):string=>
+    sql.replace(/\s+/g,' ').replace(/;\s*$/,'').trim();
+  const expectedDdl=normalizeDdl(GUARDIAN_REPLAY_SCHEMA.slice(
+    GUARDIAN_REPLAY_SCHEMA.indexOf('CREATE TABLE'),
+  ));
+  const objects=db.prepare(
+    "SELECT type,name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY name",
+  ).all() as Array<{type:string;name:string;sql:string|null}>;
+  const tempObjects=db.prepare(
+    'SELECT name FROM sqlite_temp_master',
+  ).all() as Array<{name:string}>;
+  if(objects.length!==1 || objects[0]?.type!=='table' ||
+      objects[0]?.name!=='guardian_used_requests' ||
+      typeof objects[0].sql!=='string' ||
+      normalizeDdl(objects[0].sql)!==expectedDdl ||
+      tempObjects.length!==0) {
     throw new Error('GUARDIAN_SQLITE_LEDGER_SCHEMA_UNTRUSTED');
   }
   db.exec(`
