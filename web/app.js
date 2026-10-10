@@ -379,10 +379,12 @@ function render(snapshot) {
       });
       row.querySelector('.version-chip').textContent = device.agentVersion
         ? 'Agent v' + device.agentVersion : 'Agent sürümü bilinmiyor';
-      const ready = device.privilegeMode === 'broker' &&
-        device.adminBridgeReady === true;
+      // Last-seen telemetry from an offline device is NOT live Broker evidence.
+      const ready = device.online === true &&
+        device.privilegeMode === 'broker' && device.adminBridgeReady === true;
       const bridge = row.querySelector('.bridge-chip');
-      bridge.textContent = ready ? 'Admin Bridge hazır' : 'Admin Bridge gerekli';
+      bridge.textContent = ready ? 'Broker hazır bildirimi' :
+        device.online ? 'Broker doğrulanmadı' : 'Broker durumu bilinmiyor';
       bridge.classList.add(ready ? 'healthy' : 'needs-bridge');
       row.querySelector('.dot').classList.toggle('online', device.online);
       row.querySelector('.status-text').textContent =
@@ -510,11 +512,14 @@ function render(snapshot) {
         void setDeviceCorePreference(device.id, true, row);
       });
       const bridgeLabel = row.querySelector('.bridge-live-status');
-      bridgeLabel.textContent = ready ? 'HAZIR' : 'HAZIR DEĞİL';
+      bridgeLabel.textContent = ready ? 'HAZIR BİLDİRİMİ' :
+        device.online ? 'DOĞRULANMADI' : 'ÇEVRİMDIŞI';
       bridgeLabel.classList.toggle('ready', ready);
       row.querySelector('.bridge-copy').textContent = ready
-        ? 'Broker çalışıyor. Windows yükseltme ve yerel ACL denetimleri korunur.'
-        : 'Broker doğrulanamadı. CORE yalnızca hazır Broker ile etkin olabilir.';
+        ? 'Cihaz Broker hazır durumunu bildiriyor. Bu, ON/OFF komutunun uygulandığına dair kanıt değildir.'
+        : device.online
+          ? 'Broker hazır bildirimi yok. CORE yalnızca doğrulanan Broker ile etkin olabilir.'
+          : 'Cihaz çevrimdışı. Son Broker bilgisi güncel kabul edilemez.';
       const bridgeDesired = device.bridgePreference?.desiredMode ?? 'auto';
       const bridgeIsOn = bridgeDesired === 'on';
       const bridgeCard = row.querySelector('.bridge-access');
@@ -547,8 +552,27 @@ function render(snapshot) {
           if (!selected) void setDeviceBridgePreference(device.id, bridgeMode.dataset.bridge, row, '.bridge-mode[data-bridge="auto"]');
         });
       }
-      row.querySelector('.bridge-mode-feedback').textContent =
-        'Seçilen tercih: ' + bridgeDesired.toUpperCase() + ' · GERÇEK GÖREV DURUMU: ' + (ready ? 'Broker hazır' : 'Broker doğrulanamadı') + '. Yerel aç/kapat komutları henüz bağlı değil; bu anahtar yalnızca tercihi kaydeder. OFF seçimi CORE tercihini de iptal eder.';
+      const bridgeFeedback = row.querySelector('.bridge-mode-feedback');
+      const bridgeObservation = bridgeDesired === 'off'
+        ? ready
+          ? 'OFF seçildi ancak Broker hâlâ hazır bildiriliyor. Gerçek kapatma yapılmadı.'
+          : device.online
+            ? 'OFF seçildi. Broker durumu doğrulanamadı; kapatıldığı kanıtlanmadı.'
+            : 'OFF seçildi. Cihaz çevrimdışı; kapatma durumu bilinmiyor.'
+        : bridgeDesired === 'on'
+          ? ready
+            ? 'ON seçildi. Broker hazır bildirimi var; bu düğmenin başlattığı doğrulanmadı.'
+            : device.online
+              ? 'ON seçildi. Broker henüz hazır değil; başlatma komutu gönderilmedi.'
+              : 'ON seçildi. Cihaz çevrimdışı; başlatma komutu gönderilmedi.'
+          : ready
+            ? 'AUTO seçildi. Broker hazır bildirimi var; otomatik yönetim etkin değil.'
+            : 'AUTO seçildi. Otomatik yerel görev yönetimi henüz etkin değil.';
+      bridgeFeedback.textContent = bridgeObservation +
+        ' Bu anahtar şimdilik yalnızca tercihi kaydeder. OFF, CORE tercihini iptal eder.';
+      bridgeFeedback.classList.toggle('bridge-warning',
+        (bridgeDesired === 'off' && ready) ||
+        (bridgeDesired === 'on' && !ready));
 
       row.querySelector('.last-seen').textContent =
         device.lastSeenAt ? 'Son bağlantı: ' +
