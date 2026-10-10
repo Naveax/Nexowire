@@ -65,6 +65,9 @@ export function createGuardianSqliteReplayReserve(
 ): BridgeGuardianAtomicReserve {
   const db = opts.database;
   opts.assertProtected();
+  // Node 22 defaults to ZERO busy timeout. Install contention handling before
+  // even the first metadata read; another process can already hold a write lock.
+  db.exec('PRAGMA busy_timeout = 12000');
   const app = db.prepare('PRAGMA application_id').get() as
     { application_id?:number } | undefined;
   if (app?.application_id !== APP_ID) {
@@ -81,7 +84,6 @@ export function createGuardianSqliteReplayReserve(
     PRAGMA synchronous = EXTRA;
     PRAGMA trusted_schema = OFF;
     PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 12000;
   `);
   const mode = db.prepare('PRAGMA journal_mode').get() as {journal_mode:string};
   const sync = db.prepare('PRAGMA synchronous').get() as {synchronous:number};
