@@ -153,6 +153,31 @@ test('persisted replay/re-pair/revocation failures reject even after all local c
   assert.equal(attempts.filter(r=>r.status==='rejected').length,7);
 });
 
+test('Guardian rechecks clock, owner consent, pairing and its own health after local reservation',async()=>{
+  const snapshots:BridgeGuardianTrustedFacts[]=[
+    {...facts(),now:new Date('2026-10-10T15:01:20.000Z')},
+    {...facts(),ownerApproval:null},
+    {...facts(),credentialBinding:'b'.repeat(64)},
+    {...facts(),localGuardian:{...facts().localGuardian,
+      hubTransportAuthenticated:false}},
+    {...facts(),currentPreference:{desiredMode:'off',revision:REVISION}},
+    {...facts(),currentPreference:{desiredMode:'on',revision:'audit-event-11'},
+      ownerApproval:{requestId:REQUEST_ID,preferenceRevision:'audit-event-11'}},
+    {...facts(),accessMode:'safe'},
+    {...facts(),broker:{canonicalTaskIdentityVerified:false,
+      launcherAclVerified:false}},
+  ];
+  for(const changed of snapshots){
+    let reads=0,reservations=0;
+    const trustedRead=async()=>++reads===1?facts():changed;
+    await assert.rejects(reserveVerifiedGuardianCommand(
+      intent(),trustedRead,async()=>{reservations++;return true},
+    ));
+    assert.equal(reads,2);
+    assert.equal(reservations,1);
+  }
+});
+
 test('unknown instructions or malformed schema never reach reservation callback',async()=>{
   let invoked=false;
   for(const malformed of [
