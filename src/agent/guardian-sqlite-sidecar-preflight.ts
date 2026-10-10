@@ -33,7 +33,7 @@ export function auditGuardianSqliteSidecars(
       if((err as NodeJS.ErrnoException).code==='ENOENT')return false;
       throw new Error('GUARDIAN_SQLITE_SIDECAR_UNREADABLE');
     }
-    if(!stat.isFile() || stat.isSymbolicLink()) {
+    if(!stat.isFile() || stat.isSymbolicLink() || stat.nlink!==1) {
       throw new Error('GUARDIAN_SQLITE_SIDECAR_LINK_OR_NODE_UNTRUSTED');
     }
     try {

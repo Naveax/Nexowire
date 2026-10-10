@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync,readFileSync,
+  mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync,linkSync,readFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -69,6 +69,17 @@ test('symlinks, unreadable ACLs and excessive tree depth always deny trusted inv
     assert.throws(()=>inventoryReadOnlySourceTree(f.root,()=>{},{
       maxEntries:12000,maxDepth:24,
     }),/STACK_TREE_REPARSE_OR_SYMLINK_DENIED/);
+  }finally{f.cleanup()}
+});
+
+test('Guardian nested dependency reachable through hardlink alias is rejected',()=>{
+  const f=fixture();
+  try {
+    linkSync(path.join(f.nested,'verify.js'),
+      path.join(f.root,'alternate-dependency.js'));
+    assert.throws(()=>inventoryReadOnlySourceTree(f.root,()=>{},{
+      maxEntries:12000,maxDepth:24,
+    }),/STACK_TREE_HARDLINK_DENIED/);
   }finally{f.cleanup()}
 });
 

@@ -169,7 +169,8 @@ export function createProtectedGuardianSqliteReplayReserve(
     paths.forEach((node,index)=>{
       const stat=lstatSync(node);
       if (stat.isSymbolicLink() ||
-          (index===paths.length-1 ? !stat.isFile() : !stat.isDirectory())) {
+          (index===paths.length-1 ?
+            !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
         throw new Error('GUARDIAN_SQLITE_PROTECTED_SOURCE_INVALID');
       }
       verifyWindowsPrivateAcl(node);

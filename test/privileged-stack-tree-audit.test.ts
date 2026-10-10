@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync,readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync,linkSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {
@@ -76,6 +76,17 @@ test('links to external unverified source cannot be followed',()=>{
     }
     assert.throws(()=>inventoryReadOnlySourceTree(f.root,()=>{}),
       /STACK_TREE_REPARSE_OR_SYMLINK_DENIED/);
+  } finally {f.cleanup()}
+});
+
+test('hardlink aliases to an otherwise private source file fail closed',()=>{
+  const f=fixture();
+  try {
+    // Same NTFS/POSIX file exposed through a separately accessible path.
+    const alias=path.join(f.root,'alias.js');
+    linkSync(path.join(f.lib,'helper.js'),alias);
+    assert.throws(()=>inventoryReadOnlySourceTree(f.root,()=>{}),
+      /STACK_TREE_HARDLINK_DENIED/);
   } finally {f.cleanup()}
 });
 

@@ -124,7 +124,8 @@ export function verifyBridgeGuardianSourceAcl(): void {
       throw new Error('BRIDGE_GUARDIAN_SOURCE_MISSING_OR_UNREADABLE');
     }
     if (stat.isSymbolicLink() ||
-        (item === BRIDGE_GUARDIAN_LAUNCHER ? !stat.isFile() : !stat.isDirectory())) {
+        (item === BRIDGE_GUARDIAN_LAUNCHER ?
+          !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
       throw new Error('BRIDGE_GUARDIAN_SOURCE_UNTRUSTED_TYPE');
     }
     try {

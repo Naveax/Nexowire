@@ -64,7 +64,7 @@ export function auditPrivilegedStackSource(
       throw new Error('PRIVILEGED_STACK_SOURCE_MISSING_OR_UNREADABLE');
     }
     if (stat.isSymbolicLink() ||
-        (index === chain.length - 1 ? !stat.isFile() : !stat.isDirectory())) {
+        (index === chain.length - 1 ? !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
       throw new Error('PRIVILEGED_STACK_SOURCE_UNTRUSTED_COMPONENT');
     }
     try {
