@@ -9,7 +9,7 @@ PR #356 added an inert SQLite EXTRA synchronous, rollback DELETE, one-time Guard
 - Rejects symlinks/reparse-like nodes, unknown file types and inaccessible sidecar metadata rather than guessing they are absent.
 - Returns only audit information, including `storageAttested:false` and `privilegedOperationAuthorized:false`.
 
-The Windows-only production-oriented factory now invokes this check on its pinned database path inside its existing protected-directory assertions, before opening the database and again after a reservation. A generic injected ACL verifier is present only for disposable test fixtures; only the fixed path combined with real `verifyWindowsPrivateAcl` is intended as a production preflight.
+The Windows-only production-oriented factory now invokes this check on its pinned database path inside its existing protected-directory assertions, before opening the database and again after a reservation. A native SQLite test also opens a transaction, observes a real `-journal` sidecar while an INSERT is uncommitted, and confirms the audit accepts its existence without changing any bytes. A generic injected ACL verifier is present only for disposable test fixtures; only the fixed path combined with real `verifyWindowsPrivateAcl` is intended as a production preflight.
 
 **Limitations:** This does not eliminate filesystem hardlinks/NTFS race conditions, guarantee durable disk controller flush, verify the live privileged process identity, create or provision the Guardian database, or atomically transact with remote Cloudflare owner revocation. A file may change after the audit; a separately trusted service must retain protected handles and guarantee runtime integrity before actual OS actuation. P0 #271 remains OPEN.
 

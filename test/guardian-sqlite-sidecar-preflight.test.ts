@@ -5,6 +5,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import {DatabaseSync} from 'node:sqlite';
 import {
   auditGuardianSqliteSidecars,
 } from '../src/agent/guardian-sqlite-sidecar-preflight.js';
@@ -47,6 +48,30 @@ test('existing rollback journal must have independently verified private ACL',()
       if(p===journal)throw new Error('EVERYONE_MODIFY');
     }),/GUARDIAN_SQLITE_SIDECAR_UNTRUSTED_ACL/);
   } finally {f.cleanup()}
+});
+
+test('real SQLite transaction rollback journal is recognized without changing its bytes',()=>{
+  const f=fixture();
+  const dbFile=path.join(f.root,'real.sqlite');
+  const db=new DatabaseSync(dbFile);
+  try {
+    db.exec(`
+      PRAGMA journal_mode = DELETE;
+      PRAGMA synchronous = EXTRA;
+      CREATE TABLE demo (value TEXT NOT NULL);
+      BEGIN IMMEDIATE;
+      INSERT INTO demo VALUES ('test');
+    `);
+    const inspected:string[]=[];
+    const result=auditGuardianSqliteSidecars(dbFile,p=>inspected.push(p));
+    assert.equal(result.journalPresent,true);
+    assert.deepEqual(inspected,[dbFile+'-journal']);
+    assert.equal(result.privilegedOperationAuthorized,false);
+    db.exec('ROLLBACK');
+  } finally {
+    db.close();
+    f.cleanup();
+  }
 });
 
 test('WAL and shared memory remain forbidden with rollback DELETE configuration',()=>{
