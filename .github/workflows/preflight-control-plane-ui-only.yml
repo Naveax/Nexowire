@@ -1,0 +1,70 @@
+name: Preflight Nexowire UI-only release (NO DEPLOY)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexowire-ui-only-preflight
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout current reviewed dashboard source
+        uses: actions/checkout@v4
+        with:
+          path: ui-source
+          persist-credentials: false
+
+      - name: Checkout exact last successfully deployed backend
+        uses: actions/checkout@v4
+        with:
+          ref: 6f5863363b4ad25bbecceca5b5c78e8ffdd8fffd
+          path: pinned-production
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Stage only Admin Bridge dashboard assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ui-source/web/app.js pinned-production/web/app.js
+          cp ui-source/web/styles.css pinned-production/web/styles.css
+
+      - name: Ensure live assets still match exact production source bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node ui-source/scripts/preflight-control-plane-ui-only.mjs pinned-production
+
+      - name: Check staged UI syntax
+        run: node --check pinned-production/web/app.js
+
+      - name: Install pinned backend dependencies
+        working-directory: pinned-production
+        run: npm ci
+
+      - name: Check old Worker source with new UI assets
+        working-directory: pinned-production
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Confirm no deployment or production migration was run
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-production diff --name-only HEAD | wc -l | tr -d ' ')" = 2
+          git -C pinned-production diff --exit-code HEAD -- cloudflare/worker.js
+          git -C pinned-production diff --exit-code HEAD -- cloudflare/migrations
+          echo "UI_ONLY_PREFLIGHT=PASS"
+          echo "PRODUCTION_DEPLOYMENT_PERFORMED=false"
