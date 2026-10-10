@@ -70,11 +70,11 @@ $actions = @(
   foreach ($action in @($task.Actions)) {
     # Redact every unexpected string to avoid leaking secrets from a tampered task.
     $exe = if ([string]$action.Execute -ieq $expectedExe) { $expectedExe } else { 'NONCANONICAL' }
-    $args = if ([string]$action.Arguments -ceq $expectedArgs) { $expectedArgs } else { 'NONCANONICAL' }
+    $safeArguments = if ([string]$action.Arguments -ceq $expectedArgs) { $expectedArgs } else { 'NONCANONICAL' }
     $cwd = if ([string]$action.WorkingDirectory -ieq $root) { $root } else { 'NONCANONICAL' }
     [pscustomobject]@{
       execute = $exe
-      arguments = $args
+      arguments = $safeArguments
       workingDirectory = $cwd
     }
   }
