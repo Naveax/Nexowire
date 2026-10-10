@@ -28,7 +28,7 @@ const taskSnapshot = z.strictObject({
     execute: z.string(),
     arguments: z.string(),
     workingDirectory: z.string(),
-  })).min(1).max(5),
+  })).max(5),
   triggers: z.array(z.strictObject({
     type: z.enum(['Logon','Time','Other']),
     userSid: z.string().nullable(),
