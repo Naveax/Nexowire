@@ -11,8 +11,8 @@ import { verifyWindowsPrivateAcl } from '../src/security/windows-programdata-acl
 
 const source=readFileSync(new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8');
 
-test('Broker controls verify protected root and launcher ACLs before PowerShell task control',()=>{
-  const guard=source.indexOf('async function verifyBrokerTaskControlFiles');
+test('Broker startup verifies protected ACLs, while emergency stop remains possible',()=>{
+  const guard=source.indexOf('async function verifyBrokerTaskStartFiles');
   const start=source.indexOf('export async function startPrivilegedBrokerTask');
   const stop=source.indexOf('export async function stopPrivilegedBrokerTask');
   const uninstall=source.indexOf('export async function uninstallPrivilegedBrokerTask');
@@ -29,11 +29,15 @@ test('Broker controls verify protected root and launcher ACLs before PowerShell 
     assert.ok(at>previous,token);
     previous=at;
   }
-  for(const operation of [source.slice(start,stop),source.slice(stop,uninstall)]){
-    const gate=operation.indexOf('await verifyBrokerTaskControlFiles(options)');
-    const task=operation.indexOf('Get-ScheduledTask -TaskName $name -ErrorAction Stop');
-    assert.ok(gate>=0 && task>gate);
-  }
+  const startOperation=source.slice(start,stop);
+  const stopOperation=source.slice(stop,uninstall);
+  assert.ok(startOperation.indexOf('await verifyBrokerTaskStartFiles(options)') >= 0);
+  assert.ok(startOperation.indexOf('await verifyBrokerTaskStartFiles(options)') <
+    startOperation.indexOf('Get-ScheduledTask -TaskName $name -ErrorAction Stop'));
+  // An unsafe ACL must block starting but cannot prevent emergency stopping.
+  assert.doesNotMatch(stopOperation,/verifyBrokerTaskStartFiles\(options\)/);
+  assert.match(stopOperation,/privilegedBrokerTaskControlPreflightScript/);
+  assert.match(stopOperation,/Stop-ScheduledTask -TaskName \$name -ErrorAction Stop/);
   assert.doesNotMatch(preflight,/hardenWindowsProgramDataAcl/);
 });
 

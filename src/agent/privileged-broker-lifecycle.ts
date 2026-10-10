@@ -482,8 +482,8 @@ $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($registeredSid -ine $currentSid){throw 'BROKER_TASK_OWNER_MISMATCH'}
 `;
 
-/** This must complete before either task mutation. It changes no ACLs. */
-async function verifyBrokerTaskControlFiles(options: PrivilegedBrokerTaskOptions): Promise<void> {
+/** Refuse to start an elevated task from user-writable source files. No ACL mutation. */
+async function verifyBrokerTaskStartFiles(options: PrivilegedBrokerTaskOptions): Promise<void> {
   if (process.platform !== 'win32') {
     throw new Error('Privileged broker task control is available only on Windows.');
   }
@@ -496,7 +496,7 @@ async function verifyBrokerTaskControlFiles(options: PrivilegedBrokerTaskOptions
 export async function startPrivilegedBrokerTask(
   options: PrivilegedBrokerTaskOptions = {},
 ): Promise<PrivilegedBrokerTaskStatus> {
-  await verifyBrokerTaskControlFiles(options);
+  await verifyBrokerTaskStartFiles(options);
   const name = taskName(options);
   const script = `
 $ErrorActionPreference='Stop'
@@ -517,7 +517,9 @@ Start-ScheduledTask -TaskName $name -ErrorAction Stop
 export async function stopPrivilegedBrokerTask(
   options: PrivilegedBrokerTaskOptions = {},
 ): Promise<PrivilegedBrokerTaskStatus> {
-  await verifyBrokerTaskControlFiles(options);
+  // Do not require a clean runtime ACL when trying to stop an already-running
+  // potentially compromised task. Keep the task-identity guard below.
+
   const name = taskName(options);
   const script = `
 $ErrorActionPreference='Stop'
