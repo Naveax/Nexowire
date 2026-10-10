@@ -10,6 +10,8 @@ export interface ControlPlaneHttpOptions {
     request: Request,
   ): Promise<ControlPlaneIdentity | null>;
   agentUrl?: string;
+  /** Disabled until trusted paired-Agent command delivery is approved. */
+  enableBridgeCommandTransport?: boolean;
 }
 
 function normalizeAgentUrl(input: string): string {
@@ -136,10 +138,12 @@ function optionalFeatureList(
 
 function errorStatus(message: string): number {
   if (message === 'BILLING_PAUSED') return 503;
+  if (message === 'BRIDGE_COMMAND_DEVICE_UNAUTHENTICATED') return 401;
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
     message === 'PAIRING_NOT_FOUND' ||
     message === 'DEVICE_NOT_FOUND' ||
+    message === 'BRIDGE_COMMAND_NOT_FOUND' ||
     message === 'FOLDER_NOT_FOUND'
   ) return 404;
   if (
@@ -148,17 +152,25 @@ function errorStatus(message: string): number {
     message === 'ROOT_REQUIRES_OWNER_LOGIN' ||
     message === 'CORE_REQUIRES_OWNER_LOGIN' ||
     message === 'BRIDGE_REQUIRES_OWNER_LOGIN' ||
+    message === 'BRIDGE_COMMAND_OWNER_REQUIRED' ||
     message === 'DEVICE_LIMIT_REACHED'
   ) return 403;
   if (
     message === 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' ||
     message === 'CORE_REQUIRES_FULL_ONLINE_BROKER' ||
+    message === 'BRIDGE_COMMAND_DEVICE_NOT_READY' ||
+    message === 'BRIDGE_COMMAND_PREFERENCE_MISMATCH' ||
+    message === 'BRIDGE_COMMAND_QUEUE_REJECTED' ||
+    message === 'BRIDGE_COMMAND_NOT_CLAIMED' ||
+    message === 'BRIDGE_COMMAND_COMPLETION_REJECTED' ||
     message === 'FOLDER_ALREADY_EXISTS' ||
     message === 'FOLDER_LIMIT_REACHED' ||
     message.startsWith('PAIRING_') ||
     message === 'DEVICE_ALREADY_BOUND'
   ) return 409;
   if (
+    message.startsWith('BRIDGE_RECEIPT_') ||
+    message === 'BRIDGE_COMMAND_CONFIRMATION_REQUIRED' ||
     message.startsWith('INVALID_') ||
     message === 'JSON_REQUIRED' ||
     message === 'JSON_OBJECT_REQUIRED'
@@ -359,6 +371,55 @@ export function createControlPlaneHttpHandler(
         }
         return json(200, await service.setDeviceBridgePreference(
           identity, stringField(body, 'deviceId'), stringField(body, 'mode'),
+        ));
+      }
+
+      // A saved mode is not execution consent. The transport is opt-in.
+      if (request.method === 'POST' && path === '/api/v1/me/devices/bridge-command') {
+        if (!options.enableBridgeCommandTransport) {
+          return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
+        }
+        const body = await readJsonObject(request);
+        if (request.headers.get('x-nexowire-confirm') !== 'bridge-command-issue-v1' ||
+            body.confirmation !== 'APPLY BRIDGE MODE') {
+          return json(400,{error:'BRIDGE_COMMAND_CONFIRMATION_REQUIRED'});
+        }
+        return json(201,await service.issueBridgeModeCommand(
+          identity,stringField(body,'deviceId'),
+          stringField(body,'mode') as 'auto'|'on'|'off',
+        ));
+      }
+
+      if (request.method === 'GET' && path === '/api/v1/me/devices/bridge-command/status') {
+        if (!options.enableBridgeCommandTransport) {
+          return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
+        }
+        return json(200,await service.bridgeCommandStatus(
+          identity,url.searchParams.get('requestId') ?? '',
+        ));
+      }
+
+      // Hub service authentication AND current paired Agent credential required.
+      if (request.method === 'POST' && path === '/api/v1/internal/device/bridge-command/claim') {
+        if (!options.enableBridgeCommandTransport) {
+          return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
+        }
+        if (identity.role !== 'service') return json(403,{error:'SERVICE_REQUIRED'});
+        const body = await readJsonObject(request);
+        const intent = await service.claimBridgeModeCommand(
+          stringField(body,'credential'),stringField(body,'requestId'),
+        );
+        return intent ? json(200,{intent}) : json(409,{error:'BRIDGE_COMMAND_NOT_CLAIMABLE'});
+      }
+
+      if (request.method === 'POST' && path === '/api/v1/internal/device/bridge-command/receipt') {
+        if (!options.enableBridgeCommandTransport) {
+          return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
+        }
+        if (identity.role !== 'service') return json(403,{error:'SERVICE_REQUIRED'});
+        const body = await readJsonObject(request);
+        return json(200,await service.completeBridgeModeCommand(
+          stringField(body,'credential'),body.receipt,
         ));
       }
 

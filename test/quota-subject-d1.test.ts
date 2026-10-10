@@ -451,8 +451,8 @@ test('D1 Broker failed receipt commits once and refuses invalid failures',async(
     await store.putAccount({id:'o',quotaSubjectId:'q',displayName:null,planId:'free',customPlan:null,admin:false,createdAt:time,updatedAt:time});
     await store.putDevice({
       id:'d',ownerAccountId:'o',deviceAnchorHash:null,name:'Test',platform:'win32',credentialHash:hash,
-      accessMode:'full',agentVersion:null,privilegeMode:null,adminBridgeReady:false,
-      online:false,lastSeenAt:null,createdAt:time,updatedAt:time,
+      accessMode:'full',agentVersion:null,privilegeMode:'broker',adminBridgeReady:false,
+      online:true,lastSeenAt:time,createdAt:time,updatedAt:time,
     });
     await store.putDeviceBridgePreference({deviceId:'d',ownerAccountId:'o',desiredMode:'auto',updatedAt:'2026-10-10T13:59:50.000Z'});
     const req='55555555-5555-4555-8555-555555555555';

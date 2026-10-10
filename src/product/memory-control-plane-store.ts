@@ -308,6 +308,8 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
         record.deviceId !== deviceId || record.credentialBinding !== credentialBinding ||
         record.ownerAccountId !== device.ownerAccountId ||
         device.credentialHash !== credentialBinding ||
+        device.accessMode !== 'full' || !device.online ||
+        device.platform !== 'win32' || device.privilegeMode !== 'broker' ||
         (!isCurrentBridgePreference(this.bridgePreferences.get(deviceId),record) ||
          !validBridgeTransitionTime(at,record.issuedAt,record.expiresAt)) ||
         record.preferenceRevision !== this.bridgePreferenceRevisions.get(deviceId)) return false;
@@ -327,6 +329,8 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
         record.deviceId !== deviceId || record.credentialBinding !== credentialBinding ||
         record.ownerAccountId !== device.ownerAccountId ||
         device.credentialHash !== credentialBinding ||
+        device.accessMode !== 'full' || !device.online ||
+        device.platform !== 'win32' || device.privilegeMode !== 'broker' ||
         !isCurrentBridgePreference(this.bridgePreferences.get(deviceId),record) ||
         record.preferenceRevision !== this.bridgePreferenceRevisions.get(deviceId) ||
         !record.claimedAt || Date.parse(at) < Date.parse(record.claimedAt) ||
