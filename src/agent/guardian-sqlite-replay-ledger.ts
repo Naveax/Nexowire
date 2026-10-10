@@ -9,6 +9,7 @@ import {
 } from './guardian-local-replay-ledger.js';
 import { verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import { verifyBridgeGuardianSourceAcl } from './bridge-guardian-task-preflight.js';
+import { auditGuardianSqliteSidecars } from './guardian-sqlite-sidecar-preflight.js';
 
 const STATE_DIR = 'C:\\ProgramData\\Nexowire\\bridge-guardian\\state';
 const DATABASE_PATH = STATE_DIR + '\\replay.sqlite';
@@ -158,6 +159,9 @@ export function createProtectedGuardianSqliteReplayReserve(
       }
       verifyWindowsPrivateAcl(node);
     });
+    // The DB file's private ACL is not enough: pre-existing rollback-journal
+    // files must also be trusted, and WAL/SHM are forbidden in DELETE mode.
+    auditGuardianSqliteSidecars(DATABASE_PATH,verifyWindowsPrivateAcl);
   };
   assertProtected();
   if (path.win32.normalize(DATABASE_PATH).toLowerCase() !==
