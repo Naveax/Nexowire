@@ -82,10 +82,13 @@ export function verifyBridgeGuardianTaskSnapshot(
     throw new Error('BRIDGE_GUARDIAN_TASK_ACTION_UNVERIFIED');
   }
 
-  if (!task.triggers.some(trigger =>
-    trigger.type === 'Logon' &&
-    trigger.enabled &&
-    trigger.userSid === expectedCurrentUserSid)) {
+  // Any additional, duplicated, disabled or unknown triggers must deny
+  // trust. One expected logon trigger is NOT enough if a second trigger
+  // can start the protected task in an unreviewed context.
+  if (task.triggers.length !== 1 ||
+      task.triggers[0]?.type !== 'Logon' ||
+      task.triggers[0].enabled !== true ||
+      task.triggers[0].userSid !== expectedCurrentUserSid) {
     throw new Error('BRIDGE_GUARDIAN_TASK_LOGON_TRIGGER_UNVERIFIED');
   }
 
