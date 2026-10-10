@@ -75,6 +75,10 @@ export function isolatedPrivilegedBrokerTaskEnvironment(
 ):NodeJS.ProcessEnv{
   const name=input.NEXOWIRE_BROKER_TASK_NAME;
   const launcher=input.NEXOWIRE_BROKER_LAUNCHER;
+  const desiredMode=input.NEXOWIRE_BROKER_DESIRED_MODE;
+  if(desiredMode!==undefined && !['auto','on','off'].includes(desiredMode)){
+    throw new Error('PRIVILEGED_BROKER_TASK_MODE_INVALID');
+  }
   if(!name||name.length>128||!launcher||launcher.length>4096){
     throw new Error('PRIVILEGED_BROKER_TASK_ENV_INVALID');
   }
@@ -86,6 +90,7 @@ export function isolatedPrivilegedBrokerTaskEnvironment(
     PSModulePath:BROKER_TASK_MODULE_DIR,
     NEXOWIRE_BROKER_TASK_NAME:name,
     NEXOWIRE_BROKER_LAUNCHER:launcher,
+    ...(desiredMode ? {NEXOWIRE_BROKER_DESIRED_MODE:desiredMode} : {}),
   };
 }
 
@@ -535,6 +540,106 @@ Stop-ScheduledTask -TaskName $name -ErrorAction Stop
   );
   await new Promise((resolve) => setTimeout(resolve, 250));
   return await privilegedBrokerTaskStatus(options);
+}
+
+export type PrivilegedBrokerDesiredMode = 'auto' | 'on' | 'off';
+
+export interface PrivilegedBrokerModeResult {
+  requestedMode: PrivilegedBrokerDesiredMode;
+  previousState: string;
+  finalState: string;
+  taskVerified: boolean;
+  /** Task Scheduler state alone is not proof of Broker process health. */
+  brokerHealthVerified: false;
+}
+
+/**
+ * Local-only task transition. Does not accept a cloud preference as authority;
+ * a future pairing-bound command channel must independently authorize requests.
+ * OFF disables the repeating trigger BEFORE stopping the current instance.
+ */
+export const privilegedBrokerModeTransitionScript = String.raw`
+$ErrorActionPreference='Stop'
+$name=$env:NEXOWIRE_BROKER_TASK_NAME
+$mode=$env:NEXOWIRE_BROKER_DESIRED_MODE
+if($mode -cnotin @('auto','on','off')){throw 'BROKER_MODE_INVALID'}
+$task=Get-ScheduledTask -TaskName $name -ErrorAction Stop
+${privilegedBrokerTaskControlPreflightScript}
+$previousState=[string]$task.State
+if($mode -eq 'off'){
+  if($previousState -ne 'Disabled'){
+    # Disable first: an every-minute recovery trigger must not undo OFF.
+    Disable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null
+  }
+  # Stop only if the previous snapshot had an active scheduler instance.
+  if($previousState -eq 'Running'){
+    Stop-ScheduledTask -TaskName $name -ErrorAction Stop
+  }
+} else {
+  if($previousState -eq 'Disabled'){
+    Enable-ScheduledTask -TaskName $name -ErrorAction Stop | Out-Null
+  }
+  if($previousState -ne 'Running'){
+    Start-ScheduledTask -TaskName $name -ErrorAction Stop
+  }
+}
+$final=Get-ScheduledTask -TaskName $name -ErrorAction Stop
+$finalState=[string]$final.State
+if($mode -eq 'off' -and $finalState -ne 'Disabled'){
+  throw 'BROKER_MODE_OFF_NOT_VERIFIED'
+}
+if($mode -ne 'off'){
+  for($i=0;$i -lt 12 -and $finalState -ne 'Running';$i++){
+    Start-Sleep -Milliseconds 250
+    $final=Get-ScheduledTask -TaskName $name -ErrorAction Stop
+    $finalState=[string]$final.State
+  }
+  if($finalState -ne 'Running'){throw 'BROKER_MODE_RUNNING_NOT_VERIFIED'}
+}
+[pscustomobject]@{
+  requestedMode=$mode
+  previousState=$previousState
+  finalState=$finalState
+  taskVerified=$true
+  brokerHealthVerified=$false
+} | ConvertTo-Json -Compress
+`;
+
+/** Explicit local elevation is required; this never self-elevates or installs. */
+export async function reconcilePrivilegedBrokerMode(
+  mode: PrivilegedBrokerDesiredMode,
+  confirmation: string,
+  options: PrivilegedBrokerTaskOptions = {},
+): Promise<PrivilegedBrokerModeResult> {
+  if (mode !== 'auto' && mode !== 'on' && mode !== 'off') {
+    throw new Error('BROKER_MODE_INVALID');
+  }
+  if (confirmation !== 'ADMIN BRIDGE MODE CONFIRMED') {
+    throw new Error('BROKER_MODE_CONFIRMATION_REQUIRED');
+  }
+  if (taskName(options) !== TASK_NAME_DEFAULT) {
+    throw new Error('BROKER_MODE_NONCANONICAL_TASK_DENIED');
+  }
+  if (process.platform !== 'win32' || !isWindowsProcessElevated()) {
+    throw new Error('BROKER_MODE_LOCAL_ELEVATION_REQUIRED');
+  }
+  if (mode !== 'off') {
+    await verifyBrokerTaskStartFiles(options);
+  }
+  const result = await runPowerShellJson<unknown>(
+    privilegedBrokerModeTransitionScript,
+    {
+      ...lifecycleEnv(TASK_NAME_DEFAULT, launcherPath(options)),
+      NEXOWIRE_BROKER_DESIRED_MODE: mode,
+    },
+  );
+  return z.object({
+    requestedMode: z.enum(['auto','on','off']),
+    previousState: z.string(),
+    finalState: z.string(),
+    taskVerified: z.literal(true),
+    brokerHealthVerified: z.literal(false),
+  }).parse(result);
 }
 
 export async function uninstallPrivilegedBrokerTask(
