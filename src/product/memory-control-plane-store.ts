@@ -8,6 +8,8 @@ import type {
   ProductAccountRecord,
   ProductDeviceRecord,
   RootModeLeaseRecord,
+  DeviceMaintenancePreferenceRecord,
+  DeviceBridgePreferenceRecord,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   PrepaidCreditInput,
@@ -62,6 +64,8 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
   private readonly rootModeLeases = new Map<string, RootModeLeaseRecord>();
+  private readonly maintenancePreferences = new Map<string, DeviceMaintenancePreferenceRecord>();
+  private readonly bridgePreferences = new Map<string, DeviceBridgePreferenceRecord>();
   private readonly deviceFolders = new Map<string, DeviceFolderRecord>();
   private readonly deviceFolderAssignments = new Map<string, string>();
   private readonly pairings = new Map<string, PairingRecord>();
@@ -235,6 +239,24 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
 
   async putRootModeLease(record: RootModeLeaseRecord): Promise<void> {
     this.rootModeLeases.set(record.deviceId, clone(record));
+  }
+
+  async getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null> {
+    const record = this.maintenancePreferences.get(deviceId);
+    return record ? clone(record) : null;
+  }
+
+  async putDeviceMaintenancePreference(record: DeviceMaintenancePreferenceRecord): Promise<void> {
+    this.maintenancePreferences.set(record.deviceId, clone(record));
+  }
+
+  async getDeviceBridgePreference(deviceId: string): Promise<DeviceBridgePreferenceRecord | null> {
+    const record = this.bridgePreferences.get(deviceId);
+    return record ? clone(record) : null;
+  }
+
+  async putDeviceBridgePreference(record: DeviceBridgePreferenceRecord): Promise<void> {
+    this.bridgePreferences.set(record.deviceId, clone(record));
   }
 
   async listDevices(

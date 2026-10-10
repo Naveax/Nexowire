@@ -52,6 +52,20 @@ export interface RootModeLeaseRecord {
   updatedAt: string;
 }
 
+export interface DeviceBridgePreferenceRecord {
+  deviceId: string;
+  ownerAccountId: string;
+  desiredMode: 'auto' | 'on' | 'off';
+  updatedAt: string;
+}
+
+export interface DeviceMaintenancePreferenceRecord {
+  deviceId: string;
+  ownerAccountId: string;
+  enabled: boolean;
+  updatedAt: string;
+}
+
 export interface DeviceFolderRecord {
   id: string;
   ownerAccountId: string;
@@ -202,6 +216,10 @@ export interface ControlPlaneStore {
   putDevice(record: ProductDeviceRecord): Promise<void>;
   getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null>;
   putRootModeLease(record: RootModeLeaseRecord): Promise<void>;
+  getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null>;
+  putDeviceMaintenancePreference(record: DeviceMaintenancePreferenceRecord): Promise<void>;
+  getDeviceBridgePreference(deviceId: string): Promise<DeviceBridgePreferenceRecord | null>;
+  putDeviceBridgePreference(record: DeviceBridgePreferenceRecord): Promise<void>;
   listDevices(ownerAccountId?: string): Promise<ProductDeviceRecord[]>;
   listDeviceFolders(ownerAccountId: string): Promise<DeviceFolderRecord[]>;
   listDeviceFolderAssignments(ownerAccountId: string): Promise<DeviceFolderAssignmentRecord[]>;

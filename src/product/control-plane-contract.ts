@@ -5,6 +5,8 @@ export interface ProductDeviceSummary {
   platform: string;
   accessMode: 'safe' | 'full';
   rootMode: { active: boolean; expiresAt: string | null };
+  persistentMaintenance: { enabled: boolean; active: boolean; updatedAt: string | null };
+  bridgePreference: { desiredMode: 'auto' | 'on' | 'off'; applied: false; updatedAt: string | null };
   agentVersion: string | null;
   privilegeMode: 'direct' | 'broker' | null;
   adminBridgeReady: boolean | null;

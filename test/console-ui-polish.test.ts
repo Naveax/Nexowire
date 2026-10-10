@@ -30,7 +30,9 @@ test('FULL and ROOT are shown independently beside Agent/Bridge and Core is not 
   assert.match(app, /Full Access açık/);
   assert.match(app, /ROOT kapalı/);
   assert.match(app, /ROOT izni açık/);
-  assert.match(app, /Core Access henüz etkinleştirilebilir değil/);
+  assert.match(app, /core-shortcut/);
+  assert.match(app, /setDeviceCorePreference/);
+  assert.match(app, /CORE UNLIMITED/);
   assert.match(html, /data-filter="persistent"[^>]+>CORE/);
 });
 

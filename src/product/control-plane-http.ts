@@ -146,10 +146,13 @@ function errorStatus(message: string): number {
     message === 'ADMIN_REQUIRED' ||
     message === 'OWNER_LOGIN_REQUIRED' ||
     message === 'ROOT_REQUIRES_OWNER_LOGIN' ||
+    message === 'CORE_REQUIRES_OWNER_LOGIN' ||
+    message === 'BRIDGE_REQUIRES_OWNER_LOGIN' ||
     message === 'DEVICE_LIMIT_REACHED'
   ) return 403;
   if (
     message === 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' ||
+    message === 'CORE_REQUIRES_FULL_ONLINE_BROKER' ||
     message === 'FOLDER_ALREADY_EXISTS' ||
     message === 'FOLDER_LIMIT_REACHED' ||
     message.startsWith('PAIRING_') ||
@@ -325,6 +328,38 @@ export function createControlPlaneHttpHandler(
             body.enabled,
           ),
         );
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/me/devices/core-preference'
+      ) {
+        const body = await readJsonObject(request);
+        if (typeof body.enabled !== 'boolean') {
+          return json(400, { error: 'INVALID_CORE_ENABLED' });
+        }
+        if (body.enabled && (
+          request.headers.get('x-nexowire-confirm') !== 'core-preference-v1' ||
+          body.confirmation !== 'CORE UNLIMITED'
+        )) {
+          return json(400, { error: 'CORE_CONFIRMATION_REQUIRED' });
+        }
+        return json(200, await service.setDeviceCorePreference(
+          identity, stringField(body, 'deviceId'), body.enabled,
+        ));
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/v1/me/devices/bridge-preference'
+      ) {
+        const body = await readJsonObject(request);
+        if (request.headers.get('x-nexowire-confirm') !== 'bridge-preference-v1') {
+          return json(400, { error: 'BRIDGE_CONFIRMATION_REQUIRED' });
+        }
+        return json(200, await service.setDeviceBridgePreference(
+          identity, stringField(body, 'deviceId'), stringField(body, 'mode'),
+        ));
       }
 
       if (

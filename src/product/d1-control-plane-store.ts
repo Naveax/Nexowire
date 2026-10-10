@@ -7,6 +7,8 @@ import type {
   ProductAccountRecord,
   ProductDeviceRecord,
   RootModeLeaseRecord,
+  DeviceMaintenancePreferenceRecord,
+  DeviceBridgePreferenceRecord,
   ProductQuotaSubjectRecord,
   ProductUsagePeriodRecord,
   PrepaidCreditInput,
@@ -565,6 +567,39 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     await this.db.prepare(
       'INSERT INTO device_root_mode_leases (device_id, owner_account_id, expires_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET owner_account_id = excluded.owner_account_id, expires_at = excluded.expires_at, updated_at = excluded.updated_at',
     ).bind(record.deviceId, record.ownerAccountId, record.expiresAt, record.updatedAt).run();
+  }
+
+  async getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null> {
+    const row = await this.db.prepare(
+      'SELECT device_id, owner_account_id, enabled, updated_at FROM device_maintenance_preferences WHERE device_id = ?',
+    ).bind(deviceId).first<{ device_id: string; owner_account_id: string; enabled: number; updated_at: string }>();
+    return row ? {
+      deviceId: row.device_id,
+      ownerAccountId: row.owner_account_id,
+      enabled: row.enabled === 1,
+      updatedAt: row.updated_at,
+    } : null;
+  }
+
+  async putDeviceMaintenancePreference(record: DeviceMaintenancePreferenceRecord): Promise<void> {
+    await this.db.prepare(
+      'INSERT INTO device_maintenance_preferences (device_id, owner_account_id, enabled, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET owner_account_id = excluded.owner_account_id, enabled = excluded.enabled, updated_at = excluded.updated_at',
+    ).bind(record.deviceId, record.ownerAccountId, record.enabled ? 1 : 0, record.updatedAt).run();
+  }
+
+  async getDeviceBridgePreference(deviceId: string): Promise<DeviceBridgePreferenceRecord | null> {
+    const row = await this.db.prepare(
+      'SELECT device_id, owner_account_id, desired_mode, updated_at FROM device_bridge_preferences WHERE device_id = ?',
+    ).bind(deviceId).first<{ device_id: string; owner_account_id: string; desired_mode: string; updated_at: string }>();
+    const desiredMode = row?.desired_mode;
+    if (!row || (desiredMode !== 'auto' && desiredMode !== 'on' && desiredMode !== 'off')) return null;
+    return { deviceId: row.device_id, ownerAccountId: row.owner_account_id, desiredMode, updatedAt: row.updated_at };
+  }
+
+  async putDeviceBridgePreference(record: DeviceBridgePreferenceRecord): Promise<void> {
+    await this.db.prepare(
+      'INSERT INTO device_bridge_preferences (device_id, owner_account_id, desired_mode, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET owner_account_id = excluded.owner_account_id, desired_mode = excluded.desired_mode, updated_at = excluded.updated_at',
+    ).bind(record.deviceId, record.ownerAccountId, record.desiredMode, record.updatedAt).run();
   }
 
   async listDevices(

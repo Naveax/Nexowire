@@ -6,7 +6,7 @@ const formatCompact = (value) => Number.isFinite(value)
   : '—';
 const FREE_ONLY_MODE = true;
 const openPcSettings = new Set();
-// Core Access remains display-only until server-side owner approval and Broker enforcement exist.
+// CORE is a revocable owner preference; Broker remains authoritative for elevated actions.
 let currentSnapshot = null;
 let selectedDeviceFilter = 'all';
 let selectedDeviceLayout = 'grid';
@@ -90,6 +90,11 @@ function explainApiError(code) {
       'ROOT DANGER onay ifadesi doğrulanamadı.',
     ROOT_REQUIRES_OWNER_LOGIN:
       'Bu işlem için cihazın sahibi olan hesapla giriş yap.',
+    CORE_REQUIRES_OWNER_LOGIN: 'CORE için cihazın sahibi olan hesapla giriş yap.',
+    BRIDGE_REQUIRES_OWNER_LOGIN: 'Admin Bridge ayarları için cihazın sahibi olmalısın.',
+    BRIDGE_CONFIRMATION_REQUIRED: 'Admin Bridge onayı doğrulanamadı.',
+    CORE_CONFIRMATION_REQUIRED: 'Onay ifadesi CORE UNLIMITED olmalı.',
+    CORE_REQUIRES_FULL_ONLINE_BROKER: 'CORE için Full Access, çevrimiçi cihaz ve hazır Admin Bridge gerekli.',
     DEVICE_NOT_FOUND: 'Cihaz bu hesaba bağlı değil.',
     UNAUTHENTICATED: 'Oturum süresi doldu. GitHub ile tekrar giriş yap.',
   };
@@ -159,6 +164,46 @@ async function setDeviceRootMode(deviceId, enabled, row) {
     status.textContent = error.message;
     action.disabled = false;
     approve.disabled = false;
+  }
+}
+
+async function setDeviceCorePreference(deviceId, enabled, row) {
+  const action = row.querySelector('.core-toggle');
+  const approve = row.querySelector('.core-approve');
+  const input = row.querySelector('.core-phrase');
+  const status = row.querySelector('.core-copy');
+  if (enabled && input.value.trim() !== 'CORE UNLIMITED') {
+    status.textContent = 'Onaylamak için CORE UNLIMITED yaz.';
+    input.focus();
+    return;
+  }
+  action.disabled = true;
+  approve.disabled = true;
+  status.textContent = enabled ? 'CORE kaydediliyor…' : 'CORE kapatılıyor…';
+  try {
+    await postDeviceMode('/api/v1/me/devices/core-preference', deviceId,
+      { enabled, ...(enabled ? { confirmation: 'CORE UNLIMITED' } : {}) },
+      enabled ? 'core-preference-v1' : null);
+    await load();
+  } catch (error) {
+    status.textContent = error.message;
+    action.disabled = false;
+    approve.disabled = false;
+  }
+}
+
+async function setDeviceBridgePreference(deviceId, mode, row) {
+  const buttons = [...row.querySelectorAll('.bridge-mode')];
+  const feedback = row.querySelector('.bridge-mode-feedback');
+  for (const button of buttons) button.disabled = true;
+  feedback.textContent = 'Admin Bridge tercih modu kaydediliyor…';
+  try {
+    await postDeviceMode('/api/v1/me/devices/bridge-preference', deviceId,
+      { mode }, 'bridge-preference-v1');
+    await load();
+  } catch (error) {
+    feedback.textContent = error.message;
+    for (const button of buttons) button.disabled = false;
   }
 }
 
@@ -244,7 +289,7 @@ function render(snapshot) {
     empty.textContent = !devices.length
       ? 'Henüz bağlı cihaz yok. Yeni cihaz bağlayarak başlayabilirsin.'
       : selectedDeviceFilter === 'persistent'
-        ? 'Core Access henüz etkinleştirilebilir değil. Sunucu, özel onay ve Broker kontrolleri tamamlanmalı.'
+        ? 'CORE etkin cihaz bulunmuyor. Tümü filtresinden ilgili cihazın CORE düğmesini aç.'
         : 'Bu erişim düzeyinde cihaz bulunmuyor.';
     root.appendChild(empty);
   } else {
@@ -257,7 +302,7 @@ function render(snapshot) {
         '  <span class="device-icon" aria-hidden="true">▣</span>',
         '  <div><div class="device-name"></div><small class="platform"></small></div>',
         ' </div>',
-        ' <div class="status"><span class="dot"></span><span class="status-text"></span></div>',
+        ' <div class="device-header-actions"><button type="button" class="core-shortcut" aria-label="CORE ayarlarını aç">CORE</button><div class="status"><span class="dot"></span><span class="status-text"></span></div></div>',
         '</div>',
         '<section class="pc-settings">',
         '<div class="device-meta">',
@@ -284,6 +329,22 @@ function render(snapshot) {
         '    <input class="root-phrase" maxlength="32" autocomplete="off" placeholder="ROOT DANGER"></label>',
         '   <button type="button" class="danger-button root-approve">15 dakikalık izni aç</button>',
         '  </div>',
+        ' </div>',
+        ' <div class="core-access">',
+        '  <div class="core-head"><strong>CORE ACCESS</strong><span class="core-duration">SÜRESİZ</span></div>',
+        '  <small class="core-copy" role="status" aria-live="polite"></small>',
+        '  <button type="button" class="secondary core-toggle">CORE aç</button>',
+        '  <div class="core-confirm-panel" hidden>',
+        '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir.</small>',
+        '   <label>Onaylamak için CORE UNLIMITED yaz<input class="core-phrase" maxlength="32" autocomplete="off" placeholder="CORE UNLIMITED"></label>',
+        '   <button type="button" class="primary core-approve">CORE etkinleştir</button>',
+        '  </div>',
+        ' </div>',
+        ' <div class="bridge-access">',
+        '  <div class="bridge-head"><strong>Admin Bridge</strong><span class="bridge-live-status"></span></div>',
+        '  <small class="bridge-copy"></small>',
+        '  <div class="bridge-mode-options" role="group" aria-label="Admin Bridge modları"><button type="button" class="secondary bridge-mode" data-bridge="auto">AUTO</button><button type="button" class="secondary bridge-mode" data-bridge="on">AÇ</button><button type="button" class="secondary bridge-mode" data-bridge="off">KAPAT</button></div>',
+        '  <small class="bridge-mode-feedback" role="status" aria-live="polite"></small>',
         ' </div>',
         '</div>',
         '</div></div></section>',
@@ -403,6 +464,62 @@ function render(snapshot) {
       rootApprove.addEventListener('click', () => {
         void setDeviceRootMode(device.id, true, row);
       });
+
+      const core = device.persistentMaintenance ?? {enabled: false, active: false};
+      const corePanel = row.querySelector('.core-confirm-panel');
+      const coreButton = row.querySelector('.core-toggle');
+      const coreText = row.querySelector('.core-copy');
+      const coreShortcut = row.querySelector('.core-shortcut');
+      const coreContainer = row.querySelector('.core-access');
+      coreContainer.classList.toggle('active', core.active === true);
+      coreShortcut.classList.toggle('active', core.active === true);
+      coreShortcut.setAttribute('aria-pressed', String(core.active === true));
+      coreShortcut.textContent = core.active ? 'CORE AÇIK' : core.enabled ? 'CORE BEKLEMEDE' : 'CORE';
+      coreButton.textContent = core.enabled ? 'CORE kapat' : 'CORE aç';
+      coreText.textContent = core.active
+        ? 'CORE tercihi süresiz etkin. Her yönetici işlemi ayrıca Broker ve Windows denetiminden geçer.'
+        : core.enabled
+          ? 'CORE tercih kaydı duruyor, ancak cihaz veya Admin Bridge hazır olmadığı için etkin değil.'
+          : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
+      corePanel.hidden = true;
+      coreShortcut.addEventListener('click', () => {
+        setSettingsOpen(true);
+        coreContainer.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        coreButton.focus();
+      });
+      coreButton.addEventListener('click', () => {
+        if (core.enabled) {
+          void setDeviceCorePreference(device.id, false, row);
+        } else if (mode !== 'full' || !device.online || !ready) {
+          coreText.textContent = 'Önce Full Access aç; cihaz çevrimiçi ve Admin Bridge hazır olmalı.';
+          coreShortcut.focus();
+        } else {
+          corePanel.hidden = !corePanel.hidden;
+          if (!corePanel.hidden) row.querySelector('.core-phrase').focus();
+        }
+      });
+      row.querySelector('.core-approve').addEventListener('click', () => {
+        void setDeviceCorePreference(device.id, true, row);
+      });
+      const bridgeLabel = row.querySelector('.bridge-live-status');
+      bridgeLabel.textContent = ready ? 'HAZIR' : 'HAZIR DEĞİL';
+      bridgeLabel.classList.toggle('ready', ready);
+      row.querySelector('.bridge-copy').textContent = ready
+        ? 'Broker çalışıyor. Windows yükseltme ve yerel ACL denetimleri korunur.'
+        : 'Broker doğrulanamadı. CORE yalnızca hazır Broker ile etkin olabilir.';
+      const bridgeDesired = device.bridgePreference?.desiredMode ?? 'auto';
+      for (const bridgeMode of row.querySelectorAll('.bridge-mode')) {
+        const selected = bridgeMode.dataset.bridge === bridgeDesired;
+        bridgeMode.classList.toggle('selected', selected);
+        bridgeMode.setAttribute('aria-pressed', String(selected));
+        bridgeMode.addEventListener('click', () => {
+          if (bridgeMode.dataset.bridge !== bridgeDesired) {
+            void setDeviceBridgePreference(device.id, bridgeMode.dataset.bridge, row);
+          }
+        });
+      }
+      row.querySelector('.bridge-mode-feedback').textContent =
+        'Tercih: ' + bridgeDesired.toUpperCase() + ' · Kaydedilir ancak yerel servis komutları henüz bağlı değildir. Mevcut Broker durumu değiştirilmez.';
 
       row.querySelector('.last-seen').textContent =
         device.lastSeenAt ? 'Son bağlantı: ' +

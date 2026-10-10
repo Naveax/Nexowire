@@ -87,6 +87,8 @@ function applyMigrations(db: DatabaseSync): void {
     '0011_device_root_mode_leases.sql',
     '0012_owner_device_folders.sql',
     '0013_owner_device_selection.sql',
+    '0014_device_maintenance_preferences.sql',
+    '0015_device_bridge_preferences.sql',
   ]) {
     db.exec(
       readFileSync(
@@ -322,6 +324,49 @@ test('D1 owner folders retain empty folders and cascade device assignments on de
     assert.equal((await store.listDeviceFolders('folder-owner')).length, 1);
     await store.deleteDeviceFolder('folder-owner', 'folder-maxi');
     assert.equal((await store.listDeviceFolderAssignments('folder-owner')).length, 0);
+  } finally {
+    db.close();
+  }
+});
+
+test('D1 CORE and Bridge owner preferences persist with auditable changes', async () => {
+  const db=new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+  try {
+    const store=new D1ControlPlaneStore(new SqliteD1Database(db));
+    const time='2026-10-10T12:00:00Z';
+    await store.putQuotaSubject({id:'pref-quota',kind:'free-cluster',createdAt:time,updatedAt:time});
+    await store.putAccount({
+      id:'pref-owner',quotaSubjectId:'pref-quota',displayName:null,
+      planId:'free',customPlan:null,admin:false,createdAt:time,updatedAt:time,
+    });
+    await store.putDevice({
+      id:'pref-device',ownerAccountId:'pref-owner',deviceAnchorHash:null,
+      name:'Bridge test',platform:'win32',credentialHash:'pref-hash',
+      accessMode:'safe',agentVersion:null,privilegeMode:null,
+      adminBridgeReady:null,online:false,lastSeenAt:null,
+      createdAt:time,updatedAt:time,
+    });
+    assert.equal(await store.getDeviceMaintenancePreference('pref-device'),null);
+    assert.equal(await store.getDeviceBridgePreference('pref-device'),null);
+    await store.putDeviceMaintenancePreference({
+      deviceId:'pref-device',ownerAccountId:'pref-owner',enabled:true,updatedAt:time,
+    });
+    await store.putDeviceMaintenancePreference({
+      deviceId:'pref-device',ownerAccountId:'pref-owner',enabled:false,updatedAt:time,
+    });
+    await store.putDeviceBridgePreference({
+      deviceId:'pref-device',ownerAccountId:'pref-owner',desiredMode:'auto',updatedAt:time,
+    });
+    await store.putDeviceBridgePreference({
+      deviceId:'pref-device',ownerAccountId:'pref-owner',desiredMode:'off',updatedAt:time,
+    });
+    assert.equal((await store.getDeviceMaintenancePreference('pref-device'))?.enabled,false);
+    assert.equal((await store.getDeviceBridgePreference('pref-device'))?.desiredMode,'off');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM device_maintenance_events').get()?.n,2);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM device_bridge_preference_events').get()?.n,2);
+    assert.equal(db.prepare('SELECT operation FROM device_maintenance_events ORDER BY rowid DESC LIMIT 1').get()?.operation,'disable');
   } finally {
     db.close();
   }

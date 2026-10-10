@@ -56,6 +56,11 @@ test('dashboard filters real device access tiers and offers owner folder managem
   assert.match(app, /X-Nexowire-Confirm':'device-folder-v1'/);
   assert.match(app, /formatCompact/);
   assert.match(app, /root-clock/);
+  assert.match(app, /core-shortcut/);
+  assert.match(app, /core-preference-v1/);
+  assert.match(app, /bridge-mode-options/);
+  assert.match(app, /bridge-preference-v1/);
+  assert.match(app, /setDeviceBridgePreference/);
   assert.doesNotMatch(app, /persistentMaintenance\.active = true/);
   assert.match(css, /\.device-list\.list-view/);
   assert.match(css, /\.folder-toolbar/);
