@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {
-  assertGenericTaskIsNotReserved,
+  assertGenericTaskActivationAllowed,
   executeWindowsCapability,
 } from '../src/agent/windows-control.js';
 
@@ -15,12 +15,12 @@ test('protected Nexowire task names cannot use general Scheduled Task mutations'
     '  NEXOWIRE STACK  ',
   ];
   for(const name of reserved){
-    assert.throws(
-      ()=>assertGenericTaskIsNotReserved(name),
-      /NEXOWIRE_RESERVED_TASK_REQUIRES_PROTECTED_LIFECYCLE/,
-    );
-    if(process.platform==='win32'){
-      for(const action of ['start','stop','enable','disable'] as const){
+    for(const action of ['start','enable'] as const) {
+      assert.throws(
+        ()=>assertGenericTaskActivationAllowed(name,action),
+        /NEXOWIRE_RESERVED_TASK_REQUIRES_PROTECTED_LIFECYCLE/,
+      );
+      if(process.platform==='win32'){
         await assert.rejects(
           executeWindowsCapability('windows.task.control',{
             name,path:'\\',action,
@@ -29,9 +29,12 @@ test('protected Nexowire task names cannot use general Scheduled Task mutations'
         );
       }
     }
+    // Never execute an actual task stop in this test. Only check local guard.
+    assert.doesNotThrow(()=>assertGenericTaskActivationAllowed(name,'stop'));
+    assert.doesNotThrow(()=>assertGenericTaskActivationAllowed(name,'disable'));
   }
-  assert.doesNotThrow(()=>assertGenericTaskIsNotReserved('Custom Backup Task'));
-  assert.doesNotThrow(()=>assertGenericTaskIsNotReserved('Nexowire User Test Task'));
+  assert.doesNotThrow(()=>assertGenericTaskActivationAllowed('Custom Backup Task','start'));
+  assert.doesNotThrow(()=>assertGenericTaskActivationAllowed('Nexowire User Test Task','enable'));
 });
 
 test('Windows PowerShell also guards reserved tasks before any Scheduled Task lookup',()=>{

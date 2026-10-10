@@ -109,7 +109,11 @@ const RegistryDeleteInputSchema = z.object({
  * identity/ACL preflights and the separately accepted Stack cutover.
  * All task paths are refused for these reserved names to prevent confusion.
  */
-export function assertGenericTaskIsNotReserved(name: string): void {
+export function assertGenericTaskActivationAllowed(
+  name: string, action: 'start' | 'stop' | 'enable' | 'disable',
+): void {
+  // Emergency STOP/DISABLE must remain available under normal OS ACLs.
+  if (action !== 'start' && action !== 'enable') return;
   const normalized = name.trim().toLowerCase();
   if (normalized === 'nexowire privileged broker' ||
       normalized === 'nexowire stack') {
@@ -917,7 +921,8 @@ try {
 }
 $name = [string]$inputData.name
 $taskPath = [string]$inputData.path
-if (@('Nexowire Privileged Broker','Nexowire Stack') -icontains $name.Trim()) {
+if (([string]$inputData.action -in @('start','enable')) -and
+    (@('Nexowire Privileged Broker','Nexowire Stack') -icontains $name.Trim())) {
   throw 'NEXOWIRE_RESERVED_TASK_REQUIRES_PROTECTED_LIFECYCLE'
 }
 $matches = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq $name -and $_.TaskPath -eq $taskPath })
@@ -1096,7 +1101,7 @@ export async function executeWindowsCapability(
     }
     case 'windows.task.control': {
       const parsed = ScheduledTaskControlInputSchema.parse(input);
-      assertGenericTaskIsNotReserved(parsed.name);
+      assertGenericTaskActivationAllowed(parsed.name,parsed.action);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           scheduledTaskControlScript,
