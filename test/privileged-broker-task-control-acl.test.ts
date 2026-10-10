@@ -15,8 +15,8 @@ test('Broker startup verifies protected ACLs, while emergency stop remains possi
   const guard=source.indexOf('async function verifyBrokerTaskStartFiles');
   const start=source.indexOf('export async function startPrivilegedBrokerTask');
   const stop=source.indexOf('export async function stopPrivilegedBrokerTask');
-  const uninstall=source.indexOf('export async function uninstallPrivilegedBrokerTask');
-  assert.ok(guard>=0 && guard<start && start<stop && stop<uninstall);
+  const nextOperation=source.indexOf('export type PrivilegedBrokerDesiredMode');
+  assert.ok(guard>=0 && guard<start && start<stop && stop<nextOperation);
   const preflight=source.slice(guard,start);
   const list=[
     'assertBrokerRootSafeToRemove(trustedRoot)',
@@ -30,7 +30,7 @@ test('Broker startup verifies protected ACLs, while emergency stop remains possi
     previous=at;
   }
   const startOperation=source.slice(start,stop);
-  const stopOperation=source.slice(stop,uninstall);
+  const stopOperation=source.slice(stop,nextOperation);
   assert.ok(startOperation.indexOf('await verifyBrokerTaskStartFiles(options)') >= 0);
   assert.ok(startOperation.indexOf('await verifyBrokerTaskStartFiles(options)') <
     startOperation.indexOf('Get-ScheduledTask -TaskName $name -ErrorAction Stop'));
