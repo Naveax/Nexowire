@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
+import { AdminBridgeModeReceiptSchema,type AdminBridgeModeIntent } from '../src/protocol/admin-bridge-intent.js';
+import { guardianPublicKeyId,signGuardianModeReceipt } from '../src/protocol/guardian-signed-receipt.js';
 import {MemoryControlPlaneStore} from '../src/product/memory-control-plane-store.js';
 import {ControlPlaneService,type ControlPlaneIdentity} from '../src/product/control-plane-service.js';
 import {createControlPlaneHttpHandler} from '../src/product/control-plane-http.js';
 
-async function fixture(enabled=true) {
+async function fixture(enabled=true, trustedKey: boolean | 'wrong'=true) {
   let now=new Date('2026-10-10T15:00:00.000Z');
+  const keys=generateKeyPairSync('ed25519');
+  const wrongKeys=generateKeyPairSync('ed25519');
   const store=new MemoryControlPlaneStore();
   const service=new ControlPlaneService(store,{now:()=>now});
   const owner={accountId:'transport-owner',role:'user'} as const;
@@ -26,6 +31,8 @@ async function fixture(enabled=true) {
   await service.setDeviceBridgePreference(owner,deviceId,'on');
   const handle=createControlPlaneHttpHandler(service,{
     enableBridgeCommandTransport:enabled,
+    ...(trustedKey ? {getTrustedGuardianPublicKey:async () =>
+      trustedKey==='wrong'?wrongKeys.publicKey:keys.publicKey} : {}),
     authenticate:async request=>{
       const raw=request.headers.get('x-test-identity');
       return raw?JSON.parse(raw) as ControlPlaneIdentity:null;
@@ -52,8 +59,17 @@ async function fixture(enabled=true) {
       {headers:{'x-test-identity':JSON.stringify(identity)}},
     ));
   };
+  const signReceipt=async(intent:AdminBridgeModeIntent, rawReceipt:unknown)=>{
+    const pref=await store.getDeviceBridgePreference(deviceId);
+    assert.ok(pref);
+    return signGuardianModeReceipt({
+      type:'guardian.signed-bridge-receipt',version:1,
+      intent,receipt:AdminBridgeModeReceiptSchema.parse(rawReceipt),
+      preferenceRevision:pref.updatedAt,keyId:guardianPublicKeyId(keys.publicKey),
+    },keys.privateKey);
+  };
   return {store,service,owner,stranger,internal,deviceId,credential,
-    send,getStatus,ownerCommand,claim,acknowledge,
+    send,getStatus,ownerCommand,claim,acknowledge,signReceipt,keys,
     advance:(ms:number)=>{now=new Date(now.getTime()+ms);},
     now:()=>now.toISOString()};
 }
@@ -66,6 +82,18 @@ test('bridge command transport remains disabled by default even for authenticate
   assert.equal((await f.send(f.claim,{
     credential:f.credential,requestId:'11111111-1111-4111-8111-111111111111',
   },f.internal)).status,503);
+});
+
+test('command transport remains closed if no trusted Guardian signing key resolver is installed',async()=>{
+  const f=await fixture(true,false);
+  const issue=await f.send(f.ownerCommand,{
+    deviceId:f.deviceId,mode:'on',confirmation:'APPLY BRIDGE MODE',
+  },f.owner,'bridge-command-issue-v1');
+  assert.equal(issue.status,503);
+  assert.equal((await f.send(f.claim,{
+    credential:f.credential,requestId:'11111111-1111-4111-8111-111111111111',
+  },f.internal)).status,503);
+  assert.equal((await f.send(f.acknowledge,{credential:f.credential,receipt:{}},f.internal)).status,503);
 });
 
 test('owner approval is independent of saved bridge preference; no automatic queue',async()=>{
@@ -101,7 +129,8 @@ test('only service and currently paired device can claim once, then submit verif
   assert.equal((await f.send(f.claim,{credential:'nwx_dev_fake',requestId},f.internal)).status,401);
   const claimed=await f.send(f.claim,{credential:f.credential,requestId},f.internal);
   assert.equal(claimed.status,200);
-  const result=await claimed.json() as {intent:{requestId:string;desiredMode:string;credentialBinding:string}};
+  const result=await claimed.json() as {intent:AdminBridgeModeIntent};
+  const intent=result.intent;
   assert.equal(result.intent.requestId,requestId);
   assert.equal(result.intent.desiredMode,'on');
   assert.match(result.intent.credentialBinding,/^[a-f0-9]{64}$/);
@@ -113,16 +142,47 @@ test('only service and currently paired device can claim once, then submit verif
     taskState:'Running',taskVerified:true,
     brokerHealth:'authenticated-ready',failureCode:null,
   };
-  assert.equal((await f.send(f.acknowledge,{credential:f.credential,receipt},f.owner)).status,403);
-  assert.equal((await f.send(f.acknowledge,{credential:'nwx_dev_fake',receipt},f.internal)).status,401);
+  const signedReceipt=await f.signReceipt(result.intent,receipt);
+  // A Hub claim with no Guardian signature cannot be accepted as success.
+  assert.equal((await f.send(f.acknowledge,{credential:f.credential,receipt},f.internal)).status,400);
+  assert.equal((await f.send(f.acknowledge,{credential:f.credential,signedReceipt},f.owner)).status,403);
+  assert.equal((await f.send(f.acknowledge,{credential:'nwx_dev_fake',signedReceipt},f.internal)).status,401);
   assert.equal((await f.send(f.acknowledge,{credential:f.credential,
-    receipt:{...receipt,brokerHealth:'unverified'}},f.internal)).status,400);
+    signedReceipt:{...signedReceipt,receipt:{...receipt,taskState:'Disabled'}}},f.internal)).status,400);
+  assert.equal((await f.send(f.acknowledge,{credential:f.credential,
+    signedReceipt:await f.signReceipt(result.intent,{...receipt,brokerHealth:'unverified'})},f.internal)).status,400);
   assert.equal((await f.getStatus(requestId,f.owner).then(x=>x.json()) as {status:string}).status,'claimed');
-  const accepted=await f.send(f.acknowledge,{credential:f.credential,receipt},f.internal);
+  const accepted=await f.send(f.acknowledge,{credential:f.credential,signedReceipt:await f.signReceipt(intent,receipt)},f.internal);
   assert.equal(accepted.status,200);
   assert.equal((await accepted.json() as {status:string}).status,'applied');
-  assert.equal((await f.send(f.acknowledge,{credential:f.credential,receipt},f.internal)).status,409);
+  assert.equal((await f.send(f.acknowledge,{credential:f.credential,signedReceipt:await f.signReceipt(intent,receipt)},f.internal)).status,409);
   assert.equal((await f.getStatus(requestId,f.owner).then(x=>x.json()) as {status:string}).status,'applied');
+});
+
+test('an unregistered Guardian public key cannot complete a claimed command',async()=>{
+  const f=await fixture(true,'wrong');
+  const issue=await f.send(f.ownerCommand,{
+    deviceId:f.deviceId,mode:'on',confirmation:'APPLY BRIDGE MODE',
+  },f.owner,'bridge-command-issue-v1');
+  assert.equal(issue.status,201);
+  const {requestId}=await issue.json() as {requestId:string};
+  const claimed=await f.send(f.claim,{credential:f.credential,requestId},f.internal);
+  assert.equal(claimed.status,200);
+  const {intent}=await claimed.json() as {intent:AdminBridgeModeIntent};
+  const receipt={
+    type:'admin-bridge.mode-receipt',version:1,requestId,
+    deviceId:f.deviceId,credentialBinding:intent.credentialBinding,
+    desiredMode:'on',observedAt:f.now(),result:'applied',
+    taskState:'Running',taskVerified:true,
+    brokerHealth:'authenticated-ready',failureCode:null,
+  };
+  const signedReceipt=await f.signReceipt(intent,receipt);
+  const reply=await f.send(f.acknowledge,{
+    credential:f.credential,signedReceipt,
+  },f.internal);
+  assert.equal(reply.status,400);
+  assert.equal((await reply.json() as {error:string}).error,'GUARDIAN_RECEIPT_UNREGISTERED_KEY');
+  assert.equal((await f.getStatus(requestId,f.owner).then(x=>x.json()) as {status:string}).status,'claimed');
 });
 
 test('changing saved preference invalidates in-flight claims and receipts',async()=>{
@@ -133,7 +193,7 @@ test('changing saved preference invalidates in-flight claims and receipts',async
   const {requestId}=await issue.json() as {requestId:string};
   const claimed=await f.send(f.claim,{credential:f.credential,requestId},f.internal);
   assert.equal(claimed.status,200);
-  const {intent}=await claimed.json() as {intent:{credentialBinding:string}};
+  const {intent}=await claimed.json() as {intent:AdminBridgeModeIntent};
   await f.service.setDeviceBridgePreference(f.owner,f.deviceId,'off');
   await f.service.setDeviceBridgePreference(f.owner,f.deviceId,'on');
   const receipt={
@@ -143,7 +203,7 @@ test('changing saved preference invalidates in-flight claims and receipts',async
     taskState:'Running',taskVerified:true,
     brokerHealth:'authenticated-ready',failureCode:null,
   };
-  assert.equal((await f.send(f.acknowledge,{credential:f.credential,receipt},f.internal)).status,409);
+  assert.equal((await f.send(f.acknowledge,{credential:f.credential,signedReceipt:await f.signReceipt(intent,receipt)},f.internal)).status,409);
   assert.equal((await f.getStatus(requestId,f.owner).then(x=>x.json()) as {status:string}).status,'claimed');
 });
 
@@ -173,7 +233,7 @@ test('failed device receipt is recorded as failure, never successful applied',as
   },f.owner,'bridge-command-issue-v1');
   const {requestId}=await issue.json() as {requestId:string};
   const claimed=await f.send(f.claim,{credential:f.credential,requestId},f.internal);
-  const {intent}=await claimed.json() as {intent:{credentialBinding:string}};
+  const {intent}=await claimed.json() as {intent:AdminBridgeModeIntent};
   const receipt={
     type:'admin-bridge.mode-receipt',version:1,requestId,
     deviceId:f.deviceId,credentialBinding:intent.credentialBinding,
@@ -181,7 +241,7 @@ test('failed device receipt is recorded as failure, never successful applied',as
     taskState:'Ready',taskVerified:false,
     brokerHealth:'unverified',failureCode:'BROKER_NOT_ELEVATED',
   };
-  const accepted=await f.send(f.acknowledge,{credential:f.credential,receipt},f.internal);
+  const accepted=await f.send(f.acknowledge,{credential:f.credential,signedReceipt:await f.signReceipt(intent,receipt)},f.internal);
   assert.equal(accepted.status,200);
   assert.equal((await accepted.json() as {status:string}).status,'failed');
   assert.equal((await f.getStatus(requestId,f.owner).then(x=>x.json()) as {status:string;failureCode:string}).failureCode,'BROKER_NOT_ELEVATED');
@@ -203,7 +263,7 @@ test('offline and SAFE transitions deny a queued claim or in-flight completion',
   await f.store.putDevice(original);
   const claimed=await f.send(f.claim,{credential:f.credential,requestId},f.internal);
   assert.equal(claimed.status,200);
-  const intent=(await claimed.json() as {intent:{credentialBinding:string}}).intent;
+  const intent=(await claimed.json() as {intent:AdminBridgeModeIntent}).intent;
   // Revocation does not remotely execute anything; it prevents a stale ACK.
   await f.service.setDeviceAccessMode(f.owner,f.deviceId,'safe');
   const receipt={
@@ -214,6 +274,6 @@ test('offline and SAFE transitions deny a queued claim or in-flight completion',
     brokerHealth:'authenticated-ready',failureCode:null,
   };
   assert.equal((await f.send(f.acknowledge,{
-    credential:f.credential,receipt,
+    credential:f.credential,signedReceipt:await f.signReceipt(intent,receipt),
   },f.internal)).status,409);
 });

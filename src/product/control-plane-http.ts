@@ -1,9 +1,11 @@
+import type { KeyObject } from 'node:crypto';
 import type {
   ControlPlaneIdentity,
 } from './control-plane-service.js';
 import { ControlPlaneService } from './control-plane-service.js';
 import { PRODUCT_PLANS, type ProductFeature } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
+import { GuardianSignedReceiptSchema } from '../protocol/guardian-signed-receipt.js';
 
 export interface ControlPlaneHttpOptions {
   authenticate(
@@ -12,6 +14,10 @@ export interface ControlPlaneHttpOptions {
   agentUrl?: string;
   /** Disabled until trusted paired-Agent command delivery is approved. */
   enableBridgeCommandTransport?: boolean;
+  /** Must resolve a pre-enrolled Ed25519 key for CURRENT paired device; never from HTTP body. Missing resolver disables ALL command routes. */
+  getTrustedGuardianPublicKey?: (identity: {
+    deviceId:string;ownerAccountId:string;credentialBinding:string;
+  }) => Promise<KeyObject|null>;
 }
 
 function normalizeAgentUrl(input: string): string {
@@ -137,7 +143,8 @@ function optionalFeatureList(
 }
 
 function errorStatus(message: string): number {
-  if (message === 'BILLING_PAUSED') return 503;
+  if (message === 'BILLING_PAUSED' ||
+      message === 'BRIDGE_GUARDIAN_SIGNING_KEY_NOT_ENROLLED') return 503;
   if (message === 'BRIDGE_COMMAND_DEVICE_UNAUTHENTICATED') return 401;
   if (
     message === 'ACCOUNT_NOT_FOUND' ||
@@ -163,6 +170,8 @@ function errorStatus(message: string): number {
     message === 'BRIDGE_COMMAND_QUEUE_REJECTED' ||
     message === 'BRIDGE_COMMAND_NOT_CLAIMED' ||
     message === 'BRIDGE_COMMAND_COMPLETION_REJECTED' ||
+    message === 'GUARDIAN_RECEIPT_EXPIRED' ||
+    message === 'GUARDIAN_RECEIPT_CURRENT_INTENT_OR_REVISION_MISMATCH' ||
     message === 'FOLDER_ALREADY_EXISTS' ||
     message === 'FOLDER_LIMIT_REACHED' ||
     message.startsWith('PAIRING_') ||
@@ -170,6 +179,7 @@ function errorStatus(message: string): number {
   ) return 409;
   if (
     message.startsWith('BRIDGE_RECEIPT_') ||
+    message.startsWith('GUARDIAN_RECEIPT_') ||
     message === 'BRIDGE_COMMAND_CONFIRMATION_REQUIRED' ||
     message.startsWith('INVALID_') ||
     message === 'JSON_REQUIRED' ||
@@ -376,7 +386,7 @@ export function createControlPlaneHttpHandler(
 
       // A saved mode is not execution consent. The transport is opt-in.
       if (request.method === 'POST' && path === '/api/v1/me/devices/bridge-command') {
-        if (!options.enableBridgeCommandTransport) {
+        if (!options.enableBridgeCommandTransport || !options.getTrustedGuardianPublicKey) {
           return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
         }
         const body = await readJsonObject(request);
@@ -391,7 +401,7 @@ export function createControlPlaneHttpHandler(
       }
 
       if (request.method === 'GET' && path === '/api/v1/me/devices/bridge-command/status') {
-        if (!options.enableBridgeCommandTransport) {
+        if (!options.enableBridgeCommandTransport || !options.getTrustedGuardianPublicKey) {
           return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
         }
         return json(200,await service.bridgeCommandStatus(
@@ -401,7 +411,7 @@ export function createControlPlaneHttpHandler(
 
       // Hub service authentication AND current paired Agent credential required.
       if (request.method === 'POST' && path === '/api/v1/internal/device/bridge-command/claim') {
-        if (!options.enableBridgeCommandTransport) {
+        if (!options.enableBridgeCommandTransport || !options.getTrustedGuardianPublicKey) {
           return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
         }
         if (identity.role !== 'service') return json(403,{error:'SERVICE_REQUIRED'});
@@ -413,13 +423,16 @@ export function createControlPlaneHttpHandler(
       }
 
       if (request.method === 'POST' && path === '/api/v1/internal/device/bridge-command/receipt') {
-        if (!options.enableBridgeCommandTransport) {
+        if (!options.enableBridgeCommandTransport || !options.getTrustedGuardianPublicKey) {
           return json(503,{error:'BRIDGE_COMMAND_TRANSPORT_DISABLED'});
         }
         if (identity.role !== 'service') return json(403,{error:'SERVICE_REQUIRED'});
         const body = await readJsonObject(request);
-        return json(200,await service.completeBridgeModeCommand(
-          stringField(body,'credential'),body.receipt,
+        const parsed = GuardianSignedReceiptSchema.safeParse(body.signedReceipt);
+        if (!parsed.success) return json(400,{error:'GUARDIAN_RECEIPT_SIGNATURE_REQUIRED'});
+        return json(200,await service.completeSignedBridgeModeCommand(
+          stringField(body,'credential'),parsed.data,
+          options.getTrustedGuardianPublicKey,
         ));
       }
 
