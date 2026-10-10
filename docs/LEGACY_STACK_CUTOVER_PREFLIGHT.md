@@ -16,6 +16,8 @@ The one-object JSON output contains the Highest Stack task state and expected la
 
 No files, DACLs, tasks, tokens or processes are changed. The script does not read sensitive DPAPI token envelopes or export scheduled task XML. Its fail-closed blockers include both observed conflicts and pending owner approval, protected task backup and rollback validation. It always reports safeToCutover=false, privilegedOperationPerformed=false, credentialsInspected=false, taskXmlBackedUp=false, protectedRollbackVerified=false.
 
+As of the 2026-10-11 security follow-up, task diagnostics also expose `system32PowerShellPinned`, `launcherUnderProtectedStack` and `nonInteractive` booleans. When the task is readable but any is false, the report adds `LEGACY_TASK_UNQUALIFIED_INTERPRETER`, `LEGACY_TASK_LAUNCHER_OUTSIDE_PROTECTED_STACK` and/or `LEGACY_TASK_INTERACTIVE_POWERSHELL`. This is critical because a Task action that merely contains the expected *legacy* launcher path may still execute unqualified `powershell.exe` and a user-writable AppData script. The live elevated Stack was observed to have both those issues; they cannot be treated as a successful security cutover. Existing `expectedLauncherReferenced` remains an inventory hint, not a trusted task-action attestation.
+
 ### Interpretation
 
 The full-tree ACL inventories are conservative and do not compute Windows effective permissions, validate all dynamic imports/DLLs or attest a signed Nexowire release. Hashes of three nonsecret files are NOT a complete backup, and a signed Node executable does not prove JS code integrity. Port and task-state readings are snapshots and are not proof of sole process ownership at future launch time. An unavailable scan or unreadable task/port cannot be silently marked clean.
