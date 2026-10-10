@@ -82,7 +82,7 @@ export function createGuardianSqliteReplayReserve(
     GUARDIAN_REPLAY_SCHEMA.indexOf('CREATE TABLE'),
   ));
   const objects=db.prepare(
-    "SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+    "SELECT type,name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY name",
   ).all() as Array<{type:string;name:string;sql:string|null}>;
   const tempObjects=db.prepare(
     'SELECT name FROM sqlite_temp_master',

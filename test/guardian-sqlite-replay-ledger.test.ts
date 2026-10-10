@@ -272,6 +272,17 @@ test('extra persistent trigger or alternate table invalidates the trusted ledger
   } finally {f.cleanup()}
 });
 
+test('sqliteX-prefixed trigger cannot hide behind SQL LIKE underscore wildcard',()=>{
+  const f=fixture();
+  const db=f.openDb();
+  try {
+    // LIKE 'sqlite_%' falsely matches sqliteX..., as '_' means any character.
+    db.exec('CREATE TRIGGER sqliteXforget AFTER INSERT ON guardian_used_requests BEGIN DELETE FROM guardian_used_requests; END');
+    assert.throws(()=>createGuardianSqliteReplayReserve(f.options(db)),
+      /GUARDIAN_SQLITE_LEDGER_SCHEMA_UNTRUSTED/);
+  } finally {db.close();f.cleanup()}
+});
+
 test('connection-local temp triggers that can erase committed keys are rejected',()=>{
   const f=fixture();
   const db=f.openDb();
