@@ -233,6 +233,55 @@ test('reject unprovisioned schema and incorrect journal application identity',()
   } finally {f.cleanup()}
 });
 
+test('STRICT ledger without exact PRIMARY KEY uniqueness is never trusted',()=>{
+  const f=fixture();
+  const altered=new DatabaseSync(':memory:');
+  try {
+    altered.exec(GUARDIAN_REPLAY_SCHEMA.replace(
+      'request_digest TEXT PRIMARY KEY NOT NULL',
+      'request_digest TEXT NOT NULL',
+    ));
+    assert.throws(()=>createGuardianSqliteReplayReserve(
+      f.options(altered),
+    ),/GUARDIAN_SQLITE_LEDGER_SCHEMA_UNTRUSTED/);
+  } finally {altered.close();f.cleanup()}
+});
+
+test('extra persistent trigger or alternate table invalidates the trusted ledger',()=>{
+  const f=fixture();
+  try {
+    for(const statement of [
+      "CREATE TRIGGER forget_reservation AFTER INSERT ON guardian_used_requests BEGIN DELETE FROM guardian_used_requests; END",
+      "CREATE TABLE audit_side_channel (secret TEXT NOT NULL) STRICT",
+    ]) {
+      const db=f.openDb();
+      try {
+        db.exec(statement);
+        assert.throws(()=>createGuardianSqliteReplayReserve(f.options(db)),
+          /GUARDIAN_SQLITE_LEDGER_SCHEMA_UNTRUSTED/);
+      } finally {
+        db.close();
+        // Remove only the test-created schema object, not the protected
+        // production ledger. Every fixture is disposable.
+        const clean=f.openDb();
+        clean.exec(statement.startsWith('CREATE TRIGGER')
+          ?'DROP TRIGGER forget_reservation':'DROP TABLE audit_side_channel');
+        clean.close();
+      }
+    }
+  } finally {f.cleanup()}
+});
+
+test('connection-local temp triggers that can erase committed keys are rejected',()=>{
+  const f=fixture();
+  const db=f.openDb();
+  try {
+    db.exec("CREATE TEMP TRIGGER forget_reservation AFTER INSERT ON guardian_used_requests BEGIN DELETE FROM guardian_used_requests; END");
+    assert.throws(()=>createGuardianSqliteReplayReserve(f.options(db)),
+      /GUARDIAN_SQLITE_LEDGER_SCHEMA_UNTRUSTED/);
+  } finally {db.close();f.cleanup()}
+});
+
 test('bad request identifiers and unsafe ACL checker fail before any insert',async()=>{
   const f=fixture();
   const db=f.openDb();
