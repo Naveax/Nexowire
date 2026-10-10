@@ -1,5 +1,6 @@
 import {
   createHash,
+  type KeyObject,
   randomBytes,
   randomUUID,
   timingSafeEqual,
@@ -29,6 +30,7 @@ import {
 } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
 import { AdminBridgeModeReceiptSchema, verifyAdminBridgeModeReceipt, type AdminBridgeModeIntent } from '../protocol/admin-bridge-intent.js';
+import { GuardianSignedReceiptSchema, verifyGuardianSignedModeReceipt } from '../protocol/guardian-signed-receipt.js';
 import { resolveOwnerDeviceTarget, type DeviceTargetQuery, type TargetResolution } from './device-target-resolution.js';
 
 export interface ControlPlaneIdentity {
@@ -1067,6 +1069,69 @@ export class ControlPlaneService {
     );
     if (!committed) throw new Error('BRIDGE_COMMAND_COMPLETION_REJECTED');
     return {requestId:command.requestId,status};
+  }
+
+  /**
+   * HTTP-safe receipt completion. The Hub cannot self-certify a Windows
+   * task result: require an Ed25519 signature from a key independently
+   * registered for the CURRENT pairing, plus current owner preference
+   * revision and atomic one-time completion.
+   *
+   * The key resolver must be backed by a separate trusted Guardian enrollment
+   * registry, NEVER an arbitrary HTTP body or incoming envelope.
+   */
+  async completeSignedBridgeModeCommand(
+    credential: string,
+    rawEnvelope: unknown,
+    getTrustedGuardianPublicKey: (
+      identity: {deviceId:string;ownerAccountId:string;credentialBinding:string},
+    ) => Promise<KeyObject | null>,
+  ): Promise<{requestId:string;status:'applied'|'failed'}> {
+    const agent = await this.authenticateDeviceCredential(credential);
+    if (!agent) throw new Error('BRIDGE_COMMAND_DEVICE_UNAUTHENTICATED');
+    const envelope = GuardianSignedReceiptSchema.parse(rawEnvelope);
+    const receipt = envelope.receipt;
+    const credentialBinding=secretHash(credential);
+    if (receipt.deviceId !== agent.deviceId ||
+        receipt.credentialBinding !== credentialBinding) {
+      throw new Error('BRIDGE_RECEIPT_IDENTITY_MISMATCH');
+    }
+    const command=await this.store.getBridgeCommand(receipt.requestId);
+    if (!command || command.deviceId !== agent.deviceId ||
+        command.ownerAccountId !== agent.ownerAccountId ||
+        command.credentialBinding !== credentialBinding ||
+        command.status !== 'claimed') {
+      throw new Error('BRIDGE_COMMAND_NOT_CLAIMED');
+    }
+    const preference=await this.store.getDeviceBridgePreference(agent.deviceId);
+    if (!preference || preference.ownerAccountId !== agent.ownerAccountId ||
+        preference.desiredMode !== command.desiredMode ||
+        preference.updatedAt !== envelope.preferenceRevision) {
+      throw new Error('BRIDGE_COMMAND_PREFERENCE_MISMATCH');
+    }
+    const key=await getTrustedGuardianPublicKey({
+      deviceId:agent.deviceId,
+      ownerAccountId:agent.ownerAccountId,
+      credentialBinding,
+    });
+    if (!key) throw new Error('BRIDGE_GUARDIAN_SIGNING_KEY_NOT_ENROLLED');
+    const expectedIntent:AdminBridgeModeIntent={
+      type:'admin-bridge.mode-intent',version:1,
+      requestId:command.requestId,deviceId:command.deviceId,
+      ownerAccountId:command.ownerAccountId,
+      credentialBinding:command.credentialBinding,
+      desiredMode:command.desiredMode,
+      issuedAt:command.issuedAt,expiresAt:command.expiresAt,
+    };
+    verifyGuardianSignedModeReceipt(envelope,{
+      expectedIntent,
+      currentPreferenceRevision:preference.updatedAt,
+      registeredDevicePublicKey:key,
+      now:this.now(),
+    });
+    // Still re-check pairing, preference, task/health schema and atomic replay
+    // through the existing completion transaction. Signature != OS evidence.
+    return await this.completeBridgeModeCommand(credential,receipt);
   }
 
   /** Owner-only inspection: never include device credential digests in HTTP. */
