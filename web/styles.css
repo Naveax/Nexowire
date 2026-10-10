@@ -148,6 +148,13 @@ small,.subtle,.label { color: var(--muted); }
 .core-shortcut{border:1px solid rgba(163,142,255,.5);border-radius:10px;background:rgba(123,95,210,.16);color:#e3d5ff;font-size:12px;font-weight:850;letter-spacing:.055em;min-height:37px;padding:8px 13px;transition:background .16s ease,border-color .16s ease}
 .core-shortcut:hover{background:rgba(143,110,243,.26);border-color:#ba9eff}
 .core-shortcut.active{background:rgba(91,211,151,.14);color:#8af0b8;border-color:rgba(104,224,169,.6)}
+.bridge-quick-toggle{display:flex;align-items:center;justify-content:center;gap:7px;min-height:37px;padding:7px 10px;border:1px solid #43536b;border-radius:10px;background:#1b273a;color:#dbe6fa;font-weight:800;font-size:11px;letter-spacing:.025em;transition:border-color .16s,background .16s}
+.bridge-quick-toggle .bridge-quick-caption{font-size:10px;color:#aabbd3;letter-spacing:.065em}
+.bridge-quick-toggle .bridge-quick-state{padding:3px 6px;border:1px solid rgba(251,192,120,.5);background:rgba(251,192,120,.1);border-radius:5px;color:#f7ca90}
+.bridge-quick-toggle.active{border-color:rgba(107,220,163,.7);background:rgba(53,122,88,.14)}
+.bridge-quick-toggle.active .bridge-quick-state{color:#94f1c2;border-color:rgba(107,220,163,.65);background:rgba(73,179,120,.14)}
+.bridge-quick-toggle:focus-visible,.bridge-toggle:focus-visible{outline:2px solid #c0b2ff;outline-offset:3px}
+.bridge-quick-toggle:disabled,.bridge-toggle:disabled{opacity:.6;cursor:wait}
 .core-access,.bridge-access{display:grid;gap:10px;border:1px solid rgba(166,144,240,.28);border-radius:13px;padding:14px;background:rgba(123,99,197,.07);margin-top:6px;min-width:0}
 .core-access.active{border-color:rgba(104,224,169,.65);background:rgba(37,105,76,.1)}
 .core-head,.bridge-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -166,7 +173,21 @@ small,.subtle,.label { color: var(--muted); }
 .bridge-mode-options{display:flex;gap:7px;flex-wrap:wrap}
 .bridge-mode-options button{min-width:71px;min-height:39px}
 .bridge-mode-options button.selected{border-color:var(--accent);background:rgba(142,172,255,.16);color:#e3ecff}
-@media(max-width:620px){.device-header-actions{justify-content:flex-start}.core-shortcut{min-height:42px}.core-access,.bridge-access{padding:12px}.bridge-mode-options button{flex:1 1 auto}}
+.bridge-access.preference-on{border-color:rgba(101,203,152,.48);background:rgba(46,99,76,.09)}
+.bridge-switch-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px;border-radius:12px;border:1px solid #394b63;background:rgba(15,26,42,.68)}
+.bridge-switch-description{display:grid;gap:4px;min-width:0}
+.bridge-switch-description strong{font-size:13px;color:#e2eaf9;letter-spacing:.035em}
+.bridge-switch-description small{color:var(--muted);font-size:11px}
+.bridge-toggle{display:inline-flex;align-items:center;justify-content:center;gap:11px;min-height:44px;min-width:112px;padding:7px 11px;background:#202f45;border:1px solid #53647c;border-radius:12px;color:#e9f1ff;font-size:12px;font-weight:850;cursor:pointer}
+.bridge-toggle.active{background:rgba(40,119,81,.2);border-color:#65dba0;color:#a5f6c9}
+.bridge-toggle-track{position:relative;display:block;width:42px;height:24px;border-radius:99px;background:#647289;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);transition:background .18s}
+.bridge-toggle-thumb{position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .18s}
+.bridge-toggle.active .bridge-toggle-track{background:#299b6a}
+.bridge-toggle.active .bridge-toggle-thumb{transform:translateX(18px)}
+.bridge-toggle-label{min-width:34px;text-align:center}
+.bridge-mode-options{align-items:center}
+.bridge-mode-options small{color:var(--muted);font-size:11px;line-height:1.35}
+@media(max-width:620px){.device-header-actions{justify-content:flex-start}.core-shortcut,.bridge-quick-toggle{min-height:42px}.core-access,.bridge-access{padding:12px}.bridge-mode-options button{flex:0 0 auto}.bridge-switch-row{align-items:center}.bridge-toggle{min-height:46px}}
 
 .last-seen { font-size: 11px; color: #7f90a8; margin-top: 3px; }
 .device-foot { margin-top: 12px; padding-top: 12px; border-top:1px solid #253347; display:flex; gap:8px; align-items:center; justify-content:space-between; }

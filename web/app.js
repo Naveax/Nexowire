@@ -192,15 +192,21 @@ async function setDeviceCorePreference(deviceId, enabled, row) {
   }
 }
 
-async function setDeviceBridgePreference(deviceId, mode, row) {
-  const buttons = [...row.querySelectorAll('.bridge-mode')];
+async function setDeviceBridgePreference(deviceId, mode, row, focusSelector = '.bridge-toggle') {
+  const buttons = [...row.querySelectorAll('.bridge-quick-toggle, .bridge-toggle, .bridge-mode')];
   const feedback = row.querySelector('.bridge-mode-feedback');
   for (const button of buttons) button.disabled = true;
-  feedback.textContent = 'Admin Bridge tercih modu kaydediliyor…';
+  feedback.textContent = 'Admin Bridge ' + (mode === 'on' ? 'ON' : mode === 'off' ? 'OFF' : 'AUTO') + ' tercihi kaydediliyor… Broker durumu henüz değiştirilmez.';
   try {
     await postDeviceMode('/api/v1/me/devices/bridge-preference', deviceId,
       { mode }, 'bridge-preference-v1');
     await load();
+    // Device cards rerender after saving. Keep keyboard focus on the same
+    // control instead of silently returning it to the document body.
+    const updated = [...document.querySelectorAll('.device')].find(
+      (candidate) => candidate.dataset.deviceId === deviceId,
+    );
+    updated?.querySelector(focusSelector)?.focus({ preventScroll: true });
   } catch (error) {
     feedback.textContent = error.message;
     for (const button of buttons) button.disabled = false;
@@ -296,13 +302,14 @@ function render(snapshot) {
     for (const device of visibleDevices) {
       const row = document.createElement('article');
       row.className = 'device' + (device.online ? '' : ' offline');
+      row.dataset.deviceId = device.id;
       row.innerHTML = [
         '<div class="device-header">',
         ' <div class="device-identity">',
         '  <span class="device-icon" aria-hidden="true">▣</span>',
         '  <div><div class="device-name"></div><small class="platform"></small></div>',
         ' </div>',
-        ' <div class="device-header-actions"><button type="button" class="core-shortcut" aria-label="CORE ayarlarını aç">CORE</button><div class="status"><span class="dot"></span><span class="status-text"></span></div></div>',
+        ' <div class="device-header-actions"><button type="button" class="core-shortcut" aria-label="CORE ayarlarını aç">CORE</button><button type="button" class="bridge-quick-toggle" aria-label="Admin Bridge aç kapa tercihi"><span class="bridge-quick-caption">BRIDGE</span><span class="bridge-quick-state">AUTO</span></button><div class="status"><span class="dot"></span><span class="status-text"></span></div></div>',
         '</div>',
         '<section class="pc-settings">',
         '<div class="device-meta">',
@@ -341,9 +348,10 @@ function render(snapshot) {
         '  </div>',
         ' </div>',
         ' <div class="bridge-access">',
-        '  <div class="bridge-head"><strong>Admin Bridge</strong><span class="bridge-live-status"></span></div>',
+        '  <div class="bridge-head"><strong>ADMIN BRIDGE</strong><span class="bridge-live-status"></span></div>',
         '  <small class="bridge-copy"></small>',
-        '  <div class="bridge-mode-options" role="group" aria-label="Admin Bridge modları"><button type="button" class="secondary bridge-mode" data-bridge="auto">AUTO</button><button type="button" class="secondary bridge-mode" data-bridge="on">AÇ</button><button type="button" class="secondary bridge-mode" data-bridge="off">KAPAT</button></div>',
+        '  <div class="bridge-switch-row"><div class="bridge-switch-description"><strong>ON / OFF</strong><small>Tercihi tek tıkla değiştir</small></div><button type="button" class="bridge-toggle" role="switch" aria-checked="false" aria-label="Admin Bridge aç kapa tercihi"><span class="bridge-toggle-track" aria-hidden="true"><span class="bridge-toggle-thumb"></span></span><span class="bridge-toggle-label">OFF</span></button></div>',
+        '  <div class="bridge-mode-options" role="group" aria-label="Admin Bridge otomatik tercihi"><button type="button" class="secondary bridge-mode" data-bridge="auto" aria-pressed="false">AUTO MOD</button><small>İstersen AUTO tercihini ayrıca seçebilirsin.</small></div>',
         '  <small class="bridge-mode-feedback" role="status" aria-live="polite"></small>',
         ' </div>',
         '</div>',
@@ -508,18 +516,39 @@ function render(snapshot) {
         ? 'Broker çalışıyor. Windows yükseltme ve yerel ACL denetimleri korunur.'
         : 'Broker doğrulanamadı. CORE yalnızca hazır Broker ile etkin olabilir.';
       const bridgeDesired = device.bridgePreference?.desiredMode ?? 'auto';
+      const bridgeIsOn = bridgeDesired === 'on';
+      const bridgeCard = row.querySelector('.bridge-access');
+      const bridgeQuickToggle = row.querySelector('.bridge-quick-toggle');
+      const bridgeToggle = row.querySelector('.bridge-toggle');
+      const bridgeNextMode = bridgeIsOn ? 'off' : 'on';
+      bridgeCard.dataset.desiredMode = bridgeDesired;
+      bridgeCard.classList.toggle('preference-on', bridgeIsOn);
+      bridgeQuickToggle.dataset.mode = bridgeDesired;
+      bridgeQuickToggle.classList.toggle('active', bridgeIsOn);
+      bridgeQuickToggle.setAttribute('aria-pressed', String(bridgeIsOn));
+      bridgeQuickToggle.querySelector('.bridge-quick-state').textContent = bridgeDesired.toUpperCase();
+      bridgeQuickToggle.setAttribute('aria-label', 'Admin Bridge tercihi ' + bridgeDesired.toUpperCase() + '. ' + bridgeNextMode.toUpperCase() + ' tercihine geç');
+      bridgeQuickToggle.title = 'Yalnızca tercih kaydı; Windows Broker işlemi değil. OFF, CORE tercihini iptal eder.';
+      bridgeQuickToggle.addEventListener('click', () => {
+        void setDeviceBridgePreference(device.id, bridgeNextMode, row, '.bridge-quick-toggle');
+      });
+      bridgeToggle.setAttribute('aria-checked', String(bridgeIsOn));
+      bridgeToggle.setAttribute('aria-label', 'Admin Bridge ' + bridgeNextMode.toUpperCase() + ' tercihine geç (Windows görevini henüz değiştirmez)');
+      bridgeToggle.classList.toggle('active', bridgeIsOn);
+      bridgeToggle.querySelector('.bridge-toggle-label').textContent = bridgeIsOn ? 'ON' : bridgeDesired === 'auto' ? 'AUTO' : 'OFF';
+      bridgeToggle.addEventListener('click', () => {
+        void setDeviceBridgePreference(device.id, bridgeNextMode, row);
+      });
       for (const bridgeMode of row.querySelectorAll('.bridge-mode')) {
         const selected = bridgeMode.dataset.bridge === bridgeDesired;
         bridgeMode.classList.toggle('selected', selected);
         bridgeMode.setAttribute('aria-pressed', String(selected));
         bridgeMode.addEventListener('click', () => {
-          if (bridgeMode.dataset.bridge !== bridgeDesired) {
-            void setDeviceBridgePreference(device.id, bridgeMode.dataset.bridge, row);
-          }
+          if (!selected) void setDeviceBridgePreference(device.id, bridgeMode.dataset.bridge, row, '.bridge-mode[data-bridge="auto"]');
         });
       }
       row.querySelector('.bridge-mode-feedback').textContent =
-        'Tercih: ' + bridgeDesired.toUpperCase() + ' · Kaydedilir ancak yerel servis komutları henüz bağlı değildir. Mevcut Broker durumu değiştirilmez.';
+        'Seçilen tercih: ' + bridgeDesired.toUpperCase() + ' · GERÇEK GÖREV DURUMU: ' + (ready ? 'Broker hazır' : 'Broker doğrulanamadı') + '. Yerel aç/kapat komutları henüz bağlı değil; bu anahtar yalnızca tercihi kaydeder. OFF seçimi CORE tercihini de iptal eder.';
 
       row.querySelector('.last-seen').textContent =
         device.lastSeenAt ? 'Son bağlantı: ' +
