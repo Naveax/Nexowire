@@ -22,6 +22,7 @@ const command:BridgeQueuedCommand={
 test('memory ledger mirrors D1 one-time queue claim completion and pairing invalidation',async()=>{
   const store=new MemoryControlPlaneStore();
   await store.putDevice(device);
+  await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'on',updatedAt:'2026-10-10T13:59:50.000Z'});
   assert.equal(await store.queueBridgeCommand(command),true);
   assert.equal(await store.queueBridgeCommand(command),false);
   const claims=await Promise.all(Array.from({length:8},()=>
@@ -36,7 +37,15 @@ test('memory ledger mirrors D1 one-time queue claim completion and pairing inval
   assert.equal(complete?.failureCode,null);
   const pending={...command,requestId:'22222222-2222-4222-8222-222222222222'};
   assert.equal(await store.queueBridgeCommand(pending),true);
+  assert.match((await store.getBridgeCommand(pending.requestId))?.preferenceRevision ?? '',/^[0-9a-f-]{36}$/i);
+  // Timestamp collision must not resurrect previously authorized commands.
+  await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'on',updatedAt:'2026-10-10T13:59:50.000Z'});
+  assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:00:30.000Z'),false);
   assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,expires),false);
+  await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T14:00:50.000Z'});
+  assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:00:52.000Z'),false);
+  await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'on',updatedAt:'2026-10-10T14:00:51.000Z'});
+  assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:00:52.000Z'),false);
   await store.putDevice({...device,credentialHash:'f'.repeat(64)});
   assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:00:22.000Z'),false);
   assert.equal(await store.queueBridgeCommand({...pending,requestId:'33333333-3333-4333-8333-333333333333'}),false);
@@ -45,6 +54,7 @@ test('memory ledger mirrors D1 one-time queue claim completion and pairing inval
 test('memory ledger rejects invalid ownership and timestamps before writing',async()=>{
   const store=new MemoryControlPlaneStore();
   await store.putDevice(device);
+  await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'on',updatedAt:'2026-10-10T13:59:50.000Z'});
   for(const candidate of [
     {...command,ownerAccountId:'another'},
     {...command,deviceId:'another'},

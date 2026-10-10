@@ -609,33 +609,40 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     if (!isValidBridgeQueuedCommand(record)) return false;
     const result = await this.db.prepare(
       `INSERT INTO device_bridge_commands
-        (request_id,device_id,owner_account_id,credential_binding,desired_mode,issued_at,expires_at,status)
-       SELECT ?,d.id,d.owner_account_id,d.credential_hash,?,?,?,'queued'
+        (request_id,device_id,owner_account_id,credential_binding,preference_revision,desired_mode,issued_at,expires_at,status)
+       SELECT ?,d.id,d.owner_account_id,d.credential_hash,
+         (SELECT e.id FROM device_bridge_preference_events e
+           WHERE e.device_id=d.id ORDER BY e.rowid DESC LIMIT 1),?,?,?,'queued'
        FROM devices d
        WHERE d.id=? AND d.owner_account_id=? AND d.credential_hash=?
+         AND EXISTS (SELECT 1 FROM device_bridge_preferences p
+           WHERE p.device_id=d.id AND p.owner_account_id=d.owner_account_id
+             AND p.desired_mode=? AND p.updated_at<=?)
        ON CONFLICT(request_id) DO NOTHING`,
     ).bind(
       record.requestId, record.desiredMode, record.issuedAt,
       record.expiresAt, record.deviceId, record.ownerAccountId,
-      record.credentialBinding,
+      record.credentialBinding, record.desiredMode, record.issuedAt,
     ).run();
     return result.meta?.changes === 1;
   }
 
   async getBridgeCommand(requestId: string): Promise<BridgeCommandRecord | null> {
     const row = await this.db.prepare(
-      `SELECT request_id,device_id,owner_account_id,credential_binding,desired_mode,
+      `SELECT request_id,device_id,owner_account_id,credential_binding,preference_revision,desired_mode,
        issued_at,expires_at,status,claimed_at,completed_at,failure_code
        FROM device_bridge_commands WHERE request_id=?`,
     ).bind(requestId).first<{
       request_id: string; device_id: string; owner_account_id: string;
-      credential_binding: string; desired_mode: BridgeCommandRecord['desiredMode'];
+      credential_binding: string; preference_revision: string;
+      desired_mode: BridgeCommandRecord['desiredMode'];
       issued_at: string; expires_at: string; status: BridgeCommandRecord['status'];
       claimed_at: string | null; completed_at: string | null; failure_code: string | null;
     }>();
     return row ? {
       requestId:row.request_id,deviceId:row.device_id,
       ownerAccountId:row.owner_account_id,credentialBinding:row.credential_binding,
+      preferenceRevision:row.preference_revision,
       desiredMode:row.desired_mode,issuedAt:row.issued_at,expiresAt:row.expires_at,
       status:row.status,claimedAt:row.claimed_at,
       completedAt:row.completed_at,failureCode:row.failure_code,
@@ -654,7 +661,15 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
            SELECT 1 FROM devices d WHERE d.id=device_bridge_commands.device_id
              AND d.owner_account_id=device_bridge_commands.owner_account_id
              AND d.credential_hash=device_bridge_commands.credential_binding
-         )`,
+         )
+         AND EXISTS (SELECT 1 FROM device_bridge_preferences p
+           WHERE p.device_id=device_bridge_commands.device_id
+             AND p.owner_account_id=device_bridge_commands.owner_account_id
+             AND p.desired_mode=device_bridge_commands.desired_mode
+             AND p.updated_at<=device_bridge_commands.issued_at
+             AND (SELECT e.id FROM device_bridge_preference_events e
+               WHERE e.device_id=device_bridge_commands.device_id
+               ORDER BY e.rowid DESC LIMIT 1)=device_bridge_commands.preference_revision)`,
     ).bind(at,requestId,deviceId,credentialBinding,at,at).run();
     return result.meta?.changes === 1;
   }
@@ -678,7 +693,15 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
            SELECT 1 FROM devices d WHERE d.id=device_bridge_commands.device_id
              AND d.owner_account_id=device_bridge_commands.owner_account_id
              AND d.credential_hash=device_bridge_commands.credential_binding
-         )`,
+         )
+         AND EXISTS (SELECT 1 FROM device_bridge_preferences p
+           WHERE p.device_id=device_bridge_commands.device_id
+             AND p.owner_account_id=device_bridge_commands.owner_account_id
+             AND p.desired_mode=device_bridge_commands.desired_mode
+             AND p.updated_at<=device_bridge_commands.issued_at
+             AND (SELECT e.id FROM device_bridge_preference_events e
+               WHERE e.device_id=device_bridge_commands.device_id
+               ORDER BY e.rowid DESC LIMIT 1)=device_bridge_commands.preference_revision)`,
     ).bind(
       result,at,failureCode,requestId,deviceId,credentialBinding,at,at,
     ).run();

@@ -68,6 +68,8 @@ export interface BridgeCommandRecord {
   deviceId: string;
   ownerAccountId: string;
   credentialBinding: string;
+  /** Audit event ID: changes even if preference timestamp is identical. */
+  preferenceRevision: string;
   desiredMode: 'auto' | 'on' | 'off';
   issuedAt: string;
   expiresAt: string;

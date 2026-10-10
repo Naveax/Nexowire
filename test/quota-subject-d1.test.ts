@@ -395,6 +395,7 @@ test('D1 Broker command ledger atomically claims once and rejects old pairings',
       online:true,lastSeenAt:issuedAt,createdAt:issuedAt,updatedAt:issuedAt,
     };
     await store.putDevice(device);
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T13:59:50.000Z'});
     const queued={
       requestId:'11111111-1111-4111-8111-111111111111',
       deviceId:device.id,ownerAccountId:device.ownerAccountId,
@@ -422,8 +423,16 @@ test('D1 Broker command ledger atomically claims once and rejects old pairings',
     assert.equal(await store.queueBridgeCommand({...queued,requestId:'22222222-2222-4222-8222-222222222222',expiresAt:'2026-10-10T14:02:00Z'}),false);
     const pending={...queued,requestId:'33333333-3333-4333-8333-333333333333'};
     assert.equal(await store.queueBridgeCommand(pending),true);
+    assert.equal((await store.getBridgeCommand(pending.requestId))?.preferenceRevision?.length,32);
+    // A repeated preference update at the SAME timestamp invalidates old intent.
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T13:59:50.000Z'});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
     assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,expiresAt),false);
     assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'invalid-time'),false);
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'on',updatedAt:'2026-10-10T14:00:10.000Z'});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T14:00:11.000Z'});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
     await store.putDevice({...device,credentialHash:'b'.repeat(64)});
     assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
     assert.equal(await store.queueBridgeCommand({...pending,requestId:'44444444-4444-4444-8444-444444444444'}),false);
@@ -445,6 +454,7 @@ test('D1 Broker failed receipt commits once and refuses invalid failures',async(
       accessMode:'full',agentVersion:null,privilegeMode:null,adminBridgeReady:false,
       online:false,lastSeenAt:null,createdAt:time,updatedAt:time,
     });
+    await store.putDeviceBridgePreference({deviceId:'d',ownerAccountId:'o',desiredMode:'auto',updatedAt:'2026-10-10T13:59:50.000Z'});
     const req='55555555-5555-4555-8555-555555555555';
     assert.equal(await store.queueBridgeCommand({
       requestId:req,deviceId:'d',ownerAccountId:'o',credentialBinding:hash,

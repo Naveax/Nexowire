@@ -15,3 +15,7 @@ The database state transition is NOT itself proof that the task changed. `comple
 Remaining gates: explicit owner intent confirmation; authenticated Hub-to-paired-Agent command channel; local correct-user/elevated approval; durable cross-restart replay claims at receiver; a verifiable device-signed/credential-authenticated receipt; and a read-only UI result driven by committed verified receipts. Do not deploy an agent that blindly replays previously chosen preferences. Do not modify live privileged tasks until #271 is resolved.
 
 Tests run in isolated SQLite/memory stores and never touch the online devices.
+
+## Preference-revision invalidation
+
+The ledger snapshots the ID of the most recent `device_bridge_preference_events` row when a new command is queued. D1 checks the **current latest audit-event ID** again in the atomic claim and completion SQL; memory-store tests model the same rule with a new UUID on every preference update. Consequently, choosing a different mode and then choosing the original mode again **cannot** revive an old command, even if all changes occur within the same millisecond. The source preference itself must match the mode and precede issuance. A future receiver must repeat the authoritative revision check immediately before local task actuation, because an in-flight action may race with a later user change.

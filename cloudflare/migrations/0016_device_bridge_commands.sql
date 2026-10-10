@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS device_bridge_commands (
   device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
   owner_account_id TEXT NOT NULL REFERENCES accounts(id),
   credential_binding TEXT NOT NULL,
+  preference_revision TEXT NOT NULL,
   desired_mode TEXT NOT NULL CHECK(desired_mode IN ('auto','on','off')),
   issued_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
