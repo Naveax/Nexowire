@@ -89,6 +89,7 @@ function applyMigrations(db: DatabaseSync): void {
     '0013_owner_device_selection.sql',
     '0014_device_maintenance_preferences.sql',
     '0015_device_bridge_preferences.sql',
+    '0016_device_bridge_commands.sql',
   ]) {
     db.exec(
       readFileSync(
@@ -370,4 +371,101 @@ test('D1 CORE and Bridge owner preferences persist with auditable changes', asyn
   } finally {
     db.close();
   }
+});
+
+test('D1 Broker command ledger atomically claims once and rejects old pairings',async()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+  try {
+    const store=new D1ControlPlaneStore(new SqliteD1Database(db));
+    const issuedAt='2026-10-10T14:00:00.000Z';
+    const expiresAt='2026-10-10T14:02:00.000Z';
+    const hash='a'.repeat(64);
+    await store.putQuotaSubject({id:'ledger-quota',kind:'free-cluster',createdAt:issuedAt,updatedAt:issuedAt});
+    await store.putAccount({
+      id:'ledger-owner',quotaSubjectId:'ledger-quota',displayName:null,
+      planId:'free',customPlan:null,admin:false,createdAt:issuedAt,updatedAt:issuedAt,
+    });
+    const device={
+      id:'ledger-device',ownerAccountId:'ledger-owner',deviceAnchorHash:null,
+      name:'Ledger test',platform:'win32',credentialHash:hash,
+      accessMode:'full' as const,agentVersion:'1.0.5',
+      privilegeMode:'broker' as const,adminBridgeReady:true,
+      online:true,lastSeenAt:issuedAt,createdAt:issuedAt,updatedAt:issuedAt,
+    };
+    await store.putDevice(device);
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T13:59:50.000Z'});
+    const queued={
+      requestId:'11111111-1111-4111-8111-111111111111',
+      deviceId:device.id,ownerAccountId:device.ownerAccountId,
+      credentialBinding:hash,desiredMode:'off' as const,
+      issuedAt,expiresAt,
+    };
+    assert.equal(await store.getBridgeCommand(queued.requestId),null);
+    assert.equal(await store.queueBridgeCommand(queued),true);
+    assert.equal(await store.queueBridgeCommand(queued),false);
+    assert.equal((await store.getBridgeCommand(queued.requestId))?.status,'queued');
+    const claims=await Promise.all(Array.from({length:8},()=>
+      store.claimBridgeCommand(queued.requestId,device.id,hash,'2026-10-10T14:01:00.000Z')));
+    assert.equal(claims.filter(Boolean).length,1);
+    assert.equal((await store.getBridgeCommand(queued.requestId))?.status,'claimed');
+    assert.equal(await store.completeBridgeCommand(
+      queued.requestId,device.id,hash,'applied','2026-10-10T14:01:01.000Z',null,
+    ),true);
+    assert.equal(await store.completeBridgeCommand(
+      queued.requestId,device.id,hash,'applied','2026-10-10T14:01:02.000Z',null,
+    ),false);
+    assert.equal((await store.getBridgeCommand(queued.requestId))?.status,'applied');
+    assert.equal(await store.queueBridgeCommand({...queued,requestId:'22222222-2222-4222-8222-222222222222',ownerAccountId:'other'}),false);
+    assert.equal(await store.queueBridgeCommand({...queued,requestId:'22222222-2222-4222-8222-222222222222',credentialBinding:'b'.repeat(64)}),false);
+    assert.equal(await store.queueBridgeCommand({...queued,requestId:'22222222-2222-4222-8222-222222222222',expiresAt:'2026-10-10T14:05:00.000Z'}),false);
+    assert.equal(await store.queueBridgeCommand({...queued,requestId:'22222222-2222-4222-8222-222222222222',expiresAt:'2026-10-10T14:02:00Z'}),false);
+    const pending={...queued,requestId:'33333333-3333-4333-8333-333333333333'};
+    assert.equal(await store.queueBridgeCommand(pending),true);
+    assert.equal((await store.getBridgeCommand(pending.requestId))?.preferenceRevision?.length,32);
+    // A repeated preference update at the SAME timestamp invalidates old intent.
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T13:59:50.000Z'});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,expiresAt),false);
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'invalid-time'),false);
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'on',updatedAt:'2026-10-10T14:00:10.000Z'});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
+    await store.putDeviceBridgePreference({deviceId:device.id,ownerAccountId:device.ownerAccountId,desiredMode:'off',updatedAt:'2026-10-10T14:00:11.000Z'});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
+    await store.putDevice({...device,credentialHash:'b'.repeat(64)});
+    assert.equal(await store.claimBridgeCommand(pending.requestId,device.id,hash,'2026-10-10T14:01:00.000Z'),false);
+    assert.equal(await store.queueBridgeCommand({...pending,requestId:'44444444-4444-4444-8444-444444444444'}),false);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM device_bridge_commands').get()?.n,2);
+  }finally{db.close()}
+});
+
+test('D1 Broker failed receipt commits once and refuses invalid failures',async()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys=ON');
+  applyMigrations(db);
+  try{
+    const store=new D1ControlPlaneStore(new SqliteD1Database(db));
+    const time='2026-10-10T14:00:00.000Z',hash='c'.repeat(64);
+    await store.putQuotaSubject({id:'q',kind:'free-cluster',createdAt:time,updatedAt:time});
+    await store.putAccount({id:'o',quotaSubjectId:'q',displayName:null,planId:'free',customPlan:null,admin:false,createdAt:time,updatedAt:time});
+    await store.putDevice({
+      id:'d',ownerAccountId:'o',deviceAnchorHash:null,name:'Test',platform:'win32',credentialHash:hash,
+      accessMode:'full',agentVersion:null,privilegeMode:null,adminBridgeReady:false,
+      online:false,lastSeenAt:null,createdAt:time,updatedAt:time,
+    });
+    await store.putDeviceBridgePreference({deviceId:'d',ownerAccountId:'o',desiredMode:'auto',updatedAt:'2026-10-10T13:59:50.000Z'});
+    const req='55555555-5555-4555-8555-555555555555';
+    assert.equal(await store.queueBridgeCommand({
+      requestId:req,deviceId:'d',ownerAccountId:'o',credentialBinding:hash,
+      desiredMode:'auto',issuedAt:time,expiresAt:'2026-10-10T14:01:59.000Z',
+    }),true);
+    assert.equal(await store.completeBridgeCommand(req,'d',hash,'failed','2026-10-10T14:00:20.000Z','TASK_FAILED'),false);
+    assert.equal(await store.claimBridgeCommand(req,'d',hash,'2026-10-10T14:00:15.000Z'),true);
+    assert.equal(await store.completeBridgeCommand(req,'d',hash,'failed','2026-10-10T14:00:10.000Z','TASK_FAILED'),false);
+    assert.equal(await store.completeBridgeCommand(req,'d',hash,'failed','2026-10-10T14:00:20.000Z',null),false);
+    assert.equal(await store.completeBridgeCommand(req,'d',hash,'applied','2026-10-10T14:00:20.000Z','TASK_FAILED'),false);
+    assert.equal(await store.completeBridgeCommand(req,'d',hash,'failed','2026-10-10T14:00:20.000Z','TASK_FAILED'),true);
+    assert.equal((await store.getBridgeCommand(req))?.failureCode,'TASK_FAILED');
+  }finally{db.close()}
 });
