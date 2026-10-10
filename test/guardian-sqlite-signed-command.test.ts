@@ -36,6 +36,7 @@ function fixture(){
       database:db,assertProtected:()=>{},
       readCurrentPairing:async()=>({
         deviceId,credentialBinding,preferenceRevision:revision,currentlyAuthorized,
+        approvedRequestId:requestId,approvedPreferenceRevision:revision,
       }),
     });
     const envelope=signGuardianHubCommand({

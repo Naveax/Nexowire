@@ -11,8 +11,8 @@ import {
   createProtectedGuardianSqliteReplayReserve,
 } from '../src/agent/guardian-sqlite-replay-ledger.js';
 import {
-  type GuardianCurrentLocalPairing,
-} from '../src/agent/guardian-local-replay-ledger.js';
+  type GuardianSqliteCurrentOwnerApproval,
+} from '../src/agent/guardian-sqlite-replay-ledger.js';
 
 const request='11111111-1111-4111-8111-111111111111';
 const deviceId='device-1';
@@ -25,9 +25,10 @@ function fixture() {
   const provisioner=new DatabaseSync(filename);
   provisioner.exec(GUARDIAN_REPLAY_SCHEMA);
   provisioner.close();
-  let current:GuardianCurrentLocalPairing={
+  let current:GuardianSqliteCurrentOwnerApproval={
     deviceId,credentialBinding:binding,preferenceRevision:revision,
     currentlyAuthorized:true,
+    approvedRequestId:request,approvedPreferenceRevision:revision,
   };
   let checks=0;
   const openDb=()=>new DatabaseSync(filename);
@@ -38,7 +39,7 @@ function fixture() {
   });
   return {
     filename,directory,openDb,options,
-    update(x:GuardianCurrentLocalPairing){current=x},
+    update(x:GuardianSqliteCurrentOwnerApproval){current=x},
     get current(){return current},
     get checks(){return checks},
     cleanup(){rmSync(directory,{recursive:true,force:true})},
@@ -95,6 +96,8 @@ const reserve=createGuardianSqliteReplayReserve({
   readCurrentPairing:async()=>({
     deviceId:'device-1',credentialBinding:'a'.repeat(64),
     preferenceRevision:'owner-revision-1',currentlyAuthorized:true,
+    approvedRequestId:'11111111-1111-4111-8111-111111111111',
+    approvedPreferenceRevision:'owner-revision-1',
   }),
 });
 const ok=await reserve('11111111-1111-4111-8111-111111111111',
@@ -127,6 +130,8 @@ const reserve=createGuardianSqliteReplayReserve({
   readCurrentPairing:async()=>({
     deviceId:'device-1',credentialBinding:'a'.repeat(64),
     preferenceRevision:'owner-revision-1',currentlyAuthorized:true,
+    approvedRequestId:'11111111-1111-4111-8111-111111111111',
+    approvedPreferenceRevision:'owner-revision-1',
   }),
 });
 const won=await reserve('11111111-1111-4111-8111-111111111111',
@@ -168,6 +173,26 @@ test('pairing revocation before commit fails with no row',async()=>{
     );
     assert.deepEqual(db.prepare('SELECT * FROM guardian_used_requests').all(),[]);
   } finally {db.close();f.cleanup()}
+});
+
+test('signed request needs current owner approval for exact UUID and preference revision',async()=>{
+  for(const changed of [
+    {approvedRequestId:'22222222-2222-4222-8222-222222222222'},
+    {approvedPreferenceRevision:'stale-owner-revision'},
+  ]) {
+    const f=fixture(),db=f.openDb();
+    try {
+      f.update({...f.current,...changed});
+      const reserve=createGuardianSqliteReplayReserve(f.options(db));
+      await assert.rejects(
+        reserve(request,deviceId,binding,revision),
+        /GUARDIAN_SQLITE_CURRENT_PAIRING_REVOKED/,
+      );
+      assert.equal((db.prepare(
+        'SELECT COUNT(*) AS total FROM guardian_used_requests',
+      ).get() as {total:number}).total,0);
+    }finally{db.close();f.cleanup()}
+  }
 });
 
 test('revocation racing after durable commit consumes command but cannot authorize it',async()=>{
@@ -240,7 +265,8 @@ test('production factory is fixed-root Windows-only and never installs itself',(
   if(process.platform!=='win32') {
     assert.throws(()=>createProtectedGuardianSqliteReplayReserve(async()=>({
       deviceId,credentialBinding:binding,preferenceRevision:revision,
-      currentlyAuthorized:true,
+      currentlyAuthorized:true,approvedRequestId:request,
+      approvedPreferenceRevision:revision,
     })),/GUARDIAN_SQLITE_PROTECTED_WINDOWS_ONLY/);
   }
 });

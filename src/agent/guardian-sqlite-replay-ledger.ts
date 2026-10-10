@@ -32,10 +32,17 @@ CREATE TABLE guardian_used_requests (
 ) STRICT;
 `;
 
+export interface GuardianSqliteCurrentOwnerApproval extends GuardianCurrentLocalPairing {
+  /** Exact command UUID independently approved by the current owner. */
+  readonly approvedRequestId:string;
+  /** Approval must be tied to the latest owner's desired-mode revision. */
+  readonly approvedPreferenceRevision:string;
+}
+
 export interface GuardianSqliteReplayOptions {
   readonly database: DatabaseSync;
-  /** Trusted local pairing/owner-revision observer, NOT an HTTP field. */
-  readonly readCurrentPairing: () => Promise<GuardianCurrentLocalPairing>;
+  /** Trusted local approval/pairing observer, NOT an HTTP request body. */
+  readonly readCurrentPairing: () => Promise<GuardianSqliteCurrentOwnerApproval>;
   /**
    * Production wrapper checks separately protected Guardian root, database
    * and descendants each time. Tests may provide an isolated fixture checker.
@@ -93,7 +100,9 @@ export function createGuardianSqliteReplayReserve(
       if (!facts.currentlyAuthorized ||
           facts.deviceId !== deviceId ||
           facts.credentialBinding !== credentialBinding ||
-          facts.preferenceRevision !== preferenceRevision) {
+          facts.preferenceRevision !== preferenceRevision ||
+          facts.approvedRequestId !== requestId ||
+          facts.approvedPreferenceRevision !== preferenceRevision) {
         throw new Error('GUARDIAN_SQLITE_CURRENT_PAIRING_REVOKED');
       }
     };
@@ -130,7 +139,7 @@ export function createGuardianSqliteReplayReserve(
  * state database; never auto-creates it or enables Windows tasks.
  */
 export function createProtectedGuardianSqliteReplayReserve(
-  readCurrentPairing:()=>Promise<GuardianCurrentLocalPairing>,
+  readCurrentPairing:()=>Promise<GuardianSqliteCurrentOwnerApproval>,
 ):{ reserve:BridgeGuardianAtomicReserve;close:()=>void } {
   if (process.platform !== 'win32') {
     throw new Error('GUARDIAN_SQLITE_PROTECTED_WINDOWS_ONLY');
