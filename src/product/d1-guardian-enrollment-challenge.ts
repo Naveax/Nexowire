@@ -47,6 +47,10 @@ export async function verifyAndConsumeGuardianEnrollmentChallenge(
        AND consumed_at IS NULL
        AND issued_at <= ?
        AND expires_at > ?
+       -- An old application timestamp is insufficient when D1 was queued:
+       -- evaluate UTC time when SQLite actually executes this UPDATE.
+       AND issued_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+       AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
        AND EXISTS (
          SELECT 1 FROM devices AS d
          WHERE d.id = device_guardian_enrollment_challenges.device_id
