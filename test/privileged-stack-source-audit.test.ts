@@ -47,6 +47,7 @@ test('read-only source auditor does not mutate ACLs or invoke task start and sto
   const source=readFileSync(new URL('../src/security/privileged-stack-source-audit.ts',import.meta.url),'utf8');
   assert.match(source,/lstatSync/);
   assert.match(source,/verifyWindowsPrivateAcl/);
+  assert.match(source,/stat\.nlink!==1/);
   assert.doesNotMatch(source,/hardenWindowsProgramDataAcl|icacls\.exe|Register-ScheduledTask|Unregister-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask|chmodSync|chownSync/);
 });
 

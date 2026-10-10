@@ -62,7 +62,10 @@ export function inventoryReadOnlySourceTree(
       throw new Error('STACK_TREE_UNTRUSTED_ACL');
     }
     verifiedAclEntries++;
+    // Reject NTFS/POSIX hardlinked source: a second path may live under an
+    // unverified writable parent even when this path's ACL looks private.
     if(stat.isFile()) {
+      if(stat.nlink!==1)throw new Error('STACK_TREE_HARDLINK_DENIED');
       scannedFiles++;
       continue;
     }

@@ -114,5 +114,6 @@ test('preflight source is read-only and does not try to install/enable protected
   );
   assert.match(code,/verifyWindowsPrivateAcl/);
   assert.match(code,/lstatSync/);
+  assert.match(code,/stat\.nlink!==1/);
   assert.doesNotMatch(code,/hardenWindowsProgramDataAcl|icacls\.exe|Register-ScheduledTask|Unregister-ScheduledTask|Start-ScheduledTask|Enable-ScheduledTask|Stop-ScheduledTask|Disable-ScheduledTask/);
 });

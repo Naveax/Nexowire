@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mkdtempSync,writeFileSync,rmSync,symlinkSync,readFileSync,
+  mkdtempSync,writeFileSync,rmSync,symlinkSync,linkSync,readFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -104,6 +104,17 @@ test('journal reparse/symlink and malformed paths are rejected',()=>{
     assert.throws(()=>auditGuardianSqliteSidecars(f.database,()=>{}),
       /GUARDIAN_SQLITE_SIDECAR_LINK_OR_NODE_UNTRUSTED/);
   } finally {f.cleanup()}
+});
+
+test('rollback journal hardlink aliases outside the protected ledger are refused',()=>{
+  const f=fixture();
+  try {
+    const elsewhere=path.join(f.root,'untrusted-export');
+    writeFileSync(elsewhere,'fixture');
+    linkSync(elsewhere,f.database+'-journal');
+    assert.throws(()=>auditGuardianSqliteSidecars(f.database,()=>{}),
+      /GUARDIAN_SQLITE_SIDECAR_LINK_OR_NODE_UNTRUSTED/);
+  }finally{f.cleanup()}
 });
 
 test('pinned production SQLite wrapper always checks sidecar ACL, no install mutation',()=>{
