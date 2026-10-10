@@ -101,7 +101,7 @@ test('tampered task, health, failure state, time and signature all fail verifica
     {...sig,receipt:{...sig.receipt,taskState:'Ready'}},
     {...sig,receipt:{...sig.receipt,result:'failed',failureCode:'TASK_FAILED'}},
     {...sig,receipt:{...sig.receipt,observedAt:'2026-10-10T15:01:01.000Z'}},
-    {...sig,signature:'A'+sig.signature.slice(1)},
+    {...sig,signature:(sig.signature.startsWith('A')?'B':'A')+sig.signature.slice(1)},
     {...sig,preferenceRevision:'rev-forged'},
   ];
   for(const modified of tampered){

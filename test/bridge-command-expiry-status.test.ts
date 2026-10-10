@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {generateKeyPairSync} from 'node:crypto';
+import {guardianPublicKeyId,signGuardianModeReceipt} from '../src/protocol/guardian-signed-receipt.js';
 import {MemoryControlPlaneStore} from '../src/product/memory-control-plane-store.js';
 import {ControlPlaneService} from '../src/product/control-plane-service.js';
 
 const base=new Date('2026-10-10T15:00:00.000Z');
 async function fixture() {
   let time=new Date(base);
+  const keys=generateKeyPairSync('ed25519');
   const store=new MemoryControlPlaneStore();
   const service=new ControlPlaneService(store,{now:()=>time});
   const owner={accountId:'expiry-owner',role:'user'} as const;
@@ -23,8 +26,17 @@ async function fixture() {
   await service.setDeviceBridgePreference(owner,deviceId,'on');
   const issue=async()=>await service.issueBridgeModeCommand(owner,deviceId,'on');
   const now=(ms:number)=>{time=new Date(base.getTime()+ms)};
-  return {store,service,owner,deviceId,credential:paired.deviceCredential,issue,now};
+  const preference=await store.getDeviceBridgePreference(deviceId);
+  assert.ok(preference);
+  return {store,service,owner,deviceId,credential:paired.deviceCredential,issue,now,
+    keys,preferenceRevision:preference.updatedAt};
 }
+
+test('unsigned finalization is not exposed outside ControlPlaneService',async()=>{
+  const f=await fixture();
+  assert.equal('completeBridgeModeCommand' in f.service,false);
+  assert.equal(typeof f.service.completeSignedBridgeModeCommand,'function');
+});
 
 test('queued commands project expired exactly at expiry without writing into durable audit history',async()=>{
   const {store,service,owner,issue,now}=await fixture();
@@ -70,7 +82,15 @@ test('final applied or failed results remain auditable after timeout',async()=>{
       failureCode:result==='failed'?'BROKER_NOT_READY':null,
     };
     f.now(31_000);
-    const accepted=await f.service.completeBridgeModeCommand(f.credential,receipt);
+    const signedReceipt=signGuardianModeReceipt({
+      type:'guardian.signed-bridge-receipt',version:1,
+      intent:claimed,receipt,
+      preferenceRevision:f.preferenceRevision,
+      keyId:guardianPublicKeyId(f.keys.publicKey),
+    },f.keys.privateKey);
+    const accepted=await f.service.completeSignedBridgeModeCommand(
+      f.credential,signedReceipt,async()=>f.keys.publicKey,
+    );
     assert.equal(accepted.status,result);
     f.now(200_000);
     assert.equal((await f.service.bridgeCommandStatus(f.owner,issued.requestId)).status,result);

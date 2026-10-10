@@ -1037,8 +1037,8 @@ export class ControlPlaneService {
     };
   }
 
-  /** Receipt validation is independent of claimed/queued state. */
-  async completeBridgeModeCommand(
+  /** Private finalizer: no caller may persist a Broker outcome without verifying the registered Guardian signature first. */
+  async #completeBridgeModeCommand(
     credential: string, rawReceipt: unknown,
   ): Promise<{requestId:string;status:'applied'|'failed'}> {
     const agent = await this.authenticateDeviceCredential(credential);
@@ -1131,7 +1131,7 @@ export class ControlPlaneService {
     });
     // Still re-check pairing, preference, task/health schema and atomic replay
     // through the existing completion transaction. Signature != OS evidence.
-    return await this.completeBridgeModeCommand(credential,receipt);
+    return await this.#completeBridgeModeCommand(credential,receipt);
   }
 
   /** Owner-only inspection: never include device credential digests in HTTP. */
