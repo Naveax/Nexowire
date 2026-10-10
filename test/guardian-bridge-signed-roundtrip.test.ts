@@ -97,6 +97,7 @@ async function fixture(mode:'on'|'off'|'auto') {
     currentGuardianKeyId:guardianPublicKeyId(guardian.publicKey),
     enrolledHubPublicKey:hub.publicKey,
     now:new Date('2026-10-10T15:00:30.000Z'),
+    nowAfterReservation:()=>new Date('2026-10-10T15:00:30.000Z'),
     atomicallyReserveRequest:async(requestId,requestedDevice,binding,revision)=>{
       const verified=await reserveVerifiedGuardianCommand(
         claimed,async()=>localFacts,async(id,dev,cred,rev)=>{
@@ -194,6 +195,7 @@ test('Guardian trust facts block signed Hub commands before any replay reservati
     currentGuardianKeyId:guardianPublicKeyId(f.guardian.publicKey),
     enrolledHubPublicKey:f.hub.publicKey,
     now:new Date('2026-10-10T15:00:30.000Z'),
+    nowAfterReservation:()=>new Date('2026-10-10T15:00:30.000Z'),
     atomicallyReserveRequest:async()=> {
       await reserveVerifiedGuardianCommand(f.claimed,async()=>denied,
         async()=>{throw new Error('MUST_NOT_RESERVE')});

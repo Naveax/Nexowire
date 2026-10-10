@@ -69,6 +69,9 @@ export interface GuardianHubCommandContext {
   /** Pin comes from trusted local enrollment, NEVER the incoming envelope. */
   readonly enrolledHubPublicKey:KeyObject;
   readonly now:Date;
+  /** Fresh local clock after the durable reservation finishes. The initial
+   * timestamp cannot be reused after a slow/blocked storage transaction. */
+  readonly nowAfterReservation:()=>Date;
   /**
    * Must be durable and transactional across local Guardian restarts.
    * It must atomically reject expired, revoked, re-paired or repeated commands.
@@ -110,6 +113,14 @@ export async function verifyAndReserveGuardianHubCommand(
     signed.ownerPreferenceRevision,
   );
   if(!reserved)throw new Error('GUARDIAN_HUB_COMMAND_REPLAY_OR_REVOKED');
+
+  // The transaction may have waited for an OS file lock past expiry. A
+  // persisted reservation then stays consumed, but cannot become success.
+  validateAdminBridgeModeIntent(intent,{
+    deviceId:ctx.deviceId,ownerAccountId:ctx.ownerAccountId,
+    credentialBinding:ctx.credentialBinding,
+    now:ctx.nowAfterReservation(),hasConsumedRequestId:()=>false,
+  });
 
   // A valid Hub command is NOT local elevation or task authorization.
   // Source integrity, expected protected task, owner consent and OS evidence

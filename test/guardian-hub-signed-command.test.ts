@@ -35,6 +35,7 @@ const ctx=():GuardianHubCommandContext=>({
   currentGuardianKeyId:guardianKeyId,
   enrolledHubPublicKey:hub.publicKey,
   now:new Date('2026-10-10T15:01:00.000Z'),
+  nowAfterReservation:()=>new Date('2026-10-10T15:01:00.000Z'),
   atomicallyReserveRequest:async()=>true,
 });
 
@@ -102,6 +103,23 @@ test('expired, future or revoked commands never pass reserve',async()=>{
       ...ctx(),atomicallyReserveRequest:async()=>false,
     }),/GUARDIAN_HUB_COMMAND_REPLAY_OR_REVOKED/,
   );
+});
+
+test('Hub command expiry during local reservation consumes it but rejects the outcome',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  for(const expiredAt of [
+    '2026-10-10T15:02:00.000Z',
+    '2026-10-10T15:02:01.000Z',
+    'Invalid Date',
+  ]) {
+    let reservations=0;
+    await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+      ...ctx(),
+      atomicallyReserveRequest:async()=>{reservations++;return true},
+      nowAfterReservation:()=>new Date(expiredAt),
+    }),/BRIDGE_INTENT_EXPIRED_OR_INVALID/);
+    assert.equal(reservations,1);
+  }
 });
 
 test('atomic repeated claims accept only one locally, durable storage required in production',async()=>{

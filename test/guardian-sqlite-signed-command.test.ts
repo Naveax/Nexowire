@@ -55,6 +55,7 @@ function fixture(){
       currentOwnerPreferenceRevision:ownerPreferenceRevision,
       currentGuardianKeyId:guardianKeyId,
       enrolledHubPublicKey:hub.publicKey,now:clock,
+      nowAfterReservation:()=>new Date(clock),
       atomicallyReserveRequest:reserve,
     };
     return {db,reserve,envelope,context};
