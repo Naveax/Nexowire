@@ -308,7 +308,11 @@ export class ControlPlaneService {
       folders: folders.map(({id, name}) => ({id, name})),
       autoSelectDevices,
       devices: await Promise.all(devices.map(async (device) => {
-        const lease = await this.store.getRootModeLease(device.id);
+        const [lease, maintenance, bridgePreference] = await Promise.all([
+          this.store.getRootModeLease(device.id),
+          this.store.getDeviceMaintenancePreference(device.id),
+          this.store.getDeviceBridgePreference(device.id),
+        ]);
         const unexpiredLease =
           lease?.ownerAccountId === account.id &&
           device.accessMode === 'full' &&
@@ -326,6 +330,16 @@ export class ControlPlaneService {
         rootMode: {
           active: Boolean(active),
           expiresAt: unexpiredLease && lease ? lease.expiresAt : null,
+        },
+        persistentMaintenance: {
+          enabled: Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id && device.accessMode === 'full'),
+          active: Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id && device.accessMode === 'full' && device.online && device.privilegeMode === 'broker' && device.adminBridgeReady === true && bridgePreference?.desiredMode !== 'off'),
+          updatedAt: maintenance?.ownerAccountId === account.id ? maintenance.updatedAt : null,
+        },
+        bridgePreference: {
+          desiredMode: bridgePreference?.ownerAccountId === account.id ? bridgePreference.desiredMode : 'auto',
+          applied: false as const,
+          updatedAt: bridgePreference?.ownerAccountId === account.id ? bridgePreference.updatedAt : null,
         },
         agentVersion: device.agentVersion,
         privilegeMode: device.privilegeMode,
@@ -607,7 +621,7 @@ export class ControlPlaneService {
       name: record.requestedDeviceName,
       platform: boundedText('platform', input.platform, 64),
       credentialHash: secretHash(rawCredential),
-      accessMode: existingDevice?.accessMode ?? 'safe',
+      accessMode: existingDevice?.ownerAccountId === effectiveAccount.id ? existingDevice.accessMode : 'safe',
       agentVersion: existingDevice?.agentVersion ?? null,
       privilegeMode: existingDevice?.privilegeMode ?? null,
       adminBridgeReady:
@@ -625,6 +639,15 @@ export class ControlPlaneService {
       ownerAccountId: effectiveAccount.id,
       expiresAt: new Date(0).toISOString(),
       updatedAt: now,
+    });
+    // Pairing a new credential always revokes the old persistent preference.
+    await this.store.putDeviceMaintenancePreference({
+      deviceId: device.id, ownerAccountId: effectiveAccount.id,
+      enabled: false, updatedAt: now,
+    });
+    await this.store.putDeviceBridgePreference({
+      deviceId: device.id, ownerAccountId: effectiveAccount.id,
+      desiredMode: 'auto', updatedAt: now,
     });
     await this.store.putPairing(consumed.record);
 
@@ -823,19 +846,29 @@ export class ControlPlaneService {
     }
 
     const updatedAt = this.now().toISOString();
-    await this.store.putDevice({
-      ...device,
-      accessMode: mode,
-      updatedAt,
-    });
     if (mode === 'safe') {
+      await this.store.putDeviceMaintenancePreference({
+        deviceId: device.id,
+        ownerAccountId: account.id,
+        enabled: false,
+        updatedAt,
+      });
       await this.store.putRootModeLease({
         deviceId: device.id,
         ownerAccountId: account.id,
         expiresAt: new Date(0).toISOString(),
         updatedAt,
       });
+      await this.store.putDeviceBridgePreference({
+        deviceId: device.id, ownerAccountId: account.id,
+        desiredMode: 'off', updatedAt,
+      });
     }
+    await this.store.putDevice({
+      ...device,
+      accessMode: mode,
+      updatedAt,
+    });
     return {
       deviceId: device.id,
       accessMode: mode,
@@ -880,6 +913,55 @@ export class ControlPlaneService {
       deviceId,
       rootMode: { active: enabled, expiresAt: enabled ? expiresAt : null },
     };
+  }
+
+  /** Stores a durable, owner-controlled maintenance preference, not OS elevation. */
+  async setDeviceCorePreference(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+    enabled: boolean,
+  ): Promise<{ deviceId: string; persistentMaintenance: { enabled: boolean; active: boolean; updatedAt: string } }> {
+    if (identity.role === 'service') throw new Error('CORE_REQUIRES_OWNER_LOGIN');
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id) throw new Error('DEVICE_NOT_FOUND');
+    const bridgePreference = await this.store.getDeviceBridgePreference(deviceId);
+    if (enabled && (device.accessMode !== 'full' || !device.online || device.privilegeMode !== 'broker' || device.adminBridgeReady !== true || bridgePreference?.desiredMode === 'off')) {
+      throw new Error('CORE_REQUIRES_FULL_ONLINE_BROKER');
+    }
+    const updatedAt = this.now().toISOString();
+    await this.store.putDeviceMaintenancePreference({
+      deviceId, ownerAccountId: account.id, enabled, updatedAt,
+    });
+    return { deviceId, persistentMaintenance: { enabled, active: enabled, updatedAt } };
+  }
+
+  /** Desired device Broker mode. This endpoint never executes host commands. */
+  async setDeviceBridgePreference(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+    modeInput: string,
+  ): Promise<{ deviceId: string; bridgePreference: { desiredMode: 'auto' | 'on' | 'off'; applied: false; updatedAt: string } }> {
+    if (identity.role === 'service') throw new Error('BRIDGE_REQUIRES_OWNER_LOGIN');
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const device = await this.store.getDevice(deviceId);
+    if (!device || device.ownerAccountId !== account.id) throw new Error('DEVICE_NOT_FOUND');
+    const mode = modeInput.trim().toLowerCase();
+    if (mode !== 'auto' && mode !== 'on' && mode !== 'off') throw new Error('INVALID_BRIDGE_MODE');
+    const updatedAt = this.now().toISOString();
+    if (mode === 'off') {
+      // Selecting OFF invalidates an earlier CORE preference even if the
+      // host never receives the desired Broker mode.
+      await this.store.putDeviceMaintenancePreference({
+        deviceId, ownerAccountId: account.id, enabled: false, updatedAt,
+      });
+    }
+    await this.store.putDeviceBridgePreference({
+      deviceId, ownerAccountId: account.id, desiredMode: mode, updatedAt,
+    });
+    return {deviceId, bridgePreference: { desiredMode: mode, applied: false, updatedAt }};
   }
 
   async chargeUsage(input: {
