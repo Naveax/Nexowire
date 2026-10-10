@@ -44,7 +44,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node ui-source/scripts/preflight-control-plane-ui-only.mjs pinned-production
+          node ui-source/scripts/preflight-control-plane-ui-only.mjs pinned-production > ui-only-preflight-manifest.json
+          cat ui-only-preflight-manifest.json
 
       - name: Check staged UI syntax
         run: node --check pinned-production/web/app.js
@@ -68,3 +69,22 @@ jobs:
           git -C pinned-production diff --exit-code HEAD -- cloudflare/migrations
           echo "UI_ONLY_PREFLIGHT=PASS"
           echo "PRODUCTION_DEPLOYMENT_PERFORMED=false"
+
+      - name: Prepare fixed, reviewed two-file UI preview artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ui-preview/web
+          cp pinned-production/web/app.js ui-preview/web/app.js
+          cp pinned-production/web/styles.css ui-preview/web/styles.css
+          cp ui-only-preflight-manifest.json ui-preview/manifest.json
+          node -e 'const m=require("./ui-preview/manifest.json"); if(m.backendCommit!=="6f5863363b4ad25bbecceca5b5c78e8ffdd8fffd" || m.liveBaselineMatched!==true || m.productionDeploymentPerformed!==false || m.backendRuntimeAttested!==false || m.files.length!==2 || m.files.map(x=>x.path).sort().join(",")!=="web/app.js,web/styles.css") process.exit(1)'
+          test "$(find ui-preview -type f | wc -l | tr -d ' ')" = 3
+
+      - name: Upload verified review artifact (NO DEPLOY)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexowire-ui-only-review
+          path: ui-preview/
+          if-no-files-found: error
+          retention-days: 7

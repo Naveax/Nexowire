@@ -22,3 +22,18 @@ test('preview workflow lacks Cloudflare secrets, deployment, D1 migration or mut
   assert.match(wf,/permissions:\s*\n\s*contents: read/);
   assert.match(wf,/PRODUCTION_DEPLOYMENT_PERFORMED=false/);
 });
+
+test('upload only two candidate assets and one verified SHA manifest for manual inspection',()=>{
+  assert.match(wf,/preflight-control-plane-ui-only\.mjs pinned-production > ui-only-preflight-manifest\.json/);
+  assert.match(wf,/cp pinned-production\/web\/app\.js ui-preview\/web\/app\.js/);
+  assert.match(wf,/cp pinned-production\/web\/styles\.css ui-preview\/web\/styles\.css/);
+  assert.match(wf,/cp ui-only-preflight-manifest\.json ui-preview\/manifest\.json/);
+  assert.match(wf,/m\.liveBaselineMatched!==true/);
+  assert.match(wf,/m\.productionDeploymentPerformed!==false/);
+  assert.match(wf,/m\.backendRuntimeAttested!==false/);
+  assert.match(wf,/find ui-preview -type f/);
+  assert.match(wf,/actions\/upload-artifact@v4/);
+  assert.match(wf,/path: ui-preview\//);
+  assert.match(wf,/retention-days: 7/);
+  assert.doesNotMatch(wf,/\bwrangler\b|CLOUDFLARE_API_TOKEN|wrangler\s+deploy|git\s+push/);
+});
