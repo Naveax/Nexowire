@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mkdtempSync,writeFileSync,rmSync,symlinkSync,linkSync,readFileSync,
+  mkdtempSync,writeFileSync,appendFileSync,rmSync,symlinkSync,linkSync,readFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -114,6 +114,28 @@ test('rollback journal hardlink aliases outside the protected ledger are refused
     linkSync(elsewhere,f.database+'-journal');
     assert.throws(()=>auditGuardianSqliteSidecars(f.database,()=>{}),
       /GUARDIAN_SQLITE_SIDECAR_LINK_OR_NODE_UNTRUSTED/);
+  }finally{f.cleanup()}
+});
+
+test('reject journal content changing during trusted ACL inspection',()=>{
+  const f=fixture();
+  try {
+    const journal=f.database+'-journal';
+    writeFileSync(journal,'initial');
+    assert.throws(()=>auditGuardianSqliteSidecars(f.database,p=>{
+      if(p===journal)appendFileSync(journal,'late');
+    }),/GUARDIAN_SQLITE_SIDECAR_CHANGED_DURING_AUDIT/);
+  }finally{f.cleanup()}
+});
+
+test('reject journal removed during the ACL check',()=>{
+  const f=fixture();
+  try {
+    const journal=f.database+'-journal';
+    writeFileSync(journal,'initial');
+    assert.throws(()=>auditGuardianSqliteSidecars(f.database,p=>{
+      if(p===journal)rmSync(journal);
+    }),/GUARDIAN_SQLITE_SIDECAR_CHANGED_DURING_AUDIT/);
   }finally{f.cleanup()}
 });
 

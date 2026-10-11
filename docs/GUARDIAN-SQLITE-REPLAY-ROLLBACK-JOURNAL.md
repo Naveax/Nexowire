@@ -8,6 +8,8 @@ Tests verify an exclusive winner among 20 asynchronous reservations, **exactly o
 
 The only production-oriented factory pins `C:\ProgramData\Nexowire\bridge-guardian\state\replay.sqlite` and checks the Guardian launcher and each ancestor directory/database owner/write ACL before opening it. A separately owner-approved protected installer must pre-provision and attest the database, owner credentials and Guardian executable. This source PR does not create a production database.
 
+The separate read-only `-journal` / `-wal` / `-shm` sidecar preflight now checks file identity and modification metadata before and after ACL inspection, then rechecks all three paths, including those observed absent. Files disappearing, changing or appearing during that sampling window fail closed. This does not create an atomic filesystem snapshot or establish storage integrity across power loss or a later path swap.
+
 **Critical remaining limits:**
 - `synchronous=EXTRA` requests stronger SQLite/OS flush behavior but does not prove that a specific storage controller respects flush or eliminate all filesystem/hardware crash failure modes. Real forced-power-loss device tests and complete journal/sidecar ACL analysis remain necessary.
 - A SQLite transaction cannot atomically commit with Cloudflare D1 owner revocation. The local reserve callback now requires independently trusted **exact owner-approved request UUID and matching preference revision** in addition to current pairing/authorization, but a protected authenticated session/lease protocol tied to Cloudflare approval is still necessary, and remote revocation may race even the post-commit re-read.
