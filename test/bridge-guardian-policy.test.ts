@@ -178,6 +178,65 @@ test('Guardian rechecks clock, owner consent, pairing and its own health after l
   }
 });
 
+test('Guardian rejects a backwards post-reservation clock after consuming replay marker',async()=>{
+  let reads=0,reservations=0;
+  await assert.rejects(reserveVerifiedGuardianCommand(
+    intent(),
+    async()=>++reads===1?facts():{
+      ...facts(),now:new Date('2026-10-10T14:59:59.000Z'),
+    },
+    async()=>{reservations++;return true},
+  ),/BRIDGE_GUARDIAN_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(reads,2);
+  assert.equal(reservations,1);
+});
+
+test('mutable initial Date cannot move the trusted clock baseline after reservation',async()=>{
+  const shared=facts();
+  let reads=0,reservations=0;
+  await assert.rejects(reserveVerifiedGuardianCommand(
+    intent(),async()=>{reads++;return shared},
+    async()=>{
+      reservations++;
+      shared.now.setTime(Date.parse('2026-10-10T14:59:59.000Z'));
+      return true;
+    },
+  ),/BRIDGE_GUARDIAN_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(reads,2);
+  assert.equal(reservations,1);
+});
+
+test('owner preference baseline cannot be changed via a reused mutable fact object',async()=>{
+  const shared={
+    ...facts(),
+    currentPreference:{desiredMode:'on' as const,revision:REVISION},
+    ownerApproval:{requestId:REQUEST_ID,preferenceRevision:REVISION},
+  };
+  let reads=0,reservations=0;
+  await assert.rejects(reserveVerifiedGuardianCommand(
+    intent(),async()=>{reads++;return shared},
+    async()=>{
+      reservations++;
+      shared.currentPreference.revision='audit-event-11';
+      shared.ownerApproval.preferenceRevision='audit-event-11';
+      return true;
+    },
+  ),/BRIDGE_GUARDIAN_OWNER_APPROVAL_INVALID/);
+  assert.equal(reads,2);
+  assert.equal(reservations,1);
+});
+
+test('truthy nonboolean replay reservation cannot authorize local processing',async()=>{
+  for(const invalid of [1,'true',{},[],null,undefined]){
+    let reads=0;
+    await assert.rejects(reserveVerifiedGuardianCommand(
+      intent(),async()=>{reads++;return facts()},
+      async()=>invalid as boolean,
+    ),/BRIDGE_GUARDIAN_ALREADY_CONSUMED_OR_REVOKED/);
+    assert.equal(reads,1);
+  }
+});
+
 test('unknown instructions or malformed schema never reach reservation callback',async()=>{
   let invoked=false;
   for(const malformed of [
