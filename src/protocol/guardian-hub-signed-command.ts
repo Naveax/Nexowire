@@ -58,6 +58,17 @@ export function signGuardianHubCommand(
   ).toString('base64url')};
 }
 
+/** Trusted, fresh device/owner/HUB enrollment snapshot after durable reserve. */
+export interface GuardianHubPostReservationTrust {
+  readonly deviceId:string;
+  readonly ownerAccountId:string;
+  readonly credentialBinding:string;
+  readonly currentOwnerPreferenceRevision:string;
+  readonly currentGuardianKeyId:string;
+  /** Must come from protected enrollment, not from the signed command. */
+  readonly enrolledHubPublicKey:KeyObject;
+}
+
 export interface GuardianHubCommandContext {
   readonly deviceId:string;
   readonly ownerAccountId:string;
@@ -72,6 +83,11 @@ export interface GuardianHubCommandContext {
   /** Fresh local clock after the durable reservation finishes. The initial
    * timestamp cannot be reused after a slow/blocked storage transaction. */
   readonly nowAfterReservation:()=>Date;
+  /**
+   * Independent trusted read AFTER durable reservation. Never reuse a
+   * pre-reservation owner/device/key snapshot as a second attestation.
+   */
+  readonly readTrustAfterReservation:()=>Promise<GuardianHubPostReservationTrust>;
   /**
    * Must be durable and transactional across local Guardian restarts.
    * It must atomically reject expired, revoked, re-paired or repeated commands.
@@ -129,10 +145,31 @@ export async function verifyAndReserveGuardianHubCommand(
   if(!Number.isFinite(afterMs) || afterMs<beforeMs) {
     throw new Error('GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED');
   }
+  // Fresh enrollment and preference state can change while a durable
+  // reservation is blocked. Consuming the marker is not permission to accept
+  // a revoked command, rotated signer or unpaired device.
+  const fresh=await ctx.readTrustAfterReservation();
   validateAdminBridgeModeIntent(intent,{
-    deviceId:ctx.deviceId,ownerAccountId:ctx.ownerAccountId,
-    credentialBinding:ctx.credentialBinding,
-    now:afterReservation,hasConsumedRequestId:()=>false,
+    deviceId:fresh.deviceId,ownerAccountId:fresh.ownerAccountId,
+    credentialBinding:fresh.credentialBinding,
+    now:new Date(afterMs),hasConsumedRequestId:()=>false,
+  });
+  if(fresh.currentOwnerPreferenceRevision!==signed.ownerPreferenceRevision ||
+      !revision.safeParse(fresh.currentOwnerPreferenceRevision).success ||
+      fresh.currentGuardianKeyId!==signed.guardianKeyId ||
+      hubCommandPublicKeyId(fresh.enrolledHubPublicKey)!==signed.hubSignerKeyId) {
+    throw new Error('GUARDIAN_HUB_COMMAND_POST_RESERVATION_TRUST_REVOKED');
+  }
+  // A slow trusted re-read itself can cross expiry or roll back the clock.
+  const completed=ctx.nowAfterReservation();
+  const completedMs=completed instanceof Date?completed.getTime():Number.NaN;
+  if(!Number.isFinite(completedMs)||completedMs<afterMs) {
+    throw new Error('GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED');
+  }
+  validateAdminBridgeModeIntent(intent,{
+    deviceId:fresh.deviceId,ownerAccountId:fresh.ownerAccountId,
+    credentialBinding:fresh.credentialBinding,
+    now:new Date(completedMs),hasConsumedRequestId:()=>false,
   });
 
   // A valid Hub command is NOT local elevation or task authorization.
