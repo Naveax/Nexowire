@@ -11,11 +11,16 @@ const MAX_PATH_LENGTH=4096;
 // File identity and modification metadata observed before an ACL check.
 // Ignore atime (read-only traversal can update it). This is a race detector,
 // not a substitute for a kernel-held handle or runtime code attestation.
-function sourceFingerprint(stat:NonNullable<ReturnType<typeof lstatSync>>):string {
+function sourceFingerprint(
+  node:string,stat:NonNullable<ReturnType<typeof lstatSync>>,
+):string {
   return JSON.stringify([
     stat.dev,stat.ino,stat.mode,stat.nlink,stat.size,
     stat.mtimeMs,stat.ctimeMs,stat.birthtimeMs,
     stat.isFile(),stat.isDirectory(),stat.isSymbolicLink(),
+    // NTFS directory metadata alone may not reflect children added/removed.
+    // Snapshot the actual names to reject those changes on revalidation.
+    stat.isDirectory()?readdirSync(node).sort():null,
   ]);
 }
 
@@ -26,7 +31,13 @@ function assertSourceUnchanged(node:string,fingerprint:string):void {
   } catch {
     throw new Error('STACK_TREE_CHANGED_DURING_AUDIT');
   }
-  if(sourceFingerprint(current)!==fingerprint) {
+  let latest:string;
+  try {
+    latest=sourceFingerprint(node,current);
+  } catch {
+    throw new Error('STACK_TREE_CHANGED_DURING_AUDIT');
+  }
+  if(latest!==fingerprint) {
     throw new Error('STACK_TREE_CHANGED_DURING_AUDIT');
   }
 }
@@ -80,7 +91,7 @@ export function inventoryReadOnlySourceTree(
     if(!stat.isDirectory()&&!stat.isFile()) {
       throw new Error('STACK_TREE_NONREGULAR_NODE_DENIED');
     }
-    const fingerprint=sourceFingerprint(stat);
+    const fingerprint=sourceFingerprint(node,stat);
     try {
       aclCheck(node);
     } catch {

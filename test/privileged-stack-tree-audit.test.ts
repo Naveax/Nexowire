@@ -121,6 +121,16 @@ test('reject directory changes during ACL inventory instead of checking stale na
   } finally {f.cleanup()}
 });
 
+test('final pass rejects files introduced under an earlier checked directory',()=>{
+  const f=fixture();
+  try {
+    const existing=path.join(f.lib,'helper.js');
+    assert.throws(()=>inventoryReadOnlySourceTree(f.root,p=>{
+      if(p===existing)writeFileSync(path.join(f.lib,'late.js'),'x');
+    }),/STACK_TREE_CHANGED_DURING_AUDIT/);
+  }finally{f.cleanup()}
+});
+
 test('production auditor pins full Stack root; no local or cloud mutation pathways',()=>{
   const src=readFileSync(
     new URL('../src/security/privileged-stack-tree-audit.ts',import.meta.url),'utf8',
