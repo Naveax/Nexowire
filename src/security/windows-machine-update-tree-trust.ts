@@ -30,11 +30,31 @@ $trusted=@{
 }
 $rights=[System.Security.AccessControl.FileSystemRights]
 $writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+# Shared OS ancestors may legitimately allow creation of unrelated siblings.
+# They must not permit an untrusted identity to replace the *existing*
+# protected update root via delete-child, delete, DACL or ownership control.
+$ancestorMask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
 # First reject reparse/junction ancestors before entering the update tree.
 $cur=$root
 while($cur){
   $item=Get-Item -LiteralPath $cur -Force -ErrorAction Stop
   if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'MACHINE_UPDATE_REPARSE_ANCESTOR'}
+  if($cur -ine $root){
+    $parentAcl=Get-Acl -LiteralPath $cur -ErrorAction Stop
+    $parentOwner=$parentAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    if(-not $trusted.ContainsKey($parentOwner)){throw 'MACHINE_UPDATE_ANCESTOR_OWNER_UNTRUSTED'}
+    foreach($ace in $parentAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+      # INHERIT_ONLY entries do not grant rights over this directory itself.
+      if((([int]$ace.PropagationFlags -band [int][Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){
+        continue
+      }
+      if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
+         ([int]$ace.FileSystemRights -band $ancestorMask) -ne 0 -and
+         -not $trusted.ContainsKey($ace.IdentityReference.Value)){
+        throw 'MACHINE_UPDATE_ANCESTOR_REPLACEMENT_RIGHTS'
+      }
+    }
+  }
   $parent=[IO.Path]::GetDirectoryName($cur.TrimEnd('\'))
   if(!$parent -or $parent -eq $cur){break}
   $cur=$parent

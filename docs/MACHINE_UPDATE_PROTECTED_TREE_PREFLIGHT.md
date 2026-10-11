@@ -4,14 +4,14 @@ P0 #271: a string-canonical machine update root and checksum-verified ZIP are in
 
 ## Source-only barriers
 
-- A read-only fixed inbox Windows PowerShell + full-path Microsoft.PowerShell.Security module audit checks the pre-existing C:\ProgramData\Nexowire tree, including existing descendants and ancestors for directory reparse points. It rejects any item that is a symlink/junction, an untrusted owner, or an allow ACE granting untrusted write/delete/permission-changing rights. Only SYSTEM, Administrators and TrustedInstaller are accepted as trusted owner/writer SIDs. The scan is bounded to 25,000 objects and 120 seconds; a missing root, inaccessible file, unexpected output or error is refusal, not approval.
+- A read-only fixed inbox Windows PowerShell + full-path Microsoft.PowerShell.Security module audit checks the pre-existing C:\ProgramData\Nexowire tree, including existing descendants and ancestors for directory reparse points. Ancestor ACLs must additionally have trusted owners and deny untrusted **delete / delete-child / change-permissions / take-ownership** rights; ordinary unrelated sibling creation on shared OS directories remains permitted. Explicit `INHERIT_ONLY` rights on an ancestor do not count as effective permissions on that ancestor itself. Every item under the protected update root still uses the full write-ACL deny mask. It rejects any item that is a symlink/junction, an untrusted owner, or an allow ACE granting untrusted write/delete/permission-changing rights. Only SYSTEM, Administrators and TrustedInstaller are accepted as trusted owner/writer SIDs. The scan is bounded to 25,000 objects and 120 seconds; a missing root, inaccessible file, unexpected output or error is refusal, not approval.
 - The child audit environment cannot inherit caller PATH, PSModulePath, NODE_OPTIONS, user profile temp or process hooks. One exact success marker is accepted. No ACL is changed by the auditor.
 - The machine updater invokes this audit BEFORE downloads/staging/ACL changes, AFTER the newly staged runtime, and IMMEDIATELY BEFORE detached cutover.
 - After staging and ACL tightening, the existing independent protected runtime validator also checks the staged node.exe signer (valid OpenJS Foundation), the CLI import code subtree and ancestor DACL/reparse protection. No cutover helper is written unless both root and runtime gates pass.
 
 ## Verification on Windows work-pc
 
-26/26 focused machine update and privileged runtime tests PASS, npm typecheck/build PASS. The real read-only auditor accepted the OS-protected inbox Microsoft.PowerShell.Security module tree and rejected a user-owned/writable temporary test directory with a poisoned caller PATH/module search. No update was scheduled or live ACL changed.
+The original 26/26 focused machine update and privileged runtime tests passed. The additional ancestor-rights checks passed 8/8 focused tests, including the actual Windows protected inbox module and signed Node/npm trust inspections; npm typecheck/build also passed. The real read-only auditor accepted the OS-protected inbox Microsoft.PowerShell.Security module tree and rejected a user-owned/writable temporary test directory with a poisoned caller PATH/module search. No update was scheduled or live ACL changed.
 
 ## Current live blocker
 

@@ -24,6 +24,32 @@ test('machine updater read-only ACL auditor uses fixed Windows executable enviro
     assert.equal((env as NodeJS.ProcessEnv)[key],undefined);
 });
 
+test('machine-update audit rejects ancestor replace and DACL-takeover rights',()=>{
+  const source=readFileSync(
+    new URL('../src/security/windows-machine-update-tree-trust.ts',import.meta.url),
+    'utf8',
+  );
+  const ancestor=source.indexOf('$ancestorMask=');
+  const walk=source.indexOf('$cur=$root');
+  const rootScan=source.indexOf('$dirs=New-Object');
+  assert.ok(ancestor>=0 && ancestor<walk && rootScan>walk);
+  const guard=source.slice(walk,rootScan);
+  for(const required of [
+    'Get-Acl -LiteralPath $cur',
+    'MACHINE_UPDATE_ANCESTOR_OWNER_UNTRUSTED',
+    'MACHINE_UPDATE_ANCESTOR_REPLACEMENT_RIGHTS',
+    '$ancestorMask',
+    'DeleteSubdirectoriesAndFiles',
+    'InheritOnly',
+    '$cur -ine $root',
+  ]){
+    assert.ok((required==='DeleteSubdirectoriesAndFiles'?source:guard).includes(required),required);
+  }
+  // Full source tree files/dirs retain the stricter write ACL mask.
+  assert.match(source,/\[int\]\$ace\.FileSystemRights -band \$writeMask/);
+  assert.doesNotMatch(source,/Set-Acl|icacls\.exe|Register-ScheduledTask|Start-ScheduledTask/);
+});
+
 test('root audit accepts exactly one clean marker with normal successful termination',()=>{
   assert.equal(machineUpdateRootAuditSucceeded({
     error:null,status:0,stdout:'PROTECTED_MACHINE_UPDATE_TREE\r\n',
