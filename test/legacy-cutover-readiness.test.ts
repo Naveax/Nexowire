@@ -24,8 +24,10 @@ test('cutover readiness script is read only and cannot claim clearance',()=>{
   assert.match(source,/LEGACY_TASK_UNQUALIFIED_INTERPRETER/);
   assert.match(source,/LEGACY_TASK_LAUNCHER_OUTSIDE_PROTECTED_STACK/);
   assert.match(source,/LEGACY_TASK_INTERACTIVE_POWERSHELL/);
-  assert.match(source,/\$taskInterpreterPinned=\(\[string\]\$action\.Execute -ieq \$psExe\)/);
-  assert.ok(source.includes(String.raw`$taskLauncherUnderProtectedRoot=Under 'C:\ProgramData\NexowireStack' $Launcher`));
+  assert.match(source,/LEGACY_TASK_WORKING_DIRECTORY_UNPINNED/);
+  assert.match(source,/LEGACY_TASK_NONCANONICAL_PROTECTED_ACTION/);
+  assert.match(source,/\$taskInterpreterPinned=\$actionTrust\.system32PowerShellPinned/);
+  assert.match(source,/\$actionTrust=TestProtectedStackTaskAction \$action/);
 });
 
 test('Windows cutover report inventories fixture and retains mandatory blockers',{
@@ -70,6 +72,8 @@ test('Windows cutover report inventories fixture and retains mandatory blockers'
     assert.equal(report.task.system32PowerShellPinned,false);
     assert.equal(report.task.launcherUnderProtectedStack,false);
     assert.equal(report.task.nonInteractive,false);
+    assert.equal(report.task.protectedWorkingDirectory,false);
+    assert.equal(report.task.canonicalProtectedAction,false);
     assert.equal(report.audits.length,3);
     assert.ok(report.audits.every((a:{completed:boolean})=>a.completed));
     assert.ok(report.blockers.includes('TRUSTED_REPLACEMENT_NOT_ACCEPTED'));

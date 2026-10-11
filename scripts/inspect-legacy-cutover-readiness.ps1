@@ -66,6 +66,27 @@ $pkg=InspectTree $RuntimeRoot $Entrypoint 'LEGACY_PACKAGE'
 $launch=InspectTree $LauncherRoot $Launcher 'LEGACY_LAUNCHER'
 $nodeRoot=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($NodeExecutable))
 $node=InspectTree $nodeRoot $NodeExecutable 'NODE_HOST'
+# Compare the real Task action against a strict future cutover command.
+# Caller-supplied -Launcher is only a legacy inventory hint.
+# Substring matching allows decoy -File or -NonInteractive flags.
+function TestProtectedStackTaskAction([AllowNull()][object]$Action){
+ $root='C:\ProgramData\NexowireStack'
+ $launcher=$root+'\run-stack.ps1'
+ $expectedArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$launcher+'"'
+ $execute=if($null -ne $Action){[string]$Action.Execute}else{''}
+ $arguments=if($null -ne $Action){[string]$Action.Arguments}else{''}
+ $workingDirectory=if($null -ne $Action){[string]$Action.WorkingDirectory}else{''}
+ $interpreterPinned=($execute -ieq 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
+ $argumentsPinned=($arguments -ceq $expectedArgs)
+ $directoryPinned=($workingDirectory -ieq $root)
+ return [pscustomobject]@{
+  system32PowerShellPinned=$interpreterPinned
+  launcherUnderProtectedStack=$argumentsPinned
+  nonInteractive=$argumentsPinned
+  protectedWorkingDirectory=$directoryPinned
+  canonicalProtectedAction=($interpreterPinned -and $argumentsPinned -and $directoryPinned)
+ }
+}
 $task=$null
 try{$task=Get-ScheduledTask -TaskName $TaskName -TaskPath '\' -ErrorAction Stop}catch{Block 'LEGACY_SUPERVISOR_TASK_UNVERIFIED'}
 $taskState=if($task){[string]$task.State}else{'not-found'}
@@ -74,21 +95,28 @@ $taskMatch=$false
 $taskInterpreterPinned=$false
 $taskLauncherUnderProtectedRoot=$false
 $taskNonInteractive=$false
+$taskWorkingDirectoryPinned=$false
+$taskActionCanonical=$false
 if($task){
  $actions=@($task.Actions)
  if($actions.Count -eq 1){
   $action=$actions[0]
   $arguments=[string]$action.Arguments
   $taskMatch=([IO.Path]::GetFileName([string]$action.Execute) -ieq 'powershell.exe') -and $arguments.IndexOf($Launcher,[StringComparison]::OrdinalIgnoreCase) -ge 0
-  # A filename-only match does not certify the interpreter or launcher path.
-  $taskInterpreterPinned=([string]$action.Execute -ieq $psExe)
-  $taskLauncherUnderProtectedRoot=Under 'C:\ProgramData\NexowireStack' $Launcher
-  $taskNonInteractive=($arguments -match '(?i)(?:^|\s)-NonInteractive(?:\s|$)')
+  # Inspect the executed action, not the caller-provided -Launcher.
+  $actionTrust=TestProtectedStackTaskAction $action
+  $taskInterpreterPinned=$actionTrust.system32PowerShellPinned
+  $taskLauncherUnderProtectedRoot=$actionTrust.launcherUnderProtectedStack
+  $taskNonInteractive=$actionTrust.nonInteractive
+  $taskWorkingDirectoryPinned=$actionTrust.protectedWorkingDirectory
+  $taskActionCanonical=$actionTrust.canonicalProtectedAction
  }
  if(!$taskMatch){Block 'LEGACY_TASK_LAUNCHER_UNVERIFIED'}
  if(!$taskInterpreterPinned){Block 'LEGACY_TASK_UNQUALIFIED_INTERPRETER'}
  if(!$taskLauncherUnderProtectedRoot){Block 'LEGACY_TASK_LAUNCHER_OUTSIDE_PROTECTED_STACK'}
  if(!$taskNonInteractive){Block 'LEGACY_TASK_INTERACTIVE_POWERSHELL'}
+ if(!$taskWorkingDirectoryPinned){Block 'LEGACY_TASK_WORKING_DIRECTORY_UNPINNED'}
+ if(!$taskActionCanonical){Block 'LEGACY_TASK_NONCANONICAL_PROTECTED_ACTION'}
  if($taskState -eq 'Running'){Block 'LEGACY_SUPERVISOR_RUNNING'}
 }
 function ReadPort([int]$port){
@@ -122,7 +150,7 @@ foreach($item in @(
 foreach($pending in @('TRUSTED_REPLACEMENT_NOT_ACCEPTED','TASK_AND_SECRET_ROLLBACK_UNVERIFIED','OWNER_AUTH_AND_SESSION_ACCEPTANCE_PENDING')){Block $pending}
 [pscustomobject]@{
  schemaVersion=1;mode='READ_ONLY';privilegedOperationPerformed=$false;safeToCutover=$false
- task=[pscustomobject]@{state=$taskState;runLevel=$taskLevel;expectedLauncherReferenced=$taskMatch;system32PowerShellPinned=$taskInterpreterPinned;launcherUnderProtectedStack=$taskLauncherUnderProtectedRoot;nonInteractive=$taskNonInteractive}
+ task=[pscustomobject]@{state=$taskState;runLevel=$taskLevel;expectedLauncherReferenced=$taskMatch;system32PowerShellPinned=$taskInterpreterPinned;launcherUnderProtectedStack=$taskLauncherUnderProtectedRoot;nonInteractive=$taskNonInteractive;protectedWorkingDirectory=$taskWorkingDirectoryPinned;canonicalProtectedAction=$taskActionCanonical}
  ports=[pscustomobject]@{hub=$hub;broker=$broker}
  audits=@($pkg,$launch,$node)
  nodeSignatureStatus=$sigStatus;sha256=[pscustomobject]$hashes
