@@ -2,6 +2,7 @@ import * as z from 'zod';
 import {
   AdminBridgeModeIntentSchema,
   AdminBridgeModeReceiptSchema,
+  validateAdminBridgeModeIntent,
   verifyAdminBridgeModeReceipt,
   type AdminBridgeModeIntent,
   type AdminBridgeModeReceipt,
@@ -97,6 +98,14 @@ export async function measureGuardianBrokerPostcondition(
       when >= Date.parse(intent.expiresAt)) {
     throw new Error('GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID');
   }
+  // Validate the entire bounded intent window BEFORE any potentially slow
+  // protected OS collector. The matching fields here are from the intent
+  // itself: this is temporal/schema hygiene, NOT local owner authorization.
+  validateAdminBridgeModeIntent(intent,{
+    deviceId:intent.deviceId,ownerAccountId:intent.ownerAccountId,
+    credentialBinding:intent.credentialBinding,
+    now:new Date(when),hasConsumedRequestId:()=>false,
+  });
   // A failing collector can take longer than the approved intent window.
   // Never backdate failure evidence to the clock sampled before the reads.
   // Failure receipts have only the protocol's five-second reporting grace.

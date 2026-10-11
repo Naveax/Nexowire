@@ -10,6 +10,8 @@ The existing `reconcilePrivilegedBrokerMode` only verifies the Scheduled Task po
 
 ### Acceptance rules
 
+Before any local task, process, or health collector runs, the directly callable measurement function strictly revalidates the intent's issuance and expiration window, including the maximum **120-second** lifetime. Invalid or overlong intents are rejected without starting even a read-only OS collector. This purely temporal preflight does **not** substitute for independent current-owner approval, pairing, signed-command verification, or durable replay checks.
+
 - **ON:** task `Running`, exactly one trusted Broker process and one Broker listener, verified local process image/owner provenance, and cryptographically authenticated Broker health `READY`, elevated, reachable and expected version matching. After final task/process inventory, a **second independent authenticated health probe** must succeed and exactly match the initial parsed health evidence; a Broker that becomes unreachable, unhealthy, or changes version before the final receipt is rejected.
 - **AUTO:** all ON checks **plus** independently verified evidence that the recovery trigger is actually **enabled**. Merely inspecting a disabled trigger no longer suffices.
 - **OFF:** task `Disabled`, independently completed process/port inventory confirming zero Broker processes and zero 43112 listeners, **plus** verified evidence that the recovery trigger is actually **disabled**. No health probe is required or used to infer Broker absence; a refused health probe or missing auth token never counts as Broker absence.

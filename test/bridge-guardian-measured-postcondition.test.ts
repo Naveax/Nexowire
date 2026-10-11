@@ -127,6 +127,37 @@ test('AUTO additionally needs independently verified recovery trigger',async()=>
   assert.equal(withTrigger.receipt.result,'applied');
 });
 
+test('invalid signed intent lifetime is rejected before any local OS collector',async()=>{
+  for(const mode of ['on','auto','off'] as const){
+    let taskReads=0,processReads=0,healthReads=0;
+    const overlyLong={
+      ...intent(mode),
+      issuedAt:'2026-10-10T15:00:00.000Z',
+      expiresAt:'2026-10-10T15:03:00.001Z',
+    };
+    await assert.rejects(measureGuardianBrokerPostcondition(overlyLong,collectors({
+      readTask:async()=>{taskReads++;return task()},
+      readProcessAndPort:async()=>{processReads++;return processState()},
+      readHealth:async()=>{healthReads++;return health()},
+    })),/BRIDGE_INTENT_EXPIRED_OR_INVALID/);
+    assert.equal(taskReads,0,mode);
+    assert.equal(processReads,0,mode);
+    assert.equal(healthReads,0,mode);
+  }
+});
+
+test('direct measurement accepts the exact permitted two-minute boundary',async()=>{
+  const answer=await measureGuardianBrokerPostcondition({
+    ...intent('off'),
+    issuedAt:'2026-10-10T15:00:00.000Z',
+    expiresAt:'2026-10-10T15:02:00.000Z',
+  },collectors({
+    readTask:async()=>task('Disabled'),
+    readProcessAndPort:async()=>processState(false),
+  }));
+  assert.equal(answer.receipt.result,'applied');
+});
+
 test('receipt cannot be measured past the short-lived command expiry or before issue',async()=>{
   for(const date of [
     '2026-10-10T15:02:00.000Z','2026-10-10T14:59:59.000Z',
