@@ -255,6 +255,50 @@ test('applied receipt uses final clock sample after independent second read',asy
   assert.equal(reads,2);
 });
 
+test('failed measurement uses final clock rather than stale pre-collector timestamp',async()=>{
+  let reads=0;
+  const answer=await measureGuardianBrokerPostcondition(intent('on'),collectors({
+    now:()=>new Date(++reads===1?
+      '2026-10-10T15:01:59.000Z':'2026-10-10T15:02:04.999Z'),
+    readTask:async()=>{throw new Error('TASK_RPC_DELAY')},
+  }));
+  assert.equal(answer.locallyMeasured,false);
+  assert.equal(answer.receipt.result,'failed');
+  assert.equal(answer.receipt.observedAt,'2026-10-10T15:02:04.999Z');
+  assert.equal(reads,2);
+});
+
+test('failed collector cannot backdate proof beyond five-second failure grace',async()=>{
+  for(const final of [
+    '2026-10-10T15:02:05.001Z',
+    '2026-10-10T15:01:58.000Z',
+    'Invalid Date',
+  ]){
+    let reads=0;
+    await assert.rejects(measureGuardianBrokerPostcondition(intent(),collectors({
+      now:()=>new Date(++reads===1?
+        '2026-10-10T15:01:59.000Z':final),
+      readTask:async()=>{throw new Error('TASK_AUDIT_UNAVAILABLE')},
+    })),/GUARDIAN_POSTCONDITION_FAILURE_CLOCK_UNTRUSTED/);
+    assert.equal(reads,2);
+  }
+});
+
+test('final process audit failure also cannot reuse initial timestamp after expiry',async()=>{
+  let processes=0,clocks=0;
+  await assert.rejects(measureGuardianBrokerPostcondition(intent('off'),collectors({
+    now:()=>new Date(++clocks===1?
+      '2026-10-10T15:01:00.000Z':'2026-10-10T15:10:00.000Z'),
+    readTask:async()=>task('Disabled'),
+    readProcessAndPort:async()=>{
+      if(++processes===1)return processState(false);
+      throw new Error('COLLECTOR_DISCONNECTED');
+    },
+  })),/GUARDIAN_POSTCONDITION_FAILURE_CLOCK_UNTRUSTED/);
+  assert.equal(processes,2);
+  assert.equal(clocks,2);
+});
+
 test('failed evidence is a failed receipt, never forged applied success',async()=>{
   const answer=await measureGuardianBrokerPostcondition(intent(),collectors({
     readHealth:async()=>({...health(),status:'NOT_ELEVATED'}),
