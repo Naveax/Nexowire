@@ -110,6 +110,13 @@ export function verifyAdminBridgeModeReceipt(
     if (!receipt.failureCode) throw new Error('BRIDGE_RECEIPT_FAILURE_CODE_REQUIRED');
     return { receipt, applied: false };
   }
+  // Error reports may arrive shortly outside the intent window, but success
+  // must attest an action observed strictly while authorization was valid.
+  // Never turn post-expiry or pre-issuance evidence into applied=true.
+  if (observed < Date.parse(intent.issuedAt) ||
+      observed >= Date.parse(intent.expiresAt)) {
+    throw new Error('BRIDGE_RECEIPT_STALE');
+  }
   if (receipt.failureCode !== null || !receipt.taskVerified) {
     throw new Error('BRIDGE_RECEIPT_UNVERIFIED_POSTCONDITION');
   }
