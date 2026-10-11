@@ -10,9 +10,9 @@ The existing `reconcilePrivilegedBrokerMode` only verifies the Scheduled Task po
 
 ### Acceptance rules
 
-- **ON:** task `Running`, exactly one trusted Broker process and one Broker listener, verified local process image/owner provenance, and cryptographically authenticated Broker health `READY`, elevated, reachable and expected version matching.
+- **ON:** task `Running`, exactly one trusted Broker process and one Broker listener, verified local process image/owner provenance, and cryptographically authenticated Broker health `READY`, elevated, reachable and expected version matching. After final task/process inventory, a **second independent authenticated health probe** must succeed and exactly match the initial parsed health evidence; a Broker that becomes unreachable, unhealthy, or changes version before the final receipt is rejected.
 - **AUTO:** all ON checks **plus** independently verified evidence that the recovery trigger is actually **enabled**. Merely inspecting a disabled trigger no longer suffices.
-- **OFF:** task `Disabled`, independently completed process/port inventory confirming zero Broker processes and zero 43112 listeners, **plus** verified evidence that the recovery trigger is actually **disabled**. A refused health probe or missing auth token never counts as Broker absence.
+- **OFF:** task `Disabled`, independently completed process/port inventory confirming zero Broker processes and zero 43112 listeners, **plus** verified evidence that the recovery trigger is actually **disabled**. No health probe is required or used to infer Broker absence; a refused health probe or missing auth token never counts as Broker absence.
 - Missing tasks, untrusted audit, unknown state, stale intent, a final clock sample earlier than the initial sample, mismatched health, omitted process/recovery evidence and errors are never converted into `applied`. Failures yield a well-formed *failed* receipt for signing by a future protected Guardian.
 - The receipt still needs owner-approved command, local privileged Guardian attestation, current pairing, per-device Ed25519 signing, transport verification and atomic finalization.
 

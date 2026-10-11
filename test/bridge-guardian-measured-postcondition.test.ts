@@ -178,6 +178,50 @@ test('ON rejects a task disappearing or failing the second authenticated process
   }
 });
 
+test('ON and AUTO reauthenticate Broker health after final process inventory',async()=>{
+  for(const mode of ['on','auto'] as const){
+    let probes=0;
+    const result=await measureGuardianBrokerPostcondition(intent(mode),collectors({
+      readHealth:async()=>{probes++;return health()},
+    }));
+    assert.equal(result.receipt.result,'applied');
+    assert.equal(probes,2);
+  }
+});
+
+test('second Broker health probe failure can never produce applied ON or AUTO receipt',async()=>{
+  for(const mode of ['on','auto'] as const){
+    for(const failure of ['unhealthy','unreachable','changed-version','throw'] as const){
+      let probes=0;
+      const result=await measureGuardianBrokerPostcondition(intent(mode),collectors({
+        readHealth:async()=>{
+          probes++;
+          if(probes===1)return health();
+          if(failure==='throw')throw new Error('BROKER_RESTARTED');
+          if(failure==='unhealthy')return {...health(),status:'HEALTH_UNAVAILABLE',ready:false};
+          if(failure==='unreachable')return {...health(),reachable:false};
+          return {...health(),version:'1.0.6',expectedVersion:'1.0.6'};
+        },
+      }));
+      assert.equal(result.receipt.result,'failed',mode+' '+failure);
+      assert.equal(result.locallyMeasured,false);
+      assert.equal(result.receipt.failureCode,'BROKER_HEALTH_UNVERIFIED');
+      assert.equal(probes,2);
+    }
+  }
+});
+
+test('OFF does not use authenticated health absence as shutdown evidence',async()=>{
+  let probes=0;
+  const result=await measureGuardianBrokerPostcondition(intent('off'),collectors({
+    readTask:async()=>task('Disabled'),
+    readProcessAndPort:async()=>processState(false),
+    readHealth:async()=>{probes++;throw new Error('NO_HEALTH_WHEN_DISABLED')},
+  }));
+  assert.equal(result.receipt.result,'applied');
+  assert.equal(probes,0);
+});
+
 test('time expiry during slow collector never generates an applied receipt',async()=>{
   let reads=0;
   await assert.rejects(measureGuardianBrokerPostcondition(intent('on'),collectors({

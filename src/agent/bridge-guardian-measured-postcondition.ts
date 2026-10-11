@@ -117,6 +117,7 @@ export async function measureGuardianBrokerPostcondition(
       'BROKER_PROCESS_AUDIT_UNVERIFIED',state);
   }
 
+  let observedHealth:LocalBridgeHealthEvidence|undefined;
   if (intent.desiredMode === 'off') {
     // An unauthenticated health timeout is NOT proof that Broker stopped.
     const allGone=state==='Disabled' &&
@@ -137,7 +138,6 @@ export async function measureGuardianBrokerPostcondition(
            !processData.recoveryTriggerEnabled))) {
       return unsuccessful(intent,observedAt,'BROKER_MODE_NOT_APPLIED',state);
     }
-    let observedHealth:z.infer<typeof health>;
     try {
       observedHealth=health.parse(await collectors.readHealth());
     } catch {
@@ -178,6 +178,25 @@ export async function measureGuardianBrokerPostcondition(
       JSON.stringify(processData)!==JSON.stringify(finalProcess)) {
     return unsuccessful(intent,observedAt,
       'BROKER_MODE_NOT_APPLIED',finalTask.state);
+  }
+
+  // A previously healthy broker can fail after the first authenticated
+  // probe while task/process inventories still look unchanged. ON/AUTO must
+  // not stamp "authenticated-ready" using that stale first health sample.
+  // OFF still proves absence from independent process/port inventory only.
+  if (intent.desiredMode!=='off') {
+    let finalHealth:LocalBridgeHealthEvidence;
+    try {
+      finalHealth=health.parse(await collectors.readHealth());
+    } catch {
+      return unsuccessful(intent,observedAt,
+        'BROKER_HEALTH_UNVERIFIED',finalTask.state);
+    }
+    if (!observedHealth ||
+        JSON.stringify(observedHealth)!==JSON.stringify(finalHealth)) {
+      return unsuccessful(intent,observedAt,
+        'BROKER_HEALTH_UNVERIFIED',finalTask.state);
+    }
   }
 
   // Long-running collectors can outlive the signed owner-approved window.
