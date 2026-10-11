@@ -71,13 +71,24 @@ try{$task=Get-ScheduledTask -TaskName $TaskName -TaskPath '\' -ErrorAction Stop}
 $taskState=if($task){[string]$task.State}else{'not-found'}
 $taskLevel=if($task){[string]$task.Principal.RunLevel}else{'unknown'}
 $taskMatch=$false
+$taskInterpreterPinned=$false
+$taskLauncherUnderProtectedRoot=$false
+$taskNonInteractive=$false
 if($task){
  $actions=@($task.Actions)
  if($actions.Count -eq 1){
   $action=$actions[0]
-  $taskMatch=([IO.Path]::GetFileName([string]$action.Execute) -ieq 'powershell.exe') -and ([string]$action.Arguments).IndexOf($Launcher,[StringComparison]::OrdinalIgnoreCase) -ge 0
+  $arguments=[string]$action.Arguments
+  $taskMatch=([IO.Path]::GetFileName([string]$action.Execute) -ieq 'powershell.exe') -and $arguments.IndexOf($Launcher,[StringComparison]::OrdinalIgnoreCase) -ge 0
+  # A filename-only match does not certify the interpreter or launcher path.
+  $taskInterpreterPinned=([string]$action.Execute -ieq $psExe)
+  $taskLauncherUnderProtectedRoot=Under 'C:\ProgramData\NexowireStack' $Launcher
+  $taskNonInteractive=($arguments -match '(?i)(?:^|\s)-NonInteractive(?:\s|$)')
  }
  if(!$taskMatch){Block 'LEGACY_TASK_LAUNCHER_UNVERIFIED'}
+ if(!$taskInterpreterPinned){Block 'LEGACY_TASK_UNQUALIFIED_INTERPRETER'}
+ if(!$taskLauncherUnderProtectedRoot){Block 'LEGACY_TASK_LAUNCHER_OUTSIDE_PROTECTED_STACK'}
+ if(!$taskNonInteractive){Block 'LEGACY_TASK_INTERACTIVE_POWERSHELL'}
  if($taskState -eq 'Running'){Block 'LEGACY_SUPERVISOR_RUNNING'}
 }
 function ReadPort([int]$port){
@@ -111,7 +122,7 @@ foreach($item in @(
 foreach($pending in @('TRUSTED_REPLACEMENT_NOT_ACCEPTED','TASK_AND_SECRET_ROLLBACK_UNVERIFIED','OWNER_AUTH_AND_SESSION_ACCEPTANCE_PENDING')){Block $pending}
 [pscustomobject]@{
  schemaVersion=1;mode='READ_ONLY';privilegedOperationPerformed=$false;safeToCutover=$false
- task=[pscustomobject]@{state=$taskState;runLevel=$taskLevel;expectedLauncherReferenced=$taskMatch}
+ task=[pscustomobject]@{state=$taskState;runLevel=$taskLevel;expectedLauncherReferenced=$taskMatch;system32PowerShellPinned=$taskInterpreterPinned;launcherUnderProtectedStack=$taskLauncherUnderProtectedRoot;nonInteractive=$taskNonInteractive}
  ports=[pscustomobject]@{hub=$hub;broker=$broker}
  audits=@($pkg,$launch,$node)
  nodeSignatureStatus=$sigStatus;sha256=[pscustomobject]$hashes
