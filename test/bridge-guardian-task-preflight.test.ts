@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   BRIDGE_GUARDIAN_TASK_NAME,
   BRIDGE_GUARDIAN_SOURCE_ROOT,
   BRIDGE_GUARDIAN_LAUNCHER,
   BRIDGE_GUARDIAN_POWERSHELL,
   verifyBridgeGuardianTaskSnapshot,
+  inspectGuardianSourceChainSnapshotOnly,
 } from '../src/agent/bridge-guardian-task-preflight.js';
 
 const SID = 'S-1-5-21-100-200-300-1001';
@@ -105,6 +108,38 @@ test('extra unrecognized task and action fields are not interpreted as permissio
   assert.throws(()=>verifyBridgeGuardianTaskSnapshot({
     ...t,actions:[{...t.actions[0],injectedShell:'cmd.exe'}],
   },SID));
+});
+
+test('read-only Guardian source chain rejects launcher modifications during ACL read',()=>{
+  const root=mkdtempSync(path.join(tmpdir(),'guardian-chain-stability-'));
+  const directory=path.join(root,'guardian');
+  mkdirSync(directory);
+  const launcher=path.join(directory,'launch.ps1');
+  writeFileSync(launcher,'original');
+  try {
+    const chain=[root,directory,launcher];
+    const observed:string[]=[];
+    inspectGuardianSourceChainSnapshotOnly(chain,p=>{observed.push(p)});
+    assert.deepEqual(observed,chain);
+    assert.throws(()=>inspectGuardianSourceChainSnapshotOnly(chain,p=>{
+      if(p===launcher)appendFileSync(launcher,'changed');
+    }),/BRIDGE_GUARDIAN_SOURCE_CHANGED_DURING_AUDIT/);
+  }finally{rmSync(root,{recursive:true,force:true})}
+});
+
+test('Guardian source chain revisits protected ancestors at completion',()=>{
+  const root=mkdtempSync(path.join(tmpdir(),'guardian-chain-ancestor-'));
+  const directory=path.join(root,'guardian');
+  mkdirSync(directory);
+  const launcher=path.join(directory,'launch.ps1');
+  writeFileSync(launcher,'original');
+  try {
+    assert.throws(()=>inspectGuardianSourceChainSnapshotOnly(
+      [root,directory,launcher],p=>{
+        if(p===launcher)writeFileSync(path.join(directory,'late-file'),'x');
+      },
+    ),/BRIDGE_GUARDIAN_SOURCE_CHANGED_DURING_AUDIT/);
+  }finally{rmSync(root,{recursive:true,force:true})}
 });
 
 test('preflight source is read-only and does not try to install/enable protected tasks',()=>{
