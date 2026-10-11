@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { lstatSync } from 'node:fs';
 import path from 'node:path';
 import type { BridgeGuardianAtomicReserve } from './bridge-guardian-policy.js';
 import {
@@ -8,7 +7,10 @@ import {
   type GuardianCurrentLocalPairing,
 } from './guardian-local-replay-ledger.js';
 import { verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
-import { verifyBridgeGuardianSourceAcl } from './bridge-guardian-task-preflight.js';
+import {
+  verifyBridgeGuardianSourceAcl,
+  inspectGuardianSourceChainSnapshotOnly,
+} from './bridge-guardian-task-preflight.js';
 import { auditGuardianSqliteSidecars } from './guardian-sqlite-sidecar-preflight.js';
 
 const STATE_DIR = 'C:\\ProgramData\\Nexowire\\bridge-guardian\\state';
@@ -166,18 +168,13 @@ export function createProtectedGuardianSqliteReplayReserve(
     'C:\\ProgramData\\Nexowire\\bridge-guardian',STATE_DIR,DATABASE_PATH];
   const assertProtected=()=>{
     verifyBridgeGuardianSourceAcl();
-    paths.forEach((node,index)=>{
-      const stat=lstatSync(node);
-      if (stat.isSymbolicLink() ||
-          (index===paths.length-1 ?
-            !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
-        throw new Error('GUARDIAN_SQLITE_PROTECTED_SOURCE_INVALID');
-      }
-      verifyWindowsPrivateAcl(node);
+    // Keep the database and all ancestor snapshots active throughout the
+    // sidecar inspection. A DB/parent mutation during this window must fail.
+    inspectGuardianSourceChainSnapshotOnly(paths,verifyWindowsPrivateAcl,()=>{
+      // The DB file's private ACL is not enough: rollback-journal ACLs
+      // must be trusted, while WAL/SHM remain forbidden in DELETE mode.
+      auditGuardianSqliteSidecars(DATABASE_PATH,verifyWindowsPrivateAcl);
     });
-    // The DB file's private ACL is not enough: pre-existing rollback-journal
-    // files must also be trusted, and WAL/SHM are forbidden in DELETE mode.
-    auditGuardianSqliteSidecars(DATABASE_PATH,verifyWindowsPrivateAcl);
   };
   assertProtected();
   if (path.win32.normalize(DATABASE_PATH).toLowerCase() !==

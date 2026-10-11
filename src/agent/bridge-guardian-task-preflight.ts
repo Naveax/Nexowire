@@ -111,6 +111,7 @@ export function verifyBridgeGuardianTaskSnapshot(
 export function inspectGuardianSourceChainSnapshotOnly(
   paths:readonly string[],
   checkAcl:(absolutePath:string)=>void,
+  inspectRelatedNodes?:()=>void,
 ):void {
   if(paths.length<2 || paths.length>16) {
     throw new Error('BRIDGE_GUARDIAN_SOURCE_CHAIN_INVALID');
@@ -159,7 +160,11 @@ export function inspectGuardianSourceChainSnapshotOnly(
     assertUnchanged(item,initial);
     observed.push([item,initial]);
   }
-  // Recheck ancestors: they can be replaced while a later ACL is measured.
+  // The optional read-only related-node inspection (e.g., SQLite journal
+  // sidecars) belongs INSIDE the source snapshot, before final revalidation.
+  // An injected callback is NOT production authority or OS attestation.
+  inspectRelatedNodes?.();
+  // Recheck ancestors: they can be replaced during later ACL or sidecar reads.
   for(const [item,initial] of observed) {
     assertUnchanged(item,initial);
   }
