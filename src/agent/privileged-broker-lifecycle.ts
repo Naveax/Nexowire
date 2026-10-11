@@ -7,6 +7,7 @@ import { isWindowsProcessElevated } from './privileged-broker.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
+import {inspectPrivilegedStackSourceChainReadOnly} from '../security/privileged-stack-source-audit.js';
 import {
   defaultPrivilegedBrokerSecretFile,
   loadOrCreatePrivilegedBrokerToken,
@@ -396,6 +397,10 @@ export async function installPrivilegedBrokerTask(
 
   const directory = rootDir(options);
   await assertBrokerRootSafeToRemove(directory);
+  // A private Broker root is insufficient if its parent can rename or
+  // substitute that root before the Highest Scheduled Task is registered.
+  // Do not persist the DPAPI secret until the existing parent passes ACL.
+  verifyWindowsPrivateAcl(path.win32.dirname(directory));
   const launcher = launcherPath(options);
   const name = taskName(options);
   const secretFile =
@@ -494,8 +499,12 @@ async function verifyBrokerTaskStartFiles(options: PrivilegedBrokerTaskOptions):
   }
   const trustedRoot = rootDir(options);
   await assertBrokerRootSafeToRemove(trustedRoot);
-  verifyWindowsPrivateAcl(trustedRoot);
-  verifyWindowsPrivateAcl(launcherPath(options));
+  // Trust the complete private parent -> root -> launcher chain. The
+  // existing read-only inspector rechecks identity and directory entries
+  // after each ACL probe, rejecting observable replacement during audit.
+  inspectPrivilegedStackSourceChainReadOnly([
+    path.win32.dirname(trustedRoot),trustedRoot,launcherPath(options),
+  ],verifyWindowsPrivateAcl);
 }
 
 export async function startPrivilegedBrokerTask(
