@@ -30,6 +30,7 @@ const fakeProcess=(running:boolean,trigger=true)=>({
   brokerListenerCount:running?1:0,listenerPort:43112,
   brokerProcessImageAndOwnerVerified:running,
   recoveryTriggerVerified:trigger,
+  recoveryTriggerEnabled:running,
 });
 const fakeHealth=()=>({
   expectedVersion:'1.0.5',version:'1.0.5',

@@ -34,8 +34,10 @@ const processAudit = z.strictObject({
   listenerPort:z.literal(43112),
   /** Exact signed Broker executable/owner provenance when it is running. */
   brokerProcessImageAndOwnerVerified:z.boolean(),
-  /** True only after independently inspecting recovery trigger state. */
+  /** Independently inspected recovery trigger state, not remote self-report. */
   recoveryTriggerVerified:z.boolean(),
+  /** Actual observed recovery trigger enablement, separately from audit success. */
+  recoveryTriggerEnabled:z.boolean(),
 });
 export type LocalBridgeTaskEvidence=z.infer<typeof task>;
 export type LocalBridgeHealthEvidence=z.infer<typeof health>;
@@ -95,7 +97,7 @@ export async function measureGuardianBrokerPostcondition(
       when >= Date.parse(intent.expiresAt)) {
     throw new Error('GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID');
   }
-  const observedAt=sampledAt.toISOString();
+  const observedAt=new Date(when).toISOString();
   let taskData:LocalBridgeTaskEvidence;
   try {
     taskData=task.parse(await collectors.readTask());
@@ -119,7 +121,9 @@ export async function measureGuardianBrokerPostcondition(
     // An unauthenticated health timeout is NOT proof that Broker stopped.
     const allGone=state==='Disabled' &&
       processData.brokerProcessCount===0 &&
-      processData.brokerListenerCount===0;
+      processData.brokerListenerCount===0 &&
+      processData.recoveryTriggerVerified &&
+      !processData.recoveryTriggerEnabled;
     if (!allGone) {
       return unsuccessful(intent,observedAt,'BROKER_MODE_NOT_APPLIED',state);
     }
@@ -129,7 +133,8 @@ export async function measureGuardianBrokerPostcondition(
         processData.brokerListenerCount!==1 ||
         !processData.brokerProcessImageAndOwnerVerified ||
         (intent.desiredMode==='auto' &&
-          !processData.recoveryTriggerVerified)) {
+          (!processData.recoveryTriggerVerified ||
+           !processData.recoveryTriggerEnabled))) {
       return unsuccessful(intent,observedAt,'BROKER_MODE_NOT_APPLIED',state);
     }
     let observedHealth:z.infer<typeof health>;
@@ -180,6 +185,7 @@ export async function measureGuardianBrokerPostcondition(
   const completedAt=collectors.now();
   const completedTime=completedAt.getTime();
   if (!Number.isFinite(completedTime) ||
+      completedTime<when ||
       completedTime<Date.parse(intent.issuedAt) ||
       completedTime>=Date.parse(intent.expiresAt)) {
     throw new Error('GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID');

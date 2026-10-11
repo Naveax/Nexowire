@@ -11,9 +11,9 @@ The existing `reconcilePrivilegedBrokerMode` only verifies the Scheduled Task po
 ### Acceptance rules
 
 - **ON:** task `Running`, exactly one trusted Broker process and one Broker listener, verified local process image/owner provenance, and cryptographically authenticated Broker health `READY`, elevated, reachable and expected version matching.
-- **AUTO:** all ON checks **plus** a separately verified recovery trigger. Task state alone cannot attest that a future Broker crash will recover.
-- **OFF:** task `Disabled` **and** independently completed process and port inventory confirming zero Broker processes and zero 43112 listeners. A refused health probe or missing auth token never counts as Broker absence.
-- Missing tasks, untrusted audit, unknown state, stale intent, mismatched health, omitted process evidence and errors are never converted into `applied`. Failures yield a well-formed *failed* receipt for signing by a future protected Guardian.
+- **AUTO:** all ON checks **plus** independently verified evidence that the recovery trigger is actually **enabled**. Merely inspecting a disabled trigger no longer suffices.
+- **OFF:** task `Disabled`, independently completed process/port inventory confirming zero Broker processes and zero 43112 listeners, **plus** verified evidence that the recovery trigger is actually **disabled**. A refused health probe or missing auth token never counts as Broker absence.
+- Missing tasks, untrusted audit, unknown state, stale intent, a final clock sample earlier than the initial sample, mismatched health, omitted process/recovery evidence and errors are never converted into `applied`. Failures yield a well-formed *failed* receipt for signing by a future protected Guardian.
 - The receipt still needs owner-approved command, local privileged Guardian attestation, current pairing, per-device Ed25519 signing, transport verification and atomic finalization.
 
 **Important:** the injected collectors in this source-only policy are not themselves secure attestations. An untrusted Hub or remote Agent can fabricate the input objects. **Do not connect these to remote JSON or permit this method to authorize task mutation.** Protected local Windows process readers and a separate Guardian service are required before any production receipt may represent real measurements.

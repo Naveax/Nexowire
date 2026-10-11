@@ -17,13 +17,14 @@ const task=(state:'Running'|'Disabled'|'Ready'='Running')=>({
   installed:true,taskName:'Nexowire Privileged Broker',
   identityVerified:true,state,
 });
-const processState=(running=true,trigger=true)=>({
+const processState=(running=true,trigger=true,triggerEnabled=running)=>({
   complete:true,trustedCollector:true,
   brokerProcessCount:running?1:0,
   brokerListenerCount:running?1:0,
   listenerPort:43112,
   brokerProcessImageAndOwnerVerified:running,
   recoveryTriggerVerified:trigger,
+  recoveryTriggerEnabled:triggerEnabled,
 });
 const health=()=>({
   expectedVersion:'1.0.5',version:'1.0.5',
@@ -75,6 +76,8 @@ test('OFF requires disabled task AND independent absence of all broker processes
     {...processState(false),brokerProcessCount:1},
     {...processState(false),complete:false},
     {...processState(false),trustedCollector:false},
+    {...processState(false),recoveryTriggerVerified:false},
+    {...processState(false),recoveryTriggerEnabled:true},
   ]) {
     const notOff=await measureGuardianBrokerPostcondition(intent('off'),collectors({
       readTask:async()=>task('Disabled'),
@@ -116,6 +119,10 @@ test('AUTO additionally needs independently verified recovery trigger',async()=>
     readProcessAndPort:async()=>processState(true,false),
   }));
   assert.equal(noTrigger.receipt.result,'failed');
+  const disabledRecovery=await measureGuardianBrokerPostcondition(intent('auto'),collectors({
+    readProcessAndPort:async()=>processState(true,true,false),
+  }));
+  assert.equal(disabledRecovery.receipt.result,'failed');
   const withTrigger=await measureGuardianBrokerPostcondition(intent('auto'),collectors());
   assert.equal(withTrigger.receipt.result,'applied');
 });
@@ -178,6 +185,17 @@ test('time expiry during slow collector never generates an applied receipt',asyn
       '2026-10-10T15:01:59.000Z':'2026-10-10T15:02:00.000Z'),
   })),/GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID/);
   assert.equal(reads,2);
+});
+
+test('time rollback during independent measurement cannot produce an applied receipt',async()=>{
+  let samples=0;
+  await assert.rejects(measureGuardianBrokerPostcondition(intent('off'),collectors({
+    now:()=>new Date(++samples===1?
+      '2026-10-10T15:01:00.000Z':'2026-10-10T15:00:59.000Z'),
+    readTask:async()=>task('Disabled'),
+    readProcessAndPort:async()=>processState(false),
+  })),/GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID/);
+  assert.equal(samples,2);
 });
 
 test('applied receipt uses final clock sample after independent second read',async()=>{
