@@ -89,6 +89,17 @@ export function verifyAdminBridgeModeReceipt(
   raw: unknown,
   intent: AdminBridgeModeIntent,
 ): { receipt: AdminBridgeModeReceipt; applied: boolean } {
+  // Receipts are a separately callable boundary. A caller that skipped the
+  // earlier intent authorization must not mint applied/failed proof against
+  // an arbitrarily long or malformed authorization interval.
+  AdminBridgeModeIntentSchema.parse(intent);
+  const issuedAt = Date.parse(intent.issuedAt);
+  const expiresAt = Date.parse(intent.expiresAt);
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) ||
+      expiresAt<=issuedAt ||
+      expiresAt-issuedAt>MAX_INTENT_LIFETIME_MS) {
+    throw new Error('BRIDGE_RECEIPT_INTENT_WINDOW_INVALID');
+  }
   const receipt = AdminBridgeModeReceiptSchema.parse(raw);
   if (
     receipt.requestId !== intent.requestId ||
@@ -101,8 +112,8 @@ export function verifyAdminBridgeModeReceipt(
   const observed = Date.parse(receipt.observedAt);
   if (
     !Number.isFinite(observed) ||
-    observed < Date.parse(intent.issuedAt) - MAX_CLOCK_SKEW_MS ||
-    observed > Date.parse(intent.expiresAt) + MAX_CLOCK_SKEW_MS
+    observed < issuedAt - MAX_CLOCK_SKEW_MS ||
+    observed > expiresAt + MAX_CLOCK_SKEW_MS
   ) {
     throw new Error('BRIDGE_RECEIPT_STALE');
   }
@@ -113,8 +124,7 @@ export function verifyAdminBridgeModeReceipt(
   // Error reports may arrive shortly outside the intent window, but success
   // must attest an action observed strictly while authorization was valid.
   // Never turn post-expiry or pre-issuance evidence into applied=true.
-  if (observed < Date.parse(intent.issuedAt) ||
-      observed >= Date.parse(intent.expiresAt)) {
+  if (observed < issuedAt || observed >= expiresAt) {
     throw new Error('BRIDGE_RECEIPT_STALE');
   }
   if (receipt.failureCode !== null || !receipt.taskVerified) {
