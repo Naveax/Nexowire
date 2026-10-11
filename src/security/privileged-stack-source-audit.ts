@@ -1,4 +1,4 @@
-import { lstatSync } from 'node:fs';
+import { lstatSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { verifyWindowsPrivateAcl } from './windows-programdata-acl.js';
 
@@ -47,35 +47,82 @@ export interface PrivilegedStackSourceAudit {
 }
 
 /**
- * Read-only fail-closed audit. Each component is lstat'd (not stat'd) to
- * reject any junction/symlink traversal, then its owner/write ACL is checked
- * with the pinned Windows inbox PowerShell binary.
+ * Testable read-only mechanism, not trusted collection or OS authority.
+ * A caller-supplied chain or ACL callback cannot certify production state.
  */
-export function auditPrivilegedStackSource(
-  entrypoint: string = STACK_ENTRY,
-): PrivilegedStackSourceAudit {
-  const chain = privilegedStackSourceChain(entrypoint);
-  for (let index = 0; index < chain.length; index++) {
-    const node = chain[index]!;
+export function inspectPrivilegedStackSourceChainReadOnly(
+  chain:readonly string[],
+  aclCheck:(absolutePath:string)=>void,
+):number {
+  if(chain.length<2 || chain.length>16){
+    throw new Error('PRIVILEGED_STACK_SOURCE_CHAIN_INVALID');
+  }
+  const fingerprint=(node:string,stat:NonNullable<ReturnType<typeof lstatSync>>):string=>
+    JSON.stringify([
+      stat.dev,stat.ino,stat.mode,stat.nlink,stat.size,
+      stat.mtimeMs,stat.ctimeMs,stat.birthtimeMs,
+      stat.isFile(),stat.isDirectory(),stat.isSymbolicLink(),
+      // NTFS parent timestamps may not reveal child creation/removal.
+      stat.isDirectory()?readdirSync(node).sort():null,
+    ]);
+  const assertUnchanged=(node:string,before:string):void=>{
+    let after:string;
+    try {
+      const current=lstatSync(node);
+      after=fingerprint(node,current);
+    } catch {
+      throw new Error('PRIVILEGED_STACK_SOURCE_CHANGED_DURING_AUDIT');
+    }
+    if(after!==before){
+      throw new Error('PRIVILEGED_STACK_SOURCE_CHANGED_DURING_AUDIT');
+    }
+  };
+  const observed:Array<readonly [string,string]>=[];
+  for (let index=0;index<chain.length;index++) {
+    const node=chain[index]!;
     let stat;
     try {
-      stat = lstatSync(node);
+      stat=lstatSync(node);
     } catch {
       throw new Error('PRIVILEGED_STACK_SOURCE_MISSING_OR_UNREADABLE');
     }
     if (stat.isSymbolicLink() ||
-        (index === chain.length - 1 ? !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
+        (index===chain.length-1 ? !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
       throw new Error('PRIVILEGED_STACK_SOURCE_UNTRUSTED_COMPONENT');
     }
+    let before:string;
     try {
-      verifyWindowsPrivateAcl(node);
+      before=fingerprint(node,stat);
+    } catch {
+      throw new Error('PRIVILEGED_STACK_SOURCE_MISSING_OR_UNREADABLE');
+    }
+    try {
+      aclCheck(node);
     } catch {
       throw new Error('PRIVILEGED_STACK_SOURCE_UNTRUSTED_ACL');
     }
+    assertUnchanged(node,before);
+    observed.push([node,before]);
   }
+  // An ancestor can change while a later component's ACL is inspected.
+  for(const [node,before] of observed){
+    assertUnchanged(node,before);
+  }
+  return observed.length;
+}
+
+/**
+ * Production wrapper pins the live Stack entrypoint and Windows ACL verifier.
+ * This audit does not confer runtime attestation or privilege to run tasks.
+ */
+export function auditPrivilegedStackSource(
+  entrypoint:string=STACK_ENTRY,
+):PrivilegedStackSourceAudit {
+  const chain=privilegedStackSourceChain(entrypoint);
+  const count=inspectPrivilegedStackSourceChainReadOnly(chain,verifyWindowsPrivateAcl);
   return {
-    trusted: true,
+    trusted:true,
     entrypoint:chain.at(-1)!,
-    verifiedComponents:chain.length,
+    verifiedComponents:count,
   };
 }
