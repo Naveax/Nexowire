@@ -112,14 +112,24 @@ export async function verifyAndReserveGuardianHubCommand(
     intent.requestId,intent.deviceId,intent.credentialBinding,
     signed.ownerPreferenceRevision,
   );
-  if(!reserved)throw new Error('GUARDIAN_HUB_COMMAND_REPLAY_OR_REVOKED');
+  // Runtime callbacks are a security boundary: a truthy object or string
+  // must never be misinterpreted as a completed durable reservation.
+  if(reserved!==true)throw new Error('GUARDIAN_HUB_COMMAND_REPLAY_OR_REVOKED');
 
-  // The transaction may have waited for an OS file lock past expiry. A
-  // persisted reservation then stays consumed, but cannot become success.
+  // A slow reservation may outlive the signed window. Reject a backwards
+  // local clock sample as well: replay safety requires fresh, ordered time.
+  // The reservation is already consumed on either failure.
+  const afterReservation=ctx.nowAfterReservation();
+  const beforeMs=ctx.now.getTime();
+  const afterMs=afterReservation instanceof Date ?
+    afterReservation.getTime() : Number.NaN;
+  if(!Number.isFinite(afterMs) || afterMs<beforeMs) {
+    throw new Error('GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED');
+  }
   validateAdminBridgeModeIntent(intent,{
     deviceId:ctx.deviceId,ownerAccountId:ctx.ownerAccountId,
     credentialBinding:ctx.credentialBinding,
-    now:ctx.nowAfterReservation(),hasConsumedRequestId:()=>false,
+    now:afterReservation,hasConsumedRequestId:()=>false,
   });
 
   // A valid Hub command is NOT local elevation or task authorization.
