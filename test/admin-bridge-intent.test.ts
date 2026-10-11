@@ -122,6 +122,45 @@ test('failure receipts can report after expiry within the existing skew budget',
   },issued),/BRIDGE_RECEIPT_STALE/);
 });
 
+test('receipt verifier rejects invalid intent lifetime even when the receipt itself matches',()=>{
+  for(const mode of ['on','off','auto'] as const){
+    const source=intent(mode);
+    const invalid=[
+      {...source,issuedAt:'2026-10-10T14:59:00.000Z',
+        expiresAt:'2026-10-10T15:01:00.001Z'},
+      {...source,issuedAt:'2026-10-10T15:00:50.000Z',
+        expiresAt:'2026-10-10T15:00:50.000Z'},
+      {...source,issuedAt:'2026-10-10T15:01:00.000Z',
+        expiresAt:'2026-10-10T15:00:00.000Z'},
+    ];
+    for(const malformed of invalid){
+      assert.throws(()=>verifyAdminBridgeModeReceipt(
+        receipt(malformed),malformed,
+      ),/BRIDGE_RECEIPT_INTENT_WINDOW_INVALID/);
+      assert.throws(()=>verifyAdminBridgeModeReceipt(
+        receipt(malformed,'failed'),malformed,
+      ),/BRIDGE_RECEIPT_INTENT_WINDOW_INVALID/);
+    }
+  }
+});
+
+test('receipt verifier permits exactly 120 seconds of signed intent lifetime',()=>{
+  const exactlyBounded={
+    ...intent('on'),
+    issuedAt:'2026-10-10T14:59:00.000Z',
+    expiresAt:'2026-10-10T15:01:00.000Z',
+  };
+  assert.equal(verifyAdminBridgeModeReceipt(receipt(exactlyBounded),exactlyBounded).applied,true);
+});
+
+test('receipt verifier rejects extra unreviewed intent fields before accepting evidence',()=>{
+  const source=intent('off');
+  const injected={...source,permissionToRun:true};
+  assert.throws(()=>verifyAdminBridgeModeReceipt(
+    receipt(source),injected,
+  ));
+});
+
 test('failed receipts remain failed even when task state appears correct',()=>{
   const valid=intent('on');
   assert.equal(verifyAdminBridgeModeReceipt(receipt(valid,'failed'),valid).applied,false);

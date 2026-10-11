@@ -8,7 +8,7 @@ This is a schema and **pure validation** component, not a working remote control
 **Security assumptions still required for integration:** transport authentication with credential/session binding, authorization by the actual device owner, server-generated signed or MAC-protected payload, a durable atomic consume/claim operation, explicit short-lived user confirmation, and verified local interactive elevated execution context. A caller-supplied `hasConsumedRequestId` callback alone is insufficient to guarantee exactly once in a distributed system. A SHA-256 credential binding is **not** a signature and must never be treated as one.
 
 ## Receipt envelope
-`AdminBridgeModeReceiptSchema` accepts only an exact matching request UUID/device/pairing/mode, timestamp within the permitted window, task state and Broker health evidence.
+`AdminBridgeModeReceiptSchema` accepts only an exact matching request UUID/device/pairing/mode, timestamp within the permitted window, task state and Broker health evidence. The independently callable receipt verifier **also parses the original intent strictly and enforces a positive authorization interval of at most 120 seconds**, for both `applied` and `failed` receipts. No matching or signed receipt can validate evidence against an unbounded, inverted, or malformed intent window even if a previous caller bypassed intent preflight.
 
 A receipt may indicate `applied` only if:
 - OFF: Windows Task Scheduler reports Disabled **and** independent Broker probing confirms the listener absent.
