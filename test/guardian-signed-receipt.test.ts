@@ -151,6 +151,44 @@ test('expired, pre-issued, extra-field and malformed signatures fail closed',()=
   assert.throws(()=>verifyGuardianSignedModeReceipt({...sig,signature:'bad'},context(p)));
 });
 
+test('signed receipt cannot claim a measurement beyond five seconds in the future',()=>{
+  const original=payload();
+  const future=signGuardianModeReceipt({
+    ...original,
+    receipt:{...original.receipt,observedAt:'2026-10-10T15:01:10.001Z'},
+  },keys.privateKey);
+  assert.throws(
+    ()=>verifyGuardianSignedModeReceipt(future,context(original)),
+    /GUARDIAN_RECEIPT_OBSERVED_IN_FUTURE/,
+  );
+});
+
+test('five-second Guardian clock skew is accepted for signed measurement evidence',()=>{
+  const original=payload();
+  const within=signGuardianModeReceipt({
+    ...original,
+    receipt:{...original.receipt,observedAt:'2026-10-10T15:01:10.000Z'},
+  },keys.privateKey);
+  const verified=verifyGuardianSignedModeReceipt(within,context(original));
+  assert.equal(verified.applied,true);
+});
+
+test('authenticated future-dated failure receipts are also denied',()=>{
+  const original=payload();
+  const fail=signGuardianModeReceipt({
+    ...original,receipt:{
+      ...original.receipt,
+      observedAt:'2026-10-10T15:01:45.000Z',
+      result:'failed',taskVerified:false,brokerHealth:'unverified',
+      taskState:'Unknown',failureCode:'BROKER_OFFLINE',
+    },
+  },keys.privateKey);
+  assert.throws(
+    ()=>verifyGuardianSignedModeReceipt(fail,context(original)),
+    /GUARDIAN_RECEIPT_OBSERVED_IN_FUTURE/,
+  );
+});
+
 test('signed transcript uses canonical fields rather than arbitrary JSON property order',()=>{
   const p=payload();
   const r=signGuardianModeReceipt(p,keys.privateKey);
