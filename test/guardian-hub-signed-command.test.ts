@@ -110,7 +110,6 @@ test('Hub command expiry during local reservation consumes it but rejects the ou
   for(const expiredAt of [
     '2026-10-10T15:02:00.000Z',
     '2026-10-10T15:02:01.000Z',
-    'Invalid Date',
   ]) {
     let reservations=0;
     await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
@@ -120,6 +119,56 @@ test('Hub command expiry during local reservation consumes it but rejects the ou
     }),/BRIDGE_INTENT_EXPIRED_OR_INVALID/);
     assert.equal(reservations,1);
   }
+});
+
+test('backwards post-reservation clock fails closed after durable request consumption',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  let reservations=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...ctx(),
+    atomicallyReserveRequest:async()=>{reservations++;return true},
+    nowAfterReservation:()=>new Date('2026-10-10T15:00:59.999Z'),
+  }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(reservations,1);
+});
+
+test('mutating the initial Date during reservation cannot move the time baseline',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  const context=ctx();
+  let reservations=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...context,
+    atomicallyReserveRequest:async()=>{
+      reservations++;
+      context.now.setTime(Date.parse('2026-10-10T15:00:00.000Z'));
+      return true;
+    },
+    nowAfterReservation:()=>new Date('2026-10-10T15:00:30.000Z'),
+  }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(reservations,1);
+});
+
+test('truthy nonboolean reservation results are never treated as committed',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  for(const invalid of [1,'true',{},[],null,undefined]){
+    let sampled=false;
+    await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+      ...ctx(),
+      atomicallyReserveRequest:async()=>invalid as boolean,
+      nowAfterReservation:()=>{sampled=true;return new Date('2026-10-10T15:01:00Z')},
+    }),/GUARDIAN_HUB_COMMAND_REPLAY_OR_REVOKED/);
+    assert.equal(sampled,false);
+  }
+});
+
+test('invalid post-reservation clock is rejected after reservation',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  let reservations=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...ctx(),atomicallyReserveRequest:async()=>{reservations++;return true},
+    nowAfterReservation:()=>new Date('Invalid Date'),
+  }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(reservations,1);
 });
 
 test('atomic repeated claims accept only one locally, durable storage required in production',async()=>{

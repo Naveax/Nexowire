@@ -10,6 +10,8 @@ The only production-oriented factory pins `C:\ProgramData\Nexowire\bridge-guardi
 
 The separate read-only `-journal` / `-wal` / `-shm` sidecar preflight now checks file identity and modification metadata before and after ACL inspection, then rechecks all three paths, including those observed absent. Files disappearing, changing or appearing during that sampling window fail closed. This does not create an atomic filesystem snapshot or establish storage integrity across power loss or a later path swap.
 
+The signed Guardian Hub command validator also requires the durable reservation callback to return the literal boolean `true` (not a truthy value). After consumption, its independently sampled local time must be valid and **no earlier** than the original pre-reservation sample; a backwards clock, invalid sample, or expired command fails closed even though the replay marker remains consumed. These checks cannot attest trusted OS clock hardware or substitute for Cloudflare approval and independent owner authorization.
+
 **Critical remaining limits:**
 - `synchronous=EXTRA` requests stronger SQLite/OS flush behavior but does not prove that a specific storage controller respects flush or eliminate all filesystem/hardware crash failure modes. Real forced-power-loss device tests and complete journal/sidecar ACL analysis remain necessary.
 - A SQLite transaction cannot atomically commit with Cloudflare D1 owner revocation. The local reserve callback now requires independently trusted **exact owner-approved request UUID and matching preference revision** in addition to current pairing/authorization, but a protected authenticated session/lease protocol tied to Cloudflare approval is still necessary, and remote revocation may race even the post-commit re-read.
