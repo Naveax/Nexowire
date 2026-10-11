@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,mkdirSync,writeFileSync,appendFileSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {
   privilegedStackSourceChain,
   auditPrivilegedStackSource,
+  inspectPrivilegedStackSourceChainReadOnly,
 } from '../src/security/privileged-stack-source-audit.js';
 
 const expected='C:\\ProgramData\\NexowireStack\\nexowire\\node_modules\\nexowire\\dist\\src\\cli.js';
@@ -41,6 +44,52 @@ test('Stack source rejects traversal, UNC paths, sibling-prefix confusion and al
     assert.throws(()=>privilegedStackSourceChain(candidate),/PRIVILEGED_STACK_SOURCE_NONCANONICAL_PATH/);
     assert.throws(()=>auditPrivilegedStackSource(candidate),/PRIVILEGED_STACK_SOURCE_NONCANONICAL_PATH/);
   }
+});
+
+test('read-only Stack source chain rejects entry mutation during ACL inspection',()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-chain-'));
+  const nested=join(root,'dep');
+  mkdirSync(nested);
+  const entry=join(nested,'cli.js');
+  writeFileSync(entry,'original');
+  try {
+    const chain=[root,nested,entry];
+    const visited:string[]=[];
+    assert.equal(inspectPrivilegedStackSourceChainReadOnly(chain,p=>{
+      visited.push(p);
+    }),3);
+    assert.deepEqual(visited,chain);
+    assert.throws(()=>inspectPrivilegedStackSourceChainReadOnly(chain,p=>{
+      if(p===entry)appendFileSync(entry,'changed');
+    }),/PRIVILEGED_STACK_SOURCE_CHANGED_DURING_AUDIT/);
+  } finally {rmSync(root,{force:true,recursive:true})}
+});
+
+test('read-only Stack source chain revalidates ancestor directory entries',()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-ancestor-'));
+  const nested=join(root,'dep');
+  mkdirSync(nested);
+  const entry=join(nested,'cli.js');
+  writeFileSync(entry,'original');
+  try {
+    const chain=[root,nested,entry];
+    assert.throws(()=>inspectPrivilegedStackSourceChainReadOnly(chain,p=>{
+      if(p===entry)writeFileSync(join(nested,'unexpected.js'),'x');
+    }),/PRIVILEGED_STACK_SOURCE_CHANGED_DURING_AUDIT/);
+  } finally {rmSync(root,{force:true,recursive:true})}
+});
+
+test('source chain rejects untrusted ACL and invalid inspection lengths',()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-acl-'));
+  const entry=join(root,'cli.js');
+  writeFileSync(entry,'x');
+  try{
+    assert.throws(()=>inspectPrivilegedStackSourceChainReadOnly([root,entry],()=>{
+      throw new Error('UNTRUSTED_WRITE');
+    }),/PRIVILEGED_STACK_SOURCE_UNTRUSTED_ACL/);
+    assert.throws(()=>inspectPrivilegedStackSourceChainReadOnly([root],()=>{}),
+      /PRIVILEGED_STACK_SOURCE_CHAIN_INVALID/);
+  }finally{rmSync(root,{force:true,recursive:true})}
 });
 
 test('read-only source auditor does not mutate ACLs or invoke task start and stop',()=>{
