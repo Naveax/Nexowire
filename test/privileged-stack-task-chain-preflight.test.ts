@@ -106,7 +106,9 @@ test('unknown Task fields and aliases cannot be used to inject actuation permiss
   },sid));
 });
 
-test('launcher snapshot verifies fixed child and two ACL nodes before dependency inventory',()=>{
+test('launcher snapshot verifies fixed child and two ACL nodes before dependency inventory',{
+  skip:process.platform!=='win32',
+},()=>{
   const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
   const launcher=join(root,'run-stack.ps1');
   writeFileSync(launcher,'Write-Output SAFE');
@@ -122,7 +124,9 @@ test('launcher snapshot verifies fixed child and two ACL nodes before dependency
   } finally {rmSync(root,{recursive:true,force:true})}
 });
 
-test('launcher snapshot rejects changing launcher during ACL inspection',()=>{
+test('launcher snapshot rejects changing launcher during ACL inspection',{
+  skip:process.platform!=='win32',
+},()=>{
   const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
   const launcher=join(root,'run-stack.ps1');
   writeFileSync(launcher,'initial');
@@ -136,7 +140,9 @@ test('launcher snapshot rejects changing launcher during ACL inspection',()=>{
   } finally {rmSync(root,{recursive:true,force:true})}
 });
 
-test('launcher snapshot rejects changes during dependency inventory and new root children',()=>{
+test('launcher snapshot rejects changes during dependency inventory and new root children',{
+  skip:process.platform!=='win32',
+},()=>{
   for(const change of ['launcher-write','new-child','launcher-delete'] as const){
     const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
     const launcher=join(root,'run-stack.ps1');
@@ -154,7 +160,9 @@ test('launcher snapshot rejects changes during dependency inventory and new root
   }
 });
 
-test('launcher snapshot rejects fake source paths and incomplete dependency inventory',()=>{
+test('launcher snapshot rejects fake source paths and incomplete dependency inventory',{
+  skip:process.platform!=='win32',
+},()=>{
   const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
   const launcher=join(root,'run-stack.ps1');
   writeFileSync(launcher,'initial');
@@ -172,6 +180,17 @@ test('launcher snapshot rejects fake source paths and incomplete dependency inve
       root,launcher,()=>{},()=>0),
     /STACK_TASK_DEPENDENCY_INVENTORY_UNTRUSTED/);
   } finally {rmSync(root,{recursive:true,force:true})}
+});
+
+test('non-Windows fixture roots cannot be substituted for the protected Stack path',{
+  skip:process.platform==='win32',
+},()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
+  try{
+    assert.throws(()=>inspectProtectedStackLauncherSnapshotOnly(
+      root,join(root,'run-stack.ps1'),()=>{},()=>1,
+    ),/STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED/);
+  }finally{rmSync(root,{recursive:true,force:true})}
 });
 
 test('production pinned source check remains read-only; no actuation/install path',()=>{
