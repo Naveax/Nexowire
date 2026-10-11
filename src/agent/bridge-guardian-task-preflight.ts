@@ -1,4 +1,4 @@
-import { lstatSync } from 'node:fs';
+import { lstatSync, readdirSync } from 'node:fs';
 import * as z from 'zod';
 import { verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 
@@ -104,6 +104,68 @@ export function verifyBridgeGuardianTaskSnapshot(
 }
 
 /**
+ * Pure read-only inspection mechanism for a chain ending in a file.
+ * The caller-supplied path and ACL callback are NOT authority to run tasks.
+ * A privileged caller MUST use the separately pinned wrapper below.
+ */
+export function inspectGuardianSourceChainSnapshotOnly(
+  paths:readonly string[],
+  checkAcl:(absolutePath:string)=>void,
+):void {
+  if(paths.length<2 || paths.length>16) {
+    throw new Error('BRIDGE_GUARDIAN_SOURCE_CHAIN_INVALID');
+  }
+  const fingerprint=(
+    item:string,stat:NonNullable<ReturnType<typeof lstatSync>>,
+  ):string=>JSON.stringify([
+    stat.dev,stat.ino,stat.mode,stat.nlink,stat.size,
+    stat.mtimeMs,stat.ctimeMs,stat.birthtimeMs,
+    stat.isFile(),stat.isDirectory(),stat.isSymbolicLink(),
+    // NTFS directory metadata timestamps are not a reliable signal that
+    // children appeared or disappeared during inspection.
+    stat.isDirectory()?readdirSync(item).sort():null,
+  ]);
+  const observed:Array<readonly [string,string]>=[];
+  const assertUnchanged=(item:string,initial:string):void=>{
+    let current;
+    try {
+      current=lstatSync(item);
+    } catch {
+      throw new Error('BRIDGE_GUARDIAN_SOURCE_CHANGED_DURING_AUDIT');
+    }
+    if(fingerprint(item,current)!==initial) {
+      throw new Error('BRIDGE_GUARDIAN_SOURCE_CHANGED_DURING_AUDIT');
+    }
+  };
+  for(let index=0;index<paths.length;index++){
+    const item=paths[index]!;
+    let stat;
+    try {
+      stat=lstatSync(item);
+    } catch {
+      throw new Error('BRIDGE_GUARDIAN_SOURCE_MISSING_OR_UNREADABLE');
+    }
+    if (stat.isSymbolicLink() ||
+        (index === paths.length-1 ?
+          !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
+      throw new Error('BRIDGE_GUARDIAN_SOURCE_UNTRUSTED_TYPE');
+    }
+    const initial=fingerprint(item,stat);
+    try {
+      checkAcl(item);
+    } catch {
+      throw new Error('BRIDGE_GUARDIAN_SOURCE_UNTRUSTED_ACL');
+    }
+    assertUnchanged(item,initial);
+    observed.push([item,initial]);
+  }
+  // Recheck ancestors: they can be replaced while a later ACL is measured.
+  for(const [item,initial] of observed) {
+    assertUnchanged(item,initial);
+  }
+}
+
+/**
  * Read-only ACL/reparse check for a future, separately installed Guardian.
  * No installer is provided and the protected path is expected to be absent
  * on the current production Agent. Absence is a failure, not permission.
@@ -112,26 +174,9 @@ export function verifyBridgeGuardianSourceAcl(): void {
   if (process.platform !== 'win32') {
     throw new Error('BRIDGE_GUARDIAN_WINDOWS_ONLY');
   }
-  for (const item of [
+  inspectGuardianSourceChainSnapshotOnly([
     'C:\\ProgramData\\Nexowire',
     BRIDGE_GUARDIAN_SOURCE_ROOT,
     BRIDGE_GUARDIAN_LAUNCHER,
-  ]) {
-    let stat;
-    try {
-      stat = lstatSync(item);
-    } catch {
-      throw new Error('BRIDGE_GUARDIAN_SOURCE_MISSING_OR_UNREADABLE');
-    }
-    if (stat.isSymbolicLink() ||
-        (item === BRIDGE_GUARDIAN_LAUNCHER ?
-          !stat.isFile() || stat.nlink!==1 : !stat.isDirectory())) {
-      throw new Error('BRIDGE_GUARDIAN_SOURCE_UNTRUSTED_TYPE');
-    }
-    try {
-      verifyWindowsPrivateAcl(item);
-    } catch {
-      throw new Error('BRIDGE_GUARDIAN_SOURCE_UNTRUSTED_ACL');
-    }
-  }
+  ],verifyWindowsPrivateAcl);
 }
