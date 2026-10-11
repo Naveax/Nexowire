@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync,linkSync,readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,appendFileSync,rmSync,symlinkSync,linkSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {
@@ -87,6 +87,37 @@ test('hardlink aliases to an otherwise private source file fail closed',()=>{
     linkSync(path.join(f.lib,'helper.js'),alias);
     assert.throws(()=>inventoryReadOnlySourceTree(f.root,()=>{}),
       /STACK_TREE_HARDLINK_DENIED/);
+  } finally {f.cleanup()}
+});
+
+test('reject changed file after its initial source inspection',()=>{
+  const f=fixture();
+  try {
+    const target=path.join(f.lib,'helper.js');
+    assert.throws(()=>inventoryReadOnlySourceTree(f.root,p=>{
+      if(p===target)appendFileSync(target,'new content');
+    }),/STACK_TREE_CHANGED_DURING_AUDIT/);
+  } finally {f.cleanup()}
+});
+
+test('final audit pass notices changes to previously checked nodes',()=>{
+  const f=fixture();
+  try {
+    let firstFile:string|undefined;
+    assert.throws(()=>inventoryReadOnlySourceTree(f.root,p=>{
+      if(!p.endsWith('.js'))return;
+      if(firstFile)appendFileSync(firstFile,'late write');
+      else firstFile=p;
+    }),/STACK_TREE_CHANGED_DURING_AUDIT/);
+  } finally {f.cleanup()}
+});
+
+test('reject directory changes during ACL inventory instead of checking stale names',()=>{
+  const f=fixture();
+  try {
+    assert.throws(()=>inventoryReadOnlySourceTree(f.root,p=>{
+      if(p===f.lib)writeFileSync(path.join(f.lib,'unexpected.js'),'x');
+    }),/STACK_TREE_CHANGED_DURING_AUDIT/);
   } finally {f.cleanup()}
 });
 

@@ -8,6 +8,29 @@ const MAX_ENTRIES=150000;
 const MAX_DEPTH=48;
 const MAX_PATH_LENGTH=4096;
 
+// File identity and modification metadata observed before an ACL check.
+// Ignore atime (read-only traversal can update it). This is a race detector,
+// not a substitute for a kernel-held handle or runtime code attestation.
+function sourceFingerprint(stat:NonNullable<ReturnType<typeof lstatSync>>):string {
+  return JSON.stringify([
+    stat.dev,stat.ino,stat.mode,stat.nlink,stat.size,
+    stat.mtimeMs,stat.ctimeMs,stat.birthtimeMs,
+    stat.isFile(),stat.isDirectory(),stat.isSymbolicLink(),
+  ]);
+}
+
+function assertSourceUnchanged(node:string,fingerprint:string):void {
+  let current:NonNullable<ReturnType<typeof lstatSync>>;
+  try {
+    current=lstatSync(node);
+  } catch {
+    throw new Error('STACK_TREE_CHANGED_DURING_AUDIT');
+  }
+  if(sourceFingerprint(current)!==fingerprint) {
+    throw new Error('STACK_TREE_CHANGED_DURING_AUDIT');
+  }
+}
+
 export interface ReadOnlySourceTreeInventory {
   readonly scannedFiles:number;
   readonly scannedDirectories:number;
@@ -41,6 +64,7 @@ export function inventoryReadOnlySourceTree(
     throw new Error('STACK_TREE_LIMIT_INVALID');
   }
   const stack:[string,number][]=[[root,0]];
+  const observed:Array<readonly [string,string]>=[];
   let scannedFiles=0;
   let scannedDirectories=0;
   let verifiedAclEntries=0;
@@ -56,11 +80,16 @@ export function inventoryReadOnlySourceTree(
     if(!stat.isDirectory()&&!stat.isFile()) {
       throw new Error('STACK_TREE_NONREGULAR_NODE_DENIED');
     }
+    const fingerprint=sourceFingerprint(stat);
     try {
       aclCheck(node);
     } catch {
       throw new Error('STACK_TREE_UNTRUSTED_ACL');
     }
+    // ACL queries may take significant time. Never accept a substituted
+    // source node (or contents) merely because the old path was safe.
+    assertSourceUnchanged(node,fingerprint);
+    observed.push([node,fingerprint]);
     verifiedAclEntries++;
     // Reject NTFS/POSIX hardlinked source: a second path may live under an
     // unverified writable parent even when this path's ACL looks private.
@@ -71,6 +100,7 @@ export function inventoryReadOnlySourceTree(
     }
     scannedDirectories++;
     const names=readdirSync(node);
+    assertSourceUnchanged(node,fingerprint);
     if(names.length && depth>=maxDepth) {
       throw new Error('STACK_TREE_DEPTH_LIMIT_EXCEEDED');
     }
@@ -88,6 +118,11 @@ export function inventoryReadOnlySourceTree(
       }
       stack.push([child,depth+1]);
     }
+  }
+  // Nodes visited early might be replaced while a later ACL is checked.
+  // Final read-only revalidation detects such changes within this scan.
+  for(const [node,fingerprint] of observed) {
+    assertSourceUnchanged(node,fingerprint);
   }
   return Object.freeze({
     scannedFiles,scannedDirectories,verifiedAclEntries,
