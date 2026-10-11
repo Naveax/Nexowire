@@ -316,7 +316,7 @@ test('production factory is fixed-root Windows-only and never installs itself',(
     new URL('../src/agent/guardian-sqlite-replay-ledger.ts',import.meta.url),'utf8');
   assert.match(src,/verifyBridgeGuardianSourceAcl/);
   assert.match(src,/verifyWindowsPrivateAcl/);
-  assert.match(src,/stat\.nlink!==1/);
+  assert.match(src,/inspectGuardianSourceChainSnapshotOnly\(paths,verifyWindowsPrivateAcl/);
   assert.match(src,/PRAGMA synchronous = EXTRA/);
   assert.match(src,/BEGIN IMMEDIATE/);
   assert.match(src,/INSERT OR IGNORE/);

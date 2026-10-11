@@ -142,6 +142,42 @@ test('Guardian source chain revisits protected ancestors at completion',()=>{
   }finally{rmSync(root,{recursive:true,force:true})}
 });
 
+test('Guardian source snapshot includes read-only related SQLite audit before final check',()=>{
+  const root=mkdtempSync(path.join(tmpdir(),'guardian-sidecar-window-'));
+  const state=path.join(root,'state');
+  mkdirSync(state);
+  const db=path.join(state,'replay.sqlite');
+  writeFileSync(db,'original');
+  try {
+    let related=0;
+    const visited:string[]=[];
+    inspectGuardianSourceChainSnapshotOnly([root,state,db],p=>{
+      visited.push(p);
+    },()=>{related++;});
+    assert.deepEqual(visited,[root,state,db]);
+    assert.equal(related,1);
+  }finally{rmSync(root,{recursive:true,force:true})}
+});
+
+test('Guardian source snapshot rejects changed DB or parent during related-sidecar check',()=>{
+  for(const change of ['database-write','new-sidecar','remove-database'] as const){
+    const root=mkdtempSync(path.join(tmpdir(),'guardian-sidecar-race-'));
+    const state=path.join(root,'state');
+    mkdirSync(state);
+    const db=path.join(state,'replay.sqlite');
+    writeFileSync(db,'original');
+    try {
+      assert.throws(()=>inspectGuardianSourceChainSnapshotOnly(
+        [root,state,db],()=>{},()=>{
+          if(change==='database-write')appendFileSync(db,'changed');
+          if(change==='new-sidecar')writeFileSync(db+'-journal','x');
+          if(change==='remove-database')rmSync(db);
+        },
+      ),/BRIDGE_GUARDIAN_SOURCE_CHANGED_DURING_AUDIT/,change);
+    }finally{rmSync(root,{recursive:true,force:true})}
+  }
+});
+
 test('preflight source is read-only and does not try to install/enable protected tasks',()=>{
   const code=readFileSync(
     new URL('../src/agent/bridge-guardian-task-preflight.ts',import.meta.url),
