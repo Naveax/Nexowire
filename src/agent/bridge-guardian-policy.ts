@@ -77,27 +77,30 @@ export async function reserveVerifiedGuardianCommand(
   atomicReserve: BridgeGuardianAtomicReserve,
 ): Promise<BridgeGuardianReservedCommand> {
   const facts = await trustedRead();
+  // Snapshot primitives before any asynchronous reservation. The trusted
+  // collector may reuse mutable Date or preference objects between reads.
+  const initialTime=facts.now.getTime();
+  const preferenceRevision=facts.currentPreference.revision;
   const intent: AdminBridgeModeIntent = validateAdminBridgeModeIntent(rawIntent, {
     deviceId: facts.deviceId,
     ownerAccountId: facts.ownerAccountId,
     credentialBinding: facts.credentialBinding,
-    now: facts.now,
+    now: new Date(initialTime),
     // Atomic replay checks occur in atomicReserve below.
     hasConsumedRequestId: () => false,
   });
 
-  const preference=facts.currentPreference;
   const assertStillTrusted=(facts:BridgeGuardianTrustedFacts):void=>{
   if (facts.platform !== 'win32' || facts.accessMode !== 'full') {
     throw new Error('BRIDGE_GUARDIAN_DEVICE_NOT_ELIGIBLE');
   }
   const observedPreference=facts.currentPreference;
   if (!REVISION_PATTERN.test(observedPreference.revision) ||
-      observedPreference.revision !== preference.revision ||
+      observedPreference.revision !== preferenceRevision ||
       observedPreference.desiredMode !== intent.desiredMode ||
       !facts.ownerApproval ||
       facts.ownerApproval.requestId !== intent.requestId ||
-      facts.ownerApproval.preferenceRevision !== preference.revision) {
+      facts.ownerApproval.preferenceRevision !== preferenceRevision) {
     throw new Error('BRIDGE_GUARDIAN_OWNER_APPROVAL_INVALID');
   }
 
@@ -127,19 +130,26 @@ export async function reserveVerifiedGuardianCommand(
     intent.requestId,
     intent.deviceId,
     intent.credentialBinding,
-    preference.revision,
+    preferenceRevision,
   );
-  if (!reserved) throw new Error('BRIDGE_GUARDIAN_ALREADY_CONSUMED_OR_REVOKED');
+  if (reserved!==true) {
+    throw new Error('BRIDGE_GUARDIAN_ALREADY_CONSUMED_OR_REVOKED');
+  }
 
   // A pending disk reservation can outlive the signed command, owner grant,
   // paired session or Guardian health. Re-read trusted facts from the source;
   // a consumed request must remain consumed when authorization expires.
   const current=await trustedRead();
+  const currentTime=current.now instanceof Date ?
+    current.now.getTime() : Number.NaN;
+  if(!Number.isFinite(currentTime) || currentTime<initialTime){
+    throw new Error('BRIDGE_GUARDIAN_POST_RESERVATION_CLOCK_UNTRUSTED');
+  }
   validateAdminBridgeModeIntent(intent,{
     deviceId:current.deviceId,
     ownerAccountId:current.ownerAccountId,
     credentialBinding:current.credentialBinding,
-    now:current.now,hasConsumedRequestId:()=>false,
+    now:new Date(currentTime),hasConsumedRequestId:()=>false,
   });
   assertStillTrusted(current);
 
@@ -147,7 +157,7 @@ export async function reserveVerifiedGuardianCommand(
     requestId: intent.requestId,
     deviceId: intent.deviceId,
     ownerAccountId: intent.ownerAccountId,
-    preferenceRevision: preference.revision,
+    preferenceRevision,
     desiredMode: intent.desiredMode,
     expiresAt: intent.expiresAt,
     state: 'reserved-for-verified-local-processing' as const,
