@@ -1,4 +1,3 @@
-import { lstatSync } from 'node:fs';
 import {
   inventoryReadOnlySourceTree,
   type ReadOnlySourceTreeInventory,
@@ -6,6 +5,8 @@ import {
 import { verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import {
   BRIDGE_GUARDIAN_SOURCE_ROOT,
+  BRIDGE_GUARDIAN_LAUNCHER,
+  inspectGuardianSourceChainSnapshotOnly,
   verifyBridgeGuardianSourceAcl,
 } from './bridge-guardian-task-preflight.js';
 
@@ -27,22 +28,26 @@ export function auditBridgeGuardianFullSourceTree():GuardianSourceTreeAudit {
   if (process.platform !== 'win32') {
     throw new Error('GUARDIAN_SOURCE_TREE_WINDOWS_ONLY');
   }
-  // The launcher plus existing protected ancestor checks are mandatory.
+  // Keep the protected ancestors and launcher under a single snapshot
+  // while the potentially long full-tree dependency inventory runs.
+  // A previously verified parent/launcher may change after its own ACL
+  // check; the enclosing snapshot rejects observable changes on return.
   verifyBridgeGuardianSourceAcl();
-  const parent = 'C:\\ProgramData\\Nexowire';
-  const parentStat = lstatSync(parent);
-  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
-    throw new Error('GUARDIAN_SOURCE_TREE_PARENT_INVALID');
+  const parent='C:\\ProgramData\\Nexowire';
+  const observed:{inventory?:ReadOnlySourceTreeInventory}={};
+  inspectGuardianSourceChainSnapshotOnly([
+    parent,BRIDGE_GUARDIAN_SOURCE_ROOT,BRIDGE_GUARDIAN_LAUNCHER,
+  ],verifyWindowsPrivateAcl,()=>{
+    // Static release/maintenance audit, never an OS execution permit.
+    observed.inventory=inventoryReadOnlySourceTree(
+      BRIDGE_GUARDIAN_SOURCE_ROOT,verifyWindowsPrivateAcl,
+      {maxEntries:12000,maxDepth:24},
+    );
+  });
+  if(!observed.inventory){
+    throw new Error('GUARDIAN_SOURCE_TREE_INVENTORY_UNVERIFIED');
   }
-  verifyWindowsPrivateAcl(parent);
-
-  // This is a static release/maintenance audit, not an OS execution permit.
-  // Every nested source file, dependency, directory, symlink or junction
-  // must be inspected, with conservative size/depth limits.
-  const inventory=inventoryReadOnlySourceTree(
-    BRIDGE_GUARDIAN_SOURCE_ROOT,verifyWindowsPrivateAcl,
-    {maxEntries:12000,maxDepth:24},
-  );
+  const inventory=observed.inventory;
   return Object.freeze({
     root:BRIDGE_GUARDIAN_SOURCE_ROOT,
     inventory,auditOnly:true as const,
