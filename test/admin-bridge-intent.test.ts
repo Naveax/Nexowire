@@ -92,6 +92,36 @@ test('stale and wrong-device receipts are never counted as applied',()=>{
   assert.throws(()=>verifyAdminBridgeModeReceipt({...sample,failureCode:'IGNORED_ERROR'},valid),/BRIDGE_RECEIPT_UNVERIFIED_POSTCONDITION/);
 });
 
+test('applied receipts require observed OS evidence strictly inside intent window',()=>{
+  for(const mode of ['off','on','auto'] as const){
+    const issued=intent(mode);
+    const original=receipt(issued);
+    assert.equal(verifyAdminBridgeModeReceipt({
+      ...original,observedAt:'2026-10-10T15:01:19.999Z',
+    },issued).applied,true);
+    for(const bad of [
+      '2026-10-10T14:59:35Z',
+      '2026-10-10T14:59:39.999Z',
+      '2026-10-10T15:01:20Z',
+      '2026-10-10T15:01:24.999Z',
+    ]){
+      assert.throws(()=>verifyAdminBridgeModeReceipt({
+        ...original,observedAt:bad,
+      },issued),/BRIDGE_RECEIPT_STALE/,mode+' '+bad);
+    }
+  }
+});
+
+test('failure receipts can report after expiry within the existing skew budget',()=>{
+  const issued=intent('off');
+  assert.equal(verifyAdminBridgeModeReceipt({
+    ...receipt(issued,'failed'),observedAt:'2026-10-10T15:01:24.999Z',
+  },issued).applied,false);
+  assert.throws(()=>verifyAdminBridgeModeReceipt({
+    ...receipt(issued,'failed'),observedAt:'2026-10-10T15:01:25.001Z',
+  },issued),/BRIDGE_RECEIPT_STALE/);
+});
+
 test('failed receipts remain failed even when task state appears correct',()=>{
   const valid=intent('on');
   assert.equal(verifyAdminBridgeModeReceipt(receipt(valid,'failed'),valid).applied,false);

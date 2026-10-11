@@ -15,6 +15,8 @@ A receipt may indicate `applied` only if:
 - ON/AUTO: task is Running **and** the expected Broker responds to an authenticated health probe.
 - Both: the task status check itself was verified, the receipt is fresh, and there is no reported failure code.
 
+For an `applied` result, `observedAt` must fall **strictly within** `[issuedAt, expiresAt)`: neither pre-issuance evidence nor a post-expiry (including the exact expiry instant) OS success can be accepted. The existing five-second clock-skew allowance is retained only for `failed` reports near the intent boundaries. These are schema-level timing assertions, not trusted device attestation.
+
 A failed operation must carry a bounded failure code and stays `applied:false`, regardless of task status.
 
 **Operational gaps:** Trusted device-side producer of a receipt and its authentication, replay ledger, durable cloud storage and UI status propagation are still pending in #323. These must not be inferred from the existing `device_bridge_preferences` preference row. In particular, never automatically replay preexisting OFF/ON preferences as privileged commands after deployment, and do not claim the source-only local reconciler in #327 is active on a live Agent.

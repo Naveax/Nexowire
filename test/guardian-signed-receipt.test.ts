@@ -120,6 +120,18 @@ test('a signed unverified health postcondition is still NOT an applied receipt',
     /BRIDGE_RECEIPT_UNVERIFIED_POSTCONDITION/);
 });
 
+test('valid Ed25519 signature cannot promote post-expiry measurement to applied',()=>{
+  const original=payload('on');
+  const signed=signGuardianModeReceipt({
+    ...original,
+    receipt:{...original.receipt,observedAt:original.intent.expiresAt},
+  },keys.privateKey);
+  assert.throws(()=>verifyGuardianSignedModeReceipt(signed,{
+    ...context(original),
+    now:new Date('2026-10-10T15:01:59.000Z'),
+  }),/BRIDGE_RECEIPT_STALE/);
+});
+
 test('explicit signed failure is verifiable but never counted as applied',()=>{
   const p=payload();
   const fail={
