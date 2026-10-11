@@ -132,6 +132,22 @@ test('backwards post-reservation clock fails closed after durable request consum
   assert.equal(reservations,1);
 });
 
+test('mutating the initial Date during reservation cannot move the time baseline',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  const context=ctx();
+  let reservations=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...context,
+    atomicallyReserveRequest:async()=>{
+      reservations++;
+      context.now.setTime(Date.parse('2026-10-10T15:00:00.000Z'));
+      return true;
+    },
+    nowAfterReservation:()=>new Date('2026-10-10T15:00:30.000Z'),
+  }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(reservations,1);
+});
+
 test('truthy nonboolean reservation results are never treated as committed',async()=>{
   const envelope=signGuardianHubCommand(body(),hub.privateKey);
   for(const invalid of [1,'true',{},[],null,undefined]){

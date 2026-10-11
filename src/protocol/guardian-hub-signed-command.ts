@@ -87,9 +87,12 @@ export async function verifyAndReserveGuardianHubCommand(
 ):Promise<{readonly authenticated:true;readonly executionAuthorized:false;
   readonly intent:AdminBridgeModeIntent;readonly preferenceRevision:string}> {
   const signed=GuardianHubSignedCommandSchema.parse(raw);
+  // Pin the initial sample before any asynchronous callback can mutate the
+  // Date object supplied by a local collector.
+  const initialTime=ctx.now.getTime();
   const intent=validateAdminBridgeModeIntent(signed.intent,{
     deviceId:ctx.deviceId,ownerAccountId:ctx.ownerAccountId,
-    credentialBinding:ctx.credentialBinding,now:ctx.now,
+    credentialBinding:ctx.credentialBinding,now:new Date(initialTime),
     hasConsumedRequestId:()=>false,
   });
   if(signed.ownerPreferenceRevision!==ctx.currentOwnerPreferenceRevision ||
@@ -120,7 +123,7 @@ export async function verifyAndReserveGuardianHubCommand(
   // local clock sample as well: replay safety requires fresh, ordered time.
   // The reservation is already consumed on either failure.
   const afterReservation=ctx.nowAfterReservation();
-  const beforeMs=ctx.now.getTime();
+  const beforeMs=initialTime;
   const afterMs=afterReservation instanceof Date ?
     afterReservation.getTime() : Number.NaN;
   if(!Number.isFinite(afterMs) || afterMs<beforeMs) {
