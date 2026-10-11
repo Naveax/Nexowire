@@ -56,6 +56,12 @@ function fixture(){
       currentGuardianKeyId:guardianKeyId,
       enrolledHubPublicKey:hub.publicKey,now:clock,
       nowAfterReservation:()=>new Date(clock),
+      readTrustAfterReservation:async()=>({
+        deviceId,ownerAccountId,credentialBinding,
+        currentOwnerPreferenceRevision:revision,
+        currentGuardianKeyId:guardianKeyId,
+        enrolledHubPublicKey:hub.publicKey,
+      }),
       atomicallyReserveRequest:reserve,
     };
     return {db,reserve,envelope,context};

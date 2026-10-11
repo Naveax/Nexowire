@@ -36,6 +36,11 @@ const ctx=():GuardianHubCommandContext=>({
   enrolledHubPublicKey:hub.publicKey,
   now:new Date('2026-10-10T15:01:00.000Z'),
   nowAfterReservation:()=>new Date('2026-10-10T15:01:00.000Z'),
+  readTrustAfterReservation:async()=>({
+    deviceId:'device-1',ownerAccountId:'owner-1',credentialBinding:pair,
+    currentOwnerPreferenceRevision:revision,currentGuardianKeyId:guardianKeyId,
+    enrolledHubPublicKey:hub.publicKey,
+  }),
   atomicallyReserveRequest:async()=>true,
 });
 
@@ -169,6 +174,69 @@ test('invalid post-reservation clock is rejected after reservation',async()=>{
     nowAfterReservation:()=>new Date('Invalid Date'),
   }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED/);
   assert.equal(reservations,1);
+});
+
+test('fresh trust snapshot revocation after durable reservation fails closed',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  const initial=ctx();
+  const trusted=await initial.readTrustAfterReservation();
+  const rotated=generateKeyPairSync('ed25519');
+  const changes=[
+    {currentOwnerPreferenceRevision:'owner-audit-44'},
+    {currentGuardianKeyId:'c'.repeat(64)},
+    {enrolledHubPublicKey:rotated.publicKey},
+    {deviceId:'device-2'},
+    {ownerAccountId:'owner-2'},
+    {credentialBinding:'c'.repeat(64)},
+  ];
+  for(const delta of changes){
+    let consumed=0;
+    let trustReads=0;
+    await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+      ...ctx(),
+      atomicallyReserveRequest:async()=>{consumed++;return true},
+      readTrustAfterReservation:async()=>{trustReads++;return {...trusted,...delta}},
+    }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_TRUST_REVOKED|BRIDGE_INTENT_IDENTITY_MISMATCH/);
+    assert.equal(consumed,1);
+    assert.equal(trustReads,1);
+  }
+});
+
+test('post-reservation trust reader errors are never treated as acceptance',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  let consumed=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...ctx(),
+    atomicallyReserveRequest:async()=>{consumed++;return true},
+    readTrustAfterReservation:async()=>{throw new Error('TRUST_COLLECTOR_UNAVAILABLE')},
+  }),/TRUST_COLLECTOR_UNAVAILABLE/);
+  assert.equal(consumed,1);
+});
+
+test('long-running post-reservation trust read cannot use earlier unexpired time',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  let consumed=0,clockReads=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...ctx(),
+    atomicallyReserveRequest:async()=>{consumed++;return true},
+    nowAfterReservation:()=>new Date(++clockReads===1?
+      '2026-10-10T15:01:00.000Z':'2026-10-10T15:02:00.000Z'),
+  }),/BRIDGE_INTENT_EXPIRED_OR_INVALID/);
+  assert.equal(consumed,1);
+  assert.equal(clockReads,2);
+});
+
+test('fresh post-reservation clock cannot go backwards while trust reader runs',async()=>{
+  const envelope=signGuardianHubCommand(body(),hub.privateKey);
+  let consumed=0,clockReads=0;
+  await assert.rejects(verifyAndReserveGuardianHubCommand(envelope,{
+    ...ctx(),
+    atomicallyReserveRequest:async()=>{consumed++;return true},
+    nowAfterReservation:()=>new Date(++clockReads===1?
+      '2026-10-10T15:01:00.000Z':'2026-10-10T15:00:59.000Z'),
+  }),/GUARDIAN_HUB_COMMAND_POST_RESERVATION_CLOCK_UNTRUSTED/);
+  assert.equal(consumed,1);
+  assert.equal(clockReads,2);
 });
 
 test('atomic repeated claims accept only one locally, durable storage required in production',async()=>{

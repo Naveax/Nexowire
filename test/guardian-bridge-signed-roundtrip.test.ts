@@ -99,6 +99,13 @@ async function fixture(mode:'on'|'off'|'auto') {
     enrolledHubPublicKey:hub.publicKey,
     now:new Date('2026-10-10T15:00:30.000Z'),
     nowAfterReservation:()=>new Date('2026-10-10T15:00:30.000Z'),
+    readTrustAfterReservation:async()=>({
+      deviceId,ownerAccountId:owner.accountId,
+      credentialBinding:claimed.credentialBinding,
+      currentOwnerPreferenceRevision:preference.updatedAt,
+      currentGuardianKeyId:guardianPublicKeyId(guardian.publicKey),
+      enrolledHubPublicKey:hub.publicKey,
+    }),
     atomicallyReserveRequest:async(requestId,requestedDevice,binding,revision)=>{
       const verified=await reserveVerifiedGuardianCommand(
         claimed,async()=>localFacts,async(id,dev,cred,rev)=>{
@@ -197,6 +204,13 @@ test('Guardian trust facts block signed Hub commands before any replay reservati
     enrolledHubPublicKey:f.hub.publicKey,
     now:new Date('2026-10-10T15:00:30.000Z'),
     nowAfterReservation:()=>new Date('2026-10-10T15:00:30.000Z'),
+    readTrustAfterReservation:async()=>({
+      deviceId:f.deviceId,ownerAccountId:f.owner.accountId,
+      credentialBinding:f.claimed.credentialBinding,
+      currentOwnerPreferenceRevision:f.preference.updatedAt,
+      currentGuardianKeyId:guardianPublicKeyId(f.guardian.publicKey),
+      enrolledHubPublicKey:f.hub.publicKey,
+    }),
     atomicallyReserveRequest:async()=> {
       await reserveVerifiedGuardianCommand(f.claimed,async()=>denied,
         async()=>{throw new Error('MUST_NOT_RESERVE')});
