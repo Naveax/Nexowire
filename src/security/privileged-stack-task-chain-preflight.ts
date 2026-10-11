@@ -1,4 +1,4 @@
-import {lstatSync} from 'node:fs';
+import {lstatSync,readdirSync,type Stats} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
 import {verifyWindowsPrivateAcl} from './windows-programdata-acl.js';
@@ -95,28 +95,85 @@ export interface PrivilegedStackLauncherReadOnlyAudit {
 }
 
 /**
+ * Pure snapshot inspection for isolated testing only. Callbacks do not convey
+ * trusted OS authority. The production wrapper below pins both paths and the
+ * actual Windows ACL verifier; no task operation is implemented here.
+ */
+export function inspectProtectedStackLauncherSnapshotOnly(
+  root:string,
+  launcher:string,
+  inspectAcl:(absolutePath:string)=>void,
+  inspectDependencies:()=>number,
+):number {
+  if(!path.win32.isAbsolute(root) ||
+      path.win32.normalize(root).toLowerCase()!==root.toLowerCase() ||
+      path.win32.dirname(launcher).toLowerCase()!==root.toLowerCase() ||
+      path.win32.basename(launcher).toLowerCase()!=='run-stack.ps1' ||
+      path.win32.normalize(launcher).toLowerCase()!==launcher.toLowerCase()) {
+    throw new Error('STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED');
+  }
+  const fingerprint=(p:string,st:Stats):string=>
+    JSON.stringify([
+      st.dev,st.ino,st.mode,st.nlink,st.size,
+      st.mtimeMs,st.ctimeMs,st.birthtimeMs,
+      st.isFile(),st.isDirectory(),st.isSymbolicLink(),
+      // Windows directory timestamps can stay unchanged after child creation.
+      st.isDirectory()?readdirSync(p).sort():null,
+    ]);
+  const observed:Array<readonly [string,string]>=[];
+  const unchanged=(p:string,before:string):void=>{
+    let after:string;
+    try { after=fingerprint(p,lstatSync(p)); }
+    catch { throw new Error('STACK_TASK_LAUNCHER_CHANGED_DURING_AUDIT'); }
+    if(after!==before){
+      throw new Error('STACK_TASK_LAUNCHER_CHANGED_DURING_AUDIT');
+    }
+  };
+  for(const p of [root,launcher]) {
+    let st:Stats;
+    let before:string;
+    try {
+      st=lstatSync(p);
+      if(st.isSymbolicLink() ||
+          (p===launcher ? !st.isFile()||st.nlink!==1 : !st.isDirectory())){
+        throw new Error('STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED');
+      }
+      before=fingerprint(p,st);
+    } catch {
+      throw new Error('STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED');
+    }
+    inspectAcl(p);
+    unchanged(p,before);
+    observed.push([p,before]);
+  }
+  // The source may change while the unrelated dependency inventory runs.
+  const nodes=inspectDependencies();
+  if(!Number.isSafeInteger(nodes)||nodes<1){
+    throw new Error('STACK_TASK_DEPENDENCY_INVENTORY_UNTRUSTED');
+  }
+  for(const [p,before] of observed) unchanged(p,before);
+  return nodes;
+}
+
+/**
  * Read-only maintenance audit for an already installed protected candidate.
  * Must NOT be called as a per-command hot path. This never writes Task/ACL.
+ * Snapshot comparisons are not an atomic filesystem/runtime attestation.
  */
 export function auditProtectedPrivilegedStackLauncherReadOnly():
     PrivilegedStackLauncherReadOnlyAudit {
   if(process.platform!=='win32') {
     throw new Error('STACK_TASK_WINDOWS_ONLY');
   }
-  for(const p of [STACK_ROOT,STACK_LAUNCHER]) {
-    const st=lstatSync(p);
-    if(st.isSymbolicLink() ||
-      (p===STACK_LAUNCHER ? !st.isFile()||st.nlink!==1 : !st.isDirectory()) ||
-      path.win32.normalize(p).toLowerCase()!==p.toLowerCase()) {
-      throw new Error('STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED');
-    }
-    verifyWindowsPrivateAcl(p);
-  }
-  const inventory=auditPrivilegedStackDependencyTree();
+  const nodes=inspectProtectedStackLauncherSnapshotOnly(
+    STACK_ROOT,STACK_LAUNCHER,
+    p=>verifyWindowsPrivateAcl(p),
+    ()=>auditPrivilegedStackDependencyTree().verifiedAclEntries,
+  );
   return Object.freeze({
     launcher:STACK_LAUNCHER,
     aclComponentsVerified:2 as const,
-    sourceDependencyNodesChecked:inventory.verifiedAclEntries,
+    sourceDependencyNodesChecked:nodes,
     sourceTreeRuntimeAttested:false as const,
     productionTaskRetargeted:false as const,
     remoteActuationAuthorized:false as const,

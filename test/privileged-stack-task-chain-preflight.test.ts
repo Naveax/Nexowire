@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,writeFileSync,appendFileSync,rmSync} from 'node:fs';
+import {join,dirname} from 'node:path';
+import {tmpdir} from 'node:os';
 import {
   verifyPrivilegedStackTaskSnapshot,
   auditProtectedPrivilegedStackLauncherReadOnly,
+  inspectProtectedStackLauncherSnapshotOnly,
   STACK_TASK,STACK_ROOT,STACK_LAUNCHER,STACK_LAUNCH_ARGS,
   WINDOWS_POWERSHELL,
 } from '../src/security/privileged-stack-task-chain-preflight.js';
@@ -101,6 +104,93 @@ test('unknown Task fields and aliases cannot be used to inject actuation permiss
   assert.throws(()=>verifyPrivilegedStackTaskSnapshot({
     ...future(),name:'Nexowire Stack Backup',
   },sid));
+});
+
+test('launcher snapshot verifies fixed child and two ACL nodes before dependency inventory',{
+  skip:process.platform!=='win32',
+},()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
+  const launcher=join(root,'run-stack.ps1');
+  writeFileSync(launcher,'Write-Output SAFE');
+  try {
+    const inspected:string[]=[];
+    let inventories=0;
+    const count=inspectProtectedStackLauncherSnapshotOnly(root,launcher,p=>{
+      inspected.push(p);
+    },()=>{inventories++;return 12});
+    assert.equal(count,12);
+    assert.deepEqual(inspected,[root,launcher]);
+    assert.equal(inventories,1);
+  } finally {rmSync(root,{recursive:true,force:true})}
+});
+
+test('launcher snapshot rejects changing launcher during ACL inspection',{
+  skip:process.platform!=='win32',
+},()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
+  const launcher=join(root,'run-stack.ps1');
+  writeFileSync(launcher,'initial');
+  try {
+    let inventoryCalled=false;
+    assert.throws(()=>inspectProtectedStackLauncherSnapshotOnly(root,launcher,p=>{
+      if(p===launcher)appendFileSync(launcher,'-changed');
+    },()=>{inventoryCalled=true;return 1}),
+    /STACK_TASK_LAUNCHER_CHANGED_DURING_AUDIT/);
+    assert.equal(inventoryCalled,false);
+  } finally {rmSync(root,{recursive:true,force:true})}
+});
+
+test('launcher snapshot rejects changes during dependency inventory and new root children',{
+  skip:process.platform!=='win32',
+},()=>{
+  for(const change of ['launcher-write','new-child','launcher-delete'] as const){
+    const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
+    const launcher=join(root,'run-stack.ps1');
+    writeFileSync(launcher,'initial');
+    try {
+      assert.throws(()=>inspectProtectedStackLauncherSnapshotOnly(
+        root,launcher,()=>{},()=>{
+          if(change==='launcher-write')appendFileSync(launcher,'-changed');
+          if(change==='new-child')writeFileSync(join(root,'unexpected.js'),'x');
+          if(change==='launcher-delete')rmSync(launcher);
+          return 7;
+        }),
+      /STACK_TASK_LAUNCHER_CHANGED_DURING_AUDIT/,change);
+    } finally {rmSync(root,{recursive:true,force:true})}
+  }
+});
+
+test('launcher snapshot rejects fake source paths and incomplete dependency inventory',{
+  skip:process.platform!=='win32',
+},()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
+  const launcher=join(root,'run-stack.ps1');
+  writeFileSync(launcher,'initial');
+  try {
+    for(const candidate of [
+      join(root,'sub','run-stack.ps1'),
+      join(root,'other.ps1'),
+      join(dirname(root),'run-stack.ps1'),
+    ]){
+      assert.throws(()=>inspectProtectedStackLauncherSnapshotOnly(
+        root,candidate,()=>{},()=>5),
+      /STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED/);
+    }
+    assert.throws(()=>inspectProtectedStackLauncherSnapshotOnly(
+      root,launcher,()=>{},()=>0),
+    /STACK_TASK_DEPENDENCY_INVENTORY_UNTRUSTED/);
+  } finally {rmSync(root,{recursive:true,force:true})}
+});
+
+test('non-Windows fixture roots cannot be substituted for the protected Stack path',{
+  skip:process.platform==='win32',
+},()=>{
+  const root=mkdtempSync(join(tmpdir(),'nwx-stack-launcher-'));
+  try{
+    assert.throws(()=>inspectProtectedStackLauncherSnapshotOnly(
+      root,join(root,'run-stack.ps1'),()=>{},()=>1,
+    ),/STACK_TASK_LAUNCHER_SOURCE_UNTRUSTED/);
+  }finally{rmSync(root,{recursive:true,force:true})}
 });
 
 test('production pinned source check remains read-only; no actuation/install path',()=>{
