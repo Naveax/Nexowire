@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { windowsProgramDataAclArguments,verifyWindowsPrivateAcl,protectedWindowsAclEnvironment } from '../src/security/windows-programdata-acl.js';
-import {mkdtempSync,rmSync} from 'node:fs';
+import { windowsProgramDataAclArguments,verifyWindowsPrivateAcl,protectedWindowsAclEnvironment,snapshotFlatProgramDataChildrenReadOnly } from '../src/security/windows-programdata-acl.js';
+import {mkdtempSync,rmSync,mkdirSync,writeFileSync,appendFileSync,linkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {readFileSync} from 'node:fs';
@@ -80,6 +80,49 @@ test('protected install checks final ACL after hardening, before task registrati
   for(const forbidden of ['Set-Acl','Register-ScheduledTask','Stop-Process','Get-Credential']){
     assert.equal(source.includes(forbidden),false,forbidden);
   }
+});
+
+test('flat protected directory snapshot observes new, removed and changed child files',()=>{
+  const root=mkdtempSync(path.join(tmpdir(),'nwx-flat-acl-'));
+  try{
+    const a=path.join(root,'launch.ps1');
+    writeFileSync(a,'initial');
+    const baseline=snapshotFlatProgramDataChildrenReadOnly(root);
+    assert.equal(baseline.length,1);
+    assert.equal(baseline[0]?.name,'launch.ps1');
+    assert.equal(Object.isFrozen(baseline),true);
+    writeFileSync(path.join(root,'extra.txt'),'unexpected');
+    assert.notDeepEqual(snapshotFlatProgramDataChildrenReadOnly(root),baseline);
+    rmSync(path.join(root,'extra.txt'));
+    appendFileSync(a,'-changed');
+    assert.notDeepEqual(snapshotFlatProgramDataChildrenReadOnly(root),baseline);
+    rmSync(a);
+    assert.deepEqual(snapshotFlatProgramDataChildrenReadOnly(root),[]);
+  }finally{rmSync(root,{recursive:true,force:true})}
+});
+
+test('flat protected directory inspection rejects nested directories and hardlink aliases',()=>{
+  const root=mkdtempSync(path.join(tmpdir(),'nwx-flat-acl-'));
+  try{
+    mkdirSync(path.join(root,'unexpected'));
+    assert.throws(()=>snapshotFlatProgramDataChildrenReadOnly(root),
+      /PROTECTED_ACL_CHILD_TYPE_OR_HARDLINK_UNTRUSTED/);
+    rmSync(path.join(root,'unexpected'),{recursive:true});
+    const file=path.join(root,'source.txt');
+    writeFileSync(file,'data');
+    linkSync(file,path.join(root,'alias.txt'));
+    assert.throws(()=>snapshotFlatProgramDataChildrenReadOnly(root),
+      /PROTECTED_ACL_CHILD_TYPE_OR_HARDLINK_UNTRUSTED/);
+  }finally{rmSync(root,{recursive:true,force:true})}
+});
+
+test('Windows ACL hardener source checks full inventory again after child ACL passes',()=>{
+  const src=readFileSync(new URL('../src/security/windows-programdata-acl.ts',import.meta.url),'utf8');
+  assert.match(src,/const original=snapshotFlatProgramDataChildrenReadOnly\(root\)/);
+  assert.match(src,/const current=lstatSync\(child\)/);
+  assert.match(src,/current\.nlink!==entry\.nlink/);
+  assert.match(src,/JSON\.stringify\(snapshotFlatProgramDataChildrenReadOnly\(root\)\)/);
+  assert.match(src,/verifyWindowsPrivateAcl\(root\);\s*\}/);
 });
 
 test('read-only protected ACL validation rejects an ordinary user-owned temporary directory',{

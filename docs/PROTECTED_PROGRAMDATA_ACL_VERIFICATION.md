@@ -17,6 +17,8 @@ When the authorized elevated `hub boot-install` workflow invokes
   and Interactive using stable Windows SIDs;
 - **checks each directory/file DACL after modification**, before proceeding
   with future task-registration steps;
+- snapshots all direct regular files before ACL changes, rejects hardlink aliases, and rechecks each file's identity/content-related metadata before hardening that child;
+- re-enumerates the exact directory child set and checks root identity/ACL again after processing all children, rejecting observable mid-hardening additions, deletions, or replacements;
 - rejects unexpected owner SIDs, reparse points, or any remaining untrusted
   allow-write ACE, including unrecognized local group/user principals.
 
@@ -40,7 +42,7 @@ It does **not** silently change the ACLs of Naveax's live v1.0.0
 writable runtime in Issue #271.
 
 Important: this is a conservative owner/allow-ACE check, not a complete
-Windows effective-token policy verifier. As with the source-path gate, only
+Windows effective-token policy verifier. The extra file snapshots are **not atomic** and cannot guarantee against replacement after the final check. They verify the flat set during an authorized installer operation; they do not certify running privileged source bytes. As with the source-path gate, only
 `C:\Windows` is currently accepted as a trusted PowerShell interpreter
 location. Unsupported OS layouts fail closed.
 

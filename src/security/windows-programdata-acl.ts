@@ -114,37 +114,68 @@ Write-Output 'PRIVATE_ACL_VERIFIED'
   }
 }
 
-export function hardenWindowsProgramDataAcl(
-  root: string,
-): void {
+/**
+ * Read-only file inventory; test fixture readers are NOT Windows ACL authority.
+ * These lifecycle roots are intentionally flat and must never contain links.
+ */
+export function snapshotFlatProgramDataChildrenReadOnly(root:string):ReadonlyArray<{
+  readonly name:string;
+  readonly dev:number;
+  readonly ino:number;
+  readonly nlink:number;
+  readonly size:number;
+  readonly mtimeMs:number;
+  readonly birthtimeMs:number;
+}> {
+  const parent=lstatSync(root);
+  if (!parent.isDirectory()||parent.isSymbolicLink()) {
+    throw new Error('PROTECTED_ACL_DIRECTORY_UNTRUSTED');
+  }
+  const entries=readdirSync(root,{withFileTypes:true});
+  const snapshot=entries.map(entry=>{
+    const child=path.join(root,entry.name);
+    const stat=lstatSync(child);
+    if(!entry.isFile()||entry.isSymbolicLink()||
+        !stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1) {
+      throw new Error('PROTECTED_ACL_CHILD_TYPE_OR_HARDLINK_UNTRUSTED');
+    }
+    return Object.freeze({
+      name:entry.name,dev:stat.dev,ino:stat.ino,nlink:stat.nlink,
+      size:stat.size,mtimeMs:stat.mtimeMs,birthtimeMs:stat.birthtimeMs,
+    });
+  });
+  snapshot.sort((a,b)=>a.name.localeCompare(b.name,'en'));
+  return Object.freeze(snapshot);
+}
+
+export function hardenWindowsProgramDataAcl(root:string):void {
   if (process.platform !== 'win32') return;
 
-  const stat = lstatSync(root);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new Error(
-      'Refusing to harden non-directory or reparse-point ProgramData root.',
-    );
-  }
-
-  // These protected lifecycle directories contain only flat files.
-  // Fail closed instead of traversing a junction or unexpected subdirectory.
-  const entries = readdirSync(root, {
-    withFileTypes: true,
-  });
-  for (const entry of entries) {
-    if (!entry.isFile() || entry.isSymbolicLink()) {
-      throw new Error(
-        'Unexpected object in protected ProgramData directory: ' +
-          entry.name,
-      );
-    }
-  }
-
+  const originalRoot=lstatSync(root);
+  const original=snapshotFlatProgramDataChildrenReadOnly(root);
   applyAcl(root, true);
   verifyWindowsPrivateAcl(root);
-  for (const entry of entries) {
+  for(const entry of original) {
     const child=path.join(root,entry.name);
+    // Never apply an elevated ACL to a new link/alias substituted after
+    // enumeration. The final inventory also rejects files added mid-loop.
+    const current=lstatSync(child);
+    if(!current.isFile()||current.isSymbolicLink()||
+        current.dev!==entry.dev||current.ino!==entry.ino||
+        current.nlink!==entry.nlink||
+        current.size!==entry.size||current.mtimeMs!==entry.mtimeMs||
+        current.birthtimeMs!==entry.birthtimeMs) {
+      throw new Error('PROTECTED_ACL_CHILD_CHANGED_DURING_HARDENING');
+    }
     applyAcl(child, false);
     verifyWindowsPrivateAcl(child);
   }
+  const finalRoot=lstatSync(root);
+  if(!finalRoot.isDirectory()||finalRoot.isSymbolicLink()||
+      finalRoot.dev!==originalRoot.dev||finalRoot.ino!==originalRoot.ino||
+      JSON.stringify(snapshotFlatProgramDataChildrenReadOnly(root))!==
+        JSON.stringify(original)) {
+    throw new Error('PROTECTED_ACL_CHILD_INVENTORY_CHANGED');
+  }
+  verifyWindowsPrivateAcl(root);
 }
