@@ -11,7 +11,7 @@ This is an **inert cryptographic protocol** for future Guardian-produced receipt
 - A key ID equal to SHA-256 of the Ed25519 public key's SPKI DER representation.
 - A canonical base64url Ed25519 signature over a deterministic domain-separated, fixed-field-order transcript.
 
-`verifyGuardianSignedModeReceipt` requires a **trusted, previously registered** public key for this paired device. A public key supplied inside the HTTP request must never establish trust. The caller must also supply the current authoritative owner intent and preference revision and the current time. Validation rejects malformed, expired, altered, cross-device, cross-request or wrong-key receipts. An authenticated failed receipt remains `applied:false`. A signed false claim about Broker task state must still be rejected by trusted, independent device-local health measurement.
+`verifyGuardianSignedModeReceipt` requires a **trusted, previously registered** public key for this paired device. A public key supplied inside the HTTP request must never establish trust. The caller must also supply the current authoritative owner intent and preference revision and the current time. Validation rejects malformed, expired, altered, cross-device, cross-request or wrong-key receipts. Even an authentic signed receipt cannot claim a measurement performed more than five seconds **after** the trusted current verification time; signed future-dated success or failure evidence is rejected. Up to five seconds of Guardian/server clock skew remains permitted. An authenticated failed receipt remains `applied:false`. A signed false claim about Broker task state must still be rejected by trusted, independent device-local health measurement.
 
 ## Boundaries still open
 

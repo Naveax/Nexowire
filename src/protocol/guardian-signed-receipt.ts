@@ -118,6 +118,13 @@ export function verifyGuardianSignedModeReceipt(
         context.registeredDevicePublicKey,bytes)) {
     throw new Error('GUARDIAN_RECEIPT_BAD_SIGNATURE');
   }
+  // A valid signature authenticates the claimed timestamp but cannot make a
+  // future measurement have happened already. Tolerate at most 5 seconds of
+  // Guardian/server clock skew; never finalize a future-dated OS claim.
+  const measuredTime=Date.parse(envelope.receipt.observedAt);
+  if (!Number.isFinite(measuredTime) || measuredTime>time+5000) {
+    throw new Error('GUARDIAN_RECEIPT_OBSERVED_IN_FUTURE');
+  }
   const assessment=verifyAdminBridgeModeReceipt(
     envelope.receipt,envelope.intent,
   );
