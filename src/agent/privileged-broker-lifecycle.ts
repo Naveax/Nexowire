@@ -8,6 +8,11 @@ import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import {
+  assertNoPrivilegedNodeStartupFlags,
+  assertWindowsPrivilegedRuntimeTrusted,
+  PRIVILEGED_NODE_INJECTION_ENV,
+} from '../security/windows-privileged-runtime-trust.js';
+import {
   defaultPrivilegedBrokerSecretFile,
   loadOrCreatePrivilegedBrokerToken,
   readExistingPrivilegedBrokerToken,
@@ -263,6 +268,10 @@ export function buildPrivilegedBrokerLauncher(
 
   const lines = [
     "$ErrorActionPreference='Stop'",
+    // The scheduled Highest task inherits the Windows account's environment,
+    // not the installer process's sanitized task-registration environment.
+    // Remove preload/import hooks before launching the privileged Node host.
+    ...PRIVILEGED_NODE_INJECTION_ENV.map(name=>'$env:'+name+'=$null'),
   ];
 
   const brokerHost =
@@ -394,6 +403,19 @@ export async function installPrivilegedBrokerTask(
     );
   }
 
+  // P0 privileged-code boundary: never create a token, launcher or Highest
+  // task from an untrusted Node binary, user-writeable CLI package, imported
+  // dependency or Node startup hook. This is read-only and fail-closed.
+  const cliEntrypoint=options.cliEntrypoint??process.argv[1];
+  if(!cliEntrypoint){
+    throw new Error('PRIVILEGED_BROKER_CLI_ENTRYPOINT_REQUIRED');
+  }
+  assertNoPrivilegedNodeStartupFlags(options.execArgv??process.execArgv);
+  assertWindowsPrivilegedRuntimeTrusted({
+    executable:options.execPath??process.execPath,
+    cliEntrypoint,
+    env,
+  });
   const directory = rootDir(options);
   await assertBrokerRootSafeToRemove(directory);
   const launcher = launcherPath(options);

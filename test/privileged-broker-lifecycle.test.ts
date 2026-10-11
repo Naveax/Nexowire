@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PRIVILEGED_NODE_INJECTION_ENV} from '../src/security/windows-privileged-runtime-trust.js';
 import {
   buildPrivilegedBrokerLauncher,
   privilegedBrokerTaskStatus,
@@ -30,6 +32,56 @@ test('broker task launcher preserves runtime args and never persists plaintext b
   assert.match(launcher, /'privileged-broker' 'run'/);
   assert.match(launcher, /O''Brien/);
   assert.equal(launcher.includes('must-not-persist'), false);
+});
+
+test('elevated Broker launcher strips account-level Node injection variables before executing code',()=>{
+  const launcher=buildPrivilegedBrokerLauncher({
+    execPath:'C:\\Program Files\\nodejs\\node.exe',
+    execArgv:[],
+    cliEntrypoint:'C:\\ProgramData\\Nexowire\\cli.js',
+    env:{
+      NODE_OPTIONS:'--require C:\\Users\\Public\\inject.js',
+      NODE_PATH:'C:\\Users\\Public\\node_modules',
+      NODE_EXTRA_CA_CERTS:'C:\\Users\\Public\\fake.pem',
+    },
+  });
+  const command=launcher.indexOf("'C:\\Program Files\\nodejs\\node.exe'");
+  assert.ok(command>0);
+  for(const variable of PRIVILEGED_NODE_INJECTION_ENV){
+    const clear='$env:'+variable+'=$null';
+    assert.ok(launcher.includes(clear),variable);
+    assert.ok(launcher.indexOf(clear)<command,variable);
+    assert.ok(!launcher.includes('C:\\Users\\Public'),variable);
+  }
+});
+
+test('elevated Broker installer rejects untrusted runtime before secrets, launcher or task registration',()=>{
+  const source=readFileSync(
+    new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8',
+  );
+  const begin=source.indexOf('export async function installPrivilegedBrokerTask');
+  const end=source.indexOf('/** Fail closed before operating on an elevated scheduled task.');
+  assert.ok(begin>=0 && end>begin);
+  const installer=source.slice(begin,end);
+  const boundary=[
+    'assertNoPrivilegedNodeStartupFlags(options.execArgv??process.execArgv)',
+    'assertWindowsPrivilegedRuntimeTrusted({',
+    'await loadOrCreatePrivilegedBrokerToken({',
+    'await fs.mkdir(directory,',
+    'await fs.writeFile(',
+    'Register-ScheduledTask -TaskName $name',
+    'Start-ScheduledTask -TaskName $name',
+  ];
+  let previous=-1;
+  for(const step of boundary){
+    const next=installer.indexOf(step);
+    assert.ok(next>previous,step);
+    previous=next;
+  }
+  assert.match(installer,/const cliEntrypoint=options\.cliEntrypoint\?\?process\.argv\[1\]/);
+  assert.match(installer,/\scliEntrypoint,\s/);
+  assert.match(installer,/executable:options\.execPath\?\?process\.execPath/);
+  assert.match(installer,/env,/);
 });
 
 test(
