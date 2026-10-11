@@ -91,29 +91,43 @@ export async function measureGuardianBrokerPostcondition(
 ):Promise<LocalBridgePostconditionResult> {
   const intent=AdminBridgeModeIntentSchema.parse(rawIntent);
   const sampledAt=collectors.now();
-  const when=sampledAt.getTime();
+  const when=sampledAt instanceof Date?sampledAt.getTime():Number.NaN;
   if (!Number.isFinite(when) ||
       when < Date.parse(intent.issuedAt) ||
       when >= Date.parse(intent.expiresAt)) {
     throw new Error('GUARDIAN_POSTCONDITION_EXPIRED_OR_INVALID');
   }
-  const observedAt=new Date(when).toISOString();
+  // A failing collector can take longer than the approved intent window.
+  // Never backdate failure evidence to the clock sampled before the reads.
+  // Failure receipts have only the protocol's five-second reporting grace.
+  const failed=(
+    reason:Parameters<typeof unsuccessful>[2],
+    state:Parameters<typeof unsuccessful>[3],
+  ):LocalBridgePostconditionResult=>{
+    const current=collectors.now();
+    const time=current instanceof Date?current.getTime():Number.NaN;
+    if(!Number.isFinite(time)||time<when||
+        time>Date.parse(intent.expiresAt)+5_000){
+      throw new Error('GUARDIAN_POSTCONDITION_FAILURE_CLOCK_UNTRUSTED');
+    }
+    return unsuccessful(intent,new Date(time).toISOString(),reason,state);
+  };
   let taskData:LocalBridgeTaskEvidence;
   try {
     taskData=task.parse(await collectors.readTask());
   } catch {
-    return unsuccessful(intent,observedAt,'TASK_AUDIT_UNAVAILABLE','Unknown');
+    return failed('TASK_AUDIT_UNAVAILABLE','Unknown');
   }
   const state=taskData.state;
   let processData:LocalBridgeProcessEvidence;
   try {
     processData=processAudit.parse(await collectors.readProcessAndPort());
   } catch {
-    return unsuccessful(intent,observedAt,
+    return failed(
       'BROKER_PROCESS_AUDIT_UNVERIFIED',state);
   }
   if (!processData.complete || !processData.trustedCollector) {
-    return unsuccessful(intent,observedAt,
+    return failed(
       'BROKER_PROCESS_AUDIT_UNVERIFIED',state);
   }
 
@@ -126,7 +140,7 @@ export async function measureGuardianBrokerPostcondition(
       processData.recoveryTriggerVerified &&
       !processData.recoveryTriggerEnabled;
     if (!allGone) {
-      return unsuccessful(intent,observedAt,'BROKER_MODE_NOT_APPLIED',state);
+      return failed('BROKER_MODE_NOT_APPLIED',state);
     }
   } else {
     if(state!=='Running' ||
@@ -136,12 +150,12 @@ export async function measureGuardianBrokerPostcondition(
         (intent.desiredMode==='auto' &&
           (!processData.recoveryTriggerVerified ||
            !processData.recoveryTriggerEnabled))) {
-      return unsuccessful(intent,observedAt,'BROKER_MODE_NOT_APPLIED',state);
+      return failed('BROKER_MODE_NOT_APPLIED',state);
     }
     try {
       observedHealth=health.parse(await collectors.readHealth());
     } catch {
-      return unsuccessful(intent,observedAt,
+      return failed(
         'BROKER_HEALTH_UNVERIFIED',state);
     }
     if (!observedHealth.ready ||
@@ -150,7 +164,7 @@ export async function measureGuardianBrokerPostcondition(
         !observedHealth.elevated ||
         !observedHealth.version ||
         observedHealth.version!==observedHealth.expectedVersion) {
-      return unsuccessful(intent,observedAt,
+      return failed(
         'BROKER_HEALTH_UNVERIFIED',state);
     }
   }
@@ -161,22 +175,22 @@ export async function measureGuardianBrokerPostcondition(
   try {
     finalTask=task.parse(await collectors.readTask());
   } catch {
-    return unsuccessful(intent,observedAt,'TASK_AUDIT_UNAVAILABLE','Unknown');
+    return failed('TASK_AUDIT_UNAVAILABLE','Unknown');
   }
   let finalProcess:LocalBridgeProcessEvidence;
   try {
     finalProcess=processAudit.parse(await collectors.readProcessAndPort());
   } catch {
-    return unsuccessful(intent,observedAt,
+    return failed(
       'BROKER_PROCESS_AUDIT_UNVERIFIED',finalTask.state);
   }
   if (!finalProcess.complete || !finalProcess.trustedCollector) {
-    return unsuccessful(intent,observedAt,
+    return failed(
       'BROKER_PROCESS_AUDIT_UNVERIFIED',finalTask.state);
   }
   if (JSON.stringify(taskData)!==JSON.stringify(finalTask) ||
       JSON.stringify(processData)!==JSON.stringify(finalProcess)) {
-    return unsuccessful(intent,observedAt,
+    return failed(
       'BROKER_MODE_NOT_APPLIED',finalTask.state);
   }
 
@@ -189,12 +203,12 @@ export async function measureGuardianBrokerPostcondition(
     try {
       finalHealth=health.parse(await collectors.readHealth());
     } catch {
-      return unsuccessful(intent,observedAt,
+      return failed(
         'BROKER_HEALTH_UNVERIFIED',finalTask.state);
     }
     if (!observedHealth ||
         JSON.stringify(observedHealth)!==JSON.stringify(finalHealth)) {
-      return unsuccessful(intent,observedAt,
+      return failed(
         'BROKER_HEALTH_UNVERIFIED',finalTask.state);
     }
   }
