@@ -1677,6 +1677,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         ...targetFields,
         browser: z.enum(['auto', 'edge', 'chrome']).optional(),
         headless: z.boolean().optional(),
+        ui_target: z.enum(['headless','private_desktop']).optional(),
         initial_url: z.string().min(1).max(4096).optional(),
         width: z.number().int().min(320).max(3840).optional(),
         height: z.number().int().min(240).max(2160).optional(),
@@ -1687,6 +1688,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       provider_id,
       browser,
       headless,
+      ui_target,
       initial_url,
       width,
       height,
@@ -1697,6 +1699,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         {
           ...(browser ? { browser } : {}),
           ...(headless !== undefined ? { headless } : {}),
+          ...(ui_target ? { ui_target } : {}),
           ...(initial_url ? { initial_url } : {}),
           ...(width !== undefined ? { width } : {}),
           ...(height !== undefined ? { height } : {}),

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import WebSocket from 'ws';
+import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
 
 export type BrowserKind = 'edge' | 'chrome';
 
@@ -14,6 +15,8 @@ export interface BrowserSessionSummary {
   port: number;
   createdAt: string;
   headless: boolean;
+  uiTarget?: 'headless'|'private_desktop';
+  desktopName?: string;
   status: 'running' | 'exited';
   exitCode: number | null;
 }
@@ -56,10 +59,16 @@ export interface BrowserPageSnapshot {
   elementsTruncated: boolean;
 }
 
+interface PrivateBrowserProcess {
+  pid:number;
+  exitCode:null;
+  signalCode:null;
+}
+type BrowserProcess=ChildProcess|PrivateBrowserProcess;
 interface BrowserSession extends BrowserSessionSummary {
   executable: string;
   userDataDir: string;
-  process: ChildProcess;
+  process: BrowserProcess;
   stderr: string;
 }
 
@@ -234,8 +243,13 @@ class CdpClient {
   }
 }
 
-function isAlive(child: ChildProcess): boolean {
-  return child.exitCode === null && child.signalCode === null;
+function isAlive(child: BrowserProcess): boolean {
+  if(child.exitCode!==null||child.signalCode!==null||!child.pid)return false;
+  if('kill' in child)return true;
+  try{
+    process.kill(child.pid,0);
+    return true;
+  }catch{return false;}
 }
 
 export function validateBrowserUrl(value: string): string {
@@ -293,6 +307,8 @@ function publicSession(
     port: session.port,
     createdAt: session.createdAt,
     headless: session.headless,
+    ...(session.uiTarget?{uiTarget:session.uiTarget}:{}),
+    ...(session.desktopName?{desktopName:session.desktopName}:{}),
     status: session.status,
     exitCode: session.exitCode,
   };
@@ -550,12 +566,27 @@ export class BrowserManager {
   async start(input: {
     browser?: 'auto' | BrowserKind;
     headless?: boolean;
+    uiTarget?: 'headless'|'private_desktop';
     initialUrl?: string;
     width?: number;
     height?: number;
   }) {
     const browser = input.browser ?? 'auto';
     const headless = input.headless ?? true;
+    const uiTarget=input.uiTarget ?? 'headless';
+    if(uiTarget==='private_desktop' &&
+       (this.platform!=='win32'||process.platform!=='win32')){
+      throw new BrowserControlError(
+        'PRIVATE_BROWSER_WINDOWS_ONLY',
+        'Private GUI browser launch requires an interactive Windows desktop.',
+      );
+    }
+    if(!headless && this.platform==='win32' && uiTarget!=='private_desktop'){
+      throw new BrowserControlError(
+        'BROWSER_VISIBLE_DEFAULT_DENIED',
+        'Visible browser launch requires ui_target=private_desktop to avoid stealing the user desktop.',
+      );
+    }
     const width = Math.min(3840, Math.max(320, input.width ?? 1440));
     const height = Math.min(2160, Math.max(240, input.height ?? 900));
     const initialUrl = validateBrowserUrl(
@@ -580,20 +611,29 @@ export class BrowserManager {
       initialUrl,
     ];
 
-    const child = spawn(resolved.executable, args, {
-      windowsHide: headless,
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
+    let child:BrowserProcess|undefined;
     let stderr = '';
-    child.stderr?.on('data', (chunk: Buffer) => {
-      if (stderr.length >= 32_768) return;
-      stderr += chunk.toString('utf8').slice(
-        0,
-        32_768 - stderr.length,
-      );
-    });
 
     try {
+      if(uiTarget==='private_desktop'){
+        await executeWindowsPrivateDesktopCapability(
+          'windows.private_desktop.start',{create_shortcut:false},
+        );
+        const launch=await executeWindowsPrivateDesktopCapability(
+          'windows.private_desktop.launch',
+          {executable:resolved.executable,args,cwd:path.dirname(resolved.executable)},
+        ) as {data:{pid:number}};
+        child={pid:launch.data.pid,exitCode:null,signalCode:null};
+      }else{
+        const spawned=spawn(resolved.executable,args,{
+          windowsHide:headless,stdio:['ignore','ignore','pipe'],
+        });
+        child=spawned;
+        spawned.stderr?.on('data',(chunk:Buffer)=>{
+          if(stderr.length>=32_768)return;
+          stderr+=chunk.toString('utf8').slice(0,32_768-stderr.length);
+        });
+      }
       const port = await this.waitForPort(
         userDataDir,
         child,
@@ -607,23 +647,27 @@ export class BrowserManager {
         port,
         createdAt: new Date().toISOString(),
         headless,
+        uiTarget,
+        ...(uiTarget==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
         status: 'running',
         exitCode: null,
         userDataDir,
         process: child,
         stderr,
       };
-      child.once('exit', (code) => {
-        session.status = 'exited';
-        session.exitCode = code;
-      });
+      if('once' in child){
+        child.once('exit', (code) => {
+          session.status = 'exited';
+          session.exitCode = code;
+        });
+      }
       this.sessions.set(id, session);
       return {
         ...publicSession(session),
         initialUrl,
       };
     } catch (error) {
-      await this.terminate(child);
+      if(child)await this.terminate(child);
       await fs.rm(userDataDir, {
         recursive: true,
         force: true,
@@ -1692,7 +1736,7 @@ export class BrowserManager {
 
   private async waitForPort(
     userDataDir: string,
-    child: ChildProcess,
+    child: BrowserProcess,
     stderr: () => string,
   ): Promise<number> {
     const file = path.join(userDataDir, 'DevToolsActivePort');
@@ -1755,7 +1799,7 @@ export class BrowserManager {
     );
   }
 
-  private async terminate(child: ChildProcess): Promise<void> {
+  private async terminate(child: BrowserProcess): Promise<void> {
     if (!child.pid || !isAlive(child)) return;
 
     if (this.platform === 'win32') {
@@ -1781,7 +1825,7 @@ export class BrowserManager {
           resolve();
         });
       });
-    } else {
+    } else if('kill' in child){
       child.kill('SIGKILL');
     }
   }

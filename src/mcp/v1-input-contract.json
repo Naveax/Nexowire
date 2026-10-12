@@ -226,6 +226,13 @@
       "headless": {
         "type": "boolean"
       },
+      "ui_target": {
+        "type": "string",
+        "enum": [
+          "headless",
+          "private_desktop"
+        ]
+      },
       "initial_url": {
         "type": "string",
         "minLength": 1,

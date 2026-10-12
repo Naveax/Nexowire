@@ -7,6 +7,7 @@ const TargetIdSchema = z.string().min(1).max(256);
 const SessionStartSchema = z.object({
   browser: z.enum(['auto', 'edge', 'chrome']).default('auto'),
   headless: z.boolean().default(true),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   initial_url: z.string().min(1).max(4096).default('about:blank'),
   width: z.number().int().min(320).max(3840).default(1440),
   height: z.number().int().min(240).max(2160).default(900),
@@ -75,6 +76,7 @@ export interface BrowserRuntime {
   start(input: {
     browser?: 'auto' | 'edge' | 'chrome';
     headless?: boolean;
+    uiTarget?: 'headless'|'private_desktop';
     initialUrl?: string;
     width?: number;
     height?: number;
@@ -142,6 +144,7 @@ export async function executeBrowserCapability(
         data: await runtime.start({
           browser: parsed.browser,
           headless: parsed.headless,
+          ...(parsed.ui_target?{uiTarget:parsed.ui_target}:{}),
           initialUrl: parsed.initial_url,
           width: parsed.width,
           height: parsed.height,
