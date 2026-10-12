@@ -2209,6 +2209,13 @@
         "minLength": 1,
         "maxLength": 200000
       },
+      "ui_target": {
+        "type": "string",
+        "enum": [
+          "headless",
+          "private_desktop"
+        ]
+      },
       "shell": {
         "type": "string",
         "enum": [

@@ -4503,10 +4503,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Execute shell command',
       description:
-        'Execute a command through pwsh, Windows PowerShell, cmd, bash, or sh on a target computer.',
+        'Run a command on a target computer. On Windows, ui_target=private_desktop routes the shell to NexowirePrivate without changing the active desktop; headless remains the default for existing automation.',
       inputSchema: {
         ...targetFields,
         command: z.string().min(1).max(200_000),
+        ui_target: z.enum(['headless','private_desktop']).optional(),
         shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
         cwd: z.string().max(4096).optional(),
         timeout_ms: z.number().int().min(100).max(600_000).optional(),
@@ -4517,6 +4518,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       device_id,
       provider_id,
       command,
+      ui_target,
       shell,
       cwd,
       timeout_ms,
@@ -4527,6 +4529,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         'shell.exec',
         {
           command,
+          ...(ui_target ? { ui_target } : {}),
           ...(shell ? { shell } : {}),
           ...(cwd ? { cwd } : {}),
           ...(timeout_ms ? { timeout_ms } : {}),

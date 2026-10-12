@@ -15,6 +15,7 @@ import { executeWindowsAccessibilityCapability } from './windows-accessibility.j
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
+import { runWindowsPrivateShell } from './windows-private-shell.js';
 import { executeWindowsPrivateViewerCapability } from './windows-private-viewer.js';
 import { captureWindowsPrivateScreen } from './windows-private-screen.js';
 import {
@@ -36,6 +37,9 @@ import { detectWsl } from './wsl-detection.js';
 import { executeLiveUpdateCapability } from '../update/live-update.js';
 
 const ShellExecInputSchema = z.object({
+  // Explicit private desktop dispatch preserves existing headless clients.
+  // GUI applications should use this target or windows.private_desktop.launch.
+  ui_target: z.enum(['headless','private_desktop']).default('headless'),
   command: z.string().min(1).max(200_000),
   shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
   cwd: z.string().optional(),
@@ -411,11 +415,17 @@ async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown
   const parsed = ShellExecInputSchema.parse(input);
   const cwd = parsed.cwd ? await policy.resolveExisting(parsed.cwd) : undefined;
   const command = shellCommand(parsed.shell, parsed.command);
-  const result = await runProcess(command.executable, command.args, {
-    ...(cwd ? { cwd } : {}),
-    timeoutMs: parsed.timeout_ms,
-    maxOutputBytes: parsed.max_output_bytes,
-  });
+  const result = parsed.ui_target === 'private_desktop'
+    ? await runWindowsPrivateShell(command.executable, command.args, {
+        ...(cwd ? { cwd } : {}),
+        timeoutMs: parsed.timeout_ms,
+        maxOutputBytes: parsed.max_output_bytes,
+      })
+    : await runProcess(command.executable, command.args, {
+        ...(cwd ? { cwd } : {}),
+        timeoutMs: parsed.timeout_ms,
+        maxOutputBytes: parsed.max_output_bytes,
+      });
 
   return {
     stdout: result.stdout,
