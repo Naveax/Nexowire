@@ -437,7 +437,11 @@ async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown
     stderr: result.stderr,
     exitCode: result.exitCode,
     truncated: result.truncated,
-    data: { timedOut: result.timedOut },
+    data: {
+      timedOut: result.timedOut,
+      uiTarget,
+      ...(uiTarget==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
+    },
   };
 }
 
@@ -1356,6 +1360,8 @@ async function workspaceChecks(
     data: {
       root: detection.root,
       parallel: parsed.parallel,
+      uiTarget,
+      ...(uiTarget==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
       ok: results.every((result) => result.ok),
       passed: results.filter((result) => result.ok).length,
       failed: results.filter((result) => !result.ok).length,

@@ -53,9 +53,14 @@ test('configured Windows default shell executes in AI private desktop without sw
     shell:'powershell',command:"[Console]::Write('policy-private-ok')",
     timeout_ms:15_000,
     // Deliberately no ui_target: configured owner default must apply.
-  },new PathPolicy(['*'])) as {stdout:string;exitCode:number|null};
+  },new PathPolicy(['*'])) as {
+    stdout:string;exitCode:number|null;
+    data:{uiTarget:string;desktopName?:string};
+  };
   assert.equal(result.exitCode,0);
   assert.equal(result.stdout,'policy-private-ok');
+  assert.equal(result.data.uiTarget,'private_desktop');
+  assert.equal(result.data.desktopName,'NexowirePrivate');
   const status=await executeWindowsPrivateDesktopCapability(
     'windows.private_desktop.status',{},
   ) as {data:{running:boolean;inputDesktop:string}};
