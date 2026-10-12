@@ -6,6 +6,7 @@ import * as z from 'zod';
 import {
   captureWindowsPrivateScreen,
 } from './windows-private-screen.js';
+import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
 
 const ViewerStartSchema = z.object({
   refresh_ms: z
@@ -92,6 +93,7 @@ function runtimePaths() {
     root,
     state: path.join(root, 'state.json'),
     frame: path.join(root, 'frame.png'),
+    windows: path.join(root, 'windows.json'),
     heartbeat: path.join(root, 'heartbeat.txt'),
     viewer: path.join(root, 'viewer.ps1'),
   };
@@ -196,6 +198,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$HeartbeatPath,
   [Parameter(Mandatory = $true)]
+  [string]$WindowsPath,
+  [Parameter(Mandatory = $true)]
   [int]$RefreshMs,
   [Parameter(Mandatory = $true)]
   [int]$Topmost
@@ -258,6 +262,12 @@ $window.Topmost = ($Topmost -eq 1)
 $window.ShowInTaskbar = $true
 
 $root = New-Object System.Windows.Controls.Grid
+$columnPreview=New-Object System.Windows.Controls.ColumnDefinition
+$columnPreview.Width=[System.Windows.GridLength]::new(1,[System.Windows.GridUnitType]::Star)
+$columnApps=New-Object System.Windows.Controls.ColumnDefinition
+$columnApps.Width=[System.Windows.GridLength]::new(240)
+[void]$root.ColumnDefinitions.Add($columnPreview)
+[void]$root.ColumnDefinitions.Add($columnApps)
 $rowTop = New-Object System.Windows.Controls.RowDefinition
 $rowTop.Height = [System.Windows.GridLength]::Auto
 $rowImage = New-Object System.Windows.Controls.RowDefinition
@@ -296,6 +306,37 @@ $enter.Add_Click({
 )
 [void]$bar.Children.Add($enter)
 
+$compact=New-Object System.Windows.Controls.Button
+$compact.Content='COMPACT PREVIEW'
+$compact.Margin='0,10,10,10'
+$compact.Padding='14,8,14,8'
+$compact.ToolTip='Toggle small AI preview without switching desktops.'
+$script:compactMode=$false
+$compact.Add_Click({
+  $script:compactMode=-not $script:compactMode
+  if($script:compactMode){
+    $window.MinWidth=320
+    $window.MinHeight=240
+    $window.Width=480
+    $window.Height=350
+    $columnApps.Width=[System.Windows.GridLength]::new(0)
+    $enter.Visibility=[System.Windows.Visibility]::Collapsed
+    $compact.Content='EXPAND PREVIEW'
+  }else{
+    $window.MinWidth=640
+    $window.MinHeight=420
+    $window.Width=1280
+    $window.Height=820
+    $columnApps.Width=[System.Windows.GridLength]::new(240)
+    $enter.Visibility=[System.Windows.Visibility]::Visible
+    $compact.Content='COMPACT PREVIEW'
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $compact,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($compact)
+
 $close = New-Object System.Windows.Controls.Button
 $close.Content = 'CLOSE VIEWER'
 $close.Margin = '0,10,10,10'
@@ -316,6 +357,7 @@ $status.Margin = '12,0,12,0'
 [void]$bar.Children.Add($status)
 
 [System.Windows.Controls.Grid]::SetRow($bar, 0)
+[System.Windows.Controls.Grid]::SetColumnSpan($bar,2)
 [void]$root.Children.Add($bar)
 
 $image = New-Object System.Windows.Controls.Image
@@ -324,7 +366,18 @@ $image.HorizontalAlignment = 'Stretch'
 $image.VerticalAlignment = 'Stretch'
 $image.SnapsToDevicePixels = $true
 [System.Windows.Controls.Grid]::SetRow($image, 1)
+[System.Windows.Controls.Grid]::SetColumn($image, 0)
 [void]$root.Children.Add($image)
+
+$appList=New-Object System.Windows.Controls.ListBox
+$appList.Background=[System.Windows.Media.Brushes]::Black
+$appList.Foreground=[System.Windows.Media.Brushes]::White
+$appList.BorderThickness='0'
+$appList.Margin='5'
+$appList.ToolTip='Read-only window list from NexowirePrivate, never the owner Default desktop.'
+[System.Windows.Controls.Grid]::SetRow($appList,1)
+[System.Windows.Controls.Grid]::SetColumn($appList,1)
+[void]$root.Children.Add($appList)
 
 $window.Content = $root
 $lastFrameWrite = [datetime]::MinValue
@@ -371,6 +424,27 @@ function Load-Frame {
   }
 }
 
+function Update-WindowList {
+  if(-not(Test-Path -LiteralPath $WindowsPath)){return}
+  try{
+    $snapshot=Get-Content -LiteralPath $WindowsPath -Raw -ErrorAction Stop |
+      ConvertFrom-Json -ErrorAction Stop
+    $appList.Items.Clear()
+    $windows=@($snapshot.windows)
+    if($windows.Count -eq 0){
+      [void]$appList.Items.Add('No private app windows')
+      return
+    }
+    foreach($privateWindow in $windows){
+      $name=[string]$privateWindow.title
+      $pidText=[string]$privateWindow.pid
+      [void]$appList.Items.Add(($name+'  (PID '+$pidText+')'))
+    }
+  }catch{
+    # The previous preview remains available when inventory is unreadable.
+  }
+}
+
 function Heartbeat-Healthy {
   if (-not (Test-Path -LiteralPath $HeartbeatPath)) {
     return $false
@@ -393,11 +467,13 @@ $timer.Add_Tick({
     return
   }
   Load-Frame
+  Update-WindowList
 })
 $timer.Start()
 
 $window.Add_Closed({ $timer.Stop() })
 Load-Frame
+Update-WindowList
 [void]$window.ShowDialog()
 `;
 
@@ -409,6 +485,29 @@ async function ensureViewerScript(): Promise<void> {
     viewerScript,
     'utf8',
   );
+}
+
+async function refreshPrivateWindowInventory():Promise<void>{
+  const snapshot=await executeWindowsPrivateDesktopCapability(
+    'windows.private_desktop.windows',{},
+  ) as {data:{windows:Array<{
+    hwnd:string;title:string;processId:number;visible:boolean;
+  }>}};
+  const list=(snapshot.data.windows??[])
+    .filter(window=>window.visible && window.title.trim().length>0)
+    .slice(0,24)
+    .map(window=>({
+      hwnd:String(window.hwnd).slice(0,64),
+      title:window.title.replace(/[\r\n\t]/g,' ').slice(0,120),
+      pid:window.processId,
+    }));
+  const destination=runtimePaths().windows;
+  const temp=destination+'.tmp';
+  await fs.writeFile(temp,JSON.stringify({
+    updatedAt:new Date().toISOString(),windows:list,
+  }),{encoding:'utf8',mode:0o600});
+  await fs.rm(destination,{force:true});
+  await fs.rename(temp,destination);
 }
 
 async function captureAndPersist(
@@ -426,6 +525,9 @@ async function captureAndPersist(
     const frameBytes = await writeFrame(
       capture.data.base64,
     );
+    // Window inventory is best-effort, never an excuse to stop refreshing
+    // the image. This is a read-only query of NexowirePrivate, not Default.
+    await refreshPrivateWindowInventory().catch(()=>undefined);
     return {
       ...state,
       lastFrameAt: new Date().toISOString(),
@@ -498,6 +600,7 @@ async function cleanupRuntime(
   await Promise.all([
     fs.rm(p.state, { force: true }),
     fs.rm(p.frame, { force: true }),
+    fs.rm(p.windows, { force: true }),
     fs.rm(p.heartbeat, { force: true }),
     ...(removeScript
       ? [fs.rm(p.viewer, { force: true })]
@@ -639,6 +742,8 @@ async function viewerStart(
       p.frame,
       '-HeartbeatPath',
       p.heartbeat,
+      '-WindowsPath',
+      p.windows,
       '-RefreshMs',
       String(parsed.refresh_ms),
       '-Topmost',
