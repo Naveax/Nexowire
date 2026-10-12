@@ -251,6 +251,8 @@ $window.Height = 820
 $window.MinWidth = 640
 $window.MinHeight = 420
 $window.WindowStartupLocation = 'CenterScreen'
+# A background AI viewer must not activate or steal the owner's foreground app.
+$window.ShowActivated = $false
 $window.Background = [System.Windows.Media.Brushes]::Black
 $window.Topmost = ($Topmost -eq 1)
 $window.ShowInTaskbar = $true
@@ -624,7 +626,7 @@ async function viewerStart(
 
   const p = runtimePaths();
   const child = spawn(
-    'powershell.exe',
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     [
       '-NoLogo',
       '-NoProfile',
@@ -643,7 +645,8 @@ async function viewerStart(
       parsed.topmost ? '1' : '0',
     ],
     {
-      windowsHide: false,
+      windowsHide: true,
+      shell: false,
       detached: false,
       stdio: 'ignore',
     },
