@@ -9,13 +9,15 @@ import {TaskGraphStore} from '../src/agent/task-graph-store.js';
 import {PathPolicy} from '../src/agent/path-policy.js';
 import {executeWindowsPrivateDesktopCapability} from '../src/agent/windows-private-desktop.js';
 
-test('real runbook forwards private desktop policy to all dependency graphs without changing owner input',{
+test('owner-configured AI private desktop default applies to full live runbooks and nested graphs',{
   skip:process.platform!=='win32'||process.env.NEXOWIRE_RUN_PRIVATE_RUNBOOK_LIVE!=='1',
   timeout:90_000,
 },async(t)=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-runbook-live-'));
   const beforeDir=process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
   const beforeShortcut=process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT;
+  const beforePolicy=process.env.NEXOWIRE_AI_UI_TARGET_DEFAULT;
+  process.env.NEXOWIRE_AI_UI_TARGET_DEFAULT='private_desktop';
   process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=path.join(root,'desktop');
   process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT='1';
   t.after(async()=>{
@@ -24,6 +26,8 @@ test('real runbook forwards private desktop policy to all dependency graphs with
     else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=beforeDir;
     if(beforeShortcut===undefined)delete process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT;
     else process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT=beforeShortcut;
+    if(beforePolicy===undefined)delete process.env.NEXOWIRE_AI_UI_TARGET_DEFAULT;
+    else process.env.NEXOWIRE_AI_UI_TARGET_DEFAULT=beforePolicy;
     await fs.rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:100}).catch(()=>undefined);
   });
   const runbooks=new RunbookStore({stateFile:path.join(root,'rb-state.json')});
@@ -31,7 +35,7 @@ test('real runbook forwards private desktop policy to all dependency graphs with
   await Promise.all([runbooks.initialize(),taskGraphs.initialize()]);
   const result=await executeCapability('runbook.run',{
     runbook_id:'private-e2e',
-    ui_target:'private_desktop',
+    // Deliberately omit ui_target: owner-configured private default must apply.
     steps:[
       {id:'build',kind:'task_graph',task_graph:{
         ui_target:'headless',
