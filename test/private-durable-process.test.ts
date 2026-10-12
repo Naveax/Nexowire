@@ -16,7 +16,8 @@ test('private process target fails closed on unsupported OS', {
   });
   await assert.rejects(
     manager.start({command:'echo hello',ui_target:'private_desktop'},new PathPolicy(['*'])),
-    /PRIVATE_PROCESS_WINDOWS_ONLY/,
+    (error:unknown)=>error instanceof Error && 'code' in error &&
+      error.code==='PRIVATE_PROCESS_WINDOWS_ONLY',
   );
 });
 
