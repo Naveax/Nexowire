@@ -13,6 +13,12 @@ test('AI viewer uses non-activating WPF window and hides its launcher console',(
   assert.match(source,/windowsHide: true/);
   assert.match(source,/System32\\\\WindowsPowerShell\\\\v1\.0\\\\powershell\.exe/);
   assert.doesNotMatch(source,/windowsHide: false/);
+  for(const fragment of [
+    'COMPACT PREVIEW','EXPAND PREVIEW','Update-WindowList',
+    'refreshPrivateWindowInventory','-WindowsPath',
+    "windows.private_desktop.windows",
+    "$window.ShowActivated = $false",
+  ])assert.ok(source.includes(fragment),fragment);
 });
 
 function foregroundHwnd():string{
@@ -60,6 +66,12 @@ test('AI viewer opens without foreground focus theft while private desktop remai
     },
   ) as {data:{running:boolean}};
   assert.equal(started.data.running,true);
+  const inventory=JSON.parse(
+    await fs.readFile(path.join(root,'viewer','windows.json'),'utf8'),
+  ) as {windows:unknown[];updatedAt:string};
+  assert.ok(Array.isArray(inventory.windows));
+  assert.ok(inventory.windows.length<=24);
+  assert.ok(typeof inventory.updatedAt==='string');
   const after=foregroundHwnd();
   if(before!=='0'&&after!=='0')assert.equal(after,before);
   const desktop=await executeWindowsPrivateDesktopCapability(
