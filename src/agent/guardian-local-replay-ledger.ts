@@ -76,7 +76,26 @@ export function createGuardianLocalReplayReserve(
     if(!directoryStat.isDirectory()||directoryStat.isSymbolicLink()){
       throw new Error('GUARDIAN_REPLAY_UNPROTECTED_DIRECTORY');
     }
+    // An awaited pairing/owner read can outlive the protected-directory
+    // check. Pin the initial directory identity across that gap, rather
+    // than writing a durable marker into a substituted path.
+    const directoryIdentity={
+      dev:directoryStat.dev,ino:directoryStat.ino,
+      birthtimeMs:directoryStat.birthtimeMs,
+    };
+    const assertSameDirectory=async()=>{
+      let current;
+      try { current=await lstat(directory); }
+      catch { throw new Error('GUARDIAN_REPLAY_DIRECTORY_CHANGED_DURING_RESERVATION'); }
+      if(!current.isDirectory()||current.isSymbolicLink()||
+          current.dev!==directoryIdentity.dev||
+          current.ino!==directoryIdentity.ino||
+          current.birthtimeMs!==directoryIdentity.birthtimeMs){
+        throw new Error('GUARDIAN_REPLAY_DIRECTORY_CHANGED_DURING_RESERVATION');
+      }
+    };
     await assertCurrent();
+    await assertSameDirectory();
 
     const marker=path.join(directory,key+'.once');
     let handle;
@@ -106,6 +125,9 @@ export function createGuardianLocalReplayReserve(
     if(assertProtectedMarker)await assertProtectedMarker(marker);
     await assertProtectedDirectory();
     await assertCurrent();
+    // A final pairing read can itself race with directory substitution.
+    // A consumed tombstone stays consumed on any subsequent failure.
+    await assertSameDirectory();
     return true;
   };
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,renameSync,readFileSync,readdirSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
@@ -93,6 +93,52 @@ test('owner revision mutation after tombstone write consumes request but never a
     assert.equal(await createGuardianLocalReplayReserve(f.options)(
       REQUEST,DEVICE,CREDENTIAL,REVISION),false);
   } finally {f.cleanup()}
+});
+
+test('replacing the protected directory during initial pairing read is rejected before writing',async()=>{
+  const f=fixture();
+  const detached=f.directory+'-detached';
+  try{
+    let reads=0;
+    const reserve=createGuardianLocalReplayReserve({
+      ...f.options,readCurrentPairing:async()=>{
+        reads++;
+        if(reads===1){
+          renameSync(f.directory,detached);
+          mkdirSync(f.directory);
+        }
+        return f.options.readCurrentPairing();
+      },
+    });
+    await assert.rejects(reserve(REQUEST,DEVICE,CREDENTIAL,REVISION),
+      /GUARDIAN_REPLAY_DIRECTORY_CHANGED_DURING_RESERVATION/);
+    assert.equal(reads,1);
+    assert.deepEqual(readdirSync(f.directory),[]);
+    assert.deepEqual(readdirSync(detached),[]);
+  }finally{f.cleanup();rmSync(detached,{recursive:true,force:true})}
+});
+
+test('replacing the protected directory during final pairing read cannot authorize a consumed request',async()=>{
+  const f=fixture();
+  const detached=f.directory+'-detached';
+  try{
+    let reads=0;
+    const reserve=createGuardianLocalReplayReserve({
+      ...f.options,readCurrentPairing:async()=>{
+        reads++;
+        if(reads===2){
+          renameSync(f.directory,detached);
+          mkdirSync(f.directory);
+        }
+        return f.options.readCurrentPairing();
+      },
+    });
+    await assert.rejects(reserve(REQUEST,DEVICE,CREDENTIAL,REVISION),
+      /GUARDIAN_REPLAY_DIRECTORY_CHANGED_DURING_RESERVATION/);
+    assert.equal(reads,2);
+    assert.deepEqual(readdirSync(f.directory),[]);
+    assert.deepEqual(readdirSync(detached),[guardianLocalRequestDigest(REQUEST)+'.once']);
+  }finally{f.cleanup();rmSync(detached,{recursive:true,force:true})}
 });
 
 test('root or marker ACL verification failures must never turn into successful reservations',async()=>{
