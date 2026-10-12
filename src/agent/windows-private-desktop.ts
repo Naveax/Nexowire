@@ -125,8 +125,10 @@ function alive(pid: number | undefined): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // EPERM means the PID may still exist but the current account cannot
+    // inspect it. Treat as alive; never discard a host/child on uncertainty.
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -139,8 +141,15 @@ async function waitExit(pid: number, timeout = 4_000): Promise<boolean> {
 }
 
 async function readState(): Promise<PrivateDesktopState | undefined> {
+  let body: string;
   try {
-    const value = JSON.parse(await fs.readFile(paths().state, 'utf8'));
+    body=await fs.readFile(paths().state,'utf8');
+  }catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;
+    throw error;
+  }
+  try {
+    const value:unknown=JSON.parse(body);
     return z.object({
       version: z.literal(1),
       desktopName: z.literal(DESKTOP_NAME),
@@ -149,8 +158,13 @@ async function readState(): Promise<PrivateDesktopState | undefined> {
       launchedPids: z.array(z.number().int().positive()).max(1024),
       startedAt: z.string().min(1),
     }).parse(value) as PrivateDesktopState;
-  } catch {
-    return undefined;
+  }catch{
+    // Corrupt/unknown state is not evidence that the prior desktop host
+    // has stopped. Never delete it or launch a second host blindly.
+    throw new PrivateDesktopError(
+      'PRIVATE_DESKTOP_STATE_INVALID',
+      'Private desktop state is malformed; refusing to replace a possibly live host.',
+    );
   }
 }
 
@@ -645,6 +659,14 @@ async function shortcut():Promise<string|null>{
 
 async function start(input:unknown):Promise<{data:unknown}>{
   assertWindows();const parsed=StartSchema.parse(input);await ensureScripts();const p=paths();const old=await readState();if(old&&alive(old.hostPid)&&alive(old.shellPid))return{data:{running:true,reused:true,desktopName:DESKTOP_NAME,hostPid:old.hostPid,shellPid:old.shellPid,inputDesktop:await inputDesktop(),visibleDesktopChanged:false}};
+  // If any persisted PID remains alive, replacing the state would orphan
+  // its GUI process and discard the sole cleanup/stop bookkeeping.
+  if(old&&[old.hostPid,old.shellPid,...old.launchedPids].some(alive)){
+    throw new PrivateDesktopError(
+      'PRIVATE_DESKTOP_PARTIAL_HOST',
+      'Private desktop host is partially running; refusing unsafe restart.',
+    );
+  }
   await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.ready,{force:true}),fs.rm(p.shellPid,{force:true})]);const host=spawn(PRIVATE_DESKTOP_POWERSHELL,['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',p.host,'-Name',DESKTOP_NAME,'-Ready',p.ready,'-ShellPid',p.shellPid],{detached:false,windowsHide:true,shell:false,cwd:p.root,env:privateDesktopPowerShellEnvironment(),stdio:'ignore'});if(!host.pid)throw new PrivateDesktopError('HOST_START_FAILED','No PID for private desktop host.');host.unref();
   const end=Date.now()+8000;let ready=false;while(Date.now()<end){if(!alive(host.pid))break;try{await fs.access(p.ready);ready=true;break;}catch{await new Promise(r=>setTimeout(r,100));}}if(!ready){if(alive(host.pid))process.kill(host.pid);throw new PrivateDesktopError('NOT_READY','Private desktop host did not become ready.');}
   let shellPid:number|undefined;try{shellPid=await launch(PRIVATE_DESKTOP_POWERSHELL,['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',p.shell],p.root);await fs.writeFile(p.shellPid,String(shellPid)+'\n','utf8');await new Promise(r=>setTimeout(r,800));if(!alive(shellPid))throw new PrivateDesktopError('SHELL_START_FAILED','Private desktop shell exited during startup.');const state:PrivateDesktopState={version:1,desktopName:DESKTOP_NAME,hostPid:host.pid,shellPid,launchedPids:[],startedAt:new Date().toISOString()};await writeState(state);const link=parsed.create_shortcut?await shortcut():null;const v=await view();return{data:{running:true,reused:false,desktopName:DESKTOP_NAME,hostPid:host.pid,shellPid,windowCount:v.windows.length,inputDesktop:v.inputDesktop,visibleDesktopChanged:false,shortcut:link,manualSwitchHotkey:link?'Ctrl+Alt+N':null}};}catch(e){if(shellPid&&alive(shellPid)){try{process.kill(shellPid);await waitExit(shellPid);}catch{}}if(alive(host.pid)){try{process.kill(host.pid);await waitExit(host.pid);}catch{}}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);throw e;}
