@@ -46,6 +46,18 @@ test('Stack source rejects traversal, UNC paths, sibling-prefix confusion and al
   }
 });
 
+test('fixed legacy Stack code chain probes shared outer ancestors around source ACL scan',()=>{
+  const source=readFileSync(new URL('../src/security/privileged-stack-source-audit.ts',import.meta.url),'utf8');
+  const wrapper=source.slice(source.indexOf('export function auditPrivilegedStackSource('));
+  const firstRoot=wrapper.indexOf("verifyWindowsStackOuterAncestorAcl('C:\\\\')");
+  const firstData=wrapper.indexOf("verifyWindowsStackOuterAncestorAcl('C:\\\\ProgramData')");
+  const scan=wrapper.indexOf('inspectPrivilegedStackSourceChainReadOnly(');
+  const lastRoot=wrapper.indexOf("verifyWindowsStackOuterAncestorAcl('C:\\\\')",firstRoot+1);
+  const lastData=wrapper.indexOf("verifyWindowsStackOuterAncestorAcl('C:\\\\ProgramData')",firstData+1);
+  assert.ok(firstRoot>=0 && firstRoot<firstData && firstData<scan);
+  assert.ok(scan<lastRoot && lastRoot<lastData);
+});
+
 test('read-only Stack source chain rejects entry mutation during ACL inspection',()=>{
   const root=mkdtempSync(join(tmpdir(),'nwx-stack-chain-'));
   const nested=join(root,'dep');

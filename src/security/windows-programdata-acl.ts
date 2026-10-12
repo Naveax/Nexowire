@@ -115,6 +115,61 @@ Write-Output 'PRIVATE_ACL_VERIFIED'
 }
 
 /**
+ * P0 legacy Stack read-only outer-ancestor gate. Shared Windows directories
+ * can legitimately grant creation of unrelated siblings; unlike private
+ * source files, only replacement/delete/DACL/owner rights are dangerous here.
+ * Never select a caller-supplied path or a shell from the process PATH.
+ */
+export function verifyWindowsStackOuterAncestorAcl(target:string):void {
+  if(process.platform!=='win32')throw new Error('STACK_OUTER_ANCESTOR_WINDOWS_ONLY');
+  if(target!=='C:\\' && target!=='C:\\ProgramData'){
+    throw new Error('STACK_OUTER_ANCESTOR_NONCANONICAL');
+  }
+  const script=String.raw`
+$ErrorActionPreference='Stop'
+$env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
+Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
+$target=$env:NEXOWIRE_PROTECTED_ACL_TARGET
+if($target -cne 'C:\' -and $target -cne 'C:\ProgramData'){throw 'STACK_OUTER_ANCESTOR_NONCANONICAL'}
+$item=Get-Item -LiteralPath $target -Force -ErrorAction Stop
+if(-not $item.PSIsContainer -or
+   (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)){
+  throw 'STACK_OUTER_ANCESTOR_REPARSE_OR_TYPE'
+}
+$acl=Get-Acl -LiteralPath $target -ErrorAction Stop
+$trusted=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
+$owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+if(-not $trusted.ContainsKey($owner)){throw 'STACK_OUTER_ANCESTOR_OWNER_UNTRUSTED'}
+$rights=[Security.AccessControl.FileSystemRights]
+$mask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+  # Inherit-only ACEs do not apply to the inspected ancestor itself.
+  if((([int]$ace.PropagationFlags -band [int][Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
+  if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
+     ([int]$ace.FileSystemRights -band $mask) -ne 0 -and
+     -not $trusted.ContainsKey($ace.IdentityReference.Value)){
+    throw 'STACK_OUTER_ANCESTOR_REPLACEMENT_RIGHTS'
+  }
+}
+Write-Output 'STACK_OUTER_ANCESTOR_ACL_VERIFIED'
+`;
+  const result=spawnSync(WINDOWS_POWERSHELL+'\\powershell.exe',[
+    '-NoLogo','-NoProfile','-NonInteractive',
+    '-EncodedCommand',Buffer.from(script,'utf16le').toString('base64'),
+  ],{
+    windowsHide:true,encoding:'utf8',
+    stdio:['ignore','pipe','pipe'],
+    shell:false,cwd:WINDOWS_SYSTEM32,
+    env:protectedWindowsAclEnvironment(target),
+    timeout:20000,maxBuffer:512*1024,
+  });
+  if(result.error||result.status!==0||
+     result.stdout.trim()!=='STACK_OUTER_ANCESTOR_ACL_VERIFIED'){
+    throw new Error('STACK_OUTER_ANCESTOR_UNTRUSTED');
+  }
+}
+
+/**
  * Read-only file inventory; test fixture readers are NOT Windows ACL authority.
  * These lifecycle roots are intentionally flat and must never contain links.
  */
