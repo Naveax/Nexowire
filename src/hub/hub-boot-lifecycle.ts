@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
-import { hardenWindowsProgramDataAcl } from '../security/windows-programdata-acl.js';
+import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -512,7 +512,12 @@ export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
   assertElevated();
-  assertProtectedHubBootRoot(pathsFor(options).root);
+  const protectedBootRoot=pathsFor(options).root;
+  assertProtectedHubBootRoot(protectedBootRoot);
+  // A protected Hub Boot child is not safe if an untrusted account can
+  // rename or replace its parent. Check owner, write/delete/DACL rights and
+  // reparse status before reading any user or machine DPAPI credentials.
+  verifyWindowsPrivateAcl(path.win32.dirname(protectedBootRoot));
   // Fail before reading/writing protected DPAPI secrets or touching tasks:
   // a running legacy Stack would respawn its old Hub on the same port.
   await assertNoLegacyStackSupervisor(options.env ?? process.env);

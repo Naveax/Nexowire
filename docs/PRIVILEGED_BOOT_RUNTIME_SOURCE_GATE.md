@@ -76,7 +76,12 @@ Privileged Hub Boot status, installation and removal must resolve their managed
 directory to exactly `C:\ProgramData\Nexowire\hub-boot`. Relative,
 UNC, arbitrary drive, caller-selected temporary or user-profile `ProgramData`
 overrides fail closed. Installation verifies this before any protected token
-unseal, directory creation or task mutation.
+unseal, directory creation or task mutation. It also checks the **existing
+`C:\ProgramData\Nexowire` parent directory** with the pinned read-only
+Windows ACL inspector before accessing either current-user or machine DPAPI
+credentials. An untrusted owner, broad write/delete/DACL takeover grant or
+reparse/junction parent now blocks SYSTEM boot installation. This gate does
+not modify the parent ACL, create the parent or authorize a live handoff.
 
 Before the uninstall task operation and recursive directory removal, the
 existing protected root must also be a real directory (not a symlink or
