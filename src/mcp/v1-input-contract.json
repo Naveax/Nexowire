@@ -1543,6 +1543,13 @@
       "durable": {
         "type": "boolean"
       },
+      "ui_target": {
+        "type": "string",
+        "enum": [
+          "headless",
+          "private_desktop"
+        ]
+      },
       "max_buffer_bytes": {
         "type": "integer",
         "minimum": 65536,

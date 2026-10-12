@@ -12,6 +12,9 @@ const InitSchema = z.object({
   cwd: z.string().max(4096).optional(),
   maxBufferBytes: z.number().int().min(65_536).max(16_777_216),
   token: z.string().min(32).max(256),
+  // Only the limited, explicitly selected shell environment is forwarded
+  // from a private Win32 desktop worker to its CLI child.
+  executionEnv: z.record(z.string(),z.string().max(32_768)).optional(),
 });
 
 const ControlSchema = z.discriminatedUnion('type', [
@@ -171,7 +174,16 @@ async function killPidTree(pid: number): Promise<void> {
   }
 }
 
-async function readInitialInput(): Promise<unknown> {
+async function readInitialInput(sessionDir?: string): Promise<unknown> {
+  // Used only for a private desktop worker whose stdin is unavailable to
+  // CreateProcess. Init data is confined to the authenticated worker dir.
+  if(sessionDir !== undefined){
+    const file=path.join(sessionDir,'init.json');
+    const raw=await fs.readFile(file,'utf8');
+    const parsed=JSON.parse(raw) as unknown;
+    await fs.rm(file,{force:true});
+    return parsed;
+  }
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
     chunks.push(Buffer.from(chunk));
@@ -182,8 +194,9 @@ async function readInitialInput(): Promise<unknown> {
 
 export async function runProcessWorker(
   sessionDir: string,
+  fileInput = false,
 ): Promise<void> {
-  const init = InitSchema.parse(await readInitialInput());
+  const init = InitSchema.parse(await readInitialInput(fileInput?sessionDir:undefined));
   await fs.mkdir(sessionDir, { recursive: true, mode: 0o700 });
 
   const controlFile = path.join(sessionDir, 'control.json');
@@ -392,7 +405,7 @@ export async function runProcessWorker(
   child = spawn(shell.executable, shell.args, {
     ...(init.cwd ? { cwd: init.cwd } : {}),
     windowsHide: true,
-    env: process.env,
+    env: init.executionEnv ?? process.env,
     stdio: ['pipe', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
   });

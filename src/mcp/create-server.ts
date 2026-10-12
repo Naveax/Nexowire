@@ -4545,7 +4545,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'process_start',
     {
       title: 'Start process session',
-      description: 'Start a long-running or interactive process and return a reusable session id. durable=true uses a Nexowire sidecar worker so stdin/stdout/stderr can be reattached after native-agent restart.',
+      description: 'Start a reusable process session. On Windows ui_target=private_desktop launches a durable worker on NexowirePrivate without switching the user desktop; headless stays the default.',
       inputSchema: {
         ...targetFields,
         command: z.string().min(1).max(200_000),
@@ -4553,6 +4553,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         cwd: z.string().max(4096).optional(),
         name: z.string().min(1).max(128).optional(),
         durable: z.boolean().optional(),
+        ui_target: z.enum(['headless','private_desktop']).optional(),
         max_buffer_bytes: z.number().int().min(65_536).max(16_777_216).optional(),
       },
     },
@@ -4564,6 +4565,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       cwd,
       name,
       durable,
+      ui_target,
       max_buffer_bytes,
     }) =>
       await execute(
@@ -4575,6 +4577,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(cwd ? { cwd } : {}),
           ...(name ? { name } : {}),
           ...(durable !== undefined ? { durable } : {}),
+          ...(ui_target ? { ui_target } : {}),
           ...(max_buffer_bytes ? { max_buffer_bytes } : {}),
         },
         device_id,
