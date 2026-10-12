@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from '../agent/privileged-broker.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
+import {assertWindowsLocalTcpListenerOwnedByPid} from '../security/windows-local-listener-owner.js';
 import {
   assertNoPrivilegedNodeStartupFlags,
   assertWindowsPrivilegedRuntimeTrusted,
@@ -488,7 +489,12 @@ async function waitForBootHub(
           'http://127.0.0.1:' + port + '/health',
           { signal: AbortSignal.timeout(1_500) },
         );
-        if (response.ok) return pid;
+        if(response.ok){
+          // A healthy legacy/unrelated listener is not proof that the
+          // protected SYSTEM task owns the TCP socket on this port.
+          assertWindowsLocalTcpListenerOwnedByPid(port,pid);
+          return pid;
+        }
         lastError =
           'Hub health returned HTTP ' +
           response.status +
