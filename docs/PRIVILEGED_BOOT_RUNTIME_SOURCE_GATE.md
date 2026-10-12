@@ -143,6 +143,30 @@ transaction is not itself a completed rollback; owner-supervised recovery and
 separate rollback acceptance are still required. No production cleanup or
 cutover is authorized by these source-only changes.
 
+## Exclusive fresh install and task-scoped rollback ownership
+
+An elevated `boot-install` is now **fresh-install only**. An existing
+canonical SYSTEM Boot task fails before any DPAPI read or filesystem
+mutation. Existing `C:\ProgramData\Nexowire\hub-boot` also fails closed
+on exclusive `mkdir` with `HUB_BOOT_EXISTING_ROOT_INSTALL_DENIED`; it
+cannot have its old launcher or machine DPAPI ciphertext overwritten by
+an incomplete reinstall. The existing Hub port is validated before source
+secret access and directory creation.
+
+The registration uses no `-Force`; a concurrently registered task must
+not be silently replaced. Every attempt has a distinct, locally generated
+UUID in the registered task description. On failed handoff, rollback
+will unregister only a Boot task whose task identity **and exact UUID
+description** match the current installation. Foreign/concurrent task
+registrations cause `HUB_BOOT_TASK_ROLLBACK_FAILED`, preserving launcher
+evidence rather than deleting an unrelated task. If no Boot task was
+registered, rollback does not start or enable an unrelated user task.
+
+These gates prevent in-place updates; an existing installation requires a
+separately planned, backed-up owner-authorized upgrade. They do not make
+Task Scheduler and filesystem changes transactional, or cure the live
+legacy Stack P0 #271 issue.
+
 ## Real installation implications
 
 The existing Naveax v1.0.0 Stack supervisor executes writable code in

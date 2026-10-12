@@ -95,21 +95,22 @@ test('failed Hub Boot handoff never deletes preexisting or potentially running p
   const begin=src.indexOf('export async function installHubBootLifecycle(');
   const end=src.indexOf('export async function uninstallHubBootLifecycle(',begin);
   const install=src.slice(begin,end);
-  const capture=install.indexOf('let rootExistedBeforeInstall=false');
-  const mkdir=install.indexOf('await fs.mkdir(p.root,{mode:0o700})',capture);
-  const exists=install.indexOf("code!=='EEXIST'",mkdir);
-  const safe=install.indexOf('await assertHubBootRootSafeToRemove(p.root)',mkdir);
-  const acl=install.indexOf('verifyWindowsPrivateAcl(p.root)',mkdir);
+  const taskReject=install.indexOf("HUB_BOOT_EXISTING_TASK_INSTALL_DENIED");
+  const firstSecretRead=install.indexOf('readProtectedSecretFile(');
+  const invalidPort=install.indexOf('Number.isInteger(port)');
+  const mkdir=install.indexOf('await fs.mkdir(p.root,{mode:0o700})');
+  const exists=install.indexOf("code==='EEXIST'",mkdir);
+  const rejectRoot=install.indexOf('HUB_BOOT_EXISTING_ROOT_INSTALL_DENIED',mkdir);
   const firstSecretWrite=install.indexOf('await writeProtectedSecretFile(',mkdir);
-  assert.ok(capture>=0 && capture<mkdir && mkdir<exists && exists<safe);
-  assert.ok(safe<acl && acl<firstSecretWrite);
-  assert.doesNotMatch(install.slice(capture,firstSecretWrite),/await fs\.lstat\(p\.root\)|recursive:\s*true/);
+  assert.ok(taskReject>=0 && taskReject<invalidPort && invalidPort<firstSecretRead && firstSecretRead<mkdir);
+  assert.ok(mkdir<exists && exists<rejectRoot && rejectRoot<firstSecretWrite);
+  assert.doesNotMatch(install.slice(mkdir,firstSecretWrite),/await fs\.lstat\(p\.root\)|recursive:\s*true/);
 
   const rollback=install.slice(install.indexOf('} catch (error) {',install.indexOf('let switched = false;')));
   const tried=rollback.indexOf('try {');
   const recover=rollback.indexOf('await runPowerShellJson<{ ok: true }>');
   const recordFailure=rollback.indexOf('taskRollbackFailure=rollbackError');
-  const deletionGate=rollback.indexOf('if(!rootExistedBeforeInstall && taskRollbackFailure===null)');
+  const deletionGate=rollback.indexOf('if(taskRollbackFailure===null)');
   const parent=rollback.indexOf('verifyWindowsPrivateAcl(path.win32.dirname(p.root))');
   const beforeDeletion=rollback.indexOf('await assertHubBootRootSafeToRemove(p.root)');
   const aclBeforeDeletion=rollback.indexOf('verifyWindowsPrivateAcl(p.root)');
@@ -121,6 +122,26 @@ test('failed Hub Boot handoff never deletes preexisting or potentially running p
   assert.ok(deleteRoot<error);
   assert.doesNotMatch(rollback,/\.catch\(\(\) => undefined\)/);
   assert.match(rollback,/HUB_BOOT_ROLLBACK_CLEANUP_FAILED/);
+});
+
+test('Hub Boot installer never overwrites an existing SYSTEM task and limits rollback to its own marker',()=>{
+  const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const start=src.indexOf('export async function installHubBootLifecycle(');
+  const end=src.indexOf('export async function uninstallHubBootLifecycle(',start);
+  const install=src.slice(start,end);
+  const firstGuard=install.indexOf("HUB_BOOT_EXISTING_TASK_INSTALL_DENIED");
+  const firstRead=install.indexOf('readProtectedSecretFile(');
+  const register=install.indexOf('Register-ScheduledTask -TaskName $boot');
+  const recheck=install.indexOf("HUB_BOOT_EXISTING_TASK_INSTALL_DENIED",firstGuard+1);
+  const nonce=install.indexOf("randomUUID()");
+  const rollback=install.indexOf('hubBootRollbackTaskOwnershipGuard');
+  const stop=install.indexOf('Stop-ScheduledTask -TaskName $boot',rollback);
+  assert.ok(firstGuard>=0 && firstGuard<firstRead);
+  assert.ok(firstRead<nonce && nonce<recheck && recheck<register);
+  assert.ok(register<rollback && rollback<stop);
+  assert.match(install,/Description \$marker\|Out-Null/);
+  assert.doesNotMatch(install.slice(register,register+260),/-Force/);
+  assert.match(install,/HUB_BOOT_EXISTING_ROOT_INSTALL_DENIED/);
 });
 
 test('Hub Boot uninstall checks private parent ACL before task changes and again before deleting files',()=>{

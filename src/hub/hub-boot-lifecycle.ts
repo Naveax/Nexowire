@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -361,6 +362,13 @@ if($null -ne $userTask){
 }
 `;
 
+/** Roll back only an exact task registered by this installer invocation. */
+export const hubBootRollbackTaskOwnershipGuard=String.raw`
+if($bootTask -and [string]$bootTask.Description -cne $marker){
+  throw 'HUB_BOOT_ROLLBACK_TASK_NOT_OURS'
+}
+`;
+
 async function runPowerShellJson<T>(
   script: string,
   env: NodeJS.ProcessEnv,
@@ -603,6 +611,9 @@ export async function installHubBootLifecycle(
     "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
     "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
     hubBootRegisteredTaskIdentityGuard,
+    // Upgrading a preexisting SYSTEM Boot task requires a separately
+    // backed-up owner-approved migration; do not overwrite it in place.
+    "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
     '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
   ].join('\n'),taskEnv(options));
 
@@ -616,6 +627,13 @@ export async function installHubBootLifecycle(
     parsePersistedHubLauncherEnvironment(
       launcherText,
     );
+  // Reject malformed configuration before protected directory creation,
+  // machine DPAPI sealing or launcher replacement.
+  const rawPort=sourceEnv.NEXOWIRE_HTTP_PORT??'43110';
+  const port=Number(rawPort);
+  if(!Number.isInteger(port)||port<1||port>65_535){
+    throw new Error('Existing Hub has an invalid HTTP port.');
+  }
   const sourceSecretFile =
     sourceEnv
       .NEXOWIRE_CONTROL_PLANE_SERVICE_TOKEN_DPAPI_FILE;
@@ -642,18 +660,16 @@ export async function installHubBootLifecycle(
   );
 
   const p = pathsFor(options);
-  // This may be a re-install. Do not delete a previously existing root on
-  // rollback: it may hold a valid machine-scoped secret or running launcher.
-  let rootExistedBeforeInstall=false;
+  // In-place reinstall would overwrite an existing SYSTEM launcher and
+  // DPAPI secret BEFORE the Task Scheduler transaction/rollback begins.
+  // Exclusively create a new root; never touch an existing installation.
   try {
-    // mkdir without recursive=true atomically distinguishes a new root
-    // from another install racing between a separate lstat and mkdir.
     await fs.mkdir(p.root,{mode:0o700});
-  } catch(error) {
-    if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;
-    rootExistedBeforeInstall=true;
-    await assertHubBootRootSafeToRemove(p.root);
-    verifyWindowsPrivateAcl(p.root);
+  } catch(error){
+    if((error as NodeJS.ErrnoException).code==='EEXIST'){
+      throw new Error('HUB_BOOT_EXISTING_ROOT_INSTALL_DENIED');
+    }
+    throw error;
   }
   // Repair a stale child DACL before any overwrite or DPAPI work.
   hardenProgramDataAcl(p.root);
@@ -686,22 +702,12 @@ export async function installHubBootLifecycle(
     'utf8',
   );
 
-  const rawPort =
-    sourceEnv.NEXOWIRE_HTTP_PORT ?? '43110';
-  const port = Number(rawPort);
-  if (
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65_535
-  ) {
-    throw new Error(
-      'Existing Hub has an invalid HTTP port.',
-    );
-  }
-
   hardenProgramDataAcl(p.root);
 
   const envForTask = taskEnv(options);
+  // An exclusive ephemeral task marker prevents a failed install from
+  // unregistering another process's same-name task during rollback.
+  const installMarker='Nexowire pre-logon Hub install '+randomUUID();
   let switched = false;
   try {
     // The PowerShell transaction can modify the user task before a later
@@ -712,6 +718,7 @@ export async function installHubBootLifecycle(
         "$ErrorActionPreference='Stop'",
         '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
         '$user=$env:NEXOWIRE_HUB_TASK_NAME',
+        '$marker='+psLiteral(installMarker),
         '$launcher=$env:NEXOWIRE_HUB_BOOT_LAUNCHER',
         '$argument=\'-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "\' + $launcher.Replace(\'"\',\'""\') + \'"\'',
         "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
@@ -721,7 +728,9 @@ export async function installHubBootLifecycle(
         "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
         "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
         hubBootRegisteredTaskIdentityGuard,
-        "Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire pre-logon Hub' -Force|Out-Null",
+        "if($null -ne $bootTask){throw 'HUB_BOOT_EXISTING_TASK_INSTALL_DENIED'}",
+        // No -Force: a concurrent registration must fail rather than replace.
+        'Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $marker|Out-Null',
         '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         'if($userTask){',
         '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
@@ -750,15 +759,18 @@ export async function installHubBootLifecycle(
             "$ErrorActionPreference='Stop'",
             '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
             '$user=$env:NEXOWIRE_HUB_TASK_NAME',
+            '$marker='+psLiteral(installMarker),
             "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
             "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
             hubBootRegisteredTaskIdentityGuard,
-            'Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
-            'Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false -ErrorAction SilentlyContinue',
-            '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-            'if($userTask){',
-            '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-            '  Start-ScheduledTask -TaskName $user -TaskPath \\',
+            hubBootRollbackTaskOwnershipGuard,
+            'if($bootTask){',
+            '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+            '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
+            '  if($userTask){',
+            '    Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
+            '    Start-ScheduledTask -TaskName $user -TaskPath \\',
+            '  }',
             '}',
             '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
           ].join('\n'),
@@ -768,9 +780,9 @@ export async function installHubBootLifecycle(
         taskRollbackFailure=rollbackError;
       }
     }
-    // Never delete a previous installation. If task rollback failed, its
-    // launcher may still be in use; preserve evidence for manual recovery.
-    if(!rootExistedBeforeInstall && taskRollbackFailure===null){
+    // If task rollback failed, the new launcher may still be in use;
+    // preserve evidence instead of destroying a potentially live source.
+    if(taskRollbackFailure===null){
       try {
         verifyWindowsPrivateAcl(path.win32.dirname(p.root));
         await assertHubBootRootSafeToRemove(p.root);
