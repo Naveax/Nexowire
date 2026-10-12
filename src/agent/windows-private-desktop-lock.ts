@@ -43,13 +43,24 @@ async function existing(pathname:string):Promise<boolean> {
 async function readOwner(dir:string):Promise<OwnerRecord|null> {
   try {
     const raw=JSON.parse(await fs.readFile(path.join(dir,'owner.json'),'utf8')) as Partial<OwnerRecord>;
-    if(raw.version!==1 || !Number.isSafeInteger(raw.pid) ||
+    if(!raw||raw.version!==1 || !Number.isSafeInteger(raw.pid) ||
       typeof raw.nonce!=='string' || !/^[a-f0-9-]{36}$/.test(raw.nonce) ||
-      !Number.isSafeInteger(raw.startedAt))return null;
+      !Number.isSafeInteger(raw.startedAt)){
+      throw new PrivateLifecycleLockError(
+        'PRIVATE_DESKTOP_LOCK_OWNER_INVALID',
+        'Private desktop lock owner metadata is invalid; refusing reclamation.',
+      );
+    }
     return raw as OwnerRecord;
   }catch(error){
     if((error as NodeJS.ErrnoException).code==='ENOENT')return null;
-    return null;
+    if(error instanceof SyntaxError){
+      throw new PrivateLifecycleLockError(
+        'PRIVATE_DESKTOP_LOCK_OWNER_INVALID',
+        'Private desktop lock owner metadata is unreadable JSON; refusing reclamation.',
+      );
+    }
+    throw error;
   }
 }
 
@@ -111,10 +122,11 @@ export async function withPrivateDesktopProcessLock<T>(
         const previous=await readOwner(lockDir);
         const age=stat?now()-stat.mtimeMs:0;
         const dead=previous!==null&&!isAlive(previous.pid);
-        const missingAndOld=previous===null&&age>staleMs;
         const deadAndOld=dead&&age>staleMs;
-        if(stat&&(missingAndOld||deadAndOld)){
-          // No live owner is removed; recovery is guarded by an
+        if(stat&&deadAndOld){
+          // A missing/unreadable owner cannot establish that the lock's
+          // creator is dead. Never reclaim it; fail closed instead.
+          // A dead confirmed PID is guarded by an
           // exclusive directory, preventing competing scavengers.
           await fs.rm(lockDir,{recursive:true,force:true});
         }

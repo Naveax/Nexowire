@@ -61,6 +61,36 @@ test('a different live worker PID is never evicted; failure is bounded',async()=
   }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 
+test('missing or malformed ownership never permits stale lock reclamation',async()=>{
+  for(const variant of ['missing','malformed','invalid-record'] as const){
+    const root=await tempRoot();
+    const lock=path.join(root,'.lifecycle.lock');
+    try{
+      await fs.mkdir(lock);
+      if(variant==='malformed'){
+        await fs.writeFile(path.join(lock,'owner.json'),'{not-json');
+      }else if(variant==='invalid-record'){
+        await fs.writeFile(path.join(lock,'owner.json'),JSON.stringify({
+          version:1,pid:'not-a-pid',nonce:'invalid',startedAt:0,
+        }));
+      }
+      const old=new Date(Date.now()-300_000);
+      await fs.utimes(lock,old,old);
+      const expected=variant==='missing'
+        ?'PRIVATE_DESKTOP_LIFECYCLE_LOCK_BUSY'
+        :'PRIVATE_DESKTOP_LOCK_OWNER_INVALID';
+      await assert.rejects(withPrivateDesktopProcessLock(root,
+        async()=>{throw Error('must not enter');},
+        {timeoutMs:350,staleMs:1000}),
+        (error:unknown)=>typeof error==='object'&&error!==null&&
+          'code' in error&&error.code===expected,variant);
+      assert.equal((await fs.stat(lock)).isDirectory(),true,variant);
+    }finally{
+      await fs.rm(root,{recursive:true,force:true});
+    }
+  }
+});
+
 test('dead worker lock recovers under guarded reclamation',async()=>{
   const root=await tempRoot();
   const lock=path.join(root,'.lifecycle.lock');
