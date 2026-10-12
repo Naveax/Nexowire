@@ -90,6 +90,24 @@ test('SYSTEM Hub Boot requires protected parent ACL before any credential read o
   assert.match(src,/import \{ hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl \}/);
 });
 
+test('Hub Boot uninstall checks private parent ACL before task changes and again before deleting files',()=>{
+  const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const begin=src.indexOf('export async function uninstallHubBootLifecycle(');
+  const end=src.indexOf('export async function runHubBootLifecycleCommand(',begin);
+  const uninstall=src.slice(begin,end);
+  const parent=uninstall.indexOf('const parent=path.win32.dirname(p.root)');
+  const firstAcl=uninstall.indexOf('verifyWindowsPrivateAcl(parent)');
+  const firstTree=uninstall.indexOf('await assertHubBootRootSafeToRemove(p.root)');
+  const task=uninstall.indexOf('await runPowerShellJson<');
+  const finalAcl=uninstall.indexOf('verifyWindowsPrivateAcl(parent)',firstAcl+1);
+  const finalTree=uninstall.indexOf('await assertHubBootRootSafeToRemove(p.root)',firstTree+1);
+  const remove=uninstall.indexOf('await fs.rm(p.root');
+  assert.ok(parent>=0 && parent<firstAcl && firstAcl<firstTree);
+  assert.ok(firstTree<task && task<finalAcl && finalAcl<finalTree && finalTree<remove);
+  assert.match(uninstall,/verifyWindowsPrivateAcl\(parent\)/);
+  assert.match(uninstall,/await assertHubBootRootSafeToRemove\(p.root\)/);
+});
+
 test('Hub Boot uninstall validates only its flat protected files before task or recursive deletion',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const uninstall=src.indexOf('export async function uninstallHubBootLifecycle(');

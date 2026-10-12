@@ -772,6 +772,10 @@ export async function uninstallHubBootLifecycle(
   assertElevated();
   assertCanonicalHubBootTaskNames(options);
   const p = pathsFor(options);
+  // The managed root can be replaced through a writable/junction parent.
+  // Fail closed before any SYSTEM task removal or user Hub restoration.
+  const parent=path.win32.dirname(p.root);
+  verifyWindowsPrivateAcl(parent);
   await assertHubBootRootSafeToRemove(p.root);
   const result = await runPowerShellJson<{
     removed: boolean;
@@ -801,6 +805,10 @@ export async function uninstallHubBootLifecycle(
     ].join('\n'),
     taskEnv(options),
   );
+  // Another process may have changed the parent or managed root while
+  // Task Scheduler was operating. Recheck before recursive deletion.
+  verifyWindowsPrivateAcl(parent);
+  await assertHubBootRootSafeToRemove(p.root);
   await fs.rm(p.root, {
     recursive: true,
     force: true,
