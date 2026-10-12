@@ -88,12 +88,12 @@ export function requiresPhysicalConsoleGrant(
 
 export function needsPhysicalConsoleApproval(
   capability: string,
-  accessMode: 'safe' | 'full' = 'safe',
+  _accessMode: 'safe' | 'full' = 'safe',
 ): boolean {
-  return (
-    accessMode !== 'full' &&
-    requiresPhysicalConsoleGrant(capability)
-  );
+  // Control-plane Full Access authorizes remote API operations, NOT access
+  // to the owner's visible physical desktop. Only a separate, short-lived
+  // local-console grant allows foreground/input/clipboard mutations.
+  return requiresPhysicalConsoleGrant(capability);
 }
 
 export function physicalConsoleGrantStatus(
@@ -375,25 +375,14 @@ export async function requestPhysicalConsoleGrant(
 export async function executeWindowsConsoleControlCapability(
   capability: string,
   input: unknown,
-  accessMode: 'safe' | 'full' = 'safe',
+  _accessMode: 'safe' | 'full' = 'safe',
 ): Promise<{ data: unknown }> {
   switch (capability) {
     case 'windows.console_control.status':
       return { data: physicalConsoleGrantStatus() };
     case 'windows.console_control.request':
-      if (accessMode === 'full') {
-        // The owner already authorized physical control via the control plane.
-        // Do not create a time-bounded grant or show an unnecessary dialog.
-        assertWindows();
-        return {
-          data: {
-            approved: true,
-            approvalRequired: false,
-            authorization: 'owner-full-access',
-            status: physicalConsoleGrantStatus(),
-          },
-        };
-      }
+      // Even FULL must get a real, time-bounded local physical-console
+      // approval. Never synthesize an owner grant from API access alone.
       return {
         data: await requestPhysicalConsoleGrant(input),
       };
