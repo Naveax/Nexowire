@@ -16,7 +16,7 @@ import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
 import { runWindowsPrivateShell } from './windows-private-shell.js';
-import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
+import {resolveAiWorkspaceTarget,requireWslHeadlessRouting} from './ai-workspace-default.js';
 import { executeWindowsPrivateViewerCapability } from './windows-private-viewer.js';
 import { captureWindowsPrivateScreen } from './windows-private-screen.js';
 import {
@@ -50,6 +50,7 @@ const ShellExecInputSchema = z.object({
 
 const WslExecInputSchema = z.object({
   command: z.string().min(1).max(200_000),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   distro: z.string().min(1).max(128).optional(),
   cwd: z.string().min(1).max(4096).optional(),
   timeout_ms: z.number().int().min(100).max(600_000).default(60_000),
@@ -446,6 +447,7 @@ async function executeWsl(input: unknown): Promise<unknown> {
   }
 
   const parsed = WslExecInputSchema.parse(input);
+  const uiTarget=requireWslHeadlessRouting(parsed.ui_target);
   const args: string[] = [];
   if (parsed.distro) args.push('--distribution', parsed.distro);
   if (parsed.cwd) args.push('--cd', parsed.cwd);
@@ -461,7 +463,7 @@ async function executeWsl(input: unknown): Promise<unknown> {
     stderr: result.stderr,
     exitCode: result.exitCode,
     truncated: result.truncated,
-    data: { timedOut: result.timedOut },
+    data: { timedOut: result.timedOut,uiTarget },
   };
 }
 

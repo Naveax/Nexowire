@@ -4701,10 +4701,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         command: z.string().min(1).max(200_000),
         distro: z.string().min(1).max(128).optional(),
         cwd: z.string().max(4096).optional(),
+        ui_target: z.enum(['headless','private_desktop']).optional(),
         timeout_ms: z.number().int().min(100).max(600_000).optional(),
       },
     },
-    async ({ device_id, provider_id, command, distro, cwd, timeout_ms }) =>
+    async ({ device_id, provider_id, command, distro, cwd, ui_target, timeout_ms }) =>
       await execute(
         ctx,
         'wsl.exec',
@@ -4712,6 +4713,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           command,
           ...(distro ? { distro } : {}),
           ...(cwd ? { cwd } : {}),
+          ...(ui_target ? { ui_target } : {}),
           ...(timeout_ms ? { timeout_ms } : {}),
         },
         device_id,

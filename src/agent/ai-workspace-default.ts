@@ -25,3 +25,27 @@ export function resolveAiWorkspaceTarget(
   }
   return target;
 }
+
+/**
+ * WSLg/Explorer-mediated GUI processes may appear on the physical Default
+ * desktop despite hiding wsl.exe's own console. Until Windows proves a
+ * private compositor/desktop for WSLg, refuse private AI requests rather
+ * than silently launch on Default. Explicit legacy headless is still opt-in.
+ */
+export function requireWslHeadlessRouting(
+  explicit:AiWorkspaceTarget|undefined,
+  options:{
+    platform?:NodeJS.Platform;
+    env?:NodeJS.ProcessEnv;
+  }={},
+):'headless'{
+  const target=resolveAiWorkspaceTarget(explicit,options);
+  if(target==='private_desktop'){
+    const error=Object.assign(
+      new Error('WSL GUI routing is not confined to NexowirePrivate; explicit headless mode is required.'),
+      {code:'WSL_PRIVATE_GUI_NOT_ISOLATED'},
+    );
+    throw error;
+  }
+  return 'headless';
+}

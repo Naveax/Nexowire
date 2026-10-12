@@ -4309,6 +4309,13 @@
         "type": "integer",
         "minimum": 100,
         "maximum": 600000
+      },
+      "ui_target": {
+        "type": "string",
+        "enum": [
+          "headless",
+          "private_desktop"
+        ]
       }
     },
     "required": [
