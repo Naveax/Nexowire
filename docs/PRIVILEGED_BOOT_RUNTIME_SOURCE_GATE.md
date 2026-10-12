@@ -121,6 +121,27 @@ Task Scheduler changes atomic. A task can change after preflight, and existing
 cutover/rollback caveats still apply. No production task is registered, started,
 stopped, removed or renamed merely by this source change.
 
+## Failed SYSTEM boot handoff and cleanup
+
+When `boot-install` fails **after** modifying Task Scheduler, the previous
+rollback best-effort ignored a task restoration failure and nevertheless
+recursively removed `hub-boot`. That could delete a launcher or machine DPAPI
+envelope still referenced by a running task. It also erased any previously
+existing protected Hub Boot installation. The new fail-closed cleanup captures
+whether the exact protected root already existed, checks its flat contents
+and private ACL before staging, and **never removes a pre-existing root** on
+install failure. A newly created root may be removed only when Task Scheduler
+rollback reports success, and after another parent ACL, root inventory and
+root ACL check. Failed task rollback preserves the files and raises
+`HUB_BOOT_TASK_ROLLBACK_FAILED` rather than silently hiding the failure. A
+failed protected cleanup raises `HUB_BOOT_ROLLBACK_CLEANUP_FAILED` instead of
+reporting a clean recovery.
+
+These remain point-in-time checks. A failure during staging before the task
+transaction is not itself a completed rollback; owner-supervised recovery and
+separate rollback acceptance are still required. No production cleanup or
+cutover is authorized by these source-only changes.
+
 ## Real installation implications
 
 The existing Naveax v1.0.0 Stack supervisor executes writable code in
