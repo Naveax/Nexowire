@@ -1714,6 +1714,13 @@
       "retry_unknown": {
         "type": "boolean"
       },
+      "ui_target": {
+        "type": "string",
+        "enum": [
+          "headless",
+          "private_desktop"
+        ]
+      },
       "steps": {
         "minItems": 1,
         "maxItems": 64,
