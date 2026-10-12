@@ -1,10 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { windowsProgramDataAclArguments,verifyWindowsPrivateAcl,protectedWindowsAclEnvironment,snapshotFlatProgramDataChildrenReadOnly } from '../src/security/windows-programdata-acl.js';
+import { windowsProgramDataAclArguments,verifyWindowsPrivateAcl,verifyWindowsStackOuterAncestorAcl,protectedWindowsAclEnvironment,snapshotFlatProgramDataChildrenReadOnly } from '../src/security/windows-programdata-acl.js';
 import {mkdtempSync,rmSync,mkdirSync,writeFileSync,appendFileSync,linkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {readFileSync} from 'node:fs';
+
+test('legacy Stack outer ancestor audit checks only fixed OS root and ProgramData without ACL writes',{
+  skip:process.platform!=='win32',
+},()=>{
+  assert.doesNotThrow(()=>verifyWindowsStackOuterAncestorAcl('C:\\'));
+  assert.doesNotThrow(()=>verifyWindowsStackOuterAncestorAcl('C:\\ProgramData'));
+  for(const untrusted of [
+    'C:\\ProgramData\\NexowireStack','C:\\ProgramData\\','C:\\Windows',
+    'C:\\Users','D:\\ProgramData','\\\\server\\share','C:\\ProgramData\\..',
+  ]){
+    assert.throws(()=>verifyWindowsStackOuterAncestorAcl(untrusted),
+      /STACK_OUTER_ANCESTOR_NONCANONICAL/,untrusted);
+  }
+});
+
+test('legacy Stack ancestor replacement preflight pins PowerShell and checks effective delete rights',()=>{
+  const src=readFileSync(new URL('../src/security/windows-programdata-acl.ts',import.meta.url),'utf8');
+  const begin=src.indexOf('export function verifyWindowsStackOuterAncestorAcl');
+  const end=src.indexOf('export function snapshotFlatProgramDataChildrenReadOnly',begin);
+  const guard=src.slice(begin,end);
+  for(const fragment of [
+    'WINDOWS_POWERSHELL','protectedWindowsAclEnvironment(target)',
+    'ReparsePoint','Get-Acl -LiteralPath $target',
+    'DeleteSubdirectoriesAndFiles','ChangePermissions','TakeOwnership',
+    'InheritOnly','STACK_OUTER_ANCESTOR_REPLACEMENT_RIGHTS',
+    "result.stdout.trim()!=='STACK_OUTER_ANCESTOR_ACL_VERIFIED'",
+  ])assert.ok(guard.includes(fragment),fragment);
+  assert.doesNotMatch(guard,/Set-Acl|icacls\.exe|Register-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+});
 
 test('protected ACL subprocess environment cannot inherit attacker-controlled module or executable paths',()=>{
   const env=protectedWindowsAclEnvironment('C:\\ProgramData\\Nexowire\\hub-boot');

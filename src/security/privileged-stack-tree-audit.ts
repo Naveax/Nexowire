@@ -1,7 +1,7 @@
 import {lstatSync,readdirSync} from 'node:fs';
 import path from 'node:path';
 import {auditPrivilegedStackSource} from './privileged-stack-source-audit.js';
-import {verifyWindowsPrivateAcl} from './windows-programdata-acl.js';
+import {verifyWindowsPrivateAcl,verifyWindowsStackOuterAncestorAcl} from './windows-programdata-acl.js';
 
 const PRODUCTION_STACK_ROOT='C:\\ProgramData\\NexowireStack';
 const MAX_ENTRIES=150000;
@@ -154,7 +154,12 @@ export function auditPrivilegedStackDependencyTree():ReadOnlySourceTreeInventory
   }
   // First demand the exact known elevated entrypoint path remains intact.
   auditPrivilegedStackSource();
-  return inventoryReadOnlySourceTree(
+  const inventory=inventoryReadOnlySourceTree(
     PRODUCTION_STACK_ROOT,verifyWindowsPrivateAcl,
   );
+  // The long full-tree inventory can outlive the initial shared-ancestor
+  // snapshot. Do not accept the result without another parent ACL check.
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
+  return inventory;
 }

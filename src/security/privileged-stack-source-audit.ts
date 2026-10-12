@@ -1,6 +1,6 @@
 import { lstatSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { verifyWindowsPrivateAcl } from './windows-programdata-acl.js';
+import { verifyWindowsPrivateAcl, verifyWindowsStackOuterAncestorAcl } from './windows-programdata-acl.js';
 
 const STACK_ROOT = 'C:\\ProgramData\\NexowireStack';
 const STACK_ENTRY = STACK_ROOT +
@@ -119,7 +119,14 @@ export function auditPrivilegedStackSource(
   entrypoint:string=STACK_ENTRY,
 ):PrivilegedStackSourceAudit {
   const chain=privilegedStackSourceChain(entrypoint);
+  // The Stack root is private, but Windows shared ancestors are not. Check
+  // the outer C:\ and C:\ProgramData replacement/delete/owner rights
+  // before and after the potentially slow source-chain inventory.
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
   const count=inspectPrivilegedStackSourceChainReadOnly(chain,verifyWindowsPrivateAcl);
+  verifyWindowsStackOuterAncestorAcl('C:\\');
+  verifyWindowsStackOuterAncestorAcl('C:\\ProgramData');
   return {
     trusted:true,
     entrypoint:chain.at(-1)!,

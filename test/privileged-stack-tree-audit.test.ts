@@ -131,6 +131,17 @@ test('final pass rejects files introduced under an earlier checked directory',()
   }finally{f.cleanup()}
 });
 
+test('production full-tree audit revalidates OS parent rights after dependency traversal',()=>{
+  const src=readFileSync(new URL('../src/security/privileged-stack-tree-audit.ts',import.meta.url),'utf8');
+  const wrapper=src.slice(src.indexOf('export function auditPrivilegedStackDependencyTree('));
+  const entry=wrapper.indexOf('auditPrivilegedStackSource()');
+  const scan=wrapper.indexOf('inventoryReadOnlySourceTree(');
+  const after=wrapper.indexOf("verifyWindowsStackOuterAncestorAcl('C:\\\\')");
+  const parent=wrapper.indexOf("verifyWindowsStackOuterAncestorAcl('C:\\\\ProgramData')");
+  const returned=wrapper.indexOf('return inventory');
+  assert.ok(entry>=0 && entry<scan && scan<after && after<parent && parent<returned);
+});
+
 test('production auditor pins full Stack root; no local or cloud mutation pathways',()=>{
   const src=readFileSync(
     new URL('../src/security/privileged-stack-tree-audit.ts',import.meta.url),'utf8',
