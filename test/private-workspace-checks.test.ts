@@ -57,8 +57,13 @@ test('workspace checks run in private Win32 desktop without stealing active inpu
   const result=await executeCapability('workspace.checks',{
     path:root,checks:['node:test','node:build'],
     ui_target:'private_desktop',parallel:true,timeout_ms:25_000,
-  },new PathPolicy([root])) as {data:{ok:boolean;passed:number;results:Array<{id:string;stdout:string}>}};
+  },new PathPolicy([root])) as {data:{
+    ok:boolean;passed:number;uiTarget:string;desktopName?:string;
+    results:Array<{id:string;stdout:string}>
+  }};
   assert.equal(result.data.ok,true,JSON.stringify(result.data.results));
+  assert.equal(result.data.uiTarget,'private_desktop');
+  assert.equal(result.data.desktopName,'NexowirePrivate');
   assert.equal(result.data.passed,2);
   assert.match(result.data.results.find(x=>x.id==='node:test')?.stdout??'',/private-test-ok/);
   assert.match(result.data.results.find(x=>x.id==='node:build')?.stdout??'',/private-build-ok/);
