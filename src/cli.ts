@@ -219,7 +219,10 @@ async function main(): Promise<void> {
     if (!sessionDir) {
       throw new Error('process-worker requires a session directory.');
     }
-    await runProcessWorker(sessionDir);
+    if(process.argv[4]!==undefined && process.argv[4]!=='--init-file'){
+      throw new Error('process-worker received an unsupported init mode.');
+    }
+    await runProcessWorker(sessionDir,process.argv[4]==='--init-file');
     return;
   }
 

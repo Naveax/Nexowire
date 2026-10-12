@@ -5,6 +5,8 @@ import net from 'node:net';
 import path from 'node:path';
 import * as z from 'zod';
 import type { PathPolicy } from './path-policy.js';
+import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
+import {privateShellExecutionEnvironment} from './windows-private-shell.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
 
@@ -14,6 +16,7 @@ const StartSchema = z.object({
   cwd: z.string().max(4096).optional(),
   name: z.string().min(1).max(128).optional(),
   durable: z.boolean().default(false),
+  ui_target: z.enum(['headless','private_desktop']).default('headless'),
   max_buffer_bytes: z
     .number()
     .int()
@@ -58,6 +61,7 @@ const PersistedSessionSchema = z.object({
   signal: z.string().nullable(),
   status: z.enum(['running', 'exited', 'orphaned', 'lost']),
   durable: z.boolean().optional(),
+  uiTarget: z.enum(['headless','private_desktop']).optional(),
   workerDir: z.string().max(4096).optional(),
   workerPid: z.number().int().positive().nullable().optional(),
 });
@@ -91,6 +95,7 @@ interface ManagedSession {
   status: SessionStatus;
   recovered: boolean;
   durable: boolean;
+  uiTarget?: 'headless'|'private_desktop';
   workerDir?: string;
   workerPid?: number | null;
   events: ProcessOutputEvent[];
@@ -423,6 +428,8 @@ function summarize(session: ManagedSession) {
     status: session.status,
     recovered: session.recovered,
     durable: session.durable,
+    uiTarget: session.uiTarget ?? 'headless',
+    ...(session.uiTarget==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
     reattachable:
       session.durable &&
       session.status === 'running' &&
@@ -582,6 +589,7 @@ export class ProcessManager {
         status,
         recovered: true,
         durable,
+        uiTarget:saved.uiTarget ?? 'headless',
         ...(saved.workerDir ? { workerDir: saved.workerDir } : {}),
         ...(workerPid !== undefined ? { workerPid } : {}),
         events,
@@ -762,27 +770,18 @@ export class ProcessManager {
       );
     }
 
+    const privateDesktop=parsed.ui_target==='private_desktop';
+    if(privateDesktop && process.platform!=='win32'){
+      throw new ProcessManagerError(
+        'PRIVATE_PROCESS_WINDOWS_ONLY','Private process sessions require Windows.',
+      );
+    }
     const id = randomUUID();
     const workerDir = path.join(this.workerRoot, id);
     await fs.mkdir(workerDir, { recursive: true, mode: 0o700 });
 
     const token = randomBytes(32).toString('hex');
     const shell = resolveShell(parsed.shell, parsed.command);
-    const worker = spawn(
-      process.execPath,
-      [
-        ...this.workerExecArgv,
-        this.workerEntrypoint,
-        'process-worker',
-        workerDir,
-      ],
-      {
-        windowsHide: true,
-        detached: true,
-        stdio: ['pipe', 'ignore', 'ignore'],
-        env: process.env,
-      },
-    );
 
     const initPayload = {
       sessionId: id,
@@ -791,19 +790,59 @@ export class ProcessManager {
       ...(cwd ? { cwd } : {}),
       maxBufferBytes: parsed.max_buffer_bytes,
       token,
+      ...(privateDesktop?{executionEnv:privateShellExecutionEnvironment()}:{}),
     };
-
-    await new Promise<void>((resolve, reject) => {
-      const fail = (error: Error): void => {
-        worker.stdin.off('error', fail);
-        reject(error);
-      };
-      worker.stdin.once('error', fail);
-      worker.stdin.end(JSON.stringify(initPayload), () => {
-        worker.stdin.off('error', fail);
-        resolve();
+    const args=[
+      ...this.workerExecArgv,this.workerEntrypoint,'process-worker',workerDir,
+    ];
+    let worker:ReturnType<typeof spawn>|undefined;
+    let workerPid:number|undefined;
+    if(privateDesktop){
+      // A private worker is created *directly* on NexowirePrivate.
+      // The shared user's Default desktop must not become a fallback.
+      await executeWindowsPrivateDesktopCapability(
+        'windows.private_desktop.start',{create_shortcut:false},
+      );
+      await fs.writeFile(path.join(workerDir,'init.json'),JSON.stringify(initPayload),{
+        flag:'wx',mode:0o600,
       });
-    });
+      try{
+        const launch=await executeWindowsPrivateDesktopCapability(
+          'windows.private_desktop.launch',{
+            executable:process.execPath,args:[...args,'--init-file'],
+            cwd:path.dirname(this.workerEntrypoint),
+          },
+        ) as {data:{pid:number}};
+        workerPid=launch.data.pid;
+      }catch(error){
+        await fs.rm(path.join(workerDir,'init.json'),{force:true});
+        throw error;
+      }
+    }else{
+      worker=spawn(process.execPath,args,{
+        windowsHide:true,detached:true,
+        stdio:['pipe','ignore','ignore'],env:process.env,
+      });
+      workerPid=worker.pid;
+      const workerStdin=worker.stdin;
+      if(!workerStdin){
+        throw new ProcessManagerError(
+          'PROCESS_WORKER_STDIN_UNAVAILABLE',
+          'Durable worker has no initialization input pipe.',
+        );
+      }
+      await new Promise<void>((resolve,reject)=>{
+        const fail=(error:Error):void=>{
+          workerStdin.off('error',fail);
+          reject(error);
+        };
+        workerStdin.once('error',fail);
+        workerStdin.end(JSON.stringify(initPayload),()=>{
+          workerStdin.off('error',fail);
+          resolve();
+        });
+      });
+    }
 
     const deadline = Date.now() + 10_000;
     let control: WorkerControl | undefined;
@@ -831,12 +870,26 @@ export class ProcessManager {
         workerStatus &&
         workerStatus.status !== 'starting'
       ) {
+        if(privateDesktop && (
+          control.workerPid!==workerPid ||
+          workerStatus.workerPid!==workerPid ||
+          control.sessionId!==id || workerStatus.sessionId!==id
+        )){
+          throw new ProcessManagerError(
+            'PRIVATE_PROCESS_WORKER_IDENTITY_MISMATCH',
+            'Private process worker reported a different session or PID.',
+          );
+        }
         break;
       }
-      if (worker.exitCode !== null) {
+      if((worker && worker.exitCode!==null) ||
+         (privateDesktop && (!workerPid || !isPidAlive(workerPid)))){
+        if(privateDesktop){
+          await fs.rm(path.join(workerDir,'init.json'),{force:true});
+        }
         throw new ProcessManagerError(
           'PROCESS_WORKER_START_FAILED',
-          `Durable process worker exited with code ${worker.exitCode} before publishing usable state.`,
+          'Durable process worker exited before publishing usable state.',
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -844,9 +897,12 @@ export class ProcessManager {
 
     if (!control || !workerStatus) {
       try {
-        process.kill(worker.pid!, 'SIGTERM');
+        if(workerPid)process.kill(workerPid, 'SIGTERM');
       } catch {
         // Best effort worker cleanup.
+      }
+      if(privateDesktop){
+        await fs.rm(path.join(workerDir,'init.json'),{force:true});
       }
       throw new ProcessManagerError(
         'PROCESS_WORKER_START_TIMEOUT',
@@ -854,7 +910,7 @@ export class ProcessManager {
       );
     }
 
-    worker.unref();
+    worker?.unref();
     const events = await readWorkerEvents(workerDir);
     const session: ManagedSession = {
       id,
@@ -873,6 +929,7 @@ export class ProcessManager {
         workerStatus.status === 'exited' ? 'exited' : 'running',
       recovered: false,
       durable: true,
+      uiTarget:parsed.ui_target,
       workerDir,
       workerPid: control.workerPid,
       events,
@@ -920,8 +977,8 @@ export class ProcessManager {
       ? await policy.resolveExisting(parsed.cwd)
       : undefined;
 
-    if (parsed.durable) {
-      return await this.startDurable(parsed, cwd);
+    if(parsed.durable || parsed.ui_target==='private_desktop'){
+      return await this.startDurable(parsed,cwd);
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
@@ -948,6 +1005,7 @@ export class ProcessManager {
       status: 'running',
       recovered: false,
       durable: false,
+      uiTarget:'headless',
       events: [],
       nextSeq: 1,
       bufferedBytes: 0,
@@ -1367,6 +1425,7 @@ export class ProcessManager {
         signal: session.signal,
         status: session.status,
         durable: session.durable,
+        uiTarget:session.uiTarget ?? 'headless',
         ...(session.workerDir ? { workerDir: session.workerDir } : {}),
         ...(session.workerPid !== undefined
           ? { workerPid: session.workerPid }
