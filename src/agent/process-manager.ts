@@ -7,6 +7,7 @@ import * as z from 'zod';
 import type { PathPolicy } from './path-policy.js';
 import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
 import {privateShellExecutionEnvironment} from './windows-private-shell.js';
+import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
 
@@ -16,7 +17,7 @@ const StartSchema = z.object({
   cwd: z.string().max(4096).optional(),
   name: z.string().min(1).max(128).optional(),
   durable: z.boolean().default(false),
-  ui_target: z.enum(['headless','private_desktop']).default('headless'),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   max_buffer_bytes: z
     .number()
     .int()
@@ -976,9 +977,10 @@ export class ProcessManager {
     const cwd = parsed.cwd
       ? await policy.resolveExisting(parsed.cwd)
       : undefined;
+    const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
 
-    if(parsed.durable || parsed.ui_target==='private_desktop'){
-      return await this.startDurable(parsed,cwd);
+    if(parsed.durable || uiTarget==='private_desktop'){
+      return await this.startDurable({...parsed,ui_target:uiTarget},cwd);
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
