@@ -955,6 +955,19 @@ async function showPrivateDesktop(): Promise<{ data: unknown }> {
   };
 }
 
+// These operations use a shared state.json/.tmp and persistent desktop
+// host. Without serialization, parallel shell workers may race during host
+// startup or overwrite each other's launchedPids, allowing orphan windows.
+let desktopLifecycleQueue:Promise<void>=Promise.resolve();
+
+export function serializePrivateDesktopLifecycle<T>(
+  action:()=>Promise<T>,
+):Promise<T>{
+  const result=desktopLifecycleQueue.then(action);
+  desktopLifecycleQueue=result.then(()=>undefined,()=>undefined);
+  return result;
+}
+
 export async function executeWindowsPrivateDesktopCapability(
   capability: string,
   input: unknown,
@@ -963,11 +976,11 @@ export async function executeWindowsPrivateDesktopCapability(
     case 'windows.private_desktop.status':
       return await status();
     case 'windows.private_desktop.start':
-      return await start(input);
+      return await serializePrivateDesktopLifecycle(()=>start(input));
     case 'windows.private_desktop.stop':
-      return await stop();
+      return await serializePrivateDesktopLifecycle(()=>stop());
     case 'windows.private_desktop.launch':
-      return await launchApp(input);
+      return await serializePrivateDesktopLifecycle(()=>launchApp(input));
     case 'windows.private_desktop.windows':
       return await windows();
     case 'windows.private_desktop.show':

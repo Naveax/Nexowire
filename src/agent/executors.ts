@@ -147,6 +147,7 @@ const WorkspaceDetectInputSchema = z.object({
 const WorkspaceChecksInputSchema = z.object({
   path: z.string().min(1).max(4096),
   checks: z.array(z.string().min(1).max(128)).min(1).max(8),
+  ui_target: z.enum(['headless','private_desktop']).default('headless'),
   parallel: z.boolean().default(true),
   timeout_ms: z.number().int().min(100).max(600_000).default(120_000),
   max_output_bytes: z
@@ -1300,7 +1301,9 @@ async function workspaceChecks(
     }
 
     try {
-      const result = await runProcess(check.executable, check.args, {
+      const result = await (
+        parsed.ui_target==='private_desktop' ? runWindowsPrivateShell : runProcess
+      )(check.executable, check.args, {
         cwd: check.cwd,
         timeoutMs: parsed.timeout_ms,
         maxOutputBytes: parsed.max_output_bytes,

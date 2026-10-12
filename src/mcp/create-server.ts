@@ -5156,6 +5156,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         ...targetFields,
         path: z.string().min(1).max(4096),
         checks: z.array(z.string().min(1).max(128)).min(1).max(8),
+        ui_target: z.enum(['headless','private_desktop']).optional(),
         parallel: z.boolean().optional(),
         timeout_ms: z.number().int().min(100).max(600_000).optional(),
         max_output_bytes: z
@@ -5171,6 +5172,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       provider_id,
       path,
       checks,
+      ui_target,
       parallel,
       timeout_ms,
       max_output_bytes,
@@ -5181,6 +5183,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         {
           path,
           checks,
+          ...(ui_target ? { ui_target } : {}),
           ...(parallel !== undefined ? { parallel } : {}),
           ...(timeout_ms ? { timeout_ms } : {}),
           ...(max_output_bytes ? { max_output_bytes } : {}),
