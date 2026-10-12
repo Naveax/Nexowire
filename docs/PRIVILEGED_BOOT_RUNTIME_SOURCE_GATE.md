@@ -83,6 +83,14 @@ credentials. An untrusted owner, broad write/delete/DACL takeover grant or
 reparse/junction parent now blocks SYSTEM boot installation. This gate does
 not modify the parent ACL, create the parent or authorize a live handoff.
 
+The elevated `boot-uninstall` path also requires the existing private Windows
+ACL and non-reparse integrity of `C:\ProgramData\Nexowire` **before** any
+Scheduled Task stop/unregister or user Hub restoration. Because Task Scheduler
+operations are asynchronous, the same parent ACL and flat child/root shape
+are checked **again just before** recursively removing the Hub Boot directory.
+If parent ownership or deletion/write rights become unsafe, deletion fails
+closed. This is a source-only read check; no ACL is repaired or modified.
+
 Before the uninstall task operation and recursive directory removal, the
 existing protected root must also be a real directory (not a symlink or
 junction) and contain only expected flat lifecycle files: `launch.ps1`,
