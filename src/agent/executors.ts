@@ -190,6 +190,7 @@ const TaskGraphRunInputSchema = z.object({
   resume: z.boolean().default(false),
   retry_failed: z.boolean().default(false),
   retry_unknown: z.boolean().default(false),
+  ui_target: z.enum(['headless','private_desktop']).default('headless'),
   jobs: z.array(TaskGraphJobSchema).min(1).max(32),
   max_parallel: z.number().int().min(1).max(8).default(4),
   stop_on_failure: z.boolean().default(false),
@@ -1620,6 +1621,8 @@ async function runTaskGraph(
     Buffer.from(
       JSON.stringify({
         jobs: parsed.jobs,
+        // Previous headless checkpoints retain their existing spec hash.
+        ...(parsed.ui_target==='private_desktop'?{ui_target:parsed.ui_target}:{}),
         max_parallel: parsed.max_parallel,
         stop_on_failure: parsed.stop_on_failure,
         default_timeout_ms: parsed.default_timeout_ms,
@@ -1762,7 +1765,9 @@ async function runTaskGraph(
         if (cwd) result.cwd = cwd;
 
         const remainingMs = Math.max(100, deadline - Date.now());
-        const execution = await runProcess(
+        const execution = await (
+          parsed.ui_target==='private_desktop' ? runWindowsPrivateShell : runProcess
+        )(
           resolvedShell.executable,
           resolvedShell.args,
           {
@@ -1930,6 +1935,8 @@ async function runTaskGraph(
     data: {
       ...(parsed.graph_id ? { graphId: parsed.graph_id, specHash } : {}),
       resumed: parsed.resume,
+      uiTarget:parsed.ui_target,
+      ...(parsed.ui_target==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
       ok: failed === 0 && blocked === 0 && unknown === 0,
       maxParallel: parsed.max_parallel,
       stopOnFailure: parsed.stop_on_failure,
