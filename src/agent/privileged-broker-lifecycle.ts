@@ -720,6 +720,10 @@ export async function uninstallPrivilegedBrokerTask(
     throw new Error('BROKER_UNINSTALL_NONCANONICAL_TASK_DENIED');
   }
   const protectedRoot=rootDir(options);
+  const protectedParent=path.win32.dirname(protectedRoot);
+  // Do not stop/unregister an elevated task or recursively delete a root
+  // reachable through a user-writable or substituted parent.
+  verifyWindowsPrivateAcl(protectedParent);
   await assertBrokerRootSafeToRemove(protectedRoot);
   const script = `
 $ErrorActionPreference='Stop'
@@ -739,6 +743,9 @@ if ($null -ne $task) {
     script,
     lifecycleEnv(name, launcherPath(options)),
   );
+  // The scheduler operation was asynchronous; recheck the parent and the
+  // exact flat child inventory immediately before recursive removal.
+  verifyWindowsPrivateAcl(protectedParent);
   await assertBrokerRootSafeToRemove(protectedRoot);
   await fs.rm(protectedRoot, {
     recursive: true,
