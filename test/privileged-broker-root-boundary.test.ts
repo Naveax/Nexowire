@@ -38,8 +38,9 @@ test('root deletion preflight accepts only flat known broker files',()=>{
 test('broker install and recursive uninstall check protected root BEFORE privileged mutation',()=>{
   const source=readFileSync(new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8');
   assert.ok(source.includes('const directory = rootDir(options);\n  await assertBrokerRootSafeToRemove(directory);'));
-  assert.ok(source.includes('  const protectedRoot=rootDir(options);\n  await assertBrokerRootSafeToRemove(protectedRoot);'));
-  assert.ok(source.includes('await assertBrokerRootSafeToRemove(protectedRoot);\n  await fs.rm(protectedRoot, {'));
+  assert.ok(source.includes('  const protectedRoot=rootDir(options);\n  const protectedParent=path.win32.dirname(protectedRoot);'));
+  assert.ok(source.includes('  verifyWindowsPrivateAcl(protectedParent);\n  await assertBrokerRootSafeToRemove(protectedRoot);'));
+  assert.ok(source.includes('verifyWindowsPrivateAcl(protectedParent);\n  await assertBrokerRootSafeToRemove(protectedRoot);\n  await fs.rm(protectedRoot, {'));
   assert.ok(source.includes('if(!info.isDirectory()||info.isSymbolicLink())'));
   assert.ok(source.includes('assertBrokerRootEntriesFlat(entries.map('));
 });
