@@ -9,6 +9,7 @@ test('private desktop source rejects unknown persisted host state before replace
   const source=readFileSync(new URL('../src/agent/windows-private-desktop.ts',import.meta.url),'utf8');
   assert.match(source,/PRIVATE_DESKTOP_STATE_INVALID/);
   assert.match(source,/PRIVATE_DESKTOP_PARTIAL_HOST/);
+  assert.match(source,/code === 'EPERM'/);
   assert.match(source,/\[old\.hostPid,old\.shellPid,\.\.\.old\.launchedPids\]\.some\(alive\)/);
 });
 

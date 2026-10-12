@@ -125,8 +125,10 @@ function alive(pid: number | undefined): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // EPERM means the PID may still exist but the current account cannot
+    // inspect it. Treat as alive; never discard a host/child on uncertainty.
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
