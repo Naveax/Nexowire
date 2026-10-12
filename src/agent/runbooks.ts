@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import * as z from 'zod';
+import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 import type {
   RunbookCheckpoint,
   RunbookCheckpointStep,
@@ -37,7 +38,7 @@ const RunInputSchema = z.object({
   resume: z.boolean().default(false),
   retry_failed: z.boolean().default(false),
   retry_unknown: z.boolean().default(false),
-  ui_target: z.enum(['headless','private_desktop']).default('headless'),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   steps: z.array(StepSchema).min(1).max(64),
   max_parallel: z.number().int().min(1).max(8).default(2),
   stop_on_failure: z.boolean().default(false),
@@ -220,6 +221,7 @@ export async function executeDurableRunbook(
   callbacks: RunbookExecutionCallbacks,
 ): Promise<unknown> {
   const parsed = RunInputSchema.parse(input);
+  const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
   validateDependencies(parsed.steps);
 
   if (parsed.resume === false) {
@@ -231,7 +233,7 @@ export async function executeDurableRunbook(
   }
 
   const normalizedSpec = {
-    ...(parsed.ui_target==='private_desktop'?{ui_target:parsed.ui_target}:{}),
+    ...(uiTarget==='private_desktop'?{ui_target:uiTarget}:{}),
     steps: parsed.steps,
     max_parallel: parsed.max_parallel,
     stop_on_failure: parsed.stop_on_failure,
@@ -397,7 +399,7 @@ export async function executeDurableRunbook(
             ...spec.task_graph,
             // Force every command step onto the runbook's explicit private
             // desktop, regardless of an unsafe nested graph override.
-            ...(parsed.ui_target==='private_desktop'?{ui_target:'private_desktop'}:{}),
+            ...(uiTarget==='private_desktop'?{ui_target:'private_desktop'}:{}),
             graph_id: step.taskGraphId,
             resume: step.attempts > 1 || parsed.resume,
             retry_failed: parsed.retry_failed,
@@ -560,8 +562,8 @@ export async function executeDurableRunbook(
       runbookId: parsed.runbook_id,
       specHash,
       resumed: parsed.resume,
-      uiTarget:parsed.ui_target,
-      ...(parsed.ui_target==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
+      uiTarget,
+      ...(uiTarget==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
       ok: failed === 0 && blocked === 0 && unknown === 0,
       runCount: checkpoint.runCount,
       maxParallel: parsed.max_parallel,
