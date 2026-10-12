@@ -552,6 +552,10 @@ export async function hubBootLifecycleStatus(
   assertWindows();
   const p = pathsFor(options);
   assertProtectedHubBootRoot(p.root);
+  // Status is not permission to inspect arbitrary foreign Scheduled Tasks.
+  // A same-name root task owned by another principal must never be reported
+  // as a successfully installed privileged Hub.
+  assertCanonicalHubBootTaskNames(options);
   const result = await runPowerShellJson<{
     installed: boolean;
     state: string;
@@ -563,6 +567,7 @@ export async function hubBootLifecycleStatus(
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
       '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
       '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+      hubBootRegisteredTaskIdentityGuard,
       "$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{'not-installed'}",
       "$userState=if($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
       '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
@@ -577,7 +582,7 @@ export async function hubBootLifecycleStatus(
     userTaskState: result.userTaskState,
     launcher: p.launcher,
     secretFile: p.secret,
-    pid: pid && processAlive(pid) ? pid : null,
+    pid: result.installed && pid && processAlive(pid) ? pid : null,
     pidFile: p.pid,
   });
 }

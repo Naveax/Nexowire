@@ -66,6 +66,22 @@ test('Hub Boot uninstall refuses foreign tasks before stop, unregister or restor
   assert.match(uninstall,/Get-ScheduledTask -TaskName \$boot -TaskPath/);
 });
 
+test('Hub Boot status reports installed only for canonical verified Task Scheduler identity',()=>{
+  const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const start=src.indexOf('export async function hubBootLifecycleStatus(');
+  const end=src.indexOf('export async function installHubBootLifecycle(',start);
+  const status=src.slice(start,end);
+  const protectedRoot=status.indexOf('assertProtectedHubBootRoot(p.root)');
+  const canonical=status.indexOf('assertCanonicalHubBootTaskNames(options)');
+  const readTask=status.indexOf('Get-ScheduledTask -TaskName $boot -TaskPath');
+  const readUser=status.indexOf('Get-ScheduledTask -TaskName $user -TaskPath');
+  const identity=status.indexOf('hubBootRegisteredTaskIdentityGuard');
+  const report=status.indexOf('installed=($null-ne$bootTask)');
+  assert.ok(protectedRoot>=0 && protectedRoot<canonical && canonical<readTask);
+  assert.ok(readTask<readUser && readUser<identity && identity<report);
+  assert.match(status,/pid: result\.installed && pid && processAlive\(pid\) \? pid : null/);
+});
+
 test('Hub Boot install checks protected root before any token access or task changes',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const install=src.indexOf('export async function installHubBootLifecycle(');
