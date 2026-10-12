@@ -1,4 +1,7 @@
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
+import {executeCapability} from '../src/agent/executors.js';
+import {PathPolicy} from '../src/agent/path-policy.js';
 import assert from 'node:assert/strict';
 import {
   assertPhysicalConsoleGrant,
@@ -81,7 +84,7 @@ test('physical console mutations are default-denied while private input stays is
   );
 });
 
-test('SAFE remains prompt-protected while Full Access suppresses repeated console approval', () => {
+test('physical input and foreground actions require LOCAL grant in SAFE and Full Access', () => {
   const physical = [
     'windows.pointer.click',
     'windows.keyboard.type',
@@ -95,7 +98,7 @@ test('SAFE remains prompt-protected while Full Access suppresses repeated consol
     );
     assert.equal(
       needsPhysicalConsoleApproval(capability, 'full'),
-      false,
+      true,
       capability + ':full',
     );
   }
@@ -110,31 +113,32 @@ test('SAFE remains prompt-protected while Full Access suppresses repeated consol
   );
 });
 
-test(
-  'owner FULL ACCESS acknowledges console requests without a second prompt',
-  { skip: process.platform !== 'win32' },
-  async () => {
-    revokePhysicalConsoleGrant();
-    const response = await executeWindowsConsoleControlCapability(
-      'windows.console_control.request',
-      { duration_minutes: 5, reason: 'already authorized by owner' },
-      'full',
-    ) as {
-      data: {
-        approved: boolean;
-        approvalRequired: boolean;
-        authorization: string;
-        status: { active: boolean };
-      };
-    };
+test('Full Access cannot switch visible desktop, focus windows or move physical mouse without local consent',async()=>{
+  revokePhysicalConsoleGrant();
+  const policy=new PathPolicy(['*']);
+  for(const capability of [
+    'windows.private_desktop.show','windows.window.focus',
+    'windows.pointer.move','windows.pointer.click','windows.keyboard.type',
+    'windows.private_viewer.start',
+  ] as const){
+    await assert.rejects(
+      executeCapability(capability,{},policy,{accessMode:'full'}),
+      (error:unknown)=>typeof error==='object'&&error!==null&&
+        'code' in error&&error.code==='PHYSICAL_CONSOLE_GRANT_REQUIRED',
+      capability,
+    );
+  }
+  assert.equal(physicalConsoleGrantStatus().active,false);
+});
 
-    assert.equal(response.data.approved, true);
-    assert.equal(response.data.approvalRequired, false);
-    assert.equal(response.data.authorization, 'owner-full-access');
-    assert.equal(response.data.status.active, false);
-    assert.equal(physicalConsoleGrantStatus().active, false);
-  },
-);
+test('Full console-control request must use local prompt rather than synthetic auto-approval',()=>{
+  const source=readFileSync(
+    new URL('../src/agent/windows-console-grant.ts',import.meta.url),'utf8',
+  );
+  const dispatcher=source.slice(source.indexOf('export async function executeWindowsConsoleControlCapability('));
+  assert.match(dispatcher,/requestPhysicalConsoleGrant\(input\)/);
+  assert.doesNotMatch(dispatcher,/authorization: 'owner-full-access'|approvalRequired: false/);
+});
 
 test('console-control status is read-only and Windows advertises grant capabilities', () => {
   assert.equal(
