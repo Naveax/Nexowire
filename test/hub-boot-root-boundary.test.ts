@@ -90,6 +90,39 @@ test('SYSTEM Hub Boot requires protected parent ACL before any credential read o
   assert.match(src,/import \{ hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl \}/);
 });
 
+test('failed Hub Boot handoff never deletes preexisting or potentially running protected launcher',()=>{
+  const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const begin=src.indexOf('export async function installHubBootLifecycle(');
+  const end=src.indexOf('export async function uninstallHubBootLifecycle(',begin);
+  const install=src.slice(begin,end);
+  const capture=install.indexOf('let rootExistedBeforeInstall=false');
+  const mkdir=install.indexOf('await fs.mkdir(p.root,{mode:0o700})',capture);
+  const exists=install.indexOf("code!=='EEXIST'",mkdir);
+  const safe=install.indexOf('await assertHubBootRootSafeToRemove(p.root)',mkdir);
+  const acl=install.indexOf('verifyWindowsPrivateAcl(p.root)',mkdir);
+  const firstSecretWrite=install.indexOf('await writeProtectedSecretFile(',mkdir);
+  assert.ok(capture>=0 && capture<mkdir && mkdir<exists && exists<safe);
+  assert.ok(safe<acl && acl<firstSecretWrite);
+  assert.doesNotMatch(install.slice(capture,firstSecretWrite),/await fs\.lstat\(p\.root\)|recursive:\s*true/);
+
+  const rollback=install.slice(install.indexOf('} catch (error) {',install.indexOf('let switched = false;')));
+  const tried=rollback.indexOf('try {');
+  const recover=rollback.indexOf('await runPowerShellJson<{ ok: true }>');
+  const recordFailure=rollback.indexOf('taskRollbackFailure=rollbackError');
+  const deletionGate=rollback.indexOf('if(!rootExistedBeforeInstall && taskRollbackFailure===null)');
+  const parent=rollback.indexOf('verifyWindowsPrivateAcl(path.win32.dirname(p.root))');
+  const beforeDeletion=rollback.indexOf('await assertHubBootRootSafeToRemove(p.root)');
+  const aclBeforeDeletion=rollback.indexOf('verifyWindowsPrivateAcl(p.root)');
+  const deleteRoot=rollback.indexOf('await fs.rm(p.root');
+  const error=rollback.indexOf("throw new AggregateError([error,taskRollbackFailure],'HUB_BOOT_TASK_ROLLBACK_FAILED')");
+  assert.ok(tried>=0 && tried<recover && recover<recordFailure);
+  assert.ok(recordFailure<deletionGate && deletionGate<parent);
+  assert.ok(parent<beforeDeletion && beforeDeletion<aclBeforeDeletion && aclBeforeDeletion<deleteRoot);
+  assert.ok(deleteRoot<error);
+  assert.doesNotMatch(rollback,/\.catch\(\(\) => undefined\)/);
+  assert.match(rollback,/HUB_BOOT_ROLLBACK_CLEANUP_FAILED/);
+});
+
 test('Hub Boot uninstall checks private parent ACL before task changes and again before deleting files',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const begin=src.indexOf('export async function uninstallHubBootLifecycle(');

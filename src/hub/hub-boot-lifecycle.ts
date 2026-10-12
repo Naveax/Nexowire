@@ -642,10 +642,19 @@ export async function installHubBootLifecycle(
   );
 
   const p = pathsFor(options);
-  await fs.mkdir(p.root, {
-    recursive: true,
-    mode: 0o700,
-  });
+  // This may be a re-install. Do not delete a previously existing root on
+  // rollback: it may hold a valid machine-scoped secret or running launcher.
+  let rootExistedBeforeInstall=false;
+  try {
+    // mkdir without recursive=true atomically distinguishes a new root
+    // from another install racing between a separate lstat and mkdir.
+    await fs.mkdir(p.root,{mode:0o700});
+  } catch(error) {
+    if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;
+    rootExistedBeforeInstall=true;
+    await assertHubBootRootSafeToRemove(p.root);
+    verifyWindowsPrivateAcl(p.root);
+  }
   // Repair a stale child DACL before any overwrite or DPAPI work.
   hardenProgramDataAcl(p.root);
   await writeProtectedSecretFile(
@@ -733,31 +742,47 @@ export async function installHubBootLifecycle(
     hardenProgramDataAcl(p.root);
     return await hubBootLifecycleStatus(options);
   } catch (error) {
+    let taskRollbackFailure:unknown=null;
     if (switched) {
-      await runPowerShellJson<{ ok: true }>(
-        [
-          "$ErrorActionPreference='Stop'",
-          '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
-          '$user=$env:NEXOWIRE_HUB_TASK_NAME',
-          "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
-          "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
-          hubBootRegisteredTaskIdentityGuard,
-          'Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
-          'Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false -ErrorAction SilentlyContinue',
-          '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
-          'if($userTask){',
-          '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
-          '  Start-ScheduledTask -TaskName $user -TaskPath \\',
-          '}',
-          '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
-        ].join('\n'),
-        envForTask,
-      ).catch(() => undefined);
+      try {
+        await runPowerShellJson<{ ok: true }>(
+          [
+            "$ErrorActionPreference='Stop'",
+            '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
+            '$user=$env:NEXOWIRE_HUB_TASK_NAME',
+            "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+            "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+            hubBootRegisteredTaskIdentityGuard,
+            'Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+            'Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false -ErrorAction SilentlyContinue',
+            '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+            'if($userTask){',
+            '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
+            '  Start-ScheduledTask -TaskName $user -TaskPath \\',
+            '}',
+            '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+          ].join('\n'),
+          envForTask,
+        );
+      } catch(rollbackError) {
+        taskRollbackFailure=rollbackError;
+      }
     }
-    await fs.rm(p.root, {
-      recursive: true,
-      force: true,
-    }).catch(() => undefined);
+    // Never delete a previous installation. If task rollback failed, its
+    // launcher may still be in use; preserve evidence for manual recovery.
+    if(!rootExistedBeforeInstall && taskRollbackFailure===null){
+      try {
+        verifyWindowsPrivateAcl(path.win32.dirname(p.root));
+        await assertHubBootRootSafeToRemove(p.root);
+        verifyWindowsPrivateAcl(p.root);
+        await fs.rm(p.root,{recursive:true,force:true});
+      } catch(cleanupError){
+        throw new AggregateError([error,cleanupError],'HUB_BOOT_ROLLBACK_CLEANUP_FAILED');
+      }
+    }
+    if(taskRollbackFailure!==null){
+      throw new AggregateError([error,taskRollbackFailure],'HUB_BOOT_TASK_ROLLBACK_FAILED');
+    }
     throw error;
   }
 }
