@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
+import {withPrivateDesktopProcessLock} from './windows-private-desktop-lock.js';
 
 const PRIVATE_DESKTOP_SYSTEM32='C:\\Windows\\System32';
 const PRIVATE_DESKTOP_POWERSHELL=PRIVATE_DESKTOP_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -976,11 +977,14 @@ export async function executeWindowsPrivateDesktopCapability(
     case 'windows.private_desktop.status':
       return await status();
     case 'windows.private_desktop.start':
-      return await serializePrivateDesktopLifecycle(()=>start(input));
+      return await serializePrivateDesktopLifecycle(()=>
+        withPrivateDesktopProcessLock(paths().root,()=>start(input)));
     case 'windows.private_desktop.stop':
-      return await serializePrivateDesktopLifecycle(()=>stop());
+      return await serializePrivateDesktopLifecycle(()=>
+        withPrivateDesktopProcessLock(paths().root,()=>stop()));
     case 'windows.private_desktop.launch':
-      return await serializePrivateDesktopLifecycle(()=>launchApp(input));
+      return await serializePrivateDesktopLifecycle(()=>
+        withPrivateDesktopProcessLock(paths().root,()=>launchApp(input)));
     case 'windows.private_desktop.windows':
       return await windows();
     case 'windows.private_desktop.show':
