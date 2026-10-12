@@ -4199,6 +4199,13 @@
           "maxLength": 128
         }
       },
+      "ui_target": {
+        "type": "string",
+        "enum": [
+          "headless",
+          "private_desktop"
+        ]
+      },
       "parallel": {
         "type": "boolean"
       },
