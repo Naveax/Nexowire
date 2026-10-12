@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import WebSocket from 'ws';
 import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
+import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 
 export type BrowserKind = 'edge' | 'chrome';
 
@@ -573,7 +574,9 @@ export class BrowserManager {
   }) {
     const browser = input.browser ?? 'auto';
     const headless = input.headless ?? true;
-    const uiTarget=input.uiTarget ?? 'headless';
+    const uiTarget=resolveAiWorkspaceTarget(input.uiTarget,{
+      platform:this.platform,env:this.env,
+    });
     if(uiTarget==='private_desktop' &&
        (this.platform!=='win32'||process.platform!=='win32')){
       throw new BrowserControlError(

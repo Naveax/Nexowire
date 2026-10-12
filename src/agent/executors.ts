@@ -16,6 +16,7 @@ import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
 import { runWindowsPrivateShell } from './windows-private-shell.js';
+import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 import { executeWindowsPrivateViewerCapability } from './windows-private-viewer.js';
 import { captureWindowsPrivateScreen } from './windows-private-screen.js';
 import {
@@ -39,7 +40,7 @@ import { executeLiveUpdateCapability } from '../update/live-update.js';
 const ShellExecInputSchema = z.object({
   // Explicit private desktop dispatch preserves existing headless clients.
   // GUI applications should use this target or windows.private_desktop.launch.
-  ui_target: z.enum(['headless','private_desktop']).default('headless'),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   command: z.string().min(1).max(200_000),
   shell: z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']).optional(),
   cwd: z.string().optional(),
@@ -147,7 +148,7 @@ const WorkspaceDetectInputSchema = z.object({
 const WorkspaceChecksInputSchema = z.object({
   path: z.string().min(1).max(4096),
   checks: z.array(z.string().min(1).max(128)).min(1).max(8),
-  ui_target: z.enum(['headless','private_desktop']).default('headless'),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   parallel: z.boolean().default(true),
   timeout_ms: z.number().int().min(100).max(600_000).default(120_000),
   max_output_bytes: z
@@ -191,7 +192,7 @@ const TaskGraphRunInputSchema = z.object({
   resume: z.boolean().default(false),
   retry_failed: z.boolean().default(false),
   retry_unknown: z.boolean().default(false),
-  ui_target: z.enum(['headless','private_desktop']).default('headless'),
+  ui_target: z.enum(['headless','private_desktop']).optional(),
   jobs: z.array(TaskGraphJobSchema).min(1).max(32),
   max_parallel: z.number().int().min(1).max(8).default(4),
   stop_on_failure: z.boolean().default(false),
@@ -415,9 +416,10 @@ function shellCommand(
 
 async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = ShellExecInputSchema.parse(input);
+  const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
   const cwd = parsed.cwd ? await policy.resolveExisting(parsed.cwd) : undefined;
   const command = shellCommand(parsed.shell, parsed.command);
-  const result = parsed.ui_target === 'private_desktop'
+  const result = uiTarget === 'private_desktop'
     ? await runWindowsPrivateShell(command.executable, command.args, {
         ...(cwd ? { cwd } : {}),
         timeoutMs: parsed.timeout_ms,
@@ -1263,6 +1265,7 @@ async function workspaceChecks(
   policy: PathPolicy,
 ): Promise<unknown> {
   const parsed = WorkspaceChecksInputSchema.parse(input);
+  const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
   const detection = await detectWorkspaceInternal(
     { path: parsed.path },
     policy,
@@ -1302,7 +1305,7 @@ async function workspaceChecks(
 
     try {
       const result = await (
-        parsed.ui_target==='private_desktop' ? runWindowsPrivateShell : runProcess
+        uiTarget==='private_desktop' ? runWindowsPrivateShell : runProcess
       )(check.executable, check.args, {
         cwd: check.cwd,
         timeoutMs: parsed.timeout_ms,
@@ -1608,6 +1611,7 @@ async function runTaskGraph(
   store?: TaskGraphStore,
 ): Promise<unknown> {
   const parsed = TaskGraphRunInputSchema.parse(input);
+  const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
   validateTaskGraph(parsed.jobs);
 
   if (parsed.resume && !parsed.graph_id) {
@@ -1625,7 +1629,7 @@ async function runTaskGraph(
       JSON.stringify({
         jobs: parsed.jobs,
         // Previous headless checkpoints retain their existing spec hash.
-        ...(parsed.ui_target==='private_desktop'?{ui_target:parsed.ui_target}:{}),
+        ...(uiTarget==='private_desktop'?{ui_target:uiTarget}:{}),
         max_parallel: parsed.max_parallel,
         stop_on_failure: parsed.stop_on_failure,
         default_timeout_ms: parsed.default_timeout_ms,
@@ -1769,7 +1773,7 @@ async function runTaskGraph(
 
         const remainingMs = Math.max(100, deadline - Date.now());
         const execution = await (
-          parsed.ui_target==='private_desktop' ? runWindowsPrivateShell : runProcess
+          uiTarget==='private_desktop' ? runWindowsPrivateShell : runProcess
         )(
           resolvedShell.executable,
           resolvedShell.args,
@@ -1938,8 +1942,8 @@ async function runTaskGraph(
     data: {
       ...(parsed.graph_id ? { graphId: parsed.graph_id, specHash } : {}),
       resumed: parsed.resume,
-      uiTarget:parsed.ui_target,
-      ...(parsed.ui_target==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
+      uiTarget,
+      ...(uiTarget==='private_desktop'?{desktopName:'NexowirePrivate'}:{}),
       ok: failed === 0 && blocked === 0 && unknown === 0,
       maxParallel: parsed.max_parallel,
       stopOnFailure: parsed.stop_on_failure,
