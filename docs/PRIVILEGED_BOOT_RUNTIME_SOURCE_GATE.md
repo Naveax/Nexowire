@@ -91,6 +91,28 @@ Unknown files, directories or linked children fail closed. This guard is
 not an ACL verifier, does not prove the root/ancestors cannot be renamed
 after validation, and does not grant permission for a live cutover.
 
+## SYSTEM and user Scheduled Task identity boundary
+
+Elevated `boot-install` and `boot-uninstall` now require the canonical task names
+`Nexowire Hub Boot` and `Nexowire Hub`. Their Windows Task Scheduler lookups,
+registration, starts, stops, disable/enable and unregistration are scoped to the
+root task folder `\\`. A task with the same name elsewhere cannot be selected.
+
+Before the first DPAPI read or launcher write, installation checks any existing
+root task with either canonical name against its expected executable,
+PowerShell file arguments, owner SID and logon/runlevel. Boot must be SYSTEM,
+ServiceAccount and Highest; the user Hub must match the current Windows owner,
+Interactive and Limited. Installation checks both again before registering
+or disabling anything, and its best-effort rollback repeats the guard before
+touching tasks. Uninstallation does the same before removing the SYSTEM Boot
+task or restoring the user Hub. A mismatched task aborts without claiming
+ownership. The subprocess uses a sanitized Windows PowerShell environment.
+
+The identity audit does not attest a running process or make simultaneous
+Task Scheduler changes atomic. A task can change after preflight, and existing
+cutover/rollback caveats still apply. No production task is registered, started,
+stopped, removed or renamed merely by this source change.
+
 ## Real installation implications
 
 The existing Naveax v1.0.0 Stack supervisor executes writable code in
