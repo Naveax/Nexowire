@@ -110,6 +110,26 @@ test('Highest Broker install refuses custom task identities before secrets and r
   assert.ok(install.indexOf('privilegedBrokerTaskControlPreflightScript',verify+1)>preflight);
 });
 
+test('Highest Broker uninstall checks parent ACL before task mutation and after scheduler completion',()=>{
+  const source=readFileSync(
+    new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8',
+  );
+  const begin=source.indexOf('export async function uninstallPrivilegedBrokerTask');
+  const end=source.indexOf('export interface PrivilegedBrokerHealthReport',begin);
+  const uninstall=source.slice(begin,end);
+  const canonical=uninstall.indexOf('BROKER_UNINSTALL_NONCANONICAL_TASK_DENIED');
+  const parent=uninstall.indexOf('const protectedParent=path.win32.dirname(protectedRoot)');
+  const firstAcl=uninstall.indexOf('verifyWindowsPrivateAcl(protectedParent)');
+  const firstTree=uninstall.indexOf('await assertBrokerRootSafeToRemove(protectedRoot)');
+  const task=uninstall.indexOf('await runPowerShellJson<{ removed: boolean }>');
+  const lastAcl=uninstall.indexOf('verifyWindowsPrivateAcl(protectedParent)',firstAcl+1);
+  const lastTree=uninstall.indexOf('await assertBrokerRootSafeToRemove(protectedRoot)',firstTree+1);
+  const remove=uninstall.indexOf('await fs.rm(protectedRoot');
+  assert.ok(canonical>=0 && canonical<parent && parent<firstAcl);
+  assert.ok(firstAcl<firstTree && firstTree<task);
+  assert.ok(task<lastAcl && lastAcl<lastTree && lastTree<remove);
+});
+
 test('Highest Broker uninstaller verifies canonical task before stopping or removal',()=>{
   const source=readFileSync(
     new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8',
