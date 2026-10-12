@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {protectedHubTaskShellEnvironment,hubBootRegisteredTaskIdentityGuard} from '../src/hub/hub-boot-lifecycle.js';
+import {protectedHubTaskShellEnvironment,hubBootRegisteredTaskIdentityGuard,hubBootRollbackTaskOwnershipGuard} from '../src/hub/hub-boot-lifecycle.js';
 
 const input={
   NEXOWIRE_HUB_BOOT_TASK_NAME:'Nexowire Hub Boot',
@@ -73,6 +73,34 @@ test('isolated PowerShell guard rejects substituted SYSTEM and user Hub tasks', 
     else assert.match(run.stderr+run.stdout,/HUB_(BOOT|USER)_TASK_IDENTITY_MISMATCH/);
   }
 });
+test('isolated Hub Boot rollback marker denies deleting another installer task',{
+  skip:process.platform!=='win32',
+},()=>{
+  const exe='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  for(const scenario of [
+    {description:'owned by this install',actual:'install-owned',shouldPass:true},
+    {description:'concurrent foreign task',actual:'other-install',shouldPass:false},
+    {description:'no registered task',actual:null,shouldPass:true},
+  ]){
+    const commands=[
+      "$ErrorActionPreference='Stop'",
+      "$marker='install-owned'",
+      scenario.actual===null?"$bootTask=$null":
+        "$bootTask=[pscustomobject]@{Description='"+scenario.actual+"'}",
+      hubBootRollbackTaskOwnershipGuard,
+      "'ROLLBACK_MARKER_ACCEPTED'",
+    ].join('\n');
+    const run=spawnSync(exe,[
+      '-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+      Buffer.from(commands,'utf16le').toString('base64'),
+    ],{encoding:'utf8',windowsHide:true,timeout:15000});
+    assert.equal(run.status===0,scenario.shouldPass,
+      scenario.description+': '+(run.stderr||run.stdout).slice(0,500));
+    if(scenario.shouldPass)assert.match(run.stdout,/ROLLBACK_MARKER_ACCEPTED/);
+    else assert.match(run.stderr+run.stdout,/HUB_BOOT_ROLLBACK_TASK_NOT_OURS/);
+  }
+});
+
 test('Hub Boot task shell refuses missing or oversized required inputs',()=>{
   assert.throws(()=>protectedHubTaskShellEnvironment({
     NEXOWIRE_HUB_BOOT_TASK_NAME:'Nexowire Hub Boot',
