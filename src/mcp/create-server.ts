@@ -5606,6 +5606,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         resume: z.boolean().optional(),
         retry_failed: z.boolean().optional(),
         retry_unknown: z.boolean().optional(),
+        ui_target: z.enum(['headless','private_desktop']).optional(),
         steps: z.array(runbookStepSchema).min(1).max(64),
         max_parallel: z.number().int().min(1).max(8).optional(),
         stop_on_failure: z.boolean().optional(),
@@ -5624,6 +5625,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       resume,
       retry_failed,
       retry_unknown,
+      ui_target,
       steps,
       max_parallel,
       stop_on_failure,
@@ -5643,6 +5645,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             ? { retry_unknown }
             : {}),
           steps,
+          ...(ui_target ? { ui_target } : {}),
           ...(max_parallel !== undefined
             ? { max_parallel }
             : {}),
