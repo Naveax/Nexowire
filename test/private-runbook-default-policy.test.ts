@@ -30,6 +30,15 @@ test('configured private AI target reaches nested runbook tasks without explicit
       ui_target:'headless',
       jobs:[{id:'echo',command:'echo private'}],
     }}];
+    if(process.platform!=='win32'){
+      // Configured private-by-default is deliberately unsupported on Linux.
+      // It must reject BEFORE the runbook dispatches even one job.
+      await assert.rejects(executeDurableRunbook({
+        runbook_id:'default-private',steps,
+      },store,validCallbacks(calls)),/AI_PRIVATE_DESKTOP_REQUIRES_WINDOWS/);
+      assert.equal(calls.length,0);
+      return;
+    }
     const result=await executeDurableRunbook({
       runbook_id:'default-private',
       steps,
