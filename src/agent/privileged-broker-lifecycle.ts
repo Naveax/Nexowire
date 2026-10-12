@@ -394,6 +394,10 @@ export async function installPrivilegedBrokerTask(
     );
   }
 
+  // A Highest installer may otherwise overwrite any caller-named task.
+  if(taskName(options)!==TASK_NAME_DEFAULT){
+    throw new Error('BROKER_INSTALL_NONCANONICAL_TASK_DENIED');
+  }
   const env = options.env ?? process.env;
   if (
     env.NEXOWIRE_PRIVILEGED_BROKER_TOKEN?.trim() ||
@@ -425,6 +429,21 @@ export async function installPrivilegedBrokerTask(
   verifyWindowsPrivateAcl(path.win32.dirname(directory));
   const launcher = launcherPath(options);
   const name = taskName(options);
+  // Preflight an existing root task BEFORE touching secrets or overwriting
+  // launch.ps1. The registration script rechecks identity immediately before
+  // replacing its definition to narrow the task-identity race.
+  const existingTaskPreflight = `
+$ErrorActionPreference='Stop'
+$name=$env:NEXOWIRE_BROKER_TASK_NAME
+$task=Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue
+if($null -ne $task){
+  ${privilegedBrokerTaskControlPreflightScript}
+}
+[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress
+`;
+  await runPowerShellJson<{ok:boolean}>(
+    existingTaskPreflight,lifecycleEnv(name,launcher),
+  );
   const secretFile =
     env.NEXOWIRE_PRIVILEGED_BROKER_SECRET_FILE?.trim() ||
     defaultPrivilegedBrokerSecretFile();
@@ -453,14 +472,20 @@ export async function installPrivilegedBrokerTask(
 $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
 $launcher=$env:NEXOWIRE_BROKER_LAUNCHER
+# An existing task with the same name cannot be overwritten without
+# verifying the action and owner. Restrict lookup to the root TaskPath.
+$task=Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue
+if($null -ne $task){
+  ${privilegedBrokerTaskControlPreflightScript}
+}
 $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name
 $argument='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $launcher.Replace('"','""') + '"'
 $action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument
 $trigger=New-ScheduledTaskTrigger -AtLogOn -User $user
 $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
 ${PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS}
-Register-ScheduledTask -TaskName $name -Action $action -Trigger @($trigger, $minuteTrigger) -Principal $principal -Settings $settings -Description 'Nexowire elevated privileged broker' -Force | Out-Null
-Start-ScheduledTask -TaskName $name
+Register-ScheduledTask -TaskName $name -TaskPath '\' -Action $action -Trigger @($trigger, $minuteTrigger) -Principal $principal -Settings $settings -Description 'Nexowire elevated privileged broker' -Force | Out-Null
+Start-ScheduledTask -TaskName $name -TaskPath '\'
 [pscustomobject]@{ ok=$true } | ConvertTo-Json -Compress
 `;
   await runPowerShellJson<{ ok: boolean }>(
@@ -691,15 +716,20 @@ export async function uninstallPrivilegedBrokerTask(
   }
 
   const name = taskName(options);
+  if(name!==TASK_NAME_DEFAULT){
+    throw new Error('BROKER_UNINSTALL_NONCANONICAL_TASK_DENIED');
+  }
   const protectedRoot=rootDir(options);
   await assertBrokerRootSafeToRemove(protectedRoot);
   const script = `
 $ErrorActionPreference='Stop'
 $name=$env:NEXOWIRE_BROKER_TASK_NAME
-$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+$task=Get-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue
 if ($null -ne $task) {
-  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-  Unregister-ScheduledTask -TaskName $name -Confirm:$false
+  # Never unregister an unrelated task that happens to share a name.
+  ${privilegedBrokerTaskControlPreflightScript}
+  Stop-ScheduledTask -TaskName $name -TaskPath '\' -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $name -TaskPath '\' -Confirm:$false
   [pscustomobject]@{ removed=$true } | ConvertTo-Json -Compress
 } else {
   [pscustomobject]@{ removed=$false } | ConvertTo-Json -Compress

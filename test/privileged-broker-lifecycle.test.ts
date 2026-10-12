@@ -84,6 +84,50 @@ test('elevated Broker installer rejects untrusted runtime before secrets, launch
   assert.match(installer,/env,/);
 });
 
+test('Highest Broker install refuses custom task identities before secrets and registration',()=>{
+  const source=readFileSync(
+    new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8',
+  );
+  const begin=source.indexOf('export async function installPrivilegedBrokerTask');
+  const end=source.indexOf('/** Fail closed before operating on an elevated scheduled task.',begin);
+  const install=source.slice(begin,end);
+  const restriction=install.indexOf('BROKER_INSTALL_NONCANONICAL_TASK_DENIED');
+  const existing=install.indexOf('const existingTaskPreflight');
+  const taskRead=install.indexOf("Get-ScheduledTask -TaskName $name -TaskPath");
+  const verify=install.indexOf('privilegedBrokerTaskControlPreflightScript',existing);
+  const preflight=install.indexOf('await runPowerShellJson<{ok:boolean}>');
+  const secret=install.indexOf('await loadOrCreatePrivilegedBrokerToken');
+  const launcherWrite=install.indexOf('await fs.writeFile(');
+  const registration=install.indexOf('Register-ScheduledTask -TaskName $name');
+  assert.ok(begin>=0 && end>begin);
+  assert.ok(restriction>=0 && restriction<existing);
+  assert.ok(existing<taskRead && taskRead<verify && verify<preflight);
+  assert.ok(preflight<secret && secret<launcherWrite && launcherWrite<registration);
+  assert.match(install,/Get-ScheduledTask -TaskName \$name -TaskPath/);
+  assert.match(install,/Register-ScheduledTask -TaskName \$name -TaskPath/);
+  assert.match(install,/Start-ScheduledTask -TaskName \$name -TaskPath/);
+  // Existing identity is verified once before any secrets and again at registration.
+  assert.ok(install.indexOf('privilegedBrokerTaskControlPreflightScript',verify+1)>preflight);
+});
+
+test('Highest Broker uninstaller verifies canonical task before stopping or removal',()=>{
+  const source=readFileSync(
+    new URL('../src/agent/privileged-broker-lifecycle.ts',import.meta.url),'utf8',
+  );
+  const begin=source.indexOf('export async function uninstallPrivilegedBrokerTask');
+  const end=source.indexOf('export interface PrivilegedBrokerHealthReport',begin);
+  const uninstall=source.slice(begin,end);
+  const restriction=uninstall.indexOf('BROKER_UNINSTALL_NONCANONICAL_TASK_DENIED');
+  const task=uninstall.indexOf('Get-ScheduledTask -TaskName $name -TaskPath');
+  const check=uninstall.indexOf('privilegedBrokerTaskControlPreflightScript');
+  const stop=uninstall.indexOf('Stop-ScheduledTask -TaskName $name -TaskPath');
+  const unregister=uninstall.indexOf('Unregister-ScheduledTask -TaskName $name -TaskPath');
+  const deleteFiles=uninstall.indexOf('await fs.rm(protectedRoot');
+  assert.ok(restriction>=0 && restriction<task);
+  assert.ok(task<check && check<stop && stop<unregister && unregister<deleteFiles);
+  assert.match(uninstall,/await assertBrokerRootSafeToRemove\(protectedRoot\)/);
+});
+
 test(
   'broker task status is Windows-only',
   { skip: process.platform === 'win32' },
