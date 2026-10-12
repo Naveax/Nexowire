@@ -143,6 +143,26 @@ transaction is not itself a completed rollback; owner-supervised recovery and
 separate rollback acceptance are still required. No production cleanup or
 cutover is authorized by these source-only changes.
 
+## Live listener ownership before accepting Hub Boot readiness
+
+A local HTTP `/health` response by itself cannot prove that the newly
+started SYSTEM Hub process is listening on the requested port; a stale
+legacy Hub or unrelated service might respond while an unrelated PID
+appears alive. Boot readiness now checks the exact Windows TCP
+`Listen` connection owner PID **after** successful `/health` and
+**before** accepting launch success. The read-only probe uses the
+pinned System32 Windows PowerShell executable and inbox NetTCPIP
+module, accepts only integer port/PID inputs, and uses a scrubbed
+environment. A healthy response from another process fails closed,
+rather than authorizing a false-positive cutover. Tests create a real
+disposable loopback server on the Windows DEV device and confirm
+the matching PID is accepted and a different PID is rejected.
+
+TCP ownership is a point-in-time signal, not a cryptographic
+authentication of Hub content, a publisher attestation or proof of
+durable device sessions. P0 #271 and owner-approved rollout gates
+remain mandatory.
+
 ## Real installation implications
 
 The existing Naveax v1.0.0 Stack supervisor executes writable code in
