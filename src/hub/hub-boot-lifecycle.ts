@@ -646,17 +646,15 @@ export async function installHubBootLifecycle(
   // rollback: it may hold a valid machine-scoped secret or running launcher.
   let rootExistedBeforeInstall=false;
   try {
-    await fs.lstat(p.root);
+    // mkdir without recursive=true atomically distinguishes a new root
+    // from another install racing between a separate lstat and mkdir.
+    await fs.mkdir(p.root,{mode:0o700});
+  } catch(error) {
+    if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;
     rootExistedBeforeInstall=true;
     await assertHubBootRootSafeToRemove(p.root);
     verifyWindowsPrivateAcl(p.root);
-  } catch(error) {
-    if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;
   }
-  await fs.mkdir(p.root, {
-    recursive: true,
-    mode: 0o700,
-  });
   // Repair a stale child DACL before any overwrite or DPAPI work.
   hardenProgramDataAcl(p.root);
   await writeProtectedSecretFile(

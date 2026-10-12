@@ -128,8 +128,9 @@ rollback best-effort ignored a task restoration failure and nevertheless
 recursively removed `hub-boot`. That could delete a launcher or machine DPAPI
 envelope still referenced by a running task. It also erased any previously
 existing protected Hub Boot installation. The new fail-closed cleanup captures
-whether the exact protected root already existed, checks its flat contents
-and private ACL before staging, and **never removes a pre-existing root** on
+whether the exact protected root already existed using an exclusive
+non-recursive `mkdir` (rather than a separate `lstat`/`mkdir` race), checks
+pre-existing flat contents and private ACL before staging, and **never removes a pre-existing root** on
 install failure. A newly created root may be removed only when Task Scheduler
 rollback reports success, and after another parent ACL, root inventory and
 root ACL check. Failed task rollback preserves the files and raises

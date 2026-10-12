@@ -96,11 +96,14 @@ test('failed Hub Boot handoff never deletes preexisting or potentially running p
   const end=src.indexOf('export async function uninstallHubBootLifecycle(',begin);
   const install=src.slice(begin,end);
   const capture=install.indexOf('let rootExistedBeforeInstall=false');
-  const lstat=install.indexOf('await fs.lstat(p.root)',capture);
-  const safe=install.indexOf('await assertHubBootRootSafeToRemove(p.root)',capture);
-  const acl=install.indexOf('verifyWindowsPrivateAcl(p.root)',capture);
-  const firstMutation=install.indexOf('await fs.mkdir(p.root');
-  assert.ok(capture>=0 && capture<lstat && lstat<safe && safe<acl && acl<firstMutation);
+  const mkdir=install.indexOf('await fs.mkdir(p.root,{mode:0o700})',capture);
+  const exists=install.indexOf("code!=='EEXIST'",mkdir);
+  const safe=install.indexOf('await assertHubBootRootSafeToRemove(p.root)',mkdir);
+  const acl=install.indexOf('verifyWindowsPrivateAcl(p.root)',mkdir);
+  const firstSecretWrite=install.indexOf('await writeProtectedSecretFile(',mkdir);
+  assert.ok(capture>=0 && capture<mkdir && mkdir<exists && exists<safe);
+  assert.ok(safe<acl && acl<firstSecretWrite);
+  assert.doesNotMatch(install.slice(capture,firstSecretWrite),/await fs\.lstat\(p\.root\)|recursive:\s*true/);
 
   const rollback=install.slice(install.indexOf('} catch (error) {',install.indexOf('let switched = false;')));
   const tried=rollback.indexOf('try {');
