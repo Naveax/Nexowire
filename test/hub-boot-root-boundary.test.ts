@@ -23,11 +23,27 @@ test('SYSTEM Hub Boot allows exactly one canonical protected directory',()=>{
 test('Hub Boot install checks protected root before any token access or task changes',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const install=src.indexOf('export async function installHubBootLifecycle(');
-  const guard=src.indexOf('assertProtectedHubBootRoot(pathsFor(options).root)',install);
+  const guard=src.indexOf('assertProtectedHubBootRoot(protectedBootRoot)',install);
   const secret=src.indexOf('readProtectedSecretFile(',install);
   const mkdir=src.indexOf('await fs.mkdir(',install);
   assert.ok(install>=0 && guard>install && secret>guard && mkdir>guard);
 });
+test('SYSTEM Hub Boot requires protected parent ACL before any credential read or task mutation',()=>{
+  const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
+  const begin=src.indexOf('export async function installHubBootLifecycle(');
+  const end=src.indexOf('export async function uninstallHubBootLifecycle(',begin);
+  const install=src.slice(begin,end);
+  const canonical=install.indexOf('assertProtectedHubBootRoot(protectedBootRoot)');
+  const parentAcl=install.indexOf('verifyWindowsPrivateAcl(path.win32.dirname(protectedBootRoot))');
+  const currentSecret=install.indexOf('readProtectedSecretFile(');
+  const machineSecret=install.indexOf('writeProtectedSecretFile(');
+  const register=install.indexOf('Register-ScheduledTask -TaskName $boot');
+  assert.ok(begin>=0 && end>begin);
+  assert.ok(canonical>=0 && canonical<parentAcl);
+  assert.ok(parentAcl<currentSecret && currentSecret<machineSecret && machineSecret<register);
+  assert.match(src,/import \{ hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl \}/);
+});
+
 test('Hub Boot uninstall validates only its flat protected files before task or recursive deletion',()=>{
   const src=readFileSync(new URL('../src/hub/hub-boot-lifecycle.ts',import.meta.url),'utf8');
   const uninstall=src.indexOf('export async function uninstallHubBootLifecycle(');
