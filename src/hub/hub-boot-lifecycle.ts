@@ -35,6 +35,7 @@ export function protectedHubTaskShellEnvironment(input:NodeJS.ProcessEnv):NodeJS
     'NEXOWIRE_HUB_BOOT_TASK_NAME',
     'NEXOWIRE_HUB_TASK_NAME',
     'NEXOWIRE_HUB_BOOT_LAUNCHER',
+    'NEXOWIRE_HUB_USER_LAUNCHER',
   ] as const;
   const result:NodeJS.ProcessEnv={
     SystemRoot:'C:\\Windows',
@@ -161,6 +162,14 @@ function userTaskName(
     );
   }
   return name;
+}
+
+/** Elevated mutation must never select foreign Scheduled Task names. */
+export function assertCanonicalHubBootTaskNames(options:HubBootLifecycleOptions):void {
+  if(bootTaskName(options)!==BOOT_TASK_DEFAULT ||
+      userTaskName(options)!==USER_TASK_DEFAULT){
+    throw new Error('HUB_BOOT_NONCANONICAL_TASK_DENIED');
+  }
 }
 
 function programDataRoot(
@@ -303,6 +312,55 @@ export function buildHubBootLauncher(input: {
   return lines.join('\r\n');
 }
 
+export const hubBootRegisteredTaskIdentityGuard = String.raw`
+# Read-only identity gate for an existing SYSTEM Boot and its user Hub task.
+# No caller-selected name/path is authoritative for elevated task mutation.
+$expectedExe='C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+if($null -ne $bootTask){
+  if(@($bootTask).Count -ne 1 -or
+     [string]$bootTask.TaskPath -cne '\' -or
+     [string]$bootTask.TaskName -cne $boot){
+    throw 'HUB_BOOT_TASK_IDENTITY_MISMATCH'
+  }
+  $expectedBootArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $env:NEXOWIRE_HUB_BOOT_LAUNCHER.Replace('"','""') + '"'
+  $bootActions=@($bootTask.Actions)
+  $bootSid=[string]$bootTask.Principal.UserId
+  try {
+    $bootSid=(New-Object System.Security.Principal.NTAccount($bootSid)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  } catch { }
+  if($bootActions.Count -ne 1 -or
+     ([string]$bootActions[0].Execute).Trim('"') -ine $expectedExe -or
+     [string]$bootActions[0].Arguments -cne $expectedBootArgs -or
+     $bootSid -ne 'S-1-5-18' -or
+     [string]$bootTask.Principal.LogonType -cne 'ServiceAccount' -or
+     [string]$bootTask.Principal.RunLevel -cne 'Highest'){
+    throw 'HUB_BOOT_TASK_IDENTITY_MISMATCH'
+  }
+}
+if($null -ne $userTask){
+  if(@($userTask).Count -ne 1 -or
+     [string]$userTask.TaskPath -cne '\' -or
+     [string]$userTask.TaskName -cne $user){
+    throw 'HUB_USER_TASK_IDENTITY_MISMATCH'
+  }
+  $expectedUserArgs='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $env:NEXOWIRE_HUB_USER_LAUNCHER.Replace('"','""') + '"'
+  $userActions=@($userTask.Actions)
+  $registeredSid=[string]$userTask.Principal.UserId
+  try {
+    $registeredSid=(New-Object System.Security.Principal.NTAccount($registeredSid)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  } catch { }
+  $currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  if($userActions.Count -ne 1 -or
+     ([string]$userActions[0].Execute).Trim('"') -ine $expectedExe -or
+     [string]$userActions[0].Arguments -cne $expectedUserArgs -or
+     $registeredSid -ne $currentSid -or
+     [string]$userTask.Principal.LogonType -cne 'Interactive' -or
+     [string]$userTask.Principal.RunLevel -cne 'Limited'){
+    throw 'HUB_USER_TASK_IDENTITY_MISMATCH'
+  }
+}
+`;
+
 async function runPowerShellJson<T>(
   script: string,
   env: NodeJS.ProcessEnv,
@@ -378,6 +436,8 @@ function taskEnv(
       userTaskName(options),
     NEXOWIRE_HUB_BOOT_LAUNCHER:
       p.launcher,
+    NEXOWIRE_HUB_USER_LAUNCHER:
+      currentUserHubLauncher(options),
   };
 }
 
@@ -487,8 +547,8 @@ export async function hubBootLifecycleStatus(
       "$ErrorActionPreference='Stop'",
       '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
-      '$bootTask=Get-ScheduledTask -TaskName $boot -ErrorAction SilentlyContinue',
-      '$userTask=Get-ScheduledTask -TaskName $user -ErrorAction SilentlyContinue',
+      '$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+      '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
       "$bootState=if($bootTask){([string]$bootTask.State).ToLowerInvariant()}else{'not-installed'}",
       "$userState=if($userTask){([string]$userTask.State).ToLowerInvariant()}else{'not-installed'}",
       '[pscustomobject]@{installed=($null-ne$bootTask);state=$bootState;userTaskState=$userState}|ConvertTo-Json -Compress',
@@ -512,6 +572,7 @@ export async function installHubBootLifecycle(
   options: HubBootLifecycleOptions = {},
 ): Promise<HubBootLifecycleStatus> {
   assertElevated();
+  assertCanonicalHubBootTaskNames(options);
   const protectedBootRoot=pathsFor(options).root;
   assertProtectedHubBootRoot(protectedBootRoot);
   // A protected Hub Boot child is not safe if an untrusted account can
@@ -532,6 +593,18 @@ export async function installHubBootLifecycle(
     cliEntrypoint: options.cliEntrypoint ?? process.argv[1]!,
     env: options.env ?? process.env,
   });
+
+  // Fail BEFORE any DPAPI credential read or launcher overwrite if a root
+  // task matching our canonical name actually belongs to different code.
+  await runPowerShellJson<{ok:true}>([
+    "$ErrorActionPreference='Stop'",
+    '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
+    '$user=$env:NEXOWIRE_HUB_TASK_NAME',
+    "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+    "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+    hubBootRegisteredTaskIdentityGuard,
+    '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
+  ].join('\n'),taskEnv(options));
 
   const currentLauncher =
     currentUserHubLauncher(options);
@@ -636,14 +709,17 @@ export async function installHubBootLifecycle(
         '$trigger=New-ScheduledTaskTrigger -AtStartup',
         "$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest",
         '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
-        "Register-ScheduledTask -TaskName $boot -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire pre-logon Hub' -Force|Out-Null",
-        '$userTask=Get-ScheduledTask -TaskName $user -ErrorAction SilentlyContinue',
+        "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+        "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+        hubBootRegisteredTaskIdentityGuard,
+        "Register-ScheduledTask -TaskName $boot -TaskPath \\ -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire pre-logon Hub' -Force|Out-Null",
+        '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
         'if($userTask){',
-        '  Stop-ScheduledTask -TaskName $user -ErrorAction SilentlyContinue',
-        '  Disable-ScheduledTask -TaskName $user | Out-Null',
+        '  Stop-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
+        '  Disable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
         '}',
         'Start-Sleep -Milliseconds 500',
-        'Start-ScheduledTask -TaskName $boot',
+        'Start-ScheduledTask -TaskName $boot -TaskPath \\',
         '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
       ].join('\n'),
       envForTask,
@@ -663,12 +739,15 @@ export async function installHubBootLifecycle(
           "$ErrorActionPreference='Stop'",
           '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
           '$user=$env:NEXOWIRE_HUB_TASK_NAME',
-          'Stop-ScheduledTask -TaskName $boot -ErrorAction SilentlyContinue',
-          'Unregister-ScheduledTask -TaskName $boot -Confirm:$false -ErrorAction SilentlyContinue',
-          '$userTask=Get-ScheduledTask -TaskName $user -ErrorAction SilentlyContinue',
+          "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+          "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+          hubBootRegisteredTaskIdentityGuard,
+          'Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+          'Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false -ErrorAction SilentlyContinue',
+          '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
           'if($userTask){',
-          '  Enable-ScheduledTask -TaskName $user | Out-Null',
-          '  Start-ScheduledTask -TaskName $user',
+          '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
+          '  Start-ScheduledTask -TaskName $user -TaskPath \\',
           '}',
           '[pscustomobject]@{ok=$true}|ConvertTo-Json -Compress',
         ].join('\n'),
@@ -691,6 +770,7 @@ export async function uninstallHubBootLifecycle(
   userHubRestored: boolean;
 }> {
   assertElevated();
+  assertCanonicalHubBootTaskNames(options);
   const p = pathsFor(options);
   await assertHubBootRootSafeToRemove(p.root);
   const result = await runPowerShellJson<{
@@ -701,18 +781,20 @@ export async function uninstallHubBootLifecycle(
       "$ErrorActionPreference='Stop'",
       '$boot=$env:NEXOWIRE_HUB_BOOT_TASK_NAME',
       '$user=$env:NEXOWIRE_HUB_TASK_NAME',
-      '$bootTask=Get-ScheduledTask -TaskName $boot -ErrorAction SilentlyContinue',
+      "$bootTask=Get-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue",
+      "$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue",
+      hubBootRegisteredTaskIdentityGuard,
       '$removed=$false',
       'if($bootTask){',
-      '  Stop-ScheduledTask -TaskName $boot -ErrorAction SilentlyContinue',
-      '  Unregister-ScheduledTask -TaskName $boot -Confirm:$false',
+      '  Stop-ScheduledTask -TaskName $boot -TaskPath \\ -ErrorAction SilentlyContinue',
+      '  Unregister-ScheduledTask -TaskName $boot -TaskPath \\ -Confirm:$false',
       '  $removed=$true',
       '}',
       '$restored=$false',
-      '$userTask=Get-ScheduledTask -TaskName $user -ErrorAction SilentlyContinue',
+      '$userTask=Get-ScheduledTask -TaskName $user -TaskPath \\ -ErrorAction SilentlyContinue',
       'if($userTask){',
-      '  Enable-ScheduledTask -TaskName $user | Out-Null',
-      '  Start-ScheduledTask -TaskName $user',
+      '  Enable-ScheduledTask -TaskName $user -TaskPath \\ | Out-Null',
+      '  Start-ScheduledTask -TaskName $user -TaskPath \\',
       '  $restored=$true',
       '}',
       '[pscustomobject]@{removed=$removed;userHubRestored=$restored}|ConvertTo-Json -Compress',
