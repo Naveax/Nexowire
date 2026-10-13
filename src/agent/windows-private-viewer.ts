@@ -727,7 +727,9 @@ function Update-CaptureHealth {
       return
     }
     if($snapshot.lastSelectionError){
-      $status.Text='MONITOR SELECTION ERROR: '+[string]$snapshot.lastSelectionError
+      $notice=[string]$snapshot.lastSelectionError
+      $prefix=if($notice.StartsWith('Selected ')){'PREVIEW SCOPE: '}else{'MONITOR SELECTION ERROR: '}
+      $status.Text=$prefix+$notice
       return
     }
     $frameTime=[datetime]::MinValue
@@ -884,29 +886,69 @@ async function writeMonitorInventory(
   await fs.rename(temp,file);
 }
 
+function captureRequestForViewer(state:PrivateViewerState){
+  return {
+    source: state.selectedWindowHwnd ? 'window' : (state.selectedMonitorId ? 'monitor' : 'desktop'),
+    ...(state.selectedWindowHwnd ? {hwnd:state.selectedWindowHwnd} : {}),
+    ...(!state.selectedWindowHwnd && state.selectedMonitorId ? {monitor_id:state.selectedMonitorId} : {}),
+    max_width:state.maxWidth,
+    max_height:state.maxHeight,
+    max_bytes:state.maxBytes,
+  };
+}
+
+/** Recover only when the selected preview target really disappeared.
+ * Never recover rendering failures, desktop errors or timeouts as an
+ * apparently healthy preview. Never fall back to physical Default capture.
+ */
+export function recoverUnavailablePrivatePreview(
+  state:PrivateViewerState,error:unknown,
+):PrivateViewerState|null{
+  const code=error && typeof error==='object' && 'code' in error
+    ? String(error.code) : '';
+  if(code==='WINDOW_NOT_PRIVATE_DESKTOP' && state.selectedWindowHwnd){
+    return {
+      ...state,selectedWindowHwnd:null,
+      lastSelectionError:'Selected private window is unavailable; restored all AI screens.',
+    };
+  }
+  if(code==='PRIVATE_MONITOR_NOT_FOUND' && state.selectedMonitorId &&
+      !state.selectedWindowHwnd){
+    return {
+      ...state,selectedMonitorId:null,
+      lastSelectionError:'Selected host monitor disconnected; restored all AI screens.',
+    };
+  }
+  return null;
+}
+
 async function captureAndPersist(
   state: PrivateViewerState,
 ): Promise<PrivateViewerState> {
   await writeHeartbeat();
 
   try {
-    const capture = await captureWindowsPrivateScreen({
-      source: state.selectedWindowHwnd ? 'window' : (state.selectedMonitorId ? 'monitor' : 'desktop'),
-      ...(state.selectedWindowHwnd ? {hwnd:state.selectedWindowHwnd} : {}),
-      ...(!state.selectedWindowHwnd && state.selectedMonitorId ? {monitor_id:state.selectedMonitorId} : {}),
-      max_width: state.maxWidth,
-      max_height: state.maxHeight,
-      max_bytes: state.maxBytes,
-    });
+    let captureState=state;
+    let capture;
+    try{
+      capture=await captureWindowsPrivateScreen(captureRequestForViewer(state));
+    }catch(error){
+      const recovery=recoverUnavailablePrivatePreview(state,error);
+      if(!recovery)throw error;
+      // Retry once only, on our own private display. Any second error is
+      // surfaced rather than silently displaying a stale frame as live.
+      capture=await captureWindowsPrivateScreen(captureRequestForViewer(recovery));
+      captureState=recovery;
+    }
     const frameBytes = await writeFrame(
       capture.data.base64,
     );
-    await writeMonitorInventory(state.selectedMonitorId,capture.data.monitors);
+    await writeMonitorInventory(captureState.selectedMonitorId,capture.data.monitors);
     // Window inventory is best-effort, never an excuse to stop refreshing
     // the image. This is a read-only query of NexowirePrivate, not Default.
     await refreshPrivateWindowInventory().catch(()=>undefined);
     return {
-      ...state,
+      ...captureState,
       lastFrameAt: new Date().toISOString(),
       frameBytes,
       frameWidth: capture.data.width,
