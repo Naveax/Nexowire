@@ -86,6 +86,24 @@ a verified private HWND. Applications that do not support WM_CHAR, or
 require a focused child control, may need a different private input path.
 Never silently fall back to the physical clipboard.
 
+## Host-shared clipboard shortcuts are forbidden on private windows
+
+Even a message sent directly to a private HWND can cause that application to
+read the Windows window-station clipboard. Therefore
+`windows.private_keyboard.hotkey` now refuses `Ctrl+C`, `Ctrl+V`,
+`Ctrl+X`, `Ctrl+Insert`, `Shift+Insert`, `Shift+Delete`,
+Windows/Shell key combinations, and secure/system exit combinations.
+It returns `PRIVATE_HOTKEY_HOST_SHARED_NOT_ISOLATED` **before** issuing
+any native input. Common application-local hotkeys such as `Ctrl+A`,
+`Ctrl+Z`, `Alt+F4`, and `Shift+Tab` remain available.
+
+To paste text into a private window, use `windows.private_keyboard.type`
+or the Agent-memory private clipboard tools when installed; neither relies
+on Windows `Ctrl+V`. This protection does not make the host WinSta0
+clipboard OS-isolated. Native clipboard read/write by arbitrary launched
+applications remains an open limitation of desktop-object-only isolation
+until a separate guest/window-station backend is available.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.

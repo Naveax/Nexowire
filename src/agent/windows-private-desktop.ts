@@ -944,12 +944,38 @@ async function privateKeyboardType(
   }
 }
 
+/**
+ * The Windows clipboard belongs to the interactive window station, not
+ * strictly to one Win32 desktop. Posted shortcuts such as Ctrl+V may cause
+ * a private application to query the owner's shared Windows clipboard.
+ * Reject clipboard and shell-global chords rather than silently cross the
+ * private AI workspace boundary. Use private_keyboard.type for text, or
+ * the Agent-memory private clipboard when installed.
+ */
+export function assertPrivateHotkeyNoHostClipboard(keys:readonly string[]):void{
+  const selected=new Set(keys.map(key=>key.trim().toUpperCase()));
+  const ctrl=selected.has('CTRL')||selected.has('CONTROL');
+  const shift=selected.has('SHIFT');
+  const win=['WIN','META','LWIN','RWIN'].some(key=>selected.has(key));
+  const clipboardChord=(ctrl&&['C','V','X','INSERT'].some(key=>selected.has(key)))
+    ||(shift&&['INSERT','DELETE'].some(key=>selected.has(key)));
+  const systemChord=ctrl&&selected.has('ALT')&&
+    (selected.has('DELETE')||selected.has('D'));
+  if(win||clipboardChord||systemChord){
+    throw new PrivateDesktopError(
+      'PRIVATE_HOTKEY_HOST_SHARED_NOT_ISOLATED',
+      'This hotkey could reach the host clipboard or shell. Use private_keyboard.type or a verified private-memory clipboard instead.',
+    );
+  }
+}
+
 async function privateKeyboardHotkey(
   input: unknown,
 ): Promise<{ data: unknown }> {
   assertWindows();
-  await requireRunningPrivateDesktop();
   const parsed = PrivateKeyboardHotkeySchema.parse(input);
+  assertPrivateHotkeyNoHostClipboard(parsed.keys);
+  await requireRunningPrivateDesktop();
   const virtualKeys = parsed.keys.map(virtualKey);
   try {
     const result = z
