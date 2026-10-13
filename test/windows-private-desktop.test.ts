@@ -610,6 +610,7 @@ test(
       windowCapture.data.source,
       'window',
     );
+    assert.equal(windowCapture.data.emptyCaptureArea,false);
     assert.equal(
       windowCapture.data.hwnd?.toUpperCase(),
       privateHwnd.toUpperCase(),
@@ -653,6 +654,7 @@ test(
       desktopCapture.data.source,
       'desktop',
     );
+    assert.equal(desktopCapture.data.emptyCaptureArea,false);
     assert.equal(
       desktopCapture.data.inputDesktopBefore,
       'Default',

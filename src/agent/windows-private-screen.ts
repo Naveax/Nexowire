@@ -517,6 +517,7 @@ $targetGraphics = $null
 $stream = $null
 $captured = 0
 $failed = 0
+$visibleWindows = @()
 $resolvedHwnd = $null
 $windowTitle = $null
 
@@ -638,12 +639,16 @@ try {
       $desktopGraphics.Dispose()
     }
 
-    if ($captured -lt 1) {
+    # A newly started or unoccupied monitor is a valid blank preview.
+    # Do NOT treat zero visible private windows as a capture failure.
+    # If windows existed but every PrintWindow render failed, reject so
+    # the error cannot be disguised as a valid empty desktop.
+    if ($captured -lt 1 -and $visibleWindows.Count -gt 0) {
       [pscustomobject]@{
         ok = $false
         code = 'PRIVATE_DESKTOP_RENDER_FAILED'
         message =
-          'No visible NexowirePrivate window could be rendered.'
+          'Visible NexowirePrivate windows exist but none could be rendered.'
         failedWindows = $failed
       } | ConvertTo-Json -Compress
       exit 5
@@ -754,6 +759,7 @@ try {
     visibleDesktopChanged = ($before -ne $after)
     enumeratedWindows = $windows.Count
     capturedWindows = $captured
+    emptyCaptureArea = ($source -ne 'window' -and $visibleWindows.Count -eq 0)
     failedWindows = $failed
   } | ConvertTo-Json -Depth 5 -Compress
 } finally {
@@ -803,6 +809,7 @@ export interface WindowsPrivateScreenCapture {
   visibleDesktopChanged: boolean;
   enumeratedWindows: number;
   capturedWindows: number;
+  emptyCaptureArea: boolean;
   failedWindows: number;
 }
 
@@ -1016,15 +1023,7 @@ export async function inspectWindowsPrivateDisplayTopology():Promise<{data:Windo
   return {data};
 }
 
-export async function captureWindowsPrivateScreen(
-  input: unknown,
-): Promise<{
-  data: WindowsPrivateScreenCapture;
-}> {
-  assertWindows();
-  const parsed = parseWindowsPrivateScreenCaptureRequest(input);
-
-  const result = z
+export const PrivateScreenCaptureResponseSchema = z
     .object({
       ok: z.literal(true),
       source: z.enum(['desktop', 'monitor', 'window']),
@@ -1065,15 +1064,46 @@ export async function captureWindowsPrivateScreen(
       capturedWindows: z
         .number()
         .int()
-        .positive(),
+        .nonnegative(),
+      emptyCaptureArea: z.boolean(),
       failedWindows: z
         .number()
         .int()
         .nonnegative(),
     })
-    .parse(
-      await invokeCapture(parsed),
-    );
+    .superRefine((value,ctx)=>{
+      if(value.source==='window' &&
+        (value.capturedWindows!==1 || value.emptyCaptureArea)){
+        ctx.addIssue({code:'custom',path:['capturedWindows'],
+          message:'Window capture requires exactly one rendered private window.'});
+      }
+      if(value.emptyCaptureArea &&
+        (value.capturedWindows!==0 || value.failedWindows!==0)){
+        ctx.addIssue({code:'custom',path:['emptyCaptureArea'],
+          message:'An empty area cannot claim any rendered or failed windows.'});
+      }
+      if(!value.emptyCaptureArea && value.capturedWindows===0){
+        ctx.addIssue({code:'custom',path:['capturedWindows'],
+          message:'No visible window was rendered, but area is not marked empty.'});
+      }
+      if(value.visibleDesktopChanged ||
+        value.inputDesktopBefore!==value.inputDesktopAfter){
+        ctx.addIssue({code:'custom',path:['visibleDesktopChanged'],
+          message:'Private capture must preserve the physical input desktop.'});
+      }
+    });
+
+export async function captureWindowsPrivateScreen(
+  input: unknown,
+): Promise<{
+  data: WindowsPrivateScreenCapture;
+}> {
+  assertWindows();
+  const parsed = parseWindowsPrivateScreenCaptureRequest(input);
+
+  const result = PrivateScreenCaptureResponseSchema.parse(
+    await invokeCapture(parsed),
+  );
 
   const decoded = Buffer.from(
     result.base64,
