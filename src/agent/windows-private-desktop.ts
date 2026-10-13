@@ -315,15 +315,31 @@ public static class NxDesktopNative {
     return "0x"+h.ToInt64().ToString("X");
   }
   public static string PointerClick(string name,string raw,int x,int y,string button,int clicks){
-    var h=Target(name,raw);var l=XY(h,x,y);uint down,up,mask;
+    var h=Target(name,raw);
+    XY(h,x,y);
+    // Translate validated private parent coordinates into a child-local
+    // point, but only if that child belongs to the same target PID.
+    // Never move the physical cursor, SetForegroundWindow or SendInput.
+    var screen=new POINT{x=x,y=y};
+    if(!ClientToScreen(h,ref screen))
+      throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    var target=SafePrivateWheelChild(h,screen);
+    var atTarget=screen;
+    if(!ScreenToClient(target,ref atTarget))
+      throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    var l=XY(target,atTarget.x,atTarget.y);
+    uint down,up,mask;
     switch((button??"left").ToLowerInvariant()){
       case "left":down=WM_LBUTTONDOWN;up=WM_LBUTTONUP;mask=MK_LBUTTON;break;
       case "right":down=WM_RBUTTONDOWN;up=WM_RBUTTONUP;mask=MK_RBUTTON;break;
       case "middle":down=WM_MBUTTONDOWN;up=WM_MBUTTONUP;mask=MK_MBUTTON;break;
       default:throw new InvalidOperationException("BUTTON_UNSUPPORTED");
     }
-    Post(h,WM_MOUSEMOVE,UIntPtr.Zero,l);
-    for(int i=0;i<clicks;i++){Post(h,down,new UIntPtr(mask),l);Post(h,up,UIntPtr.Zero,l);}
+    Post(target,WM_MOUSEMOVE,UIntPtr.Zero,l);
+    for(int i=0;i<clicks;i++){
+      Post(target,down,new UIntPtr(mask),l);
+      Post(target,up,UIntPtr.Zero,l);
+    }
     return "0x"+h.ToInt64().ToString("X");
   }
   public static string Text(string name,string raw,string text,int intervalMs){
