@@ -1,5 +1,29 @@
 # AI Screen independent-display profile contract
 
+## Read-only isolated display backend preflight
+
+Before attempting an isolated VM or guest display provider, call
+`windows_private_display_backend_probe` to inspect prerequisite Windows host
+capabilities without modifying the physical display topology:
+
+- Whether a hypervisor is present and the VM management service is running
+- Whether Hyper-V tooling is installed and the current Agent account can
+  enumerate its VM inventory; inaccessible inventories report
+  `access_denied_or_unavailable` with **no fabricated VM counts**
+- Candidate host-shared virtual display adapters (for example, a Parsec
+  Virtual Display Adapter), which are **not proof of isolation**
+
+The result always reports `hostDisplayTopologyShared:true`,
+`isolatedAiDisplayBackendReady:false`, `osDisplaysProvisioned:false`,
+`touchesHostDisplaySettings:false` and the requirement
+`ISOLATED_GUEST_DISPLAY_PROVIDER_AND_AUTHORIZATION`.
+
+Even with a running Hyper-V service or an installed virtual adapter, no
+independent AI monitor can be claimed until a separate authorized guest
+provider has been built and verified. The preflight deliberately never
+runs VM management mutations, installs drivers, attaches displays, or
+changes physical resolution/DPI. It does not expose VM names or disk paths.
+
 ## Save the desired configuration for later sessions
 
 The following Windows MCP tools persist **desired configuration only**:
