@@ -70,8 +70,10 @@ with the Windows clipboard or persist secrets to disk:
 - `windows_private_clipboard_status`: whether private text exists, its
   length and update time, without returning text
 - `windows_private_clipboard_paste`: send stored text to one explicitly
-  selected and revalidated private HWND through the native private keyboard
-  path; no `Ctrl+V`, physical focus change, or system clipboard access
+  selected and revalidated private HWND, optionally to a same-process child
+  control chosen using both `x`/`y` private client coordinates through the
+  native private keyboard path; no `Ctrl+V`, physical focus change, or
+  system clipboard access
 - `windows_private_clipboard_clear`: explicitly wipe the in-process text
   buffer, even if the private desktop is no longer running
 
