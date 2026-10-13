@@ -217,11 +217,16 @@ public static class NxDesktopNative {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left,top,right,bottom; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x,y; }
   public sealed class W { public string Hwnd; public string Title; public int ProcessId; public bool Visible; public int Left,Top,Right,Bottom; }
+  public sealed class ChildControl { public string Hwnd,ClassName;public int ProcessId,Left,Top,Width,Height;public bool Visible,Enabled; }
+  public sealed class ControlScan {public string Hwnd;public int ProcessId;public bool Truncated;public int ForeignProcessControlsSkipped;public ChildControl[] Controls;}
   delegate bool EnumProc(IntPtr hwnd, IntPtr l);
   [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr OpenDesktop(string n,int f,bool i,uint a);
   [DllImport("user32.dll",SetLastError=true)] static extern bool CloseDesktop(IntPtr h);
   [DllImport("user32.dll",SetLastError=true)] static extern IntPtr OpenInputDesktop(uint f,bool i,uint a);
   [DllImport("user32.dll",SetLastError=true)] static extern bool EnumDesktopWindows(IntPtr h,EnumProc p,IntPtr l);
+  [DllImport("user32.dll",SetLastError=true)] static extern bool EnumChildWindows(IntPtr h,EnumProc p,IntPtr l);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,StringBuilder s,int cap);
+  [DllImport("user32.dll")] static extern bool IsWindowEnabled(IntPtr h);
   [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowTextLength(IntPtr h);
   [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h,StringBuilder s,int n);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
@@ -377,6 +382,42 @@ public static class NxDesktopNative {
     if(!CreateProcess(exe,new StringBuilder(string.Join(" ",p)),IntPtr.Zero,IntPtr.Zero,false,UNICODE,IntPtr.Zero,String.IsNullOrWhiteSpace(cwd)?null:cwd,ref si,out pi)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     try{return pi.pid;}finally{if(pi.thread!=IntPtr.Zero)CloseHandle(pi.thread);if(pi.process!=IntPtr.Zero)CloseHandle(pi.process);}
   }
+  public static ControlScan Controls(string name,string raw){
+    var top=Target(name,raw);
+    uint owner;GetWindowThreadProcessId(top,out owner);
+    var origin=new POINT{x=0,y=0};
+    if(!ClientToScreen(top,ref origin))
+      throw new InvalidOperationException("CONTROLS_ORIGIN_FAILED:"+Marshal.GetLastWin32Error());
+    var result=new List<ChildControl>();
+    var skipped=0;
+    var scanned=0;
+    var truncated=false;
+    EnumProc visitor=delegate(IntPtr child,IntPtr _){
+      scanned++;
+      if(result.Count>=128||scanned>512){truncated=true;return false;}
+      uint pid;GetWindowThreadProcessId(child,out pid);
+      if(pid!=owner){skipped++;return true;}
+      RECT r;if(!GetWindowRect(child,out r))return true;
+      var cls=new StringBuilder(256);
+      GetClassName(child,cls,cls.Capacity);
+      result.Add(new ChildControl{
+        Hwnd="0x"+child.ToInt64().ToString("X"),
+        ProcessId=(int)pid,ClassName=cls.ToString(),
+        Visible=IsWindowVisible(child),Enabled=IsWindowEnabled(child),
+        Left=r.left-origin.x,Top=r.top-origin.y,
+        Width=Math.Max(0,r.right-r.left),Height=Math.Max(0,r.bottom-r.top)
+      });
+      return true;
+    };
+    // Return false is expected when the bounded result reaches capacity.
+    if(!EnumChildWindows(top,visitor,IntPtr.Zero)&&!truncated)
+      throw new InvalidOperationException("CONTROLS_ENUM_FAILED:"+Marshal.GetLastWin32Error());
+    return new ControlScan{
+      Hwnd="0x"+top.ToInt64().ToString("X"),ProcessId=(int)owner,
+      Truncated=truncated,ForeignProcessControlsSkipped=skipped,
+      Controls=result.ToArray(),
+    };
+  }
   public static W[] Windows(string name){
     var d=OpenDesktop(name,0,false,READ|ENUM);if(d==IntPtr.Zero)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());var a=new List<W>();
     try{EnumProc cb=delegate(IntPtr h,IntPtr _){var len=Math.Min(GetWindowTextLength(h),4096);var s=new StringBuilder(len+1);GetWindowText(h,s,s.Capacity);uint pid;GetWindowThreadProcessId(h,out pid);RECT r;GetWindowRect(h,out r);a.Add(new W{Hwnd="0x"+h.ToInt64().ToString("X"),Title=s.ToString(),ProcessId=(int)pid,Visible=IsWindowVisible(h),Left=r.left,Top=r.top,Right=r.right,Bottom=r.bottom});return true;};if(!EnumDesktopWindows(d,cb,IntPtr.Zero))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());return a.ToArray();}finally{CloseDesktop(d);}
@@ -465,7 +506,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','pointer_scroll','text','hotkey','close_window')]
+  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -485,6 +526,24 @@ try {
   } elseif ($Action -eq 'pointer_click') {
     $h=[NxDesktopNative]::PointerClick([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[string]$r.button,[int]$r.clicks)
     [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;button=[string]$r.button;clicks=[int]$r.clicks;inputDesktop=[NxDesktopNative]::Input()}
+  } elseif ($Action -eq 'controls') {
+          $scan=[NxDesktopNative]::Controls([string]$r.desktop,[string]$r.hwnd)
+      [pscustomobject]@{
+        hwnd=$scan.Hwnd
+        processId=$scan.ProcessId
+        truncated=$scan.Truncated
+        foreignProcessControlsSkipped=$scan.ForeignProcessControlsSkipped
+        controls=@($scan.Controls|ForEach-Object{
+          [pscustomobject]@{
+            hwnd=$_.Hwnd;className=$_.ClassName;processId=$_.ProcessId
+            visible=$_.Visible;enabled=$_.Enabled
+            rect=[pscustomobject]@{
+              left=$_.Left;top=$_.Top;width=$_.Width;height=$_.Height
+            }
+          }
+        })
+        inputDesktop=[NxDesktopNative]::Input()
+      }
   } elseif ($Action -eq 'close_window') {
     $h=[NxDesktopNative]::CloseWindow([string]$r.desktop,[string]$r.hwnd)
     [pscustomobject]@{hwnd=$h;inputDesktop=[NxDesktopNative]::Input();closeRequested=$true}
@@ -567,6 +626,7 @@ type PrivateInputAction =
   | 'pointer_move'
   | 'pointer_click'
   | 'pointer_scroll'
+  | 'controls'
   | 'text'
   | 'hotkey'
   | 'close_window';
@@ -799,6 +859,23 @@ async function launch(
 
 const WindowSchema=z.object({hwnd:z.string(),title:z.string(),processId:z.number().int().nonnegative(),visible:z.boolean(),rect:z.object({left:z.number().int(),top:z.number().int(),right:z.number().int(),bottom:z.number().int(),width:z.number().int().nonnegative(),height:z.number().int().nonnegative()})});
 async function view(){return z.object({windows:z.array(WindowSchema).max(4096),inputDesktop:z.string().max(256)}).parse(await request('list',{desktop:DESKTOP_NAME}));}
+const ControlScanSchema=z.object({
+  hwnd:WindowHandleSchema,
+  processId:z.number().int().nonnegative(),
+  truncated:z.boolean(),
+  foreignProcessControlsSkipped:z.number().int().nonnegative(),
+  controls:z.array(z.object({
+    hwnd:WindowHandleSchema,
+    className:z.string().max(256),
+    processId:z.number().int().nonnegative(),
+    visible:z.boolean(),enabled:z.boolean(),
+    rect:z.object({
+      left:z.number().int(),top:z.number().int(),
+      width:z.number().int().nonnegative(),height:z.number().int().nonnegative(),
+    }),
+  })).max(128),
+  inputDesktop:z.string().max(256),
+});
 async function inputDesktop():Promise<string>{return z.object({inputDesktop:z.string().max(256)}).parse(await request('input',{desktop:DESKTOP_NAME})).inputDesktop;}
 
 async function shortcut():Promise<string|null>{
@@ -825,6 +902,19 @@ async function killTree(pid:number):Promise<void>{if(!alive(pid))return;await ne
 async function stop():Promise<{data:unknown}>{assertWindows();const p=paths();const s=await readState();if(!s)return{data:{running:false,stopped:false,desktopName:DESKTOP_NAME}};for(const pid of [...s.launchedPids].reverse())await killTree(pid);await killTree(s.shellPid);if(alive(s.hostPid)){try{process.kill(s.hostPid);}catch{}if(!(await waitExit(s.hostPid)))throw new PrivateDesktopError('HOST_STOP_NOT_VERIFIED','Private desktop host did not exit.',{pid:s.hostPid});}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);return{data:{running:false,stopped:true,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=> '')}};}
 async function launchApp(input:unknown):Promise<{data:unknown}>{assertWindows();const p=LaunchSchema.parse(input);const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))throw new PrivateDesktopError('NOT_RUNNING','Start the private desktop first.');const pid=await launch(p.executable,p.args,p.cwd);await writeState({...s,launchedPids:[...new Set([...s.launchedPids,pid])].slice(-1024)});return{data:{pid,desktopName:DESKTOP_NAME,visibleDesktopChanged:false}};}
 async function status():Promise<{data:unknown}>{assertWindows();const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))return{data:{running:false,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=>''),visibleDesktopChanged:false}};let v:Awaited<ReturnType<typeof view>>|undefined;try{v=await view();}catch{}return{data:{running:true,desktopName:DESKTOP_NAME,hostPid:s.hostPid,shellPid:s.shellPid,launchedPids:s.launchedPids.filter(alive),startedAt:s.startedAt,inputDesktop:v?.inputDesktop??(await inputDesktop().catch(()=>'')),windowCount:v?.windows.length??null,visibleDesktopChanged:false}};}
+async function controls(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  const parsed=z.object({hwnd:WindowHandleSchema}).strict().parse(input);
+  const s=await readState();
+  if(!s||!alive(s.hostPid)||!alive(s.shellPid))
+    throw new PrivateDesktopError('NOT_RUNNING','Private desktop is not running.');
+  const result=ControlScanSchema.parse(await privateInputRequest('controls',{
+    desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
+  }));
+  return{data:{...result,desktopName:DESKTOP_NAME,
+    boundsRelativeTo:'TOP_LEVEL_CLIENT',textContentReturned:false,
+    visibleDesktopChanged:false}};
+}
 async function windows():Promise<{data:unknown}>{assertWindows();const s=await readState();if(!s||!alive(s.hostPid))throw new PrivateDesktopError('NOT_RUNNING','Private desktop is not running.');const v=await view();return{data:{desktopName:DESKTOP_NAME,inputDesktop:v.inputDesktop,windows:v.windows,visibleDesktopChanged:false}};}
 
 
@@ -1259,6 +1349,8 @@ export async function executeWindowsPrivateDesktopCapability(
         withPrivateDesktopProcessLock(paths().root,()=>launchApp(input)));
     case 'windows.private_desktop.windows':
       return await windows();
+    case 'windows.private_desktop.controls':
+      return await controls(input);
     case 'windows.private_desktop.window.close':
       return await serializePrivateDesktopLifecycle(()=>privateWindowClose(input));
     case 'windows.private_desktop.show':
