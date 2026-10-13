@@ -18,7 +18,7 @@ import { executeWindowsPrivateDesktopCapability } from './windows-private-deskto
 import { runWindowsPrivateShell } from './windows-private-shell.js';
 import {resolveAiWorkspaceTarget,requireWslHeadlessRouting} from './ai-workspace-default.js';
 import { executeWindowsPrivateViewerCapability } from './windows-private-viewer.js';
-import { captureWindowsPrivateScreen } from './windows-private-screen.js';
+import { captureWindowsPrivateScreen, inspectWindowsPrivateDisplayTopology } from './windows-private-screen.js';
 import {planWindowsPrivateDisplays} from './windows-private-display-plan.js';
 import {
   assertPhysicalConsoleGrant,
@@ -2324,6 +2324,8 @@ export async function executeCapability(
       return await executeWindowsVirtualPointerCapability(capability, input);
     case 'windows.private_screen.capture':
       return await captureWindowsPrivateScreen(input);
+    case 'windows.private_display.topology':
+      return await inspectWindowsPrivateDisplayTopology();
     case 'windows.private_display.plan':
       return planWindowsPrivateDisplays(input);
     case 'windows.private_desktop.status':

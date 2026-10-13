@@ -1,5 +1,34 @@
 # AI Screen: monitor-aware capture (Windows)
 
+## Discover displays without taking a screenshot
+
+Call `windows_private_display_topology` first to discover available host
+monitor IDs and their real pixel coordinates, dimensions, primary monitor,
+effective DPI, and virtual union bounds. This tool:
+
+- Works **without** starting `NexowirePrivate` or opening a GUI window.
+- Does not render, transfer, or save a PNG; does not read any Default desktop
+  window contents.
+- Returns `topologyKind: "host_shared_native"` and
+  `independentAiDisplays: false`. This is host display discovery only,
+  not an isolated virtual-monitor provisioner.
+- Returns `perMonitorDpiAwarenessApplied` and nullable effective DPI
+  measurements; no assumption that 96 DPI means scaling is disabled.
+- Validates stable IDs, contiguous indexes, exactly one primary, and
+  consistency of the union bounds; validates unchanged Windows input desktop.
+
+Example workflow:
+
+1. `windows_private_display_topology` to obtain monitor IDs and bounds.
+2. `windows_private_screen_capture` with **no source selector** to capture
+   the entire private workspace on **all** connected host monitors.
+3. If explicitly requested, call `windows_private_screen_capture` with
+   `source:"monitor"` and `monitor_id` from step 1.
+4. For requested *new independent* AI monitors, call
+   `windows_private_display_plan`, which validates the intended topology
+   but reports `applied:false` until a separately isolated display backend
+   exists.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**.
