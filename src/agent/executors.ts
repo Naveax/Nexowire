@@ -2103,6 +2103,29 @@ export function assertPrivateAiGuiBoundary(capability:Capability):void{
   );
 }
 
+/**
+ * Task Scheduler can launch interactive programs in the user's logon
+ * session, regardless of the desktop of the PowerShell process calling it.
+ * Never treat a Broker authorization or windowsHide as private GUI routing.
+ * STOP and DISABLE are retained for emergency containment.
+ */
+export function assertPrivateAiScheduledTaskBoundary(
+  capability:Capability,input:unknown,
+):void{
+  if(capability!=='windows.task.control' ||
+     resolveAiWorkspaceTarget(undefined)!=='private_desktop')return;
+  const request=z.object({
+    action:z.enum(['start','stop','enable','disable']),
+  }).passthrough().parse(input);
+  if(request.action==='stop'||request.action==='disable')return;
+  throw Object.assign(new Error(
+    'Windows Task Scheduler start/enable can launch GUI on the owner Default desktop. '+
+    'This operation has no verified NexowirePrivate routing. '+
+    'Use windows.private_desktop.launch for interactive AI programs.',
+  ),{code:'AI_PRIVATE_SCHEDULED_TASK_GUI_NOT_ISOLATED',
+      capability,action:request.action});
+}
+
 export async function executeCapability(
   capability: Capability,
   input: unknown,
@@ -2112,6 +2135,7 @@ export async function executeCapability(
   // Do this before physical console grant checks. An owner-console grant
   // is not a waiver of AI private-desktop isolation.
   assertPrivateAiGuiBoundary(capability);
+  assertPrivateAiScheduledTaskBoundary(capability,input);
   if (
     needsPhysicalConsoleApproval(
       capability,
