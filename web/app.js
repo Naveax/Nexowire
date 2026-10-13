@@ -6,6 +6,7 @@ const formatCompact = (value) => Number.isFinite(value)
   : '—';
 const FREE_ONLY_MODE = true;
 const openPcSettings = new Set();
+const bridgeCommandsInFlight = new Set();
 // CORE is a revocable owner preference; Broker remains authoritative for elevated actions.
 let currentSnapshot = null;
 let selectedDeviceFilter = 'all';
@@ -93,6 +94,11 @@ function explainApiError(code) {
     CORE_REQUIRES_OWNER_LOGIN: 'CORE için cihazın sahibi olan hesapla giriş yap.',
     BRIDGE_REQUIRES_OWNER_LOGIN: 'Admin Bridge ayarları için cihazın sahibi olmalısın.',
     BRIDGE_CONFIRMATION_REQUIRED: 'Admin Bridge onayı doğrulanamadı.',
+    BRIDGE_COMMAND_CONFIRMATION_REQUIRED: 'Uygulama için APPLY BRIDGE MODE onayı gerekli.',
+    BRIDGE_COMMAND_TRANSPORT_DISABLED: 'Cihaz komut kanalı henüz etkin değil. Tercih kaydedilir; Broker değiştirilmez.',
+    BRIDGE_COMMAND_DEVICE_NOT_READY: 'Cihaz çevrimiçi, FULL ve Broker modunda olmalı.',
+    BRIDGE_COMMAND_PREFERENCE_MISMATCH: 'Kayıtlı tercih değişti. Modu yeniden seçip tekrar onayla.',
+    BRIDGE_COMMAND_QUEUE_REJECTED: 'Broker komutu kuyruğa alınamadı.',
     CORE_CONFIRMATION_REQUIRED: 'Onay ifadesi CORE UNLIMITED olmalı.',
     CORE_REQUIRES_FULL_ONLINE_BROKER: 'CORE için Full Access, çevrimiçi cihaz ve hazır Admin Bridge gerekli.',
     DEVICE_NOT_FOUND: 'Cihaz bu hesaba bağlı değil.',
@@ -210,6 +216,72 @@ async function setDeviceBridgePreference(deviceId, mode, row, focusSelector = '.
   } catch (error) {
     feedback.textContent = error.message;
     for (const button of buttons) button.disabled = false;
+  }
+}
+
+async function applyDeviceBridgeMode(deviceId,mode,row){
+  const panel=row.querySelector('.bridge-apply-panel');
+  const phrase=row.querySelector('.bridge-apply-phrase');
+  const apply=row.querySelector('.bridge-apply-toggle');
+  const approve=row.querySelector('.bridge-apply-approve');
+  const status=row.querySelector('.bridge-command-status');
+  if(phrase.value.trim()!=='APPLY BRIDGE MODE'){
+    status.textContent='Uygulamak için tam olarak APPLY BRIDGE MODE yaz.';
+    phrase.focus();
+    return;
+  }
+  if(bridgeCommandsInFlight.has(deviceId))return;
+  bridgeCommandsInFlight.add(deviceId);
+  apply.disabled=true;
+  approve.disabled=true;
+  status.textContent='Onaylı Broker komutu cihaza gönderilmek üzere kuyruğa alınıyor…';
+  try{
+    const command=await postDeviceMode(
+      '/api/v1/me/devices/bridge-command',deviceId,
+      {mode,confirmation:'APPLY BRIDGE MODE'},'bridge-command-issue-v1',
+    );
+    if(command.status!=='queued'||typeof command.requestId!=='string'){
+      throw new Error('Sunucu doğrulanmış bir komut kimliği döndürmedi.');
+    }
+    panel.hidden=true;
+    status.textContent=mode.toUpperCase()+' isteği kuyruğa alındı. Windows Broker henüz değişti sayılmaz.';
+    const expiry=Date.parse(command.expiresAt);
+    if(!Number.isFinite(expiry))throw new Error('Komut sona erme zamanı geçersiz.');
+    while(Date.now()<expiry){
+      await new Promise(resolve=>setTimeout(resolve,2500));
+      const response=await fetch(
+        '/api/v1/me/devices/bridge-command/status?requestId='+encodeURIComponent(command.requestId),
+        {credentials:'include',headers:{Accept:'application/json'}},
+      );
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(explainApiError(data.error||('HTTP '+response.status)));
+      if(data.requestId!==command.requestId||data.deviceId!==deviceId){
+        throw new Error('Cihaz komut yanıtı eşleşmiyor.');
+      }
+      if(data.status==='queued'||data.status==='claimed'){
+        status.textContent='Broker komutu '+(data.status==='queued'?'kuyrukta':'cihazda işleniyor')+
+          '. Yerel imzalı doğrulama bekleniyor.';
+        continue;
+      }
+      if(data.status==='applied'){
+        status.textContent='İmzalı cihaz onayı alındı: '+mode.toUpperCase()+' uygulandı. Güncel durum yenileniyor…';
+        await load();
+        return;
+      }
+      if(data.status==='failed'||data.status==='expired'){
+        status.textContent=data.status==='expired'?'İstek süresi doldu, uygulanmış sayılmaz.':
+          'Cihaz komutu doğrulayamadı: '+(data.failureCode||'Neden belirtilmedi.');
+        return;
+      }
+      throw new Error('Beklenmeyen cihaz komut durumu.');
+    }
+    status.textContent='Komutun süresi doldu; gerçek Broker durumu yeniden doğrulanmalı.';
+  }catch(error){
+    status.textContent=error instanceof Error?error.message:String(error);
+  }finally{
+    bridgeCommandsInFlight.delete(deviceId);
+    apply.disabled=false;
+    approve.disabled=false;
   }
 }
 
@@ -353,6 +425,13 @@ function render(snapshot) {
         '  <div class="bridge-switch-row"><div class="bridge-switch-description"><strong>ON / OFF</strong><small>Tercihi tek tıkla değiştir</small></div><button type="button" class="bridge-toggle" role="switch" aria-checked="false" aria-label="Admin Bridge aç kapa tercihi"><span class="bridge-toggle-track" aria-hidden="true"><span class="bridge-toggle-thumb"></span></span><span class="bridge-toggle-label">OFF</span></button></div>',
         '  <div class="bridge-mode-options" role="group" aria-label="Admin Bridge otomatik tercihi"><button type="button" class="secondary bridge-mode" data-bridge="auto" aria-pressed="false">AUTO MOD</button><small>İstersen AUTO tercihini ayrıca seçebilirsin.</small></div>',
         '  <small class="bridge-mode-feedback" role="status" aria-live="polite"></small>',
+        '  <button type="button" class="secondary bridge-apply-toggle">Seçilen modu cihazda uygula</button>',
+        '  <div class="bridge-apply-panel" hidden>',
+        '    <small>Bu ayrı bir gerçek cihaz komutudur. Yalnızca açık onaydan sonra kuyruğa girer. Broker durumu imzalı cihaz sonucu gelmeden başarılı gösterilmez.</small>',
+        '    <label>Onaylamak için APPLY BRIDGE MODE yaz<input class="bridge-apply-phrase" maxlength="32" autocomplete="off" placeholder="APPLY BRIDGE MODE"></label>',
+        '    <button type="button" class="primary bridge-apply-approve">Onayla ve cihaza uygula</button>',
+        '  </div>',
+        '  <small class="bridge-command-status" role="status" aria-live="polite"></small>',
         ' </div>',
         '</div>',
         '</div></div></section>',
@@ -552,6 +631,21 @@ function render(snapshot) {
           if (!selected) void setDeviceBridgePreference(device.id, bridgeMode.dataset.bridge, row, '.bridge-mode[data-bridge="auto"]');
         });
       }
+      const bridgeApply=row.querySelector('.bridge-apply-toggle');
+      const bridgeApplyPanel=row.querySelector('.bridge-apply-panel');
+      const bridgeEligible=device.online===true&&mode==='full'&&
+        device.platform==='win32'&&device.privilegeMode==='broker';
+      bridgeApply.disabled=!bridgeEligible||bridgeCommandsInFlight.has(device.id);
+      bridgeApply.title=bridgeEligible
+        ?'Ayrı onay gerektirir; tercih kaydı Broker görevini tek başına değiştirmez.'
+        :'Cihaz Windows, çevrimiçi, FULL ve Broker modunda olmalı.';
+      bridgeApply.addEventListener('click',()=>{
+        bridgeApplyPanel.hidden=!bridgeApplyPanel.hidden;
+        if(!bridgeApplyPanel.hidden)row.querySelector('.bridge-apply-phrase').focus();
+      });
+      row.querySelector('.bridge-apply-approve').addEventListener('click',()=>{
+        void applyDeviceBridgeMode(device.id,bridgeDesired,row);
+      });
       const bridgeFeedback = row.querySelector('.bridge-mode-feedback');
       const bridgeObservation = bridgeDesired === 'off'
         ? ready

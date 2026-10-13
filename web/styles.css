@@ -188,6 +188,13 @@ small,.subtle,.label { color: var(--muted); }
 .bridge-mode-options{align-items:center}
 .bridge-mode-options small{color:var(--muted);font-size:11px;line-height:1.35}
 .bridge-mode-feedback.bridge-warning{color:#f1bb8e;font-weight:650}
+.bridge-apply-toggle{justify-self:start;min-height:39px}
+.bridge-apply-panel{display:grid;gap:9px;border-top:1px solid var(--border);padding-top:12px}
+.bridge-apply-panel[hidden]{display:none}
+.bridge-apply-panel label{display:grid;gap:7px;font-size:12px}
+.bridge-apply-panel small,.bridge-command-status{color:var(--muted);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.bridge-apply-phrase{width:100%;min-height:39px;padding:9px 11px;border-radius:9px;border:1px solid #796ba4;background:#0d1523;color:var(--text)}
+.bridge-apply-approve{justify-self:start}
 .bridge-quick-toggle[data-mode="off"] .bridge-quick-state{background:rgba(146,161,187,.12);color:#c2cedd;border-color:rgba(146,161,187,.4)}
 .bridge-quick-toggle[data-mode="auto"] .bridge-quick-state{background:rgba(132,156,220,.12);color:#c0d2fb;border-color:rgba(132,156,220,.4)}
 @media(max-width:620px){.device-header-actions{justify-content:flex-start}.core-shortcut,.bridge-quick-toggle{min-height:42px}.core-access,.bridge-access{padding:12px}.bridge-mode-options button{flex:0 0 auto}.bridge-switch-row{align-items:center}.bridge-toggle{min-height:46px}}
