@@ -3895,7 +3895,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Click Nexowire private desktop HWND',
       description:
-        'Route one to three bounded mouse clicks to an exact HWND on NexowirePrivate without switching desktops or touching the physical cursor.',
+        'Route one to three mouse clicks to a private HWND without touching the physical cursor. Optional paired control_hwnd + expected_class require the click coordinates to currently hit that same-process child, otherwise fail closed.',
       inputSchema: {
         ...targetFields,
         hwnd: z
@@ -3907,6 +3907,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         y: z.number().int().min(0).max(32_767),
         button: z.enum(['left', 'right', 'middle']).optional(),
         clicks: z.number().int().min(1).max(3).optional(),
+        control_hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/).optional(),
+        expected_class:z.string().min(1).max(256).optional(),
       },
     },
     async ({
@@ -3917,6 +3919,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       y,
       button,
       clicks,
+      control_hwnd,expected_class,
     }) =>
       await execute(
         ctx,
@@ -3927,6 +3930,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           y,
           ...(button ? { button } : {}),
           ...(clicks !== undefined ? { clicks } : {}),
+          ...(control_hwnd!==undefined?{control_hwnd}:{}),
+          ...(expected_class!==undefined?{expected_class}:{}),
         },
         device_id,
         provider_id,

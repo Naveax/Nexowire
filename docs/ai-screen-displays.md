@@ -359,6 +359,24 @@ private text remains scoped to the running private desktop. This does
 not extend native HWND handling to browser DOM or WPF composition
 controls without their own Win32 child handle.
 
+## Exact child HWND click with point/identity agreement
+
+`windows_private_pointer_click` may specify the pair
+`control_hwnd` and `expected_class` from
+`windows_private_desktop_controls`. The top-level private window
+`hwnd` and `x/y` client pixels remain mandatory. Before each click,
+the native helper verifies that the selected child is a **visible,
+enabled, same-PID descendant** of the private top-level window,
+matches its exact Win32 class name, and is currently the deepest
+eligible child under that point. Invalid, stale or cross-parent HWNDs,
+class mismatches and point mismatches fail closed before that click.
+Normal coordinate-only click behavior is preserved.
+
+The helper posts only the requested private Win32 mouse messages; it
+does not touch the physical mouse cursor or switch input desktops.
+This does not prove full GUI isolation or support controls without
+native child HWNDs. UIA/DOM-level hit testing remains outside scope.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
