@@ -57,6 +57,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_private_desktop_stop: 'windows.private_desktop.stop',
   windows_private_desktop_launch: 'windows.private_desktop.launch',
   windows_private_desktop_windows: 'windows.private_desktop.windows',
+  windows_private_desktop_window_audit: 'windows.private_desktop.window_audit',
   windows_private_desktop_close_window: 'windows.private_desktop.window.close',
   windows_private_desktop_show: 'windows.private_desktop.show',
   windows_private_pointer_move: 'windows.private_pointer.move',
