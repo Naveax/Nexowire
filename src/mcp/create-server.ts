@@ -35,6 +35,7 @@ import {
   isRoutingPolicyAuthorized,
 } from '../security/target-authorization.js';
 import { isMcpToolAvailableForCapabilities } from './tool-capabilities.js';
+import {PrivateDisplayPlanSchema} from '../agent/windows-private-display-plan.js';
 import { AGENT_PROTOCOL_VERSION } from '../protocol/agent.js';
 import {
   MCP_SURFACE_VERSION,
@@ -3216,6 +3217,51 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       device_id,
       provider_id,
       30_000,
+    ),
+  );
+
+  server.registerTool(
+    'windows_private_display_profile_status',
+    {
+      title: 'Read saved AI display profile',
+      description:
+        'Read the persisted requested AI screen count, resolution, per-screen DPI, refresh and placement. This is a desired plan only: not OS-visible, not applied to the owner monitors, and no virtual driver provisioned.',
+      inputSchema: {...targetFields},
+    },
+    async ({device_id,provider_id}) => await execute(
+      ctx,'windows.private_display.profile.status',{},device_id,provider_id,30_000,
+    ),
+  );
+  server.registerTool(
+    'windows_private_display_profile_set',
+    {
+      title: 'Save desired isolated AI display profile',
+      description:
+        'Validate and persist an AI display configuration with 1-8 screens and per-screen resolution, DPI, refresh and layout. Explicitly DOES NOT apply native OS screens, DPI or any host display setting until a separate isolated display backend exists.',
+      inputSchema: {
+        ...targetFields,
+        ...PrivateDisplayPlanSchema.shape,
+      },
+    },
+    async ({
+      device_id,provider_id,screen_count,width,height,dpi,refresh_hz,
+      layout,primary_index,per_monitor,
+    }) => await execute(
+      ctx,'windows.private_display.profile.set',{
+        screen_count,width,height,dpi,refresh_hz,layout,primary_index,per_monitor,
+      },device_id,provider_id,30_000,
+    ),
+  );
+  server.registerTool(
+    'windows_private_display_profile_reset',
+    {
+      title: 'Clear requested isolated AI display profile',
+      description:
+        'Remove only the stored desired AI display profile. Does not remove drivers, alter Windows displays or change the physical input desktop.',
+      inputSchema: {...targetFields},
+    },
+    async ({device_id,provider_id}) => await execute(
+      ctx,'windows.private_display.profile.reset',{},device_id,provider_id,30_000,
     ),
   );
 

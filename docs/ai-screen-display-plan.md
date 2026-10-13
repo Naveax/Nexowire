@@ -1,5 +1,31 @@
 # AI Screen independent-display profile contract
 
+## Save the desired configuration for later sessions
+
+The following Windows MCP tools persist **desired configuration only**:
+
+- `windows_private_display_profile_set`: validate and atomically save 1–8 requested
+  AI displays, per-monitor resolution, DPI, refresh rate, and arrangement. It
+  rejects invalid topology before writing. The response always includes
+  `applied:false`, `osMonitorsProvisioned:false` and
+  `touchesHostDisplaySettings:false`.
+- `windows_private_display_profile_status`: read the persisted profile and
+  return the full derived layout with an explicit isolated-backend blocker;
+  returns `configured:false` when no profile was saved. Corrupt files fail
+  instead of silently selecting a different layout.
+- `windows_private_display_profile_reset`: erase the saved profile intent
+  only. It does not delete display drivers, alter monitor modes, or change
+  the user's physical input desktop.
+
+Profiles live under the agent user's `~/.nexowire/private-display-profile`.
+For isolated test fixtures, set `NEXOWIRE_PRIVATE_DISPLAY_PROFILE_DIR`
+to a disposable directory. The saved file is versioned and atomically replaced
+rather than being partially overwritten.
+
+A saved profile is **not a Windows monitor configuration**. Actual creation
+of independent AI-visible monitors awaits an isolated session/virtual display
+backend; a Win32 desktop alone does not provide that boundary.
+
 ## Tool: `windows_private_display_plan` (read-only)
 
 The assistant can describe a proposed **isolated** arrangement of 1–8 OS-visible AI displays with resolution, effective DPI and refresh rate. The tool validates and normalizes each request into stable IDs and nonoverlapping geometry.
