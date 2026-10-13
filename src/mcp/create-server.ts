@@ -3153,6 +3153,52 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_display_plan',
+    {
+      title: 'Plan isolated AI displays',
+      description:
+        'Validate 1-8 desired independent AI screens, per-screen pixel resolution, DPI, refresh rate, primary display and layout. Read-only planning; returns exact geometry, all-screens screenshot default and an explicit blocker until an isolated virtual-display backend exists. Does NOT change host Windows displays or pretend virtual monitors were installed.',
+      inputSchema: {
+        ...targetFields,
+        screen_count: z.number().int().min(1).max(8),
+        width: z.number().int().min(320).max(7680).optional(),
+        height: z.number().int().min(240).max(4320).optional(),
+        dpi: z.number().int().min(72).max(480).optional(),
+        refresh_hz: z.number().int().min(24).max(240).optional(),
+        layout: z.enum(['horizontal', 'vertical']).optional(),
+        primary_index: z.number().int().min(0).max(7).optional(),
+        per_monitor: z.array(z.object({
+          index: z.number().int().min(0).max(7),
+          width: z.number().int().min(320).max(7680).optional(),
+          height: z.number().int().min(240).max(4320).optional(),
+          dpi: z.number().int().min(72).max(480).optional(),
+          refresh_hz: z.number().int().min(24).max(240).optional(),
+        })).max(8).optional(),
+      },
+    },
+    async ({
+      device_id,provider_id,screen_count,width,height,dpi,refresh_hz,
+      layout,primary_index,per_monitor,
+    }) => await execute(
+      ctx,
+      'windows.private_display.plan',
+      {
+        screen_count,
+        ...(width !== undefined ? {width} : {}),
+        ...(height !== undefined ? {height} : {}),
+        ...(dpi !== undefined ? {dpi} : {}),
+        ...(refresh_hz !== undefined ? {refresh_hz} : {}),
+        ...(layout !== undefined ? {layout} : {}),
+        ...(primary_index !== undefined ? {primary_index} : {}),
+        ...(per_monitor !== undefined ? {per_monitor} : {}),
+      },
+      device_id,
+      provider_id,
+      30_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_screen_capture',
     {
       title: 'Capture Nexowire private screen',
