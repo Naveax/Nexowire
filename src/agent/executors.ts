@@ -2086,6 +2086,18 @@ const LEGACY_PHYSICAL_GUI_CAPABILITIES = new Set<Capability>([
 ]);
 
 export function assertPrivateAiGuiBoundary(capability:Capability):void{
+  // A verified installer may use PowerShell Start-Process or shell/COM
+  // brokers even when windowsHide is true. These can display child GUI
+  // windows and UAC dialogs on the owner's Default/Secure Desktop.
+  // A FULL-mode Broker approval never substitutes for AI-screen isolation.
+  if(capability==='windows.installer.apply' &&
+     resolveAiWorkspaceTarget(undefined)==='private_desktop'){
+    throw Object.assign(new Error(
+      'Verified installer apply is not isolated on NexowirePrivate. '+
+      'Elevated installers require separate owner-mediated execution '+
+      'outside private AI mode; no GUI/UAC fallback to Default is permitted.',
+    ),{code:'AI_PRIVATE_INSTALLER_UI_NOT_ISOLATED',capability});
+  }
   if(!LEGACY_PHYSICAL_GUI_CAPABILITIES.has(capability))return;
   if(resolveAiWorkspaceTarget(undefined)!=='private_desktop')return;
   const redirect=capability.startsWith('windows.pointer.')
