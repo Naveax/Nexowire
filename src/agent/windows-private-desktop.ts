@@ -54,6 +54,10 @@ const PrivatePointerClickSchema =
     clicks: z.number().int().min(1).max(3).default(1),
   });
 
+const PrivateWindowCloseSchema = z.object({
+  hwnd: WindowHandleSchema,
+});
+
 const PrivateKeyboardTypeSchema = z.object({
   hwnd: WindowHandleSchema,
   text: z.string().min(1).max(20_000),
@@ -188,6 +192,7 @@ public static class NxDesktopNative {
   public const uint WM_MOUSEMOVE=0x0200, WM_LBUTTONDOWN=0x0201, WM_LBUTTONUP=0x0202;
   public const uint WM_RBUTTONDOWN=0x0204, WM_RBUTTONUP=0x0205;
   public const uint WM_MBUTTONDOWN=0x0207, WM_MBUTTONUP=0x0208;
+  public const uint WM_CLOSE=0x0010;
   public const uint MK_LBUTTON=0x0001, MK_RBUTTON=0x0002, MK_MBUTTON=0x0010;
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
   public struct SI {
@@ -251,6 +256,11 @@ public static class NxDesktopNative {
   }
   static void Post(IntPtr h,uint msg,UIntPtr w,IntPtr l){
     if(!PostMessage(h,msg,w,l))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+  }
+  public static string CloseWindow(string name,string raw){
+    var h=Target(name,raw);
+    Post(h,WM_CLOSE,UIntPtr.Zero,IntPtr.Zero);
+    return "0x"+h.ToInt64().ToString("X");
   }
   public static string PointerMove(string name,string raw,int x,int y){
     var h=Target(name,raw);var l=XY(h,x,y);Post(h,WM_MOUSEMOVE,UIntPtr.Zero,l);return "0x"+h.ToInt64().ToString("X");
@@ -373,7 +383,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','text','hotkey')]
+  [ValidateSet('pointer_move','pointer_click','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -390,6 +400,9 @@ try {
   } elseif ($Action -eq 'pointer_click') {
     $h=[NxDesktopNative]::PointerClick([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[string]$r.button,[int]$r.clicks)
     [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;button=[string]$r.button;clicks=[int]$r.clicks;inputDesktop=[NxDesktopNative]::Input()}
+  } elseif ($Action -eq 'close_window') {
+    $h=[NxDesktopNative]::CloseWindow([string]$r.desktop,[string]$r.hwnd)
+    [pscustomobject]@{hwnd=$h;inputDesktop=[NxDesktopNative]::Input();closeRequested=$true}
   } elseif ($Action -eq 'text') {
     $h=[NxDesktopNative]::Text([string]$r.desktop,[string]$r.hwnd,[string]$r.text,[int]$r.interval_ms)
     [pscustomobject]@{hwnd=$h;charsSent=([string]$r.text).Length;intervalMs=[int]$r.interval_ms;inputDesktop=[NxDesktopNative]::Input()}
@@ -468,7 +481,8 @@ type PrivateInputAction =
   | 'pointer_move'
   | 'pointer_click'
   | 'text'
-  | 'hotkey';
+  | 'hotkey'
+  | 'close_window';
 
 async function request(action:PrivateDesktopHelperAction, payload:Record<string,unknown>):Promise<unknown>{
   const p=paths();const f=path.join(p.root,'req-'+process.pid+'-'+Date.now()+'-'+Math.random().toString(16).slice(2)+'.json');await fs.writeFile(f,JSON.stringify(payload),'utf8');
@@ -767,6 +781,60 @@ function remapPrivateInputError(error: unknown): never {
   throw error;
 }
 
+/** Graceful close: only one live top-level HWND from a process launched and
+ * tracked by this private desktop may receive WM_CLOSE. Never terminate by
+ * stale PID and never send messages to Default or the private shell.
+ */
+async function privateWindowClose(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  const state=await requireRunningPrivateDesktop();
+  const parsed=PrivateWindowCloseSchema.parse(input);
+  const before=await view();
+  const entry=before.windows.find(w=>
+    w.hwnd.toUpperCase()===parsed.hwnd.toUpperCase());
+  if(!entry){
+    throw new PrivateDesktopError('WINDOW_NOT_PRIVATE_DESKTOP',
+      'Requested HWND does not belong to NexowirePrivate.');
+  }
+  if(!state.launchedPids.includes(entry.processId)){
+    throw new PrivateDesktopError('PRIVATE_WINDOW_UNTRACKED',
+      'Only Nexowire-managed private app windows can be closed.');
+  }
+  // The helper checks desktop membership AGAIN immediately before WM_CLOSE,
+  // preventing a reused handle from ever reaching Default windows.
+  let requested:{hwnd:string;inputDesktop:string;closeRequested:boolean};
+  try{
+    requested=z.object({
+      hwnd:z.string(),inputDesktop:z.string(),closeRequested:z.literal(true),
+    }).parse(await privateInputRequest('close_window',{
+      desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
+    }));
+  }catch(error){return remapPrivateInputError(error);}
+  let closed=false;
+  const deadline=Date.now()+1800;
+  while(Date.now()<deadline){
+    const current=await view();
+    if(!current.windows.some(w=>
+      w.hwnd.toUpperCase()===parsed.hwnd.toUpperCase())){
+      closed=true;break;
+    }
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  const after=await inputDesktop();
+  if(before.inputDesktop!==after ||
+      requested.inputDesktop!==before.inputDesktop){
+    throw new PrivateDesktopError('PRIVATE_WINDOW_CLOSE_INPUT_DESKTOP_CHANGED',
+      'Physical input desktop changed during private-window close.');
+  }
+  return {data:{
+    hwnd:requested.hwnd,processId:entry.processId,
+    desktopName:DESKTOP_NAME,closeRequested:true,closed,
+    inputDesktopBefore:before.inputDesktop,inputDesktopAfter:after,
+    visibleDesktopChanged:false,touchesSystemCursor:false,
+    forcedProcessTermination:false,
+  }};
+}
+
 async function privatePointerMove(
   input: unknown,
 ): Promise<{ data: unknown }> {
@@ -1009,6 +1077,8 @@ export async function executeWindowsPrivateDesktopCapability(
         withPrivateDesktopProcessLock(paths().root,()=>launchApp(input)));
     case 'windows.private_desktop.windows':
       return await windows();
+    case 'windows.private_desktop.window.close':
+      return await serializePrivateDesktopLifecycle(()=>privateWindowClose(input));
     case 'windows.private_desktop.show':
       return await showPrivateDesktop();
     case 'windows.private_pointer.move':

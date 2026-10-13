@@ -3644,6 +3644,23 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_close_window',
+    {
+      title:'Request graceful close for managed AI private window',
+      description:
+        'Send WM_CLOSE only to an explicitly selected live NexowirePrivate top-level HWND whose process was launched and tracked by Nexowire. Never terminate a PID or target the owner Default desktop. Returns whether the window closed; unsaved-work dialogs may keep it open.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+      },
+    },
+    async ({device_id,provider_id,hwnd})=>await execute(
+      ctx,'windows.private_desktop.window.close',{hwnd},
+      device_id,provider_id,30_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_pointer_move',
     {
       title: 'Move Nexowire private pointer',
