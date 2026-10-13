@@ -104,6 +104,23 @@ clipboard OS-isolated. Native clipboard read/write by arbitrary launched
 applications remains an open limitation of desktop-object-only isolation
 until a separate guest/window-station backend is available.
 
+## Private child-control mouse clicks
+
+`windows_private_pointer_click` now validates the selected top-level
+`NexowirePrivate` HWND and relative client `x,y`, hit-tests the
+deepest visible and enabled child HWND **belonging to the same process**,
+then converts the point to that child's client coordinate system.
+`WM_MOUSEMOVE` and the requested left/right/middle mouse down/up
+sequence are posted only to this target, without moving the system
+cursor or foreground window. An invalid parent HWND or out-of-bounds
+point fails closed; an embedded cross-process child is never targeted.
+
+The real Windows DEV WinForms panel fixture accepted exactly one
+`WM_LBUTTONDOWN` and one `WM_LBUTTONUP`. This is window-message
+delivery, not universal GUI click support: WPF, browser-rendered
+elements and controls requiring physical focus may need different
+private APIs. No fallback to the physical input desktop is allowed.
+
 ## Private mouse-wheel routing
 
 `windows_private_pointer_scroll` scrolls an explicitly selected private
