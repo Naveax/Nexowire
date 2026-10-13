@@ -2307,6 +2307,19 @@ export async function executeCapability(
     case 'windows.virtual_pointer.move':
     case 'windows.virtual_pointer.style':
     case 'windows.virtual_pointer.visibility':
+      // The legacy WPF overlay is drawn on the owner's Default desktop,
+      // NOT inside WinSta0\NexowirePrivate. A private AI run must never
+      // display it just because the real cursor remains untouched.
+      // Always permit status/stop so an already-running overlay can be
+      // inspected and removed when switching into private-only mode.
+      if(capability!=='windows.virtual_pointer.status' &&
+         capability!=='windows.virtual_pointer.stop' &&
+         resolveAiWorkspaceTarget(undefined)==='private_desktop'){
+        throw Object.assign(
+          new Error('Visible pointer overlay cannot be confined to NexowirePrivate. Use private_pointer on the isolated desktop.'),
+          {code:'AI_VISIBLE_OVERLAY_NOT_ISOLATED'},
+        );
+      }
       return await executeWindowsVirtualPointerCapability(capability, input);
     case 'windows.private_screen.capture':
       return await captureWindowsPrivateScreen(input);
