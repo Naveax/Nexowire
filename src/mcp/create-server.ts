@@ -3717,6 +3717,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_window_audit',
+    {
+      title:'Audit observed private window process ownership',
+      description:
+        'Read-only classification of observed NexowirePrivate windows into tracked managed app PID, private shell PID, and untracked PID. Two snapshots are compared. Does not certify recursive isolation, absence of physical Default GUI leakage, or an independent session.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_desktop.window_audit',{},
+      device_id,provider_id,45_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_desktop_windows',
     {
       title: 'List Nexowire private desktop windows',

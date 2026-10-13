@@ -227,6 +227,30 @@ processes; it is an explicit-broker defense, not proof of transitive
 isolation. Such commands must be confined by a separately authorized
 guest/session boundary to close #402.
 
+## Observed private window process provenance (read-only)
+
+`windows_private_desktop_window_audit` inventories top-level windows
+visible on `NexowirePrivate` and classifies their process IDs as
+currently managed app PIDs, the tracked private shell PID, or
+**untracked** PIDs. It compares the window count and input desktop from
+two adjacent snapshots. Untracked PIDs are bounded to 64 distinct IDs
+and truncation is reported. The tool does not change the user input
+desktop, Windows ACLs, running process privileges, or the host display.
+
+Even when every observed HWND has a tracked owner,
+`fullDescendantIsolationVerified:false`,
+`physicalDesktopLeakageExcluded:false`, and
+`hostClipboardIsolated:false` remain explicit. **A successful audit
+is not proof that a launched child did not also create a window on
+the owner's `Default` desktop.** The tool has no view into process
+descendants, WMI/COM brokered windows, independent window stations or
+VM boundaries. If the first status snapshot cannot provide a window
+count, its completeness is uncertain and the report should not be used
+as acceptance evidence.
+
+This is a supplementary diagnosis for #402, not a substitute for a
+separate guest display provider and actual user-interaction acceptance.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
