@@ -3175,6 +3175,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_display_readiness',
+    {
+      title:'Read AI Screen configuration and isolated display readiness',
+      description:
+        'Read-only combined report of the saved 1-8 screen AI display profile, observed host-shared monitor geometry/DPI, and VM/display-backend blockers. Shows whether current physical resolutions match the desired plan but NEVER treats that as applied, independent AI monitors. Default screenshots remain all private windows on host-shared monitors. Does not change VM, device, resolution, or DPI settings.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_display.readiness',{},
+      device_id,provider_id,45_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_display_backend_probe',
     {
       title:'Inspect independent AI display backend readiness',

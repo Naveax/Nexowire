@@ -24,6 +24,26 @@ provider has been built and verified. The preflight deliberately never
 runs VM management mutations, installs drivers, attaches displays, or
 changes physical resolution/DPI. It does not expose VM names or disk paths.
 
+## Unified AI screen readiness report
+
+Call `windows_private_display_readiness` to compare the saved AI monitor
+profile against actual host-shared monitor topology and the read-only
+virtualization preflight. It reports the **desired** count, resolution, DPI,
+refresh and layout, the **observed** connected host monitor count/bounds,
+and whether host resolutions happen to match the requested plan.
+
+Even an exact resolution match is not proof of an independent AI display:
+`canApplyDesiredIsolatedDisplays:false`,
+`nativeHostMonitorsAreIndependentAiScreens:false`, and
+`applied:false` remain explicit. No profile returns
+`PROFILE_NOT_CONFIGURED`; missing Hyper-V/VM access produces distinct
+blockers. `ISOLATED_DISPLAY_PROVIDER_NOT_INSTALLED` remains a blocker
+until a separately authorized guest provider has been implemented.
+
+This is a read-only diagnosis. The method does not start/stop VMs,
+install adapters, capture owner Default windows, or change native
+monitor count, resolution, DPI or the physical input desktop.
+
 ## Save the desired configuration for later sessions
 
 The following Windows MCP tools persist **desired configuration only**:
