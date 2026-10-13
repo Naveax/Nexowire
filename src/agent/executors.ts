@@ -24,6 +24,7 @@ import {inspectWindowsPrivateDisplayBackend} from './windows-private-display-bac
 import {inspectWindowsPrivateDisplayReadiness} from './windows-private-display-readiness.js';
 import {planWindowsPrivateDisplays} from './windows-private-display-plan.js';
 import {executeWindowsPrivateDisplayProfileCapability} from './windows-private-display-profile.js';
+import {executeWindowsPrivateClipboardCapability} from './windows-private-clipboard.js';
 import {
   assertPhysicalConsoleGrant,
   executeWindowsConsoleControlCapability,
@@ -2399,6 +2400,12 @@ export async function executeCapability(
     case 'windows.private_display.profile.set':
     case 'windows.private_display.profile.reset':
       return await executeWindowsPrivateDisplayProfileCapability(capability,input);
+    case 'windows.private_clipboard.status':
+    case 'windows.private_clipboard.read':
+    case 'windows.private_clipboard.write':
+    case 'windows.private_clipboard.clear':
+    case 'windows.private_clipboard.paste':
+      return await executeWindowsPrivateClipboardCapability(capability,input);
     case 'windows.private_desktop.status':
     case 'windows.private_desktop.start':
     case 'windows.private_desktop.stop':

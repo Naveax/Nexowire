@@ -44,8 +44,8 @@ commands that would otherwise operate on the owner's `Default` desktop:
 - `windows.accessibility.tree/find/invoke/set_value` (there is no
   equivalent isolated native accessibility provider yet; use explicit
   private pointer/keyboard/window APIs, never silent Default fallback)
-- `windows.clipboard.read/write/clear` (there is no isolated private
-  clipboard equivalent yet; do not expose or mutate the user's clipboard)
+- `windows.clipboard.read/write/clear` (use the isolated Agent-memory
+  `windows.private_clipboard.*` tools instead; no owner clipboard access)
 
 These 15 routes return `AI_PHYSICAL_GUI_NOT_ISOLATED` **before** input
 validation, host GUI access, or physical-console grant checks. A grant
@@ -57,6 +57,34 @@ Without a configured private AI target, the legacy Windows GUI tools
 retain their existing behavior. This rule is enforced centrally for
 direct MCP calls and nested execution through task graphs or runbooks,
 not just in client/UI prompts.
+
+## Agent-memory private clipboard
+
+For AI-only copy/paste, use the following tools. These do **not** interact
+with the Windows clipboard or persist secrets to disk:
+
+- `windows_private_clipboard_write`: store up to 20,000 text characters
+  scoped to the current running `NexowirePrivate` desktop session
+- `windows_private_clipboard_read`: return the stored text with a
+  `max_chars` limit that **rejects** oversized reads without truncation
+- `windows_private_clipboard_status`: whether private text exists, its
+  length and update time, without returning text
+- `windows_private_clipboard_paste`: send stored text to one explicitly
+  selected and revalidated private HWND through the native private keyboard
+  path; no `Ctrl+V`, physical focus change, or system clipboard access
+- `windows_private_clipboard_clear`: explicitly wipe the in-process text
+  buffer, even if the private desktop is no longer running
+
+The buffer is cleared on Agent process restart, and becomes invalid if the
+private desktop stops/restarts or its session ID changes. Private reads,
+writes, and pastes require an active private desktop. The clipboard is text
+only; there is no image/HTML clipboard transport and no automatic sync to
+the physical Windows clipboard.
+
+A successful private paste means native WM_CHAR delivery was requested to
+a verified private HWND. Applications that do not support WM_CHAR, or
+require a focused child control, may need a different private input path.
+Never silently fall back to the physical clipboard.
 
 ## Capture contract
 

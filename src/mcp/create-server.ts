@@ -3737,6 +3737,76 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+  // This clipboard lives only in Agent memory for the currently running
+  // private desktop. Never use GetClipboardData/SetClipboardData or expose
+  // the owner's physical/default Windows clipboard in this flow.
+  server.registerTool(
+    'windows_private_clipboard_status',
+    {
+      title:'Inspect private AI memory clipboard status',
+      description:'Read whether NexowirePrivate holds in-memory text, without touching the Windows clipboard. A restarted private desktop invalidates the stored text.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_clipboard.status',{},device_id,provider_id,30_000,
+    ),
+  );
+  server.registerTool(
+    'windows_private_clipboard_read',
+    {
+      title:'Read private AI memory clipboard',
+      description:'Read only the ephemeral NexowirePrivate text buffer (not Windows clipboard). Requires a running private desktop. Never truncates silently.',
+      inputSchema:{
+        ...targetFields,max_chars:z.number().int().min(1).max(20_000).optional(),
+      },
+    },
+    async ({device_id,provider_id,max_chars})=>await execute(
+      ctx,'windows.private_clipboard.read',{
+        ...(max_chars!==undefined?{max_chars}:{}),
+      },device_id,provider_id,30_000,
+    ),
+  );
+  server.registerTool(
+    'windows_private_clipboard_write',
+    {
+      title:'Store text in isolated AI memory clipboard',
+      description:'Store up to 20,000 text characters in Agent process memory scoped to the running NexowirePrivate desktop. Does not write Windows clipboard or disk.',
+      inputSchema:{...targetFields,text:z.string().min(1).max(20_000)},
+    },
+    async ({device_id,provider_id,text})=>await execute(
+      ctx,'windows.private_clipboard.write',{text},
+      device_id,provider_id,30_000,
+    ),
+  );
+  server.registerTool(
+    'windows_private_clipboard_clear',
+    {
+      title:'Clear private AI memory clipboard',
+      description:'Discard the ephemeral NexowirePrivate text buffer, even when the private desktop is already stopped. Never clears the owner Windows clipboard.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_clipboard.clear',{},device_id,provider_id,30_000,
+    ),
+  );
+  server.registerTool(
+    'windows_private_clipboard_paste',
+    {
+      title:'Type private clipboard text into a private app',
+      description:'Type the private in-memory text into a current NexowirePrivate HWND through native private keyboard messaging, without invoking the host Windows clipboard or Ctrl+V. Target HWND is revalidated against the private desktop.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        interval_ms:z.number().int().min(0).max(100).optional(),
+      },
+    },
+    async ({device_id,provider_id,hwnd,interval_ms})=>await execute(
+      ctx,'windows.private_clipboard.paste',{
+        hwnd,...(interval_ms!==undefined?{interval_ms}:{}),
+      },device_id,provider_id,45_000,
+    ),
+  );
+
   server.registerTool(
     'windows_private_desktop_close_window',
     {
