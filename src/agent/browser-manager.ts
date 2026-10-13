@@ -102,6 +102,20 @@ export class BrowserControlError extends Error {
   }
 }
 
+/**
+ * Only the read-only readiness probe during navigation can be repeated
+ * after an occasional overloaded Windows Edge Runtime.evaluate timeout.
+ * Mutating Runtime.evaluate (click/type) must NEVER be retried, or a user
+ * action could execute twice.
+ */
+export function isTransientNavigationReadinessTimeout(
+  error:unknown,
+):boolean {
+  return error instanceof BrowserControlError &&
+    error.code==='CDP_REQUEST_TIMEOUT' &&
+    error.details?.method==='Runtime.evaluate';
+}
+
 class CdpClient {
   private nextId = 1;
   private readonly pending = new Map<
@@ -768,34 +782,46 @@ export class BrowserManager {
         }
 
         const deadline = Date.now() + timeoutMs;
+        let readinessTimeouts = 0;
         while (Date.now() < deadline) {
-          const state = await this.evaluate<{
-            readyState: string;
-            url: string;
-            title: string;
-          }>(
-            client,
-            '({readyState:document.readyState,url:location.href,title:document.title})',
-            5_000,
-          );
-          if (
-            state.readyState === 'interactive' ||
-            state.readyState === 'complete'
-          ) {
-            return {
-              sessionId: input.sessionId,
-              targetId: target.id,
-              requestedUrl,
-              ...state,
-            };
+          const remaining = deadline-Date.now();
+          try {
+            const state = await this.evaluate<{
+              readyState: string;
+              url: string;
+              title: string;
+            }>(
+              client,
+              '({readyState:document.readyState,url:location.href,title:document.title})',
+              Math.min(5_000,Math.max(100,remaining)),
+            );
+            if (
+              state.readyState === 'interactive' ||
+              state.readyState === 'complete'
+            ) {
+              return {
+                sessionId: input.sessionId,
+                targetId: target.id,
+                requestedUrl,
+                ...state,
+              };
+            }
+          } catch(error) {
+            if(!isTransientNavigationReadinessTimeout(error))throw error;
+            // Retry *only* this read-only state poll. In particular, do
+            // not repeat Page.navigate or any DOM-changing evaluation.
+            // Honor the same caller-supplied absolute deadline.
+            readinessTimeouts++;
           }
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          if(Date.now()<deadline){
+            await new Promise(resolve=>setTimeout(resolve,50));
+          }
         }
 
         throw new BrowserControlError(
           'BROWSER_NAVIGATION_TIMEOUT',
           'Timed out waiting for browser document readiness.',
-          { requestedUrl },
+          { requestedUrl,readinessTimeouts },
         );
       },
     );
