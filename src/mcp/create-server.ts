@@ -3266,6 +3266,72 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_screen_capture_set',
+    {
+      title:'Capture each private monitor separately',
+      description:
+        'Return a complete ordered collection of PNG images, one for every connected native host monitor, rendered ONLY from NexowirePrivate windows. Unlike the default combined image, each monitor is scaled independently so multi-monitor text stays readable. Detects display hotplug, preserves the input desktop, and returns NO partial image collection on error. Monitors are host-shared, not independent AI virtual displays. Use windows_private_screen_capture with source=monitor for a single requested screen.',
+      inputSchema:{
+        ...targetFields,
+        max_width:z.number().int().min(160).max(7680).optional(),
+        max_height:z.number().int().min(120).max(4320).optional(),
+        max_bytes:z.number().int().min(65_536).max(8_388_608).optional(),
+        max_total_bytes:z.number().int().min(65_536).max(33_554_432).optional(),
+      },
+    },
+    async ({device_id,provider_id,max_width,max_height,max_bytes,max_total_bytes})=>{
+      const response=await execute(
+        ctx,'windows.private_screen.capture_set',{
+          ...(max_width!==undefined?{max_width}:{}),
+          ...(max_height!==undefined?{max_height}:{}),
+          ...(max_bytes!==undefined?{max_bytes}:{}),
+          ...(max_total_bytes!==undefined?{max_total_bytes}:{}),
+        },device_id,provider_id,120_000,
+      );
+      if('isError' in response&&response.isError)return response;
+      const structured=response.structuredContent as Record<string,unknown>;
+      const packet=structured?.data;
+      const data=typeof packet==='object'&&packet!==null&&!Array.isArray(packet)
+        ? packet as Record<string,unknown>:null;
+      const frames=data?.captures;
+      if(!data||!Array.isArray(frames)||frames.length===0||
+        frames.length>8||frames.length!==data.monitorCount||
+        data.complete!==true){
+        return toolResult({ok:false,error:
+          'Per-monitor private capture returned an incomplete image collection.'},true);
+      }
+      const imageContent:Array<{type:'image';data:string;mimeType:string}>=[];
+      const sanitizedFrames:Array<Record<string,unknown>>=[];
+      for(const frame of frames){
+        if(typeof frame!=='object'||frame===null||Array.isArray(frame)){
+          return toolResult({ok:false,error:'Invalid private monitor frame.'},true);
+        }
+        const shot=frame as Record<string,unknown>;
+        if(typeof shot.base64!=='string'||shot.mimeType!=='image/png'||
+          shot.source!=='monitor'){
+          return toolResult({ok:false,error:'Incomplete private monitor image.'},true);
+        }
+        imageContent.push({
+          type:'image',data:shot.base64,mimeType:'image/png',
+        });
+        const {base64:_base64,...metadata}=shot;
+        sanitizedFrames.push(metadata);
+      }
+      const sanitized={
+        ...structured,
+        data:{...data,captures:sanitizedFrames},
+      };
+      return {
+        content:[
+          ...imageContent,
+          {type:'text' as const,text:JSON.stringify(sanitized,null,2)},
+        ],
+        structuredContent:sanitized,
+      };
+    },
+  );
+
+  server.registerTool(
     'windows_private_screen_capture',
     {
       title: 'Capture Nexowire private screen',
