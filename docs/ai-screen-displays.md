@@ -321,6 +321,28 @@ involved. Native HWND controls do not cover all WPF composition or
 browser DOM elements; this is not a full UI Automation implementation
 or an independent OS desktop guarantee.
 
+## Exact private child HWND text targeting
+
+After `windows_private_desktop_controls` returns a Win32 child
+`hwnd` and its `className`, `windows_private_keyboard_type` may
+receive them as paired `control_hwnd` and `expected_class` fields,
+alongside the validated top-level `hwnd`. The target must still be a
+visible and enabled descendant of that exact private top-level window,
+belong to the **same PID** and match the expected case-sensitive
+Win32 class name. It is checked again before every Unicode `WM_CHAR`
+message. Invalid, stale, cross-parent, disabled, hidden or mismatched
+targets are rejected without routing to the physical desktop.
+
+This mode is mutually exclusive with client coordinate `x/y`
+targeting, and neither existing top-level typing nor coordinate
+typing changes behavior. A DEV WinForms fixture with two native
+TextBox HWNDs confirmed that only the explicitly selected second
+control received the text; malformed and mismatched targets failed
+closed. Exact HWNDs can still be reused if an app destroys and
+recreates the same control with identical class/PID: this is a safer
+provenance check, **not** a permanent identity proof or full UIA
+support.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.

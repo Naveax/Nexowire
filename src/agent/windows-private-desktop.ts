@@ -73,8 +73,14 @@ const PrivateKeyboardTypeSchema = z.object({
   interval_ms: z.number().int().min(0).max(100).default(0),
   x:z.number().int().min(0).max(32767).optional(),
   y:z.number().int().min(0).max(32767).optional(),
+  control_hwnd:WindowHandleSchema.optional(),
+  expected_class:z.string().min(1).max(256).optional(),
 }).refine(value=>(value.x===undefined)===(value.y===undefined),{
   message:'Supply both x and y to target a private child control.',
+}).refine(value=>(value.control_hwnd===undefined)===(value.expected_class===undefined),{
+  message:'Supply both control_hwnd and expected_class from the control inventory.',
+}).refine(value=>value.control_hwnd===undefined||value.x===undefined,{
+  message:'Cannot combine exact child HWND and coordinate targeting.',
 });
 
 const PrivateKeyboardHotkeySchema = z.object({
@@ -237,6 +243,7 @@ public static class NxDesktopNative {
   [DllImport("user32.dll",SetLastError=true)] static extern IntPtr ChildWindowFromPointEx(IntPtr h,POINT p,uint flags);
   const uint CWP_SKIPINVISIBLE=0x1,CWP_SKIPDISABLED=0x2,CWP_SKIPTRANSPARENT=0x4;
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent,IntPtr child);
   [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr h,uint msg,UIntPtr w,IntPtr l);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
   [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool GetUserObjectInformation(IntPtr h,int i,StringBuilder b,int n,out int need);
@@ -351,11 +358,30 @@ public static class NxDesktopNative {
     }
     return "0x"+h.ToInt64().ToString("X");
   }
+  static IntPtr RequireExactChild(IntPtr parent,string raw,string expectedClass){
+    var child=H(raw);
+    if(child==IntPtr.Zero||child==parent||!IsWindow(child)||!IsChild(parent,child))
+      throw new InvalidOperationException("PRIVATE_CHILD_CONTROL_INVALID");
+    uint parentPid,childPid;
+    GetWindowThreadProcessId(parent,out parentPid);
+    GetWindowThreadProcessId(child,out childPid);
+    if(parentPid==0||childPid!=parentPid)
+      throw new InvalidOperationException("PRIVATE_CHILD_CONTROL_INVALID");
+    if(!IsWindowVisible(child)||!IsWindowEnabled(child))
+      throw new InvalidOperationException("PRIVATE_CHILD_CONTROL_UNAVAILABLE");
+    var actual=new StringBuilder(257);
+    GetClassName(child,actual,actual.Capacity);
+    if(!String.Equals(actual.ToString(),expectedClass,StringComparison.Ordinal))
+      throw new InvalidOperationException("PRIVATE_CHILD_CONTROL_CLASS_MISMATCH");
+    return child;
+  }
   public static string Text(string name,string raw,string text,int intervalMs,
-    bool childTarget,int x,int y){
+    bool childTarget,int x,int y,string childRaw,string expectedClass){
     var h=Target(name,raw);
     var sendTo=h;
-    if(childTarget){
+    if(!String.IsNullOrEmpty(childRaw)){
+      sendTo=RequireExactChild(h,childRaw,expectedClass);
+    }else if(childTarget){
       XY(h,x,y);
       var point=new POINT{x=x,y=y};
       if(!ClientToScreen(h,ref point))
@@ -364,6 +390,8 @@ public static class NxDesktopNative {
       sendTo=SafePrivateWheelChild(h,point);
     }
     foreach(char ch in text??""){
+      if(!String.IsNullOrEmpty(childRaw))
+        RequireExactChild(h,childRaw,expectedClass);
       Post(sendTo,WM_CHAR,new UIntPtr((uint)ch),IntPtr.Zero);
       if(intervalMs>0)System.Threading.Thread.Sleep(intervalMs);
     }
@@ -549,7 +577,7 @@ try {
     [pscustomobject]@{hwnd=$h;inputDesktop=[NxDesktopNative]::Input();closeRequested=$true}
   } elseif ($Action -eq 'text') {
     $hasXY=($null-ne$r.x)-and($null-ne$r.y)
-    $h=[NxDesktopNative]::Text([string]$r.desktop,[string]$r.hwnd,[string]$r.text,[int]$r.interval_ms,[bool]$hasXY,[int]$r.x,[int]$r.y)
+    $h=[NxDesktopNative]::Text([string]$r.desktop,[string]$r.hwnd,[string]$r.text,[int]$r.interval_ms,[bool]$hasXY,[int]$r.x,[int]$r.y,[string]$r.control_hwnd,[string]$r.expected_class)
     [pscustomobject]@{hwnd=$h;charsSent=([string]$r.text).Length;intervalMs=[int]$r.interval_ms;inputDesktop=[NxDesktopNative]::Input()}
   } else {
     [int[]]$keys=@($r.virtualKeys|ForEach-Object{[int]$_})
@@ -561,7 +589,7 @@ try {
 } catch {
   $message=$_.Exception.Message
   $code='PRIVATE_INPUT_FAILED'
-  foreach($candidate in @('WINDOW_NOT_PRIVATE_DESKTOP','WINDOW_NOT_FOUND','POINT_OUTSIDE_CLIENT','BUTTON_UNSUPPORTED','HOTKEY_EMPTY')){
+  foreach($candidate in @('WINDOW_NOT_PRIVATE_DESKTOP','WINDOW_NOT_FOUND','POINT_OUTSIDE_CLIENT','PRIVATE_CHILD_CONTROL_INVALID','PRIVATE_CHILD_CONTROL_UNAVAILABLE','PRIVATE_CHILD_CONTROL_CLASS_MISMATCH','BUTTON_UNSUPPORTED','HOTKEY_EMPTY')){
     if($message.Contains($candidate)){$code=$candidate;break}
   }
   $json=[pscustomobject]@{ok=$false;code=$code;message=$message}|ConvertTo-Json -Compress
@@ -1175,6 +1203,7 @@ async function privateKeyboardType(
           text: parsed.text,
           interval_ms: parsed.interval_ms,
           ...(parsed.x!==undefined&&parsed.y!==undefined?{x:parsed.x,y:parsed.y}:{}),
+          ...(parsed.control_hwnd!==undefined?{control_hwnd:parsed.control_hwnd,expected_class:parsed.expected_class}:{}),
         }),
       );
     return {
