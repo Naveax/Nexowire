@@ -103,6 +103,7 @@ export const CORE_CAPABILITIES = [
   'windows.private_desktop.show',
   'windows.private_pointer.move',
   'windows.private_pointer.click',
+  'windows.private_pointer.scroll',
   'windows.private_keyboard.type',
   'windows.private_keyboard.hotkey',
   'windows.private_clipboard.status',

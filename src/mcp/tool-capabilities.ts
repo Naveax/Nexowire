@@ -61,6 +61,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_private_desktop_show: 'windows.private_desktop.show',
   windows_private_pointer_move: 'windows.private_pointer.move',
   windows_private_pointer_click: 'windows.private_pointer.click',
+  windows_private_pointer_scroll: 'windows.private_pointer.scroll',
   windows_private_keyboard_type: 'windows.private_keyboard.type',
   windows_private_keyboard_hotkey: 'windows.private_keyboard.hotkey',
   windows_private_clipboard_status: 'windows.private_clipboard.status',

@@ -38,8 +38,8 @@ commands that would otherwise operate on the owner's `Default` desktop:
 - `windows.window.list/focus` (use `windows.private_desktop.windows`
   and managed private-window tools)
 - `windows.pointer.position/move/click/scroll` (use
-  `windows.private_pointer.move/click`; private scrolling/position
-  queries are not yet implemented)
+  `windows.private_pointer.move/click/scroll`; reading the physical
+  cursor position remains unavailable inside private AI mode)
 - `windows.keyboard.type/hotkey` (use `windows.private_keyboard.*`)
 - `windows.accessibility.tree/find/invoke/set_value` (there is no
   equivalent isolated native accessibility provider yet; use explicit
@@ -103,6 +103,44 @@ on Windows `Ctrl+V`. This protection does not make the host WinSta0
 clipboard OS-isolated. Native clipboard read/write by arbitrary launched
 applications remains an open limitation of desktop-object-only isolation
 until a separate guest/window-station backend is available.
+
+## Private mouse-wheel routing
+
+`windows_private_pointer_scroll` scrolls an explicitly selected private
+top-level window by posting `WM_MOUSEWHEEL` or `WM_MOUSEHWHEEL` only after
+native `NexowirePrivate` desktop membership validation. Inputs are the
+target `hwnd`, client coordinates `x`/`y`, a signed, nonzero multiple
+of 120 as `delta` (up/down or left/right depending on `axis`), and
+optional `axis:vertical|horizontal`. Input is capped at 10 wheel notches
+per request. The implementation translates client to screen message
+coordinates without changing the actual system cursor, foreground window,
+or input desktop. A zero delta, malformed HWND, or point outside the
+private window fails closed.
+
+The helper posts to the selected private **top-level** HWND, not arbitrary
+children or global cursor position. Applications that require wheel events
+on a specific child control may not respond. The positive/negative wheel
+direction and message payload were accepted by the actual WinForms DEV
+fixture; this does not claim support for every GUI toolkit.
+
+## Private scrolling without moving the physical pointer
+
+`windows_private_pointer_scroll` sends one bounded `WM_MOUSEWHEEL`
+(vertical) or `WM_MOUSEHWHEEL` (horizontal) message to an explicitly
+selected top-level NexowirePrivate HWND. The Agent:
+
+- Revalidates that the HWND belongs to `NexowirePrivate` immediately
+  before posting, and checks client-relative `x,y` are in bounds
+- Translates the private client point to the screen-coordinate `lParam`
+  expected by Win32 wheel messages without moving the user's cursor
+- Requires a signed, nonzero `delta` from -1200 to +1200 divisible by
+  120; rejects malformed requests before sending any native input
+- Reports `touchesSystemCursor:false` and the actual input desktop
+
+This is posted-window-message scrolling, not hardware `SendInput` or
+physical cursor movement. Some applications route wheel events to a
+specific child HWND; a successful post does not guarantee that an
+arbitrary application scrolled.
 
 ## Capture contract
 

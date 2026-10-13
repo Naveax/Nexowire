@@ -3897,6 +3897,31 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_pointer_scroll',
+    {
+      title:'Scroll one NexowirePrivate HWND without moving user cursor',
+      description:
+        'Send bounded vertical/horizontal wheel messages to one exact private top-level HWND. x/y are private client pixels; delta uses signed multiples of 120 (up/down or horizontal). Private desktop HWND is revalidated immediately before posting. Does not use SendInput or change the Windows physical cursor.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        x:z.number().int().min(0).max(32767),
+        y:z.number().int().min(0).max(32767),
+        delta:z.number().int().min(-1200).max(1200).refine(
+          value=>value!==0&&value%120===0,
+          {message:'Wheel delta must be a nonzero multiple of 120.'},
+        ),
+        axis:z.enum(['vertical','horizontal']).optional(),
+      },
+    },
+    async ({device_id,provider_id,hwnd,x,y,delta,axis})=>await execute(
+      ctx,'windows.private_pointer.scroll',{
+        hwnd,x,y,delta,...(axis?{axis}:{}),
+      },device_id,provider_id,30_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_keyboard_type',
     {
       title: 'Type text into Nexowire private HWND',

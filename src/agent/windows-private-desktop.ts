@@ -54,6 +54,14 @@ const PrivatePointerClickSchema =
     clicks: z.number().int().min(1).max(3).default(1),
   });
 
+const PrivatePointerScrollSchema=PrivatePointerMoveSchema.extend({
+  axis:z.enum(['vertical','horizontal']).default('vertical'),
+  delta:z.number().int().min(-1200).max(1200).refine(
+    value=>value!==0&&value%120===0,
+    {message:'Wheel delta must be a nonzero multiple of 120.'},
+  ),
+});
+
 const PrivateWindowCloseSchema = z.object({
   hwnd: WindowHandleSchema,
 });
@@ -192,6 +200,7 @@ public static class NxDesktopNative {
   public const uint WM_MOUSEMOVE=0x0200, WM_LBUTTONDOWN=0x0201, WM_LBUTTONUP=0x0202;
   public const uint WM_RBUTTONDOWN=0x0204, WM_RBUTTONUP=0x0205;
   public const uint WM_MBUTTONDOWN=0x0207, WM_MBUTTONUP=0x0208;
+  public const uint WM_MOUSEWHEEL=0x020A, WM_MOUSEHWHEEL=0x020E;
   public const uint WM_CLOSE=0x0010;
   public const uint MK_LBUTTON=0x0001, MK_RBUTTON=0x0002, MK_MBUTTON=0x0010;
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
@@ -201,6 +210,7 @@ public static class NxDesktopNative {
   }
   [StructLayout(LayoutKind.Sequential)] public struct PI { public IntPtr process,thread; public int pid,tid; }
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left,top,right,bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x,y; }
   public sealed class W { public string Hwnd; public string Title; public int ProcessId; public bool Visible; public int Left,Top,Right,Bottom; }
   delegate bool EnumProc(IntPtr hwnd, IntPtr l);
   [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr OpenDesktop(string n,int f,bool i,uint a);
@@ -212,6 +222,7 @@ public static class NxDesktopNative {
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out RECT r);
   [DllImport("user32.dll",SetLastError=true)] static extern bool GetClientRect(IntPtr h,out RECT r);
+  [DllImport("user32.dll",SetLastError=true)] static extern bool ClientToScreen(IntPtr h,ref POINT p);
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr h,uint msg,UIntPtr w,IntPtr l);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
@@ -264,6 +275,19 @@ public static class NxDesktopNative {
   }
   public static string PointerMove(string name,string raw,int x,int y){
     var h=Target(name,raw);var l=XY(h,x,y);Post(h,WM_MOUSEMOVE,UIntPtr.Zero,l);return "0x"+h.ToInt64().ToString("X");
+  }
+  public static string PointerScroll(string name,string raw,int x,int y,int delta,string axis){
+    var h=Target(name,raw);
+    XY(h,x,y); // validate private client coordinates without moving the real cursor
+    var point=new POINT{x=x,y=y};
+    if(!ClientToScreen(h,ref point))
+      throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    long packed=((long)(ushort)point.y<<16)|(ushort)point.x;
+    uint wheel=(axis??"vertical").ToLowerInvariant()=="horizontal"
+      ? WM_MOUSEHWHEEL:WM_MOUSEWHEEL;
+    uint wp=unchecked((uint)(delta<<16));
+    Post(h,wheel,new UIntPtr(wp),new IntPtr(packed));
+    return "0x"+h.ToInt64().ToString("X");
   }
   public static string PointerClick(string name,string raw,int x,int y,string button,int clicks){
     var h=Target(name,raw);var l=XY(h,x,y);uint down,up,mask;
@@ -383,7 +407,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','text','hotkey','close_window')]
+  [ValidateSet('pointer_move','pointer_click','pointer_scroll','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -397,6 +421,9 @@ try {
   $data = if ($Action -eq 'pointer_move') {
     $h=[NxDesktopNative]::PointerMove([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y)
     [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;inputDesktop=[NxDesktopNative]::Input()}
+  } elseif ($Action -eq 'pointer_scroll') {
+    $h=[NxDesktopNative]::PointerScroll([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[int]$r.delta,[string]$r.axis)
+    [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;delta=[int]$r.delta;axis=[string]$r.axis;inputDesktop=[NxDesktopNative]::Input()}
   } elseif ($Action -eq 'pointer_click') {
     $h=[NxDesktopNative]::PointerClick([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[string]$r.button,[int]$r.clicks)
     [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;button=[string]$r.button;clicks=[int]$r.clicks;inputDesktop=[NxDesktopNative]::Input()}
@@ -480,6 +507,7 @@ type PrivateDesktopHelperAction =
 type PrivateInputAction =
   | 'pointer_move'
   | 'pointer_click'
+  | 'pointer_scroll'
   | 'text'
   | 'hotkey'
   | 'close_window';
@@ -870,6 +898,26 @@ async function privatePointerMove(
   }
 }
 
+async function privatePointerScroll(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  await requireRunningPrivateDesktop();
+  const parsed=PrivatePointerScrollSchema.parse(input);
+  try {
+    const result=z.object({
+      hwnd:z.string(),x:z.number().int(),y:z.number().int(),
+      delta:z.number().int(),axis:z.enum(['vertical','horizontal']),
+      inputDesktop:z.string().max(256),
+    }).parse(await privateInputRequest('pointer_scroll',{
+      desktop:DESKTOP_NAME,hwnd:parsed.hwnd,x:parsed.x,y:parsed.y,
+      delta:parsed.delta,axis:parsed.axis,
+    }));
+    return {data:{
+      ...result,desktopName:DESKTOP_NAME,touchesSystemCursor:false,
+      visibleDesktopChanged:false,
+    }};
+  }catch(error){return remapPrivateInputError(error);}
+}
+
 async function privatePointerClick(
   input: unknown,
 ): Promise<{ data: unknown }> {
@@ -1111,6 +1159,8 @@ export async function executeWindowsPrivateDesktopCapability(
       return await privatePointerMove(input);
     case 'windows.private_pointer.click':
       return await privatePointerClick(input);
+    case 'windows.private_pointer.scroll':
+      return await privatePointerScroll(input);
     case 'windows.private_keyboard.type':
       return await privateKeyboardType(input);
     case 'windows.private_keyboard.hotkey':
