@@ -117,11 +117,20 @@ coordinates without changing the actual system cursor, foreground window,
 or input desktop. A zero delta, malformed HWND, or point outside the
 private window fails closed.
 
-The helper posts to the selected private **top-level** HWND, not arbitrary
-children or global cursor position. Applications that require wheel events
-on a specific child control may not respond. The positive/negative wheel
-direction and message payload were accepted by the actual WinForms DEV
-fixture; this does not claim support for every GUI toolkit.
+The helper validates the selected **top-level** HWND on
+`NexowirePrivate`, then hit-tests child HWNDs beneath the requested
+client coordinates. Wheel messages are posted to the deepest visible,
+enabled child belonging to **the same application process**. It never
+changes the global cursor or foreground window, and will not post into
+another process's embedded child. WinForms may forward an event it receives
+from a child to the parent; this is normal message propagation, not
+a second wheel request.
+
+The positive/negative wheel direction and message payload were accepted
+by the actual WinForms DEV fixture, including direct child control
+delivery. Controls without native HWNDs and frameworks that require
+focus-dependent scrolling may still need separate handling. This is not
+proof of equivalent behavior in every GUI toolkit.
 
 ## Private scrolling without moving the physical pointer
 

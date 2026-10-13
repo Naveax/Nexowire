@@ -224,6 +224,9 @@ public static class NxDesktopNative {
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out RECT r);
   [DllImport("user32.dll",SetLastError=true)] static extern bool GetClientRect(IntPtr h,out RECT r);
   [DllImport("user32.dll",SetLastError=true)] static extern bool ClientToScreen(IntPtr h,ref POINT p);
+  [DllImport("user32.dll",SetLastError=true)] static extern bool ScreenToClient(IntPtr h,ref POINT p);
+  [DllImport("user32.dll",SetLastError=true)] static extern IntPtr ChildWindowFromPointEx(IntPtr h,POINT p,uint flags);
+  const uint CWP_SKIPINVISIBLE=0x1,CWP_SKIPDISABLED=0x2,CWP_SKIPTRANSPARENT=0x4;
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr h,uint msg,UIntPtr w,IntPtr l);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
@@ -277,6 +280,26 @@ public static class NxDesktopNative {
   public static string PointerMove(string name,string raw,int x,int y){
     var h=Target(name,raw);var l=XY(h,x,y);Post(h,WM_MOUSEMOVE,UIntPtr.Zero,l);return "0x"+h.ToInt64().ToString("X");
   }
+  static IntPtr SafePrivateWheelChild(IntPtr top,POINT atScreen){
+    // Top was validated via EnumDesktopWindows on NexowirePrivate.
+    // Walk visible, enabled child controls without changing foreground,
+    // physical cursor, or targeting another process's embedded window.
+    uint ownerPid;
+    GetWindowThreadProcessId(top,out ownerPid);
+    IntPtr selected=top;
+    for(int depth=0;depth<12;depth++){
+      var inClient=atScreen;
+      if(!ScreenToClient(selected,ref inClient))break;
+      var candidate=ChildWindowFromPointEx(selected,inClient,
+        CWP_SKIPINVISIBLE|CWP_SKIPDISABLED|CWP_SKIPTRANSPARENT);
+      if(candidate==IntPtr.Zero||candidate==selected)break;
+      uint childPid;
+      GetWindowThreadProcessId(candidate,out childPid);
+      if(childPid!=ownerPid)break;
+      selected=candidate;
+    }
+    return selected;
+  }
   public static string PointerScroll(string name,string raw,int x,int y,int delta,string axis){
     var h=Target(name,raw);
     XY(h,x,y); // validate private client coordinates without moving the real cursor
@@ -287,7 +310,8 @@ public static class NxDesktopNative {
     uint wheel=(axis??"vertical").ToLowerInvariant()=="horizontal"
       ? WM_MOUSEHWHEEL:WM_MOUSEWHEEL;
     uint wp=unchecked((uint)(delta<<16));
-    Post(h,wheel,new UIntPtr(wp),new IntPtr(packed));
+    var privateTarget=SafePrivateWheelChild(h,point);
+    Post(privateTarget,wheel,new UIntPtr(wp),new IntPtr(packed));
     return "0x"+h.ToInt64().ToString("X");
   }
   public static string PointerClick(string name,string raw,int x,int y,string button,int clicks){
