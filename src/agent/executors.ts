@@ -2414,6 +2414,7 @@ export async function executeCapability(
     case 'windows.private_desktop.window.close':
     case 'windows.private_pointer.move':
     case 'windows.private_pointer.click':
+    case 'windows.private_pointer.scroll':
     case 'windows.private_keyboard.type':
     case 'windows.private_keyboard.hotkey':
     case 'windows.private_desktop.show':
