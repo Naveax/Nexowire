@@ -46,6 +46,7 @@ interface PrivateViewerState {
   maxBytes: number;
   topmost: boolean;
   selectedMonitorId: string | null;
+  lastSelectionError: string | null;
   lastFrameAt: string | null;
   frameBytes: number | null;
   frameWidth: number | null;
@@ -134,6 +135,7 @@ async function readState(): Promise<
         maxBytes: z.number().int().positive(),
         topmost: z.boolean(),
         selectedMonitorId: z.string().min(1).max(128).nullable().default(null),
+        lastSelectionError: z.string().max(256).nullable().default(null),
         lastFrameAt: z.string().nullable(),
         frameBytes: z.number().int().positive().nullable(),
         frameWidth: z.number().int().positive().nullable(),
@@ -654,6 +656,10 @@ function Update-CaptureHealth {
       $status.Text='CAPTURE ERROR: '+$message.Substring(0,[Math]::Min(150,$message.Length))
       return
     }
+    if($snapshot.lastSelectionError){
+      $status.Text='MONITOR SELECTION ERROR: '+[string]$snapshot.lastSelectionError
+      return
+    }
     $frameTime=[datetime]::MinValue
     if(-not [datetime]::TryParse([string]$snapshot.lastFrameAt,[ref]$frameTime)){
       $status.Text='NO LIVE FRAME: capture timestamp missing'
@@ -751,19 +757,30 @@ export function parseLocalMonitorSelection(input:unknown):{selectedMonitorId:str
   return {selectedMonitorId:parsed.source==='monitor'?parsed.monitor_id!:null};
 }
 
-async function readLocalMonitorSelection(
+export async function readLocalMonitorSelection(
   state:PrivateViewerState,
 ):Promise<PrivateViewerState>{
   const file=runtimePaths().monitorSelection;
   let raw:string;
-  try{raw=await fs.readFile(file,'utf8');}
-  catch(e){
+  try {raw=await fs.readFile(file,'utf8');}
+  catch(e) {
     if((e as NodeJS.ErrnoException).code==='ENOENT')return state;
-    throw e;
+    // Never starve frame/heartbeat refresh because a local selector file
+    // was temporarily inaccessible.
+    return {...state,lastSelectionError:'Cannot read local monitor selection request.'};
   }
-  await fs.rm(file,{force:true});
-  const selection=parseLocalMonitorSelection(JSON.parse(raw));
-  return {...state,...selection};
+  // Remove a consumed request before validation; malformed input is reported,
+  // never retried forever, never changes the last valid capture target.
+  await fs.rm(file,{force:true}).catch(()=>undefined);
+  try {
+    const selection=parseLocalMonitorSelection(JSON.parse(raw));
+    return {...state,...selection,lastSelectionError:null};
+  } catch {
+    return {
+      ...state,
+      lastSelectionError:'Invalid monitor selection; previous capture target preserved.',
+    };
+  }
 }
 
 async function writeMonitorInventory(
@@ -992,6 +1009,7 @@ async function viewerStatus(): Promise<{
       topmost: state.topmost,
       captureScope: state.selectedMonitorId ? 'monitor' : 'all_monitors',
       selectedMonitorId: state.selectedMonitorId,
+      lastSelectionError: state.lastSelectionError,
       lastFrameAt: state.lastFrameAt,
       frameAgeMs,
       frameHealth,
@@ -1059,6 +1077,7 @@ async function viewerStart(
     maxBytes: parsed.max_bytes,
     topmost: parsed.topmost,
     selectedMonitorId: null,
+    lastSelectionError: null,
     lastFrameAt: null,
     frameBytes: null,
     frameWidth: null,
