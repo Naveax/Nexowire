@@ -10,6 +10,15 @@ capabilities without modifying the physical display topology:
 - Whether Hyper-V tooling is installed and the current Agent account can
   enumerate its VM inventory; inaccessible inventories report
   `access_denied_or_unavailable` with **no fabricated VM counts**
+- **Effective process-token permissions:** `effectiveLocalAdministrator` and
+  `effectiveHyperVAdministrator` are tri-state booleans that test *enabled*
+  local Administrator and built-in Hyper-V Administrator roles in the actual
+  Agent process token. UAC `deny only` membership does not count as enabled.
+  Unknown inspection results are `null`, not a guessed `false`.
+- `vmManagementAccessGuidance` is one of `HYPERV_TOOLS_MISSING`,
+  `VM_MANAGEMENT_AVAILABLE`, or `REVIEW_AUTHORIZED_HYPERV_PERMISSIONS`.
+  This is guidance, not proof that group membership is the sole blocker;
+  delegated WMI/Hyper-V access policies can also affect `Get-VM`.
 - Candidate host-shared virtual display adapters (for example, a Parsec
   Virtual Display Adapter), which are **not proof of isolation**
 

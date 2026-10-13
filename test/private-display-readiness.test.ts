@@ -35,6 +35,8 @@ const host={
 const backend:WindowsPrivateDisplayBackendProbe={
   platform:'win32',hypervisorPresent:true,
   vmManagementServiceRunning:true,hyperVModuleAvailable:true,
+  effectiveLocalAdministrator:true,effectiveHyperVAdministrator:true,
+  vmManagementAccessGuidance:'VM_MANAGEMENT_AVAILABLE',
   vmInventoryStatus:'available',vmCount:3,runningVmCount:2,
   candidateHostVirtualDisplayAdapters:[
     {name:'Parsec Virtual Display Adapter',driverVersion:'0.45.0.0'},
@@ -67,6 +69,8 @@ test('even exact resolution match plus 2 running VMs is never evidence of isolat
   assert.equal(readiness.desiredScreenCount,1);
   assert.equal(readiness.hostNativeLayoutMatchesRequestedResolution,true);
   assert.equal(readiness.backend.runningVmCount,2);
+  assert.equal(readiness.backend.effectiveHyperVAdministrator,true);
+  assert.equal(readiness.backend.vmManagementAccessGuidance,'VM_MANAGEMENT_AVAILABLE');
   assert.equal(readiness.canApplyDesiredIsolatedDisplays,false);
   assert.equal(readiness.nativeHostMonitorsAreIndependentAiScreens,false);
   assert.equal(readiness.applied,false);
@@ -85,6 +89,7 @@ test('multiple requested screens show mismatch and deny provisioning on unknown 
     backend:'isolated_virtual_display_backend_required',
   },host,{
     ...backend,vmInventoryStatus:'access_denied_or_unavailable',
+    vmManagementAccessGuidance:'REVIEW_AUTHORIZED_HYPERV_PERMISSIONS',
     vmCount:null,runningVmCount:null,
   }).data;
   assert.equal(readiness.desiredScreenCount,3);
@@ -92,6 +97,8 @@ test('multiple requested screens show mismatch and deny provisioning on unknown 
   assert.equal(readiness.hostMonitorCount,1);
   assert.equal(readiness.hostNativeLayoutMatchesRequestedResolution,false);
   assert.ok(readiness.blockers.includes('VM_INVENTORY_NOT_ACCESSIBLE'));
+  assert.equal(readiness.backend.effectiveLocalAdministrator,true);
+  assert.equal(readiness.backend.vmManagementAccessGuidance,'REVIEW_AUTHORIZED_HYPERV_PERMISSIONS');
   assert.equal(readiness.canApplyDesiredIsolatedDisplays,false);
   assert.equal(readiness.changesHostDisplaySettings,false);
 });

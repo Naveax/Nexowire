@@ -31,6 +31,9 @@ export interface AiDisplayReadiness {
     hypervisorPresent:boolean|null;
     vmManagementServiceRunning:boolean|null;
     hyperVModuleAvailable:boolean;
+    effectiveLocalAdministrator:boolean|null;
+    effectiveHyperVAdministrator:boolean|null;
+    vmManagementAccessGuidance:WindowsPrivateDisplayBackendProbe['vmManagementAccessGuidance'];
     vmInventoryStatus:WindowsPrivateDisplayBackendProbe['vmInventoryStatus'];
     vmCount:number|null;
     runningVmCount:number|null;
@@ -90,6 +93,9 @@ export function assessWindowsPrivateDisplayReadiness(
       hypervisorPresent:probe.hypervisorPresent,
       vmManagementServiceRunning:probe.vmManagementServiceRunning,
       hyperVModuleAvailable:probe.hyperVModuleAvailable,
+      effectiveLocalAdministrator:probe.effectiveLocalAdministrator,
+      effectiveHyperVAdministrator:probe.effectiveHyperVAdministrator,
+      vmManagementAccessGuidance:probe.vmManagementAccessGuidance,
       vmInventoryStatus:probe.vmInventoryStatus,
       vmCount:probe.vmCount,
       runningVmCount:probe.runningVmCount,

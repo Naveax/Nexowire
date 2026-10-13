@@ -13,6 +13,8 @@ import {inspectWindowsPrivateDisplayTopology} from '../src/agent/windows-private
 const result={
   platform:'win32' as const,hypervisorPresent:true,
   vmManagementServiceRunning:true,hyperVModuleAvailable:true,
+  effectiveLocalAdministrator:false,effectiveHyperVAdministrator:false,
+  vmManagementAccessGuidance:'REVIEW_AUTHORIZED_HYPERV_PERMISSIONS' as const,
   vmInventoryStatus:'access_denied_or_unavailable' as const,
   vmCount:null,runningVmCount:null,
   candidateHostVirtualDisplayAdapters:[
@@ -34,6 +36,8 @@ test('backend readiness remains a read-only, accurately blocked capability',()=>
   const parsed=PrivateDisplayBackendProbeSchema.parse(result);
   assert.equal(parsed.isolatedAiDisplayBackendReady,false);
   assert.equal(parsed.vmCount,null);
+  assert.equal(parsed.effectiveLocalAdministrator,false);
+  assert.equal(parsed.effectiveHyperVAdministrator,false);
 });
 
 test('Hyper-V or Parsec virtual adapter can never be misreported as isolated AI screens',()=>{
@@ -43,6 +47,10 @@ test('Hyper-V or Parsec virtual adapter can never be misreported as isolated AI 
     {...result,touchesHostDisplaySettings:true},
     {...result,hostDisplayTopologyShared:false},
     {...result,vmCount:3},
+    {...result,vmManagementAccessGuidance:'VM_MANAGEMENT_AVAILABLE'},
+    {...result,hyperVModuleAvailable:false},
+    {...result,effectiveHyperVAdministrator:'yes'},
+    {...result,effectiveLocalAdministrator:'true'},
     {...result,vmInventoryStatus:'available',vmCount:null,runningVmCount:null},
     {...result,vmInventoryStatus:'available',vmCount:1,runningVmCount:2},
     {...result,unexpectedCommand:'SetDisplayConfig'},
@@ -70,6 +78,11 @@ test('real DEV probes virtualization preconditions without changing host display
 },async()=>{
   const before=(await inspectWindowsPrivateDisplayTopology()).data;
   const {data}=await inspectWindowsPrivateDisplayBackend();
+  assert.ok(data.effectiveLocalAdministrator===null ||
+    typeof data.effectiveLocalAdministrator==='boolean');
+  assert.ok(data.effectiveHyperVAdministrator===null ||
+    typeof data.effectiveHyperVAdministrator==='boolean');
+  assert.ok(data.vmManagementAccessGuidance.length>0);
   assert.equal(data.platform,'win32');
   assert.equal(data.hostDisplayTopologyShared,true);
   assert.equal(data.isolatedAiDisplayBackendReady,false);
