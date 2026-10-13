@@ -100,6 +100,8 @@ function runtimePaths() {
     windows: path.join(root, 'windows.json'),
     displays: path.join(root, 'displays.json'),
     monitorSelection: path.join(root, 'monitor-selection.request.json'),
+    windowCloseRequest: path.join(root, 'window-close.request.json'),
+    windowCloseResult: path.join(root, 'window-close.result.json'),
     emergency: path.join(root, 'emergency-stop.request'),
     emergencyResult: path.join(root, 'emergency-stop.result'),
     heartbeat: path.join(root, 'heartbeat.txt'),
@@ -217,6 +219,10 @@ param(
   [string]$DisplaysPath,
   [Parameter(Mandatory = $true)]
   [string]$MonitorSelectionPath,
+  [Parameter(Mandatory = $true)]
+  [string]$WindowCloseRequestPath,
+  [Parameter(Mandatory = $true)]
+  [string]$WindowCloseResultPath,
   [Parameter(Mandatory = $true)]
   [string]$EmergencyPath,
   [Parameter(Mandatory = $true)]
@@ -477,6 +483,53 @@ $previewWindow.Add_Click({
   $previewWindow,[System.Windows.Controls.Dock]::Left
 )
 [void]$bar.Children.Add($previewWindow)
+
+$closePrivateWindow=New-Object System.Windows.Controls.Button
+$closePrivateWindow.Content='CLOSE APP'
+$closePrivateWindow.Margin='0,10,10,10'
+$closePrivateWindow.Padding='9,8,9,8'
+$closePrivateWindow.ToolTip='Locally confirm graceful WM_CLOSE of a tracked NexowirePrivate app only.'
+$closePrivateWindow.Add_Click({
+  $selected=$appList.SelectedItem
+  if($null -eq $selected -or
+    -not ($selected -is [System.Windows.Controls.ListBoxItem])){
+    $status.Text='Select a private app window to close'
+    return
+  }
+  $handle=[string]$selected.Tag
+  if($handle -notmatch '^(?:0x[0-9a-fA-F]+|[0-9]+)$'){
+    $status.Text='Invalid private window selection'
+    return
+  }
+  $answer=[System.Windows.MessageBox]::Show(
+    'Request this managed AI private window to close? Unsaved changes may prevent closing. This does not kill a process or touch Default desktop.',
+    'Close managed AI window',
+    [System.Windows.MessageBoxButton]::YesNo,
+    [System.Windows.MessageBoxImage]::Question
+  )
+  if($answer -ne [System.Windows.MessageBoxResult]::Yes){return}
+  try{
+    $utf8=New-Object System.Text.UTF8Encoding($false)
+    $temp=$WindowCloseRequestPath+'.tmp'
+    [System.IO.File]::WriteAllText($temp,(
+      @{action='close_private_window';hwnd=$handle}|ConvertTo-Json -Compress
+    ),$utf8)
+    if([System.IO.File]::Exists($WindowCloseRequestPath)){
+      [System.IO.File]::Delete($WindowCloseRequestPath)
+    }
+    if([System.IO.File]::Exists($WindowCloseResultPath)){
+      [System.IO.File]::Delete($WindowCloseResultPath)
+    }
+    [System.IO.File]::Move($temp,$WindowCloseRequestPath)
+    $status.Text='PRIVATE WINDOW CLOSE REQUESTED: awaiting result'
+  }catch{
+    $status.Text='PRIVATE WINDOW CLOSE REQUEST COULD NOT BE SAVED'
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $closePrivateWindow,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($closePrivateWindow)
 
 $allScreens=New-Object System.Windows.Controls.Button
 $allScreens.Content='ALL SCREENS'
@@ -766,6 +819,19 @@ $timer.Add_Tick({
   Update-MonitorPicker
   Update-WindowList
   Update-CaptureHealth
+  if(Test-Path -LiteralPath $WindowCloseResultPath){
+    try{
+      $result=Get-Content -LiteralPath $WindowCloseResultPath -Raw -ErrorAction Stop |
+        ConvertFrom-Json -ErrorAction Stop
+      $resultTime=[datetime]::MinValue
+      if([datetime]::TryParse([string]$result.at,[ref]$resultTime)){
+        $age=([datetime]::UtcNow-$resultTime.ToUniversalTime()).TotalMilliseconds
+        if($age -ge 0 -and $age -lt 8000){
+          $status.Text='APP CLOSE: '+[string]$result.message
+        }
+      }
+    }catch{}
+  }
   if(Test-Path -LiteralPath $EmergencyResultPath){
     try{
       $outcome=Get-Content -LiteralPath $EmergencyResultPath -Raw -ErrorAction Stop
@@ -976,6 +1042,57 @@ function stopRefreshLoop(): void {
   }
 }
 
+const LocalPrivateWindowCloseSchema=z.object({
+  action:z.literal('close_private_window'),
+  hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+}).strict();
+
+export function parseLocalPrivateWindowCloseRequest(input:unknown):{
+  action:'close_private_window';hwnd:string;
+}{
+  return LocalPrivateWindowCloseSchema.parse(input);
+}
+
+export async function handleLocalPrivateWindowClose():Promise<void>{
+  const p=runtimePaths();
+  let raw:string;
+  try{raw=await fs.readFile(p.windowCloseRequest,'utf8');}
+  catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return;
+    return;
+  }
+  await fs.rm(p.windowCloseRequest,{force:true}).catch(()=>undefined);
+  let message:string;
+  let ok=false;
+  try{
+    const request=parseLocalPrivateWindowCloseRequest(JSON.parse(raw));
+    const status=await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.status',{},
+    ) as {data:{running:boolean;inputDesktop:string}};
+    if(!status.data.running||status.data.inputDesktop!=='Default'){
+      throw new PrivateViewerError(
+        'PRIVATE_WINDOW_CLOSE_OWNER_DESKTOP_NOT_DEFAULT',
+        'Return to Default before closing a managed AI window.');
+    }
+    // Even a forged request is fail-closed: the backend verifies the HWND
+    // is on NexowirePrivate and owned by one of its tracked launched PIDs.
+    const response=await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.window.close',{hwnd:request.hwnd},
+    ) as {data:{closed:boolean;closeRequested:boolean}};
+    ok=response.data.closed;
+    message=response.data.closed
+      ? 'Managed private window closed.'
+      : 'Close requested; application is still open (it may need confirmation).';
+  }catch(error){
+    message='Not closed: '+(error instanceof Error
+      ? error.message.slice(0,180):'Invalid private window close request.');
+  }
+  const result={at:new Date().toISOString(),ok,message};
+  await fs.writeFile(p.windowCloseResult,JSON.stringify(result),{
+    encoding:'utf8',mode:0o600,
+  }).catch(()=>undefined);
+}
+
 /**
  * This request comes exclusively from a locally confirmed viewer click.
  * It stops the dedicated private desktop and its tracked AI processes,
@@ -1048,6 +1165,8 @@ function startRefreshLoop(
       // On success viewerStop closes the WPF window and removes its files.
       if(await handleLocalEmergencyStop())return;
       if(generation!==refreshGeneration)return;
+      await handleLocalPrivateWindowClose();
+      if(generation!==refreshGeneration)return;
       state=await readLocalMonitorSelection(state);
       if(generation!==refreshGeneration)return;
       const next=await captureAndPersist(state);
@@ -1075,6 +1194,8 @@ async function cleanupRuntime(
     fs.rm(p.windows, { force: true }),
     fs.rm(p.displays, { force: true }),
     fs.rm(p.monitorSelection, { force: true }),
+    fs.rm(p.windowCloseRequest, { force: true }),
+    fs.rm(p.windowCloseResult, { force: true }),
     fs.rm(p.emergency, { force: true }),
     fs.rm(p.emergencyResult, { force: true }),
     fs.rm(p.heartbeat, { force: true }),
@@ -1251,6 +1372,10 @@ async function viewerStart(
       p.displays,
       '-MonitorSelectionPath',
       p.monitorSelection,
+      '-WindowCloseRequestPath',
+      p.windowCloseRequest,
+      '-WindowCloseResultPath',
+      p.windowCloseResult,
       '-EmergencyPath',
       p.emergency,
       '-EmergencyResultPath',

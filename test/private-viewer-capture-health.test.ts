@@ -69,7 +69,11 @@ test('WPF viewer distinguishes stale capture and stale private-window inventory 
   assert.match(source, /\[string\]\$StatePath/);
   assert.match(source, /'-StatePath',\s*p\.state/);
   assert.match(source, /function Update-CaptureHealth \{/);
-  assert.match(source, /Update-CaptureHealth\s+if\(Test-Path -LiteralPath \$EmergencyResultPath\)/);
+  // A locally confirmed app-close result can appear after capture health,
+  // before the emergency-stop result. Verify both channels remain visible.
+  assert.match(source, /Update-CaptureHealth\s+if\(Test-Path -LiteralPath \$WindowCloseResultPath\)/);
+  assert.match(source, /if\(Test-Path -LiteralPath \$EmergencyResultPath\)/);
+  assert.match(source, /APP CLOSE:/);
   assert.match(source, /STALE FRAME:/);
   assert.match(source, /CAPTURE ERROR:/);
   assert.match(source, /CAPTURE STATUS UNAVAILABLE:/);
