@@ -672,6 +672,43 @@ test(
       desktopCapture.data.enumeratedWindows >=
         desktopCapture.data.capturedWindows,
     );
+    // No explicit monitor selector means the union of every host display.
+    assert.equal(desktopCapture.data.topologyKind,'host_shared_native');
+    assert.ok(desktopCapture.data.monitorCount >= 1);
+    assert.equal(desktopCapture.data.monitorCount,desktopCapture.data.monitors.length);
+    const xMin=Math.min(...desktopCapture.data.monitors.map(m=>m.x));
+    const yMin=Math.min(...desktopCapture.data.monitors.map(m=>m.y));
+    const xMax=Math.max(...desktopCapture.data.monitors.map(m=>m.x+m.width));
+    const yMax=Math.max(...desktopCapture.data.monitors.map(m=>m.y+m.height));
+    assert.deepEqual(desktopCapture.data.captureBounds,{
+      x:xMin,y:yMin,width:xMax-xMin,height:yMax-yMin,
+    });
+    assert.equal(desktopCapture.data.selectedMonitorIndex,null);
+
+    const primary=desktopCapture.data.monitors.find(m=>m.primary)!;
+    const primaryCapture=await captureWindowsPrivateScreen({
+      source:'monitor',monitor_id:primary.id,
+      max_width:1280,max_height:720,max_bytes:4_194_304,
+    });
+    assert.equal(primaryCapture.data.source,'monitor');
+    assert.equal(primaryCapture.data.selectedMonitorIndex,primary.index);
+    assert.deepEqual(primaryCapture.data.captureBounds,{
+      x:primary.x,y:primary.y,width:primary.width,height:primary.height,
+    });
+    assert.equal(primaryCapture.data.inputDesktopBefore,'Default');
+    assert.equal(primaryCapture.data.inputDesktopAfter,'Default');
+    assert.equal(primaryCapture.data.visibleDesktopChanged,false);
+    assert.ok(primaryCapture.data.capturedWindows>=1);
+    assert.deepEqual(
+      [...Buffer.from(primaryCapture.data.base64,'base64').subarray(0,4)],
+      [0x89,0x50,0x4e,0x47],
+    );
+    await assert.rejects(
+      captureWindowsPrivateScreen({source:'monitor',monitor_id:'NX-NONEXISTENT'}),
+      (error:unknown) => !!error && typeof error==='object' &&
+        'code' in error && error.code==='PRIVATE_MONITOR_NOT_FOUND',
+    );
+
     const desktopPng = Buffer.from(
       desktopCapture.data.base64,
       'base64',

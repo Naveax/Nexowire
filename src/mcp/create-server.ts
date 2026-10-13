@@ -3157,12 +3157,14 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Capture Nexowire private screen',
       description:
-        'Render the isolated NexowirePrivate desktop or one exact private HWND as a bounded PNG using PrintWindow. This does not switch the visible Windows input desktop and does not capture the physical Default desktop.',
+        'Capture isolated NexowirePrivate windows across ALL connected host monitors by default. Set source=monitor plus monitor_index or monitor_id for one monitor, or source=window plus hwnd for one private window. Returns host monitor bounds and effective DPI. Native monitors are shared with Default; independent AI virtual displays require an isolated display driver. Never captures Default windows or switches the input desktop.',
       inputSchema: {
         ...targetFields,
         source: z
-          .enum(['desktop', 'window'])
+          .enum(['desktop', 'monitor', 'window'])
           .optional(),
+        monitor_index: z.number().int().min(0).max(15).optional(),
+        monitor_id: z.string().min(1).max(128).optional(),
         hwnd: z
           .string()
           .min(1)
@@ -3194,6 +3196,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       provider_id,
       source,
       hwnd,
+      monitor_index,
+      monitor_id,
       max_width,
       max_height,
       max_bytes,
@@ -3204,6 +3208,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         {
           ...(source ? { source } : {}),
           ...(hwnd ? { hwnd } : {}),
+          ...(monitor_index !== undefined ? { monitor_index } : {}),
+          ...(monitor_id !== undefined ? { monitor_id } : {}),
           ...(max_width !== undefined
             ? { max_width }
             : {}),
