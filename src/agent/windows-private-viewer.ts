@@ -198,6 +198,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$FramePath,
   [Parameter(Mandatory = $true)]
+  [string]$StatePath,
+  [Parameter(Mandatory = $true)]
   [string]$HeartbeatPath,
   [Parameter(Mandatory = $true)]
   [string]$WindowsPath,
@@ -436,7 +438,7 @@ $close.Add_Click({ $window.Close() })
 [void]$bar.Children.Add($close)
 
 $status = New-Object System.Windows.Controls.TextBlock
-$status.Text = 'NexowirePrivate live preview'
+$status.Text = 'NexowirePrivate | awaiting capture status'
 $status.Foreground = [System.Windows.Media.Brushes]::White
 $status.VerticalAlignment = 'Center'
 $status.Margin = '12,0,12,0'
@@ -511,11 +513,24 @@ function Load-Frame {
 }
 
 function Update-WindowList {
-  if(-not(Test-Path -LiteralPath $WindowsPath)){return}
+  $appList.Items.Clear()
+  if(-not(Test-Path -LiteralPath $WindowsPath)){
+    [void]$appList.Items.Add('Window inventory unavailable')
+    return
+  }
   try{
     $snapshot=Get-Content -LiteralPath $WindowsPath -Raw -ErrorAction Stop |
       ConvertFrom-Json -ErrorAction Stop
-    $appList.Items.Clear()
+    $updated=[datetime]::MinValue
+    if(-not [datetime]::TryParse([string]$snapshot.updatedAt,[ref]$updated)){
+      [void]$appList.Items.Add('Window inventory timestamp invalid')
+      return
+    }
+    $inventoryAge=([datetime]::UtcNow-$updated.ToUniversalTime()).TotalMilliseconds
+    if($inventoryAge -gt [Math]::Max(5000,$RefreshMs*5) -or $inventoryAge -lt -2000){
+      [void]$appList.Items.Add('Window inventory stale')
+      return
+    }
     $windows=@($snapshot.windows)
     if($windows.Count -eq 0){
       [void]$appList.Items.Add('No private app windows')
@@ -527,7 +542,8 @@ function Update-WindowList {
       [void]$appList.Items.Add(($name+'  (PID '+$pidText+')'))
     }
   }catch{
-    # The previous preview remains available when inventory is unreadable.
+    $appList.Items.Clear()
+    [void]$appList.Items.Add('Window inventory unreadable')
   }
 }
 
@@ -543,6 +559,34 @@ function Heartbeat-Healthy {
   }
 }
 
+function Update-CaptureHealth {
+  # A previously decoded frame is not proof that the stream is still live.
+  # While an emergency stop is pending, keep its status visible.
+  if(-not $emergency.IsEnabled){return}
+  try{
+    $snapshot=Get-Content -LiteralPath $StatePath -Raw -ErrorAction Stop |
+      ConvertFrom-Json -ErrorAction Stop
+    if($snapshot.lastError){
+      $message=([string]$snapshot.lastError).Replace([char]10,' ').Replace([char]13,' ')
+      $status.Text='CAPTURE ERROR: '+$message.Substring(0,[Math]::Min(150,$message.Length))
+      return
+    }
+    $frameTime=[datetime]::MinValue
+    if(-not [datetime]::TryParse([string]$snapshot.lastFrameAt,[ref]$frameTime)){
+      $status.Text='NO LIVE FRAME: capture timestamp missing'
+      return
+    }
+    $age=([datetime]::UtcNow-$frameTime.ToUniversalTime()).TotalMilliseconds
+    if($age -lt -2000 -or $age -gt [Math]::Max(2000,$RefreshMs*4)){
+      $status.Text='STALE FRAME: last capture '+[Math]::Max(0,[int]($age/1000))+'s ago'
+      return
+    }
+    $status.Text='LIVE NexowirePrivate | '+[DateTime]::Now.ToString('HH:mm:ss')
+  }catch{
+    $status.Text='CAPTURE STATUS UNAVAILABLE: showing last known frame'
+  }
+}
+
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(
   [Math]::Max(100, $RefreshMs)
@@ -554,6 +598,7 @@ $timer.Add_Tick({
   }
   Load-Frame
   Update-WindowList
+  Update-CaptureHealth
   if(Test-Path -LiteralPath $EmergencyResultPath){
     try{
       $outcome=Get-Content -LiteralPath $EmergencyResultPath -Raw -ErrorAction Stop
@@ -567,6 +612,7 @@ $timer.Start()
 $window.Add_Closed({ $timer.Stop() })
 Load-Frame
 Update-WindowList
+Update-CaptureHealth
 [void]$window.ShowDialog()
 `;
 
@@ -783,13 +829,20 @@ async function viewerStatus(): Promise<{
     };
   }
 
-  const frameAgeMs = state.lastFrameAt
-    ? Math.max(
-        0,
-        Date.now() -
-          Date.parse(state.lastFrameAt),
-      )
+  const frameTimestamp = state.lastFrameAt
+    ? Date.parse(state.lastFrameAt)
+    : NaN;
+  const frameAgeMs = Number.isFinite(frameTimestamp)
+    ? Math.max(0, Date.now() - frameTimestamp)
     : null;
+  const maxLiveFrameAgeMs = Math.max(2_000, state.refreshMs * 4);
+  const frameHealth = state.lastError
+    ? 'error'
+    : frameAgeMs === null
+      ? 'unavailable'
+      : frameAgeMs > maxLiveFrameAgeMs
+        ? 'stale'
+        : 'live';
 
   return {
     data: {
@@ -801,6 +854,8 @@ async function viewerStatus(): Promise<{
       topmost: state.topmost,
       lastFrameAt: state.lastFrameAt,
       frameAgeMs,
+      frameHealth,
+      maxLiveFrameAgeMs,
       frameBytes: state.frameBytes,
       frameWidth: state.frameWidth,
       frameHeight: state.frameHeight,
@@ -885,6 +940,8 @@ async function viewerStart(
       p.viewer,
       '-FramePath',
       p.frame,
+      '-StatePath',
+      p.state,
       '-HeartbeatPath',
       p.heartbeat,
       '-WindowsPath',
