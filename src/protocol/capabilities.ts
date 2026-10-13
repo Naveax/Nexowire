@@ -96,6 +96,7 @@ export const CORE_CAPABILITIES = [
   'windows.private_desktop.stop',
   'windows.private_desktop.launch',
   'windows.private_desktop.windows',
+  'windows.private_desktop.window.close',
   'windows.private_desktop.show',
   'windows.private_pointer.move',
   'windows.private_pointer.click',

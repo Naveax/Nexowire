@@ -2347,6 +2347,7 @@ export async function executeCapability(
     case 'windows.private_desktop.stop':
     case 'windows.private_desktop.launch':
     case 'windows.private_desktop.windows':
+    case 'windows.private_desktop.window.close':
     case 'windows.private_pointer.move':
     case 'windows.private_pointer.click':
     case 'windows.private_keyboard.type':
