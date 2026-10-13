@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import * as z from 'zod';
 import {
   PrivateDisplayPlanSchema, planWindowsPrivateDisplays,
@@ -10,6 +11,29 @@ import {
 
 const VERSION = 1;
 const MAX_PROFILE_BYTES = 64 * 1024;
+
+// Concurrent MCP requests in one Agent must not contend for profile.json on
+// Windows, whose replacement rename can report EPERM under simultaneous writes.
+// Serialize status, set, and reset. The queue also recovers after failures.
+let profileOperationQueue: Promise<void> = Promise.resolve();
+function serializeProfileOperation<T>(operation:()=>Promise<T>):Promise<T>{
+  const pending=profileOperationQueue.then(operation);
+  profileOperationQueue=pending.then(()=>undefined,()=>undefined);
+  return pending;
+}
+
+async function replaceProfileAtomically(temp:string,file:string):Promise<void>{
+  for(let retry=0;retry<4;retry++){
+    try{await fs.rename(temp,file);return;}
+    catch(error){
+      const code=(error as NodeJS.ErrnoException).code;
+      if(retry===3 || !['EPERM','EACCES','EBUSY'].includes(code??'')){
+        throw error;
+      }
+      await delay(30*(retry+1));
+    }
+  }
+}
 
 const StoredProfileSchema=z.object({
   version:z.literal(VERSION),
@@ -67,6 +91,9 @@ function emptyStatus():PrivateDisplayProfileStatus{
 /** Read a saved desired configuration; this never probes/changes host display devices. */
 export async function privateDisplayProfileStatus():Promise<{data:PrivateDisplayProfileStatus}>{
   ensureWindows();
+  return await serializeProfileOperation(readProfileStatus);
+}
+async function readProfileStatus():Promise<{data:PrivateDisplayProfileStatus}>{
   const file=profilePath();
   let bytes:Buffer;
   try{
@@ -108,6 +135,7 @@ export async function privateDisplayProfileSet(input:unknown):Promise<{data:Priv
   const requested=PrivateDisplayPlanSchema.parse(input);
   // Fail before I/O when count, DPI, topology or pixel budget is invalid.
   const checked=planWindowsPrivateDisplays(requested).data;
+  return await serializeProfileOperation(async()=>{
   const savedAt=new Date().toISOString();
   const stored={version:VERSION,savedAt,requested};
   const file=profilePath();
@@ -117,7 +145,7 @@ export async function privateDisplayProfileSet(input:unknown):Promise<{data:Priv
   try{
     await fs.writeFile(temp,JSON.stringify(stored,null,2)+'\n',
       {encoding:'utf8',mode:0o600,flag:'wx'});
-    await fs.rename(temp,file);
+    await replaceProfileAtomically(temp,file);
   }finally{
     await fs.rm(temp,{force:true}).catch(()=>undefined);
   }
@@ -127,6 +155,7 @@ export async function privateDisplayProfileSet(input:unknown):Promise<{data:Priv
     touchesHostDisplaySettings:false,
     backend:'isolated_virtual_display_backend_required',
   }};
+  });
 }
 
 /** Forget desired AI screens. No Windows display driver or monitor is touched. */
@@ -134,6 +163,7 @@ export async function privateDisplayProfileReset():Promise<{
   data:PrivateDisplayProfileStatus & {removed:boolean};
 }>{
   ensureWindows();
+  return await serializeProfileOperation(async()=>{
   const file=profilePath();
   let removed=false;
   try{await fs.unlink(file);removed=true;}
@@ -141,6 +171,7 @@ export async function privateDisplayProfileReset():Promise<{
     if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;
   }
   return {data:{...emptyStatus(),removed}};
+  });
 }
 
 export async function executeWindowsPrivateDisplayProfileCapability(

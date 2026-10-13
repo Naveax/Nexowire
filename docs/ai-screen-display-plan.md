@@ -17,6 +17,8 @@ The following Windows MCP tools persist **desired configuration only**:
   only. It does not delete display drivers, alter monitor modes, or change
   the user's physical input desktop.
 
+Repeated profile changes are supported. Within one running Agent, reads, writes, and resets are serialized so concurrent MCP requests cannot race the same Windows profile file. Profile replacement is atomic and transient Windows `EPERM`/`EACCES`/`EBUSY` rename conflicts receive a small bounded retry; invalid replacement requests leave the most recent valid profile intact. Concurrent updates from different Agent processes still require a dedicated cross-process transaction/lock protocol for strict write ordering.
+
 Profiles live under the agent user's `~/.nexowire/private-display-profile`.
 For isolated test fixtures, set `NEXOWIRE_PRIVATE_DISPLAY_PROFILE_DIR`
 to a disposable directory. The saved file is versioned and atomically replaced
