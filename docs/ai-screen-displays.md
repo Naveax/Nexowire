@@ -142,6 +142,26 @@ physical cursor movement. Some applications route wheel events to a
 specific child HWND; a successful post does not guarantee that an
 arbitrary application scrolled.
 
+## Task Scheduler activation cannot escape into owner GUI
+
+In private AI mode, `windows.task.control` rejects Task Scheduler
+`action:start` and `action:enable` with
+`AI_PRIVATE_SCHEDULED_TASK_GUI_NOT_ISOLATED`. These operations can
+launch an existing interactive Windows task in the logged-in user's
+session on `Default`, even if the command that triggered Task
+Scheduler was hidden or attached to `NexowirePrivate`.
+
+The guard is in the central Agent capability dispatcher, before a
+physical-console grant or privileged Broker RPC. It cannot be bypassed
+by FULL mode. `action:stop` and `action:disable` remain available for
+emergency containment under normal permissions. Inventory and private
+desktop launch APIs remain unchanged; ordinary non-private operation
+retains its existing authorized Task Scheduler behavior.
+
+This does not guarantee arbitrary tasks, services, native shell brokers
+or COM launches are isolated: the broader process launch audit remains
+open in issue #402.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
