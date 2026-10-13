@@ -9,7 +9,11 @@ const PrivatePasteSchema=z.object({
   hwnd:z.string().min(1).max(32)
     .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
   interval_ms:z.number().int().min(0).max(100).default(0),
-}).strict();
+  x:z.number().int().min(0).max(32767).optional(),
+  y:z.number().int().min(0).max(32767).optional(),
+}).strict().refine(value=>(value.x===undefined)===(value.y===undefined),{
+  message:'Supply both x and y for private child target.',
+});
 const PrivateReadSchema=z.object({
   max_chars:z.number().int().min(1).max(MAX_PRIVATE_TEXT_CHARS)
     .default(MAX_PRIVATE_TEXT_CHARS),
@@ -98,6 +102,7 @@ export async function executeWindowsPrivateClipboardCapability(
       'windows.private_keyboard.type',{
         hwnd:requested.hwnd,text:source,
         interval_ms:requested.interval_ms,
+        ...(requested.x!==undefined&&requested.y!==undefined?{x:requested.x,y:requested.y}:{}),
       },
     ) as {data:{charsSent:number;inputDesktop:string}};
     const after=await activePrivateDesktop();

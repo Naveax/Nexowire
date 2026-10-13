@@ -3807,16 +3807,19 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'windows_private_clipboard_paste',
     {
       title:'Type private clipboard text into a private app',
-      description:'Type the private in-memory text into a current NexowirePrivate HWND through native private keyboard messaging, without invoking the host Windows clipboard or Ctrl+V. Target HWND is revalidated against the private desktop.',
+      description:'Type private in-memory text into a verified NexowirePrivate HWND, optionally into a same-process child control selected by both x/y coordinates. No host clipboard or Ctrl+V and no physical keyboard focus change.',
       inputSchema:{
         ...targetFields,
         hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
         interval_ms:z.number().int().min(0).max(100).optional(),
+        x:z.number().int().min(0).max(32767).optional(),
+        y:z.number().int().min(0).max(32767).optional(),
       },
     },
-    async ({device_id,provider_id,hwnd,interval_ms})=>await execute(
+    async ({device_id,provider_id,hwnd,interval_ms,x,y})=>await execute(
       ctx,'windows.private_clipboard.paste',{
         hwnd,...(interval_ms!==undefined?{interval_ms}:{}),
+        ...(x!==undefined?{x}:{}),...(y!==undefined?{y}:{}),
       },device_id,provider_id,45_000,
     ),
   );
