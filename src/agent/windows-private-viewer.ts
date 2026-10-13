@@ -94,6 +94,8 @@ function runtimePaths() {
     state: path.join(root, 'state.json'),
     frame: path.join(root, 'frame.png'),
     windows: path.join(root, 'windows.json'),
+    emergency: path.join(root, 'emergency-stop.request'),
+    emergencyResult: path.join(root, 'emergency-stop.result'),
     heartbeat: path.join(root, 'heartbeat.txt'),
     viewer: path.join(root, 'viewer.ps1'),
   };
@@ -199,6 +201,10 @@ param(
   [string]$HeartbeatPath,
   [Parameter(Mandatory = $true)]
   [string]$WindowsPath,
+  [Parameter(Mandatory = $true)]
+  [string]$EmergencyPath,
+  [Parameter(Mandatory = $true)]
+  [string]$EmergencyResultPath,
   [Parameter(Mandatory = $true)]
   [int]$RefreshMs,
   [Parameter(Mandatory = $true)]
@@ -337,6 +343,38 @@ $compact.Add_Click({
 )
 [void]$bar.Children.Add($compact)
 
+$emergency=New-Object System.Windows.Controls.Button
+$emergency.Content='STOP AI WORKSPACE'
+$emergency.Margin='0,10,10,10'
+$emergency.Padding='14,8,14,8'
+$emergency.Background=[System.Windows.Media.Brushes]::Firebrick
+$emergency.Foreground=[System.Windows.Media.Brushes]::White
+$emergency.ToolTip='Locally confirm stopping only tracked NexowirePrivate tasks. Does not switch your desktop.'
+$emergency.Add_Click({
+  $answer=[System.Windows.MessageBox]::Show(
+    'Stop tracked AI private desktop programs and close the AI viewer? This will not move the physical mouse or switch the input desktop.',
+    'Nexowire AI workspace emergency stop',
+    [System.Windows.MessageBoxButton]::YesNo,
+    [System.Windows.MessageBoxImage]::Warning
+  )
+  if($answer -ne [System.Windows.MessageBoxResult]::Yes){return}
+  try{
+    [System.IO.File]::Delete($EmergencyResultPath)
+    [System.IO.File]::WriteAllText($EmergencyPath,'STOP_NEXOWIREPRIVATE')
+    $emergency.IsEnabled=$false
+    $status.Text='Private AI stop requested...'
+  }catch{
+    [System.Windows.MessageBox]::Show(
+      'Could not request AI workspace stop: '+$_.Exception.Message,
+      'Nexowire'
+    ) | Out-Null
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $emergency,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($emergency)
+
 $close = New-Object System.Windows.Controls.Button
 $close.Content = 'CLOSE VIEWER'
 $close.Margin = '0,10,10,10'
@@ -468,6 +506,13 @@ $timer.Add_Tick({
   }
   Load-Frame
   Update-WindowList
+  if(Test-Path -LiteralPath $EmergencyResultPath){
+    try{
+      $outcome=Get-Content -LiteralPath $EmergencyResultPath -Raw -ErrorAction Stop
+      $status.Text=$outcome.Substring(0,[Math]::Min(300,$outcome.Length))
+      $emergency.IsEnabled=$true
+    }catch{}
+  }
 })
 $timer.Start()
 
@@ -556,6 +601,51 @@ function stopRefreshLoop(): void {
   }
 }
 
+/**
+ * This request comes exclusively from a locally confirmed viewer click.
+ * It stops the dedicated private desktop and its tracked AI processes,
+ * never touches the owner's Default processes or moves their input desktop.
+ */
+async function handleLocalEmergencyStop():Promise<boolean>{
+  const p=runtimePaths();
+  let command:string;
+  try{
+    command=await fs.readFile(p.emergency,'utf8');
+  }catch(error){
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return false;
+    throw error;
+  }
+  await fs.rm(p.emergency,{force:true});
+  if(command!=='STOP_NEXOWIREPRIVATE'){
+    await fs.writeFile(p.emergencyResult,'Invalid private AI stop request.');
+    return false;
+  }
+  try{
+    const snapshot=await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.status',{},
+    ) as {data:{inputDesktop:string}};
+    if(snapshot.data.inputDesktop!=='Default'){
+      throw new PrivateViewerError(
+        'PRIVATE_STOP_INPUT_DESKTOP_NOT_DEFAULT',
+        'Return to the Default user desktop before stopping the private AI desktop.',
+      );
+    }
+    await executeWindowsPrivateDesktopCapability(
+      'windows.private_desktop.stop',{},
+    );
+    await viewerStop();
+    return true;
+  }catch(error){
+    await fs.writeFile(
+      p.emergencyResult,
+      'AI stop not completed: '+(
+        error instanceof Error?error.message.slice(0,200):'Unknown error'
+      ),
+    );
+    return false;
+  }
+}
+
 function startRefreshLoop(
   initial: PrivateViewerState,
 ): void {
@@ -578,11 +668,16 @@ function startRefreshLoop(
     }
 
     refreshBusy = true;
-    void captureAndPersist(state)
-      .then(async (next) => {
-        state = next;
-        await writeState(state);
-      })
+    void (async()=>{
+      // Process local emergency stop before screenshot or metadata updates.
+      // On success viewerStop closes the WPF window and removes its files.
+      if(await handleLocalEmergencyStop())return;
+      if(generation!==refreshGeneration)return;
+      const next=await captureAndPersist(state);
+      if(generation!==refreshGeneration)return;
+      state=next;
+      await writeState(state);
+    })()
       .catch(() => {
         // Keep the viewer alive on a transient persistence error.
       })
@@ -601,6 +696,8 @@ async function cleanupRuntime(
     fs.rm(p.state, { force: true }),
     fs.rm(p.frame, { force: true }),
     fs.rm(p.windows, { force: true }),
+    fs.rm(p.emergency, { force: true }),
+    fs.rm(p.emergencyResult, { force: true }),
     fs.rm(p.heartbeat, { force: true }),
     ...(removeScript
       ? [fs.rm(p.viewer, { force: true })]
@@ -744,6 +841,10 @@ async function viewerStart(
       p.heartbeat,
       '-WindowsPath',
       p.windows,
+      '-EmergencyPath',
+      p.emergency,
+      '-EmergencyResultPath',
+      p.emergencyResult,
       '-RefreshMs',
       String(parsed.refresh_ms),
       '-Topmost',
