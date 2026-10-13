@@ -12,8 +12,10 @@ const WindowHandleSchema = z
 const PrivateScreenSchema = z
   .object({
     source: z
-      .enum(['desktop', 'window'])
+      .enum(['desktop', 'monitor', 'window'])
       .default('desktop'),
+    monitor_index: z.number().int().min(0).max(15).optional(),
+    monitor_id: z.string().min(1).max(128).optional(),
     hwnd: WindowHandleSchema.optional(),
     max_width: z
       .number()
@@ -46,18 +48,36 @@ const PrivateScreenSchema = z
           'hwnd is required when source=window.',
       });
     }
-    if (
-      value.source === 'desktop' &&
-      value.hwnd
-    ) {
+    if (value.source !== 'window' && value.hwnd) {
       ctx.addIssue({
-        code: 'custom',
-        path: ['hwnd'],
-        message:
-          'hwnd is not allowed when source=desktop.',
+        code: 'custom', path: ['hwnd'],
+        message: 'hwnd requires source=window.',
+      });
+    }
+    const hasMonitor = value.monitor_index !== undefined || value.monitor_id !== undefined;
+    if (value.source === 'monitor' && !hasMonitor) {
+      ctx.addIssue({
+        code: 'custom', path: ['monitor_index'],
+        message: 'source=monitor requires monitor_index or monitor_id.',
+      });
+    }
+    if (value.source !== 'monitor' && hasMonitor) {
+      ctx.addIssue({
+        code: 'custom', path: ['monitor_index'],
+        message: 'A monitor selector requires source=monitor.',
+      });
+    }
+    if (value.monitor_index !== undefined && value.monitor_id !== undefined) {
+      ctx.addIssue({
+        code: 'custom', path: ['monitor_id'],
+        message: 'Select a monitor by index or ID, not both.',
       });
     }
   });
+
+export function parseWindowsPrivateScreenCaptureRequest(input:unknown): z.infer<typeof PrivateScreenSchema> {
+  return PrivateScreenSchema.parse(input);
+}
 
 class PrivateScreenError extends Error {
   constructor(
@@ -100,6 +120,37 @@ public static class NxPrivateScreenNative {
   public const uint SWITCH = 0x0100;
   public const int UOI_NAME = 2;
   public const uint PW_RENDERFULLCONTENT = 0x00000002;
+  public const uint MONITOR_DEFAULTTONEAREST = 2;
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct POINT { public int X; public int Y; }
+
+  [DllImport("user32.dll")]
+  static extern IntPtr MonitorFromPoint(POINT point, uint flags);
+
+  [DllImport("shcore.dll")]
+  static extern int GetDpiForMonitor(IntPtr monitor, int dpiType, out uint x, out uint y);
+
+  [DllImport("shcore.dll")]
+  static extern int SetProcessDpiAwareness(int awareness);
+
+  // Use physical monitor pixels consistently for Screen.Bounds + GetWindowRect.
+  // This affects only the short-lived screenshot helper, never the owner session.
+  public static bool TryEnablePerMonitorDpi() {
+    try { return SetProcessDpiAwareness(2) == 0; }
+    catch { return false; }
+  }
+
+  public static int[] MonitorDpi(int x, int y) {
+    try {
+      var monitor = MonitorFromPoint(new POINT { X = x, Y = y }, MONITOR_DEFAULTTONEAREST);
+      if (monitor == IntPtr.Zero) return new int[] { 0, 0 };
+      uint dpiX, dpiY;
+      int hr = GetDpiForMonitor(monitor, 0, out dpiX, out dpiY);
+      if (hr != 0) return new int[] { 0, 0 };
+      return new int[] { checked((int)dpiX), checked((int)dpiY) };
+    } catch { return new int[] { 0, 0 }; }
+  }
 
   [StructLayout(LayoutKind.Sequential)]
   public struct RECT {
@@ -385,6 +436,47 @@ $inputData =
   ConvertFrom-Json
 
 $source = [string]$inputData.source
+# Win32 desktop objects SHARE host monitor topology. These are connected
+# native monitors, never independently created AI virtual monitors.
+$dpiAwarenessApplied = [NxPrivateScreenNative]::TryEnablePerMonitorDpi()
+$hostScreens = @([System.Windows.Forms.Screen]::AllScreens)
+$displays = @(
+  for($idx=0;$idx -lt $hostScreens.Count;$idx++) {
+    $screen = $hostScreens[$idx]
+    $rectangle = $screen.Bounds
+    $effectiveDpi = [NxPrivateScreenNative]::MonitorDpi(
+      ($rectangle.X + [int]($rectangle.Width / 2)),
+      ($rectangle.Y + [int]($rectangle.Height / 2))
+    )
+    [pscustomobject]@{
+      index = $idx
+      id = [string]$screen.DeviceName
+      x = [int]$rectangle.X
+      y = [int]$rectangle.Y
+      width = [int]$rectangle.Width
+      height = [int]$rectangle.Height
+      primary = [bool]$screen.Primary
+      effectiveDpiX = $(if($effectiveDpi[0] -gt 0){$effectiveDpi[0]}else{$null})
+      effectiveDpiY = $(if($effectiveDpi[1] -gt 0){$effectiveDpi[1]}else{$null})
+    }
+  }
+)
+$selectedMonitor = $null
+if($source -eq 'monitor') {
+  if($null -ne $inputData.monitor_index) {
+    $selectedMonitor = @($displays | Where-Object { $_.index -eq [int]$inputData.monitor_index }) | Select-Object -First 1
+  } else {
+    $selectedMonitor = @($displays | Where-Object { $_.id -ieq [string]$inputData.monitor_id }) | Select-Object -First 1
+  }
+  if($null -eq $selectedMonitor) {
+    [pscustomobject]@{
+      ok = $false
+      code = 'PRIVATE_MONITOR_NOT_FOUND'
+      message = 'Requested monitor is not in the current host display topology.'
+    } | ConvertTo-Json -Compress
+    exit 7
+  }
+}
 $maxWidth = [int]$inputData.max_width
 $maxHeight = [int]$inputData.max_height
 $maxBytes = [int64]$inputData.max_bytes
@@ -440,9 +532,24 @@ try {
     $captured = 1
     $resolvedHwnd = [string]$entry.Hwnd
     $windowTitle = [string]$entry.Title
-  } elseif ($source -eq 'desktop') {
-    $bounds =
-      [System.Windows.Forms.SystemInformation]::VirtualScreen
+  } elseif ($source -eq 'desktop' -or $source -eq 'monitor') {
+    if($source -eq 'monitor') {
+      $bounds = [System.Drawing.Rectangle]::new(
+        $selectedMonitor.x, $selectedMonitor.y,
+        $selectedMonitor.width, $selectedMonitor.height
+      )
+    } else {
+      # Default captures all connected monitors, including negative coordinates.
+      $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+    }
+    if([long]$bounds.Width * [long]$bounds.Height -gt 120000000) {
+      [pscustomobject]@{
+        ok = $false
+        code = 'PRIVATE_SCREEN_SOURCE_TOO_LARGE'
+        message = 'Desktop bitmap exceeds the 120-megapixel limit; select a monitor.'
+      } | ConvertTo-Json -Compress
+      exit 8
+    }
     $sourceBitmap =
       New-Object System.Drawing.Bitmap(
         $bounds.Width,
@@ -468,7 +575,11 @@ try {
           Where-Object {
             $_.Visible -and
             ([int]$_.Right - [int]$_.Left) -gt 0 -and
-            ([int]$_.Bottom - [int]$_.Top) -gt 0
+            ([int]$_.Bottom - [int]$_.Top) -gt 0 -and
+            [int]$_.Right -gt [int]$bounds.Left -and
+            [int]$_.Left -lt [int]$bounds.Right -and
+            [int]$_.Bottom -gt [int]$bounds.Top -and
+            [int]$_.Top -lt [int]$bounds.Bottom
           }
       )
 
@@ -594,6 +705,14 @@ try {
   [pscustomobject]@{
     ok = $true
     source = $source
+    topologyKind = 'host_shared_native'
+    perMonitorDpiAwarenessApplied = $dpiAwarenessApplied
+    monitorCount = $displays.Count
+    monitors = @($displays)
+    selectedMonitorIndex = $(if($null -ne $selectedMonitor){[int]$selectedMonitor.index}else{$null})
+    captureBounds = $(if($source -ne 'window'){
+      [pscustomobject]@{x=$bounds.X;y=$bounds.Y;width=$bounds.Width;height=$bounds.Height}
+    }else{$null})
     hwnd = $resolvedHwnd
     title = $windowTitle
     width = $targetWidth
@@ -633,7 +752,17 @@ try {
 `;
 
 export interface WindowsPrivateScreenCapture {
-  source: 'desktop' | 'window';
+  source: 'desktop' | 'monitor' | 'window';
+  topologyKind: 'host_shared_native';
+  perMonitorDpiAwarenessApplied: boolean;
+  monitorCount: number;
+  monitors: Array<{
+    index: number; id: string; x: number; y: number;
+    width: number; height: number; primary: boolean;
+    effectiveDpiX: number | null; effectiveDpiY: number | null;
+  }>;
+  selectedMonitorIndex: number | null;
+  captureBounds: {x:number;y:number;width:number;height:number} | null;
   hwnd: string | null;
   title: string | null;
   width: number;
@@ -787,13 +916,28 @@ export async function captureWindowsPrivateScreen(
   data: WindowsPrivateScreenCapture;
 }> {
   assertWindows();
-  const parsed =
-    PrivateScreenSchema.parse(input);
+  const parsed = parseWindowsPrivateScreenCaptureRequest(input);
 
   const result = z
     .object({
       ok: z.literal(true),
-      source: z.enum(['desktop', 'window']),
+      source: z.enum(['desktop', 'monitor', 'window']),
+      topologyKind: z.literal('host_shared_native'),
+      perMonitorDpiAwarenessApplied: z.boolean(),
+      monitorCount: z.number().int().nonnegative(),
+      monitors: z.array(z.object({
+        index:z.number().int().nonnegative(),
+        id:z.string().min(1),x:z.number().int(),y:z.number().int(),
+        width:z.number().int().positive(),height:z.number().int().positive(),
+        primary:z.boolean(),
+        effectiveDpiX:z.number().int().positive().nullable(),
+        effectiveDpiY:z.number().int().positive().nullable(),
+      })),
+      selectedMonitorIndex:z.number().int().nonnegative().nullable(),
+      captureBounds:z.object({
+        x:z.number().int(),y:z.number().int(),
+        width:z.number().int().positive(),height:z.number().int().positive(),
+      }).nullable(),
       hwnd: z.string().nullable(),
       title: z.string().nullable(),
       width: z.number().int().positive(),
