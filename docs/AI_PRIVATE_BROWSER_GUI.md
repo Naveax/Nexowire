@@ -19,6 +19,21 @@ içinde `uiTarget: "private_desktop"` ve
 `browser_session_stop`, özel tarayıcı PID'sinin
 Windows süreç ağacını durdurur ve oturum profilini temizler.
 
+## Geçici Edge DevTools zaman aşımı toleransı
+
+Windows CI/DEV yükü altında `Page.navigate` başarılı olduktan sonra
+sayfanın `document.readyState` alanını **okuyan** CDP
+`Runtime.evaluate` komutu zaman zaman 5 saniyede yanıt vermeyebilir.
+Navigasyon hazırlık döngüsü artık yalnız bu okuma sorgusuna ait
+`CDP_REQUEST_TIMEOUT` hatasını aynı `timeout_ms` bütçesi içinde
+tekrar dener. Uç nokta kopması, geçersiz hedef ve CDP protokol
+hataları aynen döner. Süre dolarsa `BROWSER_NAVIGATION_TIMEOUT`
+oluşur ve `readinessTimeouts` sayısı tanılamada bulunur.
+
+`Page.navigate`, `Input.dispatchMouseEvent`, `set_value` ve diğer
+mutasyonlar tekrar edilmez; çift tıklama veya çift yazma riskine
+karşı genel bir retry mekanizması yoktur.
+
 ## DEV kabulü
 
 Gerçek Windows DEV makinesinde görünür Edge penceresi
