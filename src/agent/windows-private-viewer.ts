@@ -45,6 +45,7 @@ interface PrivateViewerState {
   maxHeight: number;
   maxBytes: number;
   topmost: boolean;
+  selectedMonitorId: string | null;
   lastFrameAt: string | null;
   frameBytes: number | null;
   frameWidth: number | null;
@@ -94,6 +95,8 @@ function runtimePaths() {
     state: path.join(root, 'state.json'),
     frame: path.join(root, 'frame.png'),
     windows: path.join(root, 'windows.json'),
+    displays: path.join(root, 'displays.json'),
+    monitorSelection: path.join(root, 'monitor-selection.request.json'),
     emergency: path.join(root, 'emergency-stop.request'),
     emergencyResult: path.join(root, 'emergency-stop.result'),
     heartbeat: path.join(root, 'heartbeat.txt'),
@@ -130,6 +133,7 @@ async function readState(): Promise<
         maxHeight: z.number().int().positive(),
         maxBytes: z.number().int().positive(),
         topmost: z.boolean(),
+        selectedMonitorId: z.string().min(1).max(128).nullable().default(null),
         lastFrameAt: z.string().nullable(),
         frameBytes: z.number().int().positive().nullable(),
         frameWidth: z.number().int().positive().nullable(),
@@ -203,6 +207,10 @@ param(
   [string]$HeartbeatPath,
   [Parameter(Mandatory = $true)]
   [string]$WindowsPath,
+  [Parameter(Mandatory = $true)]
+  [string]$DisplaysPath,
+  [Parameter(Mandatory = $true)]
+  [string]$MonitorSelectionPath,
   [Parameter(Mandatory = $true)]
   [string]$EmergencyPath,
   [Parameter(Mandatory = $true)]
@@ -344,6 +352,40 @@ $compact.Add_Click({
   $compact,[System.Windows.Controls.Dock]::Left
 )
 [void]$bar.Children.Add($compact)
+
+# Read-only monitor inventory; local selection changes the private preview
+# only. It never calls SetDisplayConfig or the Default desktop input APIs.
+$monitorPicker=New-Object System.Windows.Controls.ComboBox
+$monitorPicker.Width=228
+$monitorPicker.Margin='0,10,10,10'
+$monitorPicker.VerticalContentAlignment='Center'
+$monitorPicker.ToolTip='Select all host monitors or one. AI windows stay on NexowirePrivate.'
+$script:updatingMonitorPicker=$false
+$script:lastMonitorInventoryWrite=[datetime]::MinValue
+$monitorPicker.Add_SelectionChanged({
+  if($script:updatingMonitorPicker -or $null -eq $monitorPicker.SelectedItem){return}
+  $tag=[string]$monitorPicker.SelectedItem.Tag
+  $request=if($tag -eq 'all'){
+    @{source='desktop'}
+  }else{
+    @{source='monitor';monitor_id=$tag}
+  }
+  try{
+    $utf8=New-Object System.Text.UTF8Encoding($false)
+    $temporary=$MonitorSelectionPath+'.tmp'
+    [System.IO.File]::WriteAllText($temporary,($request|ConvertTo-Json -Compress),$utf8)
+    if([System.IO.File]::Exists($MonitorSelectionPath)){
+      [System.IO.File]::Delete($MonitorSelectionPath)
+    }
+    [System.IO.File]::Move($temporary,$MonitorSelectionPath)
+  }catch{
+    $status.Text='Monitor selection could not be saved'
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $monitorPicker,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($monitorPicker)
 
 $fullscreen=New-Object System.Windows.Controls.Button
 $fullscreen.Content='FULL SCREEN'
@@ -512,6 +554,47 @@ function Load-Frame {
   }
 }
 
+function Update-MonitorPicker {
+  if(-not(Test-Path -LiteralPath $DisplaysPath)){return}
+  try{
+    $item=Get-Item -LiteralPath $DisplaysPath
+    if($item.LastWriteTimeUtc -le $script:lastMonitorInventoryWrite){return}
+    $snapshot=Get-Content -LiteralPath $DisplaysPath -Raw -ErrorAction Stop |
+      ConvertFrom-Json -ErrorAction Stop
+    $timestamp=[datetime]::MinValue
+    if(-not [datetime]::TryParse([string]$snapshot.updatedAt,[ref]$timestamp)){return}
+    $age=([datetime]::UtcNow-$timestamp.ToUniversalTime()).TotalMilliseconds
+    if($age -lt -2000 -or $age -gt [Math]::Max(5000,$RefreshMs*5)){return}
+    $currentTag='all'
+    if($null -ne $monitorPicker.SelectedItem){
+      $currentTag=[string]$monitorPicker.SelectedItem.Tag
+    } elseif($snapshot.selectedMonitorId){
+      $currentTag=[string]$snapshot.selectedMonitorId
+    }
+    $script:updatingMonitorPicker=$true
+    try{
+      $monitorPicker.Items.Clear()
+      $all=New-Object System.Windows.Controls.ComboBoxItem
+      $all.Content='ALL MONITORS'
+      $all.Tag='all'
+      [void]$monitorPicker.Items.Add($all)
+      $selection=$all
+      foreach($m in @($snapshot.monitors)){
+        $entry=New-Object System.Windows.Controls.ComboBoxItem
+        $entry.Tag=[string]$m.id
+        $dpiLabel=if($m.effectiveDpiX){' | '+$m.effectiveDpiX+' DPI'}else{''}
+        $entry.Content=('SCREEN '+([int]$m.index+1)+': '+$m.width+'x'+$m.height+$dpiLabel)
+        [void]$monitorPicker.Items.Add($entry)
+        if($entry.Tag -eq $currentTag){$selection=$entry}
+      }
+      $monitorPicker.SelectedItem=$selection
+      $script:lastMonitorInventoryWrite=$item.LastWriteTimeUtc
+    }finally{$script:updatingMonitorPicker=$false}
+  }catch{
+    # Leave last known list visible. Capture health displays stale/error.
+  }
+}
+
 function Update-WindowList {
   $appList.Items.Clear()
   if(-not(Test-Path -LiteralPath $WindowsPath)){
@@ -597,6 +680,7 @@ $timer.Add_Tick({
     return
   }
   Load-Frame
+  Update-MonitorPicker
   Update-WindowList
   Update-CaptureHealth
   if(Test-Path -LiteralPath $EmergencyResultPath){
@@ -611,6 +695,7 @@ $timer.Start()
 
 $window.Add_Closed({ $timer.Stop() })
 Load-Frame
+Update-MonitorPicker
 Update-WindowList
 Update-CaptureHealth
 [void]$window.ShowDialog()
@@ -649,6 +734,53 @@ async function refreshPrivateWindowInventory():Promise<void>{
   await fs.rename(temp,destination);
 }
 
+const LocalMonitorSelectionSchema = z.object({
+  source:z.enum(['desktop','monitor']),
+  monitor_id:z.string().min(1).max(128).optional(),
+}).strict().superRefine((v,ctx)=>{
+  if(v.source==='monitor'&&!v.monitor_id)
+    ctx.addIssue({code:'custom',path:['monitor_id'],message:'monitor_id required'});
+  if(v.source==='desktop'&&v.monitor_id)
+    ctx.addIssue({code:'custom',path:['monitor_id'],message:'monitor_id only allowed for monitor'});
+});
+
+/** Only the locally clicked Viewer writes this request. It cannot switch
+ * Windows desktops or alter display configuration. */
+export function parseLocalMonitorSelection(input:unknown):{selectedMonitorId:string|null}{
+  const parsed=LocalMonitorSelectionSchema.parse(input);
+  return {selectedMonitorId:parsed.source==='monitor'?parsed.monitor_id!:null};
+}
+
+async function readLocalMonitorSelection(
+  state:PrivateViewerState,
+):Promise<PrivateViewerState>{
+  const file=runtimePaths().monitorSelection;
+  let raw:string;
+  try{raw=await fs.readFile(file,'utf8');}
+  catch(e){
+    if((e as NodeJS.ErrnoException).code==='ENOENT')return state;
+    throw e;
+  }
+  await fs.rm(file,{force:true});
+  const selection=parseLocalMonitorSelection(JSON.parse(raw));
+  return {...state,...selection};
+}
+
+async function writeMonitorInventory(
+  selectedMonitorId:string|null,
+  monitors:Array<{id:string;index:number;width:number;height:number;effectiveDpiX:number|null}>,
+):Promise<void>{
+  const file=runtimePaths().displays, temp=file+'.tmp';
+  await fs.writeFile(temp,JSON.stringify({
+    updatedAt:new Date().toISOString(),
+    selectedMonitorId,
+    topologyKind:'host_shared_native',
+    monitors,
+  }),{encoding:'utf8',mode:0o600});
+  await fs.rm(file,{force:true});
+  await fs.rename(temp,file);
+}
+
 async function captureAndPersist(
   state: PrivateViewerState,
 ): Promise<PrivateViewerState> {
@@ -656,7 +788,8 @@ async function captureAndPersist(
 
   try {
     const capture = await captureWindowsPrivateScreen({
-      source: 'desktop',
+      source: state.selectedMonitorId ? 'monitor' : 'desktop',
+      ...(state.selectedMonitorId ? {monitor_id:state.selectedMonitorId} : {}),
       max_width: state.maxWidth,
       max_height: state.maxHeight,
       max_bytes: state.maxBytes,
@@ -664,6 +797,7 @@ async function captureAndPersist(
     const frameBytes = await writeFrame(
       capture.data.base64,
     );
+    await writeMonitorInventory(state.selectedMonitorId,capture.data.monitors);
     // Window inventory is best-effort, never an excuse to stop refreshing
     // the image. This is a read-only query of NexowirePrivate, not Default.
     await refreshPrivateWindowInventory().catch(()=>undefined);
@@ -767,6 +901,8 @@ function startRefreshLoop(
       // On success viewerStop closes the WPF window and removes its files.
       if(await handleLocalEmergencyStop())return;
       if(generation!==refreshGeneration)return;
+      state=await readLocalMonitorSelection(state);
+      if(generation!==refreshGeneration)return;
       const next=await captureAndPersist(state);
       if(generation!==refreshGeneration)return;
       state=next;
@@ -790,6 +926,8 @@ async function cleanupRuntime(
     fs.rm(p.state, { force: true }),
     fs.rm(p.frame, { force: true }),
     fs.rm(p.windows, { force: true }),
+    fs.rm(p.displays, { force: true }),
+    fs.rm(p.monitorSelection, { force: true }),
     fs.rm(p.emergency, { force: true }),
     fs.rm(p.emergencyResult, { force: true }),
     fs.rm(p.heartbeat, { force: true }),
@@ -852,6 +990,8 @@ async function viewerStatus(): Promise<{
       startedAt: state.startedAt,
       refreshMs: state.refreshMs,
       topmost: state.topmost,
+      captureScope: state.selectedMonitorId ? 'monitor' : 'all_monitors',
+      selectedMonitorId: state.selectedMonitorId,
       lastFrameAt: state.lastFrameAt,
       frameAgeMs,
       frameHealth,
@@ -918,6 +1058,7 @@ async function viewerStart(
     maxHeight: parsed.max_height,
     maxBytes: parsed.max_bytes,
     topmost: parsed.topmost,
+    selectedMonitorId: null,
     lastFrameAt: null,
     frameBytes: null,
     frameWidth: null,
@@ -953,6 +1094,10 @@ async function viewerStart(
       p.heartbeat,
       '-WindowsPath',
       p.windows,
+      '-DisplaysPath',
+      p.displays,
+      '-MonitorSelectionPath',
+      p.monitorSelection,
       '-EmergencyPath',
       p.emergency,
       '-EmergencyResultPath',
