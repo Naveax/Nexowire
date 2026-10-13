@@ -6,7 +6,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import type { PathPolicy } from './path-policy.js';
 import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
-import {privateShellExecutionEnvironment} from './windows-private-shell.js';
+import {privateShellExecutionEnvironment,assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell.js';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
@@ -777,12 +777,19 @@ export class ProcessManager {
         'PRIVATE_PROCESS_WINDOWS_ONLY','Private process sessions require Windows.',
       );
     }
+    const shell = resolveShell(parsed.shell, parsed.command);
+    if(privateDesktop){
+      // Durable worker's own spawn() otherwise bypasses the direct
+      // private-desktop launcher broker denylist.
+      assertNoObviousPrivateShellBrokerInvocation(
+        shell.executable,shell.args,
+      );
+    }
     const id = randomUUID();
     const workerDir = path.join(this.workerRoot, id);
     await fs.mkdir(workerDir, { recursive: true, mode: 0o700 });
 
     const token = randomBytes(32).toString('hex');
-    const shell = resolveShell(parsed.shell, parsed.command);
 
     const initPayload = {
       sessionId: id,
