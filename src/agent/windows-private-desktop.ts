@@ -71,6 +71,10 @@ const PrivateKeyboardTypeSchema = z.object({
   hwnd: WindowHandleSchema,
   text: z.string().min(1).max(20_000),
   interval_ms: z.number().int().min(0).max(100).default(0),
+  x:z.number().int().min(0).max(32767).optional(),
+  y:z.number().int().min(0).max(32767).optional(),
+}).refine(value=>(value.x===undefined)===(value.y===undefined),{
+  message:'Supply both x and y to target a private child control.',
 });
 
 const PrivateKeyboardHotkeySchema = z.object({
@@ -326,9 +330,22 @@ public static class NxDesktopNative {
     for(int i=0;i<clicks;i++){Post(h,down,new UIntPtr(mask),l);Post(h,up,UIntPtr.Zero,l);}
     return "0x"+h.ToInt64().ToString("X");
   }
-  public static string Text(string name,string raw,string text,int intervalMs){
+  public static string Text(string name,string raw,string text,int intervalMs,
+    bool childTarget,int x,int y){
     var h=Target(name,raw);
-    foreach(char ch in text??""){Post(h,WM_CHAR,new UIntPtr((uint)ch),IntPtr.Zero);if(intervalMs>0)System.Threading.Thread.Sleep(intervalMs);}
+    var sendTo=h;
+    if(childTarget){
+      XY(h,x,y);
+      var point=new POINT{x=x,y=y};
+      if(!ClientToScreen(h,ref point))
+        throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+      // Never descend into cross-process child HWNDs.
+      sendTo=SafePrivateWheelChild(h,point);
+    }
+    foreach(char ch in text??""){
+      Post(sendTo,WM_CHAR,new UIntPtr((uint)ch),IntPtr.Zero);
+      if(intervalMs>0)System.Threading.Thread.Sleep(intervalMs);
+    }
     return "0x"+h.ToInt64().ToString("X");
   }
   public static string Hotkey(string name,string raw,int[] keys){
@@ -456,7 +473,8 @@ try {
     $h=[NxDesktopNative]::CloseWindow([string]$r.desktop,[string]$r.hwnd)
     [pscustomobject]@{hwnd=$h;inputDesktop=[NxDesktopNative]::Input();closeRequested=$true}
   } elseif ($Action -eq 'text') {
-    $h=[NxDesktopNative]::Text([string]$r.desktop,[string]$r.hwnd,[string]$r.text,[int]$r.interval_ms)
+    $hasXY=($null-ne$r.x)-and($null-ne$r.y)
+    $h=[NxDesktopNative]::Text([string]$r.desktop,[string]$r.hwnd,[string]$r.text,[int]$r.interval_ms,[bool]$hasXY,[int]$r.x,[int]$r.y)
     [pscustomobject]@{hwnd=$h;charsSent=([string]$r.text).Length;intervalMs=[int]$r.interval_ms;inputDesktop=[NxDesktopNative]::Input()}
   } else {
     [int[]]$keys=@($r.virtualKeys|ForEach-Object{[int]$_})
@@ -1050,6 +1068,7 @@ async function privateKeyboardType(
           hwnd: parsed.hwnd,
           text: parsed.text,
           interval_ms: parsed.interval_ms,
+          ...(parsed.x!==undefined&&parsed.y!==undefined?{x:parsed.x,y:parsed.y}:{}),
         }),
       );
     return {

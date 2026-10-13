@@ -3940,7 +3940,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Type text into Nexowire private HWND',
       description:
-        'Route Unicode WM_CHAR text directly to one exact top-level HWND on NexowirePrivate. This does not use SendInput and does not inject into the user-visible input desktop.',
+        'Route Unicode WM_CHAR to a verified private top-level HWND or a same-process child control selected with both x/y client coordinates. Does not change physical keyboard focus or use SendInput; toolkit support varies.',
       inputSchema: {
         ...targetFields,
         hwnd: z
@@ -3950,6 +3950,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           .regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
         text: z.string().min(1).max(20_000),
         interval_ms: z.number().int().min(0).max(100).optional(),
+        x:z.number().int().min(0).max(32767).optional(),
+        y:z.number().int().min(0).max(32767).optional(),
       },
     },
     async ({
@@ -3958,6 +3960,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       hwnd,
       text,
       interval_ms,
+      x,y,
     }) =>
       await execute(
         ctx,
@@ -3968,6 +3971,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(interval_ms !== undefined
             ? { interval_ms }
             : {}),
+          ...(x!==undefined?{x}:{}),
+          ...(y!==undefined?{y}:{}),
         },
         device_id,
         provider_id,

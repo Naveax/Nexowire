@@ -260,6 +260,27 @@ as acceptance evidence.
 This is a supplementary diagnosis for #402, not a substitute for a
 separate guest display provider and actual user-interaction acceptance.
 
+## Child text-box input inside a private app
+
+`windows_private_keyboard_type` now optionally accepts **both**
+`x` and `y` coordinates in client pixels relative to the selected,
+validated `NexowirePrivate` top-level `hwnd`. Without coordinates
+it preserves the previous top-level `WM_CHAR` behavior.
+
+With both coordinates, the native helper checks the point lies within
+the private top-level client area, descends only into visible, enabled
+child HWNDs **owned by the same application PID**, then posts Unicode
+`WM_CHAR` to that control. Supplying only one coordinate or an
+out-of-bounds point fails closed. The Windows owner cursor, actual
+keyboard focus and input desktop are unchanged. A real DEV WinForms
+TextBox accepted this targeted text without a focus switch.
+
+This is direct window-message delivery, not a universal text editing
+or accessibility abstraction. WPF controls without their own child
+HWND, browser-rendered text boxes, elevated apps and frameworks
+requiring focus/IME composition may need different private-specific
+input paths; no fallback to physical keyboard input is permitted.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
