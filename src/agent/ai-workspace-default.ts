@@ -14,13 +14,28 @@ export function resolveAiWorkspaceTarget(
   }={},
 ):AiWorkspaceTarget {
   const platform=options.platform??process.platform;
-  const configured=(options.env??process.env).NEXOWIRE_AI_UI_TARGET_DEFAULT;
-
-  const target=explicit??configured??'headless';
+  const env=options.env??process.env;
+  const configured=env.NEXOWIRE_AI_UI_TARGET_DEFAULT;
+  const enforced=env.NEXOWIRE_AI_UI_TARGET_ENFORCE_PRIVATE;
+  if(enforced!==undefined&&enforced!=='0'&&enforced!=='1'){
+    throw new Error('AI_WORKSPACE_ENFORCEMENT_POLICY_INVALID');
+  }
+  const strictPrivate=enforced==='1';
+  // This is opt-in and default-off. Unlike a preference, an enforce policy
+  // cannot be overridden by nested task graphs, runbooks or direct tools.
+  const target=explicit??configured??(strictPrivate?'private_desktop':'headless');
   if(target!=='headless'&&target!=='private_desktop'){
     throw new Error('AI_WORKSPACE_DEFAULT_POLICY_INVALID');
   }
-  if(target==='private_desktop'&&platform!=='win32'&&explicit===undefined){
+  if(strictPrivate&&target!=='private_desktop'){
+    const error=Object.assign(
+      new Error('Owner policy requires every AI command to use NexowirePrivate.'),
+      {code:'AI_PRIVATE_DESKTOP_POLICY_REQUIRED'},
+    );
+    throw error;
+  }
+  if(target==='private_desktop'&&platform!=='win32'&&
+     (explicit===undefined||strictPrivate)){
     throw new Error('AI_PRIVATE_DESKTOP_REQUIRES_WINDOWS');
   }
   return target;
