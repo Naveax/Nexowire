@@ -3153,6 +3153,27 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_display_topology',
+    {
+      title: 'Inspect available AI Screen monitors',
+      description:
+        'Read connected host monitor count, stable device IDs, pixel bounds, primary display, per-monitor effective DPI, and all-monitor union without taking a screenshot or starting NexowirePrivate. This is a read-only host-shared topology, NOT independent AI virtual monitors; never changes screen settings or input desktop. Use monitor ID or index with windows_private_screen_capture to capture one. Omit selector to capture ALL.',
+      inputSchema: {
+        ...targetFields,
+      },
+    },
+    async ({ device_id, provider_id }) =>
+      await execute(
+        ctx,
+        'windows.private_display.topology',
+        {},
+        device_id,
+        provider_id,
+        30_000,
+      ),
+  );
+
+  server.registerTool(
     'windows_private_display_plan',
     {
       title: 'Plan isolated AI displays',

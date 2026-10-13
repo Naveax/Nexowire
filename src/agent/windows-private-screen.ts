@@ -461,6 +461,30 @@ $displays = @(
     }
   }
 )
+# Metadata-only read: works even before NexowirePrivate is started, and
+# does not require any private GUI window or allocate a screenshot bitmap.
+if($source -eq 'topology') {
+  $before = [NxPrivateScreenNative]::InputDesktop()
+  $virtualBounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+  $after = [NxPrivateScreenNative]::InputDesktop()
+  [pscustomobject]@{
+    ok = $true
+    topologyKind = 'host_shared_native'
+    independentAiDisplays = $false
+    monitorCount = $displays.Count
+    monitors = @($displays)
+    virtualBounds = [pscustomobject]@{
+      x=[int]$virtualBounds.X; y=[int]$virtualBounds.Y
+      width=[int]$virtualBounds.Width; height=[int]$virtualBounds.Height
+    }
+    perMonitorDpiAwarenessApplied = $dpiAwarenessApplied
+    capturedAt = [DateTime]::UtcNow.ToString('o')
+    inputDesktopBefore = $before
+    inputDesktopAfter = $after
+    visibleDesktopChanged = ($before -ne $after)
+  } | ConvertTo-Json -Depth 5 -Compress
+  exit 0
+}
 $selectedMonitor = $null
 if($source -eq 'monitor') {
   if($null -ne $inputData.monitor_index) {
@@ -783,7 +807,7 @@ export interface WindowsPrivateScreenCapture {
 }
 
 async function invokeCapture(
-  input: z.infer<typeof PrivateScreenSchema>,
+  input: z.infer<typeof PrivateScreenSchema> | { source:'topology' },
 ): Promise<unknown> {
   return await new Promise((resolve, reject) => {
     const child = spawn(
@@ -908,6 +932,88 @@ async function invokeCapture(
       resolve(parsed);
     });
   });
+}
+
+const TopologyMonitorSchema = z.object({
+  index: z.number().int().nonnegative(),
+  id: z.string().min(1).max(128),
+  x: z.number().int(), y: z.number().int(),
+  width: z.number().int().positive(), height: z.number().int().positive(),
+  primary: z.boolean(),
+  effectiveDpiX: z.number().int().positive().nullable(),
+  effectiveDpiY: z.number().int().positive().nullable(),
+});
+
+export const PrivateDisplayTopologyResultSchema = z.object({
+  ok: z.literal(true),
+  topologyKind: z.literal('host_shared_native'),
+  independentAiDisplays: z.literal(false),
+  monitorCount: z.number().int().nonnegative(),
+  monitors: z.array(TopologyMonitorSchema),
+  virtualBounds: z.object({
+    x:z.number().int(),y:z.number().int(),
+    width:z.number().int().positive(),height:z.number().int().positive(),
+  }),
+  perMonitorDpiAwarenessApplied: z.boolean(),
+  capturedAt: z.string().datetime({offset:true}),
+  inputDesktopBefore: z.string(),
+  inputDesktopAfter: z.string(),
+  visibleDesktopChanged: z.boolean(),
+}).superRefine((value,ctx)=>{
+  if(value.monitors.length!==value.monitorCount){
+    ctx.addIssue({code:'custom',path:['monitorCount'],
+      message:'Monitor count and inventory length do not match.'});
+  }
+  if(value.monitorCount<1){
+    ctx.addIssue({code:'custom',path:['monitorCount'],
+      message:'No connected monitor inventory reported.'});
+  }
+  if(value.monitors.length>0){
+    const left=Math.min(...value.monitors.map(m=>m.x));
+    const top=Math.min(...value.monitors.map(m=>m.y));
+    const right=Math.max(...value.monitors.map(m=>m.x+m.width));
+    const bottom=Math.max(...value.monitors.map(m=>m.y+m.height));
+    const bounds=value.virtualBounds;
+    if(bounds.x!==left||bounds.y!==top||
+      bounds.width!==right-left||bounds.height!==bottom-top){
+      ctx.addIssue({code:'custom',path:['virtualBounds'],
+        message:'Reported virtual desktop bounds do not cover all monitors.'});
+    }
+    if(value.monitors.filter(m=>m.primary).length!==1){
+      ctx.addIssue({code:'custom',path:['monitors'],
+        message:'Exactly one primary host monitor must be identified.'});
+    }
+  }
+  const ids=new Set<string>();
+  for(let i=0;i<value.monitors.length;i++){
+    const monitor=value.monitors[i]!;
+    if(monitor.index!==i || ids.has(monitor.id.toUpperCase())){
+      ctx.addIssue({code:'custom',path:['monitors',i],
+        message:'Monitor indexes must be contiguous and IDs unique.'});
+    }
+    ids.add(monitor.id.toUpperCase());
+  }
+  if(value.visibleDesktopChanged ||
+    value.inputDesktopBefore!==value.inputDesktopAfter){
+    ctx.addIssue({code:'custom',path:['visibleDesktopChanged'],
+      message:'Input desktop must be preserved during topology inspection.'});
+  }
+});
+
+export type WindowsPrivateDisplayTopology =
+  Omit<z.infer<typeof PrivateDisplayTopologyResultSchema>,'ok'>;
+
+/**
+ * Read host-shared monitor configuration without needing a screenshot or
+ * launching a private app. This never provisions an independent AI monitor.
+ */
+export async function inspectWindowsPrivateDisplayTopology():Promise<{data:WindowsPrivateDisplayTopology}>{
+  assertWindows();
+  const parsed=PrivateDisplayTopologyResultSchema.parse(
+    await invokeCapture({source:'topology'}),
+  );
+  const {ok:_ok,...data}=parsed;
+  return {data};
 }
 
 export async function captureWindowsPrivateScreen(
