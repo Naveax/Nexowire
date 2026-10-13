@@ -7,6 +7,13 @@ export const PrivateDisplayBackendProbeSchema=z.object({
   hypervisorPresent:z.boolean().nullable(),
   vmManagementServiceRunning:z.boolean().nullable(),
   hyperVModuleAvailable:z.boolean(),
+  effectiveLocalAdministrator:z.boolean().nullable(),
+  effectiveHyperVAdministrator:z.boolean().nullable(),
+  vmManagementAccessGuidance:z.enum([
+    'VM_MANAGEMENT_AVAILABLE',
+    'HYPERV_TOOLS_MISSING',
+    'REVIEW_AUTHORIZED_HYPERV_PERMISSIONS',
+  ]),
   vmInventoryStatus:z.enum(['available','access_denied_or_unavailable','not_installed']),
   vmCount:z.number().int().nonnegative().nullable(),
   runningVmCount:z.number().int().nonnegative().nullable(),
@@ -20,6 +27,15 @@ export const PrivateDisplayBackendProbeSchema=z.object({
   touchesHostDisplaySettings:z.literal(false),
   pendingRequirement:z.literal('ISOLATED_GUEST_DISPLAY_PROVIDER_AND_AUTHORIZATION'),
 }).strict().superRefine((v,ctx)=>{
+  const expectedGuidance=!v.hyperVModuleAvailable
+    ?'HYPERV_TOOLS_MISSING'
+    :v.vmInventoryStatus==='available'
+      ?'VM_MANAGEMENT_AVAILABLE'
+      :'REVIEW_AUTHORIZED_HYPERV_PERMISSIONS';
+  if(v.vmManagementAccessGuidance!==expectedGuidance){
+    ctx.addIssue({code:'custom',path:['vmManagementAccessGuidance'],
+      message:'VM permission guidance is inconsistent with actual inventory access.'});
+  }
   if(v.vmInventoryStatus==='available'){
     if(v.vmCount===null||v.runningVmCount===null||
       v.runningVmCount>v.vmCount){
@@ -44,6 +60,20 @@ $runningCount=$null
 $hypervisorPresent=$null
 $vmmsRunning=$null
 $virtualAdapters=@()
+$effectiveLocalAdministrator=$null
+$effectiveHyperVAdministrator=$null
+try{
+  # WindowsPrincipal.IsInRole tests ENABLED groups in this process token.
+  # Being listed in BUILTIN Administrators as a deny-only UAC group
+  # does NOT grant Hyper-V management permissions to the running Agent.
+  $identity=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+  $principal=[System.Security.Principal.WindowsPrincipal]::new($identity)
+  $effectiveLocalAdministrator=$principal.IsInRole(
+    [System.Security.Principal.WindowsBuiltInRole]::Administrator
+  )
+  $hypervSid=[System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-578')
+  $effectiveHyperVAdministrator=$principal.IsInRole($hypervSid)
+}catch{}
 try {
   $computer=Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
   $hypervisorPresent=[bool]$computer.HypervisorPresent
@@ -81,11 +111,20 @@ try {
     }
   })
 }catch{}
+$vmManagementAccessGuidance='REVIEW_AUTHORIZED_HYPERV_PERMISSIONS'
+if(-not $hyperVModuleAvailable){
+  $vmManagementAccessGuidance='HYPERV_TOOLS_MISSING'
+}elseif($vmInventoryStatus -eq 'available'){
+  $vmManagementAccessGuidance='VM_MANAGEMENT_AVAILABLE'
+}
 [pscustomobject]@{
   platform='win32'
   hypervisorPresent=$hypervisorPresent
   vmManagementServiceRunning=$vmmsRunning
   hyperVModuleAvailable=$hyperVModuleAvailable
+  effectiveLocalAdministrator=$effectiveLocalAdministrator
+  effectiveHyperVAdministrator=$effectiveHyperVAdministrator
+  vmManagementAccessGuidance=$vmManagementAccessGuidance
   vmInventoryStatus=$vmInventoryStatus
   vmCount=$vmCount
   runningVmCount=$runningCount
