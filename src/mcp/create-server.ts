@@ -3731,6 +3731,22 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_accessibility',
+    {
+      title:'Read bounded private-window accessibility structure',
+      description:'Read-only bounded UI Automation ControlView traversal starting at an exact verified NexowirePrivate top-level HWND. Returns same-process semantic control types, automation IDs, action labels (never Edit/Text/Document/password contents), and rectangles. No RootElement or owner Default desktop enumeration, no invoke/set-value or focus changes. Incomplete coverage is explicit.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+      },
+    },
+    async ({device_id,provider_id,hwnd})=>await execute(
+      ctx,'windows.private_desktop.accessibility',{hwnd},
+      device_id,provider_id,40_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_desktop_controls',
     {
       title:'Inspect same-process controls in a private window',
