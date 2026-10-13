@@ -343,6 +343,22 @@ recreates the same control with identical class/PID: this is a safer
 provenance check, **not** a permanent identity proof or full UIA
 support.
 
+## Exact child control targeting for the private memory clipboard
+
+The same paired `control_hwnd` and `expected_class` fields can now
+be passed to `windows_private_clipboard_paste`. The Agent sends its
+ephemeral in-memory clipboard text through the validated exact-child
+native `WM_CHAR` path, with same-PID, parent/child relationship,
+visibility, enabled state and Win32 class rechecked before each char.
+This mode is mutually exclusive with client `x/y` targeting. Missing,
+stale, cross-parent or mismatched controls are rejected.
+
+Neither the Windows clipboard nor `Ctrl+V`, `SendInput`, physical
+cursor, keyboard focus, or `Default` desktop is used. The stored
+private text remains scoped to the running private desktop. This does
+not extend native HWND handling to browser DOM or WPF composition
+controls without their own Win32 child handle.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
