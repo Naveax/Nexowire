@@ -298,6 +298,27 @@ HWND, browser-rendered text boxes, elevated apps and frameworks
 requiring focus/IME composition may need different private-specific
 input paths; no fallback to physical keyboard input is permitted.
 
+## Read-only native child control inventory
+
+`windows_private_desktop_controls` takes an explicit top-level
+`NexowirePrivate` HWND and returns a bounded, read-only inventory of
+its child Win32 controls: handle, class name, process ID,
+visible/enabled flags and rectangle **relative to the top-level
+client origin**. It can be used to choose coordinates for private
+click, wheel and text controls rather than guessing pixel locations.
+
+Enumeration runs on `NexowirePrivate` itself. The top-level HWND is
+revalidated against that desktop; embedded child HWNDs belonging to
+a different process are **omitted**. The scan is capped at 128 returned
+controls and 512 inspected windows; `truncated` indicates incomplete
+coverage, with a separate count of skipped foreign-process children.
+
+No child window text, password field contents, owner `Default`
+desktop data, physical focus changes or system clipboard access are
+involved. Native HWND controls do not cover all WPF composition or
+browser DOM elements; this is not a full UI Automation implementation
+or an independent OS desktop guarantee.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.

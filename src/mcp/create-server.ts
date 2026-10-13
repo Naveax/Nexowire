@@ -3731,6 +3731,23 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_controls',
+    {
+      title:'Inspect same-process controls in a private window',
+      description:
+        'Read-only bounded inventory of child HWNDs inside one revalidated NexowirePrivate top-level window. Returns class names, process IDs, enabled/visible flags, and rectangles relative to the top-level client coordinates; no text, UIA contents, or physical desktop access. Cross-process embedded children are omitted.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+      },
+    },
+    async ({device_id,provider_id,hwnd})=>await execute(
+      ctx,'windows.private_desktop.controls',{hwnd},
+      device_id,provider_id,30_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_desktop_windows',
     {
       title: 'List Nexowire private desktop windows',
