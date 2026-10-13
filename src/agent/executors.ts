@@ -19,6 +19,7 @@ import { runWindowsPrivateShell } from './windows-private-shell.js';
 import {resolveAiWorkspaceTarget,requireWslHeadlessRouting} from './ai-workspace-default.js';
 import { executeWindowsPrivateViewerCapability } from './windows-private-viewer.js';
 import { captureWindowsPrivateScreen, inspectWindowsPrivateDisplayTopology } from './windows-private-screen.js';
+import {captureWindowsPrivateScreenSet} from './windows-private-screen-set.js';
 import {planWindowsPrivateDisplays} from './windows-private-display-plan.js';
 import {executeWindowsPrivateDisplayProfileCapability} from './windows-private-display-profile.js';
 import {
@@ -2334,6 +2335,8 @@ export async function executeCapability(
       return await executeWindowsVirtualPointerCapability(capability, input);
     case 'windows.private_screen.capture':
       return await captureWindowsPrivateScreen(input);
+    case 'windows.private_screen.capture_set':
+      return await captureWindowsPrivateScreenSet(input);
     case 'windows.private_display.topology':
       return await inspectWindowsPrivateDisplayTopology();
     case 'windows.private_display.plan':
