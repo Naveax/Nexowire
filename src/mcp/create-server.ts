@@ -3824,19 +3824,23 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'windows_private_clipboard_paste',
     {
       title:'Type private clipboard text into a private app',
-      description:'Type private in-memory text into a verified NexowirePrivate HWND, optionally into a same-process child control selected by both x/y coordinates. No host clipboard or Ctrl+V and no physical keyboard focus change.',
+      description:'Type private in-memory text into a verified NexowirePrivate HWND, using x/y child coordinates or exact same-process control_hwnd plus expected_class from read-only inventory. No host clipboard, Ctrl+V or physical focus change.',
       inputSchema:{
         ...targetFields,
         hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
         interval_ms:z.number().int().min(0).max(100).optional(),
         x:z.number().int().min(0).max(32767).optional(),
         y:z.number().int().min(0).max(32767).optional(),
+        control_hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/).optional(),
+        expected_class:z.string().min(1).max(256).optional(),
       },
     },
-    async ({device_id,provider_id,hwnd,interval_ms,x,y})=>await execute(
+    async ({device_id,provider_id,hwnd,interval_ms,x,y,control_hwnd,expected_class})=>await execute(
       ctx,'windows.private_clipboard.paste',{
         hwnd,...(interval_ms!==undefined?{interval_ms}:{}),
         ...(x!==undefined?{x}:{}),...(y!==undefined?{y}:{}),
+        ...(control_hwnd!==undefined?{control_hwnd}:{}),
+        ...(expected_class!==undefined?{expected_class}:{}),
       },device_id,provider_id,45_000,
     ),
   );

@@ -11,8 +11,14 @@ const PrivatePasteSchema=z.object({
   interval_ms:z.number().int().min(0).max(100).default(0),
   x:z.number().int().min(0).max(32767).optional(),
   y:z.number().int().min(0).max(32767).optional(),
+  control_hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/).optional(),
+  expected_class:z.string().min(1).max(256).optional(),
 }).strict().refine(value=>(value.x===undefined)===(value.y===undefined),{
   message:'Supply both x and y for private child target.',
+}).refine(value=>(value.control_hwnd===undefined)===(value.expected_class===undefined),{
+  message:'Supply both control_hwnd and expected_class from private control inventory.',
+}).refine(value=>value.control_hwnd===undefined||value.x===undefined,{
+  message:'Cannot combine exact HWND and coordinate targeting.',
 });
 const PrivateReadSchema=z.object({
   max_chars:z.number().int().min(1).max(MAX_PRIVATE_TEXT_CHARS)
@@ -103,6 +109,7 @@ export async function executeWindowsPrivateClipboardCapability(
         hwnd:requested.hwnd,text:source,
         interval_ms:requested.interval_ms,
         ...(requested.x!==undefined&&requested.y!==undefined?{x:requested.x,y:requested.y}:{}),
+        ...(requested.control_hwnd!==undefined?{control_hwnd:requested.control_hwnd,expected_class:requested.expected_class}:{}),
       },
     ) as {data:{charsSent:number;inputDesktop:string}};
     const after=await activePrivateDesktop();
