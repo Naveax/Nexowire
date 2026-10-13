@@ -1053,7 +1053,7 @@ export function parseLocalPrivateWindowCloseRequest(input:unknown):{
   return LocalPrivateWindowCloseSchema.parse(input);
 }
 
-async function handleLocalPrivateWindowClose():Promise<void>{
+export async function handleLocalPrivateWindowClose():Promise<void>{
   const p=runtimePaths();
   let raw:string;
   try{raw=await fs.readFile(p.windowCloseRequest,'utf8');}
