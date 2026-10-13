@@ -49,6 +49,27 @@ Example workflow:
 
 Each `monitors[]` entry includes `index`, Windows `id` (`\\.\\DISPLAY...`), `x`, `y`, `width`, `height`, `primary`, `effectiveDpiX`, and `effectiveDpiY`. DPI values are nullable if Windows cannot retrieve them. The DPI-awareness flag reports whether the helper successfully requested per-monitor awareness.
 
+### Explicit Windows capture repetition acceptance
+
+The opt-in DEV test `test/private-screen-repeated-capture-soak.test.ts`
+starts its own NexowirePrivate WPF fixture and performs six consecutive
+combined all-monitor captures, per-monitor PNG batches, and exact-HWND
+private-window captures. It verifies stable host topology, valid capture
+scopes, and an unchanged Windows input desktop, then removes the fixture.
+
+In PowerShell on an authorized, idle DEV computer:
+
+```powershell
+$env:NEXOWIRE_RUN_AI_SCREEN_REPEAT_SOAK_LIVE='1'
+node --test --import tsx test/private-screen-repeated-capture-soak.test.ts
+Remove-Item Env:NEXOWIRE_RUN_AI_SCREEN_REPEAT_SOAK_LIVE
+```
+
+The test is skipped by default in CI to avoid racing physical GUI/input
+acceptance tests. This short capture-only check **does not** claim
+long-duration or concurrent owner focus/cursor acceptance; a physical
+multi-monitor setup must be separately verified.
+
 ### Important isolation boundary
 
 Win32 *desktop objects* are **not** display adapters or virtual monitors. They share Windows session display topology and DPI policies with the owner's desktop. Changing native monitor count, resolution, scaling, or arrangement would change the user's environment and is **not** a supported private AI operation.
