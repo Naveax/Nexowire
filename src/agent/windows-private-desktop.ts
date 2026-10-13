@@ -53,6 +53,10 @@ const PrivatePointerClickSchema =
       .enum(['left', 'right', 'middle'])
       .default('left'),
     clicks: z.number().int().min(1).max(3).default(1),
+    control_hwnd:WindowHandleSchema.optional(),
+    expected_class:z.string().min(1).max(256).optional(),
+  }).refine(value=>(value.control_hwnd===undefined)===(value.expected_class===undefined),{
+    message:'Provide control_hwnd and expected_class together for private child click.',
   });
 
 const PrivatePointerScrollSchema=PrivatePointerMoveSchema.extend({
@@ -330,7 +334,7 @@ public static class NxDesktopNative {
     Post(privateTarget,wheel,new UIntPtr(wp),new IntPtr(packed));
     return "0x"+h.ToInt64().ToString("X");
   }
-  public static string PointerClick(string name,string raw,int x,int y,string button,int clicks){
+  public static string PointerClick(string name,string raw,int x,int y,string button,int clicks,string childRaw,string expectedClass){
     var h=Target(name,raw);
     XY(h,x,y);
     // Translate validated private parent coordinates into a child-local
@@ -340,6 +344,10 @@ public static class NxDesktopNative {
     if(!ClientToScreen(h,ref screen))
       throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     var target=SafePrivateWheelChild(h,screen);
+    if(!String.IsNullOrEmpty(childRaw)){
+      var exact=RequireExactChild(h,childRaw,expectedClass);
+      if(target!=exact)throw new InvalidOperationException("PRIVATE_CHILD_CONTROL_POINT_MISMATCH");
+    }
     var atTarget=screen;
     if(!ScreenToClient(target,ref atTarget))
       throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -353,6 +361,11 @@ public static class NxDesktopNative {
     }
     Post(target,WM_MOUSEMOVE,UIntPtr.Zero,l);
     for(int i=0;i<clicks;i++){
+      if(!String.IsNullOrEmpty(childRaw)){
+        var exact=RequireExactChild(h,childRaw,expectedClass);
+        if(SafePrivateWheelChild(h,screen)!=exact)
+          throw new InvalidOperationException("PRIVATE_CHILD_CONTROL_POINT_MISMATCH");
+      }
       Post(target,down,new UIntPtr(mask),l);
       Post(target,up,UIntPtr.Zero,l);
     }
@@ -552,7 +565,7 @@ try {
     $h=[NxDesktopNative]::PointerScroll([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[int]$r.delta,[string]$r.axis)
     [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;delta=[int]$r.delta;axis=[string]$r.axis;inputDesktop=[NxDesktopNative]::Input()}
   } elseif ($Action -eq 'pointer_click') {
-    $h=[NxDesktopNative]::PointerClick([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[string]$r.button,[int]$r.clicks)
+    $h=[NxDesktopNative]::PointerClick([string]$r.desktop,[string]$r.hwnd,[int]$r.x,[int]$r.y,[string]$r.button,[int]$r.clicks,[string]$r.control_hwnd,[string]$r.expected_class)
     [pscustomobject]@{hwnd=$h;x=[int]$r.x;y=[int]$r.y;button=[string]$r.button;clicks=[int]$r.clicks;inputDesktop=[NxDesktopNative]::Input()}
   } elseif ($Action -eq 'controls') {
           $scan=[NxDesktopNative]::Controls([string]$r.desktop,[string]$r.hwnd)
@@ -589,7 +602,7 @@ try {
 } catch {
   $message=$_.Exception.Message
   $code='PRIVATE_INPUT_FAILED'
-  foreach($candidate in @('WINDOW_NOT_PRIVATE_DESKTOP','WINDOW_NOT_FOUND','POINT_OUTSIDE_CLIENT','PRIVATE_CHILD_CONTROL_INVALID','PRIVATE_CHILD_CONTROL_UNAVAILABLE','PRIVATE_CHILD_CONTROL_CLASS_MISMATCH','BUTTON_UNSUPPORTED','HOTKEY_EMPTY')){
+  foreach($candidate in @('WINDOW_NOT_PRIVATE_DESKTOP','WINDOW_NOT_FOUND','POINT_OUTSIDE_CLIENT','PRIVATE_CHILD_CONTROL_INVALID','PRIVATE_CHILD_CONTROL_UNAVAILABLE','PRIVATE_CHILD_CONTROL_CLASS_MISMATCH','PRIVATE_CHILD_CONTROL_POINT_MISMATCH','BUTTON_UNSUPPORTED','HOTKEY_EMPTY')){
     if($message.Contains($candidate)){$code=$candidate;break}
   }
   $json=[pscustomobject]@{ok=$false;code=$code;message=$message}|ConvertTo-Json -Compress
@@ -1167,6 +1180,7 @@ async function privatePointerClick(
           y: parsed.y,
           button: parsed.button,
           clicks: parsed.clicks,
+          ...(parsed.control_hwnd!==undefined?{control_hwnd:parsed.control_hwnd,expected_class:parsed.expected_class}:{}),
         }),
       );
     return {
