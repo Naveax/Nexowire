@@ -2057,12 +2057,60 @@ function requireRunbooks(context: AgentExecutionContext): RunbookStore {
   return context.runbooks;
 }
 
+/**
+ * Legacy physical-console GUI tools are not remapped by the generic
+ * capability dispatcher. Direct MCP, task graph, or runbook calls all pass
+ * through executeCapability, so enforce the private-AI boundary here rather
+ * than trusting callers to select the right names.
+ *
+ * windows.screenshot and windows.virtual_pointer keep their dedicated
+ * private-only guards and specific error codes below.
+ */
+const LEGACY_PHYSICAL_GUI_CAPABILITIES = new Set<Capability>([
+  'windows.window.list',
+  'windows.window.focus',
+  'windows.clipboard.read',
+  'windows.clipboard.write',
+  'windows.clipboard.clear',
+  'windows.keyboard.type',
+  'windows.keyboard.hotkey',
+  'windows.accessibility.tree',
+  'windows.accessibility.find',
+  'windows.accessibility.invoke',
+  'windows.accessibility.set_value',
+  'windows.pointer.position',
+  'windows.pointer.move',
+  'windows.pointer.click',
+  'windows.pointer.scroll',
+]);
+
+export function assertPrivateAiGuiBoundary(capability:Capability):void{
+  if(!LEGACY_PHYSICAL_GUI_CAPABILITIES.has(capability))return;
+  if(resolveAiWorkspaceTarget(undefined)!=='private_desktop')return;
+  const redirect=capability.startsWith('windows.pointer.')
+    ? 'windows.private_pointer.move or windows.private_pointer.click'
+    :capability.startsWith('windows.keyboard.')
+      ? 'windows.private_keyboard.type or windows.private_keyboard.hotkey'
+      :capability.startsWith('windows.window.')
+        ? 'windows.private_desktop.windows or windows.private_desktop.window.close'
+        :capability.startsWith('windows.accessibility.')
+          ? 'windows.private_desktop.windows and the private pointer/keyboard tools (native private accessibility is not implemented)'
+          : 'No private clipboard equivalent exists yet; do not read or modify the owner clipboard';
+  throw Object.assign(
+    new Error('This legacy Windows GUI capability is bound to the owner Default desktop and is not isolated on NexowirePrivate. Use '+redirect+'.'),
+    {code:'AI_PHYSICAL_GUI_NOT_ISOLATED',capability},
+  );
+}
+
 export async function executeCapability(
   capability: Capability,
   input: unknown,
   policy: PathPolicy,
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
+  // Do this before physical console grant checks. An owner-console grant
+  // is not a waiver of AI private-desktop isolation.
+  assertPrivateAiGuiBoundary(capability);
   if (
     needsPhysicalConsoleApproval(
       capability,

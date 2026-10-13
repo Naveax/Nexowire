@@ -29,6 +29,35 @@ Example workflow:
    but reports `applied:false` until a separately isolated display backend
    exists.
 
+## Legacy physical GUI controls are blocked in private AI mode
+
+When `NEXOWIRE_AI_UI_TARGET_DEFAULT=private_desktop` or the private
+enforcement policy applies, the Agent rejects **all** legacy Windows GUI
+commands that would otherwise operate on the owner's `Default` desktop:
+
+- `windows.window.list/focus` (use `windows.private_desktop.windows`
+  and managed private-window tools)
+- `windows.pointer.position/move/click/scroll` (use
+  `windows.private_pointer.move/click`; private scrolling/position
+  queries are not yet implemented)
+- `windows.keyboard.type/hotkey` (use `windows.private_keyboard.*`)
+- `windows.accessibility.tree/find/invoke/set_value` (there is no
+  equivalent isolated native accessibility provider yet; use explicit
+  private pointer/keyboard/window APIs, never silent Default fallback)
+- `windows.clipboard.read/write/clear` (there is no isolated private
+  clipboard equivalent yet; do not expose or mutate the user's clipboard)
+
+These 15 routes return `AI_PHYSICAL_GUI_NOT_ISOLATED` **before** input
+validation, host GUI access, or physical-console grant checks. A grant
+to use the physical console does not override this AI isolation rule.
+The separate `windows.screenshot` and physical WPF virtual pointer
+protections remain in force with their existing specific error codes.
+
+Without a configured private AI target, the legacy Windows GUI tools
+retain their existing behavior. This rule is enforced centrally for
+direct MCP calls and nested execution through task graphs or runbooks,
+not just in client/UI prompts.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
