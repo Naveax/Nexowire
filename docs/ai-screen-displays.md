@@ -186,6 +186,24 @@ invoke ShellExecute/COM, delegate to Explorer, or launch an elevated
 child; those transitive launch paths need separate tracing and a
 guest/session isolation boundary before issue #402 can close.
 
+## Elevated installer GUI cannot fall back to the owner desktop
+
+`windows.installer.apply` is fail-closed with
+`AI_PRIVATE_INSTALLER_UI_NOT_ISOLATED` when the AI default is
+`private_desktop`. This check runs before physical console approval or
+privileged-Broker dispatch. An elevated installer launches via
+`Start-Process -WindowStyle Hidden`, but that hides neither
+shell-brokered child GUI windows nor UAC/Secure Desktop consent prompts
+reliably. Explicit owner FULL/Broker permission is **not** an exception
+to private AI workspace isolation.
+
+`windows.installer.preflight` and `windows.installer.status` remain
+available under their existing permission rules because they do not
+launch an installer. Outside private AI mode, the pre-existing FULL
+and Broker installer approval contract is unchanged. No UAC bypass,
+WinSta0 desktop switch, physical GUI automation or production
+deployment is implemented by this guard.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
