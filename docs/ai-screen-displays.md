@@ -405,6 +405,31 @@ because legacy/custom providers, inaccessible nodes and brokered
 children may be omitted. It is not an assurance of independent
 Windows session, virtual displays or transitive GUI isolation.
 
+## Read-only private UIA semantic target resolution
+
+`windows_private_desktop_accessibility_resolve` accepts one verified
+private top-level `hwnd`, `automation_id`, `control_type` and an
+optional exact `expected_class`. It performs a **fresh** bounded
+private-window UIA ControlView inspection, refuses skipped, truncated
+or cross-process inventories, and returns the client-relative
+rectangle only when **exactly one** enabled, onscreen same-PID
+control matches. A missing, duplicate, unavailable, or mismatched
+control fails closed.
+
+`uniqueInObservedSnapshot:true` means uniqueness **only within this
+live bounded snapshot**, not a stable object identity or a complete
+UI Automation tree. The result deliberately includes
+`authorizesInput:false` and
+`fullAccessibilityTreeVerified:false`. The selector does not
+invoke buttons, set values, read text, move physical input,
+change the host clipboard or cross to the owner's `Default` UI.
+
+The WPF DEV acceptance fixture verified unique resolution of a
+private button by Automation ID and rejection of a missing ID.
+A subsequent UIA action backend will need its own authorization,
+in-process identity revalidation and isolation acceptance; this
+read-only selector grants none of those privileges.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
