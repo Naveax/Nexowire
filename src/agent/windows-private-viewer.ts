@@ -47,6 +47,7 @@ interface PrivateViewerState {
   topmost: boolean;
   selectedMonitorId: string | null;
   lastSelectionError: string | null;
+  emptyCaptureArea: boolean | null;
   lastFrameAt: string | null;
   frameBytes: number | null;
   frameWidth: number | null;
@@ -136,6 +137,7 @@ async function readState(): Promise<
         topmost: z.boolean(),
         selectedMonitorId: z.string().min(1).max(128).nullable().default(null),
         lastSelectionError: z.string().max(256).nullable().default(null),
+        emptyCaptureArea: z.boolean().nullable().default(null),
         lastFrameAt: z.string().nullable(),
         frameBytes: z.number().int().positive().nullable(),
         frameWidth: z.number().int().positive().nullable(),
@@ -670,6 +672,10 @@ function Update-CaptureHealth {
       $status.Text='STALE FRAME: last capture '+[Math]::Max(0,[int]($age/1000))+'s ago'
       return
     }
+    if($snapshot.emptyCaptureArea){
+      $status.Text='LIVE EMPTY AI SCREEN: no private windows in selected capture area'
+      return
+    }
     $status.Text='LIVE NexowirePrivate | '+[DateTime]::Now.ToString('HH:mm:ss')
   }catch{
     $status.Text='CAPTURE STATUS UNAVAILABLE: showing last known frame'
@@ -824,6 +830,7 @@ async function captureAndPersist(
       frameBytes,
       frameWidth: capture.data.width,
       frameHeight: capture.data.height,
+      emptyCaptureArea: capture.data.emptyCaptureArea,
       lastError: null,
     };
   } catch (error) {
@@ -1017,6 +1024,7 @@ async function viewerStatus(): Promise<{
       frameBytes: state.frameBytes,
       frameWidth: state.frameWidth,
       frameHeight: state.frameHeight,
+      emptyCaptureArea: state.emptyCaptureArea,
       lastError: state.lastError,
       entryAction:
         'Local ENTER PRIVATE DESKTOP button',
@@ -1078,6 +1086,7 @@ async function viewerStart(
     topmost: parsed.topmost,
     selectedMonitorId: null,
     lastSelectionError: null,
+    emptyCaptureArea: null,
     lastFrameAt: null,
     frameBytes: null,
     frameWidth: null,

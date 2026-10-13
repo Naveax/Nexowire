@@ -39,6 +39,7 @@ Example workflow:
 - Invalid, absent, or conflicting selectors **fail closed**, never silently fall back to all screens.
 - PNG output bounds `max_width` and `max_height` are **downscale limits**, not instructions to change Windows display resolution.
 - PNG `max_bytes` is an enforced limit. Native desktop source bitmaps above 120 megapixels fail with an explicit error rather than allocating unbounded memory.
+- An existing but empty NexowirePrivate desktop or monitor region returns a valid background-only PNG with `emptyCaptureArea: true` and `capturedWindows: 0`. This is not a screenshot of the owner's Default desktop. When visible private windows exist but all rendering attempts fail, the capture still fails explicitly. The Viewer reports `LIVE EMPTY AI SCREEN` for a fresh empty capture, separately from capture errors or stale frames.
 
 ### Returned metadata
 
