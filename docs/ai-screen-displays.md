@@ -162,6 +162,30 @@ This does not guarantee arbitrary tasks, services, native shell brokers
 or COM launches are isolated: the broader process launch audit remains
 open in issue #402.
 
+## Known Windows shell-broker entry points are blocked on private launch
+
+`windows.private_desktop.launch` uses
+`CreateProcess(STARTUPINFO.lpDesktop=WinSta0\\NexowirePrivate)`
+for directly launched processes. Some Windows shell brokers can hand
+activation to existing Explorer/COM or user-interactive processes on
+`Default`, bypassing the immediate child desktop.
+
+The private launch path now refuses these known direct executable
+entry points (case-insensitive, including absolute-path variants):
+`explorer.exe`, `control.exe`, `rundll32.exe`, `dllhost.exe`,
+`mshta.exe`, `wscript.exe`, `cscript.exe`, `msiexec.exe`,
+`fodhelper.exe`, `computerdefaults.exe`, `eventvwr.exe`,
+`sdclt.exe`, `slui.exe`, and `hh.exe`. Such a call fails with
+`PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED` before creating the process.
+Direct GUI executables, browsers, editors and ordinary PowerShell/CMD
+continue to be eligible.
+
+This is a **known-broker denylist**, not proof of universal process
+isolation. A PowerShell script or third-party executable can still
+invoke ShellExecute/COM, delegate to Explorer, or launch an elevated
+child; those transitive launch paths need separate tracing and a
+guest/session isolation boundary before issue #402 can close.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.

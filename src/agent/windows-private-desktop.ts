@@ -672,12 +672,55 @@ async function resolveExecutable(executable: string): Promise<string> {
   );
 }
 
+/**
+ * These Windows launchers may forward activation to an existing Explorer,
+ * COM or shell broker on the user's Default/Secure Desktop. Assigning
+ * STARTUPINFO.lpDesktop to the immediate CreateProcess child alone does
+ * not isolate their GUI and elevation descendants.
+ *
+ * Block known broker entry points, not all applications. Scripted
+ * ShellExecute/COM children are not yet fully contained by this check.
+ */
+const PRIVATE_SHELL_BROKER_EXECUTABLES=new Set([
+  'explorer.exe',
+  'control.exe',
+  'rundll32.exe',
+  'dllhost.exe',
+  'mshta.exe',
+  'wscript.exe',
+  'cscript.exe',
+  'msiexec.exe',
+  'fodhelper.exe',
+  'computerdefaults.exe',
+  'eventvwr.exe',
+  'sdclt.exe',
+  'slui.exe',
+  'hh.exe',
+]);
+
+export function assertNoPrivateDesktopBrokeredExecutable(
+  executable:string,
+):void{
+  const name=path.win32.basename(executable.trim()
+    .replace(/^["']|["']$/g,'')).toLowerCase();
+  if(!PRIVATE_SHELL_BROKER_EXECUTABLES.has(name))return;
+  throw new PrivateDesktopError(
+    'PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED',
+    'This Windows shell/COM/installer broker may create windows on the '+
+    'owner Default or Secure Desktop. Use a directly executable private '+
+    'GUI application or an isolated guest session instead.',
+    {executable:name},
+  );
+}
+
 async function launch(
   executable: string,
   args: string[],
   cwd?: string,
 ): Promise<number> {
+  assertNoPrivateDesktopBrokeredExecutable(executable);
   const resolvedExecutable = await resolveExecutable(executable);
+  assertNoPrivateDesktopBrokeredExecutable(resolvedExecutable);
   return z
     .object({ pid: z.number().int().positive() })
     .parse(
