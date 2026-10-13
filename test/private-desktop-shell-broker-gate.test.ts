@@ -71,6 +71,18 @@ test('real private desktop refuses shell broker before creating a GUI window',{
         'code' in error&&error.code==='PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED',
       executable);
   }
+  for(const entry of [
+    {executable:'powershell.exe',args:['-NoProfile','-Command','Start-Process explorer.exe']},
+    {executable:'pwsh.exe',args:['-Command','Invoke-Item .\\example.txt']},
+    {executable:'cmd.exe',args:['/C','start "" explorer.exe']},
+    {executable:'powershell.exe',args:['-EncodedCommand','U3RhcnQtUHJvY2Vzcw==']},
+  ]){
+    await assert.rejects(
+      desktop('windows.private_desktop.launch',entry),
+      (error:unknown)=>error instanceof Error&&
+        'code' in error&&error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      entry.executable+' '+entry.args.join(' '));
+  }
   const after=await desktop('windows.private_desktop.status',{}) as {data:{launchedPids:number[];inputDesktop:string}};
   assert.deepEqual(after.data.launchedPids,before.data.launchedPids);
   assert.equal(after.data.inputDesktop,'Default');
