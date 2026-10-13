@@ -8,10 +8,10 @@ import {ZodError} from 'zod';
 import {parseLocalMonitorSelection} from '../src/agent/windows-private-viewer.js';
 
 test('locally selected display stays within private capture, default all monitors',()=>{
-  assert.deepEqual(parseLocalMonitorSelection({source:'desktop'}),{selectedMonitorId:null});
+  assert.deepEqual(parseLocalMonitorSelection({source:'desktop'}),{selectedMonitorId:null,selectedWindowHwnd:null});
   assert.deepEqual(
     parseLocalMonitorSelection({source:'monitor',monitor_id:'\\\\.\\DISPLAY1'}),
-    {selectedMonitorId:'\\\\.\\DISPLAY1'},
+    {selectedMonitorId:'\\\\.\\DISPLAY1',selectedWindowHwnd:null},
   );
 });
 
@@ -29,11 +29,14 @@ test('local monitor selector rejects missing or conflicting monitor scope',()=>{
 test('viewer emits native monitor inventory, one monitor option and explicit all-monitors control',async()=>{
   const s=await fs.readFile(new URL('../src/agent/windows-private-viewer.ts',import.meta.url),'utf8');
   for(const required of [
-    "source: state.selectedMonitorId ? 'monitor' : 'desktop'",
+    "source: state.selectedWindowHwnd ? 'window' : (state.selectedMonitorId ? 'monitor' : 'desktop')",
     "monitor_id:state.selectedMonitorId",
     "selectedMonitorId: null",
     "source='desktop'",
     "source='monitor'",
+    "source='window'",
+    "PREVIEW WINDOW",
+    "ALL SCREENS",
     "ALL MONITORS",
     'MonitorSelectionPath',
     'DisplaysPath',

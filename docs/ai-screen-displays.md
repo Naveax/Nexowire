@@ -35,7 +35,7 @@ Example workflow:
 
 - **No selector:** `source: "desktop"` (also the default) renders **all connected host displays** in a single PNG. The union includes any negative X/Y coordinates for displays to the left or above the primary.
 - **One display:** `source: "monitor", monitor_index: 0` or `source: "monitor", monitor_id: "\\\\.\\DISPLAY2"`. IDs come from the capture metadata. Index 0 is valid; use IDs if ordering may change.
-- **One window:** `source: "window", hwnd: "0x..."` and the handle must belong to a top-level `NexowirePrivate` window.
+- **One window:** `source: "window", hwnd: "0x..."` and the handle must belong to a top-level `NexowirePrivate` window. The local WPF Viewer now lists private windows with exact HWNDs. Select a private window and click **PREVIEW WINDOW** to show only its current content. The **ALL SCREENS** button restores the combined preview even if the selected window has since closed. These buttons never activate the HWND, move the user's physical cursor, or switch the input desktop. Invalid or closed HWNDs produce a capture error instead of leaking physical desktop content.
 - Invalid, absent, or conflicting selectors **fail closed**, never silently fall back to all screens.
 - PNG output bounds `max_width` and `max_height` are **downscale limits**, not instructions to change Windows display resolution.
 - PNG `max_bytes` is an enforced limit. Native desktop source bitmaps above 120 megapixels fail with an explicit error rather than allocating unbounded memory.

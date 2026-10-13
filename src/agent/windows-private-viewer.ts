@@ -46,6 +46,7 @@ interface PrivateViewerState {
   maxBytes: number;
   topmost: boolean;
   selectedMonitorId: string | null;
+  selectedWindowHwnd: string | null;
   lastSelectionError: string | null;
   emptyCaptureArea: boolean | null;
   lastFrameAt: string | null;
@@ -136,6 +137,7 @@ async function readState(): Promise<
         maxBytes: z.number().int().positive(),
         topmost: z.boolean(),
         selectedMonitorId: z.string().min(1).max(128).nullable().default(null),
+        selectedWindowHwnd: z.string().regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/).nullable().default(null),
         lastSelectionError: z.string().max(256).nullable().default(null),
         emptyCaptureArea: z.boolean().nullable().default(null),
         lastFrameAt: z.string().nullable(),
@@ -359,6 +361,26 @@ $compact.Add_Click({
 
 # Read-only monitor inventory; local selection changes the private preview
 # only. It never calls SetDisplayConfig or the Default desktop input APIs.
+# All local requests are data-only read by the Agent. No shell commands,
+# HWND activation, foreground changes, or owner desktop capture.
+function Write-PreviewSelection {
+  param([hashtable]$Request)
+  try {
+    $utf8=New-Object System.Text.UTF8Encoding($false)
+    $temporary=$MonitorSelectionPath+'.tmp'
+    [System.IO.File]::WriteAllText(
+      $temporary,($Request|ConvertTo-Json -Compress),$utf8
+    )
+    if([System.IO.File]::Exists($MonitorSelectionPath)){
+      [System.IO.File]::Delete($MonitorSelectionPath)
+    }
+    [System.IO.File]::Move($temporary,$MonitorSelectionPath)
+    return $true
+  }catch{
+    return $false
+  }
+}
+
 $monitorPicker=New-Object System.Windows.Controls.ComboBox
 $monitorPicker.Width=228
 $monitorPicker.Margin='0,10,10,10'
@@ -374,16 +396,8 @@ $monitorPicker.Add_SelectionChanged({
   }else{
     @{source='monitor';monitor_id=$tag}
   }
-  try{
-    $utf8=New-Object System.Text.UTF8Encoding($false)
-    $temporary=$MonitorSelectionPath+'.tmp'
-    [System.IO.File]::WriteAllText($temporary,($request|ConvertTo-Json -Compress),$utf8)
-    if([System.IO.File]::Exists($MonitorSelectionPath)){
-      [System.IO.File]::Delete($MonitorSelectionPath)
-    }
-    [System.IO.File]::Move($temporary,$MonitorSelectionPath)
-  }catch{
-    $status.Text='Monitor selection could not be saved'
+  if(-not (Write-PreviewSelection $request)){
+    $status.Text='Private preview selection could not be saved'
   }
 })
 [System.Windows.Controls.DockPanel]::SetDock(
@@ -438,6 +452,46 @@ $fullscreen.Add_Click({
   $fullscreen,[System.Windows.Controls.Dock]::Left
 )
 [void]$bar.Children.Add($fullscreen)
+
+$previewWindow=New-Object System.Windows.Controls.Button
+$previewWindow.Content='PREVIEW WINDOW'
+$previewWindow.Margin='0,10,10,10'
+$previewWindow.Padding='9,8,9,8'
+$previewWindow.ToolTip='Preview the selected NexowirePrivate window only. No remote input.'
+$previewWindow.Add_Click({
+  $selected=$appList.SelectedItem
+  if($null -eq $selected -or -not ($selected -is [System.Windows.Controls.ListBoxItem])){
+    $status.Text='Select a private window from the list first'
+    return
+  }
+  $handle=[string]$selected.Tag
+  if($handle -notmatch '^(?:0x[0-9a-fA-F]+|[0-9]+)$'){
+    $status.Text='Private window handle is invalid'
+    return
+  }
+  if(-not (Write-PreviewSelection @{source='window';hwnd=$handle})){
+    $status.Text='Private window preview request failed'
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $previewWindow,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($previewWindow)
+
+$allScreens=New-Object System.Windows.Controls.Button
+$allScreens.Content='ALL SCREENS'
+$allScreens.Margin='0,10,10,10'
+$allScreens.Padding='9,8,9,8'
+$allScreens.ToolTip='Restore all private screens, including from a closed window'
+$allScreens.Add_Click({
+  if(-not (Write-PreviewSelection @{source='desktop'})){
+    $status.Text='Could not restore all private screens'
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $allScreens,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($allScreens)
 
 $emergency=New-Object System.Windows.Controls.Button
 $emergency.Content='STOP AI WORKSPACE'
@@ -600,6 +654,11 @@ function Update-MonitorPicker {
 }
 
 function Update-WindowList {
+  $previousHandle=''
+  if($null -ne $appList.SelectedItem -and
+    $appList.SelectedItem -is [System.Windows.Controls.ListBoxItem]){
+    $previousHandle=[string]$appList.SelectedItem.Tag
+  }
   $appList.Items.Clear()
   if(-not(Test-Path -LiteralPath $WindowsPath)){
     [void]$appList.Items.Add('Window inventory unavailable')
@@ -626,7 +685,16 @@ function Update-WindowList {
     foreach($privateWindow in $windows){
       $name=[string]$privateWindow.title
       $pidText=[string]$privateWindow.pid
-      [void]$appList.Items.Add(($name+'  (PID '+$pidText+')'))
+      $handle=[string]$privateWindow.hwnd
+      if($handle -notmatch '^(?:0x[0-9a-fA-F]+|[0-9]+)$'){continue}
+      $entry=New-Object System.Windows.Controls.ListBoxItem
+      $entry.Content=$name+'  (PID '+$pidText+')'
+      $entry.Tag=$handle
+      $entry.ToolTip='Only renders this private HWND; does not activate it'
+      [void]$appList.Items.Add($entry)
+      if($previousHandle -eq $handle){
+        $appList.SelectedItem=$entry
+      }
     }
   }catch{
     $appList.Items.Clear()
@@ -676,7 +744,8 @@ function Update-CaptureHealth {
       $status.Text='LIVE EMPTY AI SCREEN: no private windows in selected capture area'
       return
     }
-    $status.Text='LIVE NexowirePrivate | '+[DateTime]::Now.ToString('HH:mm:ss')
+    $scope=if($snapshot.selectedWindowHwnd){'WINDOW '+[string]$snapshot.selectedWindowHwnd}else{if($snapshot.selectedMonitorId){'SINGLE MONITOR'}else{'ALL SCREENS'}}
+    $status.Text='LIVE NexowirePrivate '+$scope+' | '+[DateTime]::Now.ToString('HH:mm:ss')
   }catch{
     $status.Text='CAPTURE STATUS UNAVAILABLE: showing last known frame'
   }
@@ -747,20 +816,31 @@ async function refreshPrivateWindowInventory():Promise<void>{
 }
 
 const LocalMonitorSelectionSchema = z.object({
-  source:z.enum(['desktop','monitor']),
+  source:z.enum(['desktop','monitor','window']),
   monitor_id:z.string().min(1).max(128).optional(),
+  hwnd:z.string().regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/).optional(),
 }).strict().superRefine((v,ctx)=>{
-  if(v.source==='monitor'&&!v.monitor_id)
+  if(v.source==='monitor' && !v.monitor_id)
     ctx.addIssue({code:'custom',path:['monitor_id'],message:'monitor_id required'});
-  if(v.source==='desktop'&&v.monitor_id)
-    ctx.addIssue({code:'custom',path:['monitor_id'],message:'monitor_id only allowed for monitor'});
+  if(v.source==='window' && !v.hwnd)
+    ctx.addIssue({code:'custom',path:['hwnd'],message:'hwnd required'});
+  if(v.source!=='monitor' && v.monitor_id)
+    ctx.addIssue({code:'custom',path:['monitor_id'],message:'monitor_id requires source=monitor'});
+  if(v.source!=='window' && v.hwnd)
+    ctx.addIssue({code:'custom',path:['hwnd'],message:'hwnd requires source=window'});
 });
 
 /** Only the locally clicked Viewer writes this request. It cannot switch
  * Windows desktops or alter display configuration. */
-export function parseLocalMonitorSelection(input:unknown):{selectedMonitorId:string|null}{
+export function parseLocalMonitorSelection(input:unknown):{
+  selectedMonitorId:string|null;
+  selectedWindowHwnd:string|null;
+}{
   const parsed=LocalMonitorSelectionSchema.parse(input);
-  return {selectedMonitorId:parsed.source==='monitor'?parsed.monitor_id!:null};
+  return {
+    selectedMonitorId:parsed.source==='monitor'?parsed.monitor_id!:null,
+    selectedWindowHwnd:parsed.source==='window'?parsed.hwnd!:null,
+  };
 }
 
 export async function readLocalMonitorSelection(
@@ -811,8 +891,9 @@ async function captureAndPersist(
 
   try {
     const capture = await captureWindowsPrivateScreen({
-      source: state.selectedMonitorId ? 'monitor' : 'desktop',
-      ...(state.selectedMonitorId ? {monitor_id:state.selectedMonitorId} : {}),
+      source: state.selectedWindowHwnd ? 'window' : (state.selectedMonitorId ? 'monitor' : 'desktop'),
+      ...(state.selectedWindowHwnd ? {hwnd:state.selectedWindowHwnd} : {}),
+      ...(!state.selectedWindowHwnd && state.selectedMonitorId ? {monitor_id:state.selectedMonitorId} : {}),
       max_width: state.maxWidth,
       max_height: state.maxHeight,
       max_bytes: state.maxBytes,
@@ -1014,8 +1095,9 @@ async function viewerStatus(): Promise<{
       startedAt: state.startedAt,
       refreshMs: state.refreshMs,
       topmost: state.topmost,
-      captureScope: state.selectedMonitorId ? 'monitor' : 'all_monitors',
+      captureScope: state.selectedWindowHwnd ? 'window' : (state.selectedMonitorId ? 'monitor' : 'all_monitors'),
       selectedMonitorId: state.selectedMonitorId,
+      selectedWindowHwnd: state.selectedWindowHwnd,
       lastSelectionError: state.lastSelectionError,
       lastFrameAt: state.lastFrameAt,
       frameAgeMs,
@@ -1085,6 +1167,7 @@ async function viewerStart(
     maxBytes: parsed.max_bytes,
     topmost: parsed.topmost,
     selectedMonitorId: null,
+    selectedWindowHwnd: null,
     lastSelectionError: null,
     emptyCaptureArea: null,
     lastFrameAt: null,

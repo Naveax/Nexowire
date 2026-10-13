@@ -13,7 +13,7 @@ test('invalid local selection never starves capture; previous valid screen stays
   let state:Parameters<typeof readLocalMonitorSelection>[0]={
     version:1,pid:999,startedAt:new Date().toISOString(),
     refreshMs:500,maxWidth:1280,maxHeight:720,maxBytes:4194304,
-    topmost:false,selectedMonitorId:'\\\\.\\DISPLAY2',
+    topmost:false,selectedMonitorId:'\\\\.\\DISPLAY2',selectedWindowHwnd:null,
     lastSelectionError:null,emptyCaptureArea:null,lastFrameAt:null,frameBytes:null,
     frameWidth:null,frameHeight:null,lastError:null,
   };
@@ -58,7 +58,7 @@ test('unreadable local monitor request reports an error and retains the last val
     const state:Parameters<typeof readLocalMonitorSelection>[0]={
       version:1,pid:99,startedAt:'now',refreshMs:500,
       maxWidth:1280,maxHeight:720,maxBytes:4194304,topmost:false,
-      selectedMonitorId:'DISPLAY1',lastSelectionError:null,emptyCaptureArea:null,
+      selectedMonitorId:'DISPLAY1',selectedWindowHwnd:null,lastSelectionError:null,emptyCaptureArea:null,
       lastFrameAt:null,frameBytes:null,frameWidth:null,frameHeight:null,lastError:null,
     };
     const next=await readLocalMonitorSelection(state);
