@@ -824,6 +824,13 @@ async function viewerStart(
     processAlive(existing.pid) &&
     (await heartbeatFresh())
   ) {
+    // Agent process restarts lose the in-memory refresh interval while the
+    // independent WPF viewer may still be alive. Resume capture for the
+    // existing viewer instead of returning a misleading reused=true state
+    // that silently expires its heartbeat after 20 seconds.
+    if (!refreshTimer) {
+      startRefreshLoop(existing);
+    }
     return {
       data: {
         ...(await viewerStatus()).data as Record<
