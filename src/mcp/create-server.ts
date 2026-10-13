@@ -3175,6 +3175,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_display_backend_probe',
+    {
+      title:'Inspect independent AI display backend readiness',
+      description:
+        'Read-only Windows preflight for hypervisor presence, VM management service, authorized Hyper-V inventory and existing host virtual display adapters. No VM, driver or monitor is created or modified. Even Hyper-V plus Parsec adapter installed does NOT prove guest-isolated AI monitors. Returns isolatedAiDisplayBackendReady=false until a separate guest display provider and authorization are implemented.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_display.backend_probe',{},
+      device_id,provider_id,30_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_display_plan',
     {
       title: 'Plan isolated AI displays',

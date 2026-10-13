@@ -44,6 +44,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_private_screen_capture_set: 'windows.private_screen.capture_set',
   windows_private_display_plan: 'windows.private_display.plan',
   windows_private_display_topology: 'windows.private_display.topology',
+  windows_private_display_backend_probe: 'windows.private_display.backend_probe',
   windows_private_display_profile_status: 'windows.private_display.profile.status',
   windows_private_display_profile_set: 'windows.private_display.profile.set',
   windows_private_display_profile_reset: 'windows.private_display.profile.reset',
