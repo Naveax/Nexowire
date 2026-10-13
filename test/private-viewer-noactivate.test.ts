@@ -15,6 +15,11 @@ test('AI viewer uses non-activating WPF window and hides its launcher console',(
   assert.doesNotMatch(source,/windowsHide: false/);
   for(const fragment of [
     'COMPACT PREVIEW','EXPAND PREVIEW','Update-WindowList',
+    'FULL SCREEN','EXIT FULL SCREEN',
+    '$window.WindowState=[System.Windows.WindowState]::Maximized',
+    '$window.WindowStyle=[System.Windows.WindowStyle]::None',
+    '$enter.Visibility=[System.Windows.Visibility]::Collapsed',
+    '$window.WindowStyle=[System.Windows.WindowStyle]::SingleBorderWindow',
     'refreshPrivateWindowInventory','-WindowsPath',
     "windows.private_desktop.windows",
     "$window.ShowActivated = $false",

@@ -343,6 +343,54 @@ $compact.Add_Click({
 )
 [void]$bar.Children.Add($compact)
 
+$fullscreen=New-Object System.Windows.Controls.Button
+$fullscreen.Content='FULL SCREEN'
+$fullscreen.Margin='0,10,10,10'
+$fullscreen.Padding='14,8,14,8'
+$fullscreen.ToolTip='Explicit local fullscreen AI preview; does not switch input desktops or move the physical mouse.'
+$script:fullScreenMode=$false
+$script:normalWidth=1280
+$script:normalHeight=820
+$fullscreen.Add_Click({
+  if(-not $script:fullScreenMode){
+    # Fullscreen and compact are mutually exclusive, but neither alters
+    # the real user's input desktop or foreground on startup.
+    if($script:compactMode){
+      $script:compactMode=$false
+      $window.MinWidth=640
+      $window.MinHeight=420
+      $window.Width=1280
+      $window.Height=820
+      $columnApps.Width=[System.Windows.GridLength]::new(240)
+      $compact.Content='COMPACT PREVIEW'
+    }
+    $script:normalWidth=$window.Width
+    $script:normalHeight=$window.Height
+    $window.WindowState=[System.Windows.WindowState]::Normal
+    $window.WindowStyle=[System.Windows.WindowStyle]::None
+    $window.ResizeMode=[System.Windows.ResizeMode]::NoResize
+    $window.WindowState=[System.Windows.WindowState]::Maximized
+    $script:fullScreenMode=$true
+    $fullscreen.Content='EXIT FULL SCREEN'
+    $enter.Visibility=[System.Windows.Visibility]::Collapsed
+    $compact.Visibility=[System.Windows.Visibility]::Collapsed
+  }else{
+    $window.WindowState=[System.Windows.WindowState]::Normal
+    $window.WindowStyle=[System.Windows.WindowStyle]::SingleBorderWindow
+    $window.ResizeMode=[System.Windows.ResizeMode]::CanResize
+    $window.Width=$script:normalWidth
+    $window.Height=$script:normalHeight
+    $script:fullScreenMode=$false
+    $fullscreen.Content='FULL SCREEN'
+    $enter.Visibility=[System.Windows.Visibility]::Visible
+    $compact.Visibility=[System.Windows.Visibility]::Visible
+  }
+})
+[System.Windows.Controls.DockPanel]::SetDock(
+  $fullscreen,[System.Windows.Controls.Dock]::Left
+)
+[void]$bar.Children.Add($fullscreen)
+
 $emergency=New-Object System.Windows.Controls.Button
 $emergency.Content='STOP AI WORKSPACE'
 $emergency.Margin='0,10,10,10'
