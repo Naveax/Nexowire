@@ -3960,7 +3960,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Type text into Nexowire private HWND',
       description:
-        'Route Unicode WM_CHAR to a verified private top-level HWND or a same-process child control selected with both x/y client coordinates. Does not change physical keyboard focus or use SendInput; toolkit support varies.',
+        'Route Unicode WM_CHAR to a verified private top-level window, a child selected by x/y, or an exact same-process child HWND with matching expected_class from the private controls inventory. Exact child targets are revalidated before each character. No physical focus or SendInput.',
       inputSchema: {
         ...targetFields,
         hwnd: z
@@ -3972,6 +3972,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         interval_ms: z.number().int().min(0).max(100).optional(),
         x:z.number().int().min(0).max(32767).optional(),
         y:z.number().int().min(0).max(32767).optional(),
+        control_hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/).optional(),
+        expected_class:z.string().min(1).max(256).optional(),
       },
     },
     async ({
@@ -3980,7 +3982,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       hwnd,
       text,
       interval_ms,
-      x,y,
+      x,y,control_hwnd,expected_class,
     }) =>
       await execute(
         ctx,
@@ -3993,6 +3995,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
             : {}),
           ...(x!==undefined?{x}:{}),
           ...(y!==undefined?{y}:{}),
+          ...(control_hwnd!==undefined?{control_hwnd}:{}),
+          ...(expected_class!==undefined?{expected_class}:{}),
         },
         device_id,
         provider_id,
