@@ -2285,6 +2285,15 @@ export async function executeCapability(
     case 'windows.window.focus':
       return await executeWindowsWindowCapability(capability, input);
     case 'windows.screenshot':
+      // windows.screenshot reads the owner's Default desktop. It cannot
+      // represent an AI-isolated workspace and must never silently leak
+      // physical screen pixels when the AI target is NexowirePrivate.
+      if(resolveAiWorkspaceTarget(undefined)==='private_desktop'){
+        throw Object.assign(
+          new Error('Physical Windows screenshot cannot be isolated on NexowirePrivate. Use windows.private_screen.capture; omit a selector to capture ALL private monitors, or select monitor_index / monitor_id.'),
+          {code:'AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED'},
+        );
+      }
       return await captureWindowsScreenshot(input);
     case 'windows.clipboard.read':
     case 'windows.clipboard.write':
