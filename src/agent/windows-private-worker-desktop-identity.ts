@@ -41,6 +41,11 @@ const probe=[
   '[Console]::Out.Write([NxWorkerDesktopIdentity]::Current())',
 ].join('\n');
 
+// Fixed first-party encoded command for both durable and one-shot private
+// workers. Never derive this value from an IPC file or user input.
+export const PRIVATE_WORKER_DESKTOP_PROBE_ENCODED=
+  Buffer.from(probe,'utf16le').toString('base64');
+
 export function assertPrivateWorkerDesktopProbeResult(
   input:{status:number|null;stdout:string;error?:Error|undefined},
 ):void{
@@ -62,7 +67,7 @@ export function assertWindowsPrivateWorkerDesktopIdentity():void {
   const result=spawnSync(
     'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
-      Buffer.from(probe,'utf16le').toString('base64')],
+      PRIVATE_WORKER_DESKTOP_PROBE_ENCODED],
     {
       shell:false,
       windowsHide:true,
