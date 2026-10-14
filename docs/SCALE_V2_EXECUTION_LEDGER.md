@@ -58,6 +58,13 @@
 - Local Windows DEV validation: 28/28 targeted hosted auth/charge tests (including real SQLite D1-backed quota, concurrent same-ID replay, invalid token, privilege/feature/limit rejection, explicit gate-off), plus typecheck, worker syntax, launch audit passed. Multitenant distributed D1 contention, real OAuth token lifecycle, rollout client and provider-billed cost still require testing.
 - See [fused-auth architecture and rollout gates](SCALE_V2_S1_FUSED_AUTH_CHARGE.md). Next slice: isolated Hub-client single-call parser and protocol acceptance, auth token revocation/parallel SQLite D1, staged canary with secure fallback, exact GitHub CI.
 
+## 2026-10-15 — S1 combined-route Hub client parser (isolated DEV)
+
+- New `FusedMcpAuthorizeChargeClient` supports the candidate **one remote Worker request** with stable invocation ID and explicit bounded request fields; it does **not** replace the current `ControlPlaneMcpClient` or run in the current Hub process. Candidate server support merged from PR #492 (`51e386a7c08142ab2af472fbf860a100e923ef17`, exact-head 7/7 CI) and remains production-OFF by a hardcoded gate.
+- Strict current ownership/SAFE-FULL/role projection parsing, exact charged-status validation, explicit error classification, and **no automatic retry or fallback on uncertain reservation outcome**. Authenticated and denied protocol fixture tests use a fake fetch; no real Cloudflare traffic.
+- Windows DEV integrated rebase tests: 38/38 client/server, real SQLite D1, legacy MCP auth/metering and replay tests pass; `npm run typecheck` and `npm run build` pass. Persistent `test/fused-mcp-client-server-contract.test.ts` now covers one-call/one-reservation, concurrent replay, role denial, token revocation and exhausted quota. Before integration, require real OAuth/D1 and exact-head CI plus rollout gates in [client contract](SCALE_V2_S1_FUSED_CLIENT.md).
+- Work PC and Naveax existing native agents remain intended to be untouched; S1 not complete; S2-S5 planned; S6 parked.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**
