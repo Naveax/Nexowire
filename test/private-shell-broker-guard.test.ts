@@ -20,7 +20,7 @@ const blocked=[
   ['pwsh.exe',['-EncodedCommand','AAA=']],
   ['pwsh.exe',['-En','AAA=']],
   ['pwsh.exe',['-ec','AAA=']],
-  ['pwsh.exe',['--ec','AAA=']]
+  ['pwsh.exe',['--ec','AAA=']],
   ['pwsh.exe',['-EncodedCommand:AAA=']],
   ['pwsh.exe',['-CommandWithArgs','Start-Process explorer.exe']],
   ['pwsh.exe',['-cwa','Start-Process explorer.exe']],
