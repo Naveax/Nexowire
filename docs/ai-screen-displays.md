@@ -627,6 +627,20 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## Windows browser DevTools startup acceptance
+
+BrowserManager.start treats a valid DevToolsActivePort file as a port
+hint, not proof that Edge has started accepting CDP target-list HTTP.
+It now waits for a bounded successful /json/list response before
+reporting a browser session as ready. Windows CI's real Edge smoke
+test retries startup-only readiness failures across at most three
+distinct isolated browser profiles, stopping each failed session.
+Navigation, form, screenshot and CDP functional assertions are not
+silently retried or skipped.
+
+This addresses intermittent hosted Windows runner saturation seen in
+PR #478 CI (BROWSER_DEVTOOLS_TIMEOUT); it is unrelated to and does not
+weaken the Windows private desktop station/desktop identity gate.
 ## Durable worker Windows desktop identity check
 
 Before its requested private child process is created, the durable

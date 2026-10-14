@@ -49,22 +49,30 @@ test(
       width: 800,
       height: 600,
     });
-    let started = await launch();
-    let tabs;
-    try {
-      tabs = await manager.tabs(started.id);
-    } catch (error) {
-      // Hosted Windows runners occasionally report DevToolsActivePort before
-      // Edge's target-list HTTP server becomes responsive. Replace the
-      // failed isolated browser session once; never loop indefinitely.
-      if (!(error instanceof BrowserControlError) ||
-          !['BROWSER_DEVTOOLS_TIMEOUT','BROWSER_DEVTOOLS_UNAVAILABLE'].includes(error.code)) {
-        throw error;
+    let started:Awaited<ReturnType<typeof launch>>|undefined;
+    let tabs:Awaited<ReturnType<typeof manager.tabs>>|undefined;
+    // Hosted Windows runners can be saturated after DPAPI/Hub acceptance.
+    // Retry only startup/readiness errors, with a strict three-session cap.
+    // Each attempt uses a separate profile, and every failed session is
+    // stopped. Functional navigation and assertions are never retried.
+    for(let attempt=1;attempt<=3;attempt++){
+      try{
+        started=await launch();
+        tabs=await manager.tabs(started.id);
+        break;
+      }catch(error){
+        const retryable=error instanceof BrowserControlError&&
+          ['BROWSER_START_TIMEOUT','BROWSER_DEVTOOLS_TIMEOUT',
+            'BROWSER_DEVTOOLS_UNAVAILABLE'].includes(error.code);
+        if(started){
+          await manager.stop(started.id);
+          started=undefined;
+        }
+        if(!retryable||attempt===3)throw error;
+        await new Promise(resolve=>setTimeout(resolve,attempt*700));
       }
-      await manager.stop(started.id);
-      started = await launch();
-      tabs = await manager.tabs(started.id);
     }
+    assert.ok(started&&tabs,'Edge target listing should be ready');
     assert.ok(tabs.tabs.length >= 1);
     const page = tabs.tabs.find((tab) => tab.url === url) ?? tabs.tabs[0];
     assert.ok(page);
