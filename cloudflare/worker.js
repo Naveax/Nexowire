@@ -6,6 +6,7 @@ import { D1ControlPlaneStore } from '../dist/src/product/d1-control-plane-store.
 import { ControlPlaneService } from '../dist/src/product/control-plane-service.js';
 import { D1McpOAuthStore } from '../dist/src/product/d1-mcp-oauth-store.js';
 import { McpOAuthService } from '../dist/src/product/mcp-oauth.js';
+import { createFusedMcpAuthorizeChargeHandler } from '../dist/src/product/fused-mcp-authorize-charge.js';
 import { createMcpOAuthHttpHandler } from '../dist/src/product/mcp-oauth-http.js';
 import { createControlPlaneHttpHandler } from '../dist/src/product/control-plane-http.js';
 import { D1BillingStore } from '../dist/src/product/d1-billing-store.js';
@@ -38,6 +39,9 @@ import {
 // Review P0 #271, protected local Guardian enrollment and verified
 // device attestation before deliberately changing this build-time gate.
 const PRODUCTION_BRIDGE_COMMAND_TRANSPORT_ENABLED = false;
+// Isolated S1 candidate: not accessible from production until a separate
+// security-reviewed owner-approved rollout. Never infer this from env values.
+const PRODUCTION_FUSED_MCP_AUTH_CHARGE_ENABLED = false;
 
 function boundedCapacity(env) {
   const raw = Number(env.NEXOWIRE_FREE_CAPACITY_PERCENT ?? '0');
@@ -343,6 +347,28 @@ export default {
         prepaidCapacityCredits: 0,
       }),
     });
+
+    if (
+      PRODUCTION_FUSED_MCP_AUTH_CHARGE_ENABLED &&
+      url.pathname === '/api/v1/internal/mcp/authorize-charge'
+    ) {
+      // One remote HTTP request may verify a fresh token, account, role and
+      // authorize+reserve quota. This branch is intentionally compile-time OFF.
+      const oauth = new McpOAuthService(
+        new D1McpOAuthStore(env.DB), {
+          issuer: url.origin,
+          resource: envValue(env, 'NEXOWIRE_MCP_RESOURCE_URL'),
+        },
+      );
+      return createFusedMcpAuthorizeChargeHandler({
+        authenticateService: async (req) =>
+          (await authenticate(req, env))?.role === 'service',
+        authenticateAccessToken: token =>
+          oauth.authenticateAccessToken(token),
+        store,
+        chargeUsage: input => service.chargeUsage(input),
+      })(request);
+    }
 
     if (url.pathname.startsWith('/api/v1/billing/')) {
       if (env.NEXOWIRE_PAID_BILLING_ENABLED !== 'true') {

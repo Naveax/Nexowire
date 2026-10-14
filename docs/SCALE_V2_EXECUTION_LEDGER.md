@@ -50,6 +50,14 @@
 - **Potential optimization, NOT IMPLEMENTED**: fused per-tool owner-bound authentication + atomic ledger reservation endpoint with exact idempotency/permission/revocation checks could remove one Worker request on this narrow path. No dangerous local credential caching or unmetered bypass.
 - This is a source-path and fake-network test, not actual Cloudflare ingress, D1 rows, user traffic or capacity proof. Current effective Free-only **monthly** policy and paused billing remain unchanged. S1 #483 stays open; S6 feature development parked.
 
+## 2026-10-15 — S1 fused OAuth + quota reservation, default OFF
+
+- PR #491 Worker ingress fan-out test merged to main as `832a995f82bcdde2497751f78b73b67014037f77` after 7/7 exact-head GitHub CI. Two authenticated control-plane Worker requests/accepted hosted tool call were confirmed by real Hub-client mock-fetch routing (not production traffic).
+- DEV isolated candidate `src/product/fused-mcp-authorize-charge.ts` uses existing service token authentication, **fresh** OAuth token checks, current account/role ownership and tool ACL, device/folder projection, and exactly the existing atomic quota charge + invocation event namespace.
+- Proposed `/api/v1/internal/mcp/authorize-charge` is wired to `cloudflare/worker.js` only beneath the **hardcoded false** `PRODUCTION_FUSED_MCP_AUTH_CHARGE_ENABLED` compile-time gate. Production route remains uncallable, existing double Worker request paths and monthly Free-only policy unchanged; not deployed or enabled.
+- Local Windows DEV validation: 28/28 targeted hosted auth/charge tests (including real SQLite D1-backed quota, concurrent same-ID replay, invalid token, privilege/feature/limit rejection, explicit gate-off), plus typecheck, worker syntax, launch audit passed. Multitenant distributed D1 contention, real OAuth token lifecycle, rollout client and provider-billed cost still require testing.
+- See [fused-auth architecture and rollout gates](SCALE_V2_S1_FUSED_AUTH_CHARGE.md). Next slice: isolated Hub-client single-call parser and protocol acceptance, auth token revocation/parallel SQLite D1, staged canary with secure fallback, exact GitHub CI.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**
