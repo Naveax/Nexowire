@@ -36,6 +36,9 @@ export function assertNoObviousPrivateShellBrokerInvocation(
     'mshta.exe','wscript.exe','cscript.exe','msiexec.exe',
     'fodhelper.exe','computerdefaults.exe','eventvwr.exe',
     'sdclt.exe','slui.exe','hh.exe',
+    // WSLg/MSYS shell entry points are not attached to WinSta0\NexowirePrivate;
+    // they may broker GUI on an independent display or the owner's desktop.
+    'bash.exe','sh.exe','wsl.exe','wslhost.exe','wt.exe',
   ]);
   const executableName=path.win32.extname(name)?name:name+'.exe';
   if(directBrokers.has(executableName)){

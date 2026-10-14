@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import * as z from 'zod';
+import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 
 const InitSchema = z.object({
   sessionId: z.string().uuid(),
@@ -197,6 +198,27 @@ export async function runProcessWorker(
   fileInput = false,
 ): Promise<void> {
   const init = InitSchema.parse(await readInitialInput(fileInput?sessionDir:undefined));
+  const shell = resolveShell(init.shell, init.command);
+  // Private durable workers are a *second* trust boundary after the
+  // ProcessManager preflight. Never trust only the parent's initial argv
+  // audit: a worker can see different launch inputs after an update or
+  // replay. Re-check before control sockets, status files, or child spawn.
+  const hasPrivateEnv=init.executionEnv!==undefined;
+  if(fileInput!==hasPrivateEnv){
+    throw Object.assign(new Error(
+      'Private worker file input and sanitized execution environment must agree.',
+    ),{code:'PRIVATE_PROCESS_WORKER_INIT_MODE_MISMATCH'});
+  }
+  if(fileInput){
+    if(process.platform!=='win32'){
+      throw Object.assign(new Error(
+        'Private desktop process workers require Windows.',
+      ),{code:'PRIVATE_PROCESS_WINDOWS_ONLY'});
+    }
+    await assertNoObviousPrivateShellScriptBrokerInvocation(
+      shell.executable,shell.args,init.cwd,
+    );
+  }
   await fs.mkdir(sessionDir, { recursive: true, mode: 0o700 });
 
   const controlFile = path.join(sessionDir, 'control.json');
@@ -401,7 +423,6 @@ export async function runProcessWorker(
   await fs.writeFile(eventsFile, '', { encoding: 'utf8', mode: 0o600 });
   await persistStatus();
 
-  const shell = resolveShell(init.shell, init.command);
   child = spawn(shell.executable, shell.args, {
     ...(init.cwd ? { cwd: init.cwd } : {}),
     windowsHide: true,
