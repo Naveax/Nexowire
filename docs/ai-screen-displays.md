@@ -485,6 +485,33 @@ The existing descendant/desktop isolation acceptance in #402
 remains mandatory before claiming production-safe arbitrary GUI
 automation.
 
+## Explicit private WPF Edit ValuePattern text entry
+
+`windows_private_desktop_accessibility_set_edit_value` is an
+explicit **mutating** MCP action, not part of read-only UIA. It
+requires the exact verified private top-level `hwnd`, nonempty
+`automation_id`, exact `expected_class`, and the caller's new
+text (`value`, at most 4000 characters). A helper launched on
+`NexowirePrivate` scans a bounded ControlView subtree and
+requires exactly one **same-process**, enabled, onscreen,
+non-password `ControlType.Edit` matching those fields.
+Incomplete, ambiguous, wrong-class and inaccessible control
+trees fail closed. Only `ValuePattern.SetValue` is called;
+`Current.Value` and other existing text contents are **never read**.
+
+A real Windows DEV WPF TextBox fixture accepted the new text,
+while the owner input desktop remained `Default`; a separate
+PasswordBox was rejected. No `SendInput`, foreground focus,
+global keyboard or system clipboard is used. The value does pass
+through an ephemeral helper request file that is deleted when the
+request completes; callers should not treat that temporary file
+as a secret-storage boundary.
+
+UIA providers can have application-side effects, and a malicious
+application can still broker windows or activities elsewhere.
+This does **not** establish transitive confinement or replace
+independent OS sessions/VM-based isolation.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.

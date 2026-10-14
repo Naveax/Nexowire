@@ -564,7 +564,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','accessibility_invoke_button','text','hotkey','close_window')]
+  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','accessibility_invoke_button','accessibility_set_edit_value','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -672,7 +672,9 @@ try {
       truncated=[bool]$truncated
       inputDesktop=[NxDesktopNative]::Input()
     }
-  } elseif ($Action -eq 'accessibility_invoke_button') {
+  } elseif ($Action -eq 'accessibility_invoke_button' -or $Action -eq 'accessibility_set_edit_value') {
+    $editMode=($Action -eq 'accessibility_set_edit_value')
+    $wantedType=if($editMode){'ControlType.Edit'}else{'ControlType.Button'}
     # Explicit opt-in. Resolve, validate and invoke inside ONE private helper:
     # no RootElement, no physical focus/cursor, no generic cross-app UIA.
     $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
@@ -699,7 +701,7 @@ try {
           if([int]$details.ProcessId -ne $ownerPid){$foreign++}
           else{
             if([string]$details.AutomationId -ceq $wantedId -and
-              [string]$details.ControlType.ProgrammaticName -ceq 'ControlType.Button' -and
+              [string]$details.ControlType.ProgrammaticName -ceq $wantedType -and
               [string]$details.ClassName -ceq $wantedClass){
               [void]$matches.Add($child)
             }
@@ -717,22 +719,31 @@ try {
     if([int]$verified.ProcessId -ne $ownerPid -or
       [string]$verified.AutomationId -cne $wantedId -or
       [string]$verified.ClassName -cne $wantedClass -or
-      [string]$verified.ControlType.ProgrammaticName -cne 'ControlType.Button' -or
+      [string]$verified.ControlType.ProgrammaticName -cne $wantedType -or
       !$verified.IsEnabled -or $verified.IsOffscreen -or $verified.IsPassword){
       throw 'PRIVATE_UIA_ACTION_TARGET_UNAVAILABLE'
     }
     $pattern=$null
-    if(!$button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)){
-      throw 'PRIVATE_UIA_INVOKE_PATTERN_UNAVAILABLE'
+    if($editMode){
+      if(!$button.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$pattern)){
+        throw 'PRIVATE_UIA_VALUE_PATTERN_UNAVAILABLE'
+      }
+      $valuePattern=[System.Windows.Automation.ValuePattern]$pattern
+      if($valuePattern.Current.IsReadOnly){throw 'PRIVATE_UIA_ACTION_TARGET_UNAVAILABLE'}
+      # Never read ValuePattern.Current.Value or protected text.
+      $valuePattern.SetValue([string]$r.value)
+    }else{
+      if(!$button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)){
+        throw 'PRIVATE_UIA_INVOKE_PATTERN_UNAVAILABLE'
+      }
+      ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
     }
-    # This can cause app-side side effects, by explicit caller request.
-    ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
     [pscustomobject]@{
       hwnd="0x"+$top.ToInt64().ToString("X")
       processId=$ownerPid
       automationId=$wantedId
-      controlType='ControlType.Button'
-      invoked=$true
+      controlType=$wantedType
+      actionCompleted=$true
       inputDesktop=[NxDesktopNative]::Input()
     }
   } elseif ($Action -eq 'close_window') {
@@ -820,6 +831,7 @@ type PrivateInputAction =
   | 'controls'
   | 'accessibility'
   | 'accessibility_invoke_button'
+  | 'accessibility_set_edit_value'
   | 'text'
   | 'hotkey'
   | 'close_window';
@@ -1147,17 +1159,49 @@ async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
       processId:z.number().int().positive(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.Button'),
-      invoked:z.literal(true),
+      actionCompleted:z.literal(true),
       inputDesktop:z.string().max(256),
     }).parse(await privateInputRequest('accessibility_invoke_button',{
       desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
       automation_id:parsed.automation_id,
       expected_class:parsed.expected_class,
     },25_000));
-    return{data:{...result,desktopName:DESKTOP_NAME,
+    return{data:{...result,invoked:true,desktopName:DESKTOP_NAME,
       touchesSystemCursor:false,touchesSystemKeyboard:false,
       visibleDesktopChanged:false,
       actionScope:'EXPLICIT_SAME_PROCESS_PRIVATE_BUTTON_UIA_INVOKE'}};
+  }catch(error){return remapPrivateInputError(error);}
+}
+const PrivateUiaSetEditValueSchema=z.object({
+  hwnd:WindowHandleSchema,
+  automation_id:z.string().min(1).max(128),
+  expected_class:z.string().min(1).max(128),
+  value:z.string().max(4000),
+}).strict();
+
+async function setPrivateUiaEditValue(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  await requireRunningPrivateDesktop();
+  const parsed=PrivateUiaSetEditValueSchema.parse(input);
+  try{
+    const result=z.object({
+      hwnd:WindowHandleSchema,
+      processId:z.number().int().positive(),
+      automationId:z.string().min(1).max(128),
+      controlType:z.literal('ControlType.Edit'),
+      actionCompleted:z.literal(true),
+      inputDesktop:z.string().max(256),
+    }).parse(await privateInputRequest('accessibility_set_edit_value',{
+      desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
+      automation_id:parsed.automation_id,
+      expected_class:parsed.expected_class,
+      value:parsed.value,
+    },25_000));
+    return{data:{...result,desktopName:DESKTOP_NAME,
+      touchesSystemCursor:false,touchesSystemKeyboard:false,
+      systemClipboardTouched:false,
+      visibleDesktopChanged:false,
+      actionScope:'EXPLICIT_SAME_PROCESS_PRIVATE_UIA_EDIT_SETVALUE'}};
   }catch(error){return remapPrivateInputError(error);}
 }
 async function controls(input:unknown):Promise<{data:unknown}>{
@@ -1255,6 +1299,7 @@ function remapPrivateInputError(error: unknown): never {
       'PRIVATE_UIA_ACTION_TARGET_UNAVAILABLE',
       'PRIVATE_UIA_ACTION_INVENTORY_INCOMPLETE',
       'PRIVATE_UIA_INVOKE_PATTERN_UNAVAILABLE',
+      'PRIVATE_UIA_VALUE_PATTERN_UNAVAILABLE',
       'HOTKEY_EMPTY',
     ]) {
       if (error.message.includes(code)) {
@@ -1619,6 +1664,8 @@ export async function executeWindowsPrivateDesktopCapability(
       return await accessibility(input);
     case 'windows.private_desktop.accessibility.invoke_button':
       return await invokePrivateUiaButton(input);
+    case 'windows.private_desktop.accessibility.set_edit_value':
+      return await setPrivateUiaEditValue(input);
     case 'windows.private_desktop.window.close':
       return await serializePrivateDesktopLifecycle(()=>privateWindowClose(input));
     case 'windows.private_desktop.show':
