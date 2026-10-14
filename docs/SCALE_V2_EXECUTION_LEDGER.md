@@ -43,6 +43,13 @@
 - Documented precise limitations in [S1 metric design](SCALE_V2_S1_METRICS.md): application bytes are not billed network bytes; no hosted MCP ingress count, D1 read/write, p95 latencies or actual relay invoice yet; no NAT/P2P inference; metric state resets on restart.
 - Next slice after review: add redacted hosted ingress/D1 usage measurements behind a DEV flag with fixed-label bounded histograms. Compare measured ingress with logical invocation before any P2P proposal; never equate peer-transfer savings with eliminating ChatGPT MCP requests.
 
+## 2026-10-15 — S1 Worker ingress fan-out cost discovery (offline)
+
+- **Current hosted MCP tool path**: the real `ControlPlaneMcpClient` normally posts `/api/v1/internal/mcp/authenticate` then `/api/v1/internal/usage/charge`. An accepted hosted single-tool execution therefore reaches the control-plane Worker **twice**; retries, pairing and device presence generate additional Worker requests. See [S1 Worker fan-out evidence](SCALE_V2_S1_WORKER_INGRESS_FANOUT.md) and `test/scale-worker-capacity-model.test.ts`.
+- Deterministic, bounded offline demand model isolates exact assumptions rather than claiming production Cloudflare cost. In a hypothetical 100k Worker requests/day shared budget, just **50 users × 1,000 hosted tool calls/day × 2** exhaust the pool with no overhead budget.
+- **Potential optimization, NOT IMPLEMENTED**: fused per-tool owner-bound authentication + atomic ledger reservation endpoint with exact idempotency/permission/revocation checks could remove one Worker request on this narrow path. No dangerous local credential caching or unmetered bypass.
+- This is a source-path and fake-network test, not actual Cloudflare ingress, D1 rows, user traffic or capacity proof. Current effective Free-only **monthly** policy and paused billing remain unchanged. S1 #483 stays open; S6 feature development parked.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**

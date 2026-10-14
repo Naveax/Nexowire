@@ -55,6 +55,16 @@ These are planning variables, **not measured production values**. If using a hyp
 | 1,000 | 1,000 | 1,000,000 | **No** |
 | 10,000 | 200 | 2,000,000 | **No** |
 
+**Source-verified S1 ingress fan-out (2026-10-15, planning evidence, not live production measurement):** In the current hosted **control-plane bearer** tool path, `resolveMcpAuthorization(...)` calls `ControlPlaneMcpClient.authenticate()` (one Worker `POST /api/v1/internal/mcp/authenticate`), and `enforceHostedMcpMetering(...)` calls `ControlPlaneMcpClient.chargeTool()` (one Worker `POST /api/v1/internal/usage/charge`) before the tool can execute. This is **two distinct Worker invocations per accepted hosted tool call** on this route: `h=2`, without accounting for any other refresh, presence, retry, signaling or dashboard requests. Tests use a mocked fetch transport and confirm the exact two endpoint calls; they are **not** observed Cloudflare usage or a claim that *every* Nexowire request has this shape. A 401, read-only non-tool call or local/self-hosted authorization may differ.
+
+| Illustrative active users | Calls/user/day | At optimistic `h=1` | Current hosted tool route `h=2` (minimum) |
+| ---: | ---: | ---: | ---: |
+| 50 | 1,000 | 50,000 | 100,000 |
+| 100 | 1,000 | 100,000 | 200,000 |
+| 1,000 | 1,000 | 1,000,000 | 2,000,000 |
+
+This **does not** mean the Free plan already offers 1,000 calls/day; that is still a proposed entitlement. Even at 50 daily full-usage accounts, a hypothetical shared 100,000 Worker-request daily budget leaves no headroom for authentication failures, registration, retries or keep-alives. P2P shifts *payload transfer* off servers, not the hosted authorization/charge requests. The next architectural improvement candidate is a **single atomic authenticated authorization-and-reservation endpoint** with the same fail-closed replay, device permission, exact server-side subject, and DB atomic-charge semantics. It is a proposal, **not implemented**; never cache revocable permissions across executions or allow unmetered offline calls. See [S1 ingress evidence](SCALE_V2_S1_WORKER_INGRESS_FANOUT.md) and test `test/scale-worker-capacity-model.test.ts`.
+
 **Key constraint:** If a ChatGPT-hosted MCP call hits Nexowire's Worker once, no device-to-device P2P design can make `h` less than one for *that same hosted request*. Coalescing/batching 100 device-local actions behind one authorized MCP call can reduce **new MCP calls initiated by workflows**, not retroactively erase calls the host already sent. WebRTC/QUIC shifts large first-party streams off the hosted relay only when both clients support that transport. Without paid capacity, a saturated free pool must throttle or reject; it cannot grant infinite capacity.
 
 Cloudflare, D1, TURN, CI, domain and provider price/plan terms change. **Fetch authoritative current prices/limits at rollout**, model paid bandwidth, and implement fail-closed spend caps before provisioning any paid resource. Do not build an architecture that depends on splitting accounts/projects to evade service limits.
