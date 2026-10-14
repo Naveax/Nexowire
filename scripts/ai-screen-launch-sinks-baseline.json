@@ -23,6 +23,7 @@
     "src/agent/windows-installer-job.ts#spawnSync": 3,
     "src/agent/windows-pointer.ts#spawn": 1,
     "src/agent/windows-private-desktop.ts#spawn": 3,
+    "src/agent/windows-private-worker-desktop-identity.ts#spawnSync": 1,
     "src/agent/windows-private-display-backend-probe.ts#spawn": 1,
     "src/agent/windows-private-screen.ts#spawn": 1,
     "src/agent/windows-private-viewer.ts#spawn": 1,

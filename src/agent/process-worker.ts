@@ -5,6 +5,7 @@ import net from 'node:net';
 import path from 'node:path';
 import * as z from 'zod';
 import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
+import {assertWindowsPrivateWorkerDesktopIdentity} from './windows-private-worker-desktop-identity.js';
 
 const InitSchema = z.object({
   sessionId: z.string().uuid(),
@@ -218,6 +219,10 @@ export async function runProcessWorker(
     await assertNoObviousPrivateShellScriptBrokerInvocation(
       shell.executable,shell.args,init.cwd,
     );
+    // The static command gate is not evidence of the actual desktop.
+    // Probe a first-party child thread's Win32 desktop name before
+    // opening the control listener or spawning the requested process.
+    assertWindowsPrivateWorkerDesktopIdentity();
   }
   await fs.mkdir(sessionDir, { recursive: true, mode: 0o700 });
 
