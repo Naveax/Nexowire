@@ -102,3 +102,155 @@ test('real DEV refuses obvious escape without starting a private shell process',
     else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=root;
   }
 });
+
+test('quoted and chained CMD nested shell brokers fail closed',()=>{
+  const cases=[
+    ['cmd.exe',['/C','"start "" explorer.exe"']],
+    ['cmd.exe',['/D','/S','/C','""explorer.exe" C:\\Windows"']],
+    ['cmd.exe',['/C','pwsh.exe -EncodedCommand QQ==']],
+    ['cmd.exe',['/C','"powershell.exe -NoProfile -Command Write-Output okay"']],
+    ['cmd.exe',['/C','echo okay && pwsh -Command Write-Output hello']],
+    ['cmd.exe',['/C','call cmd.exe /C echo okay']],
+    ['cmd.exe',['/Cstart "" explorer.exe']],
+    ['"C:\\Windows\\explorer.exe"',[]],
+    ['"C:\\Windows\\System32\\rundll32.exe"',['shell32.dll,Control_RunDLL']],
+    ['powershell.exe',['-Command','& pwsh.exe -EncodedCommand QQ==']],
+  ] as const;
+  for(const [executable,args] of cases){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('quoted harmless CMD and direct PowerShell inspection remain eligible',()=>{
+  for(const [executable,args] of [
+    ['cmd.exe',['/C','"echo private worker okay"']],
+    ['cmd.exe',['/C','echo hello && node --version']],
+    ['powershell.exe',['-NoProfile','-Command','Write-Output nested-shell-no-execution']],
+    ['pwsh.exe',['-Command','Get-Process | Select-Object Id']],
+  ] as const){
+    assert.doesNotThrow(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('real DEV rejects quoted CMD and nested interpreters before allocating private desktop files',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const root=path.join(os.tmpdir(),'nx-private-quoted-cmd-guard-'+process.pid);
+  await fs.rm(root,{recursive:true,force:true});
+  const prior=process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+  process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=root;
+  try{
+    for(const [executable,args] of [
+      ['cmd.exe',['/D','/S','/C','"start "" explorer.exe"']],
+      ['cmd.exe',['/C','pwsh.exe -EncodedCommand QQ==']],
+      ['powershell.exe',['-Command','& cmd.exe /C echo okay']],
+    ] as const){
+      await assert.rejects(
+        runWindowsPrivateShell(executable,args,{timeoutMs:8_000,maxOutputBytes:4096}),
+        (error:unknown)=>error instanceof Error&&'code' in error&&
+          error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      );
+    }
+    await assert.rejects(fs.access(root),
+      (error:unknown)=>error instanceof Error&&'code' in error&&error.code==='ENOENT');
+  }finally{
+    if(prior===undefined)delete process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+    else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=prior;
+  }
+});
+
+test('extensionless Windows broker names are refused by shell preflight',()=>{
+  for(const [executable,args] of [
+    ['explorer',[]],
+    ['C:\\Windows\\explorer',[]],
+    ['control',[]],
+    ['rundll32',['shell32.dll,Control_RunDLL']],
+    ['cmd.exe',['/C','explorer']],
+    ['cmd.exe',['/C','"control"']],
+    ['powershell.exe',['-Command','& rundll32 shell32.dll,Control_RunDLL']],
+    ['pwsh.exe',['-Command','explorer']],
+  ] as const){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('PowerShell implicit positional command text is rejected before private execution',()=>{
+  for(const [executable,args] of [
+    ['powershell.exe',['-NoProfile','-NonInteractive','Start-Process explorer.exe']],
+    ['powershell.exe',['-NoProfile','Write-Output safe-but-uninspected']],
+    ['powershell.exe',['-ExecutionPolicy','Bypass','Invoke-Item .\\example.txt']],
+    ['pwsh.exe',['-NoProfile','Start-Process explorer.exe']],
+    ['powershell.exe',['-NoProfile','-UnknownOption','hello']],
+  ] as const){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('unambiguous PowerShell host switches without executable payload stay eligible',()=>{
+  for(const args of [
+    ['-NoProfile','-NonInteractive','-NoLogo'],
+    ['-NoProfile','-ExecutionPolicy','Bypass'],
+    ['-NoProfile','-WindowStyle','Hidden'],
+    ['-NoProfile','-InputFormat','Text','-OutputFormat','Text'],
+  ] as const){
+    assert.doesNotThrow(
+      ()=>assertNoObviousPrivateShellBrokerInvocation('powershell.exe',args),
+    );
+  }
+});
+
+test('real DEV rejects implicit positional PowerShell command without creating private state',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const root=path.join(os.tmpdir(),'nx-private-ps-positional-gate-'+process.pid);
+  await fs.rm(root,{recursive:true,force:true});
+  const previous=process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+  process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=root;
+  try{
+    await assert.rejects(runWindowsPrivateShell('powershell.exe',[
+      '-NoProfile','-NonInteractive','Start-Process explorer.exe',
+    ],{timeoutMs:8000,maxOutputBytes:4096}),
+    (error:unknown)=>error instanceof Error&&'code' in error&&
+      error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED');
+    await assert.rejects(fs.access(root),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='ENOENT');
+  }finally{
+    if(previous===undefined)delete process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+    else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=previous;
+  }
+});
+
+test('PowerShell mode switches appearing after positional execution cannot skip preflight',()=>{
+  for(const args of [
+    ['-NoProfile','Start-Process explorer.exe','-Command','Write-Output okay'],
+    ['-NoProfile','Start-Process explorer.exe','-File','C:\\NxNoSuchFile.ps1'],
+    ['-NonInteractive','Write-Output harmless','-Command','Write-Output okay'],
+    ['-NoProfile','Write-Output harmless','-File','C:\\NxNoSuchFile.ps1'],
+  ] as const){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation('powershell.exe',args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      args.join(' '),
+    );
+  }
+});
