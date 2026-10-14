@@ -5,9 +5,12 @@ import type {
 import { ControlPlaneService } from './control-plane-service.js';
 import { PRODUCT_PLANS, type ProductFeature } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
+import { withScaleHttpMetrics, type ScaleControlPlaneMetrics } from '../ops/scale-control-plane-metrics.js';
 import { GuardianSignedReceiptSchema } from '../protocol/guardian-signed-receipt.js';
 
 export interface ControlPlaneHttpOptions {
+  /** Optional, payload-free DEV measurements. Production callers omit this. */
+  scaleMetrics?: ScaleControlPlaneMetrics;
   authenticate(
     request: Request,
   ): Promise<ControlPlaneIdentity | null>;
@@ -196,7 +199,7 @@ export function createControlPlaneHttpHandler(
     ? normalizeAgentUrl(options.agentUrl)
     : null;
 
-  return async (request: Request): Promise<Response> => {
+  const handler = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -591,4 +594,7 @@ export function createControlPlaneHttpHandler(
       });
     }
   };
+  return options.scaleMetrics
+    ? withScaleHttpMetrics(handler, options.scaleMetrics)
+    : handler;
 }
