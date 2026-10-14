@@ -17,6 +17,7 @@ import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointe
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
 import {inspectWindowsPrivateWindowProvenance} from './windows-private-window-provenance-audit.js';
 import {resolveObservedPrivateUiaTarget} from './windows-private-uia-target.js';
+import {inspectWindowsPrivateProcessAncestry} from './windows-private-process-ancestry-audit.js';
 import { runWindowsPrivateShell } from './windows-private-shell.js';
 import {resolveAiWorkspaceTarget,requireWslHeadlessRouting} from './ai-workspace-default.js';
 import { executeWindowsPrivateViewerCapability } from './windows-private-viewer.js';
@@ -2448,6 +2449,8 @@ export async function executeCapability(
       return await inspectWindowsPrivateWindowProvenance();
     case 'windows.private_desktop.accessibility.resolve':
       return await resolveObservedPrivateUiaTarget(input);
+case 'windows.private_desktop.process_audit':
+      return await inspectWindowsPrivateProcessAncestry();
     case 'windows.private_desktop.status':
     case 'windows.private_desktop.start':
     case 'windows.private_desktop.stop':
