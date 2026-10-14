@@ -1,5 +1,20 @@
 # Roadmap
 
+## Current priority: Scale v2 foundation (2026-10-14, planned)
+
+**Active scope S1–S5; S6 feature expansion paused.** The detailed actionable checklist is [docs/SCALE_V2_ROADMAP.md](docs/SCALE_V2_ROADMAP.md), linked to [vision](docs/SCALE_V2_VISION.md), [quota/cost model](docs/SCALE_V2_QUOTA_AND_COST.md), [safe connection rollout](docs/SCALE_V2_CONNECTION_ROLLOUT.md), and [master #482](https://github.com/Naveax/Nexowire/issues/482). Stages: S1 [#483](https://github.com/Naveax/Nexowire/issues/483), S2 [#484](https://github.com/Naveax/Nexowire/issues/484), S3 [#485](https://github.com/Naveax/Nexowire/issues/485), S4 [#486](https://github.com/Naveax/Nexowire/issues/486), S5 [#487](https://github.com/Naveax/Nexowire/issues/487).
+
+- [ ] S1 authenticated connection Core v2, first-party route cost/protocol/NAT and relay budgets.
+- [ ] S2 versioned **proposed** daily Free 1,000 / Plus 5,000 / Pro 10,000 / Enterprise contracted quota subjects, atomic D1 reserve and clear unit semantics.
+- [ ] S3 signed one-click Nexowire installer, short-lived owner pairing, rollback and no-admin clean Windows acceptance.
+- [ ] S4 subscription/Enterprise policy design and provider sandbox; **paid checkout remains paused** until separate live approval.
+- [ ] S5 reproducible load/cost/zero-operator-spend hard-stop and no-disconnect owner-accepted rollout validation.
+- [ ] S6 postponed: SCREEN X / BRAIN / GUARDIAN / FLEET / DEVGRID / HIVE / HARDWARE / SPECIAL X.
+- [ ] Preserve two existing online Native Agent v1.0.5 devices, all current branches/tasks; do not modify live Hub/Agent/Broker or P0 #271 protected ACLs.
+
+**Effective deployed policy is NOT redefined by these planning checkboxes:** see [docs/FREE_ONLY_POLICY.md](docs/FREE_ONLY_POLICY.md) for temporary Free-only 1,000 weighted units **per UTC month**, 1x/5x and `BILLING_PAUSED`. Old milestones below are historical work tracking, not new Scale v2 signoff.
+
+
 ## v0.1 - Control plane bootstrap
 
 - [x] Repository and TypeScript project
