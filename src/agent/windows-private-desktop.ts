@@ -564,7 +564,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','text','hotkey','close_window')]
+  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','accessibility_invoke_button','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -672,6 +672,69 @@ try {
       truncated=[bool]$truncated
       inputDesktop=[NxDesktopNative]::Input()
     }
+  } elseif ($Action -eq 'accessibility_invoke_button') {
+    # Explicit opt-in. Resolve, validate and invoke inside ONE private helper:
+    # no RootElement, no physical focus/cursor, no generic cross-app UIA.
+    $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
+    $ownerPid=[NxDesktopNative]::ValidatedWindowProcessId([string]$r.desktop,[string]$r.hwnd)
+    $wantedId=[string]$r.automation_id
+    $wantedClass=[string]$r.expected_class
+    Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes -ErrorAction Stop
+    $root=[System.Windows.Automation.AutomationElement]::FromHandle($top)
+    if($null -eq $root){throw 'PRIVATE_UIA_ROOT_UNAVAILABLE'}
+    $walker=[System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $queue=New-Object 'System.Collections.Generic.Queue[object]'
+    $queue.Enqueue([pscustomobject]@{element=$root;depth=0})
+    $matches=New-Object 'System.Collections.Generic.List[object]'
+    $seen=0;$foreign=0;$skipped=0;$truncated=$false
+    while($queue.Count -gt 0 -and $seen -lt 256){
+      $entry=$queue.Dequeue()
+      if([int]$entry.depth -ge 5){$truncated=$true;continue}
+      try{$child=$walker.GetFirstChild($entry.element)}catch{$skipped++;continue}
+      while($null -ne $child){
+        $seen++
+        if($seen -gt 256){$truncated=$true;break}
+        try{
+          $details=$child.Current
+          if([int]$details.ProcessId -ne $ownerPid){$foreign++}
+          else{
+            if([string]$details.AutomationId -ceq $wantedId -and
+              [string]$details.ControlType.ProgrammaticName -ceq 'ControlType.Button' -and
+              [string]$details.ClassName -ceq $wantedClass){
+              [void]$matches.Add($child)
+            }
+            $queue.Enqueue([pscustomobject]@{element=$child;depth=([int]$entry.depth+1)})
+          }
+        }catch{$skipped++}
+        try{$child=$walker.GetNextSibling($child)}catch{$skipped++;break}
+      }
+    }
+    if($queue.Count -gt 0 -or $seen -gt 256){$truncated=$true}
+    if($truncated -or $skipped -gt 0 -or $foreign -gt 0){throw 'PRIVATE_UIA_ACTION_INVENTORY_INCOMPLETE'}
+    if($matches.Count -ne 1){throw 'PRIVATE_UIA_ACTION_NOT_UNIQUE'}
+    $button=$matches[0]
+    $verified=$button.Current
+    if([int]$verified.ProcessId -ne $ownerPid -or
+      [string]$verified.AutomationId -cne $wantedId -or
+      [string]$verified.ClassName -cne $wantedClass -or
+      [string]$verified.ControlType.ProgrammaticName -cne 'ControlType.Button' -or
+      !$verified.IsEnabled -or $verified.IsOffscreen -or $verified.IsPassword){
+      throw 'PRIVATE_UIA_ACTION_TARGET_UNAVAILABLE'
+    }
+    $pattern=$null
+    if(!$button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)){
+      throw 'PRIVATE_UIA_INVOKE_PATTERN_UNAVAILABLE'
+    }
+    # This can cause app-side side effects, by explicit caller request.
+    ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
+    [pscustomobject]@{
+      hwnd="0x"+$top.ToInt64().ToString("X")
+      processId=$ownerPid
+      automationId=$wantedId
+      controlType='ControlType.Button'
+      invoked=$true
+      inputDesktop=[NxDesktopNative]::Input()
+    }
   } elseif ($Action -eq 'close_window') {
     $h=[NxDesktopNative]::CloseWindow([string]$r.desktop,[string]$r.hwnd)
     [pscustomobject]@{hwnd=$h;inputDesktop=[NxDesktopNative]::Input();closeRequested=$true}
@@ -756,6 +819,7 @@ type PrivateInputAction =
   | 'pointer_scroll'
   | 'controls'
   | 'accessibility'
+  | 'accessibility_invoke_button'
   | 'text'
   | 'hotkey'
   | 'close_window';
@@ -1067,6 +1131,35 @@ async function accessibility(input:unknown):Promise<{data:unknown}>{
     exposesTextValues:false,physicalDesktopInspected:false,
     visibleDesktopChanged:false,accessibilityCoverageComplete:false}};
 }
+const PrivateUiaInvokeButtonSchema=z.object({
+  hwnd:WindowHandleSchema,
+  automation_id:z.string().min(1).max(128),
+  expected_class:z.string().min(1).max(128),
+}).strict();
+
+async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  await requireRunningPrivateDesktop();
+  const parsed=PrivateUiaInvokeButtonSchema.parse(input);
+  try{
+    const result=z.object({
+      hwnd:WindowHandleSchema,
+      processId:z.number().int().positive(),
+      automationId:z.string().min(1).max(128),
+      controlType:z.literal('ControlType.Button'),
+      invoked:z.literal(true),
+      inputDesktop:z.string().max(256),
+    }).parse(await privateInputRequest('accessibility_invoke_button',{
+      desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
+      automation_id:parsed.automation_id,
+      expected_class:parsed.expected_class,
+    },25_000));
+    return{data:{...result,desktopName:DESKTOP_NAME,
+      touchesSystemCursor:false,touchesSystemKeyboard:false,
+      visibleDesktopChanged:false,
+      actionScope:'EXPLICIT_SAME_PROCESS_PRIVATE_BUTTON_UIA_INVOKE'}};
+  }catch(error){return remapPrivateInputError(error);}
+}
 async function controls(input:unknown):Promise<{data:unknown}>{
   assertWindows();
   const parsed=z.object({hwnd:WindowHandleSchema}).strict().parse(input);
@@ -1158,6 +1251,10 @@ function remapPrivateInputError(error: unknown): never {
       'WINDOW_NOT_FOUND',
       'POINT_OUTSIDE_CLIENT',
       'BUTTON_UNSUPPORTED',
+      'PRIVATE_UIA_ACTION_NOT_UNIQUE',
+      'PRIVATE_UIA_ACTION_TARGET_UNAVAILABLE',
+      'PRIVATE_UIA_ACTION_INVENTORY_INCOMPLETE',
+      'PRIVATE_UIA_INVOKE_PATTERN_UNAVAILABLE',
       'HOTKEY_EMPTY',
     ]) {
       if (error.message.includes(code)) {
@@ -1520,6 +1617,8 @@ export async function executeWindowsPrivateDesktopCapability(
       return await controls(input);
     case 'windows.private_desktop.accessibility':
       return await accessibility(input);
+    case 'windows.private_desktop.accessibility.invoke_button':
+      return await invokePrivateUiaButton(input);
     case 'windows.private_desktop.window.close':
       return await serializePrivateDesktopLifecycle(()=>privateWindowClose(input));
     case 'windows.private_desktop.show':

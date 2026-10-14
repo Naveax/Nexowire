@@ -457,6 +457,34 @@ never evidence of complete sandbox isolation. This audit does
 not modify Windows services, permissions, task scheduler,
 process lifetimes or session configuration.
 
+## Explicit private WPF Button invocation through UI Automation
+
+`windows_private_desktop_accessibility_invoke_button` is a
+**mutating** capability, separate from the read-only UIA inspection
+and target-resolution tools. The caller must supply a validated
+NexowirePrivate top-level `hwnd`, a specific `automation_id`,
+and an exact `expected_class`. A helper launched on the **same
+private desktop** enumerates at most 256 ControlView descendants,
+rejects incomplete or cross-PID results, requires exactly one
+matching `ControlType.Button`, and rechecks that it is enabled,
+onscreen, not a password element, and still owned by the same PID
+immediately before requesting `InvokePattern.Invoke()`.
+
+The native helper does **not** use the physical cursor,
+`SendInput`, foreground-window changes, Windows clipboard,
+global UI Automation `RootElement`, or a shell/UI broker.
+A real Windows DEV WPF fixture verified an app-local Button click
+callback and unchanged `Default` input desktop; incorrect HWND,
+automation ID, class or a TextBox target was rejected.
+
+This invokes app-owned code and **can cause application-side
+effects**. It is not a general UAC/broker permission, independent
+OS session guarantee, full UIA action framework, or proof that
+an app cannot itself spawn GUI onto the user's `Default` desktop.
+The existing descendant/desktop isolation acceptance in #402
+remains mandatory before claiming production-safe arbitrary GUI
+automation.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
