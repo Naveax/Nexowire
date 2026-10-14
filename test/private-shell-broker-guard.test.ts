@@ -19,6 +19,8 @@ const blocked=[
   ['pwsh.exe',['-Command','[System.Diagnostics.Process]::Start("explorer.exe")']],
   ['pwsh.exe',['-EncodedCommand','AAA=']],
   ['pwsh.exe',['-En','AAA=']],
+  ['pwsh.exe',['-ec','AAA=']],
+  ['pwsh.exe',['--ec','AAA=']]
   ['pwsh.exe',['-EncodedCommand:AAA=']],
   ['pwsh.exe',['-CommandWithArgs','Start-Process explorer.exe']],
   ['pwsh.exe',['-cwa','Start-Process explorer.exe']],
