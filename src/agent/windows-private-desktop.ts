@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import {withPrivateDesktopProcessLock} from './windows-private-desktop-lock.js';
-import {assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell-broker-guard.js';
+import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 
 const PRIVATE_DESKTOP_SYSTEM32='C:\\Windows\\System32';
 const PRIVATE_DESKTOP_POWERSHELL=PRIVATE_DESKTOP_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -1073,10 +1073,10 @@ async function launch(
   // A directly attached PowerShell/CMD child can still dispatch GUI to
   // Explorer/COM via its command string, bypassing the executable denylist.
   // Apply the same bounded command guard used by the private shell workers.
-  assertNoObviousPrivateShellBrokerInvocation(executable,args);
+  await assertNoObviousPrivateShellScriptBrokerInvocation(executable,args,cwd);
   const resolvedExecutable = await resolveExecutable(executable);
   assertNoPrivateDesktopBrokeredExecutable(resolvedExecutable);
-  assertNoObviousPrivateShellBrokerInvocation(resolvedExecutable,args);
+  await assertNoObviousPrivateShellScriptBrokerInvocation(resolvedExecutable,args,cwd);
   return z
     .object({ pid: z.number().int().positive() })
     .parse(

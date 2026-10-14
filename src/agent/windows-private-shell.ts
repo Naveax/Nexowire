@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
-import {assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell-broker-guard.js';
+import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 export {assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell-broker-guard.js';
 
 export interface PrivateShellResult {
@@ -130,7 +130,7 @@ export async function runWindowsPrivateShell(
     throw new Error('PRIVATE_SHELL_LIMITS_INVALID');
   }
 
-  assertNoObviousPrivateShellBrokerInvocation(executable,args);
+  await assertNoObviousPrivateShellScriptBrokerInvocation(executable,args,options.cwd);
 
   await executeWindowsPrivateDesktopCapability(
     'windows.private_desktop.start', { create_shortcut: false },
