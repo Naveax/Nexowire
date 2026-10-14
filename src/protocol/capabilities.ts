@@ -103,6 +103,7 @@ export const CORE_CAPABILITIES = [
   'windows.private_desktop.accessibility',
   'windows.private_desktop.accessibility.resolve',
   'windows.private_desktop.accessibility.invoke_button',
+  'windows.private_desktop.accessibility.set_edit_value',
   'windows.private_desktop.window_audit',
   'windows.private_desktop.process_audit',
   'windows.private_desktop.window.close',

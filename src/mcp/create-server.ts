@@ -3744,6 +3744,26 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_accessibility_set_edit_value',
+    {
+      title:'Set value on verified private UIA Edit',
+      description:
+        'Explicit mutating action on one verified NexowirePrivate Edit control. Same-PID unique automation_id and exact class, enabled/onscreen/non-password, then private UIA ValuePattern.SetValue with caller-supplied text (max 4000 characters). Never reads prior content or uses physical keyboard/focus or host clipboard. App-side effects are possible.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        automation_id:z.string().min(1).max(128),
+        expected_class:z.string().min(1).max(128),
+        value:z.string().max(4000),
+      },
+    },
+    async ({device_id,provider_id,hwnd,automation_id,expected_class,value})=>
+      await execute(ctx,'windows.private_desktop.accessibility.set_edit_value',{
+        hwnd,automation_id,expected_class,value,
+      },device_id,provider_id,45_000),
+  );
+
+  server.registerTool(
     'windows_private_desktop_accessibility_invoke_button',
     {
       title:'Invoke one verified private UIA button',
