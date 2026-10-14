@@ -6,8 +6,8 @@
 
 | Device | Known identity at planning checkpoint | Observed Nexowire status | Preservation |
 | --- | --- | --- | --- |
-| Work PC | `aeaa5295-0aa8-4742-bf0c-2a6340dcf187` | Windows 10, Native Agent v1.0.5, online, Scheduled Task Running | DEV-only experimentation in separate Git branch/worktree; no live task/Hub/Agent restart |
-| Naveax PC | `adc90bbb-9576-4b4c-b76a-600e5572ad7d` | Windows 11, Native Agent v1.0.5, online, Scheduled Task Running; Stack and Broker tasks also Running | Treat as owner production computer; no process, ACL, task or program modification during planning |
+| Work PC | Authenticated work-pc device ID (not published) | Windows 10, Native Agent v1.0.5, online, Scheduled Task Running | DEV-only experimentation in separate Git branch/worktree; no live task/Hub/Agent restart |
+| Naveax PC | Authenticated Naveax device ID (not published) | Windows 11, Native Agent v1.0.5, online, Scheduled Task Running; Stack and Broker tasks also Running | Treat as owner production computer; no process, ACL, task or program modification during planning |
 
 These statuses were **observed** during the 2026-10-14 task checkpoint; they are not a future uptime guarantee. Running scheduled tasks prove only task state, not necessarily authenticated route or Broker health. A safe future gate checks authenticated `devices_list` and `machine_health` for each exact stable device ID; no alternate alias fallback if a device is missing.
 
