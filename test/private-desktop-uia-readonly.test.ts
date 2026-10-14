@@ -6,6 +6,7 @@ import path from 'node:path';
 import {MCP_TOOL_CAPABILITY_REQUIREMENTS} from '../src/mcp/tool-capabilities.js';
 import {isReadOnlyCapability} from '../src/protocol/capabilities.js';
 import {executeWindowsPrivateDesktopCapability as desktop} from '../src/agent/windows-private-desktop.js';
+import {resolveObservedPrivateUiaTarget} from '../src/agent/windows-private-uia-target.js';
 
 test('UI Automation private subtree inventory is read-only and exposed in MCP',()=>{
   assert.equal(isReadOnlyCapability('windows.private_desktop.accessibility'),true);
@@ -94,6 +95,19 @@ test('UI Automation sees bounded WPF semantic controls but not secret text',{
   assert.equal(result.data.visibleDesktopChanged,false);
   assert.equal(result.data.accessibilityCoverageComplete,false);
   assert.equal(result.data.observationScope,'PRIVATE_WINDOW_UIA_CONTROL_VIEW');
+  const selection=await resolveObservedPrivateUiaTarget({
+    hwnd,automation_id:'nxSemanticButton',
+    control_type:'ControlType.Button',
+  });
+  assert.equal(selection.data.target.automationId,'nxSemanticButton');
+  assert.equal(selection.data.target.controlType,'ControlType.Button');
+  assert.equal(selection.data.authorizesInput,false);
+  assert.equal(selection.data.physicalDesktopInspected,false);
+  await assert.rejects(resolveObservedPrivateUiaTarget({
+    hwnd,automation_id:'nxDoesNotExist',
+    control_type:'ControlType.Button',
+  }),(error:unknown)=>error instanceof Error&&'code'in error&&
+    error.code==='PRIVATE_UIA_TARGET_NOT_FOUND');
   const after=await desktop('windows.private_desktop.status',{}) as {
     data:{inputDesktop:string;running:boolean};
   };

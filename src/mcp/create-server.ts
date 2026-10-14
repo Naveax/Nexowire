@@ -3731,6 +3731,27 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_accessibility_resolve',
+    {
+      title:'Resolve unique private UI Automation control identity',
+      description:
+        'Read-only live reinspection of one verified private HWND. Resolve exactly one enabled, onscreen semantic UIA element matching automation_id, control_type and optional expected_class. Reject incomplete, foreign-process or ambiguous inventories. Returns observed geometry only, not authorization to click, type, invoke, change focus or read text.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        automation_id:z.string().min(1).max(128),
+        control_type:z.string().min(1).max(128),
+        expected_class:z.string().min(1).max(128).optional(),
+      },
+    },
+    async ({device_id,provider_id,hwnd,automation_id,control_type,expected_class})=>
+      await execute(ctx,'windows.private_desktop.accessibility.resolve',{
+        hwnd,automation_id,control_type,
+        ...(expected_class!==undefined?{expected_class}:{}),
+      },device_id,provider_id,45_000),
+  );
+
+  server.registerTool(
     'windows_private_desktop_accessibility',
     {
       title:'Read bounded private-window accessibility structure',
