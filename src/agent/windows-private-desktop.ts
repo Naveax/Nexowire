@@ -423,6 +423,23 @@ public static class NxDesktopNative {
     if(!CreateProcess(exe,new StringBuilder(string.Join(" ",p)),IntPtr.Zero,IntPtr.Zero,false,UNICODE,IntPtr.Zero,String.IsNullOrWhiteSpace(cwd)?null:cwd,ref si,out pi)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     try{return pi.pid;}finally{if(pi.thread!=IntPtr.Zero)CloseHandle(pi.thread);if(pi.process!=IntPtr.Zero)CloseHandle(pi.process);}
   }
+  public static long ValidatedWindow(string name,string raw){
+    return Target(name,raw).ToInt64();
+  }
+  public static int ValidatedWindowProcessId(string name,string raw){
+    var top=Target(name,raw);
+    uint pid;
+    GetWindowThreadProcessId(top,out pid);
+    if(pid==0)throw new InvalidOperationException("PRIVATE_UIA_OWNER_UNKNOWN");
+    return (int)pid;
+  }
+  public static int[] ClientOrigin(string name,string raw){
+    var h=Target(name,raw);
+    var p=new POINT{x=0,y=0};
+    if(!ClientToScreen(h,ref p))
+      throw new InvalidOperationException("PRIVATE_UIA_ORIGIN_UNAVAILABLE");
+    return new int[]{p.x,p.y};
+  }
   public static ControlScan Controls(string name,string raw){
     var top=Target(name,raw);
     uint owner;GetWindowThreadProcessId(top,out owner);
@@ -547,7 +564,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','text','hotkey','close_window')]
+  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -585,6 +602,76 @@ try {
         })
         inputDesktop=[NxDesktopNative]::Input()
       }
+  } elseif ($Action -eq 'accessibility') {
+    # UIA read-only subtree scan on a helper launched on NexowirePrivate.
+    # Never enumerate RootElement/Default or request ValuePattern/TextPattern.
+    $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
+    $ownerPid=[NxDesktopNative]::ValidatedWindowProcessId([string]$r.desktop,[string]$r.hwnd)
+    [int[]]$origin=[NxDesktopNative]::ClientOrigin([string]$r.desktop,[string]$r.hwnd)
+    Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes -ErrorAction Stop
+    $root=[System.Windows.Automation.AutomationElement]::FromHandle($top)
+    if($null -eq $root){throw 'PRIVATE_UIA_ROOT_UNAVAILABLE'}
+    $walker=[System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $queue=New-Object 'System.Collections.Generic.Queue[object]'
+    $queue.Enqueue([pscustomobject]@{element=$root;depth=0})
+    $nodes=New-Object 'System.Collections.Generic.List[object]'
+    $visited=0;$foreign=0;$skipped=0;$truncated=$false
+    while($queue.Count -gt 0 -and $visited -lt 256 -and $nodes.Count -lt 128){
+      $current=$queue.Dequeue()
+      if([int]$current.depth -ge 5){continue}
+      try {$child=$walker.GetFirstChild($current.element)}catch{$skipped++;continue}
+      while($null -ne $child){
+        $visited++
+        if($visited -gt 256 -or $nodes.Count -ge 128){$truncated=$true;break}
+        try{
+          $c=$child.Current
+          $nodePid=[int]$c.ProcessId
+          if($nodePid -ne $ownerPid){$foreign++}
+          else{
+            $controlType=[string]$c.ControlType.ProgrammaticName
+            $rect=$c.BoundingRectangle
+            $validRect=(!$rect.IsEmpty -and ![double]::IsNaN($rect.X) -and ![double]::IsInfinity($rect.X) -and
+              ![double]::IsNaN($rect.Y) -and ![double]::IsInfinity($rect.Y))
+            $bounds=if($validRect){[pscustomobject]@{
+              left=[int][math]::Round($rect.X-$origin[0]);top=[int][math]::Round($rect.Y-$origin[1]);
+              width=[int][math]::Round([math]::Max(0,$rect.Width));
+              height=[int][math]::Round([math]::Max(0,$rect.Height))
+            }}else{$null}
+            $name=''
+            # Only safe action-label control types get Name metadata. Edit,
+            # Text, Document and password contents must never be read.
+            if(!$c.IsPassword -and $controlType -match '(Button|CheckBox|RadioButton|TabItem|MenuItem|Hyperlink)$'){
+              $name=([string]$c.Name)
+              if($name.Length -gt 128){$name=$name.Substring(0,128)}
+            }
+            $automationId=[string]$c.AutomationId
+            if($automationId.Length -gt 128){$automationId=$automationId.Substring(0,128)}
+            $className=[string]$c.ClassName
+            if($className.Length -gt 128){$className=$className.Substring(0,128)}
+            [void]$nodes.Add([pscustomobject]@{
+              processId=$nodePid;depth=([int]$current.depth+1)
+              controlType=$controlType;automationId=$automationId
+              className=$className;actionLabel=$name
+              enabled=[bool]$c.IsEnabled;offscreen=[bool]$c.IsOffscreen
+              rect=$bounds
+            })
+            $queue.Enqueue([pscustomobject]@{element=$child;depth=([int]$current.depth+1)})
+          }
+        }catch{$skipped++}
+        try{$child=$walker.GetNextSibling($child)}catch{$skipped++;break}
+      }
+    }
+    if($queue.Count -gt 0 -or $visited -gt 256 -or $nodes.Count -ge 128){$truncated=$true}
+    [pscustomobject]@{
+      hwnd="0x"+$top.ToInt64().ToString("X")
+      processId=$ownerPid
+      nodes=@($nodes.ToArray())
+      visited=$visited
+      skipped=$skipped
+      foreignProcessNodesSkipped=$foreign
+      truncated=[bool]$truncated
+      inputDesktop=[NxDesktopNative]::Input()
+    }
   } elseif ($Action -eq 'close_window') {
     $h=[NxDesktopNative]::CloseWindow([string]$r.desktop,[string]$r.hwnd)
     [pscustomobject]@{hwnd=$h;inputDesktop=[NxDesktopNative]::Input();closeRequested=$true}
@@ -668,6 +755,7 @@ type PrivateInputAction =
   | 'pointer_click'
   | 'pointer_scroll'
   | 'controls'
+  | 'accessibility'
   | 'text'
   | 'hotkey'
   | 'close_window';
@@ -917,6 +1005,28 @@ const ControlScanSchema=z.object({
   })).max(128),
   inputDesktop:z.string().max(256),
 });
+const AccessibilityScanSchema=z.object({
+  hwnd:WindowHandleSchema,
+  processId:z.number().int().nonnegative(),
+  nodes:z.array(z.object({
+    processId:z.number().int().nonnegative(),
+    depth:z.number().int().min(1).max(5),
+    controlType:z.string().max(128),
+    automationId:z.string().max(128),
+    className:z.string().max(128),
+    actionLabel:z.string().max(128),
+    enabled:z.boolean(),offscreen:z.boolean(),
+    rect:z.object({
+      left:z.number().int(),top:z.number().int(),
+      width:z.number().int().nonnegative(),height:z.number().int().nonnegative(),
+    }).nullable(),
+  })).max(128),
+  visited:z.number().int().min(0).max(257),
+  skipped:z.number().int().nonnegative(),
+  foreignProcessNodesSkipped:z.number().int().nonnegative(),
+  truncated:z.boolean(),inputDesktop:z.string().max(256),
+});
+
 async function inputDesktop():Promise<string>{return z.object({inputDesktop:z.string().max(256)}).parse(await request('input',{desktop:DESKTOP_NAME})).inputDesktop;}
 
 async function shortcut():Promise<string|null>{
@@ -943,6 +1053,20 @@ async function killTree(pid:number):Promise<void>{if(!alive(pid))return;await ne
 async function stop():Promise<{data:unknown}>{assertWindows();const p=paths();const s=await readState();if(!s)return{data:{running:false,stopped:false,desktopName:DESKTOP_NAME}};for(const pid of [...s.launchedPids].reverse())await killTree(pid);await killTree(s.shellPid);if(alive(s.hostPid)){try{process.kill(s.hostPid);}catch{}if(!(await waitExit(s.hostPid)))throw new PrivateDesktopError('HOST_STOP_NOT_VERIFIED','Private desktop host did not exit.',{pid:s.hostPid});}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);return{data:{running:false,stopped:true,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=> '')}};}
 async function launchApp(input:unknown):Promise<{data:unknown}>{assertWindows();const p=LaunchSchema.parse(input);const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))throw new PrivateDesktopError('NOT_RUNNING','Start the private desktop first.');const pid=await launch(p.executable,p.args,p.cwd);await writeState({...s,launchedPids:[...new Set([...s.launchedPids,pid])].slice(-1024)});return{data:{pid,desktopName:DESKTOP_NAME,visibleDesktopChanged:false}};}
 async function status():Promise<{data:unknown}>{assertWindows();const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))return{data:{running:false,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=>''),visibleDesktopChanged:false}};let v:Awaited<ReturnType<typeof view>>|undefined;try{v=await view();}catch{}return{data:{running:true,desktopName:DESKTOP_NAME,hostPid:s.hostPid,shellPid:s.shellPid,launchedPids:s.launchedPids.filter(alive),startedAt:s.startedAt,inputDesktop:v?.inputDesktop??(await inputDesktop().catch(()=>'')),windowCount:v?.windows.length??null,visibleDesktopChanged:false}};}
+async function accessibility(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  const parsed=z.object({hwnd:WindowHandleSchema}).strict().parse(input);
+  const s=await readState();
+  if(!s||!alive(s.hostPid)||!alive(s.shellPid))
+    throw new PrivateDesktopError('NOT_RUNNING','Private desktop is not running.');
+  const result=AccessibilityScanSchema.parse(await privateInputRequest(
+    'accessibility',{desktop:DESKTOP_NAME,hwnd:parsed.hwnd},20_000,
+  ));
+  return{data:{...result,desktopName:DESKTOP_NAME,
+    observationScope:'PRIVATE_WINDOW_UIA_CONTROL_VIEW',
+    exposesTextValues:false,physicalDesktopInspected:false,
+    visibleDesktopChanged:false,accessibilityCoverageComplete:false}};
+}
 async function controls(input:unknown):Promise<{data:unknown}>{
   assertWindows();
   const parsed=z.object({hwnd:WindowHandleSchema}).strict().parse(input);
@@ -1394,6 +1518,8 @@ export async function executeWindowsPrivateDesktopCapability(
       return await windows();
     case 'windows.private_desktop.controls':
       return await controls(input);
+    case 'windows.private_desktop.accessibility':
+      return await accessibility(input);
     case 'windows.private_desktop.window.close':
       return await serializePrivateDesktopLifecycle(()=>privateWindowClose(input));
     case 'windows.private_desktop.show':

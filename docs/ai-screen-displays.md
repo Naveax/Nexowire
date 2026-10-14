@@ -377,6 +377,34 @@ does not touch the physical mouse cursor or switch input desktops.
 This does not prove full GUI isolation or support controls without
 native child HWNDs. UIA/DOM-level hit testing remains outside scope.
 
+## Bounded private-window UI Automation control view
+
+`windows_private_desktop_accessibility` is a read-only MCP and Agent
+capability for a selected **verified NexowirePrivate top-level HWND**.
+A temporary helper running on that same private desktop calls Windows
+UI Automation `AutomationElement.FromHandle` and traverses
+`ControlViewWalker`, bounded to 128 returned nodes, 256 visited
+children and depth 5. Children belonging to any PID other than the
+top-level window's native owner are excluded. The result contains
+control type, class, automation ID, depth, enabled/offscreen flags
+and client-relative bounding rectangles when available.
+
+The action label is returned only for recognized non-password action
+controls (buttons, radio buttons, checkboxes, menus, tabs and links).
+It does **not** request TextPattern, ValuePattern or any Edit,
+Text, Document or password control contents. It never enumerates
+`AutomationElement.RootElement`, invokes/sets a control, switches
+the input desktop or changes the physical mouse/keyboard.
+
+The WPF DEV acceptance fixture verified that the private Button and
+TextBox appear as semantic UIA controls with stable Automation IDs,
+while the TextBox's secret text is absent and the user's
+`Default` desktop remains active. This is **read-only** UIA:
+`accessibilityCoverageComplete:false` is deliberately reported
+because legacy/custom providers, inaccessible nodes and brokered
+children may be omitted. It is not an assurance of independent
+Windows session, virtual displays or transitive GUI isolation.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
