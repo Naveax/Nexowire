@@ -3744,6 +3744,25 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_accessibility_invoke_button',
+    {
+      title:'Invoke one verified private UIA button',
+      description:
+        'Explicit action on a selected NexowirePrivate top-level HWND. Revalidate a unique visible/enabled same-process WPF/UIA Button by automation_id and exact expected_class, then call its InvokePattern on a helper attached to the private desktop. Button app-side effects are possible. Reject missing, ambiguous or incomplete trees; no physical cursor/keyboard focus or host clipboard.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        automation_id:z.string().min(1).max(128),
+        expected_class:z.string().min(1).max(128),
+      },
+    },
+    async ({device_id,provider_id,hwnd,automation_id,expected_class})=>
+      await execute(ctx,'windows.private_desktop.accessibility.invoke_button',{
+        hwnd,automation_id,expected_class,
+      },device_id,provider_id,45_000),
+  );
+
+  server.registerTool(
     'windows_private_desktop_accessibility_resolve',
     {
       title:'Resolve unique private UI Automation control identity',

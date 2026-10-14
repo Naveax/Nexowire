@@ -2458,6 +2458,7 @@ case 'windows.private_desktop.process_audit':
     case 'windows.private_desktop.windows':
     case 'windows.private_desktop.controls':
     case 'windows.private_desktop.accessibility':
+    case 'windows.private_desktop.accessibility.invoke_button':
     case 'windows.private_desktop.window.close':
     case 'windows.private_pointer.move':
     case 'windows.private_pointer.click':
