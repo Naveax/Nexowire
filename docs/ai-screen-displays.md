@@ -636,7 +636,8 @@ literal `powershell.exe/pwsh.exe -File script.ps1` (or abbreviated
 are checked using the same broker denylist; opaque encoded commands,
 unsupported `-CommandWithArgs` (including `-cwa`) and inline
 command/file option values fail closed. Both single-dash and double-dash
-PowerShell host argument prefixes are inspected. The checked file must be a readable, regular,
+PowerShell host argument prefixes are inspected. A positional `.ps1`
+without an explicit `-File` option is also preflighted on Windows. The checked file must be a readable, regular,
 non-symlink local script no larger than 256 KiB. Its UTF-8
 or BOM-marked UTF-16LE text is passed through the existing
 high-confidence GUI/elevation broker command denylist before
