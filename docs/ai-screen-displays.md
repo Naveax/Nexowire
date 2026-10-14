@@ -627,6 +627,31 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## Durable worker Windows desktop identity check
+
+Before its requested private child process is created, the durable
+worker launches a fixed first-party Windows PowerShell identity probe.
+The probe calls GetThreadDesktop and GetUserObjectInformation(UOI_NAME)
+to read its actual Win32 desktop attachment. Only the exact expected
+name NexowirePrivate is accepted. A missing, ambiguous or Default
+desktop name fails closed before control socket and status creation.
+
+Reviewed AI Screen native launch sink: the single fixed spawnSync
+in windows-private-worker-desktop-identity.ts invokes only the system
+Windows PowerShell binary with a constant first-party encoded probe
+script, a bounded runtime and a narrow nonsecret environment. It is not
+a caller-selectable executable or command. The direct Node launch
+baseline explicitly tracks this additional one callsite; an unchanged
+baseline remains insufficient to prove transitive GUI isolation.
+The probe does not inspect the owner's windows, modify input, move the
+physical cursor or switch desktops. The probe's sanitized environment
+does not inherit arbitrary agent credentials. Normal headless durable
+processes retain their existing behavior without this check.
+
+This attests one actual helper child at startup. It does not prove
+that arbitrary later descendants cannot use COM, ShellExecute, UAC or
+other routes to display windows outside the private desktop. True
+independent session or guest isolation remains a P0 #402 requirement.
 ## Process launch event target provenance
 
 New process session process.started event metadata always records the
