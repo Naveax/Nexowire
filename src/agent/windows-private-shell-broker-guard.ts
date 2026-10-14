@@ -48,6 +48,7 @@ export function assertNoObviousPrivateShellBrokerInvocation(
     isPowerShellParameterAlias(x,'-encodedcommand')||
     isPowerShellParameterAlias(x,'-encodedarguments')||
     normalizedPowerShellOption(x)==='-cwa'||
+    normalizedPowerShellOption(x)==='-ec'||
     (isPowerShellParameterAlias(x,'-commandwithargs')&&
       !isPowerShellParameterAlias(x,'-command')))) {
     throw Object.assign(new Error(
