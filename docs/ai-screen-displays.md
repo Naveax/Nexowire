@@ -627,6 +627,21 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## Quoted CMD / nested interpreter launch gate
+
+For #402, bounded private GUI shell preflight rejects CMD /C or /K
+command strings whose leading broker invocation is wrapped in Windows
+quoting, including cmd.exe /D /S /C with a quoted start command.
+It also refuses direct quoted GUI broker executable paths, recursively
+invoked cmd, powershell or pwsh hosts at command boundaries, and opaque
+combined /Ccommand or /Kcommand arguments.
+
+This deliberately fails closed for nested interpreters, even for an
+apparently harmless nested command, since the parent preflight cannot audit
+their environment or transitive GUI descendants. Ordinary cmd /C echo
+and direct PowerShell inspection remain supported. This is bounded
+static text matching, not a Windows command interpreter, native child
+confinement, or secure independent-session sandbox.
 ## Explicit PowerShell -File broker preflight
 
 `NexowirePrivate` direct launches and short-lived private shell

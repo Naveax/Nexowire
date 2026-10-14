@@ -102,3 +102,67 @@ test('real DEV refuses obvious escape without starting a private shell process',
     else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=root;
   }
 });
+
+test('quoted and chained CMD nested shell brokers fail closed',()=>{
+  const cases=[
+    ['cmd.exe',['/C','"start "" explorer.exe"']],
+    ['cmd.exe',['/D','/S','/C','""explorer.exe" C:\\Windows"']],
+    ['cmd.exe',['/C','pwsh.exe -EncodedCommand QQ==']],
+    ['cmd.exe',['/C','"powershell.exe -NoProfile -Command Write-Output okay"']],
+    ['cmd.exe',['/C','echo okay && pwsh -Command Write-Output hello']],
+    ['cmd.exe',['/C','call cmd.exe /C echo okay']],
+    ['cmd.exe',['/Cstart "" explorer.exe']],
+    ['"C:\\Windows\\explorer.exe"',[]],
+    ['"C:\\Windows\\System32\\rundll32.exe"',['shell32.dll,Control_RunDLL']],
+    ['powershell.exe',['-Command','& pwsh.exe -EncodedCommand QQ==']],
+  ] as const;
+  for(const [executable,args] of cases){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('quoted harmless CMD and direct PowerShell inspection remain eligible',()=>{
+  for(const [executable,args] of [
+    ['cmd.exe',['/C','"echo private worker okay"']],
+    ['cmd.exe',['/C','echo hello && node --version']],
+    ['powershell.exe',['-NoProfile','-Command','Write-Output nested-shell-no-execution']],
+    ['pwsh.exe',['-Command','Get-Process | Select-Object Id']],
+  ] as const){
+    assert.doesNotThrow(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('real DEV rejects quoted CMD and nested interpreters before allocating private desktop files',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const root=path.join(os.tmpdir(),'nx-private-quoted-cmd-guard-'+process.pid);
+  await fs.rm(root,{recursive:true,force:true});
+  const prior=process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+  process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=root;
+  try{
+    for(const [executable,args] of [
+      ['cmd.exe',['/D','/S','/C','"start "" explorer.exe"']],
+      ['cmd.exe',['/C','pwsh.exe -EncodedCommand QQ==']],
+      ['powershell.exe',['-Command','& cmd.exe /C echo okay']],
+    ] as const){
+      await assert.rejects(
+        runWindowsPrivateShell(executable,args,{timeoutMs:8_000,maxOutputBytes:4096}),
+        (error:unknown)=>error instanceof Error&&'code' in error&&
+          error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      );
+    }
+    await assert.rejects(fs.access(root),
+      (error:unknown)=>error instanceof Error&&'code' in error&&error.code==='ENOENT');
+  }finally{
+    if(prior===undefined)delete process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+    else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=prior;
+  }
+});
