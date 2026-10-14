@@ -12,6 +12,7 @@ import {
 } from '../src/relay/config.js';
 import { startRelayServer } from '../src/relay/server.js';
 import { AGENT_PROTOCOL_VERSION } from '../src/protocol/agent.js';
+import { ScaleTransportMetrics } from '../src/ops/scale-transport-metrics.js';
 
 function waitFor(
   predicate: () => boolean,
@@ -69,7 +70,8 @@ test('relay config rejects insecure remote exposure and plaintext remote upstrea
 
 test('first-party relay forwards native-agent protocol bidirectionally', async (t) => {
   const upstreamHttp = createServer();
-  const broker = new AgentBroker();
+  const metrics = new ScaleTransportMetrics();
+  const broker = new AgentBroker({ metrics });
   const upstreamWss = attachAgentWebSocketServer(
     upstreamHttp,
     broker,
@@ -93,7 +95,7 @@ test('first-party relay forwards native-agent protocol bidirectionally', async (
     heartbeatMs: 1_000,
     maxPayloadBytes: 2 * 1024 * 1024,
   };
-  const relay = await startRelayServer(relayConfig);
+  const relay = await startRelayServer(relayConfig, { metrics });
 
   t.after(async () => {
     await relay.close();
@@ -182,9 +184,18 @@ test('first-party relay forwards native-agent protocol bidirectionally', async (
     response.data?.capability,
     'machine.snapshot',
   );
+  const totals = metrics.snapshot();
+  assert.equal(totals['relay.connections'].events, 1);
+  assert.ok(totals['relay.upstream_frames'].bytes > 0);
+  assert.ok(totals['relay.downstream_frames'].bytes > 0);
+  assert.ok(totals['agent.tx_frames'].bytes > 0);
+  assert.ok(totals['agent.rx_frames'].bytes > 0);
+  assert.equal(totals['agent.connections'].events, 1);
+  assert.equal(JSON.stringify(totals).includes('relay-agent-token'), false);
 });
 
 test('relay rejects invalid inbound agent bearer token', async (t) => {
+  const metrics = new ScaleTransportMetrics();
   const upstreamHttp = createServer();
   await new Promise<void>((resolve) =>
     upstreamHttp.listen(0, '127.0.0.1', resolve),
@@ -200,7 +211,7 @@ test('relay rejects invalid inbound agent bearer token', async (t) => {
     inboundAgentTokens: ['correct-token'],
     heartbeatMs: 1_000,
     maxPayloadBytes: 1024 * 1024,
-  });
+  }, { metrics });
 
   t.after(async () => {
     await relay.close();
@@ -229,6 +240,8 @@ test('relay rejects invalid inbound agent bearer token', async (t) => {
   });
 
   assert.equal(status, 401);
+  assert.equal(metrics.snapshot()['relay.auth_denials'].events, 1);
+  assert.equal(metrics.snapshot()['relay.connections'].events, 0);
 });
 
 test('relay config can consume platform-backed inbound and upstream credentials', () => {

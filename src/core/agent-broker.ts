@@ -9,6 +9,7 @@ import {
 } from '../protocol/agent.js';
 import { NexowireError } from './errors.js';
 import { isReadOnlyCapability } from '../protocol/capabilities.js';
+import { safelyRecordScaleMetric, type ScaleTransportMetrics } from '../ops/scale-transport-metrics.js';
 
 interface AgentConnection {
   socket: WebSocket;
@@ -58,6 +59,7 @@ export interface AgentBrokerOptions {
   maxEvents?: number;
   maxEventBytes?: number;
   reconnectGraceMs?: number;
+  metrics?: ScaleTransportMetrics;
   onDeviceState?: (
     event: DeviceStateEvent,
   ) => void | Promise<void>;
@@ -79,6 +81,7 @@ export class AgentBroker {
   private readonly maxEvents: number;
   private readonly maxEventBytes: number;
   private readonly reconnectGraceMs: number;
+  private readonly metrics?: ScaleTransportMetrics;
   private readonly onDeviceState?: (
     event: DeviceStateEvent,
   ) => void | Promise<void>;
@@ -88,6 +91,7 @@ export class AgentBroker {
   constructor(options: AgentBrokerOptions = {}) {
     this.maxEvents = options.maxEvents ?? 5_000;
     this.maxEventBytes = options.maxEventBytes ?? 8 * 1024 * 1024;
+    this.metrics = options.metrics;
     this.reconnectGraceMs = Math.min(
       30_000,
       Math.max(250, options.reconnectGraceMs ?? 5_000),
@@ -110,7 +114,10 @@ export class AgentBroker {
       connectedAt,
     };
     this.agents.set(deviceId, connection);
+    safelyRecordScaleMetric(this.metrics, 'agent.connections');
     const continuity = this.resumePending(deviceId, connection);
+    safelyRecordScaleMetric(this.metrics, 'agent.resumed_requests', 0, continuity.resumed);
+    safelyRecordScaleMetric(this.metrics, 'agent.rejected_requests', 0, continuity.rejected);
     this.notifyDeviceState({
       type: 'connected',
       device: hello.device,
@@ -131,9 +138,11 @@ export class AgentBroker {
       },
     });
 
-    socket.on('message', (raw) =>
-      this.handleMessage(deviceId, hello.instanceId, raw.toString()),
-    );
+    socket.on('message', (raw) => {
+      const message = raw.toString();
+      safelyRecordScaleMetric(this.metrics, 'agent.rx_frames', Buffer.byteLength(message));
+      this.handleMessage(deviceId, hello.instanceId, message);
+    });
     socket.on('close', () => this.handleDisconnect(deviceId, socket));
     socket.on('error', () => this.handleDisconnect(deviceId, socket));
   }
@@ -376,6 +385,7 @@ export class AgentBroker {
     if (current?.socket !== socket) return;
 
     this.agents.delete(deviceId);
+    safelyRecordScaleMetric(this.metrics, 'agent.disconnections');
     const disconnectedAt = new Date().toISOString();
     this.notifyDeviceState({
       type: 'disconnected',
@@ -483,15 +493,15 @@ export class AgentBroker {
       );
     }
 
-    connection.socket.send(
-      JSON.stringify({
-        type: 'request',
-        requestId: pending.requestId,
-        capability: pending.capability,
-        input: pending.input,
-        accessMode: pending.accessMode,
-      }),
-    );
+    const encoded = JSON.stringify({
+      type: 'request',
+      requestId: pending.requestId,
+      capability: pending.capability,
+      input: pending.input,
+      accessMode: pending.accessMode,
+    });
+    connection.socket.send(encoded);
+    safelyRecordScaleMetric(this.metrics, 'agent.tx_frames', Buffer.byteLength(encoded));
   }
 
   private finishPending(requestId: string): PendingRequest | undefined {
