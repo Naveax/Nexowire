@@ -590,6 +590,43 @@ intermediate events, transitive child-process confinement or
 an isolated virtual monitor/session. These remain distinct
 #402 release requirements.
 
+## Observed private-process GUI ownership on Default
+
+`windows_private_desktop_owner_gui_audit` is a bounded read-only
+diagnostic. It takes the tracked private shell and managed process
+roots, then follows only the **observed** Win32 parent PID links from
+`windows_private_desktop_process_audit`. A separate helper opens
+the `Default` desktop of the calling process's window station using
+`OpenDesktop` for **enumeration only**, and uses
+`EnumDesktopWindows`/`GetWindowThreadProcessId` to count
+top-level HWNDs owned by those candidate PIDs. The native helper
+never requests window titles, captions, text values, classes,
+coordinates, foreground focus, user input, or clipboard contents.
+Unrelated window owner PIDs are filtered before returning data.
+
+The result includes `observedDefaultWindowOwnerPids` and
+`observedDefaultWindowCount`. A **positive** match is a useful
+warning that a tracked process has a top-level window on the
+enumerated Default desktop. An empty result does **not** prove
+absence of a leak: process parents can exit, PIDs can be reused,
+windows may appear between samples, and `OpenDesktop` may
+refer to a session/window station other than the owner's active
+one. The API deliberately reports
+`ownerWindowStationVerified:false`,
+`allIntermediateEventsObserved:false`,
+`noDefaultGuiProven:false` and
+`physicalDesktopLeakageExcluded:false`, even when no
+matching HWND is observed.
+
+DEV acceptance verified this inventory runs without switching
+the current input desktop; synthetic tests verify that a leaked
+PID is reported and unrelated PIDs are never returned. The
+scanner fails with an explicit error if the read-only Default
+desktop cannot be opened or enumerated; it never falls back
+to interacting with the user's desktop. This is a diagnostic,
+**not** transitive process containment or owner-session
+isolation.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
