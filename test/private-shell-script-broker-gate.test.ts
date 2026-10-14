@@ -25,12 +25,21 @@ test('PowerShell -File static GUI/elevation brokerage is rejected before a priva
     ] as const){
       const file=path.join(dir,name);
       await fs.writeFile(file,script,'utf8');
-      await assert.rejects(
-        assertNoObviousPrivateShellScriptBrokerInvocation(
-          'powershell.exe',['-NoProfile','-File',file],
-        ),isDenied,name,
-      );
+      for(const parameter of ['-File','-Fi','-Fil']){
+        await assert.rejects(
+          assertNoObviousPrivateShellScriptBrokerInvocation(
+            'powershell.exe',['-NoProfile',parameter,file],
+          ),isDenied,name+' '+parameter,
+        );
+      }
     }
+    const inline=path.join(dir,'inline.ps1');
+    await fs.writeFile(inline,'Start-Process explorer.exe');
+    await assert.rejects(
+      assertNoObviousPrivateShellScriptBrokerInvocation(
+        'powershell.exe',['-File:'+inline],
+      ),isDenied,
+    );
     const missing=path.join(dir,'missing.ps1');
     await assert.rejects(
       assertNoObviousPrivateShellScriptBrokerInvocation('pwsh.exe',
