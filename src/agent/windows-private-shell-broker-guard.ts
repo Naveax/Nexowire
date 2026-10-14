@@ -1,6 +1,13 @@
 import path from 'node:path';
 import {promises as fs} from 'node:fs';
 
+// Windows PowerShell accepts abbreviated host parameters (e.g. -Fi/-Co).
+// Always interpret the same prefix as the host before applying our denylist.
+function isPowerShellParameterAlias(value:string,canonical:string):boolean{
+  const option=value.trim().toLowerCase().split(':',1)[0];
+  return option.startsWith('-')&&option.length>=2&&canonical.startsWith(option);
+}
+
 /**
  * Catch high-confidence shell/COM broker invocations *before* starting the
  * private shell worker. This is intentionally narrow and is NOT a parser,
@@ -33,14 +40,22 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   if(!isPowerShell&&!isCmd)return;
   const normalizedArgs=args.map(x=>x.trim().toLowerCase());
   if(isPowerShell && normalizedArgs.some(x=>
-      ['-encodedcommand','-enc','-e'].includes(x))) {
+    isPowerShellParameterAlias(x,'-encodedcommand')||
+    isPowerShellParameterAlias(x,'-encodedarguments')||
+    (isPowerShellParameterAlias(x,'-commandwithargs')&&
+      !isPowerShellParameterAlias(x,'-command')))) {
     throw Object.assign(new Error(
-      'Opaque encoded PowerShell is not audited for private GUI isolation.',
+      'Opaque or unsupported PowerShell execution mode is not audited for private GUI isolation.',
     ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
   }
   const commandIndex=normalizedArgs.findIndex(x=>isPowerShell
-    ?['-command','-c'].includes(x)
+    ?isPowerShellParameterAlias(x,'-command')
     :['/c','/k'].includes(x));
+  if(isPowerShell&&commandIndex>=0&&normalizedArgs[commandIndex]?.includes(':')){
+    throw Object.assign(new Error(
+      'Inline PowerShell -Command parameter cannot be audited for private GUI isolation.',
+    ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
+  }
   if(commandIndex<0||commandIndex+1>=args.length)return;
   const command=args.slice(commandIndex+1).join(' ');
   const explicitBroker=/(?:^|[;&|\r\n])\s*(?:(?:&|call)\s+)?(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
@@ -75,7 +90,7 @@ export async function assertNoObviousPrivateShellScriptBrokerInvocation(
   const name=path.win32.basename(executable.trim().replace(/^["']|["']$/g,''))
     .toLowerCase();
   if(!['pwsh','pwsh.exe','powershell','powershell.exe'].includes(name))return;
-  const index=args.findIndex(a=>['-file','-f'].includes(a.trim().toLowerCase()));
+  const index=args.findIndex(a=>isPowerShellParameterAlias(a,'-file'));
   if(index<0)return;
   const fileArg=args[index+1];
   const fail=(message:string):never=>{
@@ -83,7 +98,7 @@ export async function assertNoObviousPrivateShellScriptBrokerInvocation(
       code:'AI_PRIVATE_SHELL_SCRIPT_BROKER_NOT_AUDITED',
     });
   };
-  if(!fileArg||fileArg==='-'||fileArg.startsWith('-')||
+  if(args[index]?.includes(':')||!fileArg||fileArg==='-'||fileArg.startsWith('-')||
      fileArg.includes('\0')||!fileArg.toLowerCase().endsWith('.ps1')){
     return fail('PowerShell -File requires a locally readable .ps1 for private GUI preflight.');
   }
