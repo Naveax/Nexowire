@@ -1,5 +1,14 @@
 # Nexowire Handoff
 
+## HIGH PRIORITY HANDOFF — Scale v2 (2026-10-14)
+
+The owner has explicitly prioritized **connection scalability, user quotas, install simplicity and future plan entitlements** above feature expansion. **Only S1–S5 are active planning/implementation targets; S6 feature work is parked.**
+
+Canonical scale reading order: [vision](docs/SCALE_V2_VISION.md) → [stage checklist](docs/SCALE_V2_ROADMAP.md) → [daily quota, request math and cost](docs/SCALE_V2_QUOTA_AND_COST.md) → [two-device no-disconnect rollout](docs/SCALE_V2_CONNECTION_ROLLOUT.md) → [GitHub #482](https://github.com/Naveax/Nexowire/issues/482), then individual #483–#487. Older tasks parked in [#481](https://github.com/Naveax/Nexowire/issues/481).
+
+**Nothing from the new Scale v2 proposal is currently a live quota or production route.** Existing Free-only 1,000 weighted units per UTC **month** and `BILLING_PAUSED` remain the source of truth. Proposed future daily plan quotas are Free 1,000, Plus 5,000, Pro 10,000, Enterprise negotiated. Never silently interpret historical monthly credits as daily quotas, change payment flags, deploy or create a second Agent instance. Keep pre-existing Work PC and Naveax PC Agent connections online. P0 #271 is on owner hold; no live privileged cutover. PR #480 was DRAFT/unmerged but 7/7 CI green when this initiative was created; check live PR state before action.
+
+
 Updated: 2026-10-04
 
 ## Temporary Free-only policy (2026-10-06)

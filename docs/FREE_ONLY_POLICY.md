@@ -1,5 +1,8 @@
 # Temporary free-only policy
 
+> **Scale v2 planning notice (2026-10-14):** A *future* daily plan model is being designed in [Scale v2 quota/cost](SCALE_V2_QUOTA_AND_COST.md) and tracked in [#484](https://github.com/Naveax/Nexowire/issues/484). The current monthly Free-only limit and paused payment settings documented here are **still the operative policy**. The planned Free 1,000 / Plus 5,000 / Pro 10,000 requests/day is not deployed and does not authorize live payment activation. See [#482](https://github.com/Naveax/Nexowire/issues/482) for rollout gates.
+
+
 This deployment remains free until the owner manually enables billing after legal
 eligibility and Lemon Squeezy/Stripe account approval. Do not auto-enable based on
 the date of the owner's birthday or the presence of API keys.

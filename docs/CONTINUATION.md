@@ -1,5 +1,8 @@
 # Nexowire Continuation Protocol
 
+> **2026-10-14 priority checkpoint:** The owner has promoted Scale v2 phases **S1–S5** (connection, hosted daily user quota model, verified one-click onboarding, future subscription engine, cost/load validation), postponing S6 feature expansion. After this file's canonical handoff set, read [docs/SCALE_V2_VISION.md](SCALE_V2_VISION.md), [docs/SCALE_V2_ROADMAP.md](SCALE_V2_ROADMAP.md), [docs/SCALE_V2_QUOTA_AND_COST.md](SCALE_V2_QUOTA_AND_COST.md), [docs/SCALE_V2_CONNECTION_ROLLOUT.md](SCALE_V2_CONNECTION_ROLLOUT.md), and [issue #482](https://github.com/Naveax/Nexowire/issues/482). These additional Scale v2 files do **not** alter the existing four-file PROJECT_STATE canonical continuity contract. Current Free-only monthly policy, paid billing pause, dual Agent continuity, P0 #271 owner hold and production approval gates remain unchanged.
+
+
 This file exists so development can continue from a completely new ChatGPT conversation with no access to prior chat history.
 
 ## Temporary Free-only policy (2026-10-06)
