@@ -34,6 +34,15 @@
 5. Only then prototype optional feature-flagged transport adapter / P2P for supported first-party clients. Keep old outbound WebSocket default and no production cutover.
 6. S2 quota schema is designed in parallel, but changes to deployed metering require explicit versioned acceptance and separate launch decision.
 
+## 2026-10-15 — S1 instrumentation slice 1 (DEV only)
+
+- Docs PR [#488](https://github.com/Naveax/Nexowire/pull/488) merged as `2a1ba73d0b0320b94cf9d89e30cae56f143432de` after exact-head 7/7 CI. S1-S5 stages remain OPEN.
+- S1 DEV worktree branch `feat/scale-v2-s1-transport-metrics-20261015` adds **opt-in, in-memory, payload-free** counters for AgentBroker WebSocket frames/bytes, live connection/disconnection, resumed/rejected pending requests and relay frame bytes, connections and unauthorized upgrades.
+- Designed as optional constructor/start argument; **no live Agent/Hub/Broker or Cloudflare changes**. Real loopback WebSocket relay + reconnect tests are synthetic fixtures and are not production traffic measurements.
+- Validation: `npm run typecheck`, `npm run build`, `npm run ai-screen:launch-audit`, 13/13 targeted Node tests PASS on authorized Windows DEV; CI needs a separate exact-head PR run. The launch audit still counts 56 direct sinks / 43 signatures. No new direct process launch sinks.
+- Documented precise limitations in [S1 metric design](SCALE_V2_S1_METRICS.md): application bytes are not billed network bytes; no hosted MCP ingress count, D1 read/write, p95 latencies or actual relay invoice yet; no NAT/P2P inference; metric state resets on restart.
+- Next slice after review: add redacted hosted ingress/D1 usage measurements behind a DEV flag with fixed-label bounded histograms. Compare measured ingress with logical invocation before any P2P proposal; never equate peer-transfer savings with eliminating ChatGPT MCP requests.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**
