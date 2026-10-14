@@ -3744,6 +3744,25 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_accessibility_select_radio',
+    {
+      title:'Select verified private UIA radio button',
+      description:
+        'Explicit mutating action on a unique same-PID private UIA RadioButton matching automation_id and exact expected_class. Calls SelectionItemPattern.Select only if not already selected, verifies postcondition; rejects incomplete/ambiguous or offscreen targets. Does not use physical cursor, keyboard or clipboard. App side effects are possible.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        automation_id:z.string().min(1).max(128),
+        expected_class:z.string().min(1).max(128),
+      },
+    },
+    async ({device_id,provider_id,hwnd,automation_id,expected_class})=>
+      await execute(ctx,'windows.private_desktop.accessibility.select_radio',{
+        hwnd,automation_id,expected_class,
+      },device_id,provider_id,45_000),
+  );
+
+  server.registerTool(
     'windows_private_desktop_accessibility_set_checkbox',
     {
       title:'Set verified private UIA checkbox state',

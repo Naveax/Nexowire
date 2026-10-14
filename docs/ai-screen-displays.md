@@ -539,6 +539,33 @@ Application-defined callback side effects and indirect GUI
 brokering are **not** contained by this capability, so guest/session
 isolation remains an unsatisfied #402 acceptance condition.
 
+## Explicit private WPF RadioButton selection
+
+`windows_private_desktop_accessibility_select_radio` is an explicitly
+**mutating** MCP capability for a single RadioButton within a
+verified `NexowirePrivate` window. The caller supplies top-level
+`hwnd`, `automation_id` and exact `expected_class`. A private
+helper performs a bounded same-process UI Automation ControlView
+scan, rejects incomplete, foreign, missing or ambiguous targets,
+and confirms the element is an enabled, onscreen,
+non-password `ControlType.RadioButton` supporting
+`SelectionItemPattern`.
+
+The action reads only `SelectionItemPattern.Current.IsSelected`.
+It calls `Select()` once only when that radio option is not
+already selected, then validates the postcondition. This prevents
+an unnecessary second selection event but does not suppress
+application-defined side effects. It never reads textbox/password
+values, moves the physical cursor, changes host keyboard focus or
+touches the system clipboard.
+
+Windows DEV tests covered selecting the second radio, repeating
+the same choice without another event and returning to the first.
+Wrong HWND, class, missing ID, disabled control, duplicate
+Automation IDs and wrong control types fail closed.
+This is not complete session, descendant-process or physical
+desktop isolation; #402 remains open.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
