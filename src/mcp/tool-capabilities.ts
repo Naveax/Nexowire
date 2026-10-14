@@ -62,6 +62,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   windows_private_desktop_accessibility_resolve: 'windows.private_desktop.accessibility.resolve',
   windows_private_desktop_accessibility_invoke_button: 'windows.private_desktop.accessibility.invoke_button',
   windows_private_desktop_accessibility_set_edit_value: 'windows.private_desktop.accessibility.set_edit_value',
+  windows_private_desktop_accessibility_set_checkbox: 'windows.private_desktop.accessibility.set_checkbox',
   windows_private_desktop_window_audit: 'windows.private_desktop.window_audit',
   windows_private_desktop_process_audit: 'windows.private_desktop.process_audit',
   windows_private_desktop_close_window: 'windows.private_desktop.window.close',
