@@ -97,8 +97,12 @@ export async function assertNoObviousPrivateShellScriptBrokerInvocation(
     .toLowerCase();
   if(!['pwsh','pwsh.exe','powershell','powershell.exe'].includes(name))return;
   const index=args.findIndex(a=>isPowerShellParameterAlias(a,'-file'));
-  if(index<0)return;
-  const fileArg=args[index+1];
+  // On Windows, pwsh/powershell treat a positional .ps1 as implicit -File.
+  // It must receive the same preflight; skipping it would bypass the gate.
+  const implicitFile=index<0 && !args.some(a=>isPowerShellParameterAlias(a,'-command'))
+    ?args.find(a=>a.trim().toLowerCase().endsWith('.ps1')):undefined;
+  if(index<0&&!implicitFile)return;
+  const fileArg=index>=0?args[index+1]:implicitFile;
   const fail=(message:string):never=>{
     throw Object.assign(new Error(message),{
       code:'AI_PRIVATE_SHELL_SCRIPT_BROKER_NOT_AUDITED',
