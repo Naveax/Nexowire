@@ -65,20 +65,12 @@ export function assertNoObviousPrivateShellBrokerInvocation(
       'Combined CMD /C or /K launch argument is not audited for private GUI isolation.',
     ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
   }
-  const commandIndex=normalizedArgs.findIndex(x=>isPowerShell
-    ?isPowerShellParameterAlias(x,'-command')
-    :['/c','/k'].includes(x));
-  if(isPowerShell&&commandIndex>=0&&normalizedArgs[commandIndex]?.includes(':')){
-    throw Object.assign(new Error(
-      'Inline PowerShell -Command parameter cannot be audited for private GUI isolation.',
-    ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
-  }
-  if(isPowerShell && commandIndex<0 &&
-    !args.some(x=>isPowerShellParameterAlias(x,'-file'))){
-    // Windows PowerShell 5.1 accepts a positional command string without
-    // -Command (unlike some pwsh versions). Before that positional item,
-    // consume only known host switches and their literal argument values.
-    // An implicit .ps1 path is inspected by the script preflight below.
+  if(isPowerShell){
+    // The host determines execution mode by the *first* applicable
+    // argument. In Windows PowerShell 5.1, a positional command followed
+    // by -Command or -File still executes that earlier command text.
+    // Therefore never locate a later mode switch before verifying all
+    // preceding arguments are only legitimate host options.
     const valueless=[
       '-noprofile','-nologo','-noninteractive','-noexit',
       '-sta','-mta','-login','-noprofileloadtime',
@@ -91,6 +83,8 @@ export function assertNoObviousPrivateShellBrokerInvocation(
     for(let i=0;i<args.length;i++){
       const raw=args[i]?.trim()??'';
       const option=normalizedPowerShellOption(raw);
+      if(isPowerShellParameterAlias(option,'-command')||
+         isPowerShellParameterAlias(option,'-file'))break;
       if(valueless.some(x=>isPowerShellParameterAlias(option,x)))continue;
       if(valued.some(x=>isPowerShellParameterAlias(option,x))){
         if(raw.includes(':'))continue;
@@ -98,13 +92,27 @@ export function assertNoObviousPrivateShellBrokerInvocation(
         i++;
         continue;
       }
-      if(raw.toLowerCase().endsWith('.ps1')&&!raw.startsWith('-'))break;
+      // A script as the first positional item receives bounded .ps1
+      // preflight; a later host mode switch would obscure its meaning.
+      if(raw.toLowerCase().endsWith('.ps1')&&!raw.startsWith('-') &&
+         !args.slice(i+1).some(x=>
+           isPowerShellParameterAlias(x,'-command')||
+           isPowerShellParameterAlias(x,'-file')))break;
       throw Object.assign(new Error(
         'Positional or unrecognized PowerShell host invocation is not '+
         'audited for private GUI isolation; use explicit -Command or -File.',
       ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
     }
-  }  if(commandIndex<0||commandIndex+1>=args.length)return;
+  }
+  const commandIndex=normalizedArgs.findIndex(x=>isPowerShell
+    ?isPowerShellParameterAlias(x,'-command')
+    :['/c','/k'].includes(x));
+  if(isPowerShell&&commandIndex>=0&&normalizedArgs[commandIndex]?.includes(':')){
+    throw Object.assign(new Error(
+      'Inline PowerShell -Command parameter cannot be audited for private GUI isolation.',
+    ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
+  }
+  if(commandIndex<0||commandIndex+1>=args.length)return;
   const command=args.slice(commandIndex+1).join(' ');
   // CMD /S /C can wrap the full command in one or two leading quotes.
   // Inspect those prefixes at command boundaries, rather than silently

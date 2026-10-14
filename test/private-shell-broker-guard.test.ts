@@ -238,3 +238,19 @@ test('real DEV rejects implicit positional PowerShell command without creating p
     else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=previous;
   }
 });
+
+test('PowerShell mode switches appearing after positional execution cannot skip preflight',()=>{
+  for(const args of [
+    ['-NoProfile','Start-Process explorer.exe','-Command','Write-Output okay'],
+    ['-NoProfile','Start-Process explorer.exe','-File','C:\\NxNoSuchFile.ps1'],
+    ['-NonInteractive','Write-Output harmless','-Command','Write-Output okay'],
+    ['-NoProfile','Write-Output harmless','-File','C:\\NxNoSuchFile.ps1'],
+  ] as const){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation('powershell.exe',args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      args.join(' '),
+    );
+  }
+});
