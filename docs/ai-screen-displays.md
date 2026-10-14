@@ -627,6 +627,18 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## Process launch event target provenance
+
+New process session process.started event metadata always records the
+resolved uiTarget (headless or private_desktop). For private
+Win32 desktop sessions, the event additionally contains
+desktopName: NexowirePrivate. No raw command, worker authorization
+token, or full environment is added to these events.
+
+This records the **requested/resolved routing result**, not verified
+process-tree containment. A child process can still broker UI through
+Explorer/COM or other mechanisms; a separate guest/session boundary and
+owner Default HWND audits are still necessary for #402 acceptance.
 ## Explicit PowerShell -File broker preflight
 
 `NexowirePrivate` direct launches and short-lived private shell
