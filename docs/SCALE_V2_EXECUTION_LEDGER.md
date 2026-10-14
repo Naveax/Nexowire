@@ -73,6 +73,13 @@
 - **Important limit:** the associated refresh token can still mint a new access token. This is only a single-token denial primitive, **not** a full session logout, account-wide revoke, permission propagation, or distributed Worker/D1 race proof. In-flight operations prior to invalidation also need separate cancellation semantics.
 - See [S1 access-token invalidation contract](SCALE_V2_S1_ACCESS_TOKEN_INVALIDATION.md); S1 acceptance and production gates remain OPEN, full owner-authorized token-family revocation pending.
 
+## 2026-10-15 — S2 daily request quota proposal (simulation only)
+
+- `src/product/daily-quota-proposal.ts` models the proposed Free **1,000**, Plus **5,000**, Pro **10,000** accepted **logical hosted MCP tool invocations per UTC day**, plus an explicit finite negotiated Enterprise ceiling. This is intentionally distinct from both current 1,000 weighted **monthly** Free credits and the real number of Cloudflare Worker HTTP fetches.
+- The implementation is a bounded in-memory **simulation**, not a replacement or activation of D1/Worker/billing. Paid tiers require a test-only simulated trusted entitlement; future live entitlements must be issued by the server, never self-asserted by a user.
+- Single-process DEV **7/7** tests cover limits, UTC midnight, replay across days, independent owner keys, local 12-way same-ID replay, bounded-memory fail-closed handling, paid entitlement rejection and positive Enterprise quota validation.
+- Replay dedup across day rollover is essential: daily counters may reset while idempotency must persist. Real independent Worker/D1 atomic reservation, retention, provider cost envelopes, subscription verification and safe staged rollback remain **NOT IMPLEMENTED**. See [S2 quota definition](SCALE_V2_S2_DAILY_QUOTA_PROPOSAL.md); production remains Free-only monthly and checkout paused.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**
