@@ -13,16 +13,19 @@ import {runProcessWorker} from '../src/agent/process-worker.js';
 
 test('private worker desktop probe accepts only exact successful private identity',()=>{
   assert.doesNotThrow(()=>assertPrivateWorkerDesktopProbeResult({
-    status:0,stdout:'NexowirePrivate\r\n',
+    status:0,stdout:'WinSta0\\NexowirePrivate\r\n',
   }));
   for(const input of [
     {status:0,stdout:'Default'},
+    {status:0,stdout:'NexowirePrivate'},
+    {status:0,stdout:'AnotherStation\\NexowirePrivate'},
+    {status:0,stdout:'WinSta0\\Default'},
     {status:0,stdout:''},
-    {status:0,stdout:'NexowirePrivate\nDefault'},
-    {status:0,stdout:'NexowirePrivate_'},
-    {status:1,stdout:'NexowirePrivate'},
-    {status:null,stdout:'NexowirePrivate'},
-    {status:0,stdout:'NexowirePrivate',error:new Error('probe timeout')},
+    {status:0,stdout:'WinSta0\\NexowirePrivate\nDefault'},
+    {status:0,stdout:'WinSta0\\NexowirePrivate_'},
+    {status:1,stdout:'WinSta0\\NexowirePrivate'},
+    {status:null,stdout:'WinSta0\\NexowirePrivate'},
+    {status:0,stdout:'WinSta0\\NexowirePrivate',error:new Error('probe timeout')},
   ]){
     assert.throws(()=>assertPrivateWorkerDesktopProbeResult(input),
       (error:unknown)=>error instanceof PrivateWorkerDesktopIdentityError&&

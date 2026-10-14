@@ -631,10 +631,11 @@ isolation.
 
 Before its requested private child process is created, the durable
 worker launches a fixed first-party Windows PowerShell identity probe.
-The probe calls GetThreadDesktop and GetUserObjectInformation(UOI_NAME)
-to read its actual Win32 desktop attachment. Only the exact expected
-name NexowirePrivate is accepted. A missing, ambiguous or Default
-desktop name fails closed before control socket and status creation.
+The probe calls GetProcessWindowStation, GetThreadDesktop and
+GetUserObjectInformation(UOI_NAME) to read both actual Win32 user-object
+attachments. Only the exact expected WinSta0\NexowirePrivate pair is
+accepted. Any alternate window station, missing, ambiguous or Default
+desktop identity fails closed before control socket and status creation.
 
 Reviewed AI Screen native launch sink: the single fixed spawnSync
 in windows-private-worker-desktop-identity.ts invokes only the system
@@ -648,7 +649,7 @@ physical cursor or switch desktops. The probe's sanitized environment
 does not inherit arbitrary agent credentials. Normal headless durable
 processes retain their existing behavior without this check.
 
-This attests one actual helper child at startup. It does not prove
+This attests the window station and desktop of one actual helper child at startup. It does not prove
 that arbitrary later descendants cannot use COM, ShellExecute, UAC or
 other routes to display windows outside the private desktop. True
 independent session or guest isolation remains a P0 #402 requirement.

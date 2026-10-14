@@ -13,21 +13,24 @@ const definition=[
   'public static class NxPrivateDesktopProbe {',
   ' [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();',
   ' [DllImport("user32.dll")] public static extern IntPtr GetThreadDesktop(uint tid);',
+  ' [DllImport("user32.dll")] public static extern IntPtr GetProcessWindowStation();',
   ' [DllImport("user32.dll", CharSet=CharSet.Unicode,SetLastError=true)]',
   ' public static extern bool GetUserObjectInformation(IntPtr h,int index,StringBuilder b,int len,out int needed);',
-  ' public static string Current(){',
-  '  IntPtr d=GetThreadDesktop(GetCurrentThreadId());',
-  '  if(d==IntPtr.Zero)throw new Exception("NO_THREAD_DESKTOP");',
+  ' private static string Name(IntPtr d){',
+  '  if(d==IntPtr.Zero)throw new Exception("NO_USER_OBJECT");',
   '  int n;GetUserObjectInformation(d,2,null,0,out n);',
-  '  if(n<=0)throw new Exception("NO_DESKTOP_NAME_LENGTH");',
+  '  if(n<=0)throw new Exception("NO_NAME_LENGTH");',
   '  var b=new StringBuilder(n/2+4);',
-  '  if(!GetUserObjectInformation(d,2,b,b.Capacity*2,out n))throw new Exception("DESKTOP_NAME_UNAVAILABLE");',
+  '  if(!GetUserObjectInformation(d,2,b,b.Capacity*2,out n))throw new Exception("NAME_UNAVAILABLE");',
   '  return b.ToString();',
+  ' }',
+  ' public static string Current(){',
+  '  return Name(GetProcessWindowStation())+"\\\\"+Name(GetThreadDesktop(GetCurrentThreadId()));',
   ' }',
   '}',
 ].join('\n');
 
-test('DEV child process reports private desktop via Win32 GetThreadDesktop', {
+test('DEV child reports WinSta0 and private desktop via Windows user-object APIs', {
   skip:process.platform!=='win32'||process.env.NEXOWIRE_RUN_PRIVATE_DESKTOP_IDENTITY_LIVE!=='1',
   timeout:90_000,
 }, async(t)=>{
@@ -56,7 +59,7 @@ test('DEV child process reports private desktop via Win32 GetThreadDesktop', {
     '-NoProfile','-NonInteractive','-Command',command,
   ],{timeoutMs:30_000,maxOutputBytes:8192});
   assert.equal(result.exitCode,0,result.stderr);
-  assert.match(result.stdout,/THREAD_DESKTOP=NexowirePrivate/);
+  assert.match(result.stdout,/THREAD_DESKTOP=WinSta0\\NexowirePrivate/);
   const status=await executeWindowsPrivateDesktopCapability('windows.private_desktop.status',{}) as{
     data:{inputDesktop:string;running:boolean};
   };
