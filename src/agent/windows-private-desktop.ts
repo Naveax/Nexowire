@@ -564,7 +564,7 @@ $w = [NxDesktopNative]::Windows([string]$r.desktop)
 
 const inputHelperScript = String.raw`
 param(
-  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','accessibility_invoke_button','accessibility_set_edit_value','accessibility_set_checkbox','text','hotkey','close_window')]
+  [ValidateSet('pointer_move','pointer_click','pointer_scroll','controls','accessibility','accessibility_invoke_button','accessibility_set_edit_value','accessibility_set_checkbox','accessibility_select_radio','text','hotkey','close_window')]
   [string]$Action,
   [string]$Request,
   [string]$Response
@@ -672,10 +672,11 @@ try {
       truncated=[bool]$truncated
       inputDesktop=[NxDesktopNative]::Input()
     }
-  } elseif ($Action -in @('accessibility_invoke_button','accessibility_set_edit_value','accessibility_set_checkbox')) {
+  } elseif ($Action -in @('accessibility_invoke_button','accessibility_set_edit_value','accessibility_set_checkbox','accessibility_select_radio')) {
     $editMode=($Action -eq 'accessibility_set_edit_value')
     $checkboxMode=($Action -eq 'accessibility_set_checkbox')
-    $wantedType=if($editMode){'ControlType.Edit'}elseif($checkboxMode){'ControlType.CheckBox'}else{'ControlType.Button'}
+    $radioMode=($Action -eq 'accessibility_select_radio')
+    $wantedType=if($editMode){'ControlType.Edit'}elseif($checkboxMode){'ControlType.CheckBox'}elseif($radioMode){'ControlType.RadioButton'}else{'ControlType.Button'}
     # Explicit opt-in. Resolve, validate and invoke inside ONE private helper:
     # no RootElement, no physical focus/cursor, no generic cross-app UIA.
     $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
@@ -748,6 +749,14 @@ try {
       if($toggle.Current.ToggleState -ne $target){
         throw 'PRIVATE_UIA_CHECKBOX_POSTCONDITION_FAILED'
       }
+    }elseif($radioMode){
+      if(!$button.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern,[ref]$pattern)){
+        throw 'PRIVATE_UIA_SELECTION_ITEM_PATTERN_UNAVAILABLE'
+      }
+      $selection=[System.Windows.Automation.SelectionItemPattern]$pattern
+      # Only the element's own IsSelected is queried, never sibling labels or values.
+      if(!$selection.Current.IsSelected){$selection.Select()}
+      if(!$selection.Current.IsSelected){throw 'PRIVATE_UIA_RADIO_POSTCONDITION_FAILED'}
     }else{
       if(!$button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)){
         throw 'PRIVATE_UIA_INVOKE_PATTERN_UNAVAILABLE'
@@ -849,6 +858,7 @@ type PrivateInputAction =
   | 'accessibility_invoke_button'
   | 'accessibility_set_edit_value'
   | 'accessibility_set_checkbox'
+  | 'accessibility_select_radio'
   | 'text'
   | 'hotkey'
   | 'close_window';
@@ -1250,6 +1260,35 @@ async function setPrivateUiaCheckbox(input:unknown):Promise<{data:unknown}>{
       touchesSystemCursor:false,touchesSystemKeyboard:false,
       systemClipboardTouched:false,visibleDesktopChanged:false,
       actionScope:'EXPLICIT_SAME_PROCESS_PRIVATE_UIA_CHECKBOX_SET'}};
+  }catch(error){return remapPrivateInputError(error);}
+}
+const PrivateUiaSelectRadioSchema=z.object({
+  hwnd:WindowHandleSchema,
+  automation_id:z.string().min(1).max(128),
+  expected_class:z.string().min(1).max(128),
+}).strict();
+
+async function selectPrivateUiaRadio(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  await requireRunningPrivateDesktop();
+  const parsed=PrivateUiaSelectRadioSchema.parse(input);
+  try{
+    const result=z.object({
+      hwnd:WindowHandleSchema,
+      processId:z.number().int().positive(),
+      automationId:z.string().min(1).max(128),
+      controlType:z.literal('ControlType.RadioButton'),
+      actionCompleted:z.literal(true),
+      inputDesktop:z.string().max(256),
+    }).parse(await privateInputRequest('accessibility_select_radio',{
+      desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
+      automation_id:parsed.automation_id,
+      expected_class:parsed.expected_class,
+    },25_000));
+    return{data:{...result,selected:true,desktopName:DESKTOP_NAME,
+      touchesSystemCursor:false,touchesSystemKeyboard:false,
+      systemClipboardTouched:false,visibleDesktopChanged:false,
+      actionScope:'EXPLICIT_SAME_PROCESS_PRIVATE_UIA_RADIO_SELECT'}};
   }catch(error){return remapPrivateInputError(error);}
 }
 async function controls(input:unknown):Promise<{data:unknown}>{
@@ -1716,6 +1755,8 @@ export async function executeWindowsPrivateDesktopCapability(
       return await setPrivateUiaEditValue(input);
     case 'windows.private_desktop.accessibility.set_checkbox':
       return await setPrivateUiaCheckbox(input);
+    case 'windows.private_desktop.accessibility.select_radio':
+      return await selectPrivateUiaRadio(input);
     case 'windows.private_desktop.window.close':
       return await serializePrivateDesktopLifecycle(()=>privateWindowClose(input));
     case 'windows.private_desktop.show':
