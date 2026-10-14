@@ -1,5 +1,8 @@
 # Product control plane v0
 
+> **New SCALE v2 proposal (2026-10-14, NOT EFFECTIVE):** [Vision](SCALE_V2_VISION.md), [S1–S5 roadmap](SCALE_V2_ROADMAP.md), [daily quota/resource budget](SCALE_V2_QUOTA_AND_COST.md) and [connection/rollout](SCALE_V2_CONNECTION_ROLLOUT.md). The *initial monthly plan envelope* below is a prior design baseline. Current hosted effectiveness follows [Temporary Free-only policy](FREE_ONLY_POLICY.md), not that initial envelope. Target future Free 1,000 / Plus 5,000 / Pro 10,000 **daily** requests and Enterprise negotiated entitlements require code migration, live acceptance and separate owner activation. Paid checkout remains paused.
+
+
 Nexowire is moving from a single-owner self-hosted tool toward a multi-user product.
 
 ## Product rules
