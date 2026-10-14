@@ -429,6 +429,33 @@ private button by Automation ID and rejection of a missing ID.
 A subsequent UIA action backend will need its own authorization,
 in-process identity revalidation and isolation acceptance; this
 read-only selector grants none of those privileges.
+## Read-only observed private process ancestry audit
+
+`windows_private_desktop_process_audit` compares tracked
+`NexowirePrivate` shell and managed launch PIDs with a bounded
+`Win32_Process` CIM snapshot (up to 4096 processes) to report
+observed direct and transitive parent/child links. It reports up to
+128 descendant PIDs, suspected PID reuse, missing tracked roots,
+cross-session descendants, and inventory truncation. The native
+Windows process table is queried read-only; process names,
+executables, command lines and user-profile paths are **not
+collected or returned**.
+
+A live Windows DEV acceptance test verified that a Node process
+launched on the private desktop could spawn another Node process,
+which appeared in the ancestry report without switching the
+user's `Default` input desktop.
+
+Parent PID data is inherently non-authoritative once parents exit,
+PIDs may be reused, and inaccessible processes might be omitted.
+The report permanently marks
+`ancestryComplete:false`,
+`independentSessionVerified:false`,
+`physicalDesktopLeakageExcluded:false` and
+`noUntrackedChildrenProven:false`. An empty descendant list is
+never evidence of complete sandbox isolation. This audit does
+not modify Windows services, permissions, task scheduler,
+process lifetimes or session configuration.
 
 ## Capture contract
 

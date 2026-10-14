@@ -3717,6 +3717,19 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_process_audit',
+    {
+      title:'Audit observed private process parent links',
+      description:'Read-only bounded Win32_Process ancestry snapshot for private shell and managed roots. Reports observed descendants, cross-session differences and suspected PID reuse without revealing command lines, paths or process names. Cannot prove independent session, lack of Default-desktop GUI leakage or complete ancestry after parents exit.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_desktop.process_audit',{},
+      device_id,provider_id,45_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_desktop_window_audit',
     {
       title:'Audit observed private window process ownership',
