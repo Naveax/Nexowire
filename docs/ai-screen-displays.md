@@ -627,6 +627,29 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## One-shot private shell final child identity check
+
+The embedded one-shot private shell worker now attests its inherited
+Win32 desktop immediately before it spawns any user-requested command.
+A fixed, first-party, bounded PowerShell probe is embedded into the
+internally generated worker source at build/module initialization,
+not copied from caller-controlled input.json. Only the expected private
+desktop identity passes; a worker executed on the owner Default
+desktop fails closed, emits a bounded error result and never creates
+the requested child process. Normal headless shell and correctly
+attached private one-shot shell execution still work.
+
+The probe reuses the durable worker's constant command and narrow
+environment; it is not a user-selectable executable. The native launch
+inventory currently counts direct Node TypeScript callsites, not
+the generated worker.cjs spawn/spawnSync statements; those indirect
+runtime child launches remain separately documented and reviewed.
+
+Attesting one worker's startup attachment does not prove containment
+of any later COM/ShellExecute/UAC or arbitrary child process desktop.
+Independent Windows session or VM confinement is still required for
+full #402 acceptance.
+
 ## Windows browser DevTools startup acceptance
 
 BrowserManager.start treats a valid DevToolsActivePort file as a port
@@ -641,6 +664,7 @@ silently retried or skipped.
 This addresses intermittent hosted Windows runner saturation seen in
 PR #478 CI (BROWSER_DEVTOOLS_TIMEOUT); it is unrelated to and does not
 weaken the Windows private desktop station/desktop identity gate.
+
 ## Durable worker Windows desktop identity check
 
 Before its requested private child process is created, the durable

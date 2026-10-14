@@ -2,6 +2,10 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
+import {
+  PRIVATE_WORKER_DESKTOP_NAME,
+  PRIVATE_WORKER_DESKTOP_PROBE_ENCODED,
+} from './windows-private-worker-desktop-identity.js';
 import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 export {assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell-broker-guard.js';
 
@@ -16,7 +20,25 @@ export interface PrivateShellResult {
 const workerSource = String.raw`
 'use strict';
 const fs = require('node:fs');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
+const desktopName = ${JSON.stringify(PRIVATE_WORKER_DESKTOP_NAME)};
+const desktopProbe = ${JSON.stringify(PRIVATE_WORKER_DESKTOP_PROBE_ENCODED)};
+function assertWorkerDesktop(){
+  const result=spawnSync(
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',desktopProbe],
+    {shell:false,windowsHide:true,timeout:7000,maxBuffer:8192,
+     encoding:'utf8',env:{
+       SystemRoot:'C:\\Windows',windir:'C:\\Windows',
+       ComSpec:'C:\\Windows\\System32\\cmd.exe',
+       Path:'C:\\Windows\\System32;C:\\Windows',
+       PSModulePath:'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules',
+     }},
+  );
+  if(result.error || result.status!==0 || result.stdout.trim()!==desktopName){
+    throw new Error('PRIVATE_SHELL_WORKER_DESKTOP_UNVERIFIED');
+  }
+}
 (async function main(){
  const file = process.argv[2];
  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -46,6 +68,9 @@ const { spawn } = require('node:child_process');
    await fs.promises.rename(resultFile+'.tmp',resultFile);
  }
  try{
+   // This is the final one-shot child launch boundary: the parent's
+   // earlier argv gate cannot attest the worker's actual desktop.
+   assertWorkerDesktop();
    child=spawn(data.executable,data.args,{
      cwd:data.cwd || undefined,windowsHide:true,shell:false,
      env:data.env,
@@ -73,6 +98,10 @@ const { spawn } = require('node:child_process');
  }
 })().catch(error=>{process.stderr.write(String(error));process.exitCode=1;});
 `;
+
+// Expose a fixed source fixture for negative integration tests only.
+// Production workers are always generated internally and never accept code.
+export const privateShellWorkerSourceForTests=workerSource;
 
 /**
  * The private desktop helper deliberately has a system-only PATH. Restore
