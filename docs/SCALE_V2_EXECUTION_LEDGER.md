@@ -65,6 +65,14 @@
 - Windows DEV integrated rebase tests: 38/38 client/server, real SQLite D1, legacy MCP auth/metering and replay tests pass; `npm run typecheck` and `npm run build` pass. Persistent `test/fused-mcp-client-server-contract.test.ts` now covers one-call/one-reservation, concurrent replay, role denial, token revocation and exhausted quota. Before integration, require real OAuth/D1 and exact-head CI plus rollout gates in [client contract](SCALE_V2_S1_FUSED_CLIENT.md).
 - Work PC and Naveax existing native agents remain intended to be untouched; S1 not complete; S2-S5 planned; S6 parked.
 
+## 2026-10-15 — S1 owner-scoped access-token invalidation primitive (DEV only)
+
+- Added `McpOAuthService.invalidateAccessToken(accessToken, authenticatedAccountId)` and store implementations. D1 uses the **existing** access-token `expires_at` column, conditional on token hash, expected authenticated account ID and still-active expiry. No database migration, endpoint or production flag changes.
+- Current OAuth access-token authentication rejects the shortened expiry immediately on subsequent checks; 12 concurrent invalidation attempts on the real SQLite D1 adapter yield one successful UPDATE, with no cross-account effect.
+- Windows DEV: 18/18 targeted OAuth, D1 and fused authorization tests plus TypeScript and build PASS.
+- **Important limit:** the associated refresh token can still mint a new access token. This is only a single-token denial primitive, **not** a full session logout, account-wide revoke, permission propagation, or distributed Worker/D1 race proof. In-flight operations prior to invalidation also need separate cancellation semantics.
+- See [S1 access-token invalidation contract](SCALE_V2_S1_ACCESS_TOKEN_INVALIDATION.md); S1 acceptance and production gates remain OPEN, full owner-authorized token-family revocation pending.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**

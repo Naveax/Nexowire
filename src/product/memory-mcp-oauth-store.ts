@@ -72,6 +72,23 @@ export class MemoryMcpOAuthStore implements McpOAuthStore {
     this.accessTokens.set(record.tokenHash, clone(record));
   }
 
+  async invalidateAccessToken(
+    tokenHash: string,
+    expectedAccountId: string,
+    invalidatedAt: string,
+  ): Promise<boolean> {
+    const token = this.accessTokens.get(tokenHash);
+    if (
+      !token || token.accountId !== expectedAccountId ||
+      Date.parse(token.expiresAt) <= Date.parse(invalidatedAt)
+    ) return false;
+    this.accessTokens.set(tokenHash, {
+      ...token,
+      expiresAt: invalidatedAt,
+    });
+    return true;
+  }
+
   async getRefreshToken(
     tokenHash: string,
   ): Promise<McpRefreshTokenRecord | null> {
