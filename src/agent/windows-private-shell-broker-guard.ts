@@ -26,7 +26,9 @@ function isPowerShellParameterAlias(value:string,canonical:string):boolean{
 export function assertNoObviousPrivateShellBrokerInvocation(
   executable:string,args:readonly string[],
 ):void {
-  const name=path.win32.basename(executable.trim()).toLowerCase();
+  const name=path.win32.basename(
+    executable.trim().replace(/^["']|["']$/g,''),
+  ).toLowerCase();
   // The worker's child spawn is NOT routed through private_desktop.launch
   // and would otherwise bypass the direct-executable broker denylist.
   const directBrokers=new Set([
@@ -35,7 +37,8 @@ export function assertNoObviousPrivateShellBrokerInvocation(
     'fodhelper.exe','computerdefaults.exe','eventvwr.exe',
     'sdclt.exe','slui.exe','hh.exe',
   ]);
-  if(directBrokers.has(name)){
+  const executableName=path.win32.extname(name)?name:name+'.exe';
+  if(directBrokers.has(executableName)){
     throw Object.assign(new Error(
       'Private shell worker cannot launch a Windows GUI/COM broker directly.',
     ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
@@ -55,6 +58,52 @@ export function assertNoObviousPrivateShellBrokerInvocation(
       'Opaque or unsupported PowerShell execution mode is not audited for private GUI isolation.',
     ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
   }
+  // CMD permits /Ccommand and /Kcommand as single arguments. The opaque
+  // inline form cannot be safely segmented by our bounded parser.
+  if(isCmd && normalizedArgs.some(x=>/^\/[ck].+/i.test(x))){
+    throw Object.assign(new Error(
+      'Combined CMD /C or /K launch argument is not audited for private GUI isolation.',
+    ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
+  }
+  if(isPowerShell){
+    // The host determines execution mode by the *first* applicable
+    // argument. In Windows PowerShell 5.1, a positional command followed
+    // by -Command or -File still executes that earlier command text.
+    // Therefore never locate a later mode switch before verifying all
+    // preceding arguments are only legitimate host options.
+    const valueless=[
+      '-noprofile','-nologo','-noninteractive','-noexit',
+      '-sta','-mta','-login','-noprofileloadtime',
+    ];
+    const valued=[
+      '-executionpolicy','-inputformat','-outputformat',
+      '-configurationname','-configurationfile','-windowstyle',
+      '-workingdirectory','-version','-settingsfile','-psconsolefile',
+    ];
+    for(let i=0;i<args.length;i++){
+      const raw=args[i]?.trim()??'';
+      const option=normalizedPowerShellOption(raw);
+      if(isPowerShellParameterAlias(option,'-command')||
+         isPowerShellParameterAlias(option,'-file'))break;
+      if(valueless.some(x=>isPowerShellParameterAlias(option,x)))continue;
+      if(valued.some(x=>isPowerShellParameterAlias(option,x))){
+        if(raw.includes(':'))continue;
+        if(i+1>=args.length)break;
+        i++;
+        continue;
+      }
+      // A script as the first positional item receives bounded .ps1
+      // preflight; a later host mode switch would obscure its meaning.
+      if(raw.toLowerCase().endsWith('.ps1')&&!raw.startsWith('-') &&
+         !args.slice(i+1).some(x=>
+           isPowerShellParameterAlias(x,'-command')||
+           isPowerShellParameterAlias(x,'-file')))break;
+      throw Object.assign(new Error(
+        'Positional or unrecognized PowerShell host invocation is not '+
+        'audited for private GUI isolation; use explicit -Command or -File.',
+      ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
+    }
+  }
   const commandIndex=normalizedArgs.findIndex(x=>isPowerShell
     ?isPowerShellParameterAlias(x,'-command')
     :['/c','/k'].includes(x));
@@ -65,12 +114,19 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   }
   if(commandIndex<0||commandIndex+1>=args.length)return;
   const command=args.slice(commandIndex+1).join(' ');
-  const explicitBroker=/(?:^|[;&|\r\n])\s*(?:(?:&|call)\s+)?(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
-  const hostExecutable=/(?:^|[;&|\r\n])\s*(?:&\s*)?(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt)\.exe(?=\s|$|["'])/i;
+  // CMD /S /C can wrap the full command in one or two leading quotes.
+  // Inspect those prefixes at command boundaries, rather than silently
+  // accepting quoted start/explorer invocations.
+  const explicitBroker=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call)\s+)?["']*\s*(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
+  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt)(?:\.exe)?(?=\s|$|["'])/i;
+  // Recursive command interpreters are unbounded launch surfaces: the
+  // outer preflight cannot safely reason about a nested shell's arguments,
+  // its environment, or downstream GUI descendants.
+  const nestedShell=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call|@call)\s+)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:powershell|pwsh|cmd)(?:\.exe)?(?=\s|$|["'])/i;
   const runAs=/(?:^|\s)-Verb\s+(?:RunAs|RunAsUser)(?=\s|$|['"])/i;
   const shellObject=/\b(?:ShellExecute(?:Ex)?|Shell\.Application|WScript\.Shell)\b/i;
   const dotNetProcessStart=/\b(?:System\.Diagnostics\.Process|\[Diagnostics\.Process\])(?:::|\]::)Start\s*\(/i;
-  if([explicitBroker,hostExecutable,runAs,shellObject,dotNetProcessStart]
+  if([explicitBroker,hostExecutable,nestedShell,runAs,shellObject,dotNetProcessStart]
     .some(pattern=>pattern.test(command))){
     throw Object.assign(new Error(
       'Shell command contains a known Windows GUI/elevation broker. '+
