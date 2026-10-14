@@ -627,6 +627,34 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## Explicit PowerShell -File broker preflight
+
+`NexowirePrivate` direct launches and short-lived private shell
+workers perform an additional bounded static preflight for a
+literal `powershell.exe/pwsh.exe -File script.ps1` (or `-f`)
+invocation. The checked file must be a readable, regular,
+non-symlink local script no larger than 256 KiB. Its UTF-8
+or BOM-marked UTF-16LE text is passed through the existing
+high-confidence GUI/elevation broker command denylist before
+a private process is started. Unreadable or oversized scripts
+fail closed. The process manager also calls the same
+preflight when preparing its private durable worker.
+
+The Windows DEV acceptance verified that a script containing
+`Start-Process explorer.exe` was refused before launch
+while a harmless PowerShell `-File` script completed on
+`NexowirePrivate` without switching `Default`.
+Both paths have dedicated negative/positive tests.
+
+This is a **bounded static text check**, not a PowerShell parser,
+signature policy, content integrity guarantee or process sandbox.
+It cannot prove safety against script replacement between
+inspection and execution, dynamically constructed commands,
+nested imports, compiled executables or indirect
+`ShellExecute`/COM/UAC dispatch. Scripts that cannot be
+safely inspected must be rejected, not silently run on
+the owner's desktop. Transitive confinement remains open in #402.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.

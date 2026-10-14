@@ -7,6 +7,7 @@ import * as z from 'zod';
 import type { PathPolicy } from './path-policy.js';
 import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
 import {privateShellExecutionEnvironment,assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell.js';
+import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
@@ -781,8 +782,8 @@ export class ProcessManager {
     if(privateDesktop){
       // Durable worker's own spawn() otherwise bypasses the direct
       // private-desktop launcher broker denylist.
-      assertNoObviousPrivateShellBrokerInvocation(
-        shell.executable,shell.args,
+      await assertNoObviousPrivateShellScriptBrokerInvocation(
+        shell.executable,shell.args,cwd,
       );
     }
     const id = randomUUID();
