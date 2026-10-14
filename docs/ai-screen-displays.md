@@ -631,8 +631,11 @@ isolation.
 
 `NexowirePrivate` direct launches and short-lived private shell
 workers perform an additional bounded static preflight for a
-literal `powershell.exe/pwsh.exe -File script.ps1` (or `-f`)
-invocation. The checked file must be a readable, regular,
+literal `powershell.exe/pwsh.exe -File script.ps1` (or abbreviated
+`-F`, `-Fi`, `-Fil`) invocation. PowerShell `-Command` abbreviated options
+are checked using the same broker denylist; opaque encoded commands,
+unsupported `-CommandWithArgs` and inline command/file option values
+fail closed. The checked file must be a readable, regular,
 non-symlink local script no larger than 256 KiB. Its UTF-8
 or BOM-marked UTF-16LE text is passed through the existing
 high-confidence GUI/elevation broker command denylist before
