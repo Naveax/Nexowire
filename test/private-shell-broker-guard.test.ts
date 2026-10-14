@@ -166,3 +166,23 @@ test('real DEV rejects quoted CMD and nested interpreters before allocating priv
     else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=prior;
   }
 });
+
+test('extensionless Windows broker names are refused by shell preflight',()=>{
+  for(const [executable,args] of [
+    ['explorer',[]],
+    ['C:\\Windows\\explorer',[]],
+    ['control',[]],
+    ['rundll32',['shell32.dll,Control_RunDLL']],
+    ['cmd.exe',['/C','explorer']],
+    ['cmd.exe',['/C','"control"']],
+    ['powershell.exe',['-Command','& rundll32 shell32.dll,Control_RunDLL']],
+    ['pwsh.exe',['-Command','explorer']],
+  ] as const){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      executable+' '+args.join(' '),
+    );
+  }
+});

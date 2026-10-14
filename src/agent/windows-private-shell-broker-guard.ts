@@ -37,7 +37,8 @@ export function assertNoObviousPrivateShellBrokerInvocation(
     'fodhelper.exe','computerdefaults.exe','eventvwr.exe',
     'sdclt.exe','slui.exe','hh.exe',
   ]);
-  if(directBrokers.has(name)){
+  const executableName=path.win32.extname(name)?name:name+'.exe';
+  if(directBrokers.has(executableName)){
     throw Object.assign(new Error(
       'Private shell worker cannot launch a Windows GUI/COM broker directly.',
     ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
@@ -78,7 +79,7 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   // Inspect those prefixes at command boundaries, rather than silently
   // accepting quoted start/explorer invocations.
   const explicitBroker=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call)\s+)?["']*\s*(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
-  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt)\.exe(?=\s|$|["'])/i;
+  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt)(?:\.exe)?(?=\s|$|["'])/i;
   // Recursive command interpreters are unbounded launch surfaces: the
   // outer preflight cannot safely reason about a nested shell's arguments,
   // its environment, or downstream GUI descendants.

@@ -10,7 +10,8 @@ import {
 
 test('known shell, COM, UAC and installer brokers are blocked before any native launch',()=>{
   for(const executable of [
-    'explorer.exe','EXPLORER.EXE',
+    'explorer.exe','EXPLORER.EXE','explorer',
+    'C:\\Windows\\explorer','control','rundll32',
     'C:\\Windows\\explorer.exe',
     'C:/Windows/explorer.exe',
     '"C:\\Windows\\explorer.exe"',

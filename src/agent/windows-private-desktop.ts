@@ -1054,7 +1054,8 @@ export function assertNoPrivateDesktopBrokeredExecutable(
 ):void{
   const name=path.win32.basename(executable.trim()
     .replace(/^["']|["']$/g,'')).toLowerCase();
-  if(!PRIVATE_SHELL_BROKER_EXECUTABLES.has(name))return;
+  const executableName=path.win32.extname(name)?name:name+'.exe';
+  if(!PRIVATE_SHELL_BROKER_EXECUTABLES.has(executableName))return;
   throw new PrivateDesktopError(
     'PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED',
     'This Windows shell/COM/installer broker may create windows on the '+

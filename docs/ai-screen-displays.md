@@ -632,7 +632,7 @@ isolation.
 For #402, bounded private GUI shell preflight rejects CMD /C or /K
 command strings whose leading broker invocation is wrapped in Windows
 quoting, including cmd.exe /D /S /C with a quoted start command.
-It also refuses direct quoted GUI broker executable paths, recursively
+It also refuses direct quoted GUI broker executable paths and extensionless broker names (Windows PATHEXT), recursively
 invoked cmd, powershell or pwsh hosts at command boundaries, and opaque
 combined /Ccommand or /Kcommand arguments.
 
