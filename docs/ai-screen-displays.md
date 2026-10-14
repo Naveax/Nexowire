@@ -566,6 +566,30 @@ Automation IDs and wrong control types fail closed.
 This is not complete session, descendant-process or physical
 desktop isolation; #402 remains open.
 
+## Mixed private UIA vs. owner-input regression
+
+`test/private-uia-mixed-owner-isolation.test.ts` is a Windows DEV
+acceptance test for consecutive private WPF GUI operations. It
+creates a temporary private window with a Button, Edit, CheckBox
+and two RadioButtons, and exercises all four UIA action types in
+three successive cycles. The test verifies the app-side callback
+and output of each operation, and checks that the input desktop
+remains `Default` between cycles.
+
+In addition to API result flags, a **read-only** Win32 observer
+samples `GetCursorPos` and `GetForegroundWindow` before and
+after private actions. It fails if the DEV physical cursor or
+owner foreground HWND has changed. The observer never moves a
+cursor, sets focus or switches desktops. Because unrelated DEV
+user input would also cause a failure, the test should run on
+an unattended DEV/CI Windows session. The live three-cycle
+run passed.
+
+This is a bounded acceptance test, **not** proof of all
+intermediate events, transitive child-process confinement or
+an isolated virtual monitor/session. These remain distinct
+#402 release requirements.
+
 ## Capture contract
 
 `windows_private_screen_capture` renders only windows belonging to the `NexowirePrivate` Win32 desktop. It uses `PrintWindow` to compose a PNG; it **never uses a screenshot of the owner's Default desktop**. When the configured AI default target is `private_desktop`, the legacy `windows.screenshot` tool rejects physical/default desktop screenshots with `AI_PHYSICAL_SCREEN_CAPTURE_NOT_ISOLATED`. The AI should use `windows.private_screen.capture` instead; without a selector it captures all private-screen monitor regions. Legacy physical capture remains available only outside private AI default mode.
