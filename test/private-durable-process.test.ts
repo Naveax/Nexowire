@@ -36,7 +36,8 @@ test('durable process uses independent Win32 desktop with persistent stdin and n
     workerEntrypoint:path.resolve('src/cli.ts'),
     workerExecArgv:process.execArgv,
   };
-  const manager=new ProcessManager(options);
+  const emitted:Array<{topic:string;data:Record<string,unknown>}>=[];
+  const manager=new ProcessManager({...options,onEvent:event=>emitted.push(event)});
   let restored:ProcessManager|undefined;
   let sessionId:string|undefined;
   try{
@@ -50,6 +51,11 @@ test('durable process uses independent Win32 desktop with persistent stdin and n
     sessionId=started.sessionId;
     assert.equal(started.durable,true);
     assert.equal(started.uiTarget,'private_desktop');
+    const startedEvent=emitted.find(event=>event.topic==='process.started');
+    assert.ok(startedEvent,'A private durable start must produce a launch event');
+    assert.equal(startedEvent.data.uiTarget,'private_desktop');
+    assert.equal(startedEvent.data.desktopName,'NexowirePrivate');
+    assert.equal('command' in startedEvent.data,false);
     assert.equal(started.desktopName,'NexowirePrivate');
     assert.equal(started.reattachable,true);
     assert.equal(started.interactive,true);

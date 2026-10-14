@@ -217,4 +217,6 @@ test('process manager emits bounded process events without command payloads', as
   const startedEvent = emitted.find((event) => event.topic === 'process.started');
   assert.ok(startedEvent);
   assert.equal('command' in startedEvent.data, false);
+  assert.equal(startedEvent.data.uiTarget,'headless');
+  assert.equal('desktopName' in startedEvent.data,false);
 });

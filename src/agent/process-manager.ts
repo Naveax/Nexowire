@@ -964,6 +964,10 @@ export class ProcessManager {
         ...(session.cwd ? { cwd: session.cwd } : {}),
         startedAt: session.startedAt,
         durable: true,
+        uiTarget:session.uiTarget ?? 'headless',
+        ...(session.uiTarget==='private_desktop'?{
+          desktopName:'NexowirePrivate',
+        }:{}),
       },
     });
     this.startDurableMonitor(session);
@@ -1031,6 +1035,7 @@ export class ProcessManager {
         shell: session.shell,
         ...(session.cwd ? { cwd: session.cwd } : {}),
         startedAt: session.startedAt,
+        uiTarget:'headless',
       },
     });
 
