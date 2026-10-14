@@ -3744,6 +3744,26 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_accessibility_set_checkbox',
+    {
+      title:'Set verified private UIA checkbox state',
+      description:
+        'Explicit mutating action for a unique same-PID private UIA CheckBox with exact automation_id and expected_class. Set desired checked boolean using TogglePattern only when necessary, verify postcondition, refuse inaccessible/ambiguous/indeterminate targets. No physical cursor, keyboard or host clipboard. App side effects possible.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        automation_id:z.string().min(1).max(128),
+        expected_class:z.string().min(1).max(128),
+        checked:z.boolean(),
+      },
+    },
+    async ({device_id,provider_id,hwnd,automation_id,expected_class,checked})=>
+      await execute(ctx,'windows.private_desktop.accessibility.set_checkbox',{
+        hwnd,automation_id,expected_class,checked,
+      },device_id,provider_id,45_000),
+  );
+
+  server.registerTool(
     'windows_private_desktop_accessibility_set_edit_value',
     {
       title:'Set value on verified private UIA Edit',
