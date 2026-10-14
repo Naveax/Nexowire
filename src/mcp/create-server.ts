@@ -3717,6 +3717,20 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'windows_private_desktop_owner_gui_audit',
+    {
+      title:'Inspect observed private-process windows on Default desktop',
+      description:
+        'Read-only bounded enumeration of top-level HWND owner PIDs on the calling window station Default desktop, filtered to observed private shell/launched process descendants. No window titles, contents, focus changes or physical input. Positive matches warn of potential escape; empty results NEVER prove isolation, owner session identity or absence of transient/COM/UAC windows.',
+      inputSchema:{...targetFields},
+    },
+    async ({device_id,provider_id})=>await execute(
+      ctx,'windows.private_desktop.owner_gui_audit',{},
+      device_id,provider_id,60_000,
+    ),
+  );
+
+  server.registerTool(
     'windows_private_desktop_process_audit',
     {
       title:'Audit observed private process parent links',

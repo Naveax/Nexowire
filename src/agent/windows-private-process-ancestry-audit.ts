@@ -128,6 +128,25 @@ $items=@($rows|Where-Object {[int]$_.ProcessId -gt 0}|Select-Object -First 4096|
 @{processes=$items;inventoryTruncated=($count -gt 4096)}|ConvertTo-Json -Depth 5 -Compress
 `;
 
+/**
+ * Centralized read-only native Windows audit helper. This is not a GUI
+ * sandbox: callers must provide only internal, constant inspection scripts.
+ */
+export async function runReadOnlyWindowsAuditPowerShell(
+  script:string,
+  extraEnvironment:Record<string,string>={},
+  timeoutMs=15_000,
+  maxBufferBytes=1_500_000,
+):Promise<string>{
+  const{stdout}=await execFileAsync('powershell.exe',[
+    '-NoLogo','-NoProfile','-NonInteractive','-Command',script,
+  ],{
+    windowsHide:true,timeout:timeoutMs,maxBuffer:maxBufferBytes,
+    env:{...process.env,...extraEnvironment},
+  });
+  return stdout;
+}
+
 export async function inspectWindowsPrivateProcessAncestry(){
   if(process.platform!=='win32')throw new Error('Windows process ancestry is Windows-only.');
   const first=await executeWindowsPrivateDesktopCapability(
@@ -140,9 +159,7 @@ export async function inspectWindowsPrivateProcessAncestry(){
       code:'PRIVATE_PROCESS_AUDIT_NOT_RUNNING',
     });
   }
-  const{stdout}=await execFileAsync('powershell.exe',[
-    '-NoLogo','-NoProfile','-NonInteractive','-Command',windowsCimScript,
-  ],{windowsHide:true,timeout:15_000,maxBuffer:1_500_000});
+  const stdout=await runReadOnlyWindowsAuditPowerShell(windowsCimScript);
   const second=await executeWindowsPrivateDesktopCapability(
     'windows.private_desktop.status',{},
   ) as{data:unknown};
