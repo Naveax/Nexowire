@@ -186,3 +186,55 @@ test('extensionless Windows broker names are refused by shell preflight',()=>{
     );
   }
 });
+
+test('PowerShell implicit positional command text is rejected before private execution',()=>{
+  for(const [executable,args] of [
+    ['powershell.exe',['-NoProfile','-NonInteractive','Start-Process explorer.exe']],
+    ['powershell.exe',['-NoProfile','Write-Output safe-but-uninspected']],
+    ['powershell.exe',['-ExecutionPolicy','Bypass','Invoke-Item .\\example.txt']],
+    ['pwsh.exe',['-NoProfile','Start-Process explorer.exe']],
+    ['powershell.exe',['-NoProfile','-UnknownOption','hello']],
+  ] as const){
+    assert.throws(
+      ()=>assertNoObviousPrivateShellBrokerInvocation(executable,args),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+      executable+' '+args.join(' '),
+    );
+  }
+});
+
+test('unambiguous PowerShell host switches without executable payload stay eligible',()=>{
+  for(const args of [
+    ['-NoProfile','-NonInteractive','-NoLogo'],
+    ['-NoProfile','-ExecutionPolicy','Bypass'],
+    ['-NoProfile','-WindowStyle','Hidden'],
+    ['-NoProfile','-InputFormat','Text','-OutputFormat','Text'],
+  ] as const){
+    assert.doesNotThrow(
+      ()=>assertNoObviousPrivateShellBrokerInvocation('powershell.exe',args),
+    );
+  }
+});
+
+test('real DEV rejects implicit positional PowerShell command without creating private state',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const root=path.join(os.tmpdir(),'nx-private-ps-positional-gate-'+process.pid);
+  await fs.rm(root,{recursive:true,force:true});
+  const previous=process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+  process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=root;
+  try{
+    await assert.rejects(runWindowsPrivateShell('powershell.exe',[
+      '-NoProfile','-NonInteractive','Start-Process explorer.exe',
+    ],{timeoutMs:8000,maxOutputBytes:4096}),
+    (error:unknown)=>error instanceof Error&&'code' in error&&
+      error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED');
+    await assert.rejects(fs.access(root),
+      (error:unknown)=>error instanceof Error&&'code' in error&&
+        error.code==='ENOENT');
+  }finally{
+    if(previous===undefined)delete process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
+    else process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR=previous;
+  }
+});

@@ -73,7 +73,38 @@ export function assertNoObviousPrivateShellBrokerInvocation(
       'Inline PowerShell -Command parameter cannot be audited for private GUI isolation.',
     ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
   }
-  if(commandIndex<0||commandIndex+1>=args.length)return;
+  if(isPowerShell && commandIndex<0 &&
+    !args.some(x=>isPowerShellParameterAlias(x,'-file'))){
+    // Windows PowerShell 5.1 accepts a positional command string without
+    // -Command (unlike some pwsh versions). Before that positional item,
+    // consume only known host switches and their literal argument values.
+    // An implicit .ps1 path is inspected by the script preflight below.
+    const valueless=[
+      '-noprofile','-nologo','-noninteractive','-noexit',
+      '-sta','-mta','-login','-noprofileloadtime',
+    ];
+    const valued=[
+      '-executionpolicy','-inputformat','-outputformat',
+      '-configurationname','-configurationfile','-windowstyle',
+      '-workingdirectory','-version','-settingsfile','-psconsolefile',
+    ];
+    for(let i=0;i<args.length;i++){
+      const raw=args[i]?.trim()??'';
+      const option=normalizedPowerShellOption(raw);
+      if(valueless.some(x=>isPowerShellParameterAlias(option,x)))continue;
+      if(valued.some(x=>isPowerShellParameterAlias(option,x))){
+        if(raw.includes(':'))continue;
+        if(i+1>=args.length)break;
+        i++;
+        continue;
+      }
+      if(raw.toLowerCase().endsWith('.ps1')&&!raw.startsWith('-'))break;
+      throw Object.assign(new Error(
+        'Positional or unrecognized PowerShell host invocation is not '+
+        'audited for private GUI isolation; use explicit -Command or -File.',
+      ),{code:'AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'});
+    }
+  }  if(commandIndex<0||commandIndex+1>=args.length)return;
   const command=args.slice(commandIndex+1).join(' ');
   // CMD /S /C can wrap the full command in one or two leading quotes.
   // Inspect those prefixes at command boundaries, rather than silently

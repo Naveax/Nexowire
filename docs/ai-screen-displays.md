@@ -639,7 +639,7 @@ combined /Ccommand or /Kcommand arguments.
 This deliberately fails closed for nested interpreters, even for an
 apparently harmless nested command, since the parent preflight cannot audit
 their environment or transitive GUI descendants. Ordinary cmd /C echo
-and direct PowerShell inspection remain supported. This is bounded
+and direct PowerShell inspection remain supported. Windows PowerShell 5.1 also allows implicit positional command strings without -Command; those are now refused unless a bounded implicit .ps1 script path is available for preflight. Use explicit -Command or -File. This is bounded
 static text matching, not a Windows command interpreter, native child
 confinement, or secure independent-session sandbox.
 ## Explicit PowerShell -File broker preflight
