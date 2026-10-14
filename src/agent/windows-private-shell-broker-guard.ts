@@ -4,7 +4,7 @@ import {promises as fs} from 'node:fs';
 // Windows PowerShell accepts abbreviated host parameters (e.g. -Fi/-Co).
 // Always interpret the same prefix as the host before applying our denylist.
 function isPowerShellParameterAlias(value:string,canonical:string):boolean{
-  const option=value.trim().toLowerCase().split(':',1)[0];
+  const option=value.trim().toLowerCase().split(':',1)[0]??'';
   return option.startsWith('-')&&option.length>=2&&canonical.startsWith(option);
 }
 
