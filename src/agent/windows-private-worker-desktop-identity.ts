@@ -1,6 +1,6 @@
 import {spawnSync} from 'node:child_process';
 
-export const PRIVATE_WORKER_DESKTOP_NAME='NexowirePrivate';
+export const PRIVATE_WORKER_DESKTOP_NAME='WinSta0\\NexowirePrivate';
 
 export class PrivateWorkerDesktopIdentityError extends Error {
   readonly code='PRIVATE_PROCESS_WORKER_DESKTOP_UNVERIFIED';
@@ -11,8 +11,8 @@ export class PrivateWorkerDesktopIdentityError extends Error {
 }
 
 // Fixed first-party probe only. The PowerShell child inherits the worker's
-// window station/desktop; Windows GetThreadDesktop then observes the actual
-// child thread attachment without inspecting the owner's windows or input.
+// window station/desktop; GetProcessWindowStation and GetThreadDesktop observe the
+// child station and thread attachment without inspecting the owner's windows or input.
 const probe=[
   "$ErrorActionPreference='Stop'",
   "$ProgressPreference='SilentlyContinue'",
@@ -23,17 +23,20 @@ const probe=[
   'public static class NxWorkerDesktopIdentity {',
   ' [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();',
   ' [DllImport("user32.dll")] public static extern IntPtr GetThreadDesktop(uint tid);',
+  ' [DllImport("user32.dll")] public static extern IntPtr GetProcessWindowStation();',
   ' [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)]',
   ' public static extern bool GetUserObjectInformation(IntPtr h,int index,StringBuilder b,int len,out int needed);',
-  ' public static string Current() {',
-  '  var d=GetThreadDesktop(GetCurrentThreadId());',
-  '  if(d==IntPtr.Zero)throw new Exception("NO_THREAD_DESKTOP");',
-  '  int n;GetUserObjectInformation(d,2,null,0,out n);',
-  '  if(n<=0)throw new Exception("NO_DESKTOP_NAME_LENGTH");',
+  ' private static string Name(IntPtr h) {',
+  '  if(h==IntPtr.Zero)throw new Exception("NO_USER_OBJECT_HANDLE");',
+  '  int n;GetUserObjectInformation(h,2,null,0,out n);',
+  '  if(n<=0)throw new Exception("NO_USER_OBJECT_NAME_LENGTH");',
   '  var b=new StringBuilder(n/2+4);',
-  '  if(!GetUserObjectInformation(d,2,b,b.Capacity*2,out n))',
-  '    throw new Exception("DESKTOP_NAME_QUERY_FAILED");',
+  '  if(!GetUserObjectInformation(h,2,b,b.Capacity*2,out n))',
+  '    throw new Exception("USER_OBJECT_NAME_QUERY_FAILED");',
   '  return b.ToString();',
+  ' }',
+  ' public static string Current() {',
+  '  return Name(GetProcessWindowStation())+"\\\\"+Name(GetThreadDesktop(GetCurrentThreadId()));',
   ' }',
   '}',
   "'@",
@@ -52,7 +55,7 @@ export function assertPrivateWorkerDesktopProbeResult(
   if(input.error||input.status!==0||
      input.stdout.trim()!==PRIVATE_WORKER_DESKTOP_NAME){
     throw new PrivateWorkerDesktopIdentityError(
-      'Private durable worker child desktop identity was not verified; '+
+      'Private durable worker child window station and desktop identity was not verified; '+
       'refusing requested process spawn.',
     );
   }

@@ -1769,7 +1769,10 @@ export class BrowserManager {
     stderr: () => string,
   ): Promise<number> {
     const file = path.join(userDataDir, 'DevToolsActivePort');
-    const deadline = Date.now() + 15_000;
+    // The DevToolsActivePort marker is written before the HTTP target
+    // listing necessarily responds. Require a real bounded HTTP response
+    // so callers never receive a session that is only half-started.
+    const deadline = Date.now() + 25_000;
 
     while (Date.now() < deadline) {
       if (!isAlive(child)) {
@@ -1791,7 +1794,18 @@ export class BrowserManager {
           port > 0 &&
           port <= 65_535
         ) {
-          return port;
+          try {
+            const targets=await fetch(
+              'http://127.0.0.1:'+port+'/json/list',
+              {signal:AbortSignal.timeout(1_200)},
+            );
+            if(targets.ok && Array.isArray(await targets.json())){
+              return port;
+            }
+          }catch{
+            // Edge may have created its port file before its CDP server
+            // accepts connections. Continue until the bounded deadline.
+          }
         }
       } catch {
         // DevToolsActivePort has not appeared yet.
@@ -1801,7 +1815,7 @@ export class BrowserManager {
 
     throw new BrowserControlError(
       'BROWSER_START_TIMEOUT',
-      'Timed out waiting for Browser DevTools startup.',
+      'Timed out waiting for a responsive Browser DevTools HTTP target list.',
       { stderr: stderr().slice(-4000) },
     );
   }
