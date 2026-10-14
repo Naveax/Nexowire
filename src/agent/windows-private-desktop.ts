@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import {withPrivateDesktopProcessLock} from './windows-private-desktop-lock.js';
-import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
+import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation,isPrivateGuiBrokerExecutable} from './windows-private-shell-broker-guard.js';
 
 const PRIVATE_DESKTOP_SYSTEM32='C:\\Windows\\System32';
 const PRIVATE_DESKTOP_POWERSHELL=PRIVATE_DESKTOP_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -1032,30 +1032,12 @@ async function resolveExecutable(executable: string): Promise<string> {
  * Block known broker entry points, not all applications. Scripted
  * ShellExecute/COM children are not yet fully contained by this check.
  */
-const PRIVATE_SHELL_BROKER_EXECUTABLES=new Set([
-  'explorer.exe',
-  'control.exe',
-  'rundll32.exe',
-  'dllhost.exe',
-  'mshta.exe',
-  'wscript.exe',
-  'cscript.exe',
-  'msiexec.exe',
-  'fodhelper.exe',
-  'computerdefaults.exe',
-  'eventvwr.exe',
-  'sdclt.exe',
-  'slui.exe',
-  'hh.exe',
-]);
-
 export function assertNoPrivateDesktopBrokeredExecutable(
   executable:string,
 ):void{
   const name=path.win32.basename(executable.trim()
     .replace(/^["']|["']$/g,'')).toLowerCase();
-  const executableName=path.win32.extname(name)?name:name+'.exe';
-  if(!PRIVATE_SHELL_BROKER_EXECUTABLES.has(executableName))return;
+  if(!isPrivateGuiBrokerExecutable(executable))return;
   throw new PrivateDesktopError(
     'PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED',
     'This Windows shell/COM/installer broker may create windows on the '+
