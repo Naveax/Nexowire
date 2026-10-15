@@ -97,6 +97,14 @@
 - **Critical open gate**: daily logical request reservations and existing monthly weighted usage charge are not yet one atomic decision. Do not activate until a transactionally proven dual-charge, separate paid-plan lifecycle authority, real multi-Worker D1 contention and provider limits, owner-approved staging and explicit rollback.
 - See [S2 trusted entitlement contract](SCALE_V2_S2_TRUSTED_ENTITLEMENT.md). S2 #484 remains OPEN; Free-only monthly policy, paid billing pause, original Agents and #271 privileged hold unchanged.
 
+## 2026-10-15 — S2 combined UTC daily and legacy monthly atomic quota (DEV)
+
+- Added `src/product/dual-quota-d1-proposal.ts` and `test/fixtures/scale-v2-dual-quota-staging.sql`, staging-only standalone and **NOT in deployed `cloudflare/migrations/`**. One top-level SQLite `INSERT` and nested trigger write both S2 UTC daily invocation events and existing monthly weighted-credit events **atomically**: either both counters and event ledgers update or neither.
+- DEV file-backed SQLite tests use two separately opened connections: 1 daily call + 5 weighted credits; monthly limit rejection fully rolls back daily, and daily rejection fully rolls back monthly; 16-way same-ID replay admits once; 12-way distinct IDs at 999/1000 admits once; UTC day/month rollover replay and owner isolation; backend outage fails closed.
+- Standalone Windows DEV **11/11** tests and TypeScript PASS after adding legacy monthly-only and daily-only event collision rollback assertions. The earlier full 46/46 regression passed before these two additions; exact combined rerun is required. Full combined regression/build, exact GitHub CI and parent PR #498 status to be checked before any merge.
+- **Critical gate:** no production integration; trusted monthly tool quote and paid owner entitlements must come from first-party services. All old admission routes must be reconciled before activation or bypass remains possible. Existing monthly-weighted and proposed daily quota cannot be separately charged in live traffic.
+- Cloudflare independent Worker/D1 transactional behavior, real token-family revocation, provider row costs and signed canary rollback unverified. See [dual atomic S2 contract](SCALE_V2_S2_DUAL_ATOMIC_QUOTA.md). Both Native Agents and paused paid billing are untouched; S2 remains OPEN.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**
