@@ -1,6 +1,6 @@
 # Scale v2 S1: one-statement epoch-bound refresh rotation (DEV/STAGING)
 
-**2026-10-15 | Issue #483 | Draft stacked on PR #503.** This is a deliberately UNWIRED experimental implementation. It is NOT a production OAuth endpoint, paid feature, Cloudflare D1 migration or Agent update.
+**2026-10-15 | Issue #483 | Draft PR #504, rebased onto merged PR #503.** This is a deliberately UNWIRED experimental implementation. It is NOT a production OAuth endpoint, paid feature, Cloudflare D1 migration or Agent update.
 
 ## Defect addressed
 
@@ -19,10 +19,11 @@ Any rejection, duplicate old refresh hash, concurrent logout, stale epoch, uniqu
 
 ## Windows DEV proof
 
-`test/mcp-oauth-atomic-epoch-refresh-staging.test.ts` has 8 tests:
+`test/mcp-oauth-atomic-epoch-refresh-staging.test.ts` has 9 tests:
 
 - Successful one-step generation-2 rotation creates one usable access token and one new refresh token, preserving scope.
 - Repeated and 16 simultaneous same-refresh attempts mint **one** pair.
+- Two independently opened connections to the same WAL-backed SQLite file race the same refresh: exactly one pair is issued and only one old refresh is consumed. This is still NOT independent Cloudflare Workers.
 - Forged OAuth client/resource cannot charge/issue, and logout/epoch rollover prevents stale rotation.
 - A deliberately colliding next access-token hash **rolls back** prior refresh consumption and both new token writes.
 - When a fake provider reports a missing acknowledgement **after committing**, no success/token is returned and a second call is refused.

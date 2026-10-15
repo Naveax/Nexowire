@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {DatabaseSync,type StatementSync} from 'node:sqlite';
-import {readFileSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   type D1DatabaseLike,type D1PreparedStatementLike,type D1ResultLike,
@@ -39,8 +40,10 @@ const resource='https://mcp.example.test/mcp';
 const scope='["mcp","offline_access"]';
 const refresh=(suffix:string)=>'nwx_refresh_'+suffix.repeat(44);
 async function fixture(){
-  const sqlite=new DatabaseSync(':memory:');
-  sqlite.exec('PRAGMA foreign_keys=ON');
+  const directory=mkdtempSync(path.join(os.tmpdir(),'nwx-oauth-atomic-refresh-'));
+  const filename=path.join(directory,'refresh.sqlite');
+  const sqlite=new DatabaseSync(filename);
+  sqlite.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000');
   for(const file of ['0001_control_plane.sql','0002_external_identities.sql',
     '0003_quota_subject_device_anchor.sql','0004_device_credential_lookup.sql','0005_mcp_oauth.sql']){
     sqlite.exec(readFileSync(path.join(process.cwd(),'cloudflare/migrations',file),'utf8'));
@@ -73,6 +76,9 @@ async function fixture(){
       .run(hash(token),clientId,owner,resource,scope,'2026-10-16T00:00:00.000Z',
         null,'2026-10-15T12:00:00.000Z',generation);
   };
+  const concurrentSqlite=new DatabaseSync(filename);
+  concurrentSqlite.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000');
+  const concurrentDb=new Adapter(concurrentSqlite);
   const api=new ProposedMcpOAuthEpochAtomicRefresh({db,resource,now:()=>at});
   const oauth=new McpOAuthService(new D1McpOAuthStore(db),{
     issuer:'https://auth.example.test',resource,now:()=>at,
@@ -84,7 +90,8 @@ async function fixture(){
     'SELECT * FROM mcp_oauth_refresh_tokens WHERE token_hash=?',
   ).get(hash(token)) as Record<string,unknown>|undefined;
   const count=(table:string)=>(sqlite.prepare('SELECT COUNT(*) AS n FROM '+table).get() as {n:number}).n;
-  return {db,sqlite,epoch,api,oauth,start,seed,rotate,row,count,close(){sqlite.close()}};
+  return {db,concurrentDb,sqlite,epoch,api,oauth,start,seed,rotate,row,count,
+    close(){concurrentSqlite.close();sqlite.close();rmSync(directory,{recursive:true,force:true})}};
 }
 
 test('one atomic rotation issues usable access+refresh at current trusted epoch',async()=>{
@@ -122,6 +129,26 @@ test('16 simultaneous identical refresh requests mint exactly one pair',async()=
     const responses=await Promise.allSettled(Array.from({length:16},()=>f.rotate(token)));
     assert.equal(responses.filter(r=>r.status==='fulfilled').length,1);
     assert.equal(responses.filter(r=>r.status==='rejected').length,15);
+    assert.equal(f.count('mcp_oauth_epoch_refresh_rotations'),1);
+    assert.equal(f.count('mcp_oauth_access_tokens'),1);
+    assert.equal(f.count('mcp_oauth_refresh_tokens'),2);
+  }finally{f.close()}
+});
+
+test('two independent file-backed SQLite connections admit one atomic refresh only',async()=>{
+  const f=await fixture();try{
+    await f.start();
+    const token=refresh('J');f.seed(token);
+    const second=new ProposedMcpOAuthEpochAtomicRefresh({
+      db:f.concurrentDb,resource,now:()=>at,
+    });
+    const decisions=await Promise.allSettled([
+      f.rotate(token),
+      second.rotate({refreshToken:token,clientId,requestedResource:resource}),
+    ]);
+    assert.equal(decisions.filter(x=>x.status==='fulfilled').length,1);
+    assert.equal(decisions.filter(x=>x.status==='rejected').length,1);
+    assert.equal(f.row(token)?.revoked_at,at.toISOString());
     assert.equal(f.count('mcp_oauth_epoch_refresh_rotations'),1);
     assert.equal(f.count('mcp_oauth_access_tokens'),1);
     assert.equal(f.count('mcp_oauth_refresh_tokens'),2);
