@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — Z1 local-first MCP loopback ingress (DEV only)
+
+- Isolated branch feat/scale-v2-local-first-ingress-20261015 based on verified main e0bdb80a460eea425aab301ccb45773358c604ca, no active Agent/Hub/Worker deployment. Added opt-in nexowire local-first ingress CLI and src/mcp/local-first-ingress.ts.
+- Local-only new ingress at 127.0.0.1:43111 to existing authenticated local Hub at 127.0.0.1:43110, permits only POST /mcp and protected-resource metadata GET; rejects /agent websocket, admin, encoded/query paths, invalid Host/Origin, missing bearer, oversized/concurrent requests and missing Hub. No direct public DNS/tunnel or duplicate Agent started.
+- Public-host option requires exact configured HTTPS OAuth resource plus remote metering and read-only existing local Hub OAuth metadata proof. This does NOT prove actual Cloudflare tunnel, token validation, paid plan or any authenticated off-network ChatGPT connection; no permanent hostname yet.
+- New Windows isolated HTTP tests 11/11 PASS, TypeScript/build PASS. More tests and GitHub exact-head CI pending before acceptance. Docs: docs/SCALE_V2_LOCAL_FIRST_REMOTE_INGRESS.md.
+- NO-GO: no one-click tunnel, per-PC multi-tenant onboarding, trusted local-only commercial quota (tamperable), off-network authorization, global load soak, zero-bill proof, production canary, or in-flight Agent revoke. Existing Free-only monthly policy, both connected Agent v1.0.5 and native Hub/Broker untouched.
+
+
 ## 2026-10-15 — S1 epoch-sensitive access-token verification (isolated DEV)
 
 - Base is verified post-PR #504 main `cf8fc4cdb166f375a1f8dc4e26154550a67d0564`. Worktree `Nexowire-scale-v2-s1-epoch-access-verifier-20261015`, branch `test/scale-v2-s1-epoch-access-verifier-20261015`.
