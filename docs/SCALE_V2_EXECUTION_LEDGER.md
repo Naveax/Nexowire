@@ -88,6 +88,15 @@
 - Local typecheck/build and **26/26** combined S1/S2 regression tests were green before the final staging-fixture placement revision; exact test/CI outcome to be recorded separately. Full Cloudflare independent Worker-D1 transactions, billable rows, owner-authenticated paid plans and cross-Worker latency remain unverified. See [S2 atomic daily design](SCALE_V2_S2_ATOMIC_D1_LEDGER.md).
 - Requires owner-approved staged migration review and rollback before any activation. Existing production monthly Free-only policy, billing pause, and original Agent routes remain unchanged.
 
+## 2026-10-15 — S2 trusted plan authorization and D1 preflight (isolated DEV)
+
+- PR #497 atomic daily D1 ledger **merged into main** after exact-head **7/7 CI** as `f1bcd7f7a8010dce00e3552d9b854bcc10cd14f7`. Staging schema is test-only, not deployable.
+- Added a standalone `ProposedDailyEntitlementResolver`: resolves account and quota subject exclusively from first-party ControlPlaneStore, requires matching owner/plan `BillingStore` provider subscription for Plus/Pro, rejects ambiguous, paid disabled by default, Enterprise requires a separately negotiated finite contract. Active/on-trial policy is stricter than existing billing UI and requires product reconciliation.
+- Added `ProposedTrustedDailyReservation`: uses only a server-derived UTC clock and verified daily cap/subject to invoke the test-only D1 reservation. Not wired into Worker, Hub or the production quota ledger.
+- New DEV tests with real file-backed SQLite adapter prove the trusted Free limit, simulated verified Plus limit, duplicate protection, wrong account, paused/past-due/unpaid/cancelled, unknown provider or D1 failures. **29/29** S1/S2 combined tests and TypeScript green, build and CI to be recorded separately.
+- **Critical open gate**: daily logical request reservations and existing monthly weighted usage charge are not yet one atomic decision. Do not activate until a transactionally proven dual-charge, separate paid-plan lifecycle authority, real multi-Worker D1 contention and provider limits, owner-approved staging and explicit rollback.
+- See [S2 trusted entitlement contract](SCALE_V2_S2_TRUSTED_ENTITLEMENT.md). S2 #484 remains OPEN; Free-only monthly policy, paid billing pause, original Agents and #271 privileged hold unchanged.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**

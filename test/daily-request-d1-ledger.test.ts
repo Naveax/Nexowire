@@ -10,6 +10,9 @@ import {
 } from '../src/product/d1-control-plane-store.js';
 import { ControlPlaneService } from '../src/product/control-plane-service.js';
 import { DailyRequestD1Ledger } from '../src/product/daily-request-d1-ledger.js';
+import {MemoryBillingStore} from '../src/product/memory-billing-store.js';
+import {ProposedDailyEntitlementResolver} from '../src/product/daily-entitlement-proposal.js';
+import {ProposedTrustedDailyReservation} from '../src/product/trusted-daily-reservation-proposal.js';
 
 class SQLiteStatement implements D1PreparedStatementLike {
   constructor(private readonly statement:StatementSync,private readonly values:unknown[]=[]){}
@@ -182,4 +185,75 @@ test('S2 unknown D1 failures and invalid inputs fail closed instead of reserving
   await assert.rejects(ledger.reserve(input('too short','bad-event-0001')),/Invalid quota subject/);
   await assert.rejects(ledger.reserve(input('quota-fake-owner','bad',1000)),/Invalid invocation/);
   await assert.rejects(ledger.reserve(input('quota-fake-owner','valid-event-0002',0)),/Invalid trusted daily limit/);
+});
+
+test('S2 trusted authority feeds real SQLite D1 ledger without client-controlled tier, limit or subject',async()=>{
+  const f=await fixture();
+  try {
+    const control=new D1ControlPlaneStore(new SQLiteAdapter(f.a));
+    const billing=new MemoryBillingStore();
+    const make=(paid=false)=>new ProposedTrustedDailyReservation(
+      new ProposedDailyEntitlementResolver({control,billing},{
+        paidEntitlementsEnabled:paid,now:()=>first,
+      }),
+      f.ledgers[0],()=>first,
+    );
+    const fresh=await make().reserveAuthenticated(f.owner.id,'trusted-free-0001');
+    assert.equal(fresh.status,'reserved');
+    if(fresh.status!=='reserved')return;
+    assert.equal(fresh.dailyLimit,1000);
+    assert.equal(fresh.usedRequests,1);
+    const dupe=await make().reserveAuthenticated(f.owner.id,'trusted-free-0001');
+    assert.equal(dupe.status,'duplicate');
+
+    const subject=await control.getQuotaSubject(f.owner.quotaSubjectId);
+    assert.ok(subject);
+    await control.putQuotaSubject({...subject,kind:'subscription'});
+    await control.putAccount({...f.owner,planId:'plus'});
+
+    const disabled=await make().reserveAuthenticated(f.owner.id,'trusted-plus-0002');
+    assert.deepEqual(disabled,{status:'denied',reason:'paid-plans-disabled'});
+    const noProvider=await make(true).reserveAuthenticated(f.owner.id,'trusted-plus-0002');
+    assert.deepEqual(noProvider,{status:'denied',reason:'provider-entitlement-missing'});
+
+    await billing.putSubscription({
+      provider:'lemonsqueezy',providerSubscriptionId:'trusted-provider-sub',
+      providerCustomerId:'trusted-provider-owner',accountId:f.owner.id,
+      planId:'plus',variantId:'trusted-plus-variant',status:'active',
+      renewsAt:'2026-11-01T00:00:00.000Z',endsAt:null,trialEndsAt:null,
+      providerUpdatedAt:'2026-10-15T20:00:00.000Z',
+      createdAt:'2026-10-01T00:00:00.000Z',
+      updatedAt:'2026-10-15T20:00:00.000Z',
+    });
+    const trusted=await make(true).reserveAuthenticated(f.owner.id,'trusted-plus-0002');
+    assert.equal(trusted.status,'reserved');
+    if(trusted.status==='reserved') {
+      assert.equal(trusted.dailyLimit,5000);
+      assert.equal(trusted.usedRequests,2);
+    }
+    const rows=f.a.prepare(
+      'SELECT COUNT(*) as n FROM daily_request_invocations WHERE quota_subject_id = ?',
+    ).get(f.owner.quotaSubjectId) as {n:number};
+    assert.equal(rows.n,2);
+  }finally{f.close()}
+});
+
+test('S2 staging preflight fails closed if provider or D1 state becomes unavailable',async()=>{
+  const f=await fixture();
+  try{
+    const control=new D1ControlPlaneStore(new SQLiteAdapter(f.a));
+    const resolver=new ProposedDailyEntitlementResolver({
+      control,
+      billing:new MemoryBillingStore(),
+    },{now:()=>first});
+    const unavailableLedger=new ProposedTrustedDailyReservation(resolver,{
+      reserve:async()=>{throw new Error('NO_SAFE_RESERVATION')},
+    },()=>first);
+    await assert.rejects(
+      unavailableLedger.reserveAuthenticated(f.owner.id,'failed-reservation-0003'),
+      /NO_SAFE_RESERVATION/,
+    );
+    const absent=await unavailableLedger.reserveAuthenticated('missing-account','not-reserved-0004');
+    assert.deepEqual(absent,{status:'denied',reason:'account-not-found'});
+  }finally{f.close()}
 });
