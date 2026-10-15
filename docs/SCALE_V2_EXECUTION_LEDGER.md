@@ -80,6 +80,14 @@
 - Single-process DEV **7/7** tests cover limits, UTC midnight, replay across days, independent owner keys, local 12-way same-ID replay, bounded-memory fail-closed handling, paid entitlement rejection and positive Enterprise quota validation.
 - Replay dedup across day rollover is essential: daily counters may reset while idempotency must persist. Real independent Worker/D1 atomic reservation, retention, provider cost envelopes, subscription verification and safe staged rollback remain **NOT IMPLEMENTED**. See [S2 quota definition](SCALE_V2_S2_DAILY_QUOTA_PROPOSAL.md); production remains Free-only monthly and checkout paused.
 
+## 2026-10-15 — S2 atomic daily D1 SQL prototype (isolated DEV)
+
+- Staging-only `test/fixtures/scale-v2-daily-requests-staging.sql` defines per-quota-subject UTC day counters and an invocation ledger with a cross-day stable replay key, enforced with a **single-statement SQL trigger**. Deliberately NOT placed under automatically deployed `cloudflare/migrations/`.
+- `DailyRequestD1Ledger` test-only caller accepts authenticated-server-resolved quota subject and daily ceiling, uses existing D1 database interface; on duplicate, cap exhaustion or any ambiguous D1 failure it must **never return a new authorized reservation**. Not integrated with the running Worker/Hub/legacy monthly weighted-credit charge.
+- DEV file-backed SQLite test with **two open connections** exercises Free 1,000/1,001, 12 distinct concurrent requests at 999/1,000 (only one allowed), 16 parallel same-ID attempts (one allowed, 15 duplicate), cross-midnight replay, account isolation and plan downgrade. Legacy monthly usage unchanged.
+- Local typecheck/build and **26/26** combined S1/S2 regression tests were green before the final staging-fixture placement revision; exact test/CI outcome to be recorded separately. Full Cloudflare independent Worker-D1 transactions, billable rows, owner-authenticated paid plans and cross-Worker latency remain unverified. See [S2 atomic daily design](SCALE_V2_S2_ATOMIC_D1_LEDGER.md).
+- Requires owner-approved staged migration review and rollback before any activation. Existing production monthly Free-only policy, billing pause, and original Agent routes remain unchanged.
+
 ## Each future status report must record
 
 - **Date/time, issue number, exact commit/branch, affected paths and observable device/production impact.**
