@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexowire | Custom Usage onay taslağı (DEV)</title>
+  <meta name="robots" content="noindex,nofollow">
+  <style>
+    :root{color-scheme:dark;font:16px/1.55 system-ui,sans-serif;background:#101622;color:#eaf0ff}
+    *{box-sizing:border-box}main{max-width:750px;margin:35px auto;padding:24px}
+    section{padding:22px;margin:20px 0;border:1px solid #34435a;border-radius:16px;background:#182235}
+    h1,h2{line-height:1.25}h2{font-size:1.2rem}
+    .muted{color:#b9c6d8;font-size:.93rem}.warning{color:#ffe09b}
+    label{display:block;margin:12px 0}
+    label.check{display:flex;align-items:flex-start;gap:10px}
+    input[type=checkbox]{width:20px;height:20px;flex:none;accent-color:#86b9ff}
+    input[type=number]{width:100%;max-width:260px;padding:10px;background:#0d1522;color:#fff;border:1px solid #778aa4;border-radius:8px}
+    button{padding:11px 16px;border:none;border-radius:10px;background:#a3b5cd;color:#07111f;font-weight:bold}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    details{padding:8px 0}summary{cursor:pointer;font-weight:600}
+    .tag{display:inline-block;background:#343d57;padding:4px 9px;border-radius:7px;font-size:.82rem}
+  </style>
+</head>
+<body>
+<main>
+  <span class="tag">DEV önizlemesi · Satın alma kapalı</span>
+  <h1>Nexowire: kayıt ve Custom Usage onayı</h1>
+  <p class="warning">Bu ekran taslaktır. Gerçek sözleşme, satıcı kimliği, fiyat, cayma/iptal koşulları ve sunucu onay bağlantısı henüz yayınlanmamıştır. Bu sayfa ödeme yapmaz, hesap açmaz veya onay kaydetmez.</p>
+
+  <section aria-labelledby="signup-title">
+    <h2 id="signup-title">1. Hesap oluşturma</h2>
+    <details open><summary>Hizmet koşulları taslağı</summary>
+      <p>Hesabın güvenli kullanımından, cihaz eşleştirme izinlerinden ve Nexowire'ın kullanım kurallarından haberdar olunmalıdır. Nihai koşullar hukuki inceleme sonrası ayrı ve indirilebilir belgede yayımlanacaktır.</p>
+    </details>
+    <details><summary>KVKK aydınlatması hakkında bilgilendirme</summary>
+      <p>Veri sorumlusunun kimliği, işleme amaçları, hukuki sebepler, alıcı grupları ve kullanıcı hakları gerçek işleme envanterine göre açıklanacaktır. Bu aydınlatma, açık rıza istemek anlamına gelmez.</p>
+    </details>
+    <label class="check"><input type="checkbox" id="signup-terms"> <span>Hesap kullanım koşullarını okudum ve kabul ediyorum. <em>(Taslak, üretimde geçerli değil.)</em></span></label>
+    <label class="check"><input type="checkbox" id="signup-marketing"> <span>İsteğe bağlı ürün ve kampanya duyuruları almak istiyorum. <strong>Zorunlu değildir.</strong></span></label>
+    <p role="status" id="signup-status">Kayıt işlemi bu önizlemede kapalıdır.</p>
+  </section>
+
+  <section aria-labelledby="purchase-title">
+    <h2 id="purchase-title">2. Custom Usage seçimi</h2>
+    <label for="daily-limit">Günlük Nexowire mantıksal tool çağrısı üst sınırı (100–850.000)</label>
+    <input type="number" id="daily-limit" value="1000" min="100" max="850000" step="1" inputmode="numeric">
+    <p><strong id="plan-summary">1.000 çağrı/gün</strong></p>
+    <p class="muted">Günlük kota, kullanım hakkının üst sınırıdır; tamamını kullanabilmeniz garanti değildir. OpenAI Secure MCP Tunnel varsayılanında dakikada en fazla 600 MCP isteği, aynı tünel ve çağıran uygulamaya ait tüm kanallar arasında paylaşılır. İnternet, ChatGPT plan/çalışma alanı izinleri, cihaz kapasitesi, diğer kullanıcılar ve hizmet kesintileri kullanılabilir miktarı azaltabilir.</p>
+    <p class="warning">Fiyat, vergiler, tahsilat dönemi, satıcı iletişim bilgileri, iptal ve cayma koşulları henüz girilmediğinden satın alma onayı alınamaz.</p>
+    <details><summary>Abonelik ve ön bilgilendirme özeti</summary>
+      <p>Ödeme ekranında hizmetin niteliği, seçilen tam günlük limit, paylaşılan dakikalık bağlantı sınırı, toplam vergi dahil fiyat, yenileme aralığı, iptal/iade/cayma hakkı ve satıcı bilgileri ödeme yükümlülüğü doğmadan önce ayrı gösterilecektir.</p>
+    </details>
+    <label class="check"><input type="checkbox" id="purchase-limits"> <span>Günlük üst kotanın kullanılabilirlik garantisi olmadığını ve ilgili tüneldeki 600/dakika ortak sınırını anladım.</span></label>
+    <label class="check"><input type="checkbox" id="purchase-preinfo"> <span>Satın alma ön bilgilendirmesini inceledim. <em>(Nihai belge ve fiyat olmadan geçerli onay değildir.)</em></span></label>
+    <label class="check"><input type="checkbox" id="purchase-terms"> <span>Abonelik sözleşmesi ve kullanım koşullarını kabul ediyorum. <em>(Taslak.)</em></span></label>
+    <p role="status" id="purchase-status">Gerçek ödeme ve abonelik etkinleştirme kapalıdır.</p>
+    <button type="button" disabled aria-disabled="true">Ödeme kapalı · Hukuki ve teknik kabul bekleniyor</button>
+  </section>
+</main>
+<script>
+  const amount=document.getElementById('daily-limit');
+  const summary=document.getElementById('plan-summary');
+  const fmt=new Intl.NumberFormat('tr-TR');
+  function render(){
+    const n=Number(amount.value);
+    const valid=Number.isSafeInteger(n)&&n>=100&&n<=850000;
+    summary.textContent=valid?fmt.format(n)+' çağrı/gün':'Geçerli değer: 100–850.000 tam sayı';
+    summary.style.color=valid?'':'#ffcc88';
+    document.getElementById('purchase-status').textContent=valid
+      ? 'Bu seçim bir taslak önizlemesidir; ödeme ve onay kaydı kapalıdır.'
+      : 'Limit aralığı dışında seçim yapılamaz.';
+  }
+  amount.addEventListener('input',render);
+  render();
+</script>
+</body>
+</html>

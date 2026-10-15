@@ -115,6 +115,14 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — S2/S4 Custom Usage disclosure, separate acceptance and draft UX (OFF)
+
+- Owner requires user-facing warning on purchase and signup about provider throughput, selected daily 100..850000 limit, no guarantee of consuming full allowance, 600 requests/minute **shared by Secure MCP Tunnel and calling app**, and versioned terms acknowledgement. The legal text does NOT by itself guarantee platform capacity or extinguish statutory consumer rights.
+- From verified post-#510 main `eca9a791eff70dbe3c5ab5379397a6e962b5c633`, isolated branch `test/scale-v2-custom-usage-disclosures-20261015` adds `src/product/custom-usage-disclosures-proposal.ts`: authenticated subject/flow/price/merchant/cancel URL/document revisions/100..850000 quota bound to signed 15m HMAC offer with SHA256 receipt. Separate mandatory terms, limits, purchase pre-information confirmations; separately optional unchecked marketing; KVKK privacy notice is information and **not** bundled blanket consent. DB write failures, stale offers and cross-account price tampering fail closed.
+- DEV-only `test/fixtures/scale-v2-custom-usage-disclosures-dev.sql`, `test/custom-usage-disclosures-staging.test.ts`, and **unlinked, nonfunctional production** `web/custom-usage-consent-preview.html` with price/merchant placeholders, disabled payment. `docs/SCALE_V2_S2_S4_CUSTOM_USAGE_DISCLOSURES.md` records KVKK 2026/347 and Turkish distance-sales/contract sources plus production blockers.
+- No actual GitHub account creation acceptance hook, checkout gate, provider payment, customer data processing or daily quota change. Live Free remains 1000 weighted/month. Only DEV signing/receipt and UX preview, counsel/content/actual merchant price and provider sandbox required before any enabled consent/billing route.
+
+
 ## 2026-10-15 — Z2 Tailscale Funnel safety preflight, NO NETWORK CHANGES
 
 - Work PC already has Tailscale Running/online/MagicDNS. A sanitized, read-only `tailscale funnel status --json` found **two existing public handlers forwarding directly to old 127.0.0.1:43110 Hub**, which contains /agent as well as /mcp. Neither Funnel nor live Hub/Agents was touched; proposed safer target is localhost MCP-only 43111 from pending PR #509.
