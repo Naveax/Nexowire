@@ -115,6 +115,14 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — S1 OAuth account-wide lock and revocation (DEV proposal)
+
+- Isolated worktree `Nexowire-scale-v2-s1-oauth-logout-staging-20261015` branch `test/scale-v2-s1-oauth-logout-staging-20261015`; based on merged main `9624ad2651948b89b29c7c85537082410dcb7ea9`. **Production untouched**.
+- `test/fixtures/scale-v2-s1-oauth-logout-staging.sql`: one owner-account INSERT plus nested trigger atomically expires existing access tokens, revokes every refresh token and consumes pending auth codes. Other-account tokens unaffected. Additional staging triggers block new tokens/codes from a locked owner, closing issuance-after-logout race.
+- `src/product/mcp-oauth-account-logout-proposal.ts`: trust-only owner-authenticated fail-closed logout adapter with stable duplicate semantics, unknown provider error never a grant; no Worker route. Seven DEV SQLite regression tests PASS and typecheck PASS. See `docs/SCALE_V2_S1_OAUTH_LOGOUT_STAGING.md`.
+- **BLOCKING**: this is a hard lock; real customer re-login is disallowed by the prototype. Need server-authenticated session-epoch/family generation, safe relogin with no stale-refresh race, in-flight permission revocation and Cloudflare D1 proof before even proposing deployment. Do not confuse this with complete, customer-ready token family logout.
+
+
 ## 2026-10-15 — S2 trusted joint-admission orchestration (isolated DEV only)
 
 - Worktree: `Nexowire-scale-v2-s2-trusted-dual-admission-20261015`, branch `test/scale-v2-s2-trusted-dual-admission-20261015`, based on PR #499 HEAD `d767a8c62cb5e69b6c4c42384642e4a7dc09dc25`. **Not deployed**.
