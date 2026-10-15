@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — S1 OAuth monotonic session epoch and safe re-login (isolated DEV)
+
+- Parent #502 has exact HEAD `edcbeb07c0f167a1e55af5732f578b5782929616` and full 7/7 GitHub CI; it remains DRAFT while hard account-lock recovery is unresolved. This slice is in a new isolated `test/scale-v2-s1-oauth-session-epoch-20261015` branch stacked on #502.
+- New STAGING fixture `test/fixtures/scale-v2-s1-oauth-session-epoch-staging.sql`: backfills old permanently locked accounts, then models a monotonic account generation and compares expected generation atomically. New access/refresh/auth-code writes require the current unlocked epoch; legacy epoch-0 issuance fails closed once an account has logged out. A trusted new reauth increments the generation, rather than removing the audit lock without fencing old credentials.
+- New `src/product/mcp-oauth-session-epoch-proposal.ts` enforces injected independent **fresh first-party login** authorization, owner match, global stable operation-ID and fail-closed errors. **No production Worker imports or OAuth route changes.**
+- Windows DEV: 13 new session-epoch cases PASS; 33/33 combined S1 OAuth regressions PASS, TypeScript/build/continuation/launch audit PASS. SQLite mocks are not Cloudflare Worker/D1 acceptance. Documented in `docs/SCALE_V2_S1_OAUTH_SESSION_EPOCH.md`.
+- **NO-GO:** existing `McpOAuthService.issueTokens`/D1 writers and verifier still lack session-epoch integration; token rotation itself is not atomic with issuance, first-party reauth provider is injected test-only, in-flight device/tool permissions and deployed migration rollback remain unresolved. Production auth/Agent/Hub/Broker stays unchanged.
+
+
 ## 2026-10-15 — S1 OAuth account-wide lock and revocation (DEV proposal)
 
 - Isolated worktree `Nexowire-scale-v2-s1-oauth-logout-staging-20261015` branch `test/scale-v2-s1-oauth-logout-staging-20261015`; based on merged main `9624ad2651948b89b29c7c85537082410dcb7ea9`. **Production untouched**.
