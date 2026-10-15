@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-15. **Scope:** S1–S6 capacity intent; immediate planning applies to the approved S1–S5 program only, and does NOT unpark S6 features. This file does not authorize Cloudflare Workers Paid billing, production deployments, D1 migrations or Agent/Hub/Broker restarts.
 
+**HARD OWNER CLARIFICATION / ARCHITECTURE PRIORITY:** **$0 additional OPERATOR CLOUD INVOICE.** The intended product architecture is now LOCAL-FIRST: tool execution, MCP hosting wherever safely supported, queues and state should live on the *user's existing PC*; a self-hosted owner-managed ingress may still be essential for trustworthy commercial quota enforcement. Cloudflare Tunnel can proxy an origin without running a billed Worker+D1 application per tool. The Paid Worker/D1 pricing scenarios below are **counterfactual comparison only, NOT a recommendation or funded architecture**. Read [Zero operator cloud bill / local-first contract](SCALE_V2_ZERO_CLOUD_BILL_LOCAL_FIRST.md) before proposing any rollout. 10M/user/day remains a lab target, not a hardware throughput promise.
+
 ## Decision: two unrelated ceilings
 
 1. **Commercial entitlement** is only a server-authoritative *logical tool calls/day* counter per canonical quota subject and plan version. Future target, **OFF**: Free 1,000; Plus 5,000; Pro 10,000; Enterprise configured. Changing plans changes the call limit and corresponding reset/version rules; it does NOT alter the user's available tools, permissions or processing model. Separate safety/abuse/concurrency safeguards apply uniformly and are not hidden plan features. The current effective policy remains Free-only **1,000 weighted credits per UTC month**, 1x normal, 5x special skills, and billing paused.
@@ -24,6 +26,8 @@ Sources to refresh before owner approval:
 - https://developers.cloudflare.com/durable-objects/platform/pricing/
 
 ## Target architecture: independently scalable identity, hot tenants, execution
+
+**This section sketches a cloud-hosted alternative for cost comparison, NOT the selected no-cloud-bill deployment.** The owner-selected target is the per-user PC + low-overhead authenticated tunnel and an existing owner-hosted trusted meter wherever central quotas are required. See [local-first target](SCALE_V2_ZERO_CLOUD_BILL_LOCAL_FIRST.md).
 
 ```text
 ChatGPT-hosted MCP / first-party client
@@ -62,6 +66,8 @@ Cloudflare global stateless gateway (Worker)
 
 ## Conservative provider-cost model (NOT a real invoice)
 
+**Comparison baseline only:** the owner explicitly rejects incremental cloud-provider charges. Do not implement the Paid Workers/D1 design under a $0 operator-cloud-bill promise. Model examples below quantify why the Worker-per-tool alternative is a NO-GO for that constraint.
+
 See `src/ops/scale-elastic-capacity-model.ts` and `test/scale-elastic-capacity-model.test.ts` for exact integer math, errors and scenario reproducibility. Workers Paid rates as of 2026-10-15: base **$5/month**, 10M included Worker requests and **$0.30/million** beyond. D1 Paid includes **50M written rows/month**, then **$1/million**; reads 25B included, then **$0.001/million**. Example assumes 30 days, no retries, **one D1 row write per accepted tool call**, one read, and one control-plane Worker request per call. Real route costs differ.
 
 | Workload | Worker requests/month | Worker modeled cost | D1 written-row modeled cost | Partial monthly total |
@@ -76,6 +82,8 @@ See `src/ops/scale-elastic-capacity-model.ts` and `test/scale-elastic-capacity-m
 **Per-user plan limit does not scale cloud bill one-to-one:** an account paying more merely has higher authorized demand. Additional users and usage still cost the operator and require a sustainable revenue/budget policy, even when users see the same feature set across plans.
 
 ## Phased implementation and release gates
+
+**Replacement priority:** Z0–Z5 in [local-first zero-cloud-bill design](SCALE_V2_ZERO_CLOUD_BILL_LOCAL_FIRST.md) takes precedence over the H0–H5 paid-edge exploration below. H1–H3 may still be benchmarked in disposable local mocks to compare semantic correctness, but **must not provision paid cloud services**.
 
 - **H0 (read-only telemetry and deterministic planning):** capture per-tool hosted Worker requests and actual D1 rows read/written, CPU time, relay bytes and p50/p95/p99, redacted; verify current account plan, baseline and no-disconnect two-device state. Pure offline workload model lives in this PR.
 - **H1 (one-call control-plane admission, staging):** new versioned endpoint `authorizeAndReserve`, server derives token/account/device/plan, canonical request digest+ID, atomic reserve-before-dispatch; retain old two-call route behind an OFF-by-default feature flag. Test denied/revoked/no-charge/ambiguous ACK/duplicate/UTC boundary and request source authentication.
