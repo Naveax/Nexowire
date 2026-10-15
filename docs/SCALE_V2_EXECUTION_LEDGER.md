@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — S1 epoch-sensitive access-token verification (isolated DEV)
+
+- Base is verified post-PR #504 main `cf8fc4cdb166f375a1f8dc4e26154550a67d0564`. Worktree `Nexowire-scale-v2-s1-epoch-access-verifier-20261015`, branch `test/scale-v2-s1-epoch-access-verifier-20261015`.
+- Added staging-only `src/product/mcp-oauth-epoch-access-verifier-proposal.ts`: single joined read of token hash, current unlocked account generation, legacy account logout gate and historical session-epoch events. Prevents an old token from becoming accepted again if its expiry was restored or the epoch row is missing after historical logout. Identity read is NOT a tool-execution authorization check.
+- New `test/mcp-oauth-epoch-access-verifier-staging.test.ts` verifies 14 scenarios (including atomic refresh -> verify -> logout -> fresh reauth -> old token denied). **14/14 new, 56/56 combined S1 OAuth Windows DEV tests PASS**, TypeScript/build PASS. An initial missing-epoch history test caught a fail-open gap and was corrected before commit.
+- Cloudflare attempt: connected SentinelX had no configured Cloudflare integration or D1 management scope; Work PC showed no `wrangler` command or Cloudflare environment variable names; an isolated Cloudflare dashboard headless session met a bot challenge and was not bypassed. No remote Cloudflare SQL, D1 staging provisioning, production migrations or settings changed.
+- Documented exact scope and D1 staging acceptance prerequisites in `docs/SCALE_V2_S1_EPOCH_ACCESS_VERIFIER.md`. **NO-GO**: live OAuth verifier/issuer not epoch-aware, first-party fresh login not wired, real D1 cross-Worker transactional and read-consistency proof/cost and in-flight device/owner guard missing.
+
+
 ## 2026-10-15 — S1 atomic session-epoch refresh rotation (DEV-only, stacked)
 
 - New isolated worktree `Nexowire-scale-v2-s1-atomic-epoch-refresh-20261015`, branch `test/scale-v2-s1-atomic-epoch-refresh-20261015`, based on unmerged S1 session epoch PR #503. No production OAuth imports, changes to deployed migrations, or Native Agent service actions.
