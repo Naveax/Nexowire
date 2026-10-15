@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — S1 request-time account/device tool admission (isolated DEV)
+
+- Verified upstream main after guarded PR #506 merge: `e0bdb80a460eea425aab301ccb45773358c604ca`. This new worktree `Nexowire-scale-v2-s1-epoch-tool-admission-20261015` is independent of production Worker/MCP/Agent routes.
+- Proposed `src/product/mcp-oauth-epoch-tool-admission-proposal.ts`: single joined D1-read model checks hashed access credential, current unlocked session generation/history, configured OAuth resource/MCP scope, exact selected device owner/online state and server-classified safe/read vs full/write mode.
+- Provides a **two-check DEV dispatch wrapper** that fails closed if logout, owner transfer or mode downgrade occurs between checks. **It does NOT enforce revocation during already-running tools or make OS side effects atomic with D1.** Tool classification and Agent-side enforcement remain release blockers.
+- New `test/mcp-oauth-epoch-tool-admission-staging.test.ts`: 11/11 new Windows SQLite tests PASS; **76/76 combined S1 OAuth regression tests PASS**; TypeScript, build, continuation and launch audit PASS. Design and explicit remaining security gates: `docs/SCALE_V2_S1_EPOCH_TOOL_ADMISSION.md`.
+- **NO-GO:** real Cloudflare D1 staging access unavailable; no provider-side consistency/spend evidence, no Agent-side enforcement or in-flight action revocation. No live quota, paid plans, production schema, Agent/Hub/Broker or Worker deployment changed.
+
+
 ## 2026-10-15 — S1 epoch-sensitive access-token verification (isolated DEV)
 
 - Base is verified post-PR #504 main `cf8fc4cdb166f375a1f8dc4e26154550a67d0564`. Worktree `Nexowire-scale-v2-s1-epoch-access-verifier-20261015`, branch `test/scale-v2-s1-epoch-access-verifier-20261015`.
