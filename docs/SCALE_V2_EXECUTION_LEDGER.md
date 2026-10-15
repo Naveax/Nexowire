@@ -122,6 +122,13 @@ This ledger is updated through reviewed commits/PRs; issue comments store interm
 - New `test/mcp-oauth-epoch-access-verifier-staging.test.ts` verifies 14 scenarios (including atomic refresh -> verify -> logout -> fresh reauth -> old token denied). **14/14 new, 56/56 combined S1 OAuth Windows DEV tests PASS**, TypeScript/build PASS. An initial missing-epoch history test caught a fail-open gap and was corrected before commit.
 - Cloudflare attempt: connected SentinelX had no configured Cloudflare integration or D1 management scope; Work PC showed no `wrangler` command or Cloudflare environment variable names; an isolated Cloudflare dashboard headless session met a bot challenge and was not bypassed. No remote Cloudflare SQL, D1 staging provisioning, production migrations or settings changed.
 - Documented exact scope and D1 staging acceptance prerequisites in `docs/SCALE_V2_S1_EPOCH_ACCESS_VERIFIER.md`. **NO-GO**: live OAuth verifier/issuer not epoch-aware, first-party fresh login not wired, real D1 cross-Worker transactional and read-consistency proof/cost and in-flight device/owner guard missing.
+## 2026-10-15 — S1 atomic authorization-code consumption + issuance (isolated DEV)
+
+- New isolated branch `test/scale-v2-s1-atomic-code-redemption-20261015`, based on PR #504 verified merged main `cf8fc4cdb166f375a1f8dc4e26154550a67d0564`, **not** stacked on unfinished #505.
+- `test/fixtures/scale-v2-s1-oauth-atomic-code-staging.sql` stages one nested-trigger SQLite INSERT to compare-and-swap consume a bound, valid, PKCE-verified authorization code and insert access + optional refresh hashes in a **single atomic statement**, respecting current unlocked session generation.
+- Standalone `src/product/mcp-oauth-atomic-epoch-code-proposal.ts` validates SHA-256 PKCE, configured resource and persisted code/client/redirect/scopes/epoch, refuses replay and unknown commit acknowledgement. The real OAuth redirect canonicalizer, state/nonce and first-party identity are **not** wired.
+- New `test/mcp-oauth-atomic-epoch-code-staging.test.ts`: **9/9 Windows DEV SQLite cases PASS** for valid and no-offline-access grants, replay, 16-way contention, PKCE/client/redirect/resource mismatch, logout/expiry, collision rollback, and provider lost ACK. `npm run typecheck` PASS. See `docs/SCALE_V2_S1_ATOMIC_CODE_REDEMPTION.md`.
+- No active Cloudflare D1 login/provider proof. Production OAuth exchange path unchanged; no live Hub/Agent/Broker restarts, paid/daily plan gates or D1 production migration.
 
 
 ## 2026-10-15 — S1 atomic session-epoch refresh rotation (DEV-only, stacked)
