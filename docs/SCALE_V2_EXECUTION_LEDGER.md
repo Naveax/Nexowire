@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — S4 owner-hosted one-shot Custom Usage checkout gate (STAGING ONLY)
+
+- PR #512 disclosure HMAC proof and receipt + preview merged on main at `18fbf437d27a6339bd2705c8f447626cade97c64` after exact-head 7/7 GitHub CI. **No production signup/checkout integration.**
+- Isolated new branch `test/scale-v2-custom-usage-checkout-gate-20261015` adds `src/product/custom-usage-checkout-gate-proposal.ts` and staging-only SQLite fixture/tests. Server-owned quote (account, price, selected 100..850000 daily quota, seller contact, cancel URL and doc versions) stored with exact hash+15m signed offer. Customer independently affirms Terms, use limits, and distance-sale pre-information; untrusted browser snapshot mismatch cannot be accepted.
+- `reserveSandboxIntent` rechecks trusted account, legal/sandbox approval, current authoritative catalog price/doc versions, accepted receipt, expiration and unused nonce inside one SQLite `BEGIN IMMEDIATE`; duplicate purchase rejected. Returns `providerCheckoutAllowed:false`, **never** calls live LemonSqueezy/payment or upgrades entitlements. Security/identity route wiring remains OFF.
+- Windows 12/12 new negative+positive tests PASS, TypeScript PASS, broader billing and disclosure regression + GitHub exact-head CI pending. Docs `docs/SCALE_V2_S4_CUSTOM_USAGE_CHECKOUT_GATE.md`.
+- Production NO-GO: approved actual legal documents and pricing, authenticated first-party consent and checkout API, durable receipt archive/CSRF/provider sandbox, all-provider ingress rate accounting, external availability proof and strict zero-incremental-cloud-bill budgets. Current 1000 weighted/month Free and daily Custom Usage OFF.
+
+
 ## 2026-10-15 — S2/S4 Custom Usage disclosure, separate acceptance and draft UX (OFF)
 
 - Owner requires user-facing warning on purchase and signup about provider throughput, selected daily 100..850000 limit, no guarantee of consuming full allowance, 600 requests/minute **shared by Secure MCP Tunnel and calling app**, and versioned terms acknowledgement. The legal text does NOT by itself guarantee platform capacity or extinguish statutory consumer rights.
