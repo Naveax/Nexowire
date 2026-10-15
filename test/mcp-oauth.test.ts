@@ -146,6 +146,47 @@ test('authorization code + PKCE issues scoped access and refresh tokens', async 
   );
 });
 
+test('owner-scoped access-token invalidation is immediate without schema changes', async () => {
+  const {service,registration}=await setup();
+  const verifier='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~';
+  const redirect=new URL(await service.authorize(
+    'access-owner',
+    new URLSearchParams({
+      response_type:'code',
+      client_id:registration.client_id,
+      redirect_uri:'https://chatgpt.com/oauth/callback/test',
+      code_challenge:challenge(verifier),
+      code_challenge_method:'S256',
+      resource,scope:'mcp offline_access',
+    }),
+  ));
+  const issued=await service.token(new URLSearchParams({
+    grant_type:'authorization_code',
+    code:redirect.searchParams.get('code')!,
+    client_id:registration.client_id,
+    redirect_uri:'https://chatgpt.com/oauth/callback/test',
+    code_verifier:verifier,resource,
+  }));
+  assert.ok(await service.authenticateAccessToken(issued.access_token));
+  assert.equal(await service.invalidateAccessToken(issued.access_token,'foreign-owner'),false);
+  assert.ok(await service.authenticateAccessToken(issued.access_token));
+  assert.equal(await service.invalidateAccessToken(issued.access_token,'access-owner'),true);
+  assert.equal(await service.authenticateAccessToken(issued.access_token),null);
+  assert.equal(await service.invalidateAccessToken(issued.access_token,'access-owner'),false);
+  assert.equal(await service.invalidateAccessToken('nwx_mcp_nonexistent','access-owner'),false);
+  const results=await Promise.all(Array.from({length:8},()=>service.invalidateAccessToken(
+    issued.access_token,'access-owner',
+  )));
+  assert.equal(results.every(result=>result===false),true);
+  // IMPORTANT: Access-token invalidation alone does not revoke the refresh token.
+  const renewed=await service.token(new URLSearchParams({
+    grant_type:'refresh_token',
+    refresh_token:issued.refresh_token!,
+    client_id:registration.client_id,resource,
+  }));
+  assert.ok(await service.authenticateAccessToken(renewed.access_token));
+});
+
 test('refresh tokens rotate and cannot be replayed', async () => {
   const { service, registration } = await setup();
   const verifier =

@@ -61,6 +61,13 @@ export interface McpOAuthStore {
     record: McpAccessTokenRecord,
   ): Promise<void>;
 
+  /** Atomically expire an unexpired access token owned by the expected account. */
+  invalidateAccessToken(
+    tokenHash: string,
+    expectedAccountId: string,
+    invalidatedAt: string,
+  ): Promise<boolean>;
+
   getRefreshToken(
     tokenHash: string,
   ): Promise<McpRefreshTokenRecord | null>;

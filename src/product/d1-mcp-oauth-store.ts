@@ -230,6 +230,20 @@ export class D1McpOAuthStore implements McpOAuthStore {
       .run();
   }
 
+  async invalidateAccessToken(
+    tokenHash: string,
+    expectedAccountId: string,
+    invalidatedAt: string,
+  ): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        'UPDATE mcp_oauth_access_tokens SET expires_at = ? WHERE token_hash = ? AND account_id = ? AND expires_at > ?',
+      )
+      .bind(invalidatedAt, tokenHash, expectedAccountId, invalidatedAt)
+      .run();
+    return (result.meta?.changes ?? 0) === 1;
+  }
+
   async getRefreshToken(
     tokenHash: string,
   ): Promise<McpRefreshTokenRecord | null> {

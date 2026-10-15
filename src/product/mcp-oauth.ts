@@ -471,6 +471,26 @@ export class McpOAuthService {
     };
   }
 
+  /**
+   * Immediately expire only this access token for its authenticated owner.
+   * A trusted caller must supply an independently authenticated account ID.
+   * This does not revoke refresh tokens or terminate all user sessions.
+   */
+  async invalidateAccessToken(
+    accessToken: string,
+    authenticatedAccountId: string,
+  ): Promise<boolean> {
+    const value = accessToken.trim();
+    if (
+      !value.startsWith('nwx_mcp_') || value.length > 512 ||
+      /[\r\n\0]/.test(value) ||
+      !authenticatedAccountId.trim()
+    ) return false;
+    return this.store.invalidateAccessToken(
+      tokenHash(value), authenticatedAccountId, this.now().toISOString(),
+    );
+  }
+
   private async exchangeAuthorizationCode(
     form: URLSearchParams,
   ): Promise<McpOAuthTokenResponse> {
