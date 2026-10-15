@@ -114,3 +114,11 @@
 - **Next single actionable slice; blockers and owner approvals required.**
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
+
+## 2026-10-15 — S2 trusted joint-admission orchestration (isolated DEV only)
+
+- Worktree: `Nexowire-scale-v2-s2-trusted-dual-admission-20261015`, branch `test/scale-v2-s2-trusted-dual-admission-20261015`, based on PR #499 HEAD `d767a8c62cb5e69b6c4c42384642e4a7dc09dc25`. **Not deployed**.
+- New `src/product/trusted-dual-admission-proposal.ts`: mandatory fresh authority gate before server-resolved quota subject/entitlement, canonical monthly usage credits and **one** atomic daily/monthly reservation, using legacy-stable hosted MCP event ID. No split charge, no legacy fallback and no tool execution.
+- New 11-case negative/positive test for role denial, paid OFF, forged client tier/cap, 5x skill, replay/denials, D1 errors and rollover. Combined **47/47 S2 Windows DEV** tests PASS; TypeScript, build, continuation and AI Screen launch audit PASS. Local SQLite and injected mocks **are not** Cloudflare provider evidence.
+- Documentation: `docs/SCALE_V2_S2_TRUSTED_DUAL_ADMISSION.md`. Blocking: real OAuth owner+device guard and in-flight revocation, exclusive server charge path, old monthly-only invocation replay crossing month and quota subject, full token-family revoke, real Worker/D1 concurrency and owner spend/rollback gates.
+- PR #499 exact HEAD CI initially **6/7**: `browser-live` Windows Edge profile `lockfile` cleanup failed `EBUSY`. One failed-job re-run on existing run `38707694064`; no merge while unresolved. Both Agent routes, current production quota, paid checkout and D1 production schema untouched.
