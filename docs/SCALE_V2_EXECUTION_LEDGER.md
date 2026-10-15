@@ -115,6 +115,14 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-15 — Z2 Tailscale Funnel safety preflight, NO NETWORK CHANGES
+
+- Work PC already has Tailscale Running/online/MagicDNS. A sanitized, read-only `tailscale funnel status --json` found **two existing public handlers forwarding directly to old 127.0.0.1:43110 Hub**, which contains /agent as well as /mcp. Neither Funnel nor live Hub/Agents was touched; proposed safer target is localhost MCP-only 43111 from pending PR #509.
+- New CLI `nexowire local-first funnel-plan`: calls only `tailscale status --json` and `tailscale funnel status --json`, reports redacted public route counts and safety state with `readyToExpose:false`. Fails closed for missing/unrecognized/unsafe active routes; no new tunnels, DNS, exposure or public endpoint created.
+- New `src/mcp/local-first-funnel-plan.ts` and `test/local-first-funnel-plan.test.ts`: 9/9 new tests; combined existing ingress + planner **20/20 PASS**, TypeScript PASS. Work PC real read-only command returned **needs-migration**, two public 43110 handlers, no protected 43111 route. Read-only Hub health: 2 Agents connected, ownerOauthConfigured=false; no public OAuth cutover approved.
+- Staged migration/test runbook `docs/SCALE_V2_Z2_TAILSCALE_SAFE_MIGRATION.md`. OpenAI Secure MCP Tunnel default 600/min => 864k/day, so does not meet 10M/day target without explicit authorized limit increase/other provider. Still no remote ChatGPT test, central daily quota conversion, automatic user PC onboarding or cloud bill change.
+
+
 ## 2026-10-15 — Z1 local-first MCP loopback ingress (DEV only)
 
 - Isolated branch feat/scale-v2-local-first-ingress-20261015 based on verified main e0bdb80a460eea425aab301ccb45773358c604ca, no active Agent/Hub/Worker deployment. Added opt-in nexowire local-first ingress CLI and src/mcp/local-first-ingress.ts.

@@ -7,6 +7,7 @@ import { runProcessWorker } from './agent/process-worker.js';
 import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
 import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
+import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
@@ -37,7 +38,8 @@ Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
-  nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire hub [preflight|install|status|start|stop|restart|uninstall]  Manage user-logon Hub autostart\n  nexowire hub [boot-install|boot-status|boot-uninstall]  Manage elevated pre-logon SYSTEM Hub\n  nexowire node [bootstrap|status|connector]  Bootstrap a self-hosted Hub + local Agent\n  nexowire local-first ingress [--listen-port=43111] [--public-host=host.example.com]\n                   LOOPBACK MCP-only origin for a secure tunnel (opt-in)\n  nexowire connect                             Connect this PC to Nexowire\n  nexowire privileged-broker [run|install|status|probe|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
+  nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire hub [preflight|install|status|start|stop|restart|uninstall]  Manage user-logon Hub autostart\n  nexowire hub [boot-install|boot-status|boot-uninstall]  Manage elevated pre-logon SYSTEM Hub\n  nexowire node [bootstrap|status|connector]  Bootstrap a self-hosted Hub + local Agent\n  nexowire local-first ingress [--listen-port=43111] [--public-host=host.example.com]
+  nexowire local-first funnel-plan               Inspect Tailscale safely; no route changes\n                   LOOPBACK MCP-only origin for a secure tunnel (opt-in)\n  nexowire connect                             Connect this PC to Nexowire\n  nexowire privileged-broker [run|install|status|probe|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
@@ -104,6 +106,11 @@ async function main(): Promise<void> {
   }
 
   if (command === 'local-first') {
+    if (process.argv[3] === 'funnel-plan') {
+      if (process.argv.length !== 4) throw new Error('funnel-plan accepts no options');
+      process.stdout.write(JSON.stringify(await readOnlyLocalFirstFunnelPlan(),null,2)+'\n');
+      return;
+    }
     if (process.argv[3] !== 'ingress') {
       throw new Error('local-first supports only: ingress');
     }
