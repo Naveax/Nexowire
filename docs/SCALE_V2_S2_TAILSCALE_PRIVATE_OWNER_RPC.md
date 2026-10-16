@@ -1,0 +1,36 @@
+# Scale v2 S2 — Owner RPC over a pinned Tailscale private overlay (DEV/STAGING)
+
+**2026-10-16.** This is the next independent code-only stage atop the #518 owner-hosted, signed-device, loopback RPC merged main. It does **not** connect or modify a live customer Agent, open an external HTTPS or Funnel hostname, change Cloudflare billing/D1 or activate daily plans. Production Free remains **1,000 weighted credits per UTC month**; proposed Free/Plus/Pro daily 1,000/5,000/10,000 and Custom 100..850,000 daily remain OFF.
+
+## Purpose and intended packet path
+
+`ChatGPT MCP HTTPS -> existing owner-authenticated ingress / shared provider-identity 600/min guard -> authenticated device -> Tailscale private overlay -> owner Tailscale-only gateway -> trusted owner RPC on 127.0.0.1 -> owner SQLite quota authority`.
+
+The *device's* local tool executor remains on its own PC. The owner control plane keeps the authoritative subscription database and validates the first-party account session epoch, device ownership, Safe/Full tool permission class and logical invocation replay. The owner quota RPC returns `authorizesToolExecution:false`; executing a native tool additionally requires the current per-tool security and Native Broker checks.
+
+**Do not send ChatGPT directly to this internal Tailscale endpoint.** It does not present a public OAuth MCP resource or independently account for OpenAI's shared 600/min tunnel budget. It is merely a protected private backhaul after the existing MCP ingress admission and identity/authorization layer.
+
+## Implemented in this PR
+
+- `src/product/owner-quota-tailscale-proxy-proposal.ts`: `startProposedOwnerQuotaTailscaleProxy` starts **only after checking** the chosen local IPv4 address belongs to the native **Tailscale** adapter and is in `100.64.0.0/10`. It binds the server to that **exact single interface address**, with an ephemeral port, never `0.0.0.0`, 127.0.0.1 or a public/WAN/LAN interface. The setting is an operator-supplied trusted local address, not an HTTP header.
+- The gateway accepts only `POST /internal/owner-quota/v1/reserve`, `application/json`, max **16 KiB inbound** and **16 KiB response**, at most **32 simultaneous** forwarded requests, **5s** owner RPC timeout, and rejects upgrade / other method/route. It copies the exact signed device body and does **not forward arbitrary client headers**, Host, authentication cookies, bearer headers, custom tunnel headers or target URLs.
+- The destination must be the **exact** `http://127.0.0.1:<port>/internal/owner-quota/v1/reserve` provided by the trusted process; it cannot be redirected to a local Hub, arbitrary website, `/agent`, database port or user-supplied address. Response is `no-store`. Service upstream failure returns 503. The owner RPC still performs all Ed25519 device signature, one-use nonce, timestamp, trusted tool catalog, session and account authorization checks before recording a daily logical tool invocation.
+- Traffic encryption and private routing for non-loopback links come from **Tailscale/WireGuard**, not from the HTTP protocol itself. Treat each tailnet machine as a distinct principal and enforce Tailscale ACL/grant policy plus owner-side Ed25519 device authentication. `100.64.0.0/10` address alone does **not** authenticate the origin device; only the private overlay and pinned keys protect this channel.
+- Code is **not imported by the deployed CLI/Hub** and does not install Tailscale, modify firewall rules, turn on Tailscale Serve/Funnel or schedule a service.
+
+## Verified evidence, with clear limit
+
+- `test/owner-quota-tailscale-proxy-staging.test.ts` has **10/10 PASS** localhost/injected-interface tests, including Tailscale adapter+CIDR, rejection of wrong adapter or non-100.64/10 IP, fixed loopback-only upstream/no-SSRF, method/route/body/status strictness, no forwarded attacker-supplied Host/Auth/Cookie, owner RPC outage fails closed, and integration against the **real staging owner RPC** that verifies the Ed25519 device request, reserves exactly one daily tool and rejects replay.
+- Both authorized private PCs' Tailscale clients were **online** with a matching named Tailscale adapter; overlay ICMP/Tailscale ping from Work PC to Naveax and from Naveax to Work PC succeeded. This proves only **basic private-overlay peer reachability**, not that arbitrary TCP RPC traffic or a commercial ChatGPT caller has been accepted.
+- A disposable smoke fixture `test/fixtures/scale-v2-owner-tailscale-remote-smoke.ts` can start an in-memory owner quota RPC plus a Tailscale-only gateway with ephemeral credentials, and self-close after **45 seconds**. The operator must set `NEXOWIRE_DEV_TAILSCALE_IP` at launch. It writes a short-lived signed test request under the current user's temporary directory and deletes it upon clean shutdown; use only on a trusted DEV operator PC. No user-specific Tailscale address, persistent credentials, or subscription secrets are committed to the repo.
+- **Real PC-to-PC signed HTTP call NOT CONFIRMED** this turn. During an attempted ephemeral test the native Nexowire shell process mutation completion was lost; a previous disposable listener did start on Work PC and auto-close, but the caller did not complete within its 30-second signed-request TTL. Later attempt did not produce a ready test server. Neither attempt warrants a successful remote RPC claim. No permanent ports or Windows Firewall rules were modified.
+
+## Production NO-GO and decisions required
+
+1. Choose a verified, supported consumer connectivity architecture; an individual Tailscale tailnet/seat allowance is not automatically a free solution for thousands of end users. Explicit shared tailnet ACL/grants and user enrollment would be required for a direct-tailnet model. Prefer an operator-controlled service design that does not silently require each unrelated paying customer to join the owner's tailnet.
+2. A stable, independently authenticated account+device channel, device Ed25519 credential provisioning/rotation and secure keystore, fresh OAuth session revocation, operator signing-key pinning and verified OpenAI Secure MCP Tunnel calling-app identity. No customer PC can write the SaaS quota DB.
+3. End-to-end actual private two-PC signed RPC test **without** changing live Hub/Agent/Funnel or opening public database, using a bounded disposable test, verified process teardown, and no permanent firewall modification. If private Windows firewall blocks, record NO-GO rather than weakening firewall.
+4. Service capacity and dependency limits: single-owner-PC uptime and upload speed, latency, SQLite lock contention, bound on concurrent in-flight tools, PC offline/reconnect behavior, reliable request receipts, controlled failover without double spend, actual **850,000/day** 24h load and honest **zero new operator cloud invoice**. The limit is a configurable ceiling and is **NOT guaranteed completed tool count**.
+5. Privacy, commercial terms, actual subscription entitlement and payment approval, user-visible warnings for shared tunnel's default 600 MCP requests/min, user device safe/Full authority and separate native execution authorization. **No production checkout, daily quotas or public tunnel is enabled here.**
+
+Release status: **staging code only, NOT ready for customers**.
