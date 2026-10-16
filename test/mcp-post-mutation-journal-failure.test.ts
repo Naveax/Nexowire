@@ -127,3 +127,20 @@ test('failed post-dispatch journal completion must be unknown, never failed', as
     },
   );
 });
+
+test('pre-dispatch audit failure is not mislabeled as an ambiguous remote mutation', async () => {
+  await withFakeMcp(
+    (root) => new IdempotencyStore(root),
+    (audit) => {
+      audit.write = async () => {
+        throw new Error('INJECTED_START_AUDIT_FAILURE');
+      };
+    },
+    async (client,store,broker) => {
+      const response = await client.callTool({name:'file_write',arguments:args});
+      assert.equal(response.isError,true);
+      assert.equal(broker.calls,0,'provider must not run before started-audit gate');
+      assert.equal((await store.get(args.idempotency_key))?.status,'failed');
+    },
+  );
+});
