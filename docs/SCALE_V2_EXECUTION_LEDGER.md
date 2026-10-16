@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-16 — S2 client-initiated outbound WS owner-quota channel (DEV/STAGING ONLY)
+
+- Prior owner private Tailscale-only RPC gateway PR #520 exact-head 7/7 GitHub Actions passed and safely squash merged as `main=519d786ca631d79c206ff2212ac5054d37e7faf2`; NO production connectivity/billing change.
+- New isolated branch `test/scale-v2-outbound-owner-ws-quota-20261016` introduces `src/product/owner-quota-outbound-ws-proposal.ts`. Clients initiate **OUTBOUND WebSocket connections**; no inbound customer PC port required. The only implemented test hub is loopback **127.0.0.1** and the test client explicitly allows only loopback `ws://`. NO production public WSS or TLS route exists yet.
+- The server bridges strict, 16KiB-bounded frames to the **existing** owner RPC through pinned 127.0.0.1 quota-only path. Device Ed25519 signature, one-use nonce, first-party account OAuth/session epoch, owner device Safe/Full and daily allowance remain checked by the trusted owner DB, not by WS connection or user headers. Tool execution is never granted by a quota response. 16 pending per connection, 16 WS clients, 4s backend timeout, no `/agent` upgrades, no network retry without new signed nonce. Client prohibits correlation-ID reuse, avoiding late-stale-response crossover.
+- 12/12 local real WS-to-owner-RPC/SQLite staging test PASS (two devices and one shared user quota, token/device revocation, replay and reconnect duplicate, bad signatures/paths/frames, owner storage unavailable). TypeScript PASS. Full verification ledger `docs/SCALE_V2_S2_OUTBOUND_OWNER_WS.md`.
+- Real external WSS TLS/certificate, production enrollment/OpenAI caller verification, remote PCs behind NAT, company uptime/HA, 600/min global provider accounting, 850k/day actual 24h load and zero-incremental-cloud-cost proof are still **BLOCKED**. Existing Free 1,000 weighted/month active; daily tiers + Custom Usage OFF, billing OFF; no Agent/Hub/Cloudflare/Tailscale runtime changes.
+
+
 ## 2026-10-16 — S2 trusted private overlay for owner-quota RPC (DEV/STAGING ONLY)
 
 - Previous signed device-to-owner localhost quota RPC PR #518 exact HEAD `c6153b8da032698afe997f6425fc5d8ee3e6196c` passed **7/7 GitHub Actions** and guarded squash merged to `main=20c30bfae3ddcd075e766f0ae1cc8e0b92dfa7fd`.
