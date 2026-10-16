@@ -362,6 +362,22 @@ test('MCP request reaches a native agent through the provider registry', async (
   assert.equal(writeRecord?.status, 'succeeded');
   assert.match(writeRecord?.fingerprint ?? '', /^[a-f0-9]{64}$/);
 
+  const queriedRecord = await client.callTool({
+    name: 'operations_idempotency_list',
+    arguments: { key: 'write-idempotency-1' },
+  });
+  const queried = queriedRecord.structuredContent as {
+    records?: Array<{ key: string; status: string }>;
+  };
+  assert.deepEqual(queried.records?.map((record) => record.key), ['write-idempotency-1']);
+  assert.equal(queried.records?.[0]?.status, 'succeeded');
+
+  const missingRecord = await client.callTool({
+    name: 'operations_idempotency_list',
+    arguments: { key: 'missing-key' },
+  });
+  assert.deepEqual((missingRecord.structuredContent as { records: unknown[] }).records, []);
+
   const aliasSet = await client.callTool({
     name: 'device_alias_set',
     arguments: {

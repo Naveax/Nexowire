@@ -215,10 +215,24 @@ export class IdempotencyStore {
     return record;
   }
 
-  async list(limit = 100): Promise<IdempotencyRecord[]> {
+  async get(keyInput: string): Promise<IdempotencyRecord | undefined> {
+    await this.initialize();
+    const record = this.records.get(validateIdempotencyKey(keyInput));
+    return record ? { ...record } : undefined;
+  }
+
+  async list(
+    limit = 100,
+    allowedDeviceIds?: ReadonlySet<string>,
+  ): Promise<IdempotencyRecord[]> {
     await this.initialize();
     const safeLimit = Math.max(1, Math.min(limit, 500));
+    // Filter before limiting: a busy foreign device must never hide an
+    // older record from a credential that is permitted to inspect it.
     return [...this.records.values()]
+      .filter((record) =>
+        allowedDeviceIds === undefined ||
+        allowedDeviceIds.has(record.targetId))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, safeLimit);
   }

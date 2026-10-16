@@ -65,6 +65,27 @@ test('idempotency store persists metadata without payloads and blocks key reuse'
     });
     assert.equal(replay.created, false);
     assert.equal(replay.record.status, 'succeeded');
+    assert.equal((await store.get('write-1'))?.status, 'succeeded');
+    assert.equal(await store.get('missing-key'), undefined);
+    // Persisted timestamps are millisecond precision; ensure ordering is stable.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await store.begin({
+      key: 'foreign-newer',
+      fingerprint: '2'.repeat(64),
+      capability: 'files.write',
+      targetId: 'foreign-device',
+    });
+    await store.complete('foreign-newer', 'succeeded');
+    assert.equal((await store.list(1))[0]?.key, 'foreign-newer');
+    assert.deepEqual(
+      (await store.list(1, new Set(['device-1']))).map((record) => record.key),
+      ['write-1'],
+    );
+    assert.deepEqual(
+      (await store.list(1, new Set(['foreign-device']))).map((record) => record.key),
+      ['foreign-newer'],
+    );
+    assert.deepEqual(await store.list(1, new Set(['absent-device'])), []);
     assert.deepEqual(replay.cachedResult, {
       ok: true,
       data: { secret: 'memory-only-result' },

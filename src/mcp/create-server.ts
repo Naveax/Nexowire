@@ -21,6 +21,7 @@ import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
   IdempotencyStoreError,
   operationFingerprint,
+  type IdempotencyRecord,
   type IdempotencyStore,
 } from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
@@ -832,17 +833,35 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List idempotency operation records',
       description:
-        'List recent payload-free idempotency records. Records contain fingerprints and status only, never mutation input or output payloads.',
+        'List visible payload-free idempotency records, or retrieve one exact key. Records contain fingerprints and status only, never mutation input or output payloads.',
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
+        key: z.string().trim().min(1).max(160)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/).optional(),
       },
     },
-    async ({ limit }) =>
-      toolResult({
-        records: ctx.idempotency
-          ? await ctx.idempotency.list(limit ?? 100)
-          : [],
-      }),
+    async ({ limit, key }) => {
+      // Historical operation status must remain visible when a directly
+      // authorized device goes offline. Do not require a live provider route.
+      // Route-only grants remain limited to their currently authorized target.
+      const allowedDeviceIds = await authorizedTargetIds(
+        ctx, await allRoutingEntries(ctx),
+      );
+      const candidates = !ctx.idempotency
+        ? []
+        : key
+          ? [await ctx.idempotency.get(key)].filter(
+              (record): record is IdempotencyRecord => record !== undefined,
+            )
+          : await ctx.idempotency.list(limit ?? 100, allowedDeviceIds);
+      return toolResult({
+        records: candidates
+          .filter((record) =>
+            allowedDeviceIds === undefined ||
+            allowedDeviceIds.has(record.targetId))
+          .slice(0, limit ?? 100),
+      });
+    },
   );
 
   server.registerTool(

@@ -10,6 +10,7 @@ import { ProviderRegistry } from '../src/core/provider-registry.js';
 import { DeviceAliasStore } from '../src/devices/alias-store.js';
 import { DeviceRoutingPolicyStore } from '../src/devices/routing-policy-store.js';
 import { DeviceGroupStore } from '../src/devices/group-store.js';
+import { IdempotencyStore } from '../src/operations/idempotency-store.js';
 import { createNexowireMcpServer } from '../src/mcp/create-server.js';
 import type {
   Provider,
@@ -64,6 +65,7 @@ class TargetProvider implements Provider {
 async function withScopedClient(
   authorization: BearerAuthorization,
   run: (client: Client) => Promise<void>,
+  seed?: (store: IdempotencyStore) => Promise<void>,
 ): Promise<void> {
   const root = await fs.mkdtemp(
     path.join(os.tmpdir(), 'nexowire-target-scope-'),
@@ -90,6 +92,8 @@ async function withScopedClient(
     ]),
   );
 
+  const idempotency = new IdempotencyStore(root);
+  if (seed) await seed(idempotency);
   const aliases = new DeviceAliasStore(root);
   const groups = new DeviceGroupStore(root);
   const routingPolicies = new DeviceRoutingPolicyStore(root);
@@ -121,6 +125,7 @@ async function withScopedClient(
     aliases,
     groups,
     routingPolicies,
+    idempotency,
     toolAuthorization: authorization,
     workspaces: new WorkspaceStore(root),
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
@@ -144,6 +149,116 @@ async function withScopedClient(
     await fs.rm(root, { recursive: true, force: true });
   }
 }
+
+test('idempotency status lookups cannot disclose records for unpermitted devices', async () => {
+  await withScopedClient(
+    {
+      kind: 'stored',
+      scope: 'mcp',
+      credential: {
+        id: 'credential-idempotency-scoped',
+        scope: 'mcp',
+        role: 'operator',
+        createdAt: '2026-09-30T12:00:00.000Z',
+        allowedDeviceIds: ['desktop'],
+      },
+    },
+    async (client) => {
+      for (const argumentsInput of [{ limit: 10 }, { key: 'scope-laptop' }]) {
+        const result = await client.callTool({
+          name: 'operations_idempotency_list',
+          arguments: argumentsInput,
+        });
+        const content = result.structuredContent as {
+          records?: Array<{ key: string; targetId: string }>;
+        };
+        assert.deepEqual(
+          content.records?.map((record) => record.key),
+          argumentsInput.key ? [] : ['scope-desktop'],
+        );
+      }
+      const permitted = await client.callTool({
+        name: 'operations_idempotency_list',
+        arguments: { key: 'scope-desktop' },
+      });
+      const records = (permitted.structuredContent as {
+        records?: Array<{ key: string; targetId: string; status: string }>;
+      }).records;
+      assert.deepEqual(records?.map((record) => record.targetId), ['desktop']);
+      assert.equal(records?.[0]?.status, 'succeeded');
+    },
+    async (store) => {
+      for (const [key, targetId, digit] of [
+        ['scope-desktop', 'desktop', '1'],
+        ['scope-laptop', 'laptop', '2'],
+      ] as const) {
+        await store.begin({
+          key, targetId, fingerprint: digit.repeat(64), capability: 'files.write',
+        });
+        await store.complete(key, 'succeeded');
+      }
+    },
+  );
+});
+
+test('offline explicitly authorized device retains scoped idempotency history', async () => {
+  await withScopedClient({
+    kind: 'stored',
+    scope: 'mcp',
+    credential: {
+      id: 'credential-idempotency-offline',
+      scope: 'mcp',
+      role: 'operator',
+      createdAt: '2026-09-30T12:00:00.000Z',
+      allowedDeviceIds: ['desktop', 'offline-device'],
+    },
+  }, async (client) => {
+    const listed = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { limit: 20 },
+    });
+    const records = (listed.structuredContent as {
+      records: Array<{ key: string; targetId: string; status: string }>
+    }).records;
+    assert.deepEqual(records.map((record) => record.key).sort(), [
+      'offline-operation', 'online-operation',
+    ]);
+    const single = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { limit: 1 },
+    });
+    assert.deepEqual((single.structuredContent as {
+      records: Array<{ key: string }>
+    }).records.map((record) => record.key), ['offline-operation']);
+    assert.equal(records.find((record) => record.key === 'offline-operation')?.status,
+      'unknown');
+    const exact = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { key: 'offline-operation' },
+    });
+    assert.deepEqual((exact.structuredContent as {
+      records: Array<{ targetId: string }>
+    }).records.map((record) => record.targetId), ['offline-device']);
+    const foreign = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { key: 'foreign-operation' },
+    });
+    assert.deepEqual((foreign.structuredContent as { records: unknown[] }).records, []);
+  }, async (store) => {
+    for (const [key, targetId, digit, status] of [
+      ['online-operation', 'desktop', '1', 'succeeded'],
+      ['offline-operation', 'offline-device', '2', 'unknown'],
+      ['foreign-operation', 'laptop', '3', 'succeeded'],
+    ] as const) {
+      if (key === 'offline-operation') {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      await store.begin({ key, targetId, fingerprint: digit.repeat(64),
+        capability: 'files.write' });
+      await store.complete(key, status);
+    }
+  });
+});
 
 test('direct device scopes filter discovery metadata and execution targets', async () => {
   await withScopedClient(
