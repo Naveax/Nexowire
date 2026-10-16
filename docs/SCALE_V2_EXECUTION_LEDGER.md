@@ -115,6 +115,15 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-16 — S2 trusted private overlay for owner-quota RPC (DEV/STAGING ONLY)
+
+- Previous signed device-to-owner localhost quota RPC PR #518 exact HEAD `c6153b8da032698afe997f6425fc5d8ee3e6196c` passed **7/7 GitHub Actions** and guarded squash merged to `main=20c30bfae3ddcd075e766f0ae1cc8e0b92dfa7fd`.
+- Separate branch `test/scale-v2-owner-rpc-tailscale-transport-20261016`: `src/product/owner-quota-tailscale-proxy-proposal.ts` DEV-only private interface gateway that checks the existing OS 'Tailscale' IPv4 adapter/100.64.0.0/10, binds exclusively to that address/ephemeral port and forwards **only** `POST /internal/owner-quota/v1/reserve` to trusted fixed loopback owner RPC. Body <=16KiB, response <=16KiB, 32 concurrent, 5s timeout, no arbitrary Host/Auth/Cookie/Forwarded headers or user URL propagated, no WebSocket upgrades/Hub /agent, fail-closed owner RPC downtime. Actual signed device request/owner account quota authorization remains enforced by previously merged PR #518/#517.
+- **10/10 new local HTTP/proxy integration tests PASS**, including full in-process real owner RPC signature+nonce+account quota+replay. TypeScript/build PASS. Pure local test only; no public deployment or remote authenticated RPC claim. `test/fixtures/scale-v2-owner-tailscale-remote-smoke.ts` is an explicit 45s self-closing DEV-only harness with ephemeral keys and configurable `NEXOWIRE_DEV_TAILSCALE_IP`; NO hardcoded personal Tailscale IP in source.
+- Read-only verification: both authorized PCs' Tailscale daemons Running/online and both-direction Tailscale ping succeeds. A Work-PC temporary bound test endpoint started and self-closed, but Nexowire shell mutation acknowledgement and time-limited test coordination failed; **no verified remote PC-to-PC signed HTTP RPC acceptance**. No permanent firewall rule, public Funnel, cloud migration, Agent restart or service route changes.
+- Limitations: The 100.64/10 prefix is NOT authentication, relies on provider/overlay encryption and independently pinned device Ed25519 keys; direct shared tailnet is not a proven $0 scalable architecture for arbitrary customers. Future daily usage tiers and Custom 100..850k OFF, active Free remains 1000 weighted/month. See `docs/SCALE_V2_S2_TAILSCALE_PRIVATE_OWNER_RPC.md`.
+
+
 ## 2026-10-16 — Owner-hosted signed device-to-quota RPC, localhost STAGING ONLY
 
 - Prior owner-shared logical quota PR #517 exact-head 7/7 GitHub CI SUCCESS, safely squash merged to `main=67bacc0561b8a55318637835b5fe58bd4ad16d2b`. The owner-side SQLite account quota authority is still DEV-only.
