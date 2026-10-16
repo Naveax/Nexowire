@@ -115,6 +115,14 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-16 — Owner-hosted signed device-to-quota RPC, localhost STAGING ONLY
+
+- Prior owner-shared logical quota PR #517 exact-head 7/7 GitHub CI SUCCESS, safely squash merged to `main=67bacc0561b8a55318637835b5fe58bd4ad16d2b`. The owner-side SQLite account quota authority is still DEV-only.
+- New isolated branch `test/scale-v2-owner-rpc-signed-loopback-20261016` adds a **loopback-only** `startProposedOwnerQuotaLoopbackRpc` API. A device supplies a strict domain-separated Ed25519 signed request bound to POST /internal/owner-quota/v1/reserve, immutable request nonce/timestamp/device, first-party bearer, invocation ID and tool ID. Pinned revocable owner-side device public key and 30s freshness are verified, owner SQLite `BEGIN IMMEDIATE` consumes nonce once, global owner clock rollback denies, expired nonce rows pruned at 180s. Client cannot supply account, subscription tier, daily limit or operation class; owner tool catalogue computes class/fingerprint and owner auth+session epoch+device checks run again before daily quota reserve. Returned decision never grants native tool execution. Internal RPC does NOT double-charge the shared external 600/min MCP ingress budget.
+- **16/16 new localhost real HTTP + SQLite negative/positive tests PASS**, TS/build PASS. Includes 2 devices same account, spoofed device signature/body/headers, nonce replay, session key revocation, Safe write denial, DB outage, cleanup, clock rollback and concurrent calls. Docs `docs/SCALE_V2_S2_SIGNED_OWNER_RPC.md`.
+- **NO PRODUCTION RPC**: service binds 127.0.0.1 only, no public TLS, provider-verified identity, authenticated real client enrollment, real remote connectivity or owner DB exposure. No Agent, Hub, Tailscale or Cloudflare config change; future daily Custom Usage OFF, current Free 1000 weighted/month remains.
+
+
 ## 2026-10-16 — Owner-side shared logical quota authority (STAGING ONLY)
 
 - Prior Ed25519 operator-signed scope PR #516 exact-head 7/7 GitHub Actions succeeded, guarded squash merged to `main=fa8838b816068274347509162322272e9581bf4e`. No production changes.
