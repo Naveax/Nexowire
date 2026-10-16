@@ -85,6 +85,7 @@ export function validateIdempotencyKey(key: string): string {
 export class IdempotencyStore {
   private loaded = false;
   private loading?: Promise<void>;
+  private mutationQueue: Promise<void> = Promise.resolve();
   private writeChain: Promise<void> = Promise.resolve();
   private readonly records = new Map<string, IdempotencyRecord>();
   private readonly cachedResults = new Map<string, unknown>();
@@ -146,6 +147,20 @@ export class IdempotencyStore {
     }
   }
 
+  // Serialize reservations and completions so a later disk snapshot cannot
+  // include an uncommitted reservation that another caller is rolling back.
+  private async mutate<T>(fn: () => Promise<T>): Promise<T> {
+    const prior = this.mutationQueue;
+    let release!: () => void;
+    this.mutationQueue = new Promise<void>((resolve) => { release = resolve; });
+    await prior;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
   async begin(input: {
     key: string;
     fingerprint: string;
@@ -156,6 +171,7 @@ export class IdempotencyStore {
     | { created: false; record: IdempotencyRecord; cachedResult?: unknown }
   > {
     await this.initialize();
+    return this.mutate(async () => {
     const key = validateIdempotencyKey(input.key);
     const existing = this.records.get(key);
     if (existing) {
@@ -202,6 +218,7 @@ export class IdempotencyStore {
       throw error;
     }
     return { created: true, record };
+    });
   }
 
   async complete(
@@ -210,6 +227,7 @@ export class IdempotencyStore {
     cachedResult?: unknown,
   ): Promise<IdempotencyRecord> {
     await this.initialize();
+    return this.mutate(async () => {
     const key = validateIdempotencyKey(keyInput);
     const existing = this.records.get(key);
     if (!existing) {
@@ -233,10 +251,12 @@ export class IdempotencyStore {
     }
     await this.persist();
     return record;
+    });
   }
 
   async get(keyInput: string): Promise<IdempotencyRecord | undefined> {
     await this.initialize();
+    await this.mutationQueue;
     const record = this.records.get(validateIdempotencyKey(keyInput));
     return record ? { ...record } : undefined;
   }
@@ -246,6 +266,7 @@ export class IdempotencyStore {
     allowedDeviceIds?: ReadonlySet<string>,
   ): Promise<IdempotencyRecord[]> {
     await this.initialize();
+    await this.mutationQueue;
     const safeLimit = Math.max(1, Math.min(limit, 500));
     // Filter before limiting: a busy foreign device must never hide an
     // older record from a credential that is permitted to inspect it.

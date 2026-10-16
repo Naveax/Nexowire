@@ -45,6 +45,10 @@ the file read is pending. The store only reports a new key as created after
 its initial `in_progress` record has been persisted. If that initial
 journal write fails, the uncommitted reservation is removed from memory
 before the error propagates; the remote mutation was never dispatched.
+Reservations and completions in the same store are serialized to prevent
+a concurrent successful journal snapshot from resurrecting a different
+reservation whose initial disk write failed. Status queries wait for the
+pending journal mutation before returning an answer.
 
 These checks are for one in-process store instance and do not replace an
 inter-process file lock or a durable distributed transaction protocol.
