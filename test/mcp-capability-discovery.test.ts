@@ -97,6 +97,15 @@ test('MCP discovery exposes only tools backed by online capabilities while keepi
   assert.ok(tools.includes('skills_list'));
 });
 
+test('cross-device transfer requires every read/write/move/delete native capability',async()=>{
+ const partial=await listToolsForCapabilities(['files.write','files.hash','files.stat']);
+ assert.equal(partial.includes('file_transfer_between_devices'),false);
+ const complete=await listToolsForCapabilities([
+  'files.read','files.stat','files.hash','files.write','files.move','files.delete'
+ ]);
+ assert.equal(complete.includes('file_transfer_between_devices'),true);
+});
+
 test('zero online native capabilities hides agent-backed tools but leaves recovery/control-plane tools', async () => {
   const tools = await listToolsForCapabilities([]);
 
@@ -152,6 +161,16 @@ test('every capability-backed MCP registration is represented in the discovery m
       ),
     ].map((match) => match[1]!);
 
+    if (name === 'file_transfer_between_devices') {
+      // Composite tool uses a checked execute() call for each source read
+      // and destination mutation, rather than one native capability.
+      for (const required of ['files.stat','files.hash','files.read',
+        'files.write','files.move','files.delete']) {
+        assert.match(block,new RegExp("'"+required.replace('.', '\\.')+"'"));
+      }
+      observed.set(name,'files.write');
+      continue;
+    }
     if (capabilities.length === 0) continue;
     assert.equal(
       new Set(capabilities).size,
