@@ -115,6 +115,21 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-16 — Owner-side shared logical quota authority (STAGING ONLY)
+
+- Prior Ed25519 operator-signed scope PR #516 exact-head 7/7 GitHub Actions succeeded, guarded squash merged to `main=fa8838b816068274347509162322272e9581bf4e`. No production changes.
+- New isolated branch `test/scale-v2-trusted-owner-quota-authority-20261016`: `src/product/trusted-owner-quota-authority-proposal.ts`, owner-side DEV schema and test. The only all-HTTP arrival 600/min rolling transport budget comes from the already-tested signed route/owner meter; **no redundant 600/min gate** added to daily tool checks. Authenticated owner account, persisted first-party OAuth epoch, registered device owner+Safe/Full mode, plan and unique logical tool invocation are checked against a **single owner-controlled shared SQLite transaction**. Incoming request JSON cannot set its own account, daily plan limit or verification boolean. Duplicate tool ID is not charged twice or authorized to execute again.
+- Two separate SQLite connections to one owner file demonstrate shared account-level counters (no daily quota multiplier from more user PCs); Free 1000/day, Plus 5000/day, Pro 10000/day, Custom 100..850000/day remain STAGING/OFF. New 15/15 negative and positive tests, TypeScript/build PASS. Synthetic 850000 boundary is not a real throughput benchmark.
+- **NO-GO**: no real network RPC, real provider identity, production OAuth/Agent integration, shared multi-host high availability, provider-side congestion telemetry, legal sales, in-flight revocation or actual zero-new-cloud-invoice 850k/day proof. Live Free 1000 weighted credits/month and all running Agent/Hub/Broker/Tailscale remain unchanged. Full runbook `docs/SCALE_V2_S2_TRUSTED_OWNER_QUOTA_AUTHORITY.md`.
+
+## 2026-10-16 — S1/S2 operator-signed trusted transport scopes (STAGING ONLY)
+
+- The predecessor shared all-ingress 600/min staging budget PR #514 completed **7/7 exact-head CI** and guarded squash merged as main `b4e09fccc4b59ada5bb4b4a3a161a7e6d0e57dcb`; still no live public tunnel or quota policy activation.
+- New isolated branch `test/scale-v2-signed-transport-scope-20261016` adds Ed25519 operator-signed DEV route claims, canonical URL and issuer/audience/key ID checks, separate calling-app/user fallback scope selection, pinned operator public key, <15min expiry, deterministic SHA-256 opaque scope and a dynamic trusted minimum route generation rechecked on **every** staging ingress arrival. `src/mcp/signed-transport-scope-proposal.ts` can adapt the existing staging transport hook, but no live CLI/Hub imports. The signing private key belongs ONLY on an owner server, never on a customer PC; tests generate ephemeral local DEV keys.
+- New `test/signed-transport-scope-staging.test.ts` mock real localhost HTTP and signature tampering/generation/expiration tests PASS 12/12 and combined quota/ingress/disclosure regression 86/86, TypeScript/build/continuation/launch audit PASS. See `docs/SCALE_V2_S1_S2_SIGNED_TRANSPORT_SCOPE.md` for test and release gates.
+- Important NO-GO: an owner signature does not establish that a real OpenAI Secure MCP Tunnel has exposed verified caller-app metadata. Signed claims must be issued only from authenticated provider/owner proof; operator epoch state must be fresh and fail closed; global provider counter, live key custody, remote acceptance, 850k/day hardware throughput and $0 incremental operator cloud bills remain unproven. Free-only active monthly credits and paid subscriptions remain unchanged.
+
+
 ## 2026-10-16 — S2 all-ingress shared transport budget, staging-only
 
 - User explicitly prioritizes Custom Usage between 100 and 850000 logical tool calls/day, with a visible default Secure MCP Tunnel **600 requests/min** service ceiling, a versioned user consent contract and zero additional operator cloud cost. Earlier one-shot checkout gate PR #513 passed exact HEAD 7/7 and merged main `b5dfb9c34dbe05c8620c3b778ba725704253e9c6`, no real payments or daily quota activation.
