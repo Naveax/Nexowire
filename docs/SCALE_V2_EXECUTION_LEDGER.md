@@ -115,6 +115,14 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-16 — S2 all-ingress shared transport budget, staging-only
+
+- User explicitly prioritizes Custom Usage between 100 and 850000 logical tool calls/day, with a visible default Secure MCP Tunnel **600 requests/min** service ceiling, a versioned user consent contract and zero additional operator cloud cost. Earlier one-shot checkout gate PR #513 passed exact HEAD 7/7 and merged main `b5dfb9c34dbe05c8620c3b778ba725704253e9c6`, no real payments or daily quota activation.
+- This separate isolated branch `test/scale-v2-all-ingress-minute-budget-20261016` adds `src/mcp/all-ingress-transport-meter-proposal.ts` and staging-only SQLite fixture/tests. Bounded shared ingress admission counts **all arrived HTTP requests** regardless of whether later authorized, including MCP discovery, failed auth, invalid paths, retries, locally rejected requests, denied WebSocket attempts. Uses owner-controlled SQLite `BEGIN IMMEDIATE`, a rolling 600 admissions/60 seconds per operator-verified tunnel+calling app scope, and lifetime observed/accepted/throttled counters. Unknown DB/clock fail closed; never trusts client-supplied scope headers.
+- Opt-in programmatic `stagingTransportBudget` hook into localhost MCP-only reverse proxy executes before auth/routing, returns 429 Retry-After for excessive ingress arrivals and 503 on meter outage. **Production CLI never enables the hook**; code does not create public DNS/tunnel, touch Agent/Hub/Broker, Cloudflare D1, quota policy or billing. Local suite 16/16 incl independent file-backed SQLite connections and request-level HTTP mock tests PASS; TypeScript PASS.
+- Important: OpenAI provider receives and potentially counts the request before this origin code can deny it. This does NOT guarantee provider 600/min compliance or 850000/day throughput. A separate upstream requester pacing/telemetry integration and real trusted transport identity are required; `docs/SCALE_V2_S2_ALL_INGRESS_TRANSPORT_BUDGET.md` records release blockers.
+
+
 ## 2026-10-15 — S4 owner-hosted one-shot Custom Usage checkout gate (STAGING ONLY)
 
 - PR #512 disclosure HMAC proof and receipt + preview merged on main at `18fbf437d27a6339bd2705c8f447626cade97c64` after exact-head 7/7 GitHub CI. **No production signup/checkout integration.**

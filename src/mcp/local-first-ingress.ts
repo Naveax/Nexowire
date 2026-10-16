@@ -1,5 +1,6 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { LocalFirstTransportBudgetHook } from './all-ingress-transport-meter-proposal.js';
 
 /**
  * An opt-in LOOPBACK-only MCP ingress for a local, already running Nexowire Hub.
@@ -16,11 +17,13 @@ export interface LocalFirstIngressOptions {
   publicHostname?: string;
   maxConcurrent?: number;
   maxRequestBytes?: number;
+  /** DEV only. Operator-supplied trusted tunnel+app scope, NEVER HTTP input. */
+  stagingTransportBudget?: LocalFirstTransportBudgetHook;
 }
 
 export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Required<
   Pick<LocalFirstIngressOptions, 'hubPort'|'listenPort'|'maxConcurrent'|'maxRequestBytes'>
-> & {publicHostname?: string} {
+> & {publicHostname?: string;stagingTransportBudget?: LocalFirstTransportBudgetHook} {
   for (const [name, value] of [
     ['hubPort', input.hubPort], ['listenPort',input.listenPort],
   ] as const) {
@@ -53,7 +56,10 @@ export function validateLocalFirstIngress(input: LocalFirstIngressOptions): Requ
     publicHostname = value;
   }
   return {hubPort:input.hubPort,listenPort:input.listenPort,maxConcurrent,
-    maxRequestBytes,...(publicHostname ? {publicHostname}:{})};
+    maxRequestBytes,...(publicHostname ? {publicHostname}:{}),
+    ...(input.stagingTransportBudget
+      ? {stagingTransportBudget:input.stagingTransportBudget}:{}),
+  };
 }
 
 /**
@@ -154,6 +160,25 @@ export function createLocalFirstIngressServer(options:LocalFirstIngressOptions):
   const settings=validateLocalFirstIngress(options);
   let active=0;
   const server=createServer((req,res)=>{
+    // STAGING opt-in ONLY. Count before auth, route, method and body checks.
+    // This observes requests AFTER provider receipt, so it cannot reclaim or
+    // override OpenAI's own shared tunnel allowance.
+    if(settings.stagingTransportBudget){
+      let allowance;
+      try{
+        const h=settings.stagingTransportBudget;
+        allowance=h.meter.observe(h.trustedScope,h.clock?.()??new Date());
+      }catch{
+        reject(res,503,'ingress_transport_meter_unavailable');
+        return;
+      }
+      if(!allowance.allowed){
+        res.setHeader('retry-after',String(Math.max(1,
+          Math.ceil(allowance.retryAfterMs/1000))));
+        reject(res,429,'ingress_transport_rate_limited');
+        return;
+      }
+    }
     // No /agent websocket upgrade and no arbitrary URL, query, admin, health,
     // callback, filesystem or proxy CONNECT access through the tunnel.
     const path=req.url ?? '';
@@ -244,7 +269,18 @@ export function createLocalFirstIngressServer(options:LocalFirstIngressOptions):
     });
     req.pipe(upstream);
   });
-  server.on('upgrade',(_req,socket)=>socket.destroy());
+  server.on('upgrade',(_req,socket)=>{
+    // Denied WebSocket upgrades are STILL observed as arrival attempts.
+    if(settings.stagingTransportBudget){
+      try{
+        const h=settings.stagingTransportBudget;
+        h.meter.observe(h.trustedScope,h.clock?.()??new Date());
+      }catch{
+        // Always destroy even if trusted quota DB is down.
+      }
+    }
+    socket.destroy();
+  });
   server.requestTimeout=30_000;
   server.headersTimeout=15_000;
   server.keepAliveTimeout=5_000;
