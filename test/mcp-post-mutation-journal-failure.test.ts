@@ -144,3 +144,29 @@ test('pre-dispatch audit failure is not mislabeled as an ambiguous remote mutati
     },
   );
 });
+
+test('repeated audit sink failures do not hide a previously confirmed remote outcome', async () => {
+  await withFakeMcp(
+    (root) => new IdempotencyStore(root),
+    (audit) => {
+      const original = audit.write.bind(audit);
+      let writes = 0;
+      audit.write = async (entry) => {
+        if (++writes >= 2) throw new Error('INJECTED_PERSISTENT_AUDIT_FAILURE');
+        return original(entry);
+      };
+    },
+    async (client,store,broker) => {
+      const first = await client.callTool({name:'file_write',arguments:args});
+      assert.equal(first.isError,true);
+      const detail = first.structuredContent as {
+        recoveryAuditFailed?: boolean;
+        idempotency?: {persistedStatus?:string};
+      };
+      assert.equal(detail.recoveryAuditFailed,true);
+      assert.equal(detail.idempotency?.persistedStatus,'succeeded');
+      assert.equal((await store.get(args.idempotency_key))?.status,'succeeded');
+      assert.equal(broker.calls,1);
+    },
+  );
+});

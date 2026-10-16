@@ -540,16 +540,23 @@ async function execute(
       await ctx.idempotency.complete(idempotencyKey, recordedStatus);
     }
 
-    await ctx.audit?.write({
-      operationId,
-      status: 'failed',
-      capability,
-      ...(targetId ? { targetId } : {}),
-      ...(providerId ? { providerId } : {}),
-      durationMs: Math.round(performance.now() - started),
-      errorCode,
-      message,
-    });
+    // An unavailable audit sink must not mask the original failure or
+    // contradict an outcome already durably recorded in the journal.
+    let recoveryAuditFailed = false;
+    try {
+      await ctx.audit?.write({
+        operationId,
+        status: persistedOutcome ?? 'failed',
+        capability,
+        ...(targetId ? { targetId } : {}),
+        ...(providerId ? { providerId } : {}),
+        durationMs: Math.round(performance.now() - started),
+        errorCode,
+        message,
+      });
+    } catch {
+      recoveryAuditFailed = true;
+    }
     return toolResult(
       {
         ok: false,
@@ -558,6 +565,7 @@ async function execute(
           code: errorCode,
           message,
         },
+        ...(recoveryAuditFailed ? { recoveryAuditFailed: true } : {}),
         ...(idempotencyKey
           ? {
               idempotency: {

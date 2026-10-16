@@ -37,6 +37,10 @@ remote outcome was already durably confirmed, a subsequent audit/log failure
 must not overwrite that `succeeded` or `failed` outcome. A tool-level reporting
 error may therefore coexist with a journal record stating the confirmed
 remote operation outcome; inspect the exact key before another mutation.
+If the audit sink also rejects the recovery error event, the MCP response
+includes `recoveryAuditFailed=true` instead of allowing that secondary
+failure to erase the original error. This is operationally degraded and
+requires investigating audit storage; it does not confer success.
 
 For an `unknown` outcome, **do not automatically retry with a new idempotency key**.
 Read back the remote target state using an authorized read-only operation, then
