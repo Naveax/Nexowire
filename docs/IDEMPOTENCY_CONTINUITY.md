@@ -30,6 +30,14 @@ original file content, request body or cached mutation result.
 - `unknown`: the remote operation's final effect is ambiguous, for example a lost
   acknowledgement or a hub restart while execution was in progress.
 
+Once provider execution has been dispatched, a later local journal completion
+failure must not be treated as proof that the remote mutation failed. The
+orchestrator records `unknown` when it can persist a recovery state. If the
+remote outcome was already durably confirmed, a subsequent audit/log failure
+must not overwrite that `succeeded` or `failed` outcome. A tool-level reporting
+error may therefore coexist with a journal record stating the confirmed
+remote operation outcome; inspect the exact key before another mutation.
+
 For an `unknown` outcome, **do not automatically retry with a new idempotency key**.
 Read back the remote target state using an authorized read-only operation, then
 decide manually whether a new write is needed. A repeat call using the same key

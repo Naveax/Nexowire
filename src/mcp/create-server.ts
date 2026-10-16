@@ -347,6 +347,8 @@ async function execute(
   const started = performance.now();
   let targetId: string | undefined;
   let idempotencyCreated = false;
+  let providerDispatched = false;
+  let persistedOutcome: 'succeeded' | 'failed' | undefined;
 
   try {
     targetId = await resolveDevice(ctx, deviceId);
@@ -468,6 +470,9 @@ async function execute(
       ...(providerId ? { providerId } : {}),
     });
 
+    // A remote side effect may happen after dispatch, even if its response
+    // or the subsequent local journal/audit update fails.
+    providerDispatched = true;
     const result = await ctx.providers.execute(
       {
         targetId,
@@ -486,6 +491,7 @@ async function execute(
         result.ok ? 'succeeded' : 'failed',
         result,
       );
+      persistedOutcome = result.ok ? 'succeeded' : 'failed';
     }
 
     await ctx.audit?.write({
@@ -522,11 +528,16 @@ async function execute(
         ? error.code
         : 'EXECUTION_FAILED';
 
-    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
-      await ctx.idempotency.complete(
-        idempotencyKey,
-        errorCode === 'MUTATION_STATE_UNKNOWN' ? 'unknown' : 'failed',
-      );
+    // Do not overwrite a durably confirmed remote outcome just because the
+    // final audit write failed. Once provider execution started, an error in
+    // confirmation or journal persistence has an UNKNOWN side-effect state,
+    // never proof that the mutation did not run.
+    const recordedStatus = persistedOutcome ??
+      (providerDispatched || errorCode === 'MUTATION_STATE_UNKNOWN'
+        ? 'unknown' : 'failed');
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency &&
+        persistedOutcome === undefined) {
+      await ctx.idempotency.complete(idempotencyKey, recordedStatus);
     }
 
     await ctx.audit?.write({
@@ -552,10 +563,7 @@ async function execute(
               idempotency: {
                 key: idempotencyKey,
                 replayed: false,
-                persistedStatus:
-                  errorCode === 'MUTATION_STATE_UNKNOWN'
-                    ? 'unknown'
-                    : 'failed',
+                persistedStatus: recordedStatus,
               },
             }
           : {}),
