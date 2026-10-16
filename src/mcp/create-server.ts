@@ -21,6 +21,7 @@ import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
   IdempotencyStoreError,
   operationFingerprint,
+  type IdempotencyRecord,
   type IdempotencyStore,
 } from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
@@ -832,17 +833,30 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List idempotency operation records',
       description:
-        'List recent payload-free idempotency records. Records contain fingerprints and status only, never mutation input or output payloads.',
+        'List visible payload-free idempotency records, or retrieve one exact key. Records contain fingerprints and status only, never mutation input or output payloads.',
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
+        key: z.string().trim().min(1).max(160)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/).optional(),
       },
     },
-    async ({ limit }) =>
-      toolResult({
-        records: ctx.idempotency
-          ? await ctx.idempotency.list(limit ?? 100)
-          : [],
-      }),
+    async ({ limit, key }) => {
+      const visibleDevices = new Set(
+        (await routingEntries(ctx)).map((device) => device.id),
+      );
+      const candidates = !ctx.idempotency
+        ? []
+        : key
+          ? [await ctx.idempotency.get(key)].filter(
+              (record): record is IdempotencyRecord => record !== undefined,
+            )
+          : await ctx.idempotency.list(500);
+      return toolResult({
+        records: candidates
+          .filter((record) => visibleDevices.has(record.targetId))
+          .slice(0, limit ?? 100),
+      });
+    },
   );
 
   server.registerTool(

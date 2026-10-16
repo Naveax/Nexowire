@@ -65,6 +65,8 @@ test('idempotency store persists metadata without payloads and blocks key reuse'
     });
     assert.equal(replay.created, false);
     assert.equal(replay.record.status, 'succeeded');
+    assert.equal((await store.get('write-1'))?.status, 'succeeded');
+    assert.equal(await store.get('missing-key'), undefined);
     assert.deepEqual(replay.cachedResult, {
       ok: true,
       data: { secret: 'memory-only-result' },

@@ -215,6 +215,12 @@ export class IdempotencyStore {
     return record;
   }
 
+  async get(keyInput: string): Promise<IdempotencyRecord | undefined> {
+    await this.initialize();
+    const record = this.records.get(validateIdempotencyKey(keyInput));
+    return record ? { ...record } : undefined;
+  }
+
   async list(limit = 100): Promise<IdempotencyRecord[]> {
     await this.initialize();
     const safeLimit = Math.max(1, Math.min(limit, 500));
