@@ -153,3 +153,65 @@ test('in-progress records become unknown after hub restart', async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('concurrent initialization does not admit conflicting idempotency key before journal loads', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-idempotency-load-race-'));
+  try {
+    const original = new IdempotencyStore(root);
+    await original.begin({
+      key: 'historical-key',
+      fingerprint: 'a'.repeat(64),
+      capability: 'files.write',
+      targetId: 'device-1',
+    });
+    await original.complete('historical-key', 'succeeded');
+
+    const resumed = new IdempotencyStore(root);
+    // Leave initialization pending at the disk read and issue a competing
+    // request before awaiting it. This previously treated the map as empty.
+    const loading = resumed.initialize();
+    await assert.rejects(
+      () => resumed.begin({
+        key: 'historical-key',
+        fingerprint: 'b'.repeat(64),
+        capability: 'files.write',
+        targetId: 'device-1',
+      }),
+      (error: unknown) => error instanceof IdempotencyStoreError &&
+        error.code === 'IDEMPOTENCY_KEY_REUSED',
+    );
+    await loading;
+    assert.equal((await resumed.get('historical-key'))?.fingerprint, 'a'.repeat(64));
+    const disk = JSON.parse(await fs.readFile(
+      path.join(root, 'idempotency-records.json'), 'utf8',
+    )) as {records: Array<{key:string;fingerprint:string}>};
+    assert.equal(disk.records.find((record) => record.key === 'historical-key')
+      ?.fingerprint, 'a'.repeat(64));
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('failed disk persistence does not leave an uncommitted in-progress key', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-idempotency-disk-fail-'));
+  const temp = path.join(root, 'idempotency-records.json.tmp');
+  try {
+    const store = new IdempotencyStore(root);
+    await store.initialize();
+    await fs.mkdir(temp);
+    const request = {
+      key: 'recoverable-write',
+      fingerprint: 'c'.repeat(64),
+      capability: 'files.write',
+      targetId: 'device-1',
+    };
+    await assert.rejects(() => store.begin(request));
+    assert.equal(await store.get(request.key), undefined);
+    await fs.rmdir(temp);
+    const retry = await store.begin(request);
+    assert.equal(retry.created, true);
+    assert.equal((await store.get(request.key))?.status, 'in_progress');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
