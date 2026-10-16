@@ -115,6 +115,13 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-16 — Owner-side shared logical quota authority (STAGING ONLY)
+
+- Prior Ed25519 operator-signed scope PR #516 exact-head 7/7 GitHub Actions succeeded, guarded squash merged to `main=fa8838b816068274347509162322272e9581bf4e`. No production changes.
+- New isolated branch `test/scale-v2-trusted-owner-quota-authority-20261016`: `src/product/trusted-owner-quota-authority-proposal.ts`, owner-side DEV schema and test. The only all-HTTP arrival 600/min rolling transport budget comes from the already-tested signed route/owner meter; **no redundant 600/min gate** added to daily tool checks. Authenticated owner account, persisted first-party OAuth epoch, registered device owner+Safe/Full mode, plan and unique logical tool invocation are checked against a **single owner-controlled shared SQLite transaction**. Incoming request JSON cannot set its own account, daily plan limit or verification boolean. Duplicate tool ID is not charged twice or authorized to execute again.
+- Two separate SQLite connections to one owner file demonstrate shared account-level counters (no daily quota multiplier from more user PCs); Free 1000/day, Plus 5000/day, Pro 10000/day, Custom 100..850000/day remain STAGING/OFF. New 15/15 negative and positive tests, TypeScript/build PASS. Synthetic 850000 boundary is not a real throughput benchmark.
+- **NO-GO**: no real network RPC, real provider identity, production OAuth/Agent integration, shared multi-host high availability, provider-side congestion telemetry, legal sales, in-flight revocation or actual zero-new-cloud-invoice 850k/day proof. Live Free 1000 weighted credits/month and all running Agent/Hub/Broker/Tailscale remain unchanged. Full runbook `docs/SCALE_V2_S2_TRUSTED_OWNER_QUOTA_AUTHORITY.md`.
+
 ## 2026-10-16 — S1/S2 operator-signed trusted transport scopes (STAGING ONLY)
 
 - The predecessor shared all-ingress 600/min staging budget PR #514 completed **7/7 exact-head CI** and guarded squash merged as main `b4e09fccc4b59ada5bb4b4a3a161a7e6d0e57dcb`; still no live public tunnel or quota policy activation.
