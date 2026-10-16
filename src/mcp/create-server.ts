@@ -841,8 +841,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       },
     },
     async ({ limit, key }) => {
-      const visibleDevices = new Set(
-        (await routingEntries(ctx)).map((device) => device.id),
+      // Historical operation status must remain visible when a directly
+      // authorized device goes offline. Do not require a live provider route.
+      // Route-only grants remain limited to their currently authorized target.
+      const allowedDeviceIds = await authorizedTargetIds(
+        ctx, await allRoutingEntries(ctx),
       );
       const candidates = !ctx.idempotency
         ? []
@@ -853,7 +856,9 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           : await ctx.idempotency.list(500);
       return toolResult({
         records: candidates
-          .filter((record) => visibleDevices.has(record.targetId))
+          .filter((record) =>
+            allowedDeviceIds === undefined ||
+            allowedDeviceIds.has(record.targetId))
           .slice(0, limit ?? 100),
       });
     },

@@ -201,6 +201,55 @@ test('idempotency status lookups cannot disclose records for unpermitted devices
   );
 });
 
+test('offline explicitly authorized device retains scoped idempotency history', async () => {
+  await withScopedClient({
+    kind: 'stored',
+    scope: 'mcp',
+    credential: {
+      id: 'credential-idempotency-offline',
+      scope: 'mcp',
+      role: 'operator',
+      createdAt: '2026-09-30T12:00:00.000Z',
+      allowedDeviceIds: ['desktop', 'offline-device'],
+    },
+  }, async (client) => {
+    const listed = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { limit: 20 },
+    });
+    const records = (listed.structuredContent as {
+      records: Array<{ key: string; targetId: string; status: string }>
+    }).records;
+    assert.deepEqual(records.map((record) => record.key).sort(), [
+      'offline-operation', 'online-operation',
+    ]);
+    assert.equal(records.find((record) => record.key === 'offline-operation')?.status,
+      'unknown');
+    const exact = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { key: 'offline-operation' },
+    });
+    assert.deepEqual((exact.structuredContent as {
+      records: Array<{ targetId: string }>
+    }).records.map((record) => record.targetId), ['offline-device']);
+    const foreign = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { key: 'foreign-operation' },
+    });
+    assert.deepEqual((foreign.structuredContent as { records: unknown[] }).records, []);
+  }, async (store) => {
+    for (const [key, targetId, digit, status] of [
+      ['online-operation', 'desktop', '1', 'succeeded'],
+      ['offline-operation', 'offline-device', '2', 'unknown'],
+      ['foreign-operation', 'laptop', '3', 'succeeded'],
+    ] as const) {
+      await store.begin({ key, targetId, fingerprint: digit.repeat(64),
+        capability: 'files.write' });
+      await store.complete(key, status);
+    }
+  });
+});
+
 test('direct device scopes filter discovery metadata and execution targets', async () => {
   await withScopedClient(
     {
