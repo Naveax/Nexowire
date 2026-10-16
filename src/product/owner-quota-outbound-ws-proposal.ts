@@ -2,10 +2,12 @@ import {createServer,type RequestListener} from 'node:http';
 import {createServer as createSecureServer} from 'node:https';
 import {checkServerIdentity} from 'node:tls';
 import {X509Certificate} from 'node:crypto';
-import type {AddressInfo} from 'node:net';
+import type {AddressInfo,Socket} from 'node:net';
 import WebSocket,{WebSocketServer} from 'ws';
 import type {SignedOwnerQuotaRpcEnvelope} from './owner-quota-loopback-rpc-proposal.js';
-import {verifyOwnerRpcLoopbackDestination} from './owner-quota-tailscale-proxy-proposal.js';
+import {verifyOwnerRpcLoopbackDestination,
+  resolvePinnedTailscaleInterface,isTailscalePrivateIPv4}
+  from './owner-quota-tailscale-proxy-proposal.js';
 
 /**
  * DEV/STAGING only. A remote PC would initiate an OUTBOUND WSS connection
@@ -72,16 +74,26 @@ export type StagingOwnerWssIdentity={
   trustedCaPem:string;
   /** Exact SHA-256 certificate fingerprint pinned by operator enrollment. */
   expectedLeafSha256:string;
+  /** DEV private overlay only: operator-pinned server Tailnet IPv4. */
+  expectedTailscaleIPv4?:string;
 };
 export type StagingOwnerWssTlsConfig={
   /** Trusted DEV private key. Never shipped in customer bundle. */
   privateKeyPem:string;
   certificatePem:string;
 };
-export function verifyStagingQuotaWsUrl(value:string,secure=false):string{
+export function verifyStagingQuotaWsUrl(
+  value:string,secure=false,expectedTailscaleIPv4?:string,
+):string{
   let u:URL;
   try{u=new URL(value)}catch{throw new Error('Invalid staging outbound WS URL')}
-  if(u.protocol!==(secure?'wss:':'ws:')||u.hostname!=='127.0.0.1'||
+  if(expectedTailscaleIPv4 &&
+    !isTailscalePrivateIPv4(expectedTailscaleIPv4)){
+    throw new Error('Invalid pinned owner Tailnet IPv4');
+  }
+  if(u.protocol!==(secure?'wss:':'ws:')||
+    u.hostname!==(expectedTailscaleIPv4??'127.0.0.1')||
+    (expectedTailscaleIPv4 && !secure)||
     !u.port||u.pathname!==WS_PATH||
     u.search||u.hash||u.username||u.password){
     throw new Error('STAGING WS may connect only to exact loopback hub');
@@ -93,8 +105,18 @@ export async function startProposedOwnerQuotaOutboundWsHub(input:{
   fetchImpl?:typeof fetch;
   /** Optional TLS1.3-only loopback test. Not a production public listener. */
   tls?:StagingOwnerWssTlsConfig;
+  /** DEV only: bind WSS to a VERIFIED local Tailscale adapter, never WAN. */
+  stagingTailscaleIPv4?:string;
 }):Promise<{url:string;close():Promise<void>}> {
   const rpcUrl=verifyOwnerRpcLoopbackDestination(input.trustedOwnerRpcOrigin);
+  if(input.stagingTailscaleIPv4 && !input.tls){
+    throw new Error('Private overlay owner quota WS requires TLS 1.3');
+  }
+  // Resolves ONLY the real OS Tailscale adapter; an arbitrary bound
+  // 100.64/10 address or X-Forwarded-* HTTP header is not sufficient.
+  const tailnet=input.stagingTailscaleIPv4
+    ?resolvePinnedTailscaleInterface(input.stagingTailscaleIPv4):undefined;
+  const bindIp=tailnet?.address??'127.0.0.1';
   const call=input.fetchImpl??fetch;
   const connections=new Set<WebSocket>();
   const notFound:RequestListener=(_req,res)=>{
@@ -112,7 +134,11 @@ export async function startProposedOwnerQuotaOutboundWsHub(input:{
     clientTracking:true,perMessageDeflate:false,
   });
   httpServer.on('upgrade',(req,socket,head)=>{
-    if(req.url!==WS_PATH||req.method!=='GET'||connections.size>=MAX_WS_CLIENTS){
+    const tcp=socket as Socket;
+    const peer=(tcp.remoteAddress??'').replace(/^::ffff:/,'');
+    if(tcp.localAddress!==bindIp ||
+      (tailnet && !isTailscalePrivateIPv4(peer)) ||
+      req.url!==WS_PATH||req.method!=='GET'||connections.size>=MAX_WS_CLIENTS){
       socket.destroy();return;
     }
     server.handleUpgrade(req,socket,head,ws=>{
@@ -200,13 +226,13 @@ export async function startProposedOwnerQuotaOutboundWsHub(input:{
   httpServer.maxConnections=MAX_WS_CLIENTS+4;
   await new Promise<void>((resolve,reject)=>{
     httpServer.once('error',reject);
-    httpServer.listen(0,'127.0.0.1',()=>{
+    httpServer.listen(0,bindIp,()=>{
       httpServer.off('error',reject);resolve();
     });
   });
   const addr=httpServer.address() as AddressInfo;
   return {
-    url:(input.tls?'wss://':'ws://')+'127.0.0.1:'+addr.port+WS_PATH,
+    url:(input.tls?'wss://':'ws://')+addr.address+':'+addr.port+WS_PATH,
     async close(){
       for(const ws of connections)ws.terminate();
       await new Promise<void>(resolve=>server.close(()=>resolve()));
@@ -234,7 +260,9 @@ export class ProposedOutboundQuotaWsClient {
   private readyPromise:Promise<void>;
   constructor(url:string,identity?:StagingOwnerWssIdentity){
     const secure=!!identity;
-    const verifiedUrl=verifyStagingQuotaWsUrl(url,secure);
+    const verifiedUrl=verifyStagingQuotaWsUrl(
+      url,secure,identity?.expectedTailscaleIPv4,
+    );
     let secureOptions:{}={};
     if(identity){
       const {trustedCaPem,expectedLeafSha256}=identity;

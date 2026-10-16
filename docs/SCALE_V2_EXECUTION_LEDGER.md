@@ -115,6 +115,16 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-17 — ACTUAL two-PC private Tailnet WSS/TLS1.3 owner quota acceptance (STAGING)
+
+- Prior WSS TLS CA/hostname/leaf-pin PR #522 exact-head GitHub CI 7/7 success, guarded squash merged to `main=133335a5c03b672a7b3c4899eea9cdea7dd28da5`.
+- New isolated branch `test/scale-v2-tailnet-wss-two-pc-20261017` supports a *DEV-only*, operator-pinned Tailscale network adapter WSS listener requiring TLS1.3; client pins its exact 100.64/10 server IPv4, trusted CA, leaf SHA256 and checks IP SAN. No public listener, `/agent`, general reverse proxy or production CLI import.
+- **Physical Work PC as ephemeral trusted owner host and Naveax as client:** Tailscale/WireGuard private route with a **real TLSv1.3 handshake**, CA trust + IP SAN + leaf SHA256 pin checked by Naveax, then first signed DEV read quota call returned **HTTP 200 `reserved`** and `authorizesToolExecution=false`; exact same signed request returned **HTTP 409** nonce replay denied. This is FIRST VERIFIED two-device authenticated-transport/quota RPC response after previous shell timeouts. Owner-generated ephemeral DEV signed payload was transferred to Naveax; does **not** demonstrate real customer device-held private-key onboarding. Both actual machines and active Tailscale private overlay were involved.
+- New four negative unit tests plus earlier staging integration: **151/151 combined Windows tests PASS**, typecheck/build/continuation/AI Screen launch audit PASS. Test fixture uses ephemeral cert/key and synthetic account only; no native OS tool command, cloud cost, billing or user quota mutation.
+- Temporary managed Node server was stopped and VERIFIED no smoke processes; explicit cleanup removed owner readiness/temp cert/private-key folder and Naveax temporary client/config files. No public Firewall, Cloudflare, Tailscale Serve/Funnel, Agent/Hub/Broker or DNS changes.
+- Public arbitrary-customer WSS access **NOT built**, SaaS OAuth and real customer device key possession **NOT proven**, platform global default 600/min upstream telemetry and actual 850k/day 24h/$0 operator invoice **NOT proven**. Current Free 1000 weighted credits/month remains live; daily Custom Usage and billing OFF. Full acceptance details in `docs/SCALE_V2_S2_TAILNET_WSS_REAL_TWO_PC_ACCEPTANCE.md`.
+
+
 ## 2026-10-17 — S2 outbound WSS TLS1.3 and pinned owner certificate (STAGING ONLY)
 
 - Prior outbound WebSocket owner quota PR #521 exact-head GitHub Actions **7/7 PASS**, guarded squash merged `main=67c49ee90e2d07db9aa517c366fe0cb4da627d67`. No public WSS or active customer plan change.
