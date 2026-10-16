@@ -170,3 +170,32 @@ test('repeated audit sink failures do not hide a previously confirmed remote out
     },
   );
 });
+
+class AlwaysFailedCompletionStore extends IdempotencyStore {
+  override async complete(): Promise<IdempotencyRecord> {
+    throw new Error('INJECTED_UNAVAILABLE_COMPLETION_JOURNAL');
+  }
+}
+
+test('unavailable journal after remote dispatch returns fail-closed metadata without claiming persisted status', async () => {
+  await withFakeMcp(
+    (root) => new AlwaysFailedCompletionStore(root),
+    () => {},
+    async (client, store, broker) => {
+      const response = await client.callTool({name:'file_write',arguments:args});
+      assert.equal(response.isError,true,'the caller receives an actionable failure');
+      const details = response.structuredContent as {
+        recoveryJournalFailed?: boolean;
+        idempotency?: { persistedStatus?: string; outcomeUnconfirmed?: boolean };
+      };
+      assert.equal(details.recoveryJournalFailed, true);
+      assert.equal(details.idempotency?.persistedStatus, undefined);
+      assert.equal(details.idempotency?.outcomeUnconfirmed, true);
+      assert.equal(broker.calls, 1, 'the underlying side effect was dispatched once');
+      assert.equal((await store.get(args.idempotency_key))?.status, 'in_progress');
+      const next = await client.callTool({name:'file_write',arguments:args});
+      assert.equal(next.isError,true);
+      assert.equal(broker.calls,1,'the same idempotency key must not dispatch twice');
+    },
+  );
+});

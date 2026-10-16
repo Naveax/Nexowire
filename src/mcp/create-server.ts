@@ -535,9 +535,16 @@ async function execute(
     const recordedStatus = persistedOutcome ??
       (providerDispatched || errorCode === 'MUTATION_STATE_UNKNOWN'
         ? 'unknown' : 'failed');
+    let recoveryJournalFailed = false;
     if (idempotencyKey && idempotencyCreated && ctx.idempotency &&
         persistedOutcome === undefined) {
-      await ctx.idempotency.complete(idempotencyKey, recordedStatus);
+      try {
+        await ctx.idempotency.complete(idempotencyKey, recordedStatus);
+      } catch {
+        // Never state that a status was persisted when the recovery write
+        // itself failed. The remote operation may already have executed.
+        recoveryJournalFailed = true;
+      }
     }
 
     // An unavailable audit sink must not mask the original failure or
@@ -566,12 +573,15 @@ async function execute(
           message,
         },
         ...(recoveryAuditFailed ? { recoveryAuditFailed: true } : {}),
+        ...(recoveryJournalFailed ? { recoveryJournalFailed: true } : {}),
         ...(idempotencyKey
           ? {
               idempotency: {
                 key: idempotencyKey,
                 replayed: false,
-                persistedStatus: recordedStatus,
+                ...(idempotencyCreated && !recoveryJournalFailed
+                  ? { persistedStatus: recordedStatus }
+                  : { outcomeUnconfirmed: providerDispatched }),
               },
             }
           : {}),

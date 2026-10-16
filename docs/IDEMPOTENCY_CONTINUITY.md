@@ -39,8 +39,11 @@ error may therefore coexist with a journal record stating the confirmed
 remote operation outcome; inspect the exact key before another mutation.
 If the audit sink also rejects the recovery error event, the MCP response
 includes `recoveryAuditFailed=true` instead of allowing that secondary
-failure to erase the original error. This is operationally degraded and
-requires investigating audit storage; it does not confer success.
+failure to erase the original error. If both the original journal write
+and the recovery journal write fail, the MCP response sets
+`recoveryJournalFailed=true` and deliberately omits `persistedStatus`,
+marking the side effect unconfirmed. This is operationally degraded and
+requires investigating journal/audit storage; it does not confer success.
 
 For an `unknown` outcome, **do not automatically retry with a new idempotency key**.
 Read back the remote target state using an authorized read-only operation, then
