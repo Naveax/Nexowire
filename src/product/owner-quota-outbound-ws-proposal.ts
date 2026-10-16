@@ -1,4 +1,7 @@
-import {createServer,type Server} from 'node:http';
+import {createServer,type RequestListener} from 'node:http';
+import {createServer as createSecureServer} from 'node:https';
+import {checkServerIdentity} from 'node:tls';
+import {X509Certificate} from 'node:crypto';
 import type {AddressInfo} from 'node:net';
 import WebSocket,{WebSocketServer} from 'ws';
 import type {SignedOwnerQuotaRpcEnvelope} from './owner-quota-loopback-rpc-proposal.js';
@@ -64,10 +67,21 @@ function reject(socket:WebSocket,id:string,status:number,error:string){
   wsDecision(socket,{version:1,kind:'decision',requestId:id,
     httpStatus:status,data:{error}});
 }
-export function verifyStagingQuotaWsUrl(value:string):string{
+export type StagingOwnerWssIdentity={
+  /** Trusted operator CA certificate (not supplied by an HTTP caller). */
+  trustedCaPem:string;
+  /** Exact SHA-256 certificate fingerprint pinned by operator enrollment. */
+  expectedLeafSha256:string;
+};
+export type StagingOwnerWssTlsConfig={
+  /** Trusted DEV private key. Never shipped in customer bundle. */
+  privateKeyPem:string;
+  certificatePem:string;
+};
+export function verifyStagingQuotaWsUrl(value:string,secure=false):string{
   let u:URL;
   try{u=new URL(value)}catch{throw new Error('Invalid staging outbound WS URL')}
-  if(u.protocol!=='ws:'||u.hostname!=='127.0.0.1'||
+  if(u.protocol!==(secure?'wss:':'ws:')||u.hostname!=='127.0.0.1'||
     !u.port||u.pathname!==WS_PATH||
     u.search||u.hash||u.username||u.password){
     throw new Error('STAGING WS may connect only to exact loopback hub');
@@ -77,13 +91,22 @@ export function verifyStagingQuotaWsUrl(value:string):string{
 export async function startProposedOwnerQuotaOutboundWsHub(input:{
   trustedOwnerRpcOrigin:string;
   fetchImpl?:typeof fetch;
+  /** Optional TLS1.3-only loopback test. Not a production public listener. */
+  tls?:StagingOwnerWssTlsConfig;
 }):Promise<{url:string;close():Promise<void>}> {
   const rpcUrl=verifyOwnerRpcLoopbackDestination(input.trustedOwnerRpcOrigin);
   const call=input.fetchImpl??fetch;
   const connections=new Set<WebSocket>();
-  const httpServer=createServer((_req,res)=>{
+  const notFound:RequestListener=(_req,res)=>{
     res.writeHead(404,{'cache-control':'no-store'});res.end();
-  });
+  };
+  const httpServer=input.tls
+    ?createSecureServer({
+      key:input.tls.privateKeyPem,
+      cert:input.tls.certificatePem,
+      minVersion:'TLSv1.3',maxVersion:'TLSv1.3',
+    },notFound)
+    :createServer(notFound);
   const server=new WebSocketServer({
     noServer:true,maxPayload:MAX_FRAME,
     clientTracking:true,perMessageDeflate:false,
@@ -183,7 +206,7 @@ export async function startProposedOwnerQuotaOutboundWsHub(input:{
   });
   const addr=httpServer.address() as AddressInfo;
   return {
-    url:'ws://127.0.0.1:'+addr.port+WS_PATH,
+    url:(input.tls?'wss://':'ws://')+'127.0.0.1:'+addr.port+WS_PATH,
     async close(){
       for(const ws of connections)ws.terminate();
       await new Promise<void>(resolve=>server.close(()=>resolve()));
@@ -209,9 +232,35 @@ export class ProposedOutboundQuotaWsClient {
     timeout:ReturnType<typeof setTimeout>;
   }>();
   private readyPromise:Promise<void>;
-  constructor(url:string){
-    this.socket=new WebSocket(verifyStagingQuotaWsUrl(url),{
-      perMessageDeflate:false,handshakeTimeout:4000,
+  constructor(url:string,identity?:StagingOwnerWssIdentity){
+    const secure=!!identity;
+    const verifiedUrl=verifyStagingQuotaWsUrl(url,secure);
+    let secureOptions:{}={};
+    if(identity){
+      const {trustedCaPem,expectedLeafSha256}=identity;
+      if(typeof trustedCaPem!=='string'||!trustedCaPem.includes('BEGIN CERTIFICATE')||
+        !/^[a-fA-F0-9]{64}$/.test(expectedLeafSha256)){
+        throw new Error('Untrusted WSS server identity configuration');
+      }
+      secureOptions={
+        ca:trustedCaPem,rejectUnauthorized:true,
+        minVersion:'TLSv1.3' as const,maxVersion:'TLSv1.3' as const,
+        checkServerIdentity:(host:string,cert:import('node:tls').PeerCertificate)=>{
+          // Never replace standard certificate-chain/hostname validation
+          // with a fingerprint comparison alone.
+          const identityError=checkServerIdentity(host,cert);
+          if(identityError)return identityError;
+          const actual=new X509Certificate(cert.raw).fingerprint256
+            .replaceAll(':','').toLowerCase();
+          if(actual!==expectedLeafSha256.toLowerCase()){
+            return new Error('Pinned owner WSS server certificate mismatch');
+          }
+          return undefined;
+        },
+      };
+    }
+    this.socket=new WebSocket(verifiedUrl,{
+      perMessageDeflate:false,handshakeTimeout:4000,...secureOptions,
     });
     this.readyPromise=new Promise<void>((resolve,reject)=>{
       this.socket.once('open',()=>resolve());

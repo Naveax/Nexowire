@@ -115,6 +115,14 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-17 — S2 outbound WSS TLS1.3 and pinned owner certificate (STAGING ONLY)
+
+- Prior outbound WebSocket owner quota PR #521 exact-head GitHub Actions **7/7 PASS**, guarded squash merged `main=67c49ee90e2d07db9aa517c366fe0cb4da627d67`. No public WSS or active customer plan change.
+- New isolated branch `test/scale-v2-wss-tls-pinned-owner-20261017` extends the prior dev owner WS hub with optional **TLS 1.3 only** loopback HTTPS server. Staging client connects over WSS only when an **independently operator-pinned trusted CA + SHA256 leaf fingerprint** are given, with explicit standard Node TLS hostname/IP SAN checks **before** pin matching; TLS1.2/cert-chain/hostname/pin mismatch denied. No `rejectUnauthorized:false` switch, no public hosts allowed, and no live CLI import.
+- `test/owner-quota-wss-tls-staging.test.ts`: ephemeral DEV certificate created using OpenSSL under the OS temp folder and removed; no private keys/certificates committed. TLS1.3 real WSS handshake then device Ed25519 signed owner RPC/account quota confirmed; negative forged/pin/CA/hostname/downgrade cases. `docs/SCALE_V2_S2_WSS_TLS_IDENTITY_STAGING.md` records limitations and release gates. If OpenSSL missing in CI, TLS-specific test cases SKIP and must not be presented as tested by that runner.
+- This proves a *local TLS* connection only. Production public CA/DNS hostname, remote PC actual transport, 600/min provider upstream, 850000/day real throughput, zero additional cloud invoices, user OAuth and native command revocation still not accepted. Current Free 1000 weighted/month stays; future daily/Custom Usage OFF and billing OFF, no Agent/Hub/Broker/Tailscale/Cloudflare runtime changes.
+
+
 ## 2026-10-16 — S2 client-initiated outbound WS owner-quota channel (DEV/STAGING ONLY)
 
 - Prior owner private Tailscale-only RPC gateway PR #520 exact-head 7/7 GitHub Actions passed and safely squash merged as `main=519d786ca631d79c206ff2212ac5054d37e7faf2`; NO production connectivity/billing change.
