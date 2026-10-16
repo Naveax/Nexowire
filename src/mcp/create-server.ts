@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -109,8 +110,20 @@ function applyToolRegistrationFilters(
         name,
         availableCapabilities,
       );
+    // A composite copy cannot borrow broader permissions than the caller
+    // has for its individual read, hash, write, move and cleanup operations.
+    const transferDependencies = name === 'file_transfer_between_devices'
+      ? ['file_read','file_stat','file_hash','file_write','file_move','file_delete']
+      : [];
+    const dependenciesAuthorized = transferDependencies.every((dependency) =>
+      isMcpToolAuthorized(input.authorization,dependency));
+    const dependenciesAvailable =
+      availableCapabilities === undefined ||
+      transferDependencies.every((dependency) =>
+        isMcpToolAvailableForCapabilities(dependency,availableCapabilities));
 
-    if (!authorized || !capabilityAvailable) {
+    if (!authorized || !capabilityAvailable ||
+        !dependenciesAuthorized || !dependenciesAvailable) {
       registered.disable();
     }
     return registered;
@@ -5252,9 +5265,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         encoding: z.enum(['utf8', 'base64']).optional(),
         max_bytes: z.number().int().min(1).max(16_777_216).optional(),
         include_sha256: z.boolean().optional(),
+        offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
       },
     },
-    async ({ device_id, provider_id, path, encoding, max_bytes, include_sha256 }) =>
+    async ({ device_id, provider_id, path, encoding, max_bytes, include_sha256, offset_bytes }) =>
       await execute(
         ctx,
         'files.read',
@@ -5263,6 +5277,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(encoding ? { encoding } : {}),
           ...(max_bytes ? { max_bytes } : {}),
           ...(include_sha256 !== undefined ? { include_sha256 } : {}),
+          ...(offset_bytes !== undefined ? { offset_bytes } : {}),
         },
         device_id,
         provider_id,
@@ -5311,7 +5326,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         path: z.string().min(1).max(4096),
         content: z.string(),
         encoding: z.enum(['utf8', 'base64']).optional(),
-        mode: z.enum(['overwrite', 'append']).optional(),
+        mode: z.enum(['overwrite', 'append', 'create', 'write_at']).optional(),
+        offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
         create_parents: z.boolean().optional(),
       },
     },
@@ -5322,6 +5338,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       content,
       encoding,
       mode,
+      offset_bytes,
       create_parents,
       idempotency_key,
     }) =>
@@ -5333,6 +5350,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           content,
           ...(encoding ? { encoding } : {}),
           ...(mode ? { mode } : {}),
+          ...(offset_bytes !== undefined ? { offset_bytes } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
         },
         device_id,
@@ -5342,6 +5360,102 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'file_transfer_between_devices',
+    {
+      title: 'Transfer file between Nexowire devices',
+      description:
+        'Copy an allowed regular file between two explicitly selected, authorized devices using bounded internal chunks. The file bytes never appear in the MCP tool response. Existing destination files are not overwritten.',
+      inputSchema: {
+        source_device_id: z.string().min(1).max(128),
+        destination_device_id: z.string().min(1).max(128),
+        source_path: z.string().min(1).max(4096),
+        destination_path: z.string().min(1).max(4000),
+        max_bytes: z.number().int().min(1).max(8_388_608).optional(),
+        create_parents: z.boolean().default(false),
+      },
+    },
+    async ({source_device_id,destination_device_id,source_path,
+      destination_path,max_bytes,create_parents}) => {
+      if(source_device_id===destination_device_id){
+        return toolResult({ok:false,error:{code:'DISTINCT_DEVICES_REQUIRED',
+          message:'Use normal file_copy for a single device.'}},true);
+      }
+      const remote=async (
+        capability:string,input:Record<string,unknown>,deviceId:string
+      ):Promise<Record<string,unknown>>=>{
+        const response=await execute(ctx,capability,input,deviceId);
+        const value=response.structuredContent as Record<string,unknown>;
+        if(value?.ok!==true){
+          const error=value?.error as Record<string,unknown>|undefined;
+          throw new Error(
+            'REMOTE_'+capability.replace(/\W/g,'_').toUpperCase()+': '+
+            String(error?.code??'UNAVAILABLE'),
+          );
+        }
+        const data=value.data;
+        if(!data||typeof data!=='object'||Array.isArray(data)){
+          throw new Error('Invalid remote capability response for '+capability);
+        }
+        return data as Record<string,unknown>;
+      };
+      try{
+        const maxAllowed=max_bytes??8_388_608;
+        const hash=async(device:string,path:string)=>{
+          const data=await remote('files.hash',
+            {path,max_bytes:maxAllowed},device);
+          if(typeof data.sha256!=='string')throw new Error('Invalid SHA-256 response.');
+          return data.sha256;
+        };
+        const report=await transferCrossDeviceFile(destination_path,{
+          statSource:async()=>{
+            const d=await remote('files.stat',{path:source_path},source_device_id);
+            return {size:Number(d.size),type:String(d.type)};
+          },
+          hashSource:()=>hash(source_device_id,source_path),
+          readSource:async(offsetBytes,maxBytes)=>{
+            const d=await remote('files.read',{
+              path:source_path,encoding:'base64',
+              offset_bytes:offsetBytes,max_bytes:maxBytes
+            },source_device_id);
+            return {sourceBytes:Number(d.size),offsetBytes:Number(d.offsetBytes),
+              bytesRead:Number(d.bytesRead),content:String(d.content)};
+          },
+          writeStage:async(stage,content,offsetBytes,first)=>{
+            const d=await remote('files.write',{
+              path:stage,content,encoding:'base64',
+              mode:first?'create':'write_at',
+              ...(first?{create_parents}:{offset_bytes:offsetBytes})
+            },destination_device_id);
+            return Number(d.bytesWritten);
+          },
+          hashStage:(stage)=>hash(destination_device_id,stage),
+          commitStage:async(stage,destination)=>{
+            await remote('files.move',{
+              source:stage,destination,overwrite:false,create_parents:false,
+              atomic_no_overwrite:true
+            },destination_device_id);
+          },
+          cleanupStage:async(stage)=>{
+            await remote('files.delete',{path:stage,recursive:false},
+              destination_device_id);
+          },
+        },{maxBytes:maxAllowed});
+        return toolResult({ok:true,data:{
+          ...report,sourceDeviceId:source_device_id,
+          destinationDeviceId:destination_device_id,
+          sourcePath:source_path
+        }});
+      }catch(error){
+        return toolResult({ok:false,error:{
+          code:error instanceof Error&&'code'in error&&
+            typeof error.code==='string'?error.code:'TRANSFER_FAILED',
+          message:error instanceof Error?error.message:'Cross-device transfer failed.',
+        }},true);
+      }
+    },
+  );
 
   server.registerTool(
     'file_stat',
@@ -5453,6 +5567,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         overwrite: z.boolean().optional(),
         recursive: z.boolean().optional(),
         create_parents: z.boolean().optional(),
+        atomic_no_overwrite: z.boolean().optional(),
       },
     },
     async ({
@@ -5463,6 +5578,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       overwrite,
       recursive,
       create_parents,
+      atomic_no_overwrite,
     }) =>
       await execute(
         ctx,
@@ -5473,6 +5589,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(overwrite !== undefined ? { overwrite } : {}),
           ...(recursive !== undefined ? { recursive } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
+          ...(atomic_no_overwrite !== undefined ? { atomic_no_overwrite } : {}),
         },
         device_id,
         provider_id,
