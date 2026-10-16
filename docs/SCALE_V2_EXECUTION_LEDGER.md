@@ -115,6 +115,13 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-17 — S5 local owner database measurement (DEV only)
+
+- New isolated S5 worktree `test/scale-v2-s5-owner-quota-local-benchmark-20261017` adds a capped, reproducible **temporary-file SQLite-only** microbenchmark of the already developed trusted owner daily logical quota reserve. No network/Cloudflare/API/Agent/tool operation or production setting is exercised. Two SQLite connections with WAL+FULL and interleaved per-account reservations (not concurrent writers), idempotent replay checks, and strict ledger total assertions.
+- One observed Work PC **1,000 unique/4 accounts** run: 1,000/1,000 reserved, 0 reject, 12 replay correctly duplicate, **733.04 local reservations/sec**, **p95 1.8952 ms**; SQLite file 262144 B plus WAL 4128272 B at measurement. One **5,000 unique/10 accounts** run: 5000/5000, 0 rejected, 20 replay duplicate, **722.60 local reservations/sec**, p95 **1.8811 ms**; SQLite 1110016 B + WAL 4136512 B. These are NOT Internet, TLS, provider, real OAuth, simultaneous writers, 24h stability or actual native tool throughput metrics.
+- New staging test `test/owner-quota-local-capacity-benchmark.test.ts` validates bounded inputs, account counter integrity, duplicate checks and fail-closed option constraints. Full methods/caveats: `docs/SCALE_V2_S5_OWNER_SQLITE_LOCAL_BENCHMARK.md`. Live Free remains monthly 1000 weighted credits, daily plans Custom Usage and billing OFF. No productive Cloudflare/D1 migrations or services changed.
+
+
 ## 2026-10-17 — ACTUAL two-PC private Tailnet WSS/TLS1.3 owner quota acceptance (STAGING)
 
 - Prior WSS TLS CA/hostname/leaf-pin PR #522 exact-head GitHub CI 7/7 success, guarded squash merged to `main=133335a5c03b672a7b3c4899eea9cdea7dd28da5`.
