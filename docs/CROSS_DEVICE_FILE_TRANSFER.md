@@ -25,7 +25,7 @@ This change introduces `file_transfer_between_devices` as an MCP operation for c
 ## Known limits / cautions
 
 1. This is a **copy-only** operation. It does not remove the source file.
-2. Transfers are **not resumable** yet. If a network error occurs during a chunk, the server best-effort deletes the incomplete stage. A disconnected worker can leave an orphaned stage file. The original destination is never overwritten by the atomic commit.
+2. Transfers are **not resumable** yet. If a network error occurs during a chunk, the server best-effort deletes a stage confirmed to have been created by that transfer. If the initial exclusive-create request fails or its result is unknown, cleanup is skipped to avoid deleting an unrelated preexisting stage. A disconnected worker can leave an orphaned stage file. The original destination is never overwritten by the atomic commit.
 3. A transfer returns a failure if the destination exists. The caller may compare the existing file hash manually before choosing a different destination.
 4. Windows NTFS and filesystems supporting regular-file hard links in the same directory are expected. Unsupported filesystems **fail closed** during publication; there is no unsafe check-then-rename fallback.
 5. The source is re-hashed before commit to detect modifications. Concurrent hostile writers or filesystem-level corruption are not transactionally excluded: the staged hash check and the source hash check are read-only observations.

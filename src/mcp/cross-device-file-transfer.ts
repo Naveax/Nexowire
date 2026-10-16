@@ -66,10 +66,11 @@ export async function transferCrossDeviceFile(
         throw new CrossDeviceTransferError('TRANSFER_CHUNK_INVALID',
           'The returned source chunk is not valid canonical Base64.');
       }
-      // An aborted write may already have created a stage file. Always
-      // attempt cleanup after the first destination call, even on failure.
-      created=true;
+      // Only clean up a stage we know was created by this transfer.
+      // In particular, a failed exclusive create may mean the stage already
+      // belonged to another writer; deleting it would destroy their data.
       const wrote=await ops.writeStage(stage,part.content,offset,offset===0);
+      created=true;
       if(wrote!==expected){
         throw new CrossDeviceTransferError('TRANSFER_WRITE_INCOMPLETE',
           'The destination accepted an incomplete chunk.');

@@ -90,11 +90,12 @@ test('incomplete write never commits and stage is cleaned',async()=>{
   (e:unknown)=>e instanceof CrossDeviceTransferError&&e.code==='TRANSFER_WRITE_INCOMPLETE');
  assert.equal(f.destination,null);assert.equal(f.cleaned,1);
 });
-test('remote write rejection cannot mutate destination',async()=>{
+test('failed exclusive stage creation does not delete a stage owned by another writer',async()=>{
  const f=fixture(Buffer.alloc(100,4),{rejectWrite:true});
  await assert.rejects(transferCrossDeviceFile('dst.bin',f.ops,{newId:()=>goodId}),
   /synthetic write failure/);
- assert.equal(f.destination,null);assert.equal(f.cleaned,1);
+ assert.equal(f.destination,null);
+ assert.equal(f.cleaned,0);
 });
 test('commit refusal leaves prior destination untouched',async()=>{
  const f=fixture(Buffer.alloc(80000,5),{rejectCommit:true});

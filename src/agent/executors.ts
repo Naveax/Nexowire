@@ -601,6 +601,13 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
     }
     const handle=await fs.open(target,'r+');
     try{
+      // Revalidate the opened file, not just the pathname. A path may be
+      // swapped for another file or symlink between lstat and open.
+      const openedInfo=await handle.stat();
+      if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
+         openedInfo.ino!==info.ino||parsed.offset_bytes>openedInfo.size){
+        throw new Error('write_at target changed between validation and open.');
+      }
       let written=0;
       while(written<content.length){
         const result=await handle.write(content,written,content.length-written,
