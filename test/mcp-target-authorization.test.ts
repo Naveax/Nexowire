@@ -223,6 +223,13 @@ test('offline explicitly authorized device retains scoped idempotency history', 
     assert.deepEqual(records.map((record) => record.key).sort(), [
       'offline-operation', 'online-operation',
     ]);
+    const single = await client.callTool({
+      name: 'operations_idempotency_list',
+      arguments: { limit: 1 },
+    });
+    assert.deepEqual((single.structuredContent as {
+      records: Array<{ key: string }>
+    }).records.map((record) => record.key), ['offline-operation']);
     assert.equal(records.find((record) => record.key === 'offline-operation')?.status,
       'unknown');
     const exact = await client.callTool({
@@ -243,6 +250,9 @@ test('offline explicitly authorized device retains scoped idempotency history', 
       ['offline-operation', 'offline-device', '2', 'unknown'],
       ['foreign-operation', 'laptop', '3', 'succeeded'],
     ] as const) {
+      if (key === 'offline-operation') {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
       await store.begin({ key, targetId, fingerprint: digit.repeat(64),
         capability: 'files.write' });
       await store.complete(key, status);

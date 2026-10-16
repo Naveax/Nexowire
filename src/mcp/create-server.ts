@@ -853,7 +853,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ? [await ctx.idempotency.get(key)].filter(
               (record): record is IdempotencyRecord => record !== undefined,
             )
-          : await ctx.idempotency.list(500);
+          : await ctx.idempotency.list(limit ?? 100, allowedDeviceIds);
       return toolResult({
         records: candidates
           .filter((record) =>
