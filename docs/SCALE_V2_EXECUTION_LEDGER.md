@@ -115,6 +115,13 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-17 — S5 real multi-writer owner SQLite concurrency acceptance (DEV only)
+
+- Post-#529 separate worktree `test/scale-v2-s5-owner-concurrent-writers-20261017` implements REAL Node Worker-thread parallel admission into one temporary owner SQLite WAL database, each worker with a different independent connection, synchronized by Atomics start barrier. Different from #529's two interleaved serial connections.
+- Existing `ProposedTrustedOwnerQuotaAuthority` owner-bound daily plan+device+first-party DEV principal+one-time logical invocation ledger exercised directly. 4 workers with 164 attempts -> **100 reserved, 3 duplicate, 61 daily-exhausted**, actual daily used and immutable invocation rows both 100. 6 workers with 126 attempts -> **100 reserved, 5 duplicate, 21 daily-exhausted**, daily count 100. No OS execution grant and no per-client override, input dimensions bounded, temporary SQLite wiped after test. Source tests `test/owner-quota-concurrent-writers-staging.test.ts` and worker fixture.
+- This proves **local multi-writer correctness under contention**, not actual remote TLS/WSS or provider capacity. No 850000 completed tool/day or zero-cloud-invoice claim. Current hosted Free monthly 1000 weighted credits; proposed daily 1000/5000/10000 and Custom 100..850000 OFF, payments OFF, no Agent/Hub/Tailscale/Cloudflare service mutation. Full constraints `docs/SCALE_V2_S5_CONCURRENT_OWNER_SQLITE.md`.
+
+
 ## 2026-10-17 — S5 local owner database measurement (DEV only)
 
 - New isolated S5 worktree `test/scale-v2-s5-owner-quota-local-benchmark-20261017` adds a capped, reproducible **temporary-file SQLite-only** microbenchmark of the already developed trusted owner daily logical quota reserve. No network/Cloudflare/API/Agent/tool operation or production setting is exercised. Two SQLite connections with WAL+FULL and interleaved per-account reservations (not concurrent writers), idempotent replay checks, and strict ledger total assertions.
