@@ -334,6 +334,14 @@ This ledger is updated through reviewed commits/PRs; issue comments store interm
 - Sources: `src/product/owner-public-wss-enrollment-lease-proposal.ts`, `test/owner-public-wss-enrollment-lease-staging.test.ts`, `docs/SCALE_V2_S2_PUBLIC_WSS_ENROLLMENT_LEASE_GUARD.md`.
 
 
+## 2026-10-15 ÔÇö S1 request-time account/device tool admission (isolated DEV)
+
+- Verified upstream main after guarded PR #506 merge: `e0bdb80a460eea425aab301ccb45773358c604ca`. This new worktree `Nexowire-scale-v2-s1-epoch-tool-admission-20261015` is independent of production Worker/MCP/Agent routes.
+- Proposed `src/product/mcp-oauth-epoch-tool-admission-proposal.ts`: single joined D1-read model checks hashed access credential, current unlocked session generation/history, configured OAuth resource/MCP scope, exact selected device owner/online state and server-classified safe/read vs full/write mode.
+- Provides a **two-check DEV dispatch wrapper** that fails closed if logout, owner transfer or mode downgrade occurs between checks. **It does NOT enforce revocation during already-running tools or make OS side effects atomic with D1.** Tool classification and Agent-side enforcement remain release blockers.
+- New `test/mcp-oauth-epoch-tool-admission-staging.test.ts`: 11/11 new Windows SQLite tests PASS; **76/76 combined S1 OAuth regression tests PASS**; TypeScript, build, continuation and launch audit PASS. Design and explicit remaining security gates: `docs/SCALE_V2_S1_EPOCH_TOOL_ADMISSION.md`.
+- **NO-GO:** real Cloudflare D1 staging access unavailable; no provider-side consistency/spend evidence, no Agent-side enforcement or in-flight action revocation. No live quota, paid plans, production schema, Agent/Hub/Broker or Worker deployment changed.
+
 ## 2026-10-18 - S2 operator-issued WSS enrollment bound to signed device possession (STAGING)
 
 - Owner-host first-party issuer accepts a bearer only through injected authenticated token verifier, then atomically verifies the owner SQLite account/session/device, enrolled device Ed25519 public key and revocable profile revision before signing a fixed operator-approved TLS/CA/SPKI WSS profile. Device signs a fresh domain-separated nonce/timestamp/token-digest claim; nonce replay is fail-closed in a dedicated owner SQLite ledger. No tool or native execution rights are issued.
