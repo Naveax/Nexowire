@@ -5,6 +5,10 @@ import {X509Certificate} from 'node:crypto';
 import type {AddressInfo,Socket} from 'node:net';
 import WebSocket,{WebSocketServer} from 'ws';
 import type {SignedOwnerQuotaRpcEnvelope} from './owner-quota-loopback-rpc-proposal.js';
+import {
+  validateOwnerPublicWssTrustProfile,createOwnerPublicWssClientOptions,
+  type OwnerPublicWssTrustProfile,
+} from './owner-public-wss-trust-proposal.js';
 import {verifyOwnerRpcLoopbackDestination,
   resolvePinnedTailscaleInterface,isTailscalePrivateIPv4}
   from './owner-quota-tailscale-proxy-proposal.js';
@@ -276,6 +280,7 @@ export async function startProposedOwnerQuotaOutboundWsHub(input:{
  */
 export class ProposedOutboundQuotaWsClient {
   private readonly socket:WebSocket;
+  private readonly publicTrustAgent?:{destroy():void};
   private readonly seenRequestIds=new Set<string>();
   private readonly outstanding=new Map<string,{
     resolve:(result:OutboundQuotaReply)=>void;
@@ -283,12 +288,27 @@ export class ProposedOutboundQuotaWsClient {
     timeout:ReturnType<typeof setTimeout>;
   }>();
   private readyPromise:Promise<void>;
-  constructor(url:string,identity?:StagingOwnerWssIdentity){
-    const secure=!!identity;
-    const verifiedUrl=verifyStagingQuotaWsUrl(
-      url,secure,identity?.expectedTailscaleIPv4,
-    );
+  constructor(
+    urlOrTrustedProfile:string|OwnerPublicWssTrustProfile,
+    identity?:StagingOwnerWssIdentity,
+  ){
+    // The public mode accepts ONLY an independently enrolled operator trust
+    // profile. It never accepts an arbitrary caller URL plus a bypass flag.
+    let verifiedUrl:string;
     let secureOptions:{}={};
+    if(typeof urlOrTrustedProfile!=='string'){
+      if(identity)throw new Error('Conflicting owner WSS trust modes');
+      const profile=validateOwnerPublicWssTrustProfile(urlOrTrustedProfile);
+      verifiedUrl=profile.endpoint;
+      const publicOptions=createOwnerPublicWssClientOptions(urlOrTrustedProfile);
+      secureOptions=publicOptions;
+      this.publicTrustAgent=publicOptions.agent;
+    }else{
+      const secure=!!identity;
+      verifiedUrl=verifyStagingQuotaWsUrl(
+        urlOrTrustedProfile,secure,identity?.expectedTailscaleIPv4,
+      );
+    }
     if(identity){
       const {trustedCaPem,expectedLeafSha256}=identity;
       if(typeof trustedCaPem!=='string'||!trustedCaPem.includes('BEGIN CERTIFICATE')||
@@ -313,7 +333,8 @@ export class ProposedOutboundQuotaWsClient {
       };
     }
     this.socket=new WebSocket(verifiedUrl,{
-      perMessageDeflate:false,handshakeTimeout:4000,...secureOptions,
+      perMessageDeflate:false,handshakeTimeout:4000,
+      maxPayload:MAX_RESPONSE,...secureOptions,
     });
     this.readyPromise=new Promise<void>((resolve,reject)=>{
       this.socket.once('open',()=>resolve());
@@ -341,7 +362,10 @@ export class ProposedOutboundQuotaWsClient {
       clearTimeout(found.timeout);
       found.resolve(reply);
     });
-    this.socket.on('close',()=>this.rejectAll('Owner WS disconnected'));
+    this.socket.on('close',()=>{
+      this.rejectAll('Owner WS disconnected');
+      this.publicTrustAgent?.destroy();
+    });
     this.socket.on('error',()=>this.rejectAll('Owner WS connection error'));
   }
   private rejectAll(reason:string){
@@ -398,5 +422,6 @@ export class ProposedOutboundQuotaWsClient {
   close(){
     this.rejectAll('Client explicitly closed');
     this.socket.close();
+    this.publicTrustAgent?.destroy();
   }
 }
