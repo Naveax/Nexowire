@@ -6,6 +6,8 @@ import { runNativeAgentEnrollmentCommand } from './agent/native-agent-enrollment
 import { runProcessWorker } from './agent/process-worker.js';
 import { loadConfig } from './config.js';
 import { runHttpServer } from './mcp/http.js';
+import { runLocalFirstIngress, verifyLocalFirstPublicUpstream } from './mcp/local-first-ingress.js';
+import { readOnlyLocalFirstFunnelPlan } from './mcp/local-first-funnel-plan.js';
 import { runStdioServer } from './mcp/stdio.js';
 import { createRuntime } from './runtime.js';
 import { loadRelayConfig } from './relay/config.js';
@@ -36,7 +38,8 @@ Usage:
   nexowire http    Start the MCP hub and native-agent WebSocket endpoint
   nexowire stdio   Start an MCP server over stdio
   nexowire agent [run|enroll|doctor|status|install|start|stop|restart|uninstall]\n                   Enroll, diagnose, run, or manage the native computer agent\n  nexowire relay   Start a first-party native-agent relay
-  nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire hub [preflight|install|status|start|stop|restart|uninstall]  Manage user-logon Hub autostart\n  nexowire hub [boot-install|boot-status|boot-uninstall]  Manage elevated pre-logon SYSTEM Hub\n  nexowire node [bootstrap|status|connector]  Bootstrap a self-hosted Hub + local Agent\n  nexowire connect                             Connect this PC to Nexowire\n  nexowire privileged-broker [run|install|status|probe|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
+  nexowire tailscale [status|serve|funnel|reset]  Manage Tailscale exposure\n  nexowire hub [preflight|install|status|start|stop|restart|uninstall]  Manage user-logon Hub autostart\n  nexowire hub [boot-install|boot-status|boot-uninstall]  Manage elevated pre-logon SYSTEM Hub\n  nexowire node [bootstrap|status|connector]  Bootstrap a self-hosted Hub + local Agent\n  nexowire local-first ingress [--listen-port=43111] [--public-host=host.example.com]
+  nexowire local-first funnel-plan               Inspect Tailscale safely; no route changes\n                   LOOPBACK MCP-only origin for a secure tunnel (opt-in)\n  nexowire connect                             Connect this PC to Nexowire\n  nexowire privileged-broker [run|install|status|probe|start|stop|uninstall]\n                              Run or manage the elevated Windows broker\n  nexowire credentials <list|issue|revoke>  Manage hash-only revocable credentials
   nexowire secrets <purposes|inspect|seal>   Manage protected bootstrap secret sources
   nexowire doctor [--remote]                  Evaluate deployment readiness without printing secrets
   nexowire onboard [plan|bootstrap] [...]      Guide a secret-safe local/remote deployment bootstrap
@@ -99,6 +102,46 @@ async function main(): Promise<void> {
         process.argv.slice(3),
       );
     }
+    return;
+  }
+
+  if (command === 'local-first') {
+    if (process.argv[3] === 'funnel-plan') {
+      if (process.argv.length !== 4) throw new Error('funnel-plan accepts no options');
+      process.stdout.write(JSON.stringify(await readOnlyLocalFirstFunnelPlan(),null,2)+'\n');
+      return;
+    }
+    if (process.argv[3] !== 'ingress') {
+      throw new Error('local-first supports only: ingress');
+    }
+    let listenPort = 43111;
+    let publicHostname: string | undefined;
+    for (const arg of process.argv.slice(4)) {
+      if (arg.startsWith('--listen-port=')) {
+        const raw = arg.slice('--listen-port='.length);
+        if (!/^\d{1,5}$/.test(raw)) throw new Error('Invalid listen port');
+        listenPort = Number(raw);
+      } else if (arg.startsWith('--public-host=')) {
+        publicHostname = arg.slice('--public-host='.length);
+      } else {
+        throw new Error('Unknown local-first ingress option');
+      }
+    }
+    const config = loadConfig();
+    if (publicHostname) {
+      const configured = config.mcpResourceUrl
+        ? new URL(config.mcpResourceUrl).hostname.toLowerCase() : null;
+      if (configured !== publicHostname.toLowerCase() ||
+          !config.controlPlaneAgentAuth || !config.mcpResourceUrl) {
+        throw new Error('Public local-first ingress requires matching OAuth resource and trusted hosted auth + metering; no quota bypass');
+      }
+      await verifyLocalFirstPublicUpstream({hubPort:config.port,
+        expectedResourceUrl:config.mcpResourceUrl});
+    }
+    await runLocalFirstIngress({
+      hubPort: config.port,listenPort,
+      ...(publicHostname ? {publicHostname} : {}),
+    });
     return;
   }
 

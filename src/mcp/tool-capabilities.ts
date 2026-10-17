@@ -113,6 +113,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   file_read: 'files.read',
   file_read_many: 'files.read_many',
   file_write: 'files.write',
+  file_transfer_between_devices: 'files.write',
   file_stat: 'files.stat',
   file_hash: 'files.hash',
   file_mkdir: 'files.mkdir',
