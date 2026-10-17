@@ -115,6 +115,12 @@
 
 This ledger is updated through reviewed commits/PRs; issue comments store intermediate status without implying merge or deployment.
 
+## 2026-10-17 — S2 owner RPC HTTP-200 response schema validation (STAGING only)
+
+- Isolated test branch `test/scale-v2-owner-rpc-reply-guard-20261017` hardens the existing outbound owner quota WebSocket bridge: a mocked or invalid owner RPC HTTP 200 cannot be forwarded as a successful quota result without canonical six-field decision shape, allowed status, valid nonnegative counters and `authorizesToolExecution:false`. Invalid 200 is mapped to 502 `owner_rpc_invalid_decision`, preserving distinct authenticated 409/401/503 errors.
+- New three-part HTTP-status/security-invariant regression uses localhost-only WSS/WS staging and a synthetic fetch callback. It does not hit a real account, execute any native tool, open a public port or enable any Cloudflare/Agent/plan change. Details and remaining real-enrollment/850k/day NO-GO: `docs/SCALE_V2_S2_OWNER_RPC_REPLY_SCHEMA_GUARD.md`.
+
+
 ## 2026-10-17 — S5 real multi-writer owner SQLite concurrency acceptance (DEV only)
 
 - Post-#529 separate worktree `test/scale-v2-s5-owner-concurrent-writers-20261017` implements REAL Node Worker-thread parallel admission into one temporary owner SQLite WAL database, each worker with a different independent connection, synchronized by Atomics start barrier. Different from #529's two interleaved serial connections.
