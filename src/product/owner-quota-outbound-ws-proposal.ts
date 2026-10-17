@@ -52,6 +52,27 @@ function validFrame(value:unknown):value is OutboundQuotaFrame{
     typeof v.requestId==='string'&&REQUEST_ID.test(v.requestId)&&
     typeof v.envelope==='object'&&v.envelope!==null;
 }
+/**
+ * Never forward an untrusted/malformed HTTP 200 as a successful owner admission.
+ * The owner RPC's canonical decision always has these six keys, and quota
+ * admission still NEVER grants native command/tool execution.
+ */
+function validOwnerDecisionReply(value:unknown):boolean{
+  if(!exactKeys(value,['decision']))return false;
+  const decision=(value as {decision:unknown}).decision;
+  if(!exactKeys(decision,[
+    'status','dayUtc','dailyLimit','used','remaining','authorizesToolExecution',
+  ]))return false;
+  const q=decision as Record<string,unknown>;
+  if(typeof q.status!=='string'||!['reserved','duplicate','unauthorized','device-denied',
+    'daily-exhausted','invocation-collision'].includes(q.status)||
+    typeof q.dayUtc!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(q.dayUtc)||
+    q.authorizesToolExecution!==false)return false;
+  for(const k of ['dailyLimit','used','remaining']){
+    if(typeof q[k]!=='number'||!Number.isSafeInteger(q[k])||q[k]<0)return false;
+  }
+  return q.remaining===Math.max(0,(q.dailyLimit as number)-(q.used as number));
+}
 function serializeReply(input:OutboundQuotaReply):string{
   const data=JSON.stringify(input);
   if(Buffer.byteLength(data,'utf8')>MAX_RESPONSE){
@@ -208,6 +229,10 @@ export async function startProposedOwnerQuotaOutboundWsHub(input:{
           let data:unknown;
           try{data=JSON.parse(Buffer.concat(chunks,size).toString('utf8'))}catch{
             reject(socket,request.requestId,502,'owner_rpc_bad_json');return;
+          }
+          if(upstream.status===200&&!validOwnerDecisionReply(data)){
+            reject(socket,request.requestId,502,'owner_rpc_invalid_decision');
+            return;
           }
           wsDecision(socket,{
             version:1,kind:'decision',requestId:request.requestId,
