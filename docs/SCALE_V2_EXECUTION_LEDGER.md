@@ -325,3 +325,10 @@ This ledger is updated through reviewed commits/PRs; issue comments store interm
 - Isolated staging module validates Ed25519 operator-signed enrollment with exact account, device, active session generation, monotonic profile revision and expiry, plus the operator-pinned WSS/TLS/CA/SPKI endpoint.
 - The operator verification key and account/device/session context must originate from independently authenticated local/operator state. This verifier is not a real OAuth or device enrollment API. No live Native Agent/Hub/Broker, Cloudflare, DNS, payment or quota changes.
 - Tests: `test/owner-public-wss-signed-enrollment-staging.test.ts`; limitations and follow-up: `docs/SCALE_V2_S2_SIGNED_PUBLIC_WSS_ENROLLMENT.md`.
+
+
+## 2026-10-17 - S2 signed public WSS enrollment lease recheck (STAGING)
+
+- Isolated staging lease validates the operator-signed enrollment against independently read current account/device/active session generation/revision/key/clock before WSS dial and before each reservation. Invalid or unreachable trusted state permanently invalidates the lease; the staged session closes and never automatically retries mutating tools.
+- Signed trust profile and identity are captured immutably after verification. The authoritative owner quota and native Broker still independently validate device/session/native rights on each execution. There is no live OAuth enrollment or public WSS rollout.
+- Sources: `src/product/owner-public-wss-enrollment-lease-proposal.ts`, `test/owner-public-wss-enrollment-lease-staging.test.ts`, `docs/SCALE_V2_S2_PUBLIC_WSS_ENROLLMENT_LEASE_GUARD.md`.
