@@ -332,3 +332,11 @@ This ledger is updated through reviewed commits/PRs; issue comments store interm
 - Isolated staging lease validates the operator-signed enrollment against independently read current account/device/active session generation/revision/key/clock before WSS dial and before each reservation. Invalid or unreachable trusted state permanently invalidates the lease; the staged session closes and never automatically retries mutating tools.
 - Signed trust profile and identity are captured immutably after verification. The authoritative owner quota and native Broker still independently validate device/session/native rights on each execution. There is no live OAuth enrollment or public WSS rollout.
 - Sources: `src/product/owner-public-wss-enrollment-lease-proposal.ts`, `test/owner-public-wss-enrollment-lease-staging.test.ts`, `docs/SCALE_V2_S2_PUBLIC_WSS_ENROLLMENT_LEASE_GUARD.md`.
+
+
+## 2026-10-18 - S2 operator-issued WSS enrollment bound to signed device possession (STAGING)
+
+- Owner-host first-party issuer accepts a bearer only through injected authenticated token verifier, then atomically verifies the owner SQLite account/session/device, enrolled device Ed25519 public key and revocable profile revision before signing a fixed operator-approved TLS/CA/SPKI WSS profile. Device signs a fresh domain-separated nonce/timestamp/token-digest claim; nonce replay is fail-closed in a dedicated owner SQLite ledger. No tool or native execution rights are issued.
+- Inputs do not select a WSS URL, owner account or operator key. Operator private key remains server-side. A lost response never allows reuse of a consumed nonce; the operation is only enrollment, not a mutating OS tool.
+- Staging sources: `src/product/owner-public-wss-device-issuer-proposal.ts`, `test/fixtures/scale-v2-owner-wss-device-enrollment-dev.sql`, `test/owner-public-wss-device-issuer-staging.test.ts`, `docs/SCALE_V2_S2_DEVICE_POPSIGNED_WSS_ISSUANCE.md`.
+- PRODUCTION NO-GO: actual OAuth issuer/DPAPI or HSM/operator key provisioning, real HTTPS endpoint, hard revocation/nonce retention operations and two off-tailnet device acceptance still required. Live services, quotas and payment left unchanged.
