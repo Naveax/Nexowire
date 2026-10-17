@@ -318,3 +318,10 @@ This ledger is updated through reviewed commits/PRs; issue comments store interm
 - New `test/fixtures/scale-v2-global-replay-cutover-staging.sql` stages global canonical `mcp-` event replay PK, backfill from existing monthly and daily events, dual reservation nested trigger and explicit closure for standalone monthly/daily hosted MCP writers. Backfill uses transactional abort on historical duplicates; does not silently ignore clashes.
 - New `test/global-replay-cutover-staging.test.ts`: **8/8 Windows DEV SQLite tests PASS** for prior-month replay, subject switch, old path closure, duplicate history rollback, daily-only historical backfill, combined legacy pair and noncanonical ID. TypeScript PASS. Documented in `docs/SCALE_V2_S2_GLOBAL_REPLAY_CUTOVER.md`.
 - These tests prove local file-backed SQLite semantics only, NOT actual provider D1 multi-Worker or unrecorded historical ID completeness. Production requires upstream one-route fencing, signed canary, full OAuth/token-family revocation, old in-flight drain, provider cost and explicit owner-approved migration. Live monthly Free-only quota and both Agent routes remain unchanged.
+
+
+## 2026-10-17 - S2 operator-signed public WSS enrollment verifier (STAGING ONLY)
+
+- Isolated staging module validates Ed25519 operator-signed enrollment with exact account, device, active session generation, monotonic profile revision and expiry, plus the operator-pinned WSS/TLS/CA/SPKI endpoint.
+- The operator verification key and account/device/session context must originate from independently authenticated local/operator state. This verifier is not a real OAuth or device enrollment API. No live Native Agent/Hub/Broker, Cloudflare, DNS, payment or quota changes.
+- Tests: `test/owner-public-wss-signed-enrollment-staging.test.ts`; limitations and follow-up: `docs/SCALE_V2_S2_SIGNED_PUBLIC_WSS_ENROLLMENT.md`.
