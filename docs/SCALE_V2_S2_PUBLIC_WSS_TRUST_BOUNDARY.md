@@ -1,6 +1,6 @@
 # Scale v2 S2: Approved-public-host outbound WSS trust (DEV/STAGING ONLY)
 
-**2026-10-17.** This stage builds on merged physical-PC private Tailscale WSS acceptance PR #523, and is independent of in-progress PR #524 for client-held device private-key proof. Neither production public DNS nor TLS issuance, Cloudflare service, payment, Native Agent, Hub, Broker or active quotas are changed. User's **Free 1,000 weighted credits/month** remains active; planned Free/Plus/Pro daily and Custom 100–850,000/day are OFF.
+**2026-10-17.** This stage builds on merged physical-PC private Tailscale WSS acceptance PR #523, and follows merged PR #524 for client-held device private-key proof and merged S5 PR #530. Neither production public DNS nor TLS issuance, Cloudflare service, payment, Native Agent, Hub, Broker or active quotas are changed. User's **Free 1,000 weighted credits/month** remains active; planned Free/Plus/Pro daily and Custom 100–850,000/day are OFF.
 
 ## Architecture and explicit trust boundaries
 
@@ -15,9 +15,9 @@ New isolated module: `src/product/owner-public-wss-trust-proposal.ts`.
 
 ## Verification
 
-`test/owner-public-wss-trust-staging.test.ts` uses ephemeral locally generated one-day OpenSSL certificates in an OS temporary folder, removed after the tests. Tests do not commit a certificate or private key. Six new tests verify domain/path/port restrictions; localhost/LAN/IP/credential/redirect-like inputs fail closed; profile tampering/unsafe CA/bad pins refused; real certificate SAN and SPKI accepted with a two-pin rotation set; certificate pin mismatch and wrong hostname rejected. On environments with no OpenSSL, cryptographic certificate cases explicitly SKIP rather than pretending they passed.
+`test/owner-public-wss-trust-staging.test.ts` uses ephemeral locally generated one-day OpenSSL certificates in an OS temporary folder, removed after the tests. Tests do not commit a certificate or private key. Seven new tests verify domain/path/port restrictions; localhost/LAN/IP/credential/redirect-like inputs fail closed; profile tampering/unsafe CA/bad pins refused; real certificate SAN and SPKI accepted with a two-pin rotation set; certificate pin mismatch and wrong hostname rejected. The seventh test opens a real loopback TLS 1.3 socket using SNI for the pinned public hostname, validates certificate chain and SPKI and rejects incorrect CA, SNI and SPKI; it does not create a public listener. On environments with no OpenSSL, cryptographic certificate cases explicitly SKIP rather than pretending they passed.
 
-Windows Work-PC test results: **6/6 new PASS, 157/157 combined quota/WS/TLS/private-PC/staging tests PASS with 0 skips**, `npm run typecheck`, `npm run build`, `npm run continuation:check`, `npm run ai-screen:launch-audit`, and whitespace checks PASS. The AI Screen audit's pre-existing isolation warning remains and is not an acceptance of isolated native process execution.
+Windows Work-PC test results: **7/7 new PASS, 164/164 combined quota/WS/TLS/private-PC/staging tests PASS with 0 skips**, `npm run typecheck`, `npm run build`, `npm run continuation:check`, `npm run ai-screen:launch-audit`, and whitespace checks PASS. The AI Screen audit's pre-existing isolation warning remains and is not an acceptance of isolated native process execution.
 
 ## Production acceptance blockers
 

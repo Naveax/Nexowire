@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,X509Certificate} from 'node:crypto';
 import {Agent as HttpsAgent} from 'node:https';
+import {createServer as createTlsServer,connect as connectTls} from 'node:tls';
+import type {AddressInfo} from 'node:net';
 import type {PeerCertificate} from 'node:tls';
 import {execFileSync} from 'node:child_process';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
@@ -103,7 +105,7 @@ function tempCert(san='DNS:edge.example.com'){
       ...(certificate.toLegacyObject() as unknown as Record<string,unknown>),
       raw:certificate.raw,
     } as PeerCertificate;
-    return {dir,content,certificate,digest,peer,
+    return {dir,content,key,certificate,digest,peer,
       cleanup:()=>rmSync(dir,{recursive:true,force:true})};
   }catch(e){rmSync(dir,{recursive:true,force:true});throw e}
 }
@@ -140,4 +142,51 @@ test('wrong operator SPKI, TLS host and valid wrong-SAN certificate are rejected
     assert.match(wrongPin('edge.example.com',right.peer)?.message??'',/SPKI pin mismatch/);
     assert.match(wrongPin('edge.example.com',{...right.peer,raw:undefined} as unknown as PeerCertificate)?.message??'',/Missing/);
   }finally{right.cleanup();wrong.cleanup()}
+});
+
+test('real TLS1.3 sockets validate public-host SNI, CA and owner SPKI (no public port)',
+  {skip:!opensslBinary,timeout:25000},async()=>{
+  const right=tempCert(),other=tempCert();
+  const server=createTlsServer({
+    key:readFileSync(right.key,'utf8'),
+    cert:right.content,
+    minVersion:'TLSv1.3',maxVersion:'TLSv1.3',
+  },socket=>socket.end());
+  try{
+    await new Promise<void>((resolve,reject)=>{
+      server.once('error',reject);
+      server.listen({host:'127.0.0.1',port:0},()=>{
+        server.off('error',reject);
+        resolve();
+      });
+    });
+    const port=(server.address() as AddressInfo).port;
+    const dial=(pins:readonly string[],ca:string,serverName='edge.example.com')=>
+      new Promise<string>((resolve,reject)=>{
+        const trust=validateOwnerPublicWssTrustProfile({
+          ...profile,caMode:'custom',trustedCaPem:ca,
+          trustedSpkiSha256:pins,
+        });
+        const socket=connectTls({
+          host:'127.0.0.1',port,servername:serverName,
+          ca,rejectUnauthorized:true,
+          minVersion:'TLSv1.3',maxVersion:'TLSv1.3',
+          checkServerIdentity:ownerPublicWssPeerVerifier(trust),
+        },()=>{
+          const protocol=socket.getProtocol()??'';
+          socket.end();
+          resolve(protocol);
+        });
+        socket.once('error',reject);
+      });
+    assert.equal(await dial([right.digest],right.content),'TLSv1.3');
+    assert.equal(await dial(['f'.repeat(64),right.digest],right.content),'TLSv1.3');
+    await assert.rejects(dial(['f'.repeat(64)],right.content),/SPKI pin mismatch/);
+    await assert.rejects(dial([right.digest],other.content),/self-signed|verify|certificate/i);
+    await assert.rejects(dial([right.digest],right.content,'wrong.example.com'),
+      /Unexpected owner WSS TLS SNI hostname/);
+  }finally{
+    await new Promise<void>(resolve=>server.close(()=>resolve()));
+    right.cleanup();other.cleanup();
+  }
 });
