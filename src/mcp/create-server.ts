@@ -347,6 +347,8 @@ async function execute(
   const started = performance.now();
   let targetId: string | undefined;
   let idempotencyCreated = false;
+  let providerDispatched = false;
+  let persistedOutcome: 'succeeded' | 'failed' | undefined;
 
   try {
     targetId = await resolveDevice(ctx, deviceId);
@@ -468,6 +470,9 @@ async function execute(
       ...(providerId ? { providerId } : {}),
     });
 
+    // A remote side effect may happen after dispatch, even if its response
+    // or the subsequent local journal/audit update fails.
+    providerDispatched = true;
     const result = await ctx.providers.execute(
       {
         targetId,
@@ -486,6 +491,7 @@ async function execute(
         result.ok ? 'succeeded' : 'failed',
         result,
       );
+      persistedOutcome = result.ok ? 'succeeded' : 'failed';
     }
 
     await ctx.audit?.write({
@@ -522,23 +528,42 @@ async function execute(
         ? error.code
         : 'EXECUTION_FAILED';
 
-    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
-      await ctx.idempotency.complete(
-        idempotencyKey,
-        errorCode === 'MUTATION_STATE_UNKNOWN' ? 'unknown' : 'failed',
-      );
+    // Do not overwrite a durably confirmed remote outcome just because the
+    // final audit write failed. Once provider execution started, an error in
+    // confirmation or journal persistence has an UNKNOWN side-effect state,
+    // never proof that the mutation did not run.
+    const recordedStatus = persistedOutcome ??
+      (providerDispatched || errorCode === 'MUTATION_STATE_UNKNOWN'
+        ? 'unknown' : 'failed');
+    let recoveryJournalFailed = false;
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency &&
+        persistedOutcome === undefined) {
+      try {
+        await ctx.idempotency.complete(idempotencyKey, recordedStatus);
+      } catch {
+        // Never state that a status was persisted when the recovery write
+        // itself failed. The remote operation may already have executed.
+        recoveryJournalFailed = true;
+      }
     }
 
-    await ctx.audit?.write({
-      operationId,
-      status: 'failed',
-      capability,
-      ...(targetId ? { targetId } : {}),
-      ...(providerId ? { providerId } : {}),
-      durationMs: Math.round(performance.now() - started),
-      errorCode,
-      message,
-    });
+    // An unavailable audit sink must not mask the original failure or
+    // contradict an outcome already durably recorded in the journal.
+    let recoveryAuditFailed = false;
+    try {
+      await ctx.audit?.write({
+        operationId,
+        status: persistedOutcome ?? 'failed',
+        capability,
+        ...(targetId ? { targetId } : {}),
+        ...(providerId ? { providerId } : {}),
+        durationMs: Math.round(performance.now() - started),
+        errorCode,
+        message,
+      });
+    } catch {
+      recoveryAuditFailed = true;
+    }
     return toolResult(
       {
         ok: false,
@@ -547,15 +572,16 @@ async function execute(
           code: errorCode,
           message,
         },
+        ...(recoveryAuditFailed ? { recoveryAuditFailed: true } : {}),
+        ...(recoveryJournalFailed ? { recoveryJournalFailed: true } : {}),
         ...(idempotencyKey
           ? {
               idempotency: {
                 key: idempotencyKey,
                 replayed: false,
-                persistedStatus:
-                  errorCode === 'MUTATION_STATE_UNKNOWN'
-                    ? 'unknown'
-                    : 'failed',
+                ...(idempotencyCreated && !recoveryJournalFailed
+                  ? { persistedStatus: recordedStatus }
+                  : { outcomeUnconfirmed: providerDispatched }),
               },
             }
           : {}),
