@@ -1,5 +1,7 @@
 # Scale v2 S5 follow-up: simultaneous ingress race, fairness and Durable Object cost
 
+**Further isolated acceptance:** [Protected tenant admission, bounded reconnect storm and source-separated cloud/native metrics](SCALE_V2_S5_PROTECTED_FAIRNESS_THROUGHPUT_ACCEPTANCE_20261018.md). This is a staging-only prototype; it does not change current production quotas or provider-side ingress policy.
+
 Date: 2026-10-18. Parent [#487](https://github.com/Naveax/Nexowire/issues/487), PR [#557](https://github.com/Naveax/Nexowire/pull/557). DEV ONLY, draft, **production NO-GO**.
 
 ## Scope and reproducible measurements
