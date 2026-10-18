@@ -146,17 +146,19 @@ test('raw disk, device namespace, UNC, WSL share and drive-relative paths are de
 
 test('scoped shell execution cannot bypass file policy by selecting another cwd', async t => {
   const { allowed } = await fixture(t);
-  const restricted = new PathPolicy([allowed]);
+  const restricted = new PathPolicy([allowed], { enforceExecutionBoundary: true });
   assert.throws(() => restricted.assertUnrestrictedExecution(),
     (error: unknown) => error instanceof PathDeniedError &&
       error.details.reason === 'UNSANDBOXED_EXECUTION_DENIED');
-  const wildcard = new PathPolicy(['*']);
+  const wildcard = new PathPolicy(['*'], { enforceExecutionBoundary: true });
   assert.throws(() => wildcard.assertUnrestrictedExecution(), PathDeniedError);
   const leased = new PathPolicy(['*'], {
+    enforceExecutionBoundary: true,
     unrestrictedExecutionUntil: Date.now() + 60_000,
   });
   assert.doesNotThrow(() => leased.assertUnrestrictedExecution());
   const overlong = new PathPolicy(['*'], {
+    enforceExecutionBoundary: true,
     unrestrictedExecutionUntil: Date.now() + 24 * 60 * 60_000,
   });
   assert.throws(() => overlong.assertUnrestrictedExecution(), PathDeniedError);
@@ -195,6 +197,15 @@ test('USB grant follows reassigned letter only when stable volume identity match
     }), false);
   assert.equal(store.authorizes('F:\\Work\\Other\\image.bin',
     'usb_write', 'owner', 'device', { ...USB, driveLetter: 'F' }), false);
+});
+
+test('runtime-style policy with grant registry enforces shell boundary by default', () => {
+  const runtime = new PathPolicy(['*'], { grants: new ScopedPathGrantRegistry() });
+  assert.throws(() => runtime.assertUnrestrictedExecution(),
+    (error: unknown) => error instanceof PathDeniedError &&
+      error.details.reason === 'UNSANDBOXED_EXECUTION_DENIED');
+  const standalone = new PathPolicy(['*']);
+  assert.doesNotThrow(() => standalone.assertUnrestrictedExecution());
 });
 
 test('grant lifetime cannot exceed one day or start expired', () => {

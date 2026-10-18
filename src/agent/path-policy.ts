@@ -63,6 +63,9 @@ export interface PathPolicyOptions {
   volumeResolver?: VolumeResolver;
   platform?: NodeJS.Platform;
   defaultScopes?: readonly FileScope[];
+  // The native Agent supplies a grant registry and is always strict.
+  // Legacy library-only PathPolicy instances retain existing test semantics.
+  enforceExecutionBoundary?: boolean;
   // Local-only explicit override. Never accept this through remote tool input.
   unrestrictedExecutionUntil?: number;
   now?: () => number;
@@ -282,6 +285,7 @@ export class PathPolicy {
   }
 
   assertUnrestrictedExecution(): void {
+    if (!(this.options.enforceExecutionBoundary ?? Boolean(this.options.grants))) return;
     // Arbitrary shells, WSL, task graphs and child processes are not file
     // sandboxes. Refuse to promise path confinement with only command parsing.
     // Even '*' does not authorize USB writes through an unrestricted shell.

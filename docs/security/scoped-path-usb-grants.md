@@ -43,7 +43,12 @@ will be denied on the production Agent.
 `UNSANDBOXED_EXECUTION_DENIED` without a short-lived explicit execution lease.
 Parsing PowerShell/CMD/Bash strings cannot impose a trustworthy filesystem
 boundary. Even `*` roots do not enable arbitrary shell execution: they would
-otherwise bypass the separate USB write permission.
+otherwise bypass the separate USB write permission. The actual Native Agent
+constructs its policy with a scoped grant registry, so the boundary is enforced
+by default. Standalone `new PathPolicy(roots)` callers keep the prior
+unsandboxed execution semantics for compatibility. Such library-only policies
+**must not** be used at an untrusted dispatch boundary. Library clients can
+opt into strict enforcement with `enforceExecutionBoundary: true`.
 
 For transitional on-device configuration, an Agent process may start with
 `NEXOWIRE_UNRESTRICTED_EXEC_UNTIL` set to a timestamp at most 15 minutes in

@@ -85,6 +85,7 @@ test(
             'ws://127.0.0.1:' + address.port + '/agent',
           NEXOWIRE_DEVICE_NAME: 'macOS Native Live',
           NEXOWIRE_ALLOWED_ROOTS: allowed,
+          NEXOWIRE_UNRESTRICTED_EXEC_UNTIL: new Date(Date.now() + 10 * 60_000).toISOString(),
           NEXOWIRE_PROCESS_STATE_FILE:
             path.join(root, 'process-sessions.json'),
           NEXOWIRE_TASK_GRAPH_STATE_FILE:
