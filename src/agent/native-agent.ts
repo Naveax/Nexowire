@@ -377,6 +377,10 @@ export async function runNativeAgent(
   }
   progressSupervisor.recover(processes.list());
   const progressWatchdogTimer = setInterval(() => {
+    // Do not consume de-duplicated alerts while the Hub is unreachable.
+    // Reconciliation on reconnect can then surface a pending warning.
+    if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+    progressSupervisor.recover(processes.list());
     for (const warning of progressSupervisor.scan()) {
       emitAgentEvent('progress.watchdog.warning', warning);
     }

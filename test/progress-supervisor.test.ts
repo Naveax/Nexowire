@@ -145,3 +145,47 @@ for (const count of [10, 100, 1000]) {
     if (count === 1000) assert.equal(supervisor.snapshot('overflow').state, 'progress_unknown');
   });
 }
+
+test('multi-megabyte stdout event is parsed in bounded fragments without losing later proof lines', () => {
+  let now = 42;
+  const supervisor = new ProgressSupervisor({ now: () => now });
+  supervisor.register('large');
+  const oversized = 'log:' + 'x'.repeat(2_000_000);
+  supervisor.observeProcessEvent({topic:'process.output', data:{
+    sessionId:'large', stream:'stdout',
+    text:oversized + '\n' + record(5, 6) + 'z'.repeat(250_000),
+  }});
+  const tracked = (supervisor as unknown as { sessions: Map<string, {
+    stdoutFragment: string; droppingOversizedLine: boolean;
+  }> }).sessions.get('large')!;
+  assert.equal(tracked.stdoutFragment.length, 0);
+  assert.equal(tracked.droppingOversizedLine, true);
+  assert.equal(supervisor.snapshot('large').completedCount, 5);
+  now += 1;
+  supervisor.observeProcessEvent({topic:'process.output', data:{
+    sessionId:'large', stream:'stdout', text:'more garbage\n' + record(6, 5),
+  }});
+  assert.equal(supervisor.snapshot('large').completedCount, 6);
+  assert.equal(supervisor.snapshot('large').progressVerified, false);
+  assert.ok(tracked.stdoutFragment.length <= 8192);
+  assert.equal(tracked.droppingOversizedLine, false);
+});
+
+test('process reconciliation reflects lost and unknown outcomes without inventing completion', () => {
+  const supervisor = new ProgressSupervisor({now:()=>50});
+  supervisor.register('lost-worker');
+  supervisor.observeMetrics('lost-worker', {completed_count:2,pending_count:0,failure_count:0});
+  supervisor.recover([{sessionId:'lost-worker',status:'lost',exitCode:null}]);
+  assert.equal(supervisor.snapshot('lost-worker').state, 'lost');
+  supervisor.register('unknown-exit');
+  supervisor.observeMetrics('unknown-exit', {completed_count:1,pending_count:0,failure_count:0});
+  supervisor.recover([{sessionId:'unknown-exit',status:'exited',exitCode:null}]);
+  assert.equal(supervisor.snapshot('unknown-exit').state, 'incomplete');
+  assert.equal(supervisor.scan().find(x=>x.sessionId==='unknown-exit')?.code,
+    'PROCESS_EXITED_INCOMPLETE');
+  supervisor.register('reported');
+  supervisor.observeMetrics('reported', {completed_count:2,pending_count:0,failure_count:0});
+  supervisor.recover([{sessionId:'reported',status:'exited',exitCode:0}]);
+  assert.equal(supervisor.snapshot('reported').state, 'reported_complete');
+  assert.equal(supervisor.snapshot('reported').progressVerified, false);
+});

@@ -7,6 +7,8 @@ import { executeCapability } from '../src/agent/executors.js';
 import { PathPolicy } from '../src/agent/path-policy.js';
 import { ProcessManager } from '../src/agent/process-manager.js';
 import { ProgressSupervisor } from '../src/agent/progress-supervisor.js';
+import { TaskGraphStore } from '../src/agent/task-graph-store.js';
+import { RunbookStore } from '../src/agent/runbook-store.js';
 
 test('real managed synthetic process: process.start/read progress separated from PID and proof', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-progress-integ-'));
@@ -50,5 +52,59 @@ test('real managed synthetic process: process.start/read progress separated from
   } finally {
     await manager.shutdown();
     await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('graph/runbook persisted counters are explicitly not independent application proof', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-proof-levels-'));
+  try {
+    const taskGraphs = new TaskGraphStore({stateFile:path.join(dir,'graphs.json')});
+    const runbooks = new RunbookStore({stateFile:path.join(dir,'runbooks.json')});
+    await Promise.all([taskGraphs.initialize(),runbooks.initialize()]);
+    const graph = await taskGraphs.prepare({
+      id:'graph-proof',specHash:'a'.repeat(64),jobs:[{id:'job',dependsOn:[]}],
+      resume:false,retryFailed:false,retryUnknown:false,
+    });
+    graph.status = 'succeeded';
+    graph.jobs[0]!.status = 'succeeded';
+    graph.jobs[0]!.completedAt = '2026-10-18T16:00:00.000Z';
+    // The file does not exist: a cached hash is NOT a fresh verification.
+    graph.jobs[0]!.artifacts = [{
+      requestedPath:path.join(dir,'missing.json'), path:path.join(dir,'missing.json'),
+      size:50, sha256:'a'.repeat(64), modifiedAt:'2026-10-18T16:00:00.000Z',
+    }];
+    await taskGraphs.save(graph);
+    const runbook = await runbooks.prepare({
+      id:'runbook-proof',specHash:'b'.repeat(64),
+      steps:[{id:'step',kind:'task_graph',dependsOn:[],taskGraphId:'graph-proof'}],
+      resume:false,retryFailed:false,retryUnknown:false,
+    });
+    runbook.status = 'succeeded';
+    runbook.steps[0]!.status = 'succeeded';
+    runbook.steps[0]!.completedAt = '2026-10-18T16:00:00.000Z';
+    await runbooks.save(runbook);
+    const graphResult = await executeCapability('task.graph.get',
+      {graph_id:'graph-proof'},new PathPolicy(['*']),{taskGraphs}) as {
+        data:{progress:Record<string,unknown>}
+      };
+    const gp = graphResult.data.progress;
+    assert.equal(gp.completedCount, 1);
+    assert.equal(gp.lastRecordedJobCompletionAt, '2026-10-18T16:00:00.000Z');
+    assert.equal(gp.lastVerifiedProgressAt, null);
+    assert.equal(gp.progressVerified, false);
+    assert.equal(gp.artifactReverificationRequired, true);
+    assert.deepEqual(gp.resultArtifactSha256, ['a'.repeat(64)]);
+    assert.equal(gp.unit, 'graph_jobs_not_application_work');
+    const rbResult = await executeCapability('runbook.get',
+      {runbook_id:'runbook-proof'},new PathPolicy(['*']),{runbooks}) as {
+        data:{progress:Record<string,unknown>}
+      };
+    const rp = rbResult.data.progress;
+    assert.equal(rp.completedCount, 1);
+    assert.equal(rp.unit, 'runbook_steps_not_application_work');
+    assert.equal(rp.lastVerifiedProgressAt, null);
+    assert.equal(rp.progressVerified, false);
+  } finally {
+    await fs.rm(dir,{recursive:true,force:true});
   }
 });

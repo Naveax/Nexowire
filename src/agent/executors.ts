@@ -2302,6 +2302,7 @@ export async function executeCapability(
     }
     case 'process.read': {
       const read = await requireProcesses(context).read(input);
+      context.progressSupervisor?.recover([read.session]);
       return { data: { ...read, progress: context.progressSupervisor?.snapshot(read.session.sessionId) ?? {
         state: 'progress_unknown', completionEvidence: 'none', progressVerified: false,
       } } };
@@ -2310,13 +2311,16 @@ export async function executeCapability(
       return { data: await requireProcesses(context).write(input) };
     case 'process.stop':
       return { data: await requireProcesses(context).stop(input) };
-    case 'process.list':
-      return { data: requireProcesses(context).list().map((session) => ({
+    case 'process.list': {
+      const sessions = requireProcesses(context).list();
+      context.progressSupervisor?.recover(sessions);
+      return { data: sessions.map((session) => ({
         ...session,
         progress: context.progressSupervisor?.snapshot(session.sessionId) ?? {
           state: 'progress_unknown', completionEvidence: 'none', progressVerified: false,
         },
       })) };
+    }
     case 'process.prune':
       return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
@@ -2387,11 +2391,14 @@ export async function executeCapability(
         completedCount,
         failureCount,
         pendingCount: graph.jobs.filter((job) => job.status === 'pending' || job.status === 'running').length,
-        lastVerifiedProgressAt: graph.jobs.filter((job) => job.status === 'succeeded' && job.completedAt)
+        lastRecordedJobCompletionAt: graph.jobs.filter((job) => job.status === 'succeeded' && job.completedAt)
           .map((job) => job.completedAt!).sort().at(-1) ?? null,
+        lastVerifiedProgressAt: null,
+        progressVerified: false,
         resultArtifactSha256: graph.jobs.flatMap((job) => job.artifacts ?? [])
           .map((artifact) => artifact.sha256),
-        completionEvidence: 'persisted_job_status_and_captured_artifact_hashes',
+        completionEvidence: 'persisted_job_status_not_application_result',
+        artifactHashSource: 'captured_at_job_finish_requires_reverify',
         artifactReverificationRequired: true,
       } } };
     }
@@ -2454,9 +2461,11 @@ export async function executeCapability(
         completedCount: runbook.steps.filter((step) => step.status === 'succeeded').length,
         pendingCount: runbook.steps.filter((step) => step.status === 'pending' || step.status === 'running').length,
         failureCount: runbook.steps.filter((step) => step.status === 'failed').length,
-        lastVerifiedProgressAt: runbook.steps.filter((step) => step.status === 'succeeded' && step.completedAt)
+        lastRecordedStepCompletionAt: runbook.steps.filter((step) => step.status === 'succeeded' && step.completedAt)
           .map((step) => step.completedAt!).sort().at(-1) ?? null,
-        completionEvidence: 'persisted_runbook_step_status',
+        lastVerifiedProgressAt: null,
+        progressVerified: false,
+        completionEvidence: 'persisted_runbook_step_status_not_application_result',
       } } };
     }
     case 'runbook.prune': {

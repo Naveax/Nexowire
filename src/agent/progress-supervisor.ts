@@ -62,6 +62,7 @@ interface SessionProgress {
   sample?: WorkerProgress;
   invalidRecords: number;
   stdoutFragment: string;
+  droppingOversizedLine: boolean;
   seenWarningCodes: Set<ProgressWarningCode>;
 }
 
@@ -125,7 +126,8 @@ export class ProgressSupervisor {
     if (this.sessions.size >= this.maxSessions) return;
     this.sessions.set(sessionId, {
       id: sessionId, status: 'running', exitCode: null, startedMs,
-      lastOutputMs: startedMs, invalidRecords: 0, stdoutFragment: '', seenWarningCodes: new Set(),
+      lastOutputMs: startedMs, invalidRecords: 0, stdoutFragment: '',
+      droppingOversizedLine: false, seenWarningCodes: new Set(),
     });
   }
 
@@ -161,23 +163,50 @@ export class ProgressSupervisor {
     if (event.topic !== 'process.output') return;
     tracked.lastOutputMs = now;
     if (event.data.stream !== 'stdout' || typeof event.data.text !== 'string') return;
-    // Node chunks can split a line. Ignore oversized untrusted output and
-    // never store arbitrary command stdout in long-lived supervisor memory.
-    const combined = tracked.stdoutFragment + event.data.text;
-    const lines = combined.split('\n');
-    let remainder = lines.pop() ?? '';
-    if (Buffer.byteLength(remainder, 'utf8') > MAX_LINE_BYTES) remainder = '';
-    tracked.stdoutFragment = remainder;
-    for (const raw of lines) {
-      if (Buffer.byteLength(raw, 'utf8') > MAX_LINE_BYTES) continue;
-      const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
-      if (!line.startsWith(PROGRESS_PREFIX)) continue;
-      let parsed: unknown;
-      try { parsed = JSON.parse(line.slice(PROGRESS_PREFIX.length)); }
-      catch { this.invalid(tracked); continue; }
-      const result = WorkerProgressSchema.safeParse(parsed);
-      if (!result.success) { this.invalid(tracked); continue; }
-      this.observeMetrics(id, result.data);
+    // Never split/duplicate a possibly multi-megabyte output event in memory.
+    // Scan newline boundaries and retain at most MAX_LINE_BYTES per session.
+    const chunk = event.data.text;
+    let cursor = 0;
+    while (cursor < chunk.length) {
+      const newline = chunk.indexOf('\n', cursor);
+      const end = newline === -1 ? chunk.length : newline;
+      const span = end - cursor;
+      if (!tracked.droppingOversizedLine) {
+        if (span > MAX_LINE_BYTES) {
+          tracked.droppingOversizedLine = true;
+          tracked.stdoutFragment = '';
+        } else {
+          const part = chunk.slice(cursor, end);
+          if (Buffer.byteLength(tracked.stdoutFragment, 'utf8') +
+              Buffer.byteLength(part, 'utf8') > MAX_LINE_BYTES) {
+            tracked.droppingOversizedLine = true;
+            tracked.stdoutFragment = '';
+          } else {
+            tracked.stdoutFragment += part;
+          }
+        }
+      }
+      if (newline !== -1) {
+        if (!tracked.droppingOversizedLine) {
+          const raw = tracked.stdoutFragment;
+          const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+          if (line.startsWith(PROGRESS_PREFIX)) {
+            let parsed: unknown;
+            try { parsed = JSON.parse(line.slice(PROGRESS_PREFIX.length)); }
+            catch { this.invalid(tracked); parsed = undefined; }
+            if (parsed !== undefined) {
+              const result = WorkerProgressSchema.safeParse(parsed);
+              if (!result.success) this.invalid(tracked);
+              else this.observeMetrics(id, result.data);
+            }
+          }
+        }
+        tracked.stdoutFragment = '';
+        tracked.droppingOversizedLine = false;
+        cursor = newline + 1;
+      } else {
+        break;
+      }
     }
   }
 
@@ -236,8 +265,9 @@ export class ProgressSupervisor {
     let state: ProgressState = 'progress_unknown';
     if (tracked.status === 'lost' || tracked.status === 'orphaned') state = 'lost';
     else if (tracked.status === 'exited') {
-      state = tracked.exitCode !== 0 || (sample?.failure_count ?? 0) > 0 ? 'failed'
-        : sample && sample.pending_count === 0 ? 'reported_complete' : 'incomplete';
+      state = (tracked.exitCode !== null && tracked.exitCode !== 0) || (sample?.failure_count ?? 0) > 0 ? 'failed'
+        : tracked.exitCode === 0 && sample && sample.pending_count === 0
+          ? 'reported_complete' : 'incomplete';
     } else if (sample) {
       state = this.stalled(tracked, now) ? 'stalled' : 'active';
     }
@@ -274,10 +304,10 @@ export class ProgressSupervisor {
       let code: ProgressWarningCode | undefined;
       let certainty: ProgressWarning['certainty'] = 'observed';
       let action = 'Inspect worker logs and progress artifacts; do not blindly retry.';
-      if (item.status === 'exited' && (item.exitCode !== 0 || (item.sample?.failure_count ?? 0) > 0)) {
+      if (item.status === 'exited' && ((item.exitCode !== null && item.exitCode !== 0) || (item.sample?.failure_count ?? 0) > 0)) {
         code = 'PROCESS_EXITED_FAILED';
         if (item.exitCode === 0) certainty = 'worker_reported';
-      } else if (item.status === 'exited' && (!item.sample || item.sample.pending_count !== 0)) {
+      } else if (item.status === 'exited' && (item.exitCode === null || !item.sample || item.sample.pending_count !== 0)) {
         code = 'PROCESS_EXITED_INCOMPLETE';
       } else if (item.status !== 'running') continue;
       else if (item.sample?.diagnosis && item.sample.diagnosis !== 'none') {
