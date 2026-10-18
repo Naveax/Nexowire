@@ -168,8 +168,10 @@ test('Native Agent dispatcher accepts only console-approved grants; shell and WS
   assert.equal(list.data.active.length,0);
   for (const name of ['shell.exec','wsl.exec','process.start','task.graph.run','runbook.run','workspace.checks'] as const) {
     await assert.rejects(()=>executeCapability(name, {command:'echo deny'}, policy),
-      (err:unknown)=>err instanceof PathDeniedError &&
-        err.details.reason==='UNSANDBOXED_EXECUTION_DENIED',
+      (err:unknown)=>name === 'wsl.exec' && process.platform !== 'win32'
+        ? err instanceof Error && /only available from a Windows native agent/.test(err.message)
+        : err instanceof PathDeniedError &&
+          err.details.reason==='UNSANDBOXED_EXECUTION_DENIED',
       name);
   }
 });
