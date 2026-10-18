@@ -203,9 +203,11 @@ export async function resolveWindowsVolumeIdentity(
     // Detect a drive-letter reassignment during the multi-cmdlet probe.
     "$again=Get-Partition -DriveLetter '" + letter + "' -ErrorAction Stop",
     "$againVolume=$again | Get-Volume -ErrorAction Stop",
-    "if(!$p -or !$d -or !$v -or !$again -or !$againVolume){throw 'Volume not available'}",
+    "$againDisk=$again | Get-Disk -ErrorAction Stop",
+    "if(!$p -or !$d -or !$v -or !$again -or !$againVolume -or !$againDisk){throw 'Volume not available'}",
     "if($p.DiskNumber -ne $again.DiskNumber -or $p.PartitionNumber -ne $again.PartitionNumber -or " +
-      "[string]$v.UniqueId -ne [string]$againVolume.UniqueId){throw 'Volume reassigned during validation'}",
+      "[string]$v.UniqueId -ne [string]$againVolume.UniqueId -or " +
+      "[string]$d.UniqueId -ne [string]$againDisk.UniqueId){throw 'Volume reassigned during validation'}",
     "[pscustomobject]@{driveLetter='" + letter +
       "';volumeId=[string]$v.UniqueId;deviceId=[string]$d.UniqueId;" +
       "busType=[string]$d.BusType;driveType=[string]$v.DriveType;" +

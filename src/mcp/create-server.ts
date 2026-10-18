@@ -5381,6 +5381,48 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'file_grant_status',
+    {
+      title: 'List active scoped file permissions',
+      description: 'Read time-bounded file grants on the selected device. Does not issue new permissions.',
+      inputSchema: { ...targetFields },
+    },
+    async ({ device_id, provider_id }) => await execute(
+      ctx, 'files.grant.status', {}, device_id, provider_id,
+    ),
+  );
+  server.registerTool(
+    'file_grant_request',
+    {
+      title: 'Request local owner-approved path permissions',
+      description: 'Request a target-specific, time-bounded grant. Always requires a physical Windows console ALLOW click. Remote FULL ACCESS alone cannot approve. Denies session-0/headless or changed volumes.',
+      inputSchema: {
+        ...targetFields,
+        path: z.string().min(1).max(4096),
+        scopes: z.array(z.enum(['read', 'write', 'delete', 'move', 'recursive_delete', 'usb_write'])).min(1).max(6),
+        duration_minutes: z.number().int().min(1).max(1440).optional(),
+        reason: z.string().max(240).optional(),
+      },
+    },
+    async ({device_id, provider_id, path, scopes, duration_minutes, reason}) =>
+      await execute(ctx, 'files.grant.request', {
+        path, scopes,
+        ...(duration_minutes !== undefined ? {duration_minutes} : {}),
+        ...(reason !== undefined ? {reason} : {}),
+      }, device_id, provider_id, 105_000),
+  );
+  server.registerTool(
+    'file_grant_revoke',
+    {
+      title: 'Revoke one scoped file permission',
+      description: 'Revoke a local scoped file permission by its opaque grant UUID.',
+      inputSchema: { ...targetFields, grant_id: z.string().uuid() },
+    },
+    async ({device_id, provider_id, grant_id}) =>
+      await execute(ctx, 'files.grant.revoke', {grant_id}, device_id, provider_id),
+  );
+
+  server.registerTool(
     'file_write',
     {
       title: 'Write file',

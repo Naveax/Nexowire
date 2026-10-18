@@ -14,6 +14,7 @@ import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ScopedPathGrantRegistry } from './scoped-path-grants.js';
+import { ScopedPathGrantAuthority } from './scoped-path-grant-approval.js';
 import { ProcessManager } from './process-manager.js';
 import { TaskGraphStore } from './task-graph-store.js';
 import { RunbookStore } from './runbook-store.js';
@@ -305,9 +306,14 @@ export async function runNativeAgent(
   const hubEndpoints = parseHubEndpoints(env);
   const token = agentTokenFromEnv(env);
   const name = env.NEXOWIRE_DEVICE_NAME?.trim() || os.hostname();
+  const grantRegistry = new ScopedPathGrantRegistry();
+  const localOwnerId = env.NEXOWIRE_OWNER_ID?.trim() || 'local-owner';
+  const scopedGrantAuthority = new ScopedPathGrantAuthority(
+    grantRegistry, localOwnerId, identity.id,
+  );
   const policy = new PathPolicy(parseAllowedRoots(env.NEXOWIRE_ALLOWED_ROOTS), {
-    grants: new ScopedPathGrantRegistry(),
-    ownerId: env.NEXOWIRE_OWNER_ID?.trim() || 'local-owner',
+    grants: grantRegistry,
+    ownerId: localOwnerId,
     deviceId: identity.id,
     // Existing roots keep ordinary file mutation; recursive deletion needs an
     // individually approved scope. USB mutations always need volume grants.
@@ -513,6 +519,7 @@ export async function runNativeAgent(
                     policy,
                     {
                       processes,
+                      scopedGrantAuthority,
                       operationJournal,
                       taskGraphs,
                       runbooks,

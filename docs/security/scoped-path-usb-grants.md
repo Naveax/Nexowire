@@ -30,16 +30,25 @@ disk and partition identities. `revoke(id)` takes effect immediately;
 expiration and Agent restart invalidate grants. Both wall-clock and monotonic
 timeouts apply, so moving the wall clock backward cannot extend a grant.
 Grant IDs cannot be reused without explicit revocation; grant inspections return
-defensive copies. These records are deliberately
-in-memory and are **not yet exposed to the remote MCP client**. Loading unsigned
-grants from a path writable through file/shell tools would be self-authorizing,
-so no such shortcut has been introduced.
+defensive copies. These records remain **in-memory**. The new Agent-side
+`ScopedPathGrantAuthority` is exposed through `files.grant.status`,
+`files.grant.request`, and `files.grant.revoke` (MCP `file_grant_*`). A remote
+caller can *request* but cannot silently mint a grant. Windows grant requests
+require an actual ALLOW decision in an interactive active-console session;
+process Session 0, headless, timeout, prompt failure and DENY fail closed.
+The dialog displays resolved target, individual scopes, duration, Volume GUID,
+Disk UniqueId and reason. The Agent performs read-only filesystem and volume
+checks both before and after approval, including ancestor reparse checks.
+FULL ACCESS does **not** bypass this separate console approval. This route is
+implemented in source and tested with mock console decisions, not deployed to
+both live Agent 1.0.5 installations. A physically approved test is still
+required. Loading unsigned grants from a writable path would be
+self-authorizing, so there is no persistent grant shortcut.
 
-**Outstanding for production:** Connect grant issuance and revocation to
-authenticated local-owner/physical-console approval; show a volume fingerprint
-and resolved target on that screen; optionally persist *integrity-protected*
-grants with revocation and restart rules. Until then, USB mutation permissions
-will be denied on the production Agent.
+**Outstanding for production:** Validate the physical on-device dialog under
+actual user logon and remote MCP account/device ownership; add native
+handle-based path/file identity pinning before destructive I/O. Grant issuance
+rejects an unavailable session instead of pretending approval succeeded.
 
 ### Arbitrary execution is not a path sandbox
 
@@ -76,6 +85,10 @@ approval authority as scoped grants.
   Windows machine, the pinned probe returned C: metadata successfully even
   with intentionally poisoned subprocess PATH/PSModulePath. This is **not** a
   physical USB/drive-letter-swap acceptance test.
+- `PathPolicy` denial is returned as `PATH_DENIED` with policy reason/scope.
+  Real Windows filesystem ACL/token failures retain OS `EACCES` or `EPERM`
+  and carry `OS_FILESYSTEM_PERMISSION_DENIED` attribution. A scoped grant
+  never grants NTFS privileges.
 - Canonical path and symlink checks reduce path-escape exposure, but pathname
   `realpath` + `fs.*` is not an atomic handle-based security guarantee.
   Junction/reparse replacement and drive reassignment between checks and I/O
@@ -106,7 +119,7 @@ Run on a safe developer checkout only:
 
 ```powershell
 npm run typecheck
-node --test --import tsx test/path-policy.test.ts test/scoped-path-grants.test.ts test/agent-executors.test.ts
+node --test --import tsx test/path-policy.test.ts test/scoped-path-grants.test.ts test/scoped-path-grant-approval.test.ts test/agent-executors.test.ts
 git diff --check
 ```
 
@@ -115,7 +128,10 @@ volume ID, disk ID, partition ID, drive-letter reassignment, unavailable
 volume, outside-user-profile path, raw disk namespace, UNC/WSL shares and
 volume-root deletion. Baseline symlink/junction escape tests are retained.
 
-**Draft PR exit criteria:** implement a trustworthy on-device grant approval
-route, handle-based race resistance for mutations, reparse-point tests on
-Windows, and repeated attach/detach simulations before declaring production
-safety.
+**Draft PR exit criteria:** verify physical-console approval using a live
+installed Agent under the correct interactive user session, implement
+handle-based race resistance for mutations, run physical USB attach/detach and
+letter-swap tests (only with explicit safe acceptance permission), and close
+full Windows regression failures before declaring production safety. Existing
+synthetic tests include consent refusal, grant revoke, USB serial/volume/partition
+mismatch, junction retarget and directory-removal during a mocked approval.

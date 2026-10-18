@@ -2129,6 +2129,7 @@ async function workspaceSnapshot(
 }
 
 export interface AgentExecutionContext {
+  scopedGrantAuthority?: import('./scoped-path-grant-approval.js').ScopedPathGrantAuthority;
   processes?: ProcessManager;
   operationJournal?: AgentOperationJournal;
   taskGraphs?: TaskGraphStore;
@@ -2323,6 +2324,15 @@ export async function executeCapability(
       return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
       return await executeWsl(input, policy);
+    case 'files.grant.status':
+      if (!context.scopedGrantAuthority) throw new Error('Scoped grant authority unavailable.');
+      return { data: context.scopedGrantAuthority.status() };
+    case 'files.grant.request':
+      if (!context.scopedGrantAuthority) throw new Error('Scoped grant authority unavailable.');
+      return { data: await context.scopedGrantAuthority.request(input) };
+    case 'files.grant.revoke':
+      if (!context.scopedGrantAuthority) throw new Error('Scoped grant authority unavailable.');
+      return { data: context.scopedGrantAuthority.revoke(input) };
     case 'files.read':
       return await readFile(input, policy);
     case 'files.read_many':
@@ -2629,6 +2639,24 @@ export function normalizeAgentError(error: unknown): {
       code: 'PATH_DENIED',
       message: error.message,
       details: { path: error.requestedPath, ...error.details },
+    };
+  }
+  // OS ACL/NTFS denial is not a Nexowire path-policy decision. Preserve the
+  // actual OS code, but explicitly attribute this to the filesystem layer.
+  if (error && typeof error === 'object' && 'code' in error &&
+      (error.code === 'EACCES' || error.code === 'EPERM')) {
+    const osError = error as NodeJS.ErrnoException;
+    return {
+      code: osError.code!,
+      message: osError.message || 'Operating system denied filesystem access.',
+      details: {
+        reason: 'OS_FILESYSTEM_PERMISSION_DENIED',
+        source: 'windows_or_host_filesystem',
+        osCode: osError.code,
+        ...(typeof osError.path === 'string' ? { path: osError.path } : {}),
+        ...(typeof osError.syscall === 'string' ? { syscall: osError.syscall } : {}),
+        nextStep: 'Check Windows ACL, ownership, locked files and the actual Agent user token. A Nexowire scoped grant cannot override NTFS permissions.',
+      },
     };
   }
   if (
