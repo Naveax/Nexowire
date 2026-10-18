@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { verifyWindowsKernelJob } from './windows-job-kernel-attestation.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -101,7 +101,6 @@ export async function launchWindowsJob(
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-job-'));
   const marker = path.join(directory, 'assigned.txt');
   const release = path.join(directory, 'verified.ok');
-  const jobName = 'Local\\Nexowire-' + randomUUID();
   let child: ChildProcessWithoutNullStreams | undefined;
   let verified = false;
   try {
@@ -111,7 +110,7 @@ export async function launchWindowsJob(
       helper,
       ['--status', marker, '--cwd', options.cwd ?? '-', '--parent',
         options.guardOnParentExit ? String(process.pid) : '0',
-        '--job', jobName, '--release', release, '--', executable, ...args],
+        '--release', release, '--', executable, ...args],
       { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: options.env ?? process.env },
     );
     let failed: Error | undefined;
@@ -123,7 +122,7 @@ export async function launchWindowsJob(
       if (failed) throw failed;
       try {
         const line = (await fs.readFile(marker, 'utf8')).trim();
-        const match = /^NWJOB4 ([1-9][0-9]*) ([1-9][0-9]*)$/.exec(line);
+        const match = /^NWJOB5 ([1-9][0-9]*) ([1-9][0-9]*) ([1-9][0-9]*)$/.exec(line);
         if (!match) throw new Error('Invalid Windows Job attestation');
         const pid = Number(match[1]);
         if (!Number.isSafeInteger(pid) || pid > 0xffffffff) {
@@ -131,7 +130,8 @@ export async function launchWindowsJob(
         }
         // Never trust helper-authored marker text without an independent
         // Win32 kernel membership + job limit verification.
-        await verifyWindowsKernelJob(pid, match[2]!, jobName);
+        if (!child.pid) throw new Error('Windows Job guardian PID unavailable');
+        await verifyWindowsKernelJob(pid, match[2]!, child.pid, match[3]!);
         await verifyWindowsJobHelperBinary(helper);
         await fs.writeFile(release, 'verified', { flag: 'wx', mode: 0o600 });
         verified = true;

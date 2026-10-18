@@ -40,17 +40,16 @@ static void diagnostic(const wchar_t *stage) {
 int main(void){
   int argc=0;
   wchar_t **argv=CommandLineToArgvW(GetCommandLineW(),&argc);
-  if(!argv || argc<13 || wcscmp(argv[1],L"--status") ||
+  if(!argv || argc<11 || wcscmp(argv[1],L"--status") ||
      wcscmp(argv[3],L"--cwd") || wcscmp(argv[5],L"--parent") ||
-     wcscmp(argv[7],L"--job") || wcscmp(argv[9],L"--release") || wcscmp(argv[11],L"--")){
+     wcscmp(argv[7],L"--release") || wcscmp(argv[9],L"--")){
     fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR invalid_arguments\n");
     return 64;
   }
   const wchar_t *statusPath=argv[2];
   const wchar_t *cwd=wcscmp(argv[4],L"-")==0?NULL:argv[4];
-  const wchar_t *jobName=argv[8];
-  const wchar_t *releasePath=argv[10];
-  if(!statusPath[0]||!jobName[0]||wcsncmp(jobName,L"Local\\Nexowire-",15)||!releasePath[0]||!argv[12][0])return 64;
+  const wchar_t *releasePath=argv[8];
+  if(!statusPath[0]||!releasePath[0]||!argv[10][0])return 64;
   wchar_t *parentEnd=NULL;
   unsigned long parentPid=wcstoul(argv[6],&parentEnd,10);
   if(!argv[6][0]||*parentEnd)return 64;
@@ -61,23 +60,21 @@ int main(void){
     FALSE,parentPid):NULL;
   if(parentPid&&!parent){diagnostic(L"parent_open");return 70;}
   size_t total=1;
-  for(int i=12;i<argc;i++)total+=wcslen(argv[i])*2+4;
+  for(int i=10;i<argc;i++)total+=wcslen(argv[i])*2+4;
   if(total>32760){fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR command_too_long\n");return 64;}
   wchar_t *cmd=(wchar_t*)calloc(total,sizeof(wchar_t));
   if(!cmd)return 70;
   wchar_t *out=cmd; const wchar_t *end=cmd+total-1;
-  for(int i=12;i<argc;i++){
-    if(i>12){if(out>=end){free(cmd);return 64;}*out++=L' ';}
+  for(int i=10;i<argc;i++){
+    if(i>10){if(out>=end){free(cmd);return 64;}*out++=L' ';}
     if(!quote_arg(argv[i],&out,end)){free(cmd);return 64;}
   }
   *out=0;
 
-  HANDLE job=CreateJobObjectW(NULL,jobName);
+  // Unnamed Job: no OpenJobObject(name) surface for same-user processes to
+  // retain an extra query handle across forced guardian termination.
+  HANDLE job=CreateJobObjectW(NULL,NULL);
   if(!job){diagnostic(L"create_job");free(cmd);return 70;}
-  if(GetLastError()==ERROR_ALREADY_EXISTS){
-    fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR preexisting_job\n");
-    CloseHandle(job);free(cmd);return 70;
-  }
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit={0};
   limit.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
   if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,
@@ -117,7 +114,8 @@ int main(void){
   }
   unsigned long long ticks=((unsigned long long)c.dwHighDateTime<<32)|c.dwLowDateTime;
   wchar_t message[128]={0};
-  int length=swprintf(message,128,L"NWJOB4 %lu %llu\n",pi.dwProcessId,ticks);
+  int length=swprintf(message,128,L"NWJOB5 %lu %llu %llu\n",pi.dwProcessId,ticks,
+    (unsigned long long)(uintptr_t)job);
   HANDLE marker=CreateFileW(statusPath,GENERIC_WRITE,0,NULL,CREATE_NEW,
     FILE_ATTRIBUTE_NORMAL,NULL);
   if(marker==INVALID_HANDLE_VALUE){
@@ -139,7 +137,8 @@ int main(void){
     return 75;
   }
   // The suspended root MUST remain suspended until the Agent independently
-  // opens the named Job through the OS and proves membership and limits.
+  // duplicates this exact unnamed Job handle from the guardian and verifies
+  // the kernel membership, creation identity and Job limits.
   // A plaintext marker never authorizes process execution on its own.
   BOOL released=FALSE;
   for(int i=0;i<400;i++){

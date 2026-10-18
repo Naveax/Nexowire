@@ -38,9 +38,8 @@ test('forged stdout/marker cannot prove Windows kernel Job ownership', {
   // Current test-runner PID, fake FILETIME and unallocated unique Job name.
   // This MUST fail even if a substituted helper emitted valid NWJOB4 syntax.
   // No process is spawned or terminated in this negative test.
-  const unownedName = 'Local\\Nexowire-' + randomUUID();
   await assert.rejects(
-    () => verifyWindowsKernelJob(process.pid, '133000000000000000', unownedName),
+    () => verifyWindowsKernelJob(process.pid, '133000000000000000', process.pid, '99999'),
     /WINDOWS_JOB_KERNEL_ATTESTATION_FAILED/,
   );
 });

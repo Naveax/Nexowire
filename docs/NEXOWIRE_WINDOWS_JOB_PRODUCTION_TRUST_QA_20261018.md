@@ -1,113 +1,108 @@
-# Windows Job Object production trust QA
+# Windows Job Object: independent production trust QA
 
-Date: 2026-10-18. Issue #541 is closed, PR #559 is merged. **Neither fact
-establishes production acceptance.** This follow-up is source-only.
+Date: 2026-10-19. Merged PR #559 and closed issue #541 are **not**
+production acceptance. This follow-up is isolated source-only work
+on DRAFT PR #576. No installed Agent or main deployment was changed.
 
-## Proven threat and mitigation
+## QA incident and exact-source changes
 
-1. The prior JS launcher verified only `fs.stat(...).isFile()`, so an
-   EXE swapped at the pinned path could forge `NWJOB3 PID FILETIME` and
-   create an unmanaged process. No live-device exploitation is alleged.
-2. The new launcher rejects missing/invalid SHA-256 build baselines,
-   file-content substitution, symbolic-link and realpath redirection, or
-   changed file identity between local checks. The build script now emits
-   the digest and packaging includes it.
-3. A new random `Local\\Nexowire-<uuid>` named Job is created per
-   operation with `KILL_ON_JOB_CLOSE`. The native helper creates the
-   root **suspended**, assigns it, and publishes `NWJOB4 PID FILETIME`.
-4. The JS side independently invokes Windows kernel APIs through a
-   system PowerShell P/Invoke probe: `OpenJobObject`, `OpenProcess`,
-   `IsProcessInJob`, `GetProcessTimes`,
-   `QueryInformationJobObject(JobObjectExtendedLimitInformation)`.
-   The root's real creation FILETIME, Job membership, `KILL_ON_JOB_CLOSE`
-   and absence of `BREAKAWAY_OK/SILENT_BREAKAWAY_OK` are checked.
-   **Only after successful verification** does JS publish the per-launch
-   release gate; the helper cannot resume before it opens that gate.
-5. If any validation fails, the launcher kills **only its newly spawned
-   guardian**. A verified OS Job then reaps associated synthetic members.
-   Unconfirmed status remains unconfirmed, not success.
+- The original `NWJOB3 PID FILETIME` text marker and
+  `fs.stat(...).isFile()` could be forged by an executable substituted
+  at the nominally pinned path; independent OS ownership evidence was absent.
+- Source-built helpers now ship a SHA-256 companion manifest, and the
+  launcher checks the actual file digest, change of file ID/size/mtime,
+  symlink/reparse leaf, and canonical parent/leaf relationship before
+  starting. This **does not authenticate the manifest or eliminate a
+  last-millisecond image replacement race**.
+- Protocol **NWJOB5** (replacing provisional NWJOB4):
+  `CreateJobObjectW(NULL, NULL)` creates an **unnamed** Job.
+  The guardian creates the synthetic shell `CREATE_SUSPENDED`,
+  assigns it, verifies its membership and creation FILETIME, and
+  writes `NWJOB5 <pid> <FILETIME> <guardian-owned-handle>`.
+  The new marker is only a query input, never proof of ownership.
+- The launcher calls a **separate** Win32 verifier through system
+  Windows PowerShell: `OpenProcess(PROCESS_DUP_HANDLE)` on the guardian
+  PID, `DuplicateHandle` with `JOB_OBJECT_QUERY` from that exact
+  guardian Job handle, then `IsProcessInJob`,
+  `GetProcessTimes`, and `QueryInformationJobObject`.
+  The root must have exactly the expected creation FILETIME and be
+  a member of the duplicated Job; its limits must include
+  `KILL_ON_JOB_CLOSE` and exclude breakaway options.
+- Only after **all** checks pass does JS create the temporary
+  verification gate allowing the suspended root to resume.
+  The temporary directory survives until guardian exit; a transient
+  verifier-query handle is closed in the verifier's `finally`.
+  On failure the launcher terminates only its own spawned guardian.
+- For normal owning-parent death or Job accounting failure, the
+  guardian additionally calls `TerminateJobObject` before closing
+  the Job handle. The existing `requested/unconfirmed` cleanup
+  contract is preserved.
+- ProcessManager reports verified **root at launch**, scope
+  `job_members_only` and `outOfJobDescendants=unknown`; it does not
+  claim arbitrary COM/UAC/WMI broker processes were contained.
 
-## Publisher and release gate
+## Historical named Job bypass and new fix
 
-**Important limitation:** a build-created `.sha256` file is not a
-protected release manifest. An attacker able to replace both the EXE
-and manifest could defeat this checksum. The two path/stat checks
-reduce ordinary substitution but do not provide a fully atomic
-file-handle-to-executed-image guarantee.
+The initial provisional NWJOB4 design used the discoverable name
+`Local\\Nexowire-<uuid>`. On 2026-10-19 an isolated Work PC
+fixture held a second `JOB_OBJECT_QUERY` handle, then terminated
+**only its own verified synthetic guardian**. The synthetic root
+stayed alive until that extra handle closed, defeating an assumption
+that guardian death always invokes `KILL_ON_JOB_CLOSE`. Physical
+reproduction: **1/1 PASS**, source commit `34bb03b7490972036e256c87dab755a13e1e04c1`.
 
-The Windows bundle builder now refuses **tag-scoped** production builds
-unless `NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT` is configured to a
-40-digit trusted certificate thumbprint and
-`Get-AuthenticodeSignature` reports `Valid` with the exact thumbprint.
-The current source-built Zig/MSVC developer helper is **unsigned**. It
-is suitable for isolated tests, **not** a tagged production release.
-PR bundle smoke remains a staging artifact, not production signing
-evidence.
+The replacement NWJOB5 uses an **unnamed Job**, preventing arbitrary
+`OpenJobObject(name)` reopens. Updated test
+`test/windows-job-named-handle-caveat.test.ts` verifies no public
+name is advertised, the old query-only name-opening fixture cannot
+attach, and killing the identity-verified synthetic guardian reaps
+its root. **1/1 PASS on Work PC**.
 
-The final production solution still needs a protected/signed helper
-manifest with version/rollback binding, an installer integrity ACL or
-equivalent protected trust anchor, and a validated image/file-identity
-link across process creation. Do not use this PR as release approval.
+**Remaining risk:** a process with sufficient `PROCESS_DUP_HANDLE`
+access to the guardian may still duplicate the unnamed Job handle
+and retain it. A privileged/same-user attacker who can replace both
+the helper and companion checksum, or control the running guardian,
+is *not* eliminated by this source-only redesign. A hardened
+process-token/DACL boundary, release authenticity and image/handle
+provenance remain production gates.
 
-## Windows physical results (dedicated Work PC worktree, no live Agent changes)
+## Source validation, not staging or production
 
-- Combined targeted ProcessManager, guard-crash, synthetic Agent crash,
-  durable worker crash, streaming I/O and trust negatives: **10 PASS,
-  0 FAIL, 1 SKIP** (symlink privilege absent).
-- Independent 128-session retention/reclaim physical run:
-  **1 PASS, 0 FAIL**.
-- Prior first attempt detected a release-gate temp-directory lifetime
-  race. Temp directory lifetime now follows guardian close; positive
-  streaming tests passed afterward.
-- All terminations are limited to isolated fixture processes with
-  unique markers and PID/creation evidence. No other Work PC user
-  processes or installed services were targeted.
+- Original synthetic guardian/Agent crash, durable-worker crash,
+  stream piping, ProcessManager cleanup: see recorded test outputs
+  on this PR. A previous full Work PC run passed **22/22 + 1 SKIP**.
+- NWJOB5-specific start/stream tests: **2/2 PASS**.
+- NWJOB5 negative helper/marker/publisher tests plus unnamed handle
+  fixture: **4 PASS, 1 SKIP, 0 FAIL**; symlink creation is forbidden
+  on the local Work PC account, while GitHub Windows CI can exercise
+  it. These are separate runs and **must not** be combined as one.
+- Tests only terminate fixture-created guardian/worker PIDs after
+  exact PID+creation+unique-command-marker validation. User
+  processes and installed Nexowire Agent are untouched.
 
-## Separate acceptance blockers
+## Publisher and production release blockers
 
-## Physical reproduction: second read-only named Job handle (BLOCKER)
+The build-generated `.sha256` is not a signed/protected source of
+truth: a substitute binary and substitute manifest can be matched.
+The Windows bundle builder refuses tag-scoped releases lacking a
+specific trusted publisher thumbprint and a **Valid** Authenticode
+signer. The Zig/MSVC source-built development helper is unsigned
+and is **not production-accepted**. Release manifest, certificate
+chain, version/rollback-bound signature, protected install ACL,
+image-locking/TOCTOU closure and runtime validation are pending.
 
-2026-10-19, isolated Work PC fixture
-`test/windows-job-named-handle-caveat.test.ts` +
-`test/fixtures/windows-job-hold-query.ps1`: **1/1 PASS**.
+### Other blockers
 
-- Launch a new Job guardian + uniquely marked PowerShell/Node synthetic
-  process through ProcessManager.
-- Independently verify the fixture guardian PID, command-line marker,
-  Win32 creation timestamp and unique `Local\\Nexowire-<uuid>` Job.
-- Open a second `JOB_OBJECT_QUERY` handle in a separate, **test-created**
-  PowerShell process. Force-stop only the identity-verified synthetic
-  guardian PID with `taskkill /PID`; **the Job root stays alive** despite
-  `KILL_ON_JOB_CLOSE`.
-- Close only the synthetic query handle; the root is then terminated by
-  the final Job handle closure. The test asserts that the root is gone.
-- The test illustrates a security gap, **not** a production-ready solution.
-  A redesign of the Job naming/handle ownership or an equivalent trusted
-  lifecycle control is required to close this blocker. Normal parent death
-  now calls `TerminateJobObject`, but an involuntary guardian kill cannot
-  execute that code.
+1. Hostile nested parent Job limits, explicit breakaway, access denial
+   and out-of-Job broker launch variants still need independent
+   physical tests. `job_members_only` is not blanket tree ownership.
+2. Adversarial `PROCESS_DUP_HANDLE` retention and debugger/handle
+   inheritance scenarios still need hardened Windows-native
+   validation, not just an unnamed Job.
+3. Physical installed Agent cold restart/sidecar reattach, recovery,
+   publisher integrity and long-running soak are **separate** from
+   source regression and hosted CI success.
+4. Exact-head CI must pass; Release Readiness success alone cannot
+   authorize production.
 
-- A named Windows Job can be reopened with query rights by another
-  process. A second Job handle can delay `KILL_ON_JOB_CLOSE` if the
-  guardian is **forcibly killed** rather than exiting through its owner
-  death/error path. Normal parent-loss and accounting-error branches
-  explicitly `TerminateJobObject` before closing handles, but a true
-  involuntary guardian crash plus an externally retained handle is still
-  a BLOCKED physical acceptance and threat-model gate. The word
-  "sole" must not be used for named Job handles.
-- Nested-host Job limitations and incompatible parent Job behavior not
-  exhaustively tested with independent hostile parent fixtures.
-- Explicit and silent breakaway are disallowed on the owned Job, but
-  Windows COM/WMI/UAC/elevated broker processes outside the Job may not
-  be owned. No comprehensive out-of-Job descendant telemetry exists.
-- Full Agent cold restart/sidecar reattach on the **installed** live
-  Agent, publisher validation, signed/protected release manifest,
-  long-duration soak, power failure and privilege-denied variants are
-  **not physically accepted**.
-- `treeOwnership=windows_job` describes the verified root and
-  processes actually in the Job. It is not proof of all possible
-  broker-created descendants. Report unmanaged external side effects
-  as `unconfirmed`, never as cleaned.
-
-Do not merge this draft or deploy a new Agent solely because its
-source/CI tests pass.
+**Decision: PRODUCTION BLOCKED; keep PR #576 DRAFT.**
