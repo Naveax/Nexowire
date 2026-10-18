@@ -46,12 +46,20 @@ export async function verifyWindowsJobHelperBinary(helper: string): Promise<Help
     const expected = (await fs.readFile(manifest, 'utf8')).trim().toLowerCase();
     if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error('invalid SHA256 manifest');
     const dir = path.dirname(helper);
-    const [dirLink, link, resolved, first] = await Promise.all([
-      fs.lstat(dir), fs.lstat(helper), fs.realpath(helper), fs.stat(helper, { bigint: true }),
+    const [dirLink, link, resolved, canonicalParent, first] = await Promise.all([
+      fs.lstat(dir), fs.lstat(helper), fs.realpath(helper), fs.realpath(dir),
+      fs.stat(helper, { bigint: true }),
     ]);
+    // Windows may canonicalize a checkout's ancestor (drive/mount alias).
+    // Compare canonical parent + leaf identity instead of the uncanonical
+    // user-facing path. Never permit a symlink/junction at the selected
+    // helper leaf or at its immediate parent.
+    const sameParent = path.win32.normalize(path.win32.dirname(resolved)).toLowerCase() ===
+      path.win32.normalize(canonicalParent).toLowerCase();
+    const sameLeaf = path.win32.basename(resolved).toLowerCase() ===
+      path.win32.basename(helper).toLowerCase();
     if (dirLink.isSymbolicLink() || link.isSymbolicLink() || !link.isFile() ||
-        path.win32.normalize(resolved).toLowerCase() !==
-          path.win32.normalize(helper).toLowerCase()) {
+        !sameParent || !sameLeaf) {
       throw new Error('helper path is a link or reparse redirection');
     }
     const handle = await fs.open(helper, 'r');

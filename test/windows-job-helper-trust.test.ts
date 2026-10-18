@@ -67,7 +67,8 @@ test('helper path must not point through a symbolic link', {
       throw error;
     }
     await assert.rejects(() => verifyWindowsJobHelperBinary(helper),
-      /WINDOWS_JOB_HELPER_UNTRUSTED/);
+      (error: unknown) => error instanceof Error && 'code' in error &&
+        error.code === 'WINDOWS_JOB_HELPER_UNTRUSTED');
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
