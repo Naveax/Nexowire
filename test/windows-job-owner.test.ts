@@ -259,3 +259,34 @@ test('Windows durable sidecar worker crash closes owned Job without killing Agen
     await fs.rm(tmp,{recursive:true,force:true,maxRetries:10,retryDelay:100});
   }
 });
+
+
+test('Windows helper path cannot be replaced by inherited environment', {
+  skip:process.platform!=='win32',
+  timeout:18_000,
+},async()=>{
+  const {launchWindowsJob}=await import('../src/agent/windows-job-owner.js');
+  const key='NEXOWIRE_WINDOWS_JOB_HELPER';
+  const original=process.env[key];
+  // node.exe exists, but is not the trusted Win32 Job guardian. If selected,
+  // it cannot publish the Job attestation. The pinned package helper must win.
+  process.env[key]=process.execPath;
+  try{
+    const launch=await launchWindowsJob(
+      process.execPath,['-e','process.exit(0)'],
+      {guardOnParentExit:true},
+    );
+    if(!launch.closed()){
+      await new Promise<void>((resolve,reject)=>{
+        const timeout=setTimeout(()=>reject(new Error('Job guardian did not exit')),10_000);
+        launch.child.once('close',()=>{clearTimeout(timeout);resolve();});
+        launch.child.once('error',error=>{clearTimeout(timeout);reject(error);});
+      });
+    }
+    assert.equal(launch.child.exitCode,0,
+      'trusted helper must run to successful Job and process completion');
+  }finally{
+    if(original===undefined) delete process.env[key];
+    else process.env[key]=original;
+  }
+});

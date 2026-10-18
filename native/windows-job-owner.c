@@ -53,7 +53,8 @@ int main(void){
   unsigned long parentPid=wcstoul(argv[6],&parentEnd,10);
   if(!argv[6][0]||*parentEnd)return 64;
   // Guardian's handle to volatile parent prevents PID reuse while it lives.
-  // Durable workers pass 0: their Job must survive Agent disconnection.
+  // Volatile sessions watch Agent; durable sidecars watch their own worker.
+  // Neither mode may depend solely on ancestry after Agent exit.
   HANDLE parent=parentPid?OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,
     FALSE,parentPid):NULL;
   if(parentPid&&!parent){diagnostic(L"parent_open");return 70;}

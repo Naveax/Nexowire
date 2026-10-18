@@ -24,24 +24,20 @@ export interface WindowsJobLaunch {
   closed: () => boolean;
 }
 
-function candidateBinaries(): string[] {
+function candidateBinary(): string {
+  // Source: src/agent -> native/. Bundle: dist/src/agent -> dist/native/.
+  // Do not accept an environment-variable override or parent-directory
+  // fallback. An attacker-controlled executable can forge an ownership marker.
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  return [
-    ...(process.env.NEXOWIRE_WINDOWS_JOB_HELPER
-      ? [process.env.NEXOWIRE_WINDOWS_JOB_HELPER]
-      : []),
-    path.resolve(moduleDir, '../../native/windows-job-owner.exe'),
-    path.resolve(moduleDir, '../../../native/windows-job-owner.exe'),
-  ];
+  return path.resolve(moduleDir, '../../native/windows-job-owner.exe');
 }
 
 async function binaryPath(): Promise<string> {
-  for (const candidate of candidateBinaries()) {
-    try {
-      if ((await fs.stat(candidate)).isFile()) return candidate;
-    } catch {
-      // Next supported deployment location.
-    }
+  const candidate = candidateBinary();
+  try {
+    if ((await fs.stat(candidate)).isFile()) return candidate;
+  } catch {
+    // Fail closed below; never launch an arbitrary replacement EXE.
   }
   throw new WindowsJobOwnerError(
     'WINDOWS_JOB_HELPER_UNAVAILABLE',
