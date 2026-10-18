@@ -310,15 +310,18 @@ export class ProgressSupervisor {
       } else if (item.status === 'exited' && (item.exitCode === null || !item.sample || item.sample.pending_count !== 0)) {
         code = 'PROCESS_EXITED_INCOMPLETE';
       } else if (item.status !== 'running') continue;
-      else if (item.sample?.diagnosis && item.sample.diagnosis !== 'none') {
-        code = 'WORKER_REPORTED_BLOCKER';
-        certainty = 'worker_reported';
-        action = 'Examine worker-reported blocker; independently check host/network telemetry.';
-      } else if (item.sample && this.stalled(item, now)) {
+      // Verified counter stagnation remains observable even when a worker
+      // self-reports rate limiting or resource saturation. Report that
+      // diagnosis separately; it is not an independent root-cause proof.
+      else if (item.sample && this.stalled(item, now)) {
         code = item.growthSinceMs !== undefined &&
           now - item.growthSinceMs >= this.stallAfterMs
           ? 'QUEUE_GROWING_WITHOUT_COMPLETIONS' : 'NO_COMPLETIONS';
         certainty = 'suspected';
+      } else if (item.sample?.diagnosis && item.sample.diagnosis !== 'none') {
+        code = 'WORKER_REPORTED_BLOCKER';
+        certainty = 'worker_reported';
+        action = 'Examine worker-reported blocker; independently check host/network telemetry.';
       } else if (item.sample && item.lastHeartbeatMs !== undefined &&
                  now - item.lastHeartbeatMs >= this.stallAfterMs) {
         code = 'HEARTBEAT_STALE';

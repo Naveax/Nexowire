@@ -72,13 +72,16 @@ test('flat queue, reported blocker, stale heartbeat and failure are distinguishe
   supervisor.observeMetrics('flat', { completed_count: 0, pending_count: 5, failure_count: 0 });
   supervisor.observeMetrics('rate', { completed_count: 1, pending_count: 5, failure_count: 0, diagnosis: 'rate_limited' });
   supervisor.observeProcessEvent({ topic: 'process.exited', data: { sessionId: 'crash', exitCode: 1 } });
+  const firstWarnings = supervisor.scan();
+  assert.equal(firstWarnings.find(x => x.sessionId === 'rate')?.code, 'WORKER_REPORTED_BLOCKER');
+  assert.equal(firstWarnings.find(x => x.sessionId === 'rate')?.certainty, 'worker_reported');
+  assert.equal(firstWarnings.find(x => x.sessionId === 'crash')?.code, 'PROCESS_EXITED_FAILED');
   now += 150;
   const warnings = supervisor.scan();
   assert.equal(warnings.find(x => x.sessionId === 'flat')?.code, 'NO_COMPLETIONS');
-  assert.equal(warnings.find(x => x.sessionId === 'rate')?.code, 'WORKER_REPORTED_BLOCKER');
-  assert.equal(warnings.find(x => x.sessionId === 'rate')?.certainty, 'worker_reported');
-  assert.equal(warnings.find(x => x.sessionId === 'crash')?.code, 'PROCESS_EXITED_FAILED');
-  assert.ok(warnings.every(x => x.restartAllowed === false));
+  assert.equal(warnings.find(x => x.sessionId === 'rate')?.code, 'NO_COMPLETIONS');
+  assert.equal(warnings.find(x => x.sessionId === 'rate')?.diagnosis, 'rate_limited');
+  assert.ok([...firstWarnings, ...warnings].every(x => x.restartAllowed === false));
   assert.equal(supervisor.snapshot('crash').state, 'failed');
 });
 
@@ -188,4 +191,24 @@ test('process reconciliation reflects lost and unknown outcomes without inventin
   supervisor.recover([{sessionId:'reported',status:'exited',exitCode:0}]);
   assert.equal(supervisor.snapshot('reported').state, 'reported_complete');
   assert.equal(supervisor.snapshot('reported').progressVerified, false);
+});
+
+test('worker-reported blocker cannot mask a growing queue that has stopped completing', () => {
+  let now = 0;
+  const supervisor = new ProgressSupervisor({now:()=>now,stallAfterMs:100});
+  supervisor.register('rate-limited-queue');
+  supervisor.observeMetrics('rate-limited-queue', {
+    completed_count:0,pending_count:10,failure_count:0,diagnosis:'rate_limited',
+  });
+  assert.equal(supervisor.scan()[0]?.code,'WORKER_REPORTED_BLOCKER');
+  now = 20;
+  supervisor.observeMetrics('rate-limited-queue', {
+    completed_count:0,pending_count:20,failure_count:0,diagnosis:'rate_limited',
+  });
+  now = 150;
+  const warning = supervisor.scan()[0];
+  assert.equal(warning?.code,'QUEUE_GROWING_WITHOUT_COMPLETIONS');
+  assert.equal(warning?.diagnosis,'rate_limited');
+  assert.equal(warning?.certainty,'suspected');
+  assert.equal(warning?.restartAllowed,false);
 });
