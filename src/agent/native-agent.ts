@@ -14,6 +14,7 @@ import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
+import { ProgressSupervisor } from './progress-supervisor.js';
 import { TaskGraphStore } from './task-graph-store.js';
 import { RunbookStore } from './runbook-store.js';
 import {
@@ -344,6 +345,7 @@ export async function runNativeAgent(
       }),
     );
   };
+  const progressSupervisor = new ProgressSupervisor();
   const processes = new ProcessManager({
     stateFile: processStateFile,
     workerRoot:
@@ -351,7 +353,10 @@ export async function runNativeAgent(
       path.join(os.homedir(), '.nexowire', 'process-workers'),
     workerEntrypoint: process.argv[1],
     workerExecArgv: process.execArgv,
-    onEvent: (event) => emitAgentEvent(event.topic, event.data),
+    onEvent: (event) => {
+      progressSupervisor.observeProcessEvent(event);
+      emitAgentEvent(event.topic, event.data);
+    },
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
   const runbooks = new RunbookStore({ stateFile: runbookStateFile });
@@ -370,11 +375,19 @@ export async function runNativeAgent(
     await singletonLock?.close();
     throw error;
   }
+  progressSupervisor.recover(processes.list());
+  const progressWatchdogTimer = setInterval(() => {
+    for (const warning of progressSupervisor.scan()) {
+      emitAgentEvent('progress.watchdog.warning', warning);
+    }
+  }, 5_000);
+  progressWatchdogTimer.unref();
   let reconnectDelay = 1_000;
   let endpointIndex = 0;
 
   const stop = (): void => {
     stopped = true;
+    clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');
     void processes.shutdown();
   };
@@ -502,6 +515,7 @@ export async function runNativeAgent(
                     policy,
                     {
                       processes,
+                      progressSupervisor,
                       operationJournal,
                       taskGraphs,
                       runbooks,
