@@ -9,6 +9,7 @@ import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.
 import {privateShellExecutionEnvironment,assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell.js';
 import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
+import {launchWindowsJob, requestWindowsJobStop, type WindowsJobLaunch} from './windows-job-owner.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
 
@@ -90,6 +91,8 @@ interface ManagedSession {
   shell: string;
   cwd?: string;
   child?: ChildProcessWithoutNullStreams;
+  job?: WindowsJobLaunch;
+  processCreationFiletime?: string;
   startedAt: string;
   exitedAt?: string;
   exitCode: number | null;
@@ -454,6 +457,11 @@ function summarize(session: ManagedSession) {
     ...(session.command ? { command: session.command } : {}),
     shell: session.shell,
     ...(session.cwd ? { cwd: session.cwd } : {}),
+    ...(session.processCreationFiletime ? {
+      processCreationFiletime: session.processCreationFiletime,
+    } : {}),
+    ...(session.job ? { jobGuardianPid: session.job.guardianPid,
+      treeOwnership: 'windows_job' as const } : {}),
     status: session.status,
     recovered: session.recovered,
     durable: session.durable,
@@ -1037,7 +1045,12 @@ export class ProcessManager {
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
-    const child = spawn(shell.executable, shell.args, {
+    // On Windows the native guardian owns the entire Job lifetime. The root
+    // starts suspended and only resumes after a verified Job assignment.
+    const job = process.platform === 'win32'
+      ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env, guardOnParentExit: true })
+      : undefined;
+    const child = job?.child ?? spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
       windowsHide: true,
       env: process.env,
@@ -1049,11 +1062,12 @@ export class ProcessManager {
     const session: ManagedSession = {
       id,
       ...(parsed.name ? { name: parsed.name } : {}),
-      pid: child.pid ?? null,
+      pid: job?.pid ?? child.pid ?? null,
       command: parsed.command,
       shell: shell.label,
       ...(cwd ? { cwd } : {}),
       child,
+      ...(job ? { job, processCreationFiletime: job.creationFiletime } : {}),
       startedAt: new Date().toISOString(),
       exitCode: null,
       signal: null,
@@ -1141,6 +1155,13 @@ export class ProcessManager {
       });
       void this.persistState().catch(() => undefined);
     });
+    // Native guardian may have completed while its assignment marker was read.
+    if (job?.closed() && session.status === 'running') {
+      session.status = 'exited';
+      session.exitCode = child.exitCode;
+      session.signal = child.signalCode;
+      session.exitedAt = new Date().toISOString();
+    }
 
     await this.persistState();
     return summarize(session);
@@ -1281,20 +1302,28 @@ export class ProcessManager {
 
     if (session.durable) {
       await this.refreshDurableSession(session);
+      let treeCleanup: 'requested' | 'unconfirmed' = 'unconfirmed';
       if (session.status === 'running') {
-        await this.workerControl(session, {
+        const result = await this.workerControl(session, {
           type: 'stop',
           commandId: randomUUID(),
         });
+        if (result.treeCleanup === 'requested') treeCleanup = 'requested';
         for (let attempt = 0; attempt < 100; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
           await this.refreshDurableSession(session);
           if (session.status !== 'running') break;
         }
       }
+      // A worker response merely confirms an attempted Job handle closure.
+      // In particular, lost/active durable workers cannot claim tree cleanup.
+      if (session.status !== 'exited') treeCleanup = 'unconfirmed';
       this.stopDurableMonitor(session.id);
       await this.persistState();
-      return summarize(session);
+      return {
+        ...summarize(session),
+        ...(process.platform === 'win32' ? { treeCleanup } : {}),
+      };
     }
 
     if (session.status === 'orphaned' && session.recovered) {
@@ -1310,8 +1339,14 @@ export class ProcessManager {
         session.status === 'orphaned') &&
       session.pid
     ) {
-      treeCleanup = await killPidTree(session.pid);
+      treeCleanup = session.job
+        ? requestWindowsJobStop(session.job)
+        : await killPidTree(session.pid);
       await this.waitForChildClose(session);
+      if (session.job && !session.job.closed()) {
+        throw new ProcessManagerError('PROCESS_TREE_TERMINATION_UNCONFIRMED',
+          'Windows Job guardian has not closed; the owned descendant tree is not confirmed stopped.');
+      }
 
       for (let attempt = 0; attempt < 20; attempt++) {
         if (!isPidAlive(session.pid)) break;
@@ -1401,7 +1436,8 @@ export class ProcessManager {
 
     await Promise.all(
       volatile.map(async (session) => {
-        await killPidTree(session.pid!);
+        if (session.job) requestWindowsJobStop(session.job);
+        else await killPidTree(session.pid!);
         await this.waitForChildClose(session);
       }),
     );
@@ -1436,7 +1472,8 @@ export class ProcessManager {
         }
 
         if (session.recovered || !session.pid) return;
-        await killPidTree(session.pid);
+        if (session.job) requestWindowsJobStop(session.job);
+        else await killPidTree(session.pid);
         await this.waitForChildClose(session);
         for (let attempt = 0; attempt < 20; attempt++) {
           if (!isPidAlive(session.pid)) break;

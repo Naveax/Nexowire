@@ -390,6 +390,11 @@ export async function buildWindowsUserBundle(
       path.join(root, 'dist', 'src'),
       path.join(appRoot, 'dist', 'src'),
     );
+    // The Job guardian is a required runtime dependency on Windows.
+    // Fail the release rather than shipping a silently unmanaged shell.
+    const bundledJobOwner=path.join(appRoot,'dist','native','windows-job-owner.exe');
+    await fs.mkdir(path.dirname(bundledJobOwner),{recursive:true});
+    await fs.copyFile(path.join(root,'native','windows-job-owner.exe'),bundledJobOwner);
     await copyTree(
       path.join(root, 'skills'),
       path.join(appRoot, 'skills'),
