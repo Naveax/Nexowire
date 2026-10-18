@@ -32,6 +32,7 @@
     "src/agent/windows-virtual-pointer.ts#spawn": 1,
     "src/agent/windows-window-control.ts#spawn": 1,
     "src/agent/wsl-detection.ts#spawnSync": 1,
+    "src/diagnostics/environment-doctor.ts#spawn": 1,
     "src/hub/hub-boot-lifecycle.ts#spawn": 1,
     "src/hub/hub-lifecycle.ts#spawn": 1,
     "src/security/platform-secret-store.ts#spawn": 1,
