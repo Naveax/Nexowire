@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { promisify } from 'node:util';
+import { windowsDpapiChildEnvironment } from '../security/windows-dpapi.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -191,18 +192,38 @@ export async function resolveWindowsVolumeIdentity(
   const letter = drive.toUpperCase();
   const script = [
     "$ErrorActionPreference='Stop'",
+    // Never auto-load caller-writable modules to answer an authorization check.
+    "$env:PSModulePath='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules'",
+    // Inbox Storage imports may need built-in Utility cmdlets during init.
+    // PSModulePath is pinned, so their auto-loading cannot select user modules.
+    "Import-Module -Name 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\Storage\\Storage.psd1' -ErrorAction Stop",
     "$p=Get-Partition -DriveLetter '" + letter + "' -ErrorAction Stop",
     "$d=$p | Get-Disk -ErrorAction Stop",
-    "$v=Get-Volume -DriveLetter '" + letter + "' -ErrorAction Stop",
-    "if(!$p -or !$d -or !$v){throw 'Volume not available'}",
+    "$v=$p | Get-Volume -ErrorAction Stop",
+    // Detect a drive-letter reassignment during the multi-cmdlet probe.
+    "$again=Get-Partition -DriveLetter '" + letter + "' -ErrorAction Stop",
+    "$againVolume=$again | Get-Volume -ErrorAction Stop",
+    "if(!$p -or !$d -or !$v -or !$again -or !$againVolume){throw 'Volume not available'}",
+    "if($p.DiskNumber -ne $again.DiskNumber -or $p.PartitionNumber -ne $again.PartitionNumber -or " +
+      "[string]$v.UniqueId -ne [string]$againVolume.UniqueId){throw 'Volume reassigned during validation'}",
     "[pscustomobject]@{driveLetter='" + letter +
       "';volumeId=[string]$v.UniqueId;deviceId=[string]$d.UniqueId;" +
       "busType=[string]$d.BusType;driveType=[string]$v.DriveType;" +
       "partitionNumber=[int]$p.PartitionNumber} | ConvertTo-Json -Compress",
   ].join('; ');
-  const { stdout } = await execFileAsync('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-Command', script,
-  ], { windowsHide: true, timeout: 10_000, maxBuffer: 16_384 });
+  // Fixed, Windows inbox PowerShell path and restricted environment prevent
+  // PATH/PSModulePath/module-autoload spoofing of a security-critical probe.
+  const { stdout } = await execFileAsync(
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script,
+    ], {
+      windowsHide: true,
+      cwd: 'C:\\Windows\\System32',
+      env: windowsDpapiChildEnvironment(),
+      timeout: 10_000,
+      maxBuffer: 16_384,
+    },
+  );
   const candidate: unknown = JSON.parse(stdout.trim());
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     throw new Error('Unverifiable volume identity.');

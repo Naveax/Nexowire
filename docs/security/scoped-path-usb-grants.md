@@ -67,8 +67,15 @@ approval authority as scoped grants.
 
 - No format, partition, disk-image flashing, firmware change or live volume
   manipulation is performed by these changes or the tests.
-- PowerShell `Get-Partition`, `Get-Disk` and `Get-Volume` are used for
-  read-only volume identity retrieval. Invalid/missing values deny mutation.
+- Read-only `Get-Partition`, `Get-Disk` and `Get-Volume` run through the
+  pinned Windows inbox PowerShell executable and a restricted module search
+  environment, rather than inheriting attacker-controlled PATH/PSModulePath.
+  The installed system Storage module is imported by absolute path and the
+  partition/volume identity is checked again before emitting an answer.
+  Invalid/missing/mid-query-changed identities deny mutation. On the development
+  Windows machine, the pinned probe returned C: metadata successfully even
+  with intentionally poisoned subprocess PATH/PSModulePath. This is **not** a
+  physical USB/drive-letter-swap acceptance test.
 - Canonical path and symlink checks reduce path-escape exposure, but pathname
   `realpath` + `fs.*` is not an atomic handle-based security guarantee.
   Junction/reparse replacement and drive reassignment between checks and I/O
