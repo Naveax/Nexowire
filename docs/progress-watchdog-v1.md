@@ -42,3 +42,145 @@ Unknown or side-effecting operations are never automatically replayed. Process-t
 - Test cases cover missing/invalid telemetry, split chunks, multi-megabyte stdout, monotonically increasing counters, stalled and growing queues, blocker reports, crashed workers, unknown-exit outcomes, Process Manager reconciliation, incomplete zero-exit tasks, graph/runbook proof levels and retry-budget decisions.
 - A controlled local `process.start/read` fixture tests live stdout ingestion without starting trading bots, models or external user scripts.
 - Not yet covered: verified on-disk application result manifests bound to a specific account/device/project, long-duration independent live worker acceptance, standalone restart-safe telemetry persistence, and host resource-sampler correlation. These require separate acceptance work; no production acceptance is claimed.
+
+
+## v2: independent result-file verification (PR #550 continuation)
+
+A live PID, exit code 0, heartbeat, self-reported completed/pending/failure
+counters, or a worker-supplied SHA-256 digest are NOT verification. This
+continuation adds a separate bounded verifier in
+`src/agent/progress-proof-verifier.ts`, a supervisor-only
+`verifySessionFromDisk(sessionId, trustedRequest)` entry point, and an
+operator-only offline command. **No Process Manager changes.**
+
+### Trusted scope and on-disk format
+
+The trusted caller, NOT the worker's stdout, must independently establish
+account, device, project, run, session, immutable task total and the results
+root:
+
+```json
+{
+  "runRoot": "ABSOLUTE_OPERATOR_TRUSTED_TEST_DIRECTORY",
+  "scope": {
+    "ownerAccountId": "owner-fixture",
+    "deviceId": "device-fixture",
+    "projectId": "project-fixture",
+    "runId": "run-fixture",
+    "sessionId": "session-fixture"
+  },
+  "expectedCount": 2
+}
+```
+
+Within the root, a `manifest.json` must contain:
+
+```json
+{
+  "schemaVersion": 1,
+  "scope": {
+    "ownerAccountId": "owner-fixture",
+    "deviceId": "device-fixture",
+    "projectId": "project-fixture",
+    "runId": "run-fixture",
+    "sessionId": "session-fixture"
+  },
+  "expectedCount": 2,
+  "sealed": true,
+  "artifacts": [
+    {
+      "itemId": "unit-0",
+      "filename": "unit-0.json",
+      "sha256": "SHA256_OF_THE_EXACT_BYTES"
+    }
+  ]
+}
+```
+
+Each `results/<filename>` must be a bounded JSON object with
+`schemaVersion:1`, `runId`, `itemId`, `outcome: completed|failed`
+and optionally `payload`. The verifier reads each physical file, hashes the
+actual bytes, rejects mismatched hashes, file/manifest identity drift,
+duplicate items/filenames, symlinks, junction-like nonordinary directories,
+hardlinks, missing paths and concurrent metadata changes. Limits: 1000
+items, 128 KiB per result, 256 KiB manifest, 16 MiB combined. It re-reads
+the manifest to detect mutation during inspection.
+
+The verifier computes completed and failure counts from actual result JSON
+outcomes, pending from the **independently pinned** expected total, and an
+aggregate digest:
+
+```text
+SHA256("NEXOWIRE_RESULT_SET_V1\n" +
+       each item sorted by id: JSON.stringify([itemId,outcome,fileSha256]) + "\n")
+```
+
+The worker's reported aggregate SHA-256, completed/pending/failed counters
+and Agent-observed progress time must agree with the scanned evidence.
+The last progress timestamp is the Agent clock when the claimed count first
+advanced, NOT a worker timestamp. If a result file's observed mtime is
+significantly later than that claim, verification fails. Filesystem mtime is
+only an untrusted consistency hint, not a trustworthy completion clock.
+`lastVerifiedProgressAt` records the Agent's independent rehash time.
+
+### State / safety contract
+
+- `progress_unknown`: no trusted sample or proof, or proof unavailable.
+- `active`: running worker with reported counters, possibly separately
+  verified files; **never** implies task success.
+- `stalled`: no reported completed-count advancement with pending work for
+  the configured threshold. Queue growth has its own warning.
+- `progress_mismatch`: an explicitly attempted independent verification
+  failed (for example false counters, changed file hash, identity drift).
+- `reported_complete`: exited 0 and worker reports zero pending, but lacks
+  fresh independent proof.
+- `completed_verified`: **only** exited 0 with matching trusted scope,
+  independently rehashed exact result files, sealed expected count,
+  zero pending, zero failures, matching worker digest/counters, and a fresh
+  verification performed within the last 30 seconds.
+- A cached proof expires after 30 seconds; do not keep a green verified
+  status forever when files may be mutable. A changed sample, process
+  transition, Agent reconnect or verification race invalidates proof.
+- `failed`, `lost` and ambiguous restarts stay distinct. The watchdog
+  never triggers a process retry; retry policy continues to require
+  explicit authorization, reconciliation and bounded idempotent budget.
+
+A worker saying GPU saturation is **worker-reported**; no independent GPU
+occupancy sensor was added. High claimed GPU usage plus no completed files
+remains stalled/suspected, never falsely `completed_verified`. A reconnect
+does not imply a task was executed twice, and it does not justify replay.
+
+Operator-only optional offline check:
+
+```text
+npm run progress:verify -- --trusted-request ABSOLUTE_PATH_TO_OWNER_PROVISIONED_DESCRIPTOR.json
+```
+
+It verifies only result files; its JSON explicitly says
+`completedVerified:false` and
+`processExitIndependentlyAttested:false`, because a standalone file scan
+cannot attest to Agent process exit. A request descriptor written by the
+worker itself is NOT an independent trust anchor.
+
+### Acceptance evidence and remaining blockers
+
+Test fixture `test/fixtures/progress-result-worker-fixture.cjs` uses only
+temporary directories and controlled Node processes. Negative cases:
+fabricated completed/pending, tampered result bytes, wrong account/device/
+project/run/session, missing/duplicate results, result identity drift,
+hardlink aliasing, timestamp inconsistency, verifier/sample race, GPU report
+without output, queue growth, crash or ambiguous exit and reconnect.
+A Windows symlink fixture is attempted but may be skipped when the OS denies
+creating a symlink; hardlink rejection remains tested.
+
+**NOT PRODUCTION ACCEPTANCE:** Neither worker-created JSON nor worker-owned
+manifest is a cryptographically attested independent record of semantic
+correctness. Production still needs Agent-owned immutable write-once results
+or a protected artifact handoff/manifest signer, trusted scheduling of total
+work, filesystem ACL boundary and handle-safe TOCTOU protection, persistent
+proof journal after Agent restart, external process exit ownership check,
+physical 2-device acceptance and long-running real workloads. This module
+is not automatically invoked for arbitrary process.read responses because
+no trusted per-session project/total/root binding has been provisioned.
+Unconfigured processes remain self-reported/unverified; no fabricated green
+status. The actual crypto model/trading bot was not started.

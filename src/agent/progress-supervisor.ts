@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { verifyResultFiles, type ProgressProofReport, type ProgressProofRequest } from './progress-proof-verifier.js';
 
 /**
  * Application-owned telemetry is deliberately not treated as OS process health
@@ -10,6 +11,8 @@ import * as z from 'zod';
 export const PROGRESS_PREFIX = 'NEXOWIRE_PROGRESS_V1 ';
 const MAX_LINE_BYTES = 8192;
 const MAX_SESSIONS = 1000;
+// Files can be mutated after inspection. Cached disk proof is never permanent.
+const MAX_PROOF_AGE_MS = 30_000;
 
 export const WorkerProgressSchema = z.object({
   completed_count: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
@@ -25,7 +28,7 @@ export const WorkerProgressSchema = z.object({
 
 type WorkerProgress = z.infer<typeof WorkerProgressSchema>;
 type ProcessState = 'running' | 'exited' | 'lost' | 'orphaned';
-export type ProgressState = 'progress_unknown' | 'active' | 'stalled' | 'reported_complete' | 'incomplete' | 'failed' | 'lost';
+export type ProgressState = 'progress_unknown' | 'active' | 'stalled' | 'reported_complete' | 'completed_verified' | 'progress_mismatch' | 'incomplete' | 'failed' | 'lost';
 export type ProgressWarningCode =
   | 'QUEUE_GROWING_WITHOUT_COMPLETIONS'
   | 'NO_COMPLETIONS'
@@ -35,7 +38,10 @@ export type ProgressWarningCode =
   | 'PROCESS_EXITED_INCOMPLETE'
   | 'PROCESS_EXITED_FAILED'
   | 'WORKER_REPORTED_BLOCKER'
-  | 'INVALID_TELEMETRY';
+  | 'INVALID_TELEMETRY'
+  | 'EVIDENCE_MISMATCH'
+  | 'RECONNECT_PROOF_EXPIRED'
+  | 'DISK_PROOF_STALE';
 
 export interface ProgressWarning {
   sessionId: string;
@@ -64,6 +70,9 @@ interface SessionProgress {
   stdoutFragment: string;
   droppingOversizedLine: boolean;
   seenWarningCodes: Set<ProgressWarningCode>;
+  evidence?: ProgressProofReport;
+  proofGeneration: number;
+  pendingReconnect: boolean;
 }
 
 export interface SupervisorOptions {
@@ -128,6 +137,7 @@ export class ProgressSupervisor {
       id: sessionId, status: 'running', exitCode: null, startedMs,
       lastOutputMs: startedMs, invalidRecords: 0, stdoutFragment: '',
       droppingOversizedLine: false, seenWarningCodes: new Set(),
+      proofGeneration: 0, pendingReconnect: false,
     });
   }
 
@@ -139,9 +149,19 @@ export class ProgressSupervisor {
       if (!tracked) continue;
       if (session.status === 'running' || session.status === 'orphaned' ||
           session.status === 'exited' || session.status === 'lost') {
+        const newExitCode = session.exitCode ?? null;
+        if (tracked.status !== session.status || tracked.exitCode !== newExitCode) {
+          tracked.proofGeneration++;
+          tracked.evidence = undefined;
+        }
+        if ((session.status === 'lost' || session.status === 'orphaned') &&
+            tracked.status !== session.status) {
+          tracked.sample = undefined;
+          tracked.lastReportedProgressMs = undefined;
+        }
         tracked.status = session.status;
+        tracked.exitCode = newExitCode;
       }
-      tracked.exitCode = session.exitCode ?? null;
     }
   }
 
@@ -156,6 +176,8 @@ export class ProgressSupervisor {
     if (!tracked) return;
     const now = this.now();
     if (event.topic === 'process.exited') {
+      tracked.proofGeneration++;
+      tracked.evidence = undefined;
       tracked.status = 'exited';
       tracked.exitCode = typeof event.data.exitCode === 'number' ? event.data.exitCode : null;
       return;
@@ -227,9 +249,7 @@ export class ProgressSupervisor {
         sample.completed_count > tracked.lastCompletedCount) {
       tracked.lastCompletedAdvanceMs = now;
       tracked.growthSinceMs = undefined;
-      if (tracked.lastCompletedCount !== undefined && sample.completed_count > tracked.lastCompletedCount) {
-        tracked.lastReportedProgressMs = now;
-      }
+      if (sample.completed_count > 0) tracked.lastReportedProgressMs = now;
     } else if (tracked.lastPendingCount !== undefined) {
       if (sample.pending_count > tracked.lastPendingCount && tracked.growthSinceMs === undefined) {
         tracked.growthSinceMs = now;
@@ -237,6 +257,9 @@ export class ProgressSupervisor {
         tracked.growthSinceMs = undefined;
       }
     }
+    tracked.proofGeneration++;
+    tracked.evidence = undefined;
+    tracked.pendingReconnect = false;
     tracked.lastHeartbeatMs = now;
     tracked.lastOutputMs = now;
     tracked.lastCompletedCount = sample.completed_count;
@@ -246,6 +269,75 @@ export class ProgressSupervisor {
     // A new observation can clear old warning de-duplication when work advances.
     if (tracked.lastReportedProgressMs === now) tracked.seenWarningCodes.clear();
     return true;
+  }
+
+  /**
+   * Agent/Hub socket reconnection is not evidence that a worker has made
+   * progress. Invalidate cached reports until the worker emits fresh
+   * telemetry; never auto-replay ambiguous operations.
+   */
+  invalidateOnReconnect(): void {
+    for (const tracked of this.sessions.values()) {
+      tracked.proofGeneration++;
+      tracked.evidence = undefined;
+      if (tracked.status !== 'running') continue;
+      tracked.sample = undefined;
+      tracked.lastHeartbeatMs = undefined;
+      tracked.lastReportedProgressMs = undefined;
+      tracked.lastCompletedAdvanceMs = undefined;
+      tracked.lastCompletedCount = undefined;
+      tracked.lastPendingCount = undefined;
+      tracked.growthSinceMs = undefined;
+      tracked.stdoutFragment = '';
+      tracked.droppingOversizedLine = false;
+      tracked.pendingReconnect = true;
+      tracked.seenWarningCodes.clear();
+    }
+  }
+
+  /**
+   * Only the trusted Agent/test harness chooses the result root and expected
+   * account/device/project/run/session/total. No paths come from stdout.
+   * Actual result files are independently read and rehashed.
+   */
+  async verifySessionFromDisk(
+    sessionId: string, request: ProgressProofRequest,
+  ): Promise<ProgressProofReport> {
+    const tracked = this.sessions.get(sessionId);
+    const unverified = (reason: string): ProgressProofReport => ({
+      status: 'unverified', reason, completedCount: null,
+      pendingCount: null, failureCount: null, artifactSha256: null,
+      sealed: false, verifiedAt: null, lastArtifactModifiedAt: null,
+    });
+    if (!tracked || !tracked.sample || tracked.status === 'lost' ||
+        tracked.status === 'orphaned' ||
+        request.scope.sessionId !== sessionId) {
+      return unverified('NO_TRUSTED_LIVE_SAMPLE');
+    }
+    const generation = tracked.proofGeneration;
+    const status = tracked.status;
+    const sample = tracked.sample;
+    const report = await verifyResultFiles(request, this.now);
+    if (tracked.proofGeneration !== generation || tracked.status !== status ||
+        tracked.sample !== sample) {
+      return unverified('PROOF_RACE_REVERIFY');
+    }
+    if (report.status === 'verified' &&
+        (report.completedCount !== sample.completed_count ||
+         report.pendingCount !== sample.pending_count ||
+         report.failureCount !== sample.failure_count ||
+         !sample.result_artifact_sha256 ||
+         report.artifactSha256 !== sample.result_artifact_sha256 ||
+         // A result modified well after the Agent observed claimed progress
+         // cannot retrospectively validate that earlier stdout claim.
+         (report.completedCount > 0 && tracked.lastReportedProgressMs !== undefined &&
+          report.lastArtifactModifiedAt !== null &&
+          Date.parse(report.lastArtifactModifiedAt) > tracked.lastReportedProgressMs + 2000))) {
+      tracked.evidence = unverified('WORKER_REPORT_MISMATCH');
+    } else {
+      tracked.evidence = report;
+    }
+    return tracked.evidence;
   }
 
   private invalid(tracked: SessionProgress): void {
@@ -262,14 +354,28 @@ export class ProgressSupervisor {
     };
     const now = this.now();
     const sample = tracked.sample;
+    const freshProof = tracked.evidence?.status === 'verified' &&
+      tracked.evidence.verifiedAt !== null &&
+      now - Date.parse(tracked.evidence.verifiedAt) >= 0 &&
+      now - Date.parse(tracked.evidence.verifiedAt) <= MAX_PROOF_AGE_MS;
     let state: ProgressState = 'progress_unknown';
     if (tracked.status === 'lost' || tracked.status === 'orphaned') state = 'lost';
+    else if (tracked.status === 'exited' && tracked.exitCode !== null && tracked.exitCode !== 0) {
+      state = 'failed';
+    } else if (tracked.evidence?.status === 'unverified') {
+      state = tracked.evidence.reason === 'PROOF_UNAVAILABLE' ? 'progress_unknown' : 'progress_mismatch';
+    }
     else if (tracked.status === 'exited') {
       state = (tracked.exitCode !== null && tracked.exitCode !== 0) || (sample?.failure_count ?? 0) > 0 ? 'failed'
         : tracked.exitCode === 0 && sample && sample.pending_count === 0
           ? 'reported_complete' : 'incomplete';
     } else if (sample) {
       state = this.stalled(tracked, now) ? 'stalled' : 'active';
+    }
+    if (freshProof && tracked.evidence && tracked.status === 'exited' &&
+        tracked.exitCode === 0 && tracked.evidence.sealed &&
+        tracked.evidence.pendingCount === 0 && tracked.evidence.failureCount === 0) {
+      state = 'completed_verified';
     }
     return {
       state,
@@ -280,10 +386,18 @@ export class ProgressSupervisor {
       failureCount: sample?.failure_count ?? null,
       heartbeatAt: tracked.lastHeartbeatMs === undefined ? null : new Date(tracked.lastHeartbeatMs).toISOString(),
       lastReportedProgressAt: tracked.lastReportedProgressMs === undefined ? null : new Date(tracked.lastReportedProgressMs).toISOString(),
-      lastVerifiedProgressAt: null,
-      progressVerified: false,
+      lastVerifiedProgressAt: freshProof ? tracked.evidence!.verifiedAt : null,
+      progressVerified: freshProof,
+      verifiedCompletedCount: freshProof ? tracked.evidence!.completedCount : null,
+      verifiedPendingCount: freshProof ? tracked.evidence!.pendingCount : null,
+      verifiedFailureCount: freshProof ? tracked.evidence!.failureCount : null,
+      resultArtifactSha256Verified: freshProof ? tracked.evidence!.artifactSha256 : null,
+      lastArtifactModifiedAt: freshProof ? tracked.evidence!.lastArtifactModifiedAt : null,
+      verificationReason: tracked.evidence?.status === 'verified' && !freshProof ?
+        'DISK_PROOF_STALE_REVERIFY' : tracked.evidence?.reason ?? (tracked.pendingReconnect ? 'RECONNECT_REVERIFY_REQUIRED' : 'PROOF_NOT_ATTEMPTED'),
       resultArtifactSha256Reported: sample?.result_artifact_sha256 ?? null,
-      completionEvidence: sample ? 'self_reported_unverified' : 'none',
+      completionEvidence: freshProof ?
+        'result_files_rehashed_scope_bound' : sample ? 'self_reported_unverified' : 'none',
       diagnosis: sample?.diagnosis ?? 'unknown',
       invalidTelemetryCount: tracked.invalidRecords,
       restartAllowed: false,
@@ -304,13 +418,23 @@ export class ProgressSupervisor {
       let code: ProgressWarningCode | undefined;
       let certainty: ProgressWarning['certainty'] = 'observed';
       let action = 'Inspect worker logs and progress artifacts; do not blindly retry.';
-      if (item.status === 'exited' && ((item.exitCode !== null && item.exitCode !== 0) || (item.sample?.failure_count ?? 0) > 0)) {
+      if (item.status === 'exited' && item.exitCode !== null && item.exitCode !== 0) {
+        code = 'PROCESS_EXITED_FAILED';
+      } else if (item.evidence?.status === 'verified' && item.evidence.verifiedAt !== null &&
+          now - Date.parse(item.evidence.verifiedAt) > MAX_PROOF_AGE_MS) {
+        code = 'DISK_PROOF_STALE';
+      } else if (item.evidence?.status === 'unverified' && item.evidence.reason !== 'PROOF_UNAVAILABLE') {
+        code = 'EVIDENCE_MISMATCH';
+      } else if (item.pendingReconnect && item.status === 'running') {
+        code = 'RECONNECT_PROOF_EXPIRED';
+        certainty = 'observed';
+      } else if (item.status === 'exited' && ((item.exitCode !== null && item.exitCode !== 0) || (item.sample?.failure_count ?? 0) > 0)) {
         code = 'PROCESS_EXITED_FAILED';
         if (item.exitCode === 0) certainty = 'worker_reported';
       } else if (item.status === 'exited' && (item.exitCode === null || !item.sample || item.sample.pending_count !== 0)) {
         code = 'PROCESS_EXITED_INCOMPLETE';
       } else if (item.status !== 'running') continue;
-      // Verified counter stagnation remains observable even when a worker
+      // Observed self-reported counter stagnation remains visible when a worker
       // self-reports rate limiting or resource saturation. Report that
       // diagnosis separately; it is not an independent root-cause proof.
       else if (item.sample && this.stalled(item, now)) {
