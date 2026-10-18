@@ -25,3 +25,13 @@ Prior #556 evidence: independent temporary WPF positive case, WinForms Pane nega
 Validation:
 `node --test --test-concurrency=1 --import tsx test/private-gui-wrapper-escape.test.ts test/private-desktop-shell-broker-gate.test.ts test/private-shell-broker-guard.test.ts test/private-file-picker-guard.test.ts test/private-file-picker-path-policy.test.ts test/private-file-picker-live.test.ts test/private-file-picker-winforms-live.test.ts`
 plus opt-in `NEXOWIRE_PRIVATE_COMMON_DIALOG_LIVE=1 node --test --import tsx test/private-common-dialog-readonly-live.test.ts`.
+
+## Follow-up: on-disk generated helper integrity (2026-10-19)
+
+**Confirmed RED before code change:** after private desktop initialization on a disposable Work PC test directory, appending a harmless comment to `input-helper.ps1` did **not** cause an integrity refusal. The helper ran the unchanged semantic code and returned `WINDOW_NOT_PRIVATE_DESKTOP` for the deliberately invalid HWND. Therefore a pinned execution path was not evidence of pinned helper bytes.
+
+**Implemented bounded defense:** before private UIA/pointer/keyboard helper dispatch and before the shell control helper's launch/list/input request, compare the generated file's content digest with the Agent's embedded expected PowerShell source. Reject missing, non-regular, symlinked, truncated or changed files as `PRIVATE_DESKTOP_INTERNAL_HELPER_INTEGRITY` before any helper process dispatch. The status route now propagates this integrity failure instead of swallowing it and reporting a potentially misleading partial health reading. Synthetic live tampering is performed on disposable copies only, then those copies are restored/removed. These hashes are not secret values.
+
+**Acceptance:** `test/private-desktop-helper-integrity-live.test.ts` first reproduced the flaw (RED), then verified both `input-helper.ps1` and `helper.ps1` file modifications fail closed; no user's active desktop is switched and no live Agent services are touched.
+
+**Limitations:** A hash check before an interpreter starts is **not** atomic executable identity and cannot close an ACL/reparse/hard-link or between-check-and-execution TOCTOU race on a writable per-user script directory. Private helper trust still requires a protected native helper binary, Windows file identity / signature validation, OS process containment and real owner-active acceptance. No production PASS claim.

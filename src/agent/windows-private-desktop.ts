@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import {createHash, timingSafeEqual} from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -145,6 +146,39 @@ function paths() {
     shell: path.join(root, 'shell.ps1'),
     switcher: path.join(root, 'show.ps1'),
   };
+}
+
+/**
+ * Generated PowerShell files live in a writable per-user working directory.
+ * An exact path alone is NOT proof of the helper code that will execute.
+ * Verify bytes against embedded source and refuse symbolic-link substitution
+ * before dispatch. This narrows on-disk tampering, but cannot eliminate
+ * an after-check/before-CreateProcess TOCTOU race: production must use a
+ * protected native helper and OS-enforced process/file identity.
+ */
+async function assertGeneratedPrivateHelperIntegrity(
+  filePath:string, expectedSource:string,
+):Promise<void>{
+  const fail=():never=>{
+    throw new PrivateDesktopError(
+      'PRIVATE_DESKTOP_INTERNAL_HELPER_INTEGRITY',
+      'Generated private desktop helper is missing, changed or untrusted.',
+    );
+  };
+  try{
+    const entry=await fs.lstat(filePath);
+    const expected=Buffer.from(expectedSource,'utf8');
+    if(!entry.isFile()||entry.isSymbolicLink()||
+       entry.size!==expected.byteLength)fail();
+    const actual=await fs.readFile(filePath);
+    if(actual.byteLength!==expected.byteLength)fail();
+    const found=createHash('sha256').update(actual).digest();
+    const pinned=createHash('sha256').update(expected).digest();
+    if(!timingSafeEqual(found,pinned))fail();
+  }catch(error){
+    if(error instanceof PrivateDesktopError)throw error;
+    fail();
+  }
 }
 
 function alive(pid: number | undefined): boolean {
@@ -879,7 +913,8 @@ type PrivateInputAction =
   | 'close_window';
 
 async function request(action:PrivateDesktopHelperAction, payload:Record<string,unknown>):Promise<unknown>{
-  const p=paths();const f=path.join(p.root,'req-'+process.pid+'-'+Date.now()+'-'+Math.random().toString(16).slice(2)+'.json');await fs.writeFile(f,JSON.stringify(payload),'utf8');
+  const p=paths();
+  await assertGeneratedPrivateHelperIntegrity(p.helper,helperScript);const f=path.join(p.root,'req-'+process.pid+'-'+Date.now()+'-'+Math.random().toString(16).slice(2)+'.json');await fs.writeFile(f,JSON.stringify(payload),'utf8');
   try{return await psJson(['-File',p.helper,'-Action',action,'-Request',f]);}finally{await fs.rm(f,{force:true});}
 }
 
@@ -911,6 +946,7 @@ async function privateInputRequest(
 
   let pid: number | undefined;
   try {
+    await assertGeneratedPrivateHelperIntegrity(p.inputHelper,inputHelperScript);
     pid = await launch(
       PRIVATE_DESKTOP_POWERSHELL,
       [
@@ -1226,7 +1262,7 @@ async function start(input:unknown):Promise<{data:unknown}>{
 async function killTree(pid:number):Promise<void>{if(!alive(pid))return;await new Promise<void>(resolve=>{const c=spawn('taskkill.exe',['/PID',String(pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});c.once('error',()=>resolve());c.once('exit',()=>resolve());});await waitExit(pid);}
 async function stop():Promise<{data:unknown}>{assertWindows();const p=paths();const s=await readState();if(!s)return{data:{running:false,stopped:false,desktopName:DESKTOP_NAME}};for(const pid of [...s.launchedPids].reverse())await killTree(pid);await killTree(s.shellPid);if(alive(s.hostPid)){try{process.kill(s.hostPid);}catch{}if(!(await waitExit(s.hostPid)))throw new PrivateDesktopError('HOST_STOP_NOT_VERIFIED','Private desktop host did not exit.',{pid:s.hostPid});}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);return{data:{running:false,stopped:true,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=> '')}};}
 async function launchApp(input:unknown):Promise<{data:unknown}>{assertWindows();const p=LaunchSchema.parse(input);const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))throw new PrivateDesktopError('NOT_RUNNING','Start the private desktop first.');const pid=await launch(p.executable,p.args,p.cwd);await writeState({...s,launchedPids:[...new Set([...s.launchedPids,pid])].slice(-1024)});return{data:{pid,desktopName:DESKTOP_NAME,visibleDesktopChanged:false}};}
-async function status():Promise<{data:unknown}>{assertWindows();const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))return{data:{running:false,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=>''),visibleDesktopChanged:false}};let v:Awaited<ReturnType<typeof view>>|undefined;try{v=await view();}catch{}return{data:{running:true,desktopName:DESKTOP_NAME,hostPid:s.hostPid,shellPid:s.shellPid,launchedPids:s.launchedPids.filter(alive),startedAt:s.startedAt,inputDesktop:v?.inputDesktop??(await inputDesktop().catch(()=>'')),windowCount:v?.windows.length??null,visibleDesktopChanged:false}};}
+async function status():Promise<{data:unknown}>{assertWindows();const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))return{data:{running:false,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=>''),visibleDesktopChanged:false}};let v:Awaited<ReturnType<typeof view>>|undefined;try{v=await view();}catch(error){if(error instanceof PrivateDesktopError&&error.code==='PRIVATE_DESKTOP_INTERNAL_HELPER_INTEGRITY')throw error;}return{data:{running:true,desktopName:DESKTOP_NAME,hostPid:s.hostPid,shellPid:s.shellPid,launchedPids:s.launchedPids.filter(alive),startedAt:s.startedAt,inputDesktop:v?.inputDesktop??(await inputDesktop().catch(()=>'')),windowCount:v?.windows.length??null,visibleDesktopChanged:false}};}
 async function accessibility(input:unknown):Promise<{data:unknown}>{
   assertWindows();
   const parsed=z.object({hwnd:WindowHandleSchema}).strict().parse(input);
