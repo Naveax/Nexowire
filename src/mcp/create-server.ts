@@ -348,7 +348,7 @@ async function execute(
   let targetId: string | undefined;
   let idempotencyCreated = false;
   let providerDispatched = false;
-  let persistedOutcome: 'succeeded' | 'failed' | undefined;
+  let persistedOutcome: 'succeeded' | 'failed' | 'unknown' | undefined;
 
   try {
     targetId = await resolveDevice(ctx, deviceId);
@@ -485,18 +485,23 @@ async function execute(
       providerId,
     );
 
+    // A native Agent can have executed a mutation while failing to
+    // persist its completion, or it can reject the already-seen request ID
+    // after reconnect. Neither response is proof the mutation failed.
+    const ambiguousAgentResult = !result.ok && (
+      result.error?.code === 'AGENT_OPERATION_COMPLETION_UNCONFIRMED' ||
+      result.error?.code === 'AGENT_OPERATION_ALREADY_RECORDED'
+    );
+    const resultStatus: 'succeeded' | 'failed' | 'unknown' = result.ok
+      ? 'succeeded' : ambiguousAgentResult ? 'unknown' : 'failed';
     if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
-      await ctx.idempotency.complete(
-        idempotencyKey,
-        result.ok ? 'succeeded' : 'failed',
-        result,
-      );
-      persistedOutcome = result.ok ? 'succeeded' : 'failed';
+      await ctx.idempotency.complete(idempotencyKey,resultStatus,result);
+      persistedOutcome = resultStatus;
     }
 
     await ctx.audit?.write({
       operationId,
-      status: result.ok ? 'succeeded' : 'failed',
+      status: resultStatus,
       capability,
       targetId,
       providerId: result.meta.providerId,
@@ -511,7 +516,7 @@ async function execute(
             idempotency: {
               key: idempotencyKey,
               replayed: false,
-              persistedStatus: result.ok ? 'succeeded' : 'failed',
+              persistedStatus: resultStatus,
               operationId,
             },
           }
