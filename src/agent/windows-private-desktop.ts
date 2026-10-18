@@ -928,6 +928,7 @@ async function privateInputRequest(
         responseFile,
       ],
       p.root,
+      'internal-private-uia-helper',
     );
 
     const deadline = Date.now() + timeoutMs;
@@ -1087,9 +1088,18 @@ export function assertNoPrivateDesktopOpaqueLauncher(
     'dotnet.exe','msbuild.exe','git.exe'].includes(normalized);
   const generalWrapper=['npm.exe','npx.exe','yarn.exe','pnpm.exe',
     'pip.exe','pip3.exe'].includes(normalized);
-  const isPowerShellFile=args.some(a=>/^--?f(?:i(?:l(?:e)?)?)?(?::|$)/i.test(a.trim()));
+  const fileModeIndex=args.findIndex(a=>
+    /^--?f(?:i(?:l(?:e)?)?)?(?::|$)/i.test(a.trim()));
+  const commandMode=args.some(a=>
+    /^--?(?:c|co|com|comm|comma|comman|command|commandwithargs)(?::|=|$)/i.test(a.trim()));
+  // File must be the single terminal execution mode, with a literal .ps1
+  // argument. A later -File cannot mask an earlier -Command payload, and
+  // script parameters cannot smuggle a second arbitrary launch command.
+  const safePowerShellFile=fileModeIndex>=0&&!commandMode&&
+    fileModeIndex===args.length-2&&
+    args[fileModeIndex+1]?.trim().toLowerCase().endsWith('.ps1');
   if(dangerousExtensions.test(name)||shellHost||generalWrapper||
-      (powershell&&!isPowerShellFile)||opaqueRuntime){
+      (powershell&&!safePowerShellFile)||opaqueRuntime){
     throw new PrivateDesktopError(
       'PRIVATE_DESKTOP_OPAQUE_WRAPPER_UNISOLATED',
       'Direct private desktop launch cannot attest indirect shell, WSL, '+
@@ -1103,16 +1113,39 @@ async function launch(
   executable: string,
   args: string[],
   cwd?: string,
+  internal?:'internal-private-uia-helper',
 ): Promise<number> {
+  // This flag is accepted only from the Agent's own privateInputRequest,
+  // never from launchApp/MCP input. Bind it to our generated exact helper
+  // path and argument shape, not merely a caller-supplied executable name.
+  const runtime=paths();
+  const internalUia=internal==='internal-private-uia-helper'&&
+    path.win32.normalize(executable).toLowerCase()===
+      path.win32.normalize(PRIVATE_DESKTOP_POWERSHELL).toLowerCase()&&
+    cwd===runtime.root&&args.length===12&&
+    args[0]==='-NoLogo'&&args[1]==='-NoProfile'&&
+    args[2]==='-ExecutionPolicy'&&args[3]==='Bypass'&&
+    args[4]==='-File'&&args[5]===runtime.inputHelper&&
+    args[6]==='-Action'&&args[8]==='-Request'&&args[10]==='-Response'&&
+    ['pointer_move','pointer_click','pointer_scroll','controls',
+      'accessibility','accessibility_invoke_button',
+      'accessibility_set_edit_value','accessibility_set_checkbox',
+      'accessibility_select_radio','text','hotkey','close_window']
+      .includes(args[7]??'')&&
+    [args[9],args[11]].every(a=>typeof a==='string'&&
+      path.win32.dirname(a).toLowerCase()===runtime.root.toLowerCase());
+  if(internal&&!internalUia)
+    throw new PrivateDesktopError('PRIVATE_DESKTOP_INTERNAL_HELPER_MISMATCH',
+      'Native private UIA helper identity did not match internal dispatch.');
   assertNoPrivateDesktopBrokeredExecutable(executable);
-  assertNoPrivateDesktopOpaqueLauncher(executable,args);
+  if(!internalUia)assertNoPrivateDesktopOpaqueLauncher(executable,args);
   // A directly attached PowerShell/CMD child can still dispatch GUI to
   // Explorer/COM via its command string, bypassing the executable denylist.
   // Apply the same bounded command guard used by the private shell workers.
   await assertNoObviousPrivateShellScriptBrokerInvocation(executable,args,cwd);
   const resolvedExecutable = await resolveExecutable(executable);
   assertNoPrivateDesktopBrokeredExecutable(resolvedExecutable);
-  assertNoPrivateDesktopOpaqueLauncher(resolvedExecutable,args);
+  if(!internalUia)assertNoPrivateDesktopOpaqueLauncher(resolvedExecutable,args);
   await assertNoObviousPrivateShellScriptBrokerInvocation(resolvedExecutable,args,cwd);
   return z
     .object({ pid: z.number().int().positive() })
