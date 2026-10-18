@@ -23,7 +23,7 @@ const installers = {
     url: RELEASE + 'Nexowire-Setup.cmd',
     label: 'Windows kurulumunu indir ↗',
     checksum: RELEASE + 'SHA256SUMS-Windows',
-    note: 'Komut yalnızca indirir; güvenliğin için tarayıcıdan sessiz komut çalıştırılmaz. Dosyayı çalıştırmadan önce SHA-256 değerini doğrula.',
+    note: 'Komut yalnızca indirir; tarayıcıdan sessiz çalıştırma yapılmaz. Dosyayı çalıştırmadan önce SHA-256 değerini doğrula. Mevcut .cmd dosyası Nexowire adına Authenticode imzalı native installer değildir.',
   },
   macos: {
     heading: 'macOS kurulumu',

@@ -57,3 +57,9 @@ test('pairing credential is delivered as POST body, not query parameters', async
   assert.doesNotMatch(js, /callback\.searchParams\.set\('token'/);
   assert.doesNotMatch(js, /callback\.searchParams\.set\('pairing_id'/);
 });
+
+test('Windows setup page distinguishes unsigned Nexowire .cmd from signed native installer', async () => {
+  const js = await fs.readFile('web/connect.js', 'utf8');
+  assert.match(js, /Authenticode imzalı native installer değildir/);
+  assert.match(js, /SHA-256 değerini doğrula/);
+});

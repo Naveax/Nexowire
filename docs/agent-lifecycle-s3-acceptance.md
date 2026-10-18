@@ -113,3 +113,46 @@ stop existing devices while pairing a new one.
   restart-safe journal and long soak: pending.
 - No merge to main, live Agent or Broker restart, scheduled task invocation,
   production route mutations, or paid Cloudflare changes authorized.
+
+
+## Continuation: native Windows signature inspection and CI regression
+
+The first PR CI run 39135168316 failed in test/console-ui-polish.test.ts
+because an old static assertion still expected the now-removed callback query
+redirect. The source change remains form POST. The test now explicitly
+requires the POST method and rejects putting the pairing credential in URL
+parameters. This prevents a regression toward token-in-query.
+
+scripts/s3-windows-binary-trust.ts performs a **read-only**, operator-invoked
+acceptance inspection (NOT imported by the Native Agent runtime) against
+a caller-provided Windows disk FILE: exact SHA-256, Windows Authenticode
+SignatureStatus.Valid, exact certificate DER SHA-256 pin, exact publisher
+Subject, and before/after file hashes. Every path ancestor must be an ordinary
+non-reparse path. It launches a fixed Windows System32 PowerShell executable
+with no profile, no shell and a restricted PATH/module environment. It
+returns safeToExecute=false and productionModified=false, even on success.
+This is proof of the selected disk file's signature at inspection time, not
+proof of which bytes a subsequent installer will execute.
+
+A standalone read-only operator diagnostic is available:
+
+    npm run s3:verify-windows-binary -- --file "C:\staging\Nexowire-Agent.exe" --sha256 <sha256> --cert-sha256 <cert-der-sha256> --subject "CN=Exact Trusted Publisher"
+
+**Critical:** these inputs are pins, not a trust-root discovery service.
+Production pins must be independently provisioned by the owner/release signing
+pipeline and must NOT be learned from the untrusted downloaded binary or
+checksum manifest. The native test uses a Microsoft-signed notepad.exe as a
+known OS test file only: it does not claim Microsoft (or signed Node) is an
+authorized Nexowire publisher. Tests also reject unsigned bytes, changed
+signed bytes with matching rewritten SHA-256, wrong publisher, wrong
+certificate and wrong file hash.
+
+To wire the strict trust gate to production, there must first be a signed,
+published Nexowire-owned installer/Agent binary, immutable operator key/cert
+pins from an authenticated channel, protected stage/rollback paths,
+a journal that survives process/OS crash and a clean-user VM approval gate.
+Any unsigned Setup.cmd plus archive checksum alone remains insufficient.
+
+Existing live Windows Agent v1.0.5 tasks, Hub and Broker were intentionally
+left untouched. No auto-restart, live nexowire.update.apply, production
+service mutation or main merge is part of this continuation.
