@@ -65,6 +65,14 @@ link across process creation. Do not use this PR as release approval.
 
 ## Separate acceptance blockers
 
+- A named Windows Job can be reopened with query rights by another
+  process. A second Job handle can delay `KILL_ON_JOB_CLOSE` if the
+  guardian is **forcibly killed** rather than exiting through its owner
+  death/error path. Normal parent-loss and accounting-error branches
+  explicitly `TerminateJobObject` before closing handles, but a true
+  involuntary guardian crash plus an externally retained handle is still
+  a BLOCKED physical acceptance and threat-model gate. The word
+  "sole" must not be used for named Job handles.
 - Nested-host Job limitations and incompatible parent Job behavior not
   exhaustively tested with independent hostile parent fixtures.
 - Explicit and silent breakaway are disallowed on the owned Job, but

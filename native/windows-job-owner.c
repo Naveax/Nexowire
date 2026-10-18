@@ -167,14 +167,20 @@ int main(void){
   // accounting instead, and also watch the owning Agent for volatile tasks.
   for(;;){
     if(parent && WaitForSingleObject(parent,0)==WAIT_OBJECT_0){
-      // Parent crashed/disconnected permanently: close the sole Job handle.
-      // Only the already assigned process set is terminated.
+      // Do not assume the guardian owns the only Job handle: the named Job
+      // may temporarily be opened by an independent verifier. Explicitly
+      // terminate members even when another query handle remains open.
+      TerminateJobObject(job,78);
       CloseHandle(job);CloseHandle(pi.hProcess);CloseHandle(parent);return 78;
     }
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting={0};
     if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,
            &accounting,sizeof(accounting),NULL)){
-      diagnostic(L"job_accounting");CloseHandle(job);return 77;
+      diagnostic(L"job_accounting");
+      TerminateJobObject(job,77);
+      CloseHandle(job);CloseHandle(pi.hProcess);
+      if(parent)CloseHandle(parent);
+      return 77;
     }
     if(accounting.ActiveProcesses==0)break;
     Sleep(25);
