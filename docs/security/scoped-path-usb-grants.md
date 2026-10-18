@@ -25,7 +25,10 @@ native file tools. The policy never attempts to partition or format a disk.
 set, owner ID, Agent device ID, unique grant ID and positive expiration time
 (maximum 24 hours). A USB grant also requires the previously observed volume,
 disk and partition identities. `revoke(id)` takes effect immediately;
-expiration and Agent restart invalidate grants. These records are deliberately
+expiration and Agent restart invalidate grants. Both wall-clock and monotonic
+timeouts apply, so moving the wall clock backward cannot extend a grant.
+Grant IDs cannot be reused without explicit revocation; grant inspections return
+defensive copies. These records are deliberately
 in-memory and are **not yet exposed to the remote MCP client**. Loading unsigned
 grants from a path writable through file/shell tools would be self-authorizing,
 so no such shortcut has been introduced.
@@ -70,6 +73,15 @@ approval authority as scoped grants.
   remain TOCTOU risks. Resolving all path components with Windows handles and
   rejecting reparse transitions is a **production blocker** for dangerous
   removable-media writes.
+- A wildcard root still canonicalizes existing ancestors when creating files.
+  A junction or symlink into a removable volume must be classified by the
+  destination volume, never by the original drive-letter prefix.
+- For a future native helper, Windows exposes `CreateFileW` with
+  `FILE_FLAG_OPEN_REPARSE_POINT` and `GetFinalPathNameByHandleW`; these
+  calls must be paired with handle-relative traversal, file-ID checks and
+  safe revalidation before any destructive action. References:
+  https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea
+  and https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew.
 - `Get-Disk` is potentially expensive for frequent file operations; any
   future cache must be invalidated by verified volume change, not only TTL.
 - Other host-control capabilities, e.g. GUI input or privileged installer

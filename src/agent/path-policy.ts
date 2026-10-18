@@ -153,8 +153,10 @@ export class PathPolicy {
   ): Promise<string> {
     this.assertSafeSyntax(requestedPath);
     const resolved = path.resolve(cwd, requestedPath);
-    if (roots.includes('*')) return resolved;
-    const realRoots = await Promise.all(
+    // Even wildcard roots must canonicalize existing ancestors: otherwise
+    // a link on C: pointing to a removable E: volume is misidentified as C:.
+    const unrestricted = roots.includes('*');
+    const realRoots = unrestricted ? [] : await Promise.all(
       roots.map((root) => fs.realpath(path.resolve(root))),
     );
     let cursor = resolved;
@@ -162,7 +164,7 @@ export class PathPolicy {
     while (true) {
       try {
         const realAncestor = await fs.realpath(cursor);
-        if (!this.isWithinAnyRoot(realAncestor, realRoots)) {
+        if (!unrestricted && !this.isWithinAnyRoot(realAncestor, realRoots)) {
           throw new PathDeniedError(resolved);
         }
         return path.join(realAncestor, ...suffix.reverse());

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -41,10 +42,17 @@ const MAX_GRANT_MS = 24 * 60 * 60 * 1000;
  */
 export class ScopedPathGrantRegistry {
   private readonly grants = new Map<string, ScopedPathGrant>();
+  private readonly monotonicDeadlines = new Map<string, number>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly monotonicNow: () => number = () => performance.now(),
+  ) {}
 
   grantLocally(grant: ScopedPathGrant): void {
+    if (this.grants.has(grant.id)) {
+      throw new Error('Grant ID already exists; revoke explicitly before any replacement.');
+    }
     const remaining = grant.expiresAt - this.now();
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(grant.id) ||
         !grant.ownerId.trim() || !grant.deviceId.trim() ||
@@ -61,24 +69,38 @@ export class ScopedPathGrantRegistry {
          !Number.isSafeInteger(grant.volume.partitionNumber))) {
       throw new Error('A volume grant requires stable volume, disk and partition identifiers.');
     }
+    const deadline = this.monotonicNow() + remaining;
+    if (!Number.isFinite(deadline)) throw new Error('Invalid monotonic grant expiry.');
     this.grants.set(grant.id, {
       ...grant,
       root: path.resolve(grant.root),
       scopes: [...new Set(grant.scopes)],
       ...(grant.volume ? { volume: { ...grant.volume } } : {}),
     });
+    this.monotonicDeadlines.set(grant.id, deadline);
   }
 
   revoke(id: string): boolean {
+    this.monotonicDeadlines.delete(id);
     return this.grants.delete(id);
   }
 
   active(ownerId: string, deviceId: string): ScopedPathGrant[] {
+    const wallNow = this.now();
+    const steadyNow = this.monotonicNow();
+    for (const grant of this.grants.values()) {
+      if (grant.expiresAt <= wallNow ||
+          (this.monotonicDeadlines.get(grant.id) ?? 0) <= steadyNow) {
+        this.revoke(grant.id);
+      }
+    }
     return [...this.grants.values()].filter(grant =>
-      grant.ownerId === ownerId &&
-      grant.deviceId === deviceId &&
-      grant.expiresAt > this.now(),
-    ).map(grant => ({ ...grant, scopes: [...grant.scopes] }));
+      grant.ownerId === ownerId && grant.deviceId === deviceId,
+    ).map(grant => ({
+      ...grant,
+      scopes: [...grant.scopes],
+      ...(grant.volume ? { volume: { ...grant.volume } } : {}),
+    }));
   }
 
   authorizes(

@@ -6,6 +6,8 @@ import { promises as fs } from 'node:fs';
 import { PathPolicy, PathDeniedError } from '../src/agent/path-policy.js';
 import {
   ScopedPathGrantRegistry,
+  type ScopedPathGrant,
+  type FileScope,
   mapVolumeGrantRoot,
   isRemovableVolume,
   sameVolume,
@@ -78,7 +80,8 @@ test('target-bound owner/device grants expire and can be revoked', async t => {
   await assert.rejects(() => p.authorizeExisting(path.join(allowed, 'ok.txt'), 'write'),
     PathDeniedError);
   clock = 1000;
-  assert.equal(store.revoke('grant-001'), true);
+  // Expired grants are actively pruned; moving the clock backward cannot revive them.
+  assert.equal(store.revoke('grant-001'), false);
   await assert.rejects(() => p.authorizeExisting(path.join(allowed, 'ok.txt'), 'write'),
     PathDeniedError);
 });
@@ -206,6 +209,72 @@ test('runtime-style policy with grant registry enforces shell boundary by defaul
       error.details.reason === 'UNSANDBOXED_EXECUTION_DENIED');
   const standalone = new PathPolicy(['*']);
   assert.doesNotThrow(() => standalone.assertUnrestrictedExecution());
+});
+
+test('wildcard create resolves junction target before classifying a simulated USB volume', async t => {
+  const { allowed, denied } = await fixture(t);
+  const junction = path.join(allowed, 'mounted-volume');
+  try {
+    await fs.symlink(denied, junction, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    t.skip('Symlink/junction creation unavailable: ' + String(error));
+    return;
+  }
+  const target = path.join(junction, 'new.txt');
+  let observed = '';
+  const policy = new PathPolicy(['*'], {
+    platform: 'win32',
+    volumeResolver: async candidate => {
+      observed = candidate;
+      return candidate.toLowerCase().startsWith(denied.toLowerCase())
+        ? USB
+        : { ...USB, busType: 'SATA', driveType: 'Fixed' };
+    },
+  });
+  assert.equal(await policy.resolveForCreate(target),
+    path.join(await fs.realpath(denied), 'new.txt'));
+  await assert.rejects(() => policy.authorizeForCreate(target, 'write'),
+    (error: unknown) => error instanceof PathDeniedError &&
+      error.details.reason === 'USB_VOLUME_GRANT_REQUIRED');
+  assert.equal(observed, path.join(await fs.realpath(denied), 'new.txt'));
+});
+
+test('grant inspection returns defensive copies, and duplicate grant IDs cannot escalate', () => {
+  const wall = 10_000;
+  const registry = new ScopedPathGrantRegistry(() => wall, () => 1_000);
+  const scope: ScopedPathGrant = {
+    id: 'grant-defensive-01', ownerId: 'owner', deviceId: 'device',
+    root: path.resolve(os.tmpdir()), scopes: ['read'],
+    expiresAt: 15_000,
+    volume: { volumeId: USB.volumeId, deviceId: USB.deviceId, partitionNumber: 1 },
+  };
+  registry.grantLocally(scope);
+  scope.volume!.deviceId = 'USER_MODIFIED';
+  const returned = registry.active('owner','device')[0]!;
+  (returned.scopes as FileScope[]).push('write','usb_write');
+  returned.volume!.deviceId = 'OTHER_DEVICE';
+  const again = registry.active('owner', 'device')[0]!;
+  assert.deepEqual(again.scopes, ['read']);
+  assert.equal(again.volume!.deviceId, USB.deviceId);
+  assert.throws(() => registry.grantLocally({ ...scope, scopes: ['usb_write'] }),
+    /Grant ID already exists/);
+});
+
+test('monotonic expiry does not extend after wall-clock rollback', () => {
+  let wall = 10_000;
+  let steady = 1_000;
+  const registry = new ScopedPathGrantRegistry(() => wall, () => steady);
+  registry.grantLocally({
+    id:'grant-monotonic-01',ownerId:'owner',deviceId:'device',
+    root:path.resolve(os.tmpdir()),scopes:['read'],expiresAt:15_000,
+  });
+  wall = 5_000;
+  steady = 5_999;
+  assert.equal(registry.active('owner','device').length, 1);
+  steady = 6_000;
+  assert.deepEqual(registry.active('owner','device'), []);
+  wall = 12_000;
+  assert.deepEqual(registry.active('owner','device'), []);
 });
 
 test('grant lifetime cannot exceed one day or start expired', () => {
