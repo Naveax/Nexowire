@@ -182,7 +182,11 @@ test('wrong OAuth scope or invalid identity does not produce MCP dispatch author
     controlPlaneUrl: issuer, serviceToken: 'non-production-service-token',
     fetchImpl: async () => Response.json({authenticated: false}, {status: 401}),
   });
-  assert.equal(await unavailable.authenticate('Bearer nwx_mcp_not-a-real-credential'), undefined);
+  await assert.rejects(
+    () => unavailable.authenticate('Bearer nwx_mcp_not-a-real-credential'),
+    (error: unknown) => error instanceof Error &&
+      error.name === 'ControlPlaneMcpVerifierUnavailableError',
+  );
 });
 
 test('OAuth HTTP errors classify malicious callbacks as safe invalid_request, not 500', async () => {
@@ -280,4 +284,45 @@ test('control-plane missing scope is denied, not merely wrong explicit scope', a
     });
     assert.equal(await client.authenticate('Bearer nwx_mcp_not-real'), undefined);
   }
+});
+
+test('hosted verifier transport failures are 503-class, not invalid user credentials', async () => {
+  const { ControlPlaneMcpVerifierUnavailableError } =
+    await import('../src/hub/control-plane-mcp-auth.js');
+  const header = 'Bearer nwx_mcp_access-token-for-failure-test';
+  const failures: Array<() => Promise<Response>> = [
+    async () => new Response('sensitive-upstream-diagnostic', {status: 503}),
+    async () => new Response('invalid-json-credential-secret', {status: 200}),
+    async () => { throw new Error('sensitive-network-token-secret'); },
+  ];
+  for (const fetchImpl of failures) {
+    const client = new ControlPlaneMcpClient({
+      controlPlaneUrl: issuer,
+      serviceToken: 'non-production-service-token',
+      fetchImpl: async () => fetchImpl(),
+    });
+    await assert.rejects(
+      client.authenticate(header),
+      (error: unknown) => error instanceof ControlPlaneMcpVerifierUnavailableError &&
+        error.code === 'MCP_AUTH_VERIFIER_UNAVAILABLE' &&
+        !/sensitive|secret|token-for-failure-test/i.test(String(error)),
+    );
+  }
+  const explicitDenial = new ControlPlaneMcpClient({
+    controlPlaneUrl: issuer,
+    serviceToken: 'non-production-service-token',
+    fetchImpl: async () => Response.json({authenticated: false}),
+  });
+  assert.equal(await explicitDenial.authenticate(header), undefined);
+  // Metering is outside this patch's scope: its historical fail-closed
+  // undefined contract remains unchanged for an unavailable backend.
+  const metering = new ControlPlaneMcpClient({
+    controlPlaneUrl: issuer,
+    serviceToken: 'non-production-service-token',
+    fetchImpl: async () => { throw new Error('sensitive network outage'); },
+  });
+  assert.equal(await metering.chargeTool({
+    accountId: 'fixture-account', eventId: 'fixture-event',
+    toolName: 'machine_health',
+  }), undefined);
 });
