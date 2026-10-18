@@ -627,6 +627,19 @@ to interacting with the user's desktop. This is a diagnostic,
 **not** transitive process containment or owner-session
 isolation.
 
+## Direct private desktop bridge launch deny parity
+
+Direct windows.private_desktop.launch now rejects the same high-confidence
+GUI broker executables as the private shell and durable worker gates,
+including bash/sh, WSL/WSLg, wslhost and Windows Terminal. One shared
+case-insensitive executable-name check prevents a future denylist drift
+between direct desktop launch and shell worker launch. Extensionless and
+quoted absolute Windows executable aliases receive the same treatment.
+
+The direct launcher already runs the bounded command/script preflight
+before and after executable resolution. These gates do not confine
+arbitrary compiled children or imported/dynamic ShellExecute/COM/UAC
+behavior; full separate session/guest acceptance remains open for #402.
 ## One-shot private shell final child identity check
 
 The embedded one-shot private shell worker now attests its inherited
