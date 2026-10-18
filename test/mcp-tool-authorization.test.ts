@@ -182,6 +182,7 @@ test('stored credential roles separate user, operator, and admin control-plane a
     'policy_profile_list',
     'policy_device_check',
     'operations_idempotency_list',
+    'agent_operation_status',
     'events_read',
     'audit_recent',
     'audit_query',

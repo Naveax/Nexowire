@@ -57,8 +57,22 @@ export class AgentProvider implements Provider {
       )) as AgentOperationResult | undefined;
 
       const result = raw ?? {};
+      const isShell = request.capability === 'shell.exec' ||
+        request.capability === 'wsl.exec';
+      const timedOut = typeof result.data === 'object' &&
+        result.data !== null && !Array.isArray(result.data) &&
+        (result.data as {timedOut?:unknown}).timedOut === true;
+      const taskStatus = timedOut ? 'timed_out' :
+        typeof result.exitCode === 'number' && Number.isInteger(result.exitCode)
+          ? result.exitCode === 0 ? 'succeeded' : 'failed'
+          : 'unknown';
       return {
         ok: true,
+        ...(isShell ? {
+          taskStatus,
+          taskSuccess: taskStatus === 'succeeded' ? true :
+            taskStatus === 'unknown' ? null : false,
+        } : {}),
         ...(result.data !== undefined ? { data: result.data } : {}),
         ...(result.stdout !== undefined ? { stdout: result.stdout } : {}),
         ...(result.stderr !== undefined ? { stderr: result.stderr } : {}),

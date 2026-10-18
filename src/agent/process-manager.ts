@@ -394,18 +394,44 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-async function killPidTree(pid: number): Promise<void> {
+async function killPidTree(pid: number): Promise<'requested' | 'unconfirmed'> {
   if (process.platform === 'win32') {
-    await new Promise<void>((resolve) => {
+    // taskkill /T can fail when the shell PID has already exited while its
+    // descendants remain alive (and may still hold stdout/stderr pipes).
+    // Never discard a nonzero status or spawn error as a successful cleanup.
+    const outcome = await new Promise<{
+      code: number | null; error?: string;
+    }>((resolve) => {
+      let completed = false;
+      const settle = (result: {code:number|null;error?:string}) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
       const killer = spawn(
         'taskkill.exe',
         ['/PID', String(pid), '/T', '/F'],
-        { windowsHide: true, stdio: 'ignore' },
+        {windowsHide:true,stdio:'ignore'},
       );
-      killer.once('error', () => resolve());
-      killer.once('close', () => resolve());
+      killer.once('error', (error) =>
+        settle({code:null,error:error.message}));
+      killer.once('close', (code) => settle({code}));
+      const timer = setTimeout(() => {
+        killer.kill();
+        settle({code:null,error:'taskkill did not terminate within 10 seconds'});
+      },10_000);
     });
-    return;
+    if (outcome.code === 0) return 'requested';
+    // A gone root is not evidence its descendants were reaped.
+    if (!isPidAlive(pid)) return 'unconfirmed';
+    throw new ProcessManagerError(
+      'PROCESS_TREE_TERMINATION_UNCONFIRMED',
+      'Windows process-tree termination was not confirmed for the owned shell PID '+
+      pid+' (exitCode='+String(outcome.code)+
+      (outcome.error?', reason='+outcome.error.slice(0,180):'')+
+      '). Do not assume child processes stopped.',
+    );
   }
 
   try {
@@ -417,6 +443,7 @@ async function killPidTree(pid: number): Promise<void> {
       // It already exited or cannot be signaled.
     }
   }
+  return 'requested';
 }
 
 function summarize(session: ManagedSession) {
@@ -1233,14 +1260,17 @@ export class ProcessManager {
 
     await new Promise<void>((resolve) => {
       let settled = false;
+      const child=session.child!;
+      const onClose=()=>finish();
       const finish = (): void => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        child.off('close',onClose);
         resolve();
       };
       const timer = setTimeout(finish, timeoutMs);
-      session.child!.once('close', finish);
+      child.once('close', onClose);
       if (session.status !== 'running') finish();
     });
   }
@@ -1274,12 +1304,13 @@ export class ProcessManager {
       );
     }
 
+    let treeCleanup: 'requested' | 'unconfirmed' | undefined;
     if (
       (session.status === 'running' ||
         session.status === 'orphaned') &&
       session.pid
     ) {
-      await killPidTree(session.pid);
+      treeCleanup = await killPidTree(session.pid);
       await this.waitForChildClose(session);
 
       for (let attempt = 0; attempt < 20; attempt++) {
@@ -1287,7 +1318,13 @@ export class ProcessManager {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      if (!isPidAlive(session.pid) && !session.exitedAt) {
+      if (isPidAlive(session.pid)) {
+        throw new ProcessManagerError(
+          'PROCESS_ROOT_TERMINATION_UNCONFIRMED',
+          'Managed process root is still alive after termination attempt; no success was verified.',
+        );
+      }
+      if (!session.exitedAt) {
         session.status = 'exited';
         session.exitCode = null;
         session.signal = null;
@@ -1296,7 +1333,14 @@ export class ProcessManager {
     }
 
     await this.persistState();
-    return summarize(session);
+    return {
+      ...summarize(session),
+      ...(process.platform === 'win32' ? {
+        // 'requested' means taskkill exited 0, NOT that all descendants
+        // were individually verified. An already-exited root is unknown.
+        treeCleanup:treeCleanup ?? 'unconfirmed',
+      } : {}),
+    };
   }
 
   list() {
