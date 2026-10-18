@@ -64,7 +64,28 @@ node --test --import tsx test/scale-s5-resource-reconciliation.test.ts
 
 No external target URL accepted. The only network sockets in the reconnect suite bind `127.0.0.1` ephemeral ports. Database writes use only temporary test SQLite files or `:memory:`; all temporary files and owned sockets are torn down.
 
-## 4. Acceptance and stop conditions
+## 4. Observed local reconnect sample (one Work PC run)
+
+Machine-readable: [bounded reconnect local measurement](reports/s5-reconnect-loopback-20261018.json), from code SHA `d9658894fcf05de0104fb9ea792d3c56fdf81e61`.
+
+| Field | One observed synthetic sample |
+| --- | ---: |
+| Synthetic users/round | 120 |
+| Disconnect/reconnect rounds | 3 |
+| Total successful local WebSocket opens/closes | 360 / 360 |
+| Peak simultaneously open local sockets | 21 |
+| Simulated unique admitted IDs | 120 |
+| Exact-ID replay without re-admission | 240 |
+| Queue peak / processing peak | 8 / 4 |
+| Response latency p50 / p95 / p99 | 1.800 / 3.744 / 4.945 ms |
+| Backpressure in this specific non-saturated sample | 0 |
+| Verified native tool completions | 0 |
+| Canonical SQLite owner quota reservations in this fixture | **Not measured** |
+| Cloudflare Worker, D1, DO billed counters / invoice | **Not measured** |
+
+This is an in-memory idempotency simulation over real local plain-WS TCP connections, *not* an actual quota-ledger acceptance, a 120-simultaneously-connected WSS staging stress test or a stable latency SLA. The separate 1-slot queue test demonstrates explicit backpressure; it must not be mistaken for zero rejection under all loads. CPU/RSS sample values and exact provenance are in the JSON.
+
+## 5. Acceptance and stop conditions
 
 **Source-test acceptance:** expected fair reservations match persisted rows, every duplicate is deduplicated or fails closed, no unauthorized cross-tenant admission, no wrong-plan policy change, backpressure is explicit, p95/p99 and socket/queue peaks are recorded, and **no completed native action is attributed to any mock**.
 
