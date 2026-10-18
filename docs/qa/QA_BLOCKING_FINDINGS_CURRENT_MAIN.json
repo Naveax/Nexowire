@@ -86,7 +86,7 @@
         "R21",
         "R22"
       ],
-      "classification": "HISTORICAL_REPRODUCED_FAILURE_CURRENT_HEAD_UNVERIFIED",
+      "classification": "HISTORICAL_LINUX_FAIL_CORRECTED_SOURCE_CI_PASS_PHYSICAL_BLOCKED",
       "affected": [
         {
           "pr": 563,
@@ -104,15 +104,15 @@
         "https://github.com/Naveax/Nexowire/actions/runs/39150689903",
         "GitHub job 117743532760 Ubuntu Node22: Missing expected rejection at test/environment-doctor.test.ts:178"
       ],
-      "observed": "Prior Linux CI #39150689903 failed: platform linux was incorrectly expected to reject on Linux. Updated PR head dbf5099 adds host-platform-dependent test, injected-runner checks and live architecture equality. New CI #39154336693 is in progress, not yet confirmed PASS.",
+      "observed": "Old SHA 7a7628c CI failed on Linux. New SHA dbf5099c fixed wrong-platform expectation, live architecture/time override and injected-runner provenance. New exact-head CI #39154336693 completed 7/7 SUCCESS. No real USB/WSL/device physical acceptance.",
       "reproduction": [
         "Historical exact SHA 7a7628c75da79d8dbac18ff5eafe5a4ac9b8caa7 on Linux Node22: node --test --import tsx test/environment-doctor.test.ts -> Missing expected rejection at line 178.",
         "On new exact SHA dbf5099c5850a6df85b3ac5b8eb42386a8d581ff, test/environment-doctor.test.ts now supplies a deliberately different platform and rejects spoofed architecture or time origin. Re-run node --test --import tsx test/environment-doctor.test.ts across Linux, Windows, WSL2.",
-        "Review CI run 39154336693 for completed exact-head jobs; IN_PROGRESS is not a source PASS."
+        "New exact-head CI run 39154336693 at SHA dbf5099c5850a6df85b3ac5b8eb42386a8d581ff is 7/7 SUCCESS; historic fail on 7a7628c is superseded only for source CI."
       ],
-      "expectedFix": "Confirm new HEAD exact CI SUCCESS and no regressions, then physical USB/WSL/VM presence and provenance acceptance. Do not restore original Linux-specific wrong expectation.",
+      "expectedFix": "No further source CI blocker at this exact HEAD. Complete real USB/WSL/VM and hardware provenance acceptance before staging/production/original incident PASS.",
       "disposition": {
-        "source": "BLOCKED",
+        "source": "PASS",
         "staging": "BLOCKED",
         "production": "BLOCKED",
         "incident": "BLOCKED"

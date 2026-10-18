@@ -39,10 +39,10 @@ test('negative: CI success on Job Objects and journal v2 must not close original
   assert.equal(entry.originalIncident,'BLOCKED');
  }
 });
-test('negative: historical CI failure cannot be transferred to new unverified exact HEAD',()=>{
+test('negative: historical failed CI cannot override newer exact-head successful CI',()=>{
  for(const n of [563]){
   const entry=lookup(n)!;
-  assert.equal(entry.ci.status,'NOT_VERIFIED');
+  assert.equal(entry.ci.status,'PASS');
   assert.ok(entry.ci.reason);
  }
 });

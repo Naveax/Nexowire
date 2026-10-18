@@ -424,11 +424,10 @@
       "sourceReproducer": "test/environment-doctor.test.ts",
       "physicalAcceptanceMissing": "Linux test fails; real hardware acceptance absent",
       "ci": {
-        "status": "NOT_VERIFIED",
-        "runId": null,
-        "inProgressRunId": 39154336693,
+        "status": "PASS",
+        "runId": 39154336693,
         "historicalFailedRunId": 39150689903,
-        "reason": "Prior head CI failed, new head CI in progress; no success/failure claim"
+        "reason": "New head exact CI SUCCESS; old head failure retained for provenance only"
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",

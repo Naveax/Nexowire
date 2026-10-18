@@ -4,7 +4,7 @@
 
 ## Grounded results
 
-- The machine-readable [R01-R22](cross-project-final-acceptance.json) has 6 source PASS, 15 source BLOCKED, 0 current-head source FAIL, 1 source NOT_TESTED. All 22 staging, production and original incidents remain BLOCKED.
+- The machine-readable [R01-R22](cross-project-final-acceptance.json) has 7 source PASS, 14 source BLOCKED, 0 current-head source FAIL, 1 source NOT_TESTED. All 22 staging, production and original incidents remain BLOCKED.
 - The [25-PR inventory](PR_SOURCE_AND_RELEASE_GATES.json) separates GitHub state, exact PR SHA, checked CI and missing original-incident gates. PR merge never changes acceptance status automatically.
 - #549, #552, #558, #559, #546, #555, #554, #557 and #561 are merged to the main line at the snapshot. #553, #563, #480, #556 and #551 remain DRAFT. #564, #550 and independent QA #560 were subsequently merged, but do not constitute production acceptance.
 - Both physical Nexowire Agents returned version 1.0.5. No Agent rollout, device restart, USB write, firmware operation, billing change or user-data deletion was performed.
@@ -19,7 +19,7 @@ See [QA_BLOCKING_FINDINGS_CURRENT_MAIN.json](QA_BLOCKING_FINDINGS_CURRENT_MAIN.j
 |---|---|---|---|
 | QA-P0-559-HELPER | Win32 Job helper | Env override removed; binary type and marker trust are insufficient as independent release/publisher proof | Trusted helper binary + kernel membership + physical original child cleanup |
 | QA-P0-553-PATH | Filesystem/USB | Latest CI success; live console grant issuance and handle-relative TOCTOU protection missing | Real grants, handle pinning, USB/junction stress |
-| QA-P1-563-DOCTOR | Environment Doctor | Historical head Linux Node22 failed; latest #563 head fixes test and provenance paths, exact-head CI currently IN_PROGRESS | Correct tests plus fail-closed provenance across OS |
+| QA-P1-563-DOCTOR | Environment Doctor | Historical head Linux Node22 failed; latest #563 head source CI 7/7 SUCCESS, real hardware acceptance still missing | Correct tests plus fail-closed provenance across OS |
 | QA-P0-480-556-GUI | Private GUI/file picker | Static broker gate and UIA adapter are source-only; no demonstrated dynamic descendant containment | No Default desktop focus/input, real Common Dialog |
 | QA-P1-551-INSTALL | Lifecycle | Exact-head CI success; manager still fixture-driven without installed production adapter | Signed installer/rollback on actual authorized devices |
 | QA-P1-564-FAIRNESS | Scale S5 | Synthetic unfairness shown, live WSS 24h/cost absent | Real account-scoped fairness, 24-hour accepted completions |

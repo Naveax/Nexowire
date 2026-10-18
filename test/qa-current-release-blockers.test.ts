@@ -6,10 +6,10 @@ const read=(x:string)=>JSON.parse(readFileSync(path.resolve('docs/qa',x),'utf8')
 const matrix=read('cross-project-final-acceptance.json');
 const prs=read('PR_SOURCE_AND_RELEASE_GATES.json');
 const audit=read('QA_BLOCKING_FINDINGS_CURRENT_MAIN.json');
-test('25 exact-head PRs include merged 559 and source-unverified 563 without false final acceptance',()=>{
+test('25 exact-head PRs include merged 559 and source-success 563 without false final acceptance',()=>{
  assert.equal(prs.entries.length,25);
  assert.equal(prs.entries.find((x:any)=>x.pr===559).prState,'MERGED');
- assert.equal(prs.entries.find((x:any)=>x.pr===563).ci.status,'NOT_VERIFIED');
+ assert.equal(prs.entries.find((x:any)=>x.pr===563).ci.status,'PASS');
  assert.equal(prs.entries.find((x:any)=>x.pr===553).ci.status,'PASS');
  assert.equal(prs.entries.find((x:any)=>x.pr===551).ci.status,'PASS');
  assert.equal(prs.entries.find((x:any)=>x.pr===564).ci.status,'PASS');
@@ -20,7 +20,7 @@ test('all 22 requirements are evaluated against current pinned main and no produ
  assert.equal(matrix.inspectedMainSha,matrix.baselineSha);
  assert.equal(matrix.requirements.length,22);
  const levels=['source','staging','production','incident'];
- assert.equal(matrix.requirements.find((x:any)=>x.id==='R17').levels.source.status,'BLOCKED');
+ assert.equal(matrix.requirements.find((x:any)=>x.id==='R17').levels.source.status,'PASS');
  assert.equal(matrix.requirements.find((x:any)=>x.id==='R07').levels.source.status,'BLOCKED');
  assert.ok(matrix.requirements.every((x:any)=>levels.slice(1).every(k=>x.levels[k].status==='BLOCKED')));
 });
