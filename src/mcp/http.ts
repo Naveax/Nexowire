@@ -192,7 +192,9 @@ export async function runHttpServer(
       authorization_servers: [
         config.controlPlaneAgentAuth.url,
       ],
-      scopes_supported: ['mcp', 'offline_access'],
+      // Only resource authorization scopes belong in protected-resource metadata.
+      // offline_access is an optional token/refresh grant, not a tool scope.
+      scopes_supported: ['mcp'],
     };
     for (const metadataPath of [
       '/.well-known/oauth-protected-resource',
