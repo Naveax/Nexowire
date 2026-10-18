@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ArtifactBridgeStore } from './artifact-bridge.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
@@ -25,7 +26,12 @@ function keyFor(deviceId: string, workspaceId: string): string {
 }
 
 export class WorkspaceStore {
+  private bridge?: ArtifactBridgeStore;
   constructor(private readonly rootDir: string) {}
+
+  artifactBridge(): ArtifactBridgeStore {
+    return this.bridge ??= new ArtifactBridgeStore(this.rootDir);
+  }
 
   async save(
     input: Omit<WorkspaceCheckpoint, 'updatedAt'>,

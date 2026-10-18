@@ -1,4 +1,8 @@
+import type { FailureAttributionV2 } from './error-contract-v2.js';
+
 export interface ExecutionError {
+  /** Additive, machine-readable diagnostic; no secret provider details. */
+  attribution?: FailureAttributionV2;
   code: string;
   message: string;
   retryable?: boolean;
@@ -15,6 +19,8 @@ export interface ExecutionMeta {
 
 export interface ExecutionResult<T = unknown> {
   ok: boolean;
+  /** Shell/task diagnostics may exist even when Agent transport ok=true. */
+  diagnostic?: FailureAttributionV2;
   /** Process command outcome, separate from a successfully delivered Agent request. */
   taskStatus?: 'succeeded' | 'failed' | 'timed_out' | 'unknown';
   /** null means no verified command completion, not success. */

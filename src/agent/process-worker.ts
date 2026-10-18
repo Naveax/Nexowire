@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as z from 'zod';
 import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 import {assertWindowsPrivateWorkerDesktopIdentity} from './windows-private-worker-desktop-identity.js';
+import {launchWindowsJob, requestWindowsJobStop, type WindowsJobLaunch} from './windows-job-owner.js';
 
 const InitSchema = z.object({
   sessionId: z.string().uuid(),
@@ -236,6 +237,7 @@ export async function runProcessWorker(
   let persistChain: Promise<void> = Promise.resolve();
   let eventChain: Promise<void> = Promise.resolve();
   let child: ChildProcessWithoutNullStreams | undefined;
+  let job: WindowsJobLaunch | undefined;
   const processedCommands = new Set<string>();
   const startedAt = new Date().toISOString();
 
@@ -385,10 +387,19 @@ export async function runProcessWorker(
           }
 
           if (command.type === 'stop') {
-            if (child?.pid && status.status === 'running') {
-              await killPidTree(child.pid);
+            if (status.status === 'running' && child) {
+              if (job) {
+                const cleanup = requestWindowsJobStop(job);
+                if (cleanup !== 'requested') {
+                  socket.end(JSON.stringify({ok:false,error:'PROCESS_TREE_TERMINATION_UNCONFIRMED'})+'\n');
+                  return;
+                }
+                socket.end(JSON.stringify({ok:true,treeCleanup:cleanup})+'\n');
+                return;
+              }
+              await killPidTree(child.pid!);
             }
-            socket.end(JSON.stringify({ ok: true }) + '\n');
+            socket.end(JSON.stringify({ ok: true, treeCleanup: 'unconfirmed' }) + '\n');
           }
         } catch (error) {
           socket.end(
@@ -428,7 +439,16 @@ export async function runProcessWorker(
   await fs.writeFile(eventsFile, '', { encoding: 'utf8', mode: 0o600 });
   await persistStatus();
 
-  child = spawn(shell.executable, shell.args, {
+  // Only ordinary headless durable workers can inherit this guardian's
+  // stdout/stderr/console. Private-desktop launch is a distinct Win32 boundary
+  // and is intentionally not represented as Job-contained here.
+  if (process.platform === 'win32' && !fileInput) {
+    // Durable means independent of the Agent, not independent of the
+    // owning sidecar: worker crash must close this Job and reap its shell.
+    job = await launchWindowsJob(shell.executable, shell.args,
+      {cwd: init.cwd, env: process.env, guardOnParentExit: true});
+  }
+  child = job?.child ?? spawn(shell.executable, shell.args, {
     ...(init.cwd ? { cwd: init.cwd } : {}),
     windowsHide: true,
     env: init.executionEnv ?? process.env,
@@ -438,7 +458,7 @@ export async function runProcessWorker(
 
   status = {
     ...status,
-    childPid: child.pid ?? null,
+    childPid: job?.pid ?? child.pid ?? null,
     status: 'running',
   };
   await persistStatus();

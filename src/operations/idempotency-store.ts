@@ -208,8 +208,8 @@ export class IdempotencyStore {
       updatedAt: now,
     });
     this.records.set(key, record);
-    this.trim();
     try {
+      this.trim();
       await this.persist();
     } catch (error) {
       // The mutation has not been dispatched until begin() succeeds.
@@ -243,13 +243,23 @@ export class IdempotencyStore {
       status,
       updatedAt: new Date().toISOString(),
     });
+    const hadCachedResult=this.cachedResults.has(key);
+    const oldCachedResult=this.cachedResults.get(key);
     this.records.set(key, record);
     if (cachedResult !== undefined) {
       this.cachedResults.set(key, cachedResult);
     } else {
       this.cachedResults.delete(key);
     }
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (error) {
+      // Never report a newer status when the durable commit was lost.
+      this.records.set(key,existing);
+      if(hadCachedResult)this.cachedResults.set(key,oldCachedResult);
+      else this.cachedResults.delete(key);
+      throw error;
+    }
     return record;
     });
   }
@@ -259,6 +269,16 @@ export class IdempotencyStore {
     await this.mutationQueue;
     const record = this.records.get(validateIdempotencyKey(keyInput));
     return record ? { ...record } : undefined;
+  }
+
+  // Exact operation-ID lookup works while an Agent is offline.
+  // This is Hub evidence only; it cannot attest external OS side effects.
+  async getByOperationId(operationId:string):Promise<IdempotencyRecord|undefined>{
+    await this.initialize();
+    const id=z.string().uuid().parse(operationId);
+    await this.mutationQueue;
+    const record=[...this.records.values()].find(item=>item.operationId===id);
+    return record?{...record}:undefined;
   }
 
   async list(
@@ -279,13 +299,13 @@ export class IdempotencyStore {
   }
 
   private trim(): void {
-    if (this.records.size <= this.maxRecords) return;
-    const oldest = [...this.records.values()]
-      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-      .slice(0, this.records.size - this.maxRecords);
-    for (const record of oldest) {
-      this.records.delete(record.key);
-      this.cachedResults.delete(record.key);
+    // Retiring an idempotency tombstone makes the same key executable again.
+    // Fail closed on capacity instead of silently evicting UNKNOWN or success.
+    if (this.records.size > this.maxRecords) {
+      throw new IdempotencyStoreError(
+        'IDEMPOTENCY_STORE_FULL',
+        'Hub idempotency capacity exhausted; no prior key can be safely evicted.',
+      );
     }
   }
 

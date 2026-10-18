@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import {withPrivateDesktopProcessLock} from './windows-private-desktop-lock.js';
-import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
+import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation,isPrivateGuiBrokerExecutable} from './windows-private-shell-broker-guard.js';
 
 const PRIVATE_DESKTOP_SYSTEM32='C:\\Windows\\System32';
 const PRIVATE_DESKTOP_POWERSHELL=PRIVATE_DESKTOP_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -250,6 +250,7 @@ public static class NxDesktopNative {
   [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent,IntPtr child);
   [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr h,uint msg,UIntPtr w,IntPtr l);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
+  [DllImport("kernel32.dll",SetLastError=true)] static extern bool ProcessIdToSessionId(uint pid,out uint sessionId);
   [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool GetUserObjectInformation(IntPtr h,int i,StringBuilder b,int n,out int need);
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcess(string app,StringBuilder cmd,IntPtr pa,IntPtr ta,bool inherit,uint flags,IntPtr env,string cwd,ref SI si,out PI pi);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
@@ -433,6 +434,13 @@ public static class NxDesktopNative {
     if(pid==0)throw new InvalidOperationException("PRIVATE_UIA_OWNER_UNKNOWN");
     return (int)pid;
   }
+  public static int ValidatedWindowSessionId(string name,string raw){
+    uint pid,sessionId;
+    GetWindowThreadProcessId(Target(name,raw),out pid);
+    if(pid==0 || !ProcessIdToSessionId(pid,out sessionId))
+      throw new InvalidOperationException("PRIVATE_UIA_SESSION_UNAVAILABLE");
+    return checked((int)sessionId);
+  }
   public static int[] ClientOrigin(string name,string raw){
     var h=Target(name,raw);
     var p=new POINT{x=0,y=0};
@@ -607,6 +615,7 @@ try {
     # Never enumerate RootElement/Default or request ValuePattern/TextPattern.
     $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
     $ownerPid=[NxDesktopNative]::ValidatedWindowProcessId([string]$r.desktop,[string]$r.hwnd)
+    $ownerSession=[NxDesktopNative]::ValidatedWindowSessionId([string]$r.desktop,[string]$r.hwnd)
     [int[]]$origin=[NxDesktopNative]::ClientOrigin([string]$r.desktop,[string]$r.hwnd)
     Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes -ErrorAction Stop
     $root=[System.Windows.Automation.AutomationElement]::FromHandle($top)
@@ -665,6 +674,7 @@ try {
     [pscustomobject]@{
       hwnd="0x"+$top.ToInt64().ToString("X")
       processId=$ownerPid
+      sessionId=$ownerSession
       nodes=@($nodes.ToArray())
       visited=$visited
       skipped=$skipped
@@ -681,6 +691,10 @@ try {
     # no RootElement, no physical focus/cursor, no generic cross-app UIA.
     $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
     $ownerPid=[NxDesktopNative]::ValidatedWindowProcessId([string]$r.desktop,[string]$r.hwnd)
+    $ownerSession=[NxDesktopNative]::ValidatedWindowSessionId([string]$r.desktop,[string]$r.hwnd)
+    if([NxDesktopNative]::Input() -ne 'Default'){throw 'PRIVATE_UIA_SECURE_DESKTOP_REFUSED'}
+    if($null -ne $r.expected_process_id -and $ownerPid -ne [int]$r.expected_process_id){throw 'PRIVATE_UIA_PROCESS_CHANGED'}
+    if($null -ne $r.expected_session_id -and $ownerSession -ne [int]$r.expected_session_id){throw 'PRIVATE_UIA_SESSION_CHANGED'}
     $wantedId=[string]$r.automation_id
     $wantedClass=[string]$r.expected_class
     Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes -ErrorAction Stop
@@ -766,6 +780,7 @@ try {
     [pscustomobject]@{
       hwnd="0x"+$top.ToInt64().ToString("X")
       processId=$ownerPid
+      sessionId=$ownerSession
       automationId=$wantedId
       controlType=$wantedType
       actionCompleted=$true
@@ -913,6 +928,7 @@ async function privateInputRequest(
         responseFile,
       ],
       p.root,
+      'internal-private-uia-helper',
     );
 
     const deadline = Date.now() + timeoutMs;
@@ -1032,30 +1048,12 @@ async function resolveExecutable(executable: string): Promise<string> {
  * Block known broker entry points, not all applications. Scripted
  * ShellExecute/COM children are not yet fully contained by this check.
  */
-const PRIVATE_SHELL_BROKER_EXECUTABLES=new Set([
-  'explorer.exe',
-  'control.exe',
-  'rundll32.exe',
-  'dllhost.exe',
-  'mshta.exe',
-  'wscript.exe',
-  'cscript.exe',
-  'msiexec.exe',
-  'fodhelper.exe',
-  'computerdefaults.exe',
-  'eventvwr.exe',
-  'sdclt.exe',
-  'slui.exe',
-  'hh.exe',
-]);
-
 export function assertNoPrivateDesktopBrokeredExecutable(
   executable:string,
 ):void{
   const name=path.win32.basename(executable.trim()
     .replace(/^["']|["']$/g,'')).toLowerCase();
-  const executableName=path.win32.extname(name)?name:name+'.exe';
-  if(!PRIVATE_SHELL_BROKER_EXECUTABLES.has(executableName))return;
+  if(!isPrivateGuiBrokerExecutable(executable))return;
   throw new PrivateDesktopError(
     'PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED',
     'This Windows shell/COM/installer broker may create windows on the '+
@@ -1065,18 +1063,89 @@ export function assertNoPrivateDesktopBrokeredExecutable(
   );
 }
 
+
+/**
+ * Desktop CreateProcess only binds the immediate executable to
+ * WinSta0\NexowirePrivate. Command interpreters can shell out to WSLg,
+ * Explorer/COM or a user's existing Windows Terminal instance. There is
+ * no safe static interpreter preflight for -Command, /C or inline code.
+ * Direct private UI launches must be directly attached GUI executables,
+ * or the existing bounded, separately scanned PowerShell -File fixture.
+ */
+export function assertNoPrivateDesktopOpaqueLauncher(
+  executable:string,args:readonly string[],
+):void{
+  const name=path.win32.basename(executable.trim()
+    .replace(/^["']|["']$/g,'')).toLowerCase();
+  const normalized=path.win32.extname(name)?name:name+'.exe';
+  const dangerousExtensions=/\.(?:bat|cmd|ps1|vbs|vbe|js|jse|wsf|wsh|lnk|url|com)$/i;
+  const shellHost=normalized==='cmd.exe';
+  const powershell=['powershell.exe','pwsh.exe'].includes(normalized);
+  // The arguments of general script/compiled-code runners cannot attest
+  // indirect ShellExecute/WSLg/COM behavior. Reject even file-based runs.
+  const opaqueRuntime=['node.exe','python.exe','python3.exe','pythonw.exe',
+    'py.exe','deno.exe','bun.exe','ruby.exe','perl.exe','java.exe',
+    'dotnet.exe','msbuild.exe','git.exe'].includes(normalized);
+  const generalWrapper=['npm.exe','npx.exe','yarn.exe','pnpm.exe',
+    'pip.exe','pip3.exe'].includes(normalized);
+  const fileModeIndex=args.findIndex(a=>
+    /^--?f(?:i(?:l(?:e)?)?)?(?::|$)/i.test(a.trim()));
+  const commandMode=args.some(a=>
+    /^--?(?:c|co|com|comm|comma|comman|command|commandwithargs)(?::|=|$)/i.test(a.trim()));
+  // File must be the single terminal execution mode, with a literal .ps1
+  // argument. A later -File cannot mask an earlier -Command payload, and
+  // script parameters cannot smuggle a second arbitrary launch command.
+  const safePowerShellFile=fileModeIndex>=0&&!commandMode&&
+    fileModeIndex===args.length-2&&
+    args[fileModeIndex+1]?.trim().toLowerCase().endsWith('.ps1');
+  if(dangerousExtensions.test(name)||shellHost||generalWrapper||
+      (powershell&&!safePowerShellFile)||opaqueRuntime){
+    throw new PrivateDesktopError(
+      'PRIVATE_DESKTOP_OPAQUE_WRAPPER_UNISOLATED',
+      'Direct private desktop launch cannot attest indirect shell, WSL, '+
+      'Terminal or GUI descendants from this command wrapper.',
+      {executable:name},
+    );
+  }
+}
+
 async function launch(
   executable: string,
   args: string[],
   cwd?: string,
+  internal?:'internal-private-uia-helper',
 ): Promise<number> {
+  // This flag is accepted only from the Agent's own privateInputRequest,
+  // never from launchApp/MCP input. Bind it to our generated exact helper
+  // path and argument shape, not merely a caller-supplied executable name.
+  const runtime=paths();
+  const internalUia=internal==='internal-private-uia-helper'&&
+    path.win32.normalize(executable).toLowerCase()===
+      path.win32.normalize(PRIVATE_DESKTOP_POWERSHELL).toLowerCase()&&
+    cwd===runtime.root&&args.length===12&&
+    args[0]==='-NoLogo'&&args[1]==='-NoProfile'&&
+    args[2]==='-ExecutionPolicy'&&args[3]==='Bypass'&&
+    args[4]==='-File'&&args[5]===runtime.inputHelper&&
+    args[6]==='-Action'&&args[8]==='-Request'&&args[10]==='-Response'&&
+    ['pointer_move','pointer_click','pointer_scroll','controls',
+      'accessibility','accessibility_invoke_button',
+      'accessibility_set_edit_value','accessibility_set_checkbox',
+      'accessibility_select_radio','text','hotkey','close_window']
+      .includes(args[7]??'')&&
+    [args[9],args[11]].every(a=>typeof a==='string'&&
+      path.win32.dirname(a).toLowerCase()===runtime.root.toLowerCase());
+  if(internal&&!internalUia)
+    throw new PrivateDesktopError('PRIVATE_DESKTOP_INTERNAL_HELPER_MISMATCH',
+      'Native private UIA helper identity did not match internal dispatch.');
   assertNoPrivateDesktopBrokeredExecutable(executable);
+  if(!internalUia)assertNoPrivateDesktopOpaqueLauncher(executable,args);
   // A directly attached PowerShell/CMD child can still dispatch GUI to
   // Explorer/COM via its command string, bypassing the executable denylist.
   // Apply the same bounded command guard used by the private shell workers.
   await assertNoObviousPrivateShellScriptBrokerInvocation(executable,args,cwd);
   const resolvedExecutable = await resolveExecutable(executable);
   assertNoPrivateDesktopBrokeredExecutable(resolvedExecutable);
+  if(!internalUia)assertNoPrivateDesktopOpaqueLauncher(resolvedExecutable,args);
   await assertNoObviousPrivateShellScriptBrokerInvocation(resolvedExecutable,args,cwd);
   return z
     .object({ pid: z.number().int().positive() })
@@ -1112,6 +1181,7 @@ const ControlScanSchema=z.object({
 const AccessibilityScanSchema=z.object({
   hwnd:WindowHandleSchema,
   processId:z.number().int().nonnegative(),
+  sessionId:z.number().int().nonnegative(),
   nodes:z.array(z.object({
     processId:z.number().int().nonnegative(),
     depth:z.number().int().min(1).max(5),
@@ -1175,6 +1245,8 @@ const PrivateUiaInvokeButtonSchema=z.object({
   hwnd:WindowHandleSchema,
   automation_id:z.string().min(1).max(128),
   expected_class:z.string().min(1).max(128),
+  expected_process_id:z.number().int().positive().optional(),
+  expected_session_id:z.number().int().nonnegative().optional(),
 }).strict();
 
 async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
@@ -1185,6 +1257,7 @@ async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.Button'),
       actionCompleted:z.literal(true),
@@ -1193,6 +1266,8 @@ async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
       desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
       automation_id:parsed.automation_id,
       expected_class:parsed.expected_class,
+      expected_process_id:parsed.expected_process_id,
+      expected_session_id:parsed.expected_session_id,
     },25_000));
     return{data:{...result,invoked:true,desktopName:DESKTOP_NAME,
       touchesSystemCursor:false,touchesSystemKeyboard:false,
@@ -1204,6 +1279,8 @@ const PrivateUiaSetEditValueSchema=z.object({
   hwnd:WindowHandleSchema,
   automation_id:z.string().min(1).max(128),
   expected_class:z.string().min(1).max(128),
+  expected_process_id:z.number().int().positive().optional(),
+  expected_session_id:z.number().int().nonnegative().optional(),
   value:z.string().max(4000),
 }).strict();
 
@@ -1215,6 +1292,7 @@ async function setPrivateUiaEditValue(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.Edit'),
       actionCompleted:z.literal(true),
@@ -1223,6 +1301,8 @@ async function setPrivateUiaEditValue(input:unknown):Promise<{data:unknown}>{
       desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
       automation_id:parsed.automation_id,
       expected_class:parsed.expected_class,
+      expected_process_id:parsed.expected_process_id,
+      expected_session_id:parsed.expected_session_id,
       value:parsed.value,
     },25_000));
     return{data:{...result,desktopName:DESKTOP_NAME,
@@ -1247,6 +1327,7 @@ async function setPrivateUiaCheckbox(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.CheckBox'),
       actionCompleted:z.literal(true),
@@ -1277,6 +1358,7 @@ async function selectPrivateUiaRadio(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.RadioButton'),
       actionCompleted:z.literal(true),

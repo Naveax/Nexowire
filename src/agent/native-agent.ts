@@ -14,6 +14,7 @@ import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
 import { parseAllowedRoots, PathPolicy } from './path-policy.js';
 import { ProcessManager } from './process-manager.js';
+import { ProgressSupervisor } from './progress-supervisor.js';
 import { TaskGraphStore } from './task-graph-store.js';
 import { RunbookStore } from './runbook-store.js';
 import {
@@ -242,6 +243,45 @@ async function privilegedBrokerFromEnv(
   return new PrivilegedBrokerClient({ url, token });
 }
 
+// An asynchronously probed Admin Bridge must not turn a dropped WSS
+// connection into an unhandled error or falsely advertise elevation.
+export async function sendAgentHelloWhenReady(
+  socket: Pick<WebSocket, 'readyState' | 'send' | 'terminate'>,
+  probeBridge: () => Promise<{ reachable: boolean; elevated: boolean }>,
+  createHello: (bridge: { reachable: boolean; elevated: boolean }) => unknown,
+  probeTimeoutMs = 1_000,
+): Promise<boolean> {
+  // Hub helloTimeoutMs defaults to 5000ms; the bridge health probe can
+  // itself consume 5000ms. Never let optional elevation block Agent hello.
+  const deadline = Number.isFinite(probeTimeoutMs)
+    ? Math.min(1_500, Math.max(25, probeTimeoutMs))
+    : 1_000;
+  const notReady = { reachable: false, elevated: false };
+  let timeout: NodeJS.Timeout | undefined;
+  const timeoutResult = new Promise<typeof notReady>((resolve) => {
+    timeout = setTimeout(() => resolve(notReady), deadline);
+  });
+  const probeResult = Promise.resolve().then(probeBridge).catch(() => notReady);
+  const result = await Promise.race([probeResult, timeoutResult]);
+  if (timeout) clearTimeout(timeout);
+  const bridge = {
+    reachable: result.reachable === true,
+    elevated: result.reachable === true && result.elevated === true,
+  };
+  if (socket.readyState !== WebSocket.OPEN) return false;
+  try {
+    socket.send(JSON.stringify(createHello(bridge)));
+    return true;
+  } catch {
+    try {
+      socket.terminate();
+    } catch {
+      // Nothing else to do: reconnect loop owns the socket lifetime.
+    }
+    return false;
+  }
+}
+
 function heartbeatMs(env: NodeJS.ProcessEnv): number {
   const raw = env.NEXOWIRE_AGENT_HEARTBEAT_MS?.trim();
   if (!raw) return 30_000;
@@ -344,6 +384,7 @@ export async function runNativeAgent(
       }),
     );
   };
+  const progressSupervisor = new ProgressSupervisor();
   const processes = new ProcessManager({
     stateFile: processStateFile,
     workerRoot:
@@ -351,7 +392,10 @@ export async function runNativeAgent(
       path.join(os.homedir(), '.nexowire', 'process-workers'),
     workerEntrypoint: process.argv[1],
     workerExecArgv: process.execArgv,
-    onEvent: (event) => emitAgentEvent(event.topic, event.data),
+    onEvent: (event) => {
+      progressSupervisor.observeProcessEvent(event);
+      emitAgentEvent(event.topic, event.data);
+    },
   });
   const taskGraphs = new TaskGraphStore({ stateFile: taskGraphStateFile });
   const runbooks = new RunbookStore({ stateFile: runbookStateFile });
@@ -370,11 +414,23 @@ export async function runNativeAgent(
     await singletonLock?.close();
     throw error;
   }
+  progressSupervisor.recover(processes.list());
+  const progressWatchdogTimer = setInterval(() => {
+    // Do not consume de-duplicated alerts while the Hub is unreachable.
+    // Reconciliation on reconnect can then surface a pending warning.
+    if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+    progressSupervisor.recover(processes.list());
+    for (const warning of progressSupervisor.scan()) {
+      emitAgentEvent('progress.watchdog.warning', warning);
+    }
+  }, 5_000);
+  progressWatchdogTimer.unref();
   let reconnectDelay = 1_000;
   let endpointIndex = 0;
 
   const stop = (): void => {
     stopped = true;
+    clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');
     void processes.shutdown();
   };
@@ -419,14 +475,12 @@ export async function runNativeAgent(
         }, socketHeartbeatMs);
         heartbeatTimer.unref();
 
-        const bridgeProbe = privilegedBroker
-          ? await privilegedBroker.probe()
-          : {
-              reachable: false,
-              elevated: false,
-            };
-        socket.send(
-          JSON.stringify({
+        const greeted = await sendAgentHelloWhenReady(
+          socket,
+          privilegedBroker
+            ? () => privilegedBroker.probe()
+            : async () => ({ reachable: false, elevated: false }),
+          (bridgeProbe) => ({
             type: 'hello',
             protocolVersion: AGENT_PROTOCOL_VERSION,
             instanceId,
@@ -445,6 +499,7 @@ export async function runNativeAgent(
             },
           }),
         );
+        if (!greeted) return;
 
         socket.on('message', async (raw) => {
           let decoded: unknown;
@@ -494,6 +549,13 @@ export async function runNativeAgent(
                     };
                   }
                 }
+                // Persist a separate dispatch marker BEFORE the executor.
+                // If this CAS fails, no mutation can reach the target.
+                if(mutation){
+                  await operationJournal.markDispatched(
+                    request.data.requestId,fingerprint,
+                  );
+                }
                 let outcome: AgentResponse;
                 try {
                   const data = await executeCapability(
@@ -502,6 +564,7 @@ export async function runNativeAgent(
                     policy,
                     {
                       processes,
+                      progressSupervisor,
                       operationJournal,
                       taskGraphs,
                       runbooks,
@@ -548,10 +611,23 @@ export async function runNativeAgent(
                             shellResult.data?.timedOut !== true,
                         }
                       : undefined;
+                    const evidence=outcome.ok
+                      ? execution
+                        ? {kind:'shell_exit' as const,
+                            verified:execution.processExitCode!==null &&
+                              !execution.timedOut}
+                        : request.data.capability==='files.write'
+                          ? {kind:'file_write_ack' as const,verified:false}
+                          : request.data.capability==='windows.service.control'
+                            ? {kind:'service_readback' as const,verified:false}
+                            : undefined
+                      : undefined;
                     await operationJournal.complete(
                       request.data.requestId,
                       outcome.ok ? 'succeeded' : 'failed',
                       execution,
+                      evidence,
+                      fingerprint,
                     );
                   } catch {
                     // Remote side effects may have completed, but the final
@@ -582,7 +658,12 @@ export async function runNativeAgent(
           }
 
           if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify(response));
+            try {
+              socket.send(JSON.stringify(response));
+            } catch {
+              // Lost transport means no confirmed ACK. Hub must reconcile.
+              socket.terminate();
+            }
           }
         });
       });

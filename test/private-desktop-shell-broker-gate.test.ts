@@ -7,6 +7,10 @@ import {
   assertNoPrivateDesktopBrokeredExecutable,
   executeWindowsPrivateDesktopCapability as desktop,
 } from '../src/agent/windows-private-desktop.js';
+import {
+  assertNoObviousPrivateShellBrokerInvocation,
+  isPrivateGuiBrokerExecutable,
+} from '../src/agent/windows-private-shell-broker-guard.js';
 
 test('known shell, COM, UAC and installer brokers are blocked before any native launch',()=>{
   for(const executable of [
@@ -21,6 +25,9 @@ test('known shell, COM, UAC and installer brokers are blocked before any native 
     'mshta.exe','wscript.exe','cscript.exe','msiexec.exe',
     'fodhelper.exe','computerdefaults.exe','eventvwr.exe',
     'sdclt.exe','slui.exe','hh.exe',
+    // Terminal/WSLg bridges can display UI outside the attached desktop.
+    'bash','bash.exe','sh','sh.exe','wsl','wsl.exe',
+    'wslhost.exe','wt','wt.exe','C:\\Windows\\System32\\wsl.exe',
   ]){
     assert.throws(()=>assertNoPrivateDesktopBrokeredExecutable(executable),
       (error:unknown)=>error instanceof Error&&
@@ -65,6 +72,7 @@ test('real private desktop refuses shell broker before creating a GUI window',{
   for(const executable of [
     'explorer.exe','C:\\Windows\\explorer.exe',
     'control.exe','rundll32.exe','msiexec.exe',
+    'bash.exe','sh.exe','wsl.exe','wslhost.exe','wt.exe',
   ]){
     await assert.rejects(
       desktop('windows.private_desktop.launch',{executable,args:[]}),
@@ -81,10 +89,47 @@ test('real private desktop refuses shell broker before creating a GUI window',{
     await assert.rejects(
       desktop('windows.private_desktop.launch',entry),
       (error:unknown)=>error instanceof Error&&
-        'code' in error&&error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+        'code' in error&&(
+          error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'||
+          error.code==='PRIVATE_DESKTOP_OPAQUE_WRAPPER_UNISOLATED'),
       entry.executable+' '+entry.args.join(' '));
   }
   const after=await desktop('windows.private_desktop.status',{}) as {data:{launchedPids:number[];inputDesktop:string}};
   assert.deepEqual(after.data.launchedPids,before.data.launchedPids);
   assert.equal(after.data.inputDesktop,'Default');
+});
+
+test('direct desktop launch and shell workers share the same broker rejection set',()=>{
+  for(const name of [
+    'explorer','control','rundll32','dllhost','mshta','wscript',
+    'cscript','msiexec','fodhelper','computerdefaults','eventvwr',
+    'sdclt','slui','hh','bash','sh','wsl','wslhost','wslconfig',
+    'wt','windowsterminal',
+  ]){
+    for(const executable of [
+      name,name+'.exe',
+      'C:\\Windows\\System32\\'+name+'.exe',
+      '"C:\\Windows\\System32\\'+name+'.exe"',
+    ]){
+      assert.equal(isPrivateGuiBrokerExecutable(executable),true,executable);
+      assert.throws(
+        ()=>assertNoPrivateDesktopBrokeredExecutable(executable),
+        (error:unknown)=>error instanceof Error&&'code' in error&&
+          error.code==='PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED',
+        executable,
+      );
+      assert.throws(
+        ()=>assertNoObviousPrivateShellBrokerInvocation(executable,[]),
+        (error:unknown)=>error instanceof Error&&'code' in error&&
+          error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+        executable,
+      );
+    }
+  }
+  for(const executable of [
+    'cmd.exe','powershell.exe','pwsh.exe','node.exe','python.exe',
+    'notepad.exe','msedge.exe','chrome.exe',
+  ]){
+    assert.equal(isPrivateGuiBrokerExecutable(executable),false,executable);
+  }
 });

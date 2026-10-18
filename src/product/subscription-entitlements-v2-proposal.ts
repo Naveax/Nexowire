@@ -15,6 +15,7 @@ export interface VerifiedQuotaIdentityV2 {
   accountId: string;
   tenantId: string;
   quotaSubjectId: string;
+  quotaSubjectKind: 'free-cluster' | 'subscription' | 'prepaid';
   /** A NULL device is allowed only for device-independent hosted actions. */
   deviceId: string | null;
   deviceOwnerAccountId: string | null;
@@ -29,6 +30,7 @@ export interface VerifiedPaymentEvidenceV2 {
   provider: 'lemonsqueezy';
   accountId: string;
   providerSubscriptionId: string;
+  providerVariantId: string;
   providerStatus: BillingSubscriptionStatus;
   /** Passed by the signed-webhook reconciler after matching a paid order. */
   paymentConfirmed: boolean;
@@ -46,6 +48,9 @@ export interface QuotaContractV2 {
   quotaSubjectId: string;
   effectiveAt: string;
   expiresAt: string | null;
+  /** Server-owned subscription and catalog variant. Null only for Free. */
+  expectedProviderSubscriptionId: string | null;
+  expectedProviderVariantId: string | null;
   /** For enterprise, positive finite contract ceiling, max 850,000 in the proposal. */
   customDailyLimit?: number;
   /** Optional per-subject application budget, distinct from provider tunnel limits. */
@@ -92,7 +97,8 @@ export type QuotaEntitlementDecisionV2 =
       reason: 'invalid-authority' | 'scope-mismatch' | 'device-owner-mismatch'
         | 'tenant-membership-required' | 'paid-plans-disabled'
         | 'subscription-not-active' | 'payment-not-confirmed'
-        | 'provider-state-invalid' | 'contract-expired'
+        | 'provider-state-invalid' | 'provider-plan-mismatch'
+        | 'subject-kind-mismatch' | 'contract-expired'
         | 'disclosure-not-accepted' | 'enterprise-contract-invalid';
     }>;
 
@@ -144,8 +150,11 @@ export function evaluateQuotaEntitlementV2(
   }
 
   if (c.tier === 'free') {
+    if (i.quotaSubjectKind !== 'free-cluster') return denied('subject-kind-mismatch');
     // The candidate Free daily model does not affect the live monthly meter.
     if (snapshot.state !== null || p !== null ||
+        c.expectedProviderSubscriptionId !== null ||
+        c.expectedProviderVariantId !== null ||
         c.monthlyWeightedCredits !== PROPOSED_DAILY_REQUEST_LIMITS.free ||
         c.customDailyLimit !== undefined ||
         c.customRollingMinuteLimit !== undefined) {
@@ -158,6 +167,7 @@ export function evaluateQuotaEntitlementV2(
       monthlyWeightedCredits:c.monthlyWeightedCredits, termsHash:null,
     };
   }
+  if (i.quotaSubjectKind !== 'subscription') return denied('subject-kind-mismatch');
   if (snapshot.candidateEntitlementsEnabled !== true ||
       snapshot.productionBillingEnabled !== false) return denied('paid-plans-disabled');
   if (c.tier === 'enterprise' &&
@@ -168,6 +178,12 @@ export function evaluateQuotaEntitlementV2(
   if (snapshot.state !== 'ACTIVE') return denied('subscription-not-active');
   if (!p || !p.paymentConfirmed || p.accountId !== i.accountId ||
       !goodId(p.providerSubscriptionId)) return denied('payment-not-confirmed');
+  if (!goodId(c.expectedProviderSubscriptionId) ||
+      !goodId(c.expectedProviderVariantId) ||
+      p.providerSubscriptionId !== c.expectedProviderSubscriptionId ||
+      p.providerVariantId !== c.expectedProviderVariantId) {
+    return denied('provider-plan-mismatch');
+  }
   const providerUpdated = time(p.providerUpdatedAt);
   if (p.provider !== 'lemonsqueezy' || p.providerStatus !== 'active' ||
       !Number.isFinite(providerUpdated) || providerUpdated > now.getTime() ||

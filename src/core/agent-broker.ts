@@ -29,6 +29,24 @@ interface PendingRequest {
   reject: (reason: unknown) => void;
   timer: NodeJS.Timeout;
   reconnectTimer?: NodeJS.Timeout;
+  readOnlyReplays: number;
+}
+
+// Hub-local, redacted transport observations. No credential or payload data.
+export interface AgentConnectionHealth {
+  deviceId: string;
+  online: boolean;
+  transport: 'websocket';
+  epoch: number;
+  reconnectCount: number;
+  pingCount: number;
+  pongCount: number;
+  lastAgentAckAt?: string;
+  lastSuccessfulAgentAckAt?: string;
+  lastAgentAckOk?: boolean;
+  lastConnectedAt: string;
+  lastDisconnectedAt?: string;
+  lastDisconnectReason?: 'socket_closed' | 'socket_error' | 'heartbeat_timeout' | 'replaced';
 }
 
 export interface ConnectedAgent extends AgentDevice {
@@ -59,6 +77,7 @@ export interface AgentBrokerOptions {
   maxEvents?: number;
   maxEventBytes?: number;
   reconnectGraceMs?: number;
+  maxReadOnlyReplays?: number;
   metrics?: ScaleTransportMetrics;
   onDeviceState?: (
     event: DeviceStateEvent,
@@ -76,11 +95,15 @@ export interface ReadBrokerEventsInput {
 export class AgentBroker {
   private readonly agents = new Map<string, AgentConnection>();
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly healthByDevice = new Map<string, AgentConnectionHealth>();
+  private readonly socketDeviceIds = new WeakMap<WebSocket, string>();
+  private readonly heartbeatTimedOut = new WeakSet<WebSocket>();
   private readonly events: StoredBrokerEvent[] = [];
   private readonly eventWaiters = new Set<() => void>();
   private readonly maxEvents: number;
   private readonly maxEventBytes: number;
   private readonly reconnectGraceMs: number;
+  private readonly maxReadOnlyReplays: number;
   private readonly metrics?: ScaleTransportMetrics;
   private readonly onDeviceState?: (
     event: DeviceStateEvent,
@@ -96,6 +119,7 @@ export class AgentBroker {
       30_000,
       Math.max(250, options.reconnectGraceMs ?? 5_000),
     );
+    this.maxReadOnlyReplays = Math.min(5, Math.max(0, options.maxReadOnlyReplays ?? 2));
     this.onDeviceState = options.onDeviceState;
   }
 
@@ -103,10 +127,35 @@ export class AgentBroker {
     const deviceId = hello.device.id;
     const existing = this.agents.get(deviceId);
     if (existing && existing.socket !== socket) {
+      this.recordDisconnectReason(deviceId, 'replaced');
       existing.socket.close(4001, 'Replaced by a newer connection');
     }
 
     const connectedAt = new Date().toISOString();
+    const previous = this.healthByDevice.get(deviceId);
+    // Bounded, best-effort telemetry: evict the oldest snapshot first.
+    if (!previous && this.healthByDevice.size >= 2_048) {
+      const oldest = this.healthByDevice.keys().next().value;
+      if (oldest !== undefined) this.healthByDevice.delete(oldest);
+    }
+    const reconnectCount = (previous?.reconnectCount ?? 0) + (previous ? 1 : 0);
+    this.healthByDevice.set(deviceId, {
+      deviceId,
+      online: true,
+      transport: 'websocket',
+      epoch: (previous?.epoch ?? 0) + 1,
+      reconnectCount,
+      pingCount: previous?.pingCount ?? 0,
+      pongCount: previous?.pongCount ?? 0,
+      lastConnectedAt: connectedAt,
+      ...(previous?.lastAgentAckAt ? { lastAgentAckAt: previous.lastAgentAckAt } : {}),
+      ...(previous?.lastSuccessfulAgentAckAt ? { lastSuccessfulAgentAckAt: previous.lastSuccessfulAgentAckAt } : {}),
+      ...(previous?.lastAgentAckOk !== undefined ? { lastAgentAckOk: previous.lastAgentAckOk } : {}),
+      ...(previous?.lastDisconnectReason ? { lastDisconnectReason: previous.lastDisconnectReason } : {}),
+      ...(previous?.lastDisconnectedAt ? { lastDisconnectedAt: previous.lastDisconnectedAt } : {}),
+    });
+    if (previous) safelyRecordScaleMetric(this.metrics, 'agent.reconnects');
+    this.socketDeviceIds.set(socket, deviceId);
     const connection: AgentConnection = {
       socket,
       device: hello.device,
@@ -141,10 +190,11 @@ export class AgentBroker {
     socket.on('message', (raw) => {
       const message = raw.toString();
       safelyRecordScaleMetric(this.metrics, 'agent.rx_frames', Buffer.byteLength(message));
-      this.handleMessage(deviceId, hello.instanceId, message);
+      this.handleMessage(deviceId, socket, message);
     });
-    socket.on('close', () => this.handleDisconnect(deviceId, socket));
-    socket.on('error', () => this.handleDisconnect(deviceId, socket));
+    socket.on('pong', () => this.noteHeartbeatPong(socket));
+    socket.on('close', () => this.handleDisconnect(deviceId, socket, 'socket_closed'));
+    socket.on('error', () => this.handleDisconnect(deviceId, socket, 'socket_error'));
   }
 
   list(): ConnectedAgent[] {
@@ -160,6 +210,45 @@ export class AgentBroker {
   has(deviceId: string): boolean {
     const connection = this.agents.get(deviceId);
     return connection?.socket.readyState === WebSocket.OPEN;
+  }
+
+  getConnectionHealth(deviceId: string): AgentConnectionHealth | undefined {
+    const health = this.healthByDevice.get(deviceId);
+    return health ? { ...health } : undefined;
+  }
+
+  noteHeartbeatPing(socket: WebSocket): void {
+    const deviceId = this.socketDeviceIds.get(socket);
+    if (!deviceId || this.agents.get(deviceId)?.socket !== socket) return;
+    const health = this.healthByDevice.get(deviceId);
+    if (!health) return;
+    health.pingCount++;
+    safelyRecordScaleMetric(this.metrics, 'agent.heartbeat_pings');
+  }
+
+  noteHeartbeatTimeout(socket: WebSocket): void {
+    const deviceId = this.socketDeviceIds.get(socket);
+    if (deviceId && this.agents.get(deviceId)?.socket === socket) {
+      this.heartbeatTimedOut.add(socket);
+      this.recordDisconnectReason(deviceId, 'heartbeat_timeout');
+    }
+  }
+
+  private noteHeartbeatPong(socket: WebSocket): void {
+    const deviceId = this.socketDeviceIds.get(socket);
+    if (!deviceId || this.agents.get(deviceId)?.socket !== socket) return;
+    const health = this.healthByDevice.get(deviceId);
+    if (!health) return;
+    health.pongCount++;
+    safelyRecordScaleMetric(this.metrics, 'agent.heartbeat_pongs');
+  }
+
+  private recordDisconnectReason(
+    deviceId: string,
+    reason: AgentConnectionHealth['lastDisconnectReason'],
+  ): void {
+    const health = this.healthByDevice.get(deviceId);
+    if (health) health.lastDisconnectReason = reason;
   }
 
   async readEvents(input: ReadBrokerEventsInput = {}) {
@@ -303,11 +392,15 @@ export class AgentBroker {
 
     return await new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
+        const mutation = !isReadOnlyCapability(capability);
         this.rejectPending(
           requestId,
           new NexowireError(
-            'AGENT_TIMEOUT',
-            `Agent request timed out after ${timeoutMs}ms.`,
+            mutation ? 'MUTATION_STATE_UNKNOWN' : 'AGENT_TIMEOUT',
+            mutation
+              ? 'Agent acknowledgement timed out; mutation outcome is unknown. Reconcile by request ID, never blindly replay.'
+              : 'Read-only agent request timed out.',
+            { deviceId, capability, requestId, reason: 'ack_timeout' },
           ),
         );
       }, timeoutMs);
@@ -319,6 +412,7 @@ export class AgentBroker {
         input,
         accessMode,
         sentInstanceId: connection.instanceId,
+        readOnlyReplays: 0,
         resolve,
         reject,
         timer,
@@ -335,9 +429,12 @@ export class AgentBroker {
 
   private handleMessage(
     deviceId: string,
-    instanceId: string,
+    socket: WebSocket,
     raw: string,
   ): void {
+    // Replaced sockets must not deliver stale ACKs or events.
+    const current = this.agents.get(deviceId);
+    if (!current || current.socket !== socket) return;
     let decoded: unknown;
     try {
       decoded = JSON.parse(raw);
@@ -358,13 +455,19 @@ export class AgentBroker {
     const pending = this.pending.get(parsed.data.requestId);
     if (!pending || pending.deviceId !== deviceId) return;
     if (
-      pending.sentInstanceId !== instanceId &&
-      !isReadOnlyCapability(pending.capability)
+      pending.sentInstanceId !== current.instanceId
     ) {
       return;
     }
 
     this.finishPending(parsed.data.requestId);
+    const health = this.healthByDevice.get(deviceId);
+    if (health) {
+      health.lastAgentAckAt = new Date().toISOString();
+      if (parsed.data.ok) health.lastSuccessfulAgentAckAt = health.lastAgentAckAt;
+      health.lastAgentAckOk = parsed.data.ok;
+    }
+    safelyRecordScaleMetric(this.metrics, 'agent.ack_responses');
 
     if (parsed.data.ok) {
       pending.resolve(parsed.data.data);
@@ -380,11 +483,23 @@ export class AgentBroker {
     );
   }
 
-  private handleDisconnect(deviceId: string, socket: WebSocket): void {
+  private handleDisconnect(
+    deviceId: string,
+    socket: WebSocket,
+    reason: 'socket_closed' | 'socket_error',
+  ): void {
     const current = this.agents.get(deviceId);
     if (current?.socket !== socket) return;
 
     this.agents.delete(deviceId);
+    const health = this.healthByDevice.get(deviceId);
+    if (health) {
+      health.online = false;
+      health.lastDisconnectedAt = new Date().toISOString();
+      health.lastDisconnectReason = this.heartbeatTimedOut.has(socket)
+        ? 'heartbeat_timeout'
+        : reason;
+    }
     safelyRecordScaleMetric(this.metrics, 'agent.disconnections');
     const disconnectedAt = new Date().toISOString();
     this.notifyDeviceState({
@@ -404,12 +519,15 @@ export class AgentBroker {
         this.rejectPending(
           pending.requestId,
           new NexowireError(
-            'AGENT_RECONNECT_TIMEOUT',
-            `Agent "${deviceId}" did not reconnect within ${this.reconnectGraceMs}ms while an operation was pending.`,
+            isReadOnlyCapability(pending.capability)
+              ? 'AGENT_RECONNECT_TIMEOUT'
+              : 'MUTATION_STATE_UNKNOWN',
+            'Agent did not reconnect before the grace deadline; request outcome must be reconciled before any mutation retry.',
             {
               deviceId,
+              requestId: pending.requestId,
               capability: pending.capability,
-              sentInstanceId: pending.sentInstanceId,
+              reason: 'reconnect_grace_expired',
             },
           ),
         );
@@ -429,18 +547,32 @@ export class AgentBroker {
 
       const sameInstance =
         pending.sentInstanceId === connection.instanceId;
-      if (!sameInstance && !isReadOnlyCapability(pending.capability)) {
+      // No mutation replay, even across reconnects of the SAME instance.
+      if (!isReadOnlyCapability(pending.capability)) {
         this.rejectPending(
           pending.requestId,
           new NexowireError(
-            'AGENT_INSTANCE_CHANGED',
-            `Agent "${deviceId}" restarted while mutation "${pending.capability}" had unknown final state.`,
+            sameInstance ? 'MUTATION_STATE_UNKNOWN' : 'AGENT_INSTANCE_CHANGED',
+            'Agent connection changed before mutation acknowledgement. Reconcile request ID before any retry.',
             {
               deviceId,
+              requestId: pending.requestId,
               capability: pending.capability,
-              previousInstanceId: pending.sentInstanceId,
-              currentInstanceId: connection.instanceId,
+              reason: sameInstance ? 'connection_replaced' : 'instance_changed',
             },
+          ),
+        );
+        rejected++;
+        continue;
+      }
+
+      if (pending.readOnlyReplays >= this.maxReadOnlyReplays) {
+        this.rejectPending(
+          pending.requestId,
+          new NexowireError(
+            'AGENT_RETRY_LIMIT',
+            'Read-only request exceeded bounded reconnect replay budget.',
+            { deviceId, requestId: pending.requestId, capability: pending.capability },
           ),
         );
         rejected++;
@@ -469,6 +601,7 @@ export class AgentBroker {
         pending.reconnectTimer = undefined;
       }
       pending.sentInstanceId = connection.instanceId;
+      pending.readOnlyReplays++;
 
       try {
         this.sendPending(connection, pending);
