@@ -4,6 +4,7 @@ import * as z from 'zod';
 import { authorizationGrant, type BearerAuthorization } from '../security/auth.js';
 import { ArtifactBridgeError, type ArtifactScope } from '../workspace/artifact-bridge.js';
 import { ArtifactCheckpointAdapter } from '../workspace/artifact-checkpoint-adapter.js';
+import { ingestDeviceArtifact, type ArtifactSourceOps } from './artifact-bridge-device-ingest.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 
 // Authentication derives account identity from a verified bearer grant, NEVER from tool input.
@@ -51,6 +52,7 @@ export function registerArtifactBridgeTools(
   server: McpServer,
   workspaces: WorkspaceStore,
   auth: BearerAuthorization | undefined,
+  sourceFromDevice?: (deviceId: string) => ArtifactSourceOps,
 ): void {
   const bridge = workspaces.artifactBridge();
   const adapter = new ArtifactCheckpointAdapter(workspaces, bridge);
@@ -71,6 +73,34 @@ export function registerArtifactBridgeTools(
     acceptanceStatus: a.acceptance_status,
     ...(a.expected_previous_sha256 ? { expectedPreviousSha256: a.expected_previous_sha256 } : {}),
   })));
+  server.registerTool('artifact_bridge_ingest_device_file', {
+    title: 'Transfer an Agent file directly into verified project artifact storage',
+    description: 'Bounded server-side pull using permitted files.stat/hash/read. No file content is exposed to the tool result; repeat to resume.',
+    inputSchema: {
+      ...common, source_path: z.string().min(1).max(4096),
+      artifact_path: path, repository: z.string().min(1).max(512),
+      commit_sha: commit, operation_id: id,
+      test_status: z.enum(['unverified', 'passed', 'failed']).default('unverified'),
+      acceptance_status: z.enum(['pending', 'accepted', 'rejected']).default('pending'),
+      expected_previous_sha256: sha.optional(),
+      max_chunks: z.number().int().min(1).max(32).default(16),
+    },
+  }, async (a) => wrap(async () => {
+    const scoped = scope(auth, a.device_id, a.project_id);
+    if (!sourceFromDevice) {
+      throw new ArtifactBridgeError('INGEST_BACKEND_UNAVAILABLE', 'Agent reader has not been configured.');
+    }
+    return ingestDeviceArtifact(bridge, sourceFromDevice(a.device_id), {
+      scope: scoped, sourcePath: a.source_path, artifactPath: a.artifact_path,
+      repository: a.repository, commitSha: a.commit_sha,
+      producerOperationId: a.operation_id,
+      testStatus: a.test_status, acceptanceStatus: a.acceptance_status,
+      maxChunks: a.max_chunks,
+      ...(a.expected_previous_sha256 ? {
+        expectedPreviousSha256: a.expected_previous_sha256,
+      } : {}),
+    });
+  }));
   server.registerTool('artifact_bridge_put_chunk', {
     title: 'Append verified artifact chunk',
     description: 'Write a 64-KiB-or-smaller Base64 chunk at the exact persisted byte offset.',

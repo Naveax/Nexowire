@@ -94,3 +94,20 @@ test('MCP per-credential allowedTools hides the bridge if not granted', async ()
   } }, async client => {
     assert.equal((await client.listTools()).tools.some(t => t.name.startsWith('artifact_bridge_')), false);
   }));
+test('composite native pull is hidden unless read/stat/hash grants are all present', async () => {
+  const createAuth = (allow: string[]): BearerAuthorization => ({
+    kind: 'stored', scope: 'mcp', credential: {
+      id: 'credential-pull', scope: 'mcp', createdAt: '2026-10-18T00:00:00Z',
+      allowedTools: allow, allowedDeviceIds: ['device-A'],
+    },
+  });
+  await fixture(createAuth(['artifact_bridge_ingest_device_file']), async client => {
+    assert.equal((await client.listTools()).tools.some(t => t.name ===
+      'artifact_bridge_ingest_device_file'), false);
+  });
+  await fixture(createAuth(['artifact_bridge_ingest_device_file', 'file_read',
+    'file_stat', 'file_hash']), async client => {
+    assert.equal((await client.listTools()).tools.some(t => t.name ===
+      'artifact_bridge_ingest_device_file'), true);
+  });
+});

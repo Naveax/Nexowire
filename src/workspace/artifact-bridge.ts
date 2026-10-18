@@ -190,7 +190,7 @@ export class ArtifactBridgeStore {
     }
     return result.sort((a, b) => a.artifactPath.localeCompare(b.artifactPath));
   }
-  private async loadSession(scope: ArtifactScope, id: string): Promise<Session> {
+  private async loadSession(scope: ArtifactScope, id: string, verifyFull = true): Promise<Session> {
     const dir = this.dir(scope);
     const session = await existing(this.sessionFile(dir, id), sessionSchema);
     if (!session) return fail('SESSION_NOT_FOUND', 'Transfer session does not exist.');
@@ -208,10 +208,15 @@ export class ArtifactBridgeStore {
       try {
         for (const chunk of session.chunks) {
           if (chunk.offset !== pos) fail('CORRUPT_SESSION', 'Chunk offsets are not contiguous.');
-          const bytes = Buffer.alloc(chunk.size);
-          const { bytesRead } = await fd.read(bytes, 0, bytes.length, pos);
-          if (bytesRead !== bytes.length || digest(bytes) !== chunk.sha256) {
-            fail('CORRUPT_SESSION', 'Persisted stage differs from verified chunk receipts.');
+          // Only begin/resume and commit must rehash every staged chunk.
+          // During an uninterrupted append, checking the committed tail avoids
+          // quadratic disk reads. Final commit still verifies the entire SHA-256.
+          if (verifyFull || pos + chunk.size === session.offset) {
+            const bytes = Buffer.alloc(chunk.size);
+            const { bytesRead } = await fd.read(bytes, 0, bytes.length, pos);
+            if (bytesRead !== bytes.length || digest(bytes) !== chunk.sha256) {
+              fail('CORRUPT_SESSION', 'Persisted stage differs from verified chunk receipts.');
+            }
           }
           pos += chunk.size;
         }
@@ -264,7 +269,7 @@ export class ArtifactBridgeStore {
     const dir = this.dir(scope), bytes = canonicalBase64(contentBase64);
     if (!Number.isSafeInteger(offset) || offset < 0) fail('OFFSET_INVALID', 'Invalid transfer offset.');
     return this.locked(dir, async () => {
-      const session = await this.loadSession(scope, sessionId);
+      const session = await this.loadSession(scope, sessionId, false);
       if (offset < session.offset) {
         const prior = session.chunks.find(c => c.offset === offset && c.size === bytes.length);
         if (!prior || prior.sha256 !== digest(bytes)) fail('CHUNK_REPLAY_CONFLICT', 'Retried chunk differs from persisted bytes.');
@@ -294,7 +299,11 @@ export class ArtifactBridgeStore {
       }
       const old = await this.checkManifest(scope, metadata.artifactPath);
       if ((old?.sha256 ?? undefined) !== session.expectedPreviousSha256) {
-        if (old?.sha256 === metadata.sha256 && old.size === metadata.size) return old;
+        if (old?.sha256 === metadata.sha256 && old.size === metadata.size) {
+          await fs.rm(this.sessionFile(dir, sessionId));
+          await fs.rm(stage);
+          return old;
+        }
         fail('COMPARE_AND_SWAP_FAILED', 'The artifact changed before finalization.');
       }
       const blob = this.objectFile(dir, metadata.sha256);

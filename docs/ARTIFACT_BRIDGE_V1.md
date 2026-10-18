@@ -22,11 +22,19 @@ This feature builds a durable artifact store on the Nexowire Hub filesystem. It 
 
 These tools are experimental and not added to the frozen MCP v1 stable surface list. Both Hub and MCP plugin must run this new code before they are available. This PR does not deploy them.
 
+## Direct native Agent to Hub ingest
+
+Prefer artifact_bridge_ingest_device_file over manual Base64 transport for sensitive or larger files. Provide an authenticated and explicitly permitted device_id, source_path (checked by Native Agent path policy), project_id, logical artifact_path, repository, commit_sha and operation_id plus optional test/acceptance/CAS fields. The Hub calls native files.stat, files.hash and files.read server-side. All three underlying MCP tool grants/capabilities are required in addition to the composite permission.
+
+File payloads do NOT appear in this tool response. Only state, offset, size and SHA-256 receipt are returned. Each call processes at most 32 chunks (2 MiB), default 16 chunks (1 MiB). Repeat the SAME arguments until COMPLETE or ALREADY_PRESENT; PARTIAL is not success or acceptance. Each call checks the source digest again to detect changed files. Stage corruption blocks transfer rather than silently restarting. The complete stage SHA-256 is verified at commit.
+
+This is an explicitly invoked Hub pull, not an always-on Agent background synchronizer. Testing uses real loopback WebSocket frames with a sandboxed Native Agent, NOT production TLS, WAN connectivity or a hosted account.
+
 ## Bounds and security caveats
 
 - Maximum artifact: 256 MiB. Maximum decoded chunk: 64 KiB. Maximum 4096 stored chunks, 128 artifact references per checkpoint.
 - A per-scope exclusive lock prevents uncoordinated writers; orphaned locks following a crash intentionally fail closed and require verified operator recovery. An interrupted partial write may make a stage non-resumable if durable offset receipt and stage size differ, rather than claiming an unverified success.
-- This implementation does not autonomously stream files from Agent to Hub, replicate multiple Hub installations, verify that the claimed Git SHA exists on GitHub, attest CI results, independently verify producer operation identity, or perform cross-device file installation without explicit tool calls.
+- Explicit authenticated Hub-to-Agent source pulling is supported. This does not provide automatic background sync, multiple-Hub replication, GitHub SHA attestation, independent producer/CI attestation, or cross-device installation without explicit calls.
 - The older unscoped workspace_checkpoint tools were not changed for compatibility. The new bridge requires the caller to deliberately import and scope legacy checkpoints.
 - Artifact bytes are returned as Base64 to authorized clients on read_chunk. Never retrieve secrets through a chat unless that disclosure is intended.
 
