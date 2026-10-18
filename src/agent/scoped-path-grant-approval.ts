@@ -88,7 +88,8 @@ async function realGrantApproval(details: Parameters<GrantApprovalProvider>[0]):
       'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', approvalScript],
       { cwd: 'C:\\Windows\\System32', env: windowsDpapiChildEnvironment(),
-        windowsHide: false, stdio: ['pipe', 'pipe', 'pipe'] },
+        // Never expose a PowerShell terminal; only the local consent dialog.
+        windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
     );
     const out: Buffer[] = [];
     const err: Buffer[] = [];

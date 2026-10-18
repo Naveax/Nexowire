@@ -39,7 +39,16 @@ process Session 0, headless, timeout, prompt failure and DENY fail closed.
 The dialog displays resolved target, individual scopes, duration, Volume GUID,
 Disk UniqueId and reason. The Agent performs read-only filesystem and volume
 checks both before and after approval, including ancestor reparse checks.
-FULL ACCESS does **not** bypass this separate console approval. This route is
+FULL ACCESS does **not** bypass this separate console approval. The dedicated
+`src/agent/scoped-path-grant-approval.ts#spawn` is an explicitly reviewed
+**AI Screen launch-sink exception** (issue #402): it launches the fixed Windows
+PowerShell executable with a trusted environment, hidden PowerShell console,
+stdin-only user-supplied text, a maximum 90-second deadline and active physical
+session check. Only the opt-in YES/NO Windows Forms consent dialog is permitted
+on the owner's physical desktop. Unlike background AI Screen automation, this
+is a user-visible authorization transaction, not generic GUI control. A new
+entry is registered in `scripts/ai-screen-launch-sinks-baseline.json` and must
+not be interpreted as proof that other launch paths are isolated. This route is
 implemented in source and tested with mock console decisions, not deployed to
 both live Agent 1.0.5 installations. A physically approved test is still
 required. Loading unsigned grants from a writable path would be
