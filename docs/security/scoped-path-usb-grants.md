@@ -38,11 +38,12 @@ will be denied on the production Agent.
 
 ### Arbitrary execution is not a path sandbox
 
-When roots are restricted, `shell.exec`, `wsl.exec`, `process.start`,
-`process.write`, `task.graph.run`, `runbook.run` and `workspace.checks`
-are blocked by `UNSANDBOXED_EXECUTION_DENIED`. Parsing PowerShell/CMD/Bash
-strings cannot impose a trustworthy filesystem boundary. Explicit `*` roots
-mean an unrestricted legacy execution mode, not a scoped permission.
+`shell.exec`, `wsl.exec`, `process.start`, `process.write`,
+`task.graph.run`, `runbook.run` and `workspace.checks` are blocked by
+`UNSANDBOXED_EXECUTION_DENIED` without a short-lived explicit execution lease.
+Parsing PowerShell/CMD/Bash strings cannot impose a trustworthy filesystem
+boundary. Even `*` roots do not enable arbitrary shell execution: they would
+otherwise bypass the separate USB write permission.
 
 For transitional on-device configuration, an Agent process may start with
 `NEXOWIRE_UNRESTRICTED_EXEC_UNTIL` set to a timestamp at most 15 minutes in

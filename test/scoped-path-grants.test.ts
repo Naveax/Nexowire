@@ -151,7 +151,15 @@ test('scoped shell execution cannot bypass file policy by selecting another cwd'
     (error: unknown) => error instanceof PathDeniedError &&
       error.details.reason === 'UNSANDBOXED_EXECUTION_DENIED');
   const wildcard = new PathPolicy(['*']);
-  assert.doesNotThrow(() => wildcard.assertUnrestrictedExecution());
+  assert.throws(() => wildcard.assertUnrestrictedExecution(), PathDeniedError);
+  const leased = new PathPolicy(['*'], {
+    unrestrictedExecutionUntil: Date.now() + 60_000,
+  });
+  assert.doesNotThrow(() => leased.assertUnrestrictedExecution());
+  const overlong = new PathPolicy(['*'], {
+    unrestrictedExecutionUntil: Date.now() + 24 * 60 * 60_000,
+  });
+  assert.throws(() => overlong.assertUnrestrictedExecution(), PathDeniedError);
 });
 
 test('path root cannot be implicitly deleted or formatted', async () => {

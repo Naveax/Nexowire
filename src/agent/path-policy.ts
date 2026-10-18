@@ -284,7 +284,7 @@ export class PathPolicy {
   assertUnrestrictedExecution(): void {
     // Arbitrary shells, WSL, task graphs and child processes are not file
     // sandboxes. Refuse to promise path confinement with only command parsing.
-    if (this.roots.includes('*')) return;
+    // Even '*' does not authorize USB writes through an unrestricted shell.
     if (this.approvedExecutionUntil && this.approvedExecutionUntil > this.now()) return;
     throw new PathDeniedError(
       '<unrestricted process>', 'UNSANDBOXED_EXECUTION_DENIED',

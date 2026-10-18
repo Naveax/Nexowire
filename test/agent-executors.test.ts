@@ -22,8 +22,10 @@ test('native file capabilities round-trip content inside the allowlist', async (
   assert.ok(listed.data.entries.some((entry) => entry.path.endsWith('hello.txt')));
 });
 
-test('shell.exec captures stdout and exit code', async () => {
-  const policy = new PathPolicy(['*']);
+test('shell.exec captures stdout and exit code when explicitly leased', async () => {
+  const policy = new PathPolicy(['*'], {
+    unrestrictedExecutionUntil: Date.now() + 60_000,
+  });
   const result = await executeCapability(
     'shell.exec',
     { command: `node -e "process.stdout.write('nexowire-ok')"`, timeout_ms: 10_000 },
