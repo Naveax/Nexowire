@@ -1,5 +1,7 @@
 # Scale v2 S5 | Load, fairness, cost and capacity acceptance (2026-10-18)
 
+**Follow-up scope:** [Parallel 600/min admission race, normalized fairness counterexample, DO/WSS hibernation cost, and stricter 24h metadata evidence](SCALE_V2_S5_FAIRNESS_RATE_DO_COST_FOLLOWUP_20261018.md). This extension remains local-only, with production NO-GO.
+
 **Issue:** [#487](https://github.com/Naveax/Nexowire/issues/487), parent [#482](https://github.com/Naveax/Nexowire/issues/482).
 **Release decision: PRODUCTION NO-GO.** This is *synthetic DEV fixture acceptance only*; NOT 24-hour staging, cloud-provider billing verification, 850k successful tool invocations, or a change to live Free plan. Branch `test/parallel-15-scale-load-cost-20261018` based on `a54cbbd37e981a169631d688b53c7e3b3e90f48`. Verify PR head SHA separately.
 
