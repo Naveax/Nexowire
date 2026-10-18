@@ -11,7 +11,7 @@ import type { QuotaEntitlementDecisionV2 } from './subscription-entitlements-v2-
  */
 type Allowed = Extract<QuotaEntitlementDecisionV2, {status:'allowed'}>;
 export type V2ReservationResult = Readonly<{
-  status: 'reserved' | 'duplicate' | 'minute-exhausted'
+  status: 'reserved' | 'duplicate' | 'conflict' | 'minute-exhausted'
     | 'daily-exhausted' | 'monthly-exhausted' | 'revoked';
   quotaSubjectId: string;
   invocationId: string;
@@ -25,6 +25,8 @@ export interface TrustedV2Reservation {
   /** Constructed from signed-auth + immutable server-side contract snapshot. */
   entitlement: Allowed;
   invocationId: string;
+  /** SHA-256 of server-owned canonical root action, target and normalized params. */
+  requestFingerprint: string;
   now: Date;
   /** Server's weighted tool quote: 1 ordinary, 5 special skill. */
   toolCredits: number;
@@ -51,6 +53,10 @@ export class ProposedV2QuotaD1Ledger {
     const tenant=validId(a.tenantId,'TENANT');
     const subject=validId(a.quotaSubjectId,'SUBJECT');
     const invocation=validId(input.invocationId,'INVOCATION');
+    const fingerprint=input.requestFingerprint;
+    if(typeof fingerprint!=='string' || !/^[a-f0-9]{64}$/.test(fingerprint)){
+      throw new Error('INVALID_REQUEST_FINGERPRINT');
+    }
     const device=a.deviceId===null?null:validId(a.deviceId,'DEVICE');
     const dayLimit=positive(a.dailyLimit,'DAILY_LIMIT');
     const minuteLimit=a.rollingMinuteLimit===null?null:
@@ -68,9 +74,17 @@ export class ProposedV2QuotaD1Ledger {
     const end=new Date(Date.UTC(yy,mm+1,1)).toISOString();
     const mode=a.tier==='free'?'free':'subscription';
 
-    const existing=async()=>Boolean(await this.db.prepare(
-      'SELECT invocation_id FROM v2_quota_reservations WHERE quota_subject_id=? AND invocation_id=?',
-    ).bind(subject,invocation).first<{invocation_id:string}>());
+    const existing=async():Promise<'duplicate'|'conflict'|null>=>{
+      const row=await this.db.prepare(
+        'SELECT account_id,tenant_id,device_id,request_fingerprint FROM v2_quota_reservations WHERE quota_subject_id=? AND invocation_id=?',
+      ).bind(subject,invocation).first<{
+        account_id:string;tenant_id:string;device_id:string|null;request_fingerprint:string;
+      }>();
+      if(!row)return null;
+      if(row.account_id!==account || row.tenant_id!==tenant ||
+         row.device_id!==device || row.request_fingerprint!==fingerprint) return 'conflict';
+      return 'duplicate';
+    };
     const stats=async(status:V2ReservationResult['status']):Promise<V2ReservationResult>=>{
       const d=await this.db.prepare(
         'SELECT used_requests AS n FROM daily_request_periods WHERE quota_subject_id=? AND day_key=?',
@@ -88,11 +102,12 @@ export class ProposedV2QuotaD1Ledger {
         dayUtc:day,usedDaily,usedMonthlyCredits,usedRollingMinute};
     };
 
-    if(await existing())return stats('duplicate');
+    const prior=await existing();
+    if(prior)return stats(prior);
     try{
       const result=await this.db.prepare(
-        'INSERT INTO v2_quota_reservations (account_id,tenant_id,quota_subject_id,device_id,invocation_id,plan_tier,entitlement_revision,day_key,accepted_at,accepted_at_ms,daily_limit,minute_limit,period_key,period_start,period_end,tool_credits,monthly_credits,billing_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-      ).bind(account,tenant,subject,device,invocation,a.tier,revision,
+        'INSERT INTO v2_quota_reservations (account_id,tenant_id,quota_subject_id,device_id,invocation_id,request_fingerprint,plan_tier,entitlement_revision,day_key,accepted_at,accepted_at_ms,daily_limit,minute_limit,period_key,period_start,period_end,tool_credits,monthly_credits,billing_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      ).bind(account,tenant,subject,device,invocation,fingerprint,a.tier,revision,
         day,now.toISOString(),atMs,dayLimit,minuteLimit,period,start,end,
         credits,monthly,mode).run();
       if(result.success===false || !Number.isSafeInteger(result.meta?.changes) ||
@@ -100,13 +115,15 @@ export class ProposedV2QuotaD1Ledger {
       return stats('reserved');
     }catch(error){
       // A committed but unacknowledged write must never execute the root twice.
-      if(await existing())return stats('duplicate');
+      const committed=await existing();
+      if(committed)return stats(committed);
       const message=error instanceof Error?error.message:String(error);
       if(message.includes('v2_minute_exhausted'))return stats('minute-exhausted');
       if(message.includes('daily_request_limit_exhausted'))return stats('daily-exhausted');
       if(message.includes('quota_exhausted'))return stats('monthly-exhausted');
       if(message.includes('v2_entitlement_epoch_invalid') ||
          message.includes('v2_account_subject_invalid') ||
+         message.includes('v2_subject_kind_mismatch') ||
          message.includes('v2_wrong_device_owner') ||
          message.includes('v2_paid_tenant_conflict'))return stats('revoked');
       // Schema, clock, network and SQLite contention all fail closed.

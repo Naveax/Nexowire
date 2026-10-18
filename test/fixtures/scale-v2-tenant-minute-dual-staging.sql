@@ -22,6 +22,7 @@ CREATE TABLE v2_quota_reservations (
   quota_subject_id TEXT NOT NULL REFERENCES quota_subjects(id),
   device_id TEXT REFERENCES devices(id),
   invocation_id TEXT NOT NULL CHECK(length(invocation_id) BETWEEN 8 AND 128),
+  request_fingerprint TEXT NOT NULL CHECK(length(request_fingerprint)=64),
   plan_tier TEXT NOT NULL CHECK(plan_tier IN ('free','plus','pro','enterprise')),
   entitlement_revision INTEGER NOT NULL CHECK(entitlement_revision > 0),
   day_key TEXT NOT NULL CHECK(length(day_key) = 10),
@@ -67,6 +68,11 @@ BEGIN
       AND a.plan_id=CASE WHEN NEW.plan_tier='enterprise'
         THEN 'custom' ELSE NEW.plan_tier END
   );
+  SELECT RAISE(ABORT,'v2_subject_kind_mismatch') WHERE NOT EXISTS (
+    SELECT 1 FROM quota_subjects q
+    WHERE q.id=NEW.quota_subject_id AND q.kind=CASE
+      WHEN NEW.plan_tier='free' THEN 'free-cluster' ELSE 'subscription' END
+  );
   SELECT RAISE(ABORT,'v2_wrong_device_owner') WHERE NEW.device_id IS NOT NULL
     AND NOT EXISTS(
       SELECT 1 FROM devices d
@@ -111,4 +117,23 @@ BEGIN
   INSERT INTO v2_quota_clock(quota_subject_id,last_seen_ms)
    VALUES(NEW.quota_subject_id,NEW.accepted_at_ms)
    ON CONFLICT(quota_subject_id) DO UPDATE SET last_seen_ms=excluded.last_seen_ms;
+END;
+
+-- Every change to an issued authority must be a strict epoch advance.
+-- Scope is immutable; change tenant/subject by revoking the old row and
+-- creating a new authorized row. Deletion is forbidden in this fixture:
+-- otherwise reinsert could resurrect an older entitlement revision.
+CREATE TRIGGER v2_authority_monotonic BEFORE UPDATE ON v2_quota_authority
+BEGIN
+  SELECT RAISE(ABORT,'v2_authority_epoch_regression')
+    WHERE NEW.revision<=OLD.revision;
+  SELECT RAISE(ABORT,'v2_authority_scope_immutable')
+    WHERE NEW.account_id<>OLD.account_id OR
+          NEW.tenant_id<>OLD.tenant_id OR
+          NEW.quota_subject_id<>OLD.quota_subject_id;
+END;
+
+CREATE TRIGGER v2_authority_no_delete BEFORE DELETE ON v2_quota_authority
+BEGIN
+  SELECT RAISE(ABORT,'v2_authority_delete_forbidden');
 END;
