@@ -3,6 +3,8 @@ export const SCALE_METRIC_NAMES = [
   'agent.connections', 'agent.disconnections',
   'agent.rx_frames', 'agent.tx_frames',
   'agent.resumed_requests', 'agent.rejected_requests',
+  'agent.reconnects', 'agent.heartbeat_pings', 'agent.heartbeat_pongs',
+  'agent.ack_responses',
   'relay.connections', 'relay.upstream_frames',
   'relay.downstream_frames', 'relay.auth_denials',
 ] as const;

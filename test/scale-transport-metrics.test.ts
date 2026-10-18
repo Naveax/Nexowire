@@ -13,7 +13,7 @@ test('S1 metrics keep only bounded numeric aggregates and isolated snapshots', (
   assert.deepEqual(first['agent.rx_frames'], {events:2,bytes:200});
   assert.equal(first['agent.resumed_requests'].events, 3);
   assert.equal(first['agent.rejected_requests'].events, 0);
-  assert.equal(Object.keys(first).length, 10);
+  assert.equal(Object.keys(first).length, 14);
   // Snapshot must not mutate counters, even if a caller modifies its copy.
   (first['agent.rx_frames'] as {bytes:number}).bytes = 999;
   assert.equal(metrics.snapshot()['agent.rx_frames'].bytes, 200);
