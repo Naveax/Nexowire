@@ -131,3 +131,28 @@ The most recently committed PR head before this report and fault proxy was
 4bb72b47132ba53c5f8413915888b471a81a521f, whose GitHub Actions run
 39150296541 had 7/7 SUCCESS. Newly pushed commits need independent exact-HEAD
 CI verification and are not covered by that earlier green run.
+
+
+## Integration race / follow-up provenance
+
+**IMPORTANT:** Original PR #547 was merged by the integration owner at
+2026-10-18T18:28:47Z with head
+4bb72b47132ba53c5f8413915888b471a81a521f.
+The proxy fault-injector and this ledger were committed **after** that merge
+as original-branch commit 7597c20324ddb3c64d23744845016f213083d7c1.
+They were **not** in the #547 merge.
+
+To prevent rewriting a merged PR, the exact two-file delta was cherry-picked
+onto a new clean worktree/branch:
+fix/parallel-06-connection-fault-acceptance-20261018
+Base main: ca7fc2c457cd47181e5b5d6c4db7b0ac32698838
+Cherry-pick commit: 0c2175ebc6d5f913ab78d64ceea5cb04dabe4540
+
+The original Connection Core runtime corrections are in main via PR #547.
+This new review contains only test/connection-fault-proxy.e2e.test.ts and
+this acceptance ledger. It does not redeploy or restart the Agent, Hub,
+Broker, Cloudflare tunnel or Tailscale.
+
+**CI must be judged from the follow-up PR exact HEAD**, not the former
+PR #547 run 39150296541. Physical production reconnect and active-session
+revocation remain blocked.
