@@ -70,3 +70,51 @@ Authoritative workstream registry: [`docs/NEXOWIRE_CROSS_PROJECT_RELIABILITY_BAC
 - #546 was retargeted from already-merged #537 to `main`, preserving its developer commits. Do not merge pending current exact-head CI/independent regression.
 - #548/#550/#552/#555 combined **previous-head** local integration preview passed 57/57 tests, but #548/#550/#552 subsequently changed heads; revalidate before merge.
 - Real Agent 1.0.5 remains installed on Work PC and Naveax; no production Agent/Hub/Broker, payment, user quotas, DNS or firewall were changed. No staging-accepted or incident-closed claims are inferred.
+
+## Central integration snapshot | 2026-10-19 (supersedes earlier intake/CI snapshots)
+
+Verified origin/main before ledger update: `5072c1a47620222b95d9142b3c79be44160ba221`. Metadata below is a **point-in-time GitHub API observation**, not live attestation. Pull requests and CI may move independently. Re-read exact SHA, review threads, diff and checks before each merge.
+
+| Open PR | Owner branch | Base SHA | Exact HEAD SHA | CI jobs current rollup | Source | Staging | Production | Original incident |
+|---|---|---|---|---|---|---|---|---|
+| [#578](https://github.com/Naveax/Nexowire/pull/578) test(p0): harden real Codex OAuth loopback smoke subprocess and callback | `fix/parallel-07-codex-oauth-smoke-hardening-20261019` | `5072c1a47620222b95d9142b3c79be44160ba221` | `d2f0500f305aeda5c4be48e33f5849737ad4f0bd` | S5/F0/active2 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#576](https://github.com/Naveax/Nexowire/pull/576) security(p0): independently kernel-attest Windows Job ownership and gate helper trust | `fix/windows-job-helper-trust-qa-20261018` | `04778ccfc49a5668cbaa615a94fce81200aa8f43` | `34bb03b7490972036e256c87dab755a13e1e04c1` | S5/F0/active5 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#575](https://github.com/Naveax/Nexowire/pull/575) feat(progress): independent scoped result proof and watchdog acceptance (follow-up #550) | `fix/parallel-11-progress-proof-acceptance-20261018` | `91edbfa25097a9488534532fd99ff55916ce28e3` | `c6820b431bf88814172437373131527f457ff216` | S9/F1/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#574](https://github.com/Naveax/Nexowire/pull/574) fix(p0): session-bound ROOT and fail-closed Guardian truth (follow-up #548) | `fix/parallel-04-access-core-adminbridge-20261018` | `fd28d017ea291e8a935b05fda89d7ed2765d35d0` | `4ad35ab006453971b9c7c2267a39214b97e813a5` | S5/F2/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#572](https://github.com/Naveax/Nexowire/pull/572) test(qa): refresh R01-R22 final acceptance and exact-head blocking findings | `test/qa16-final-acceptance-refresh-20261018` | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | `62a9b97a0bcb50bafae3755368a35b4b9ac79ca6` | S6/F1/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#565](https://github.com/Naveax/Nexowire/pull/565) test(p0): Error Contract v2 end-to-end failure-chain acceptance and audit safety | `test/parallel-02-error-acceptance-20261018` | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | `3ce04218de0c717971972bc5108f8ac6f4d3fb59` | S6/F1/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#562](https://github.com/Naveax/Nexowire/pull/562) docs(integration): reconcile 16 parallel PRs and exact-head release gates | `integration/cross-project-ledger-sync-20261018` | `54ab323a58924b14fa6b93294e33dece7c68de44` | `2a7cd86c394397be7a43970827c61b3369558fd1` | S6/F1/active0 (snapshot only) | OPEN | NO | NO | OPEN |
+| [#553](https://github.com/Naveax/Nexowire/pull/553) feat(p0): scoped filesystem permissions and USB volume-bound grants | `fix/parallel-05-scoped-path-usb-grants-20261018` | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | `76f7f3d8a82b16d928c2308d44996e134589ddac` | S6/F0/active1 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#551](https://github.com/Naveax/Nexowire/pull/551) feat(s3): isolated Agent lifecycle trust/rollback and secure one-click pairing (#485) | `feat/parallel-12-agent-lifecycle-onboarding-20261018` | `54ab323a58924b14fa6b93294e33dece7c68de44` | `3659db7a63254fae1badb39eca70be8853ea4df5` | S10/F0/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#480](https://github.com/Naveax/Nexowire/pull/480) fix(ai-screen): unify direct desktop and worker GUI broker deny gates | `fix/ai-screen-direct-bridge-broker-guard-20261014` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `ec3c54d77e3b9fabb4c85831222fb48b112cd7b2` | S7/F0/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+
+### Source-integrated in this integration sequence (not production deployments)
+
+| PR | Main merge SHA | Separate stage/production/incident disposition |
+|---|---|---|
+| #561 | `6c3997ebc9f840398675cecf94b7b64132e8c4d8` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #560 | `453dcf4629ab7729a5bdf5b4a04161b1f53423bc` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #564 | `c2d4c7084b2a5173c67e8567745f00f1dc66ee7c` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #545 | `f45d0dbc02bc6309d416825f3c39fec004fbeaae` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #547 | `15911d33cbabd8b3b886204d0c677058eefcb3af` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #548 | `a85cdada5e845924c2cda30bb6d9e844acb1fa75` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #550 | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #567 | `fd28d017ea291e8a935b05fda89d7ed2765d35d0` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #563 | `91edbfa25097a9488534532fd99ff55916ce28e3` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #566 | `2d8a1cf6474bd7748ff8cc900f288f850dded840` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #568 | `35f38314eaad93d0e7821364b20c2bbfc92c7464` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #569 | `04778ccfc49a5668cbaa615a94fce81200aa8f43` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #571 | `998288455c398f9e242f3bf5c28d4fcd870c7bae` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #573 | `871726aec37ec0bb1dc15620d8395b1d37445e59` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #577 | `5831361dceba041583ffa30b9a63476bf4b6e444` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #570 | `5072c1a47620222b95d9142b3c79be44160ba221` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+
+### Negative / release blockers still not closed
+
+- **#553 P0 USB/path**: missing authenticated physical-console grant, handle-based reparse/TOCTOU atomic I/O and real hot-unplug/letter-change tests; previously observed broad Windows regression is not fully accepted. Source-only green CI is insufficient.
+- **#576/#541 WinJob**: current merged helper requires independently protected hash/Authenticode/ACL and kernel Job verification for real production. A marker or sidecar hash alone is not sufficient.
+- **#567 Journal**: restored old SQLite backup may lose request ID tombstone. Independent rollback watermark and restore preflight required.
+- **#551 Agent installer**: no signed first-party installer, independent trust chain, rollback journal or physical reboot/rollback acceptance.
+- **#480/#556**: superseded source by merged #570, but native/COM/GUI production boundary still lacks full independent acceptance; never merge stale duplicate source.
+- **#562 prior exact-head CI**: run 39150540747 failed in WSL2 Ubuntu installation before tests; not a PASS. This snapshot commit MUST earn its own exact-head CI before main merge.
+- **R01-R22**: continue four independent gates; physical/staging/production/original incident evidence remains separately blocked by exact workstream. No production Agent/Hub/Broker, DNS, user quota or payment changes authorized.
