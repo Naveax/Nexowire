@@ -3913,6 +3913,67 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       },device_id,provider_id,45_000),
   );
 
+  // File picker operations are confined to the native private-desktop UIA
+  // backend, never to windows.accessibility.* on the owner's Default desktop.
+  server.registerTool(
+    'windows_private_desktop_file_picker_prepare',
+    {
+      title:'Prepare isolated native Windows file picker',
+      description:'Private HWND/PID/session/desktop verification and one-use operation token minting. Requires an already launched and tracked private application with unique visible Edit and Button controls. Returns a 60-second, one-use operation binding grant, NOT owner approval.',
+      inputSchema:{
+        ...targetFields,
+        hwnd:z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/),
+        expected_process_id:z.number().int().positive(),
+        expected_session_id:z.number().int().nonnegative(),
+        expected_desktop_started_at:z.string().datetime(),
+        filename_edit:z.object({
+          automation_id:z.string().min(1).max(128),
+          expected_class:z.string().min(1).max(128),
+        }),
+        confirm_button:z.object({
+          automation_id:z.string().min(1).max(128),
+          expected_class:z.string().min(1).max(128),
+        }),
+      },
+    },
+    async ({device_id,provider_id,hwnd,expected_process_id,expected_session_id,
+      expected_desktop_started_at,filename_edit,confirm_button})=>
+      await execute(ctx,'windows.private_desktop.file_picker.prepare',{
+        hwnd,expected_process_id,expected_session_id,
+        expected_desktop_started_at,filename_edit,confirm_button,
+      },device_id,provider_id,55_000),
+  );
+
+  server.registerTool(
+    'windows_private_desktop_file_picker_select',
+    {
+      title:'Submit file path to isolated native Windows picker',
+      description:'Consume a one-use private picker operation grant. Set the unique filename Edit via private UIA ValuePattern, revalidate HWND/PID/session/input desktop, then invoke its unique confirmation Button. Never sends system input. Application-level file acceptance remains unverified. Do not retry on ambiguous results.',
+      inputSchema:{
+        ...targetFields,
+        grant_id:z.string().uuid(),
+        path:z.string().min(1).max(1024),
+      },
+    },
+    async ({device_id,provider_id,grant_id,path})=>
+      await execute(ctx,'windows.private_desktop.file_picker.select',{
+        grant_id,path,
+      },device_id,provider_id,90_000),
+  );
+
+  server.registerTool(
+    'windows_private_desktop_file_picker_cancel',
+    {
+      title:'Revoke isolated file-picker operation grant',
+      description:'Mark one pending/in-flight private file picker operation as cancelled. Cannot undo an already submitted application action.',
+      inputSchema:{...targetFields,grant_id:z.string().uuid()},
+    },
+    async ({device_id,provider_id,grant_id})=>
+      await execute(ctx,'windows.private_desktop.file_picker.cancel',{
+        grant_id,
+      },device_id,provider_id,30_000),
+  );
+
   server.registerTool(
     'windows_private_desktop_accessibility_resolve',
     {

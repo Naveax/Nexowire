@@ -250,6 +250,7 @@ public static class NxDesktopNative {
   [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent,IntPtr child);
   [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr h,uint msg,UIntPtr w,IntPtr l);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);
+  [DllImport("kernel32.dll",SetLastError=true)] static extern bool ProcessIdToSessionId(uint pid,out uint sessionId);
   [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool GetUserObjectInformation(IntPtr h,int i,StringBuilder b,int n,out int need);
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcess(string app,StringBuilder cmd,IntPtr pa,IntPtr ta,bool inherit,uint flags,IntPtr env,string cwd,ref SI si,out PI pi);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
@@ -433,6 +434,13 @@ public static class NxDesktopNative {
     if(pid==0)throw new InvalidOperationException("PRIVATE_UIA_OWNER_UNKNOWN");
     return (int)pid;
   }
+  public static int ValidatedWindowSessionId(string name,string raw){
+    uint pid,sessionId;
+    GetWindowThreadProcessId(Target(name,raw),out pid);
+    if(pid==0 || !ProcessIdToSessionId(pid,out sessionId))
+      throw new InvalidOperationException("PRIVATE_UIA_SESSION_UNAVAILABLE");
+    return checked((int)sessionId);
+  }
   public static int[] ClientOrigin(string name,string raw){
     var h=Target(name,raw);
     var p=new POINT{x=0,y=0};
@@ -607,6 +615,7 @@ try {
     # Never enumerate RootElement/Default or request ValuePattern/TextPattern.
     $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
     $ownerPid=[NxDesktopNative]::ValidatedWindowProcessId([string]$r.desktop,[string]$r.hwnd)
+    $ownerSession=[NxDesktopNative]::ValidatedWindowSessionId([string]$r.desktop,[string]$r.hwnd)
     [int[]]$origin=[NxDesktopNative]::ClientOrigin([string]$r.desktop,[string]$r.hwnd)
     Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes -ErrorAction Stop
     $root=[System.Windows.Automation.AutomationElement]::FromHandle($top)
@@ -665,6 +674,7 @@ try {
     [pscustomobject]@{
       hwnd="0x"+$top.ToInt64().ToString("X")
       processId=$ownerPid
+      sessionId=$ownerSession
       nodes=@($nodes.ToArray())
       visited=$visited
       skipped=$skipped
@@ -681,6 +691,10 @@ try {
     # no RootElement, no physical focus/cursor, no generic cross-app UIA.
     $top=[IntPtr]([NxDesktopNative]::ValidatedWindow([string]$r.desktop,[string]$r.hwnd))
     $ownerPid=[NxDesktopNative]::ValidatedWindowProcessId([string]$r.desktop,[string]$r.hwnd)
+    $ownerSession=[NxDesktopNative]::ValidatedWindowSessionId([string]$r.desktop,[string]$r.hwnd)
+    if([NxDesktopNative]::Input() -ne 'Default'){throw 'PRIVATE_UIA_SECURE_DESKTOP_REFUSED'}
+    if($null -ne $r.expected_process_id -and $ownerPid -ne [int]$r.expected_process_id){throw 'PRIVATE_UIA_PROCESS_CHANGED'}
+    if($null -ne $r.expected_session_id -and $ownerSession -ne [int]$r.expected_session_id){throw 'PRIVATE_UIA_SESSION_CHANGED'}
     $wantedId=[string]$r.automation_id
     $wantedClass=[string]$r.expected_class
     Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes -ErrorAction Stop
@@ -766,6 +780,7 @@ try {
     [pscustomobject]@{
       hwnd="0x"+$top.ToInt64().ToString("X")
       processId=$ownerPid
+      sessionId=$ownerSession
       automationId=$wantedId
       controlType=$wantedType
       actionCompleted=$true
@@ -1094,6 +1109,7 @@ const ControlScanSchema=z.object({
 const AccessibilityScanSchema=z.object({
   hwnd:WindowHandleSchema,
   processId:z.number().int().nonnegative(),
+  sessionId:z.number().int().nonnegative(),
   nodes:z.array(z.object({
     processId:z.number().int().nonnegative(),
     depth:z.number().int().min(1).max(5),
@@ -1157,6 +1173,8 @@ const PrivateUiaInvokeButtonSchema=z.object({
   hwnd:WindowHandleSchema,
   automation_id:z.string().min(1).max(128),
   expected_class:z.string().min(1).max(128),
+  expected_process_id:z.number().int().positive().optional(),
+  expected_session_id:z.number().int().nonnegative().optional(),
 }).strict();
 
 async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
@@ -1167,6 +1185,7 @@ async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.Button'),
       actionCompleted:z.literal(true),
@@ -1175,6 +1194,8 @@ async function invokePrivateUiaButton(input:unknown):Promise<{data:unknown}>{
       desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
       automation_id:parsed.automation_id,
       expected_class:parsed.expected_class,
+      expected_process_id:parsed.expected_process_id,
+      expected_session_id:parsed.expected_session_id,
     },25_000));
     return{data:{...result,invoked:true,desktopName:DESKTOP_NAME,
       touchesSystemCursor:false,touchesSystemKeyboard:false,
@@ -1186,6 +1207,8 @@ const PrivateUiaSetEditValueSchema=z.object({
   hwnd:WindowHandleSchema,
   automation_id:z.string().min(1).max(128),
   expected_class:z.string().min(1).max(128),
+  expected_process_id:z.number().int().positive().optional(),
+  expected_session_id:z.number().int().nonnegative().optional(),
   value:z.string().max(4000),
 }).strict();
 
@@ -1197,6 +1220,7 @@ async function setPrivateUiaEditValue(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.Edit'),
       actionCompleted:z.literal(true),
@@ -1205,6 +1229,8 @@ async function setPrivateUiaEditValue(input:unknown):Promise<{data:unknown}>{
       desktop:DESKTOP_NAME,hwnd:parsed.hwnd,
       automation_id:parsed.automation_id,
       expected_class:parsed.expected_class,
+      expected_process_id:parsed.expected_process_id,
+      expected_session_id:parsed.expected_session_id,
       value:parsed.value,
     },25_000));
     return{data:{...result,desktopName:DESKTOP_NAME,
@@ -1229,6 +1255,7 @@ async function setPrivateUiaCheckbox(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.CheckBox'),
       actionCompleted:z.literal(true),
@@ -1259,6 +1286,7 @@ async function selectPrivateUiaRadio(input:unknown):Promise<{data:unknown}>{
     const result=z.object({
       hwnd:WindowHandleSchema,
       processId:z.number().int().positive(),
+      sessionId:z.number().int().nonnegative(),
       automationId:z.string().min(1).max(128),
       controlType:z.literal('ControlType.RadioButton'),
       actionCompleted:z.literal(true),
