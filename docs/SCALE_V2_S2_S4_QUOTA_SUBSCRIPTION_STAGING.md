@@ -83,3 +83,31 @@ Each admitted root reserves a canonical lowercase **SHA-256 request fingerprint*
 Additional file-backed SQLite tests cover provider variant theft, Free/paid quota subject confusion, lost database write acknowledgements after commit, fingerprint collisions, revision regression and forbidden authority deletion. Local tests cannot establish guarantees for Cloudflare D1 rollback/trigger semantics across multiple deployed Worker isolates, or external provider billing identities. These remain deployment blockers.
 
 **Note:** Revenue settlement is deliberately not performed here. The `paymentConfirmed` property represents evidence consumed by a future *trusted* reconciler, not a boolean that clients or dashboard forms may post. Before a paid launch, validate signed and ordered webhooks, settlement and refund finality, tied account/provider IDs, encrypted and auditable consent receipts, and an explicit approval gate.
+
+## 2026-10-18 multi-process staging acceptance addendum
+
+The evidence below was obtained after reconciling PR #561 with the then-current `origin/main`. No paid or production services were modified. It adds `test/fixtures/v2-quota-process-worker.ts` and `test/v2-quota-multi-process-staging.test.ts`.
+
+**Actual test topology:** each writer is a separate Windows Node 22 operating-system process with its own SQLite handle and WAL connection to one disposable file-backed database under the OS temporary directory. A start barrier releases competing writers together. Every writer executes the staging D1-compatible insert+triggers through the existing `D1DatabaseLike` interface. The harness removes its own disposable database and only terminates subprocesses it created. This is more realistic than two handles in one process, **but it is still SQLite, not a live Cloudflare D1 service or independently deployed Cloudflare Worker isolates**.
+
+| Staging check | Observed result | What it proves |
+| --- | --- | --- |
+| Free, Plus, Pro, Enterprise sent simultaneously from four processes | Four separate subject ledgers, each 12 accepted logical invocations and 28 weighted monthly credits | Four isolated synthetic accounts do not debit one another; Free monthly weight 1x/5x is preserved in the fixture |
+| Eight competing processes, shared enterprise subject, 720 unique root invocations at one trusted timestamp, 600/rolling minute | Exactly 600 `reserved`, 120 `minute-exhausted`; all three counters record 600, with no partial rejected charge | Single-file SQLite trigger under multi-process writer contention does not over-admit beyond 600 for that subject |
+| A new root after the rolling 60-second window, across UTC midnight | `reserved` without resetting monthly usage; next UTC day's daily counter is separate | Counter boundaries do not accidentally reset rolling-window limits |
+| Same root ID, different SHA-256 payload fingerprint, sent concurrently from independent processes | One `reserved`, one `conflict`; exactly one debit | Duplicate-ID payload conflict does not execute or charge twice |
+| Wrong-owner synthetic device supplied to another account | `revoked`, zero charge to victim; legitimate owner call `reserved` | SQL checks device ownership even when the reservation object was forged |
+| Revoked paid entitlement epoch reused by four distinct processes | All `revoked`; SQL rejects lowering revision to restore permissions | Source-level revocation admission gate remains fail closed across independent SQLite writer processes |
+| An `ACTIVE` label with missing settlement, `CANCELED` or `PAST_DUE`, or cancelled provider record with future `endsAt` | Denied by candidate entitlement resolver | A status label or nominal grace period cannot grant this stricter proposed paid right alone |
+
+**Boundary:** the source fixture enforces 600 per rolling 60 seconds **per quota subject**; it is not the ingress-wide, per-tunnel + application shared OpenAI transport cap. Provider limits count discovery, retries and rejected transport requests too. An ingress-wide provider limiter is separate and mandatory; the source meter must never be advertised as satisfying provider-wide 600/min.
+
+### Unverified, release-blocking real D1 acceptance
+
+No authorized remote Cloudflare D1 staging database ID, API token or deployment target was available in this execution environment. `cloudflare/wrangler.jsonc` still contains the literal placeholder `REPLACE_WITH_D1_DATABASE_ID`. The test therefore did not access a production or customer D1 database and did **not** deploy Worker routes. Real D1 confirmation requires an owner-authorized **isolated staging** database, real independent Worker isolates, test-only identities, negative 600/min burst, concurrent same-ID/content mismatch, expired/revoked grant and wrong-device ingress, plus D1 query/cost and backend-failure instrumentation. Do not run this fixture on live D1 or transfer results from SQLite to Cloudflare as production PASS.
+
+### Source acceptance versus production entitlements
+
+**Source acceptance:** the non-live proposal compiles, DB tests use actual disposable WAL transactions and enforce the checked race, replay, account partitioning and epoch behavior. Local source-level `paymentConfirmed` evidence is a modeled trusted input, **not** a real verified settlement record, cryptographic proof, payment receipt or ready production entitlement. Verified signature, provider subscription/variant/owner reconciliation, ordered cancellation/refund webhook processing and actual financial settlement must be implemented in a separately approved component before rollout. Current production billing can treat some paused or past-due states as active in its own older policy; the proposed stricter gate does not automatically change that policy.
+
+**Production entitlement acceptance: NO-GO.** The live Free-only allowance remains 1,000 **weighted credits per UTC month** (including existing verified repository-owner exception). Future 1,000/5,000/10,000 accepted roots per UTC day are NOT enabled. Enterprise 850,000/day and 600/min were exercised only as fictional limits in isolated tests, not as guaranteed real-provider throughput, a paid tier or an invoiceable quota.

@@ -184,3 +184,22 @@ test('account plan and persisted quota subject type must agree before any paid/f
   f.identity.quotaSubjectKind='prepaid';
   assert.equal(reason(f),'subject-kind-mismatch');
 });
+
+test('ACTIVE label without settlement cannot mint paid quota; a cancelled provider record remains denied',()=>{
+  const f=paid();
+  f.state='ACTIVE';
+  f.payment=null;
+  assert.equal(reason(f),'payment-not-confirmed');
+  f.payment=paid().payment;
+  f.payment!.paymentConfirmed=false;
+  assert.equal(reason(f),'payment-not-confirmed');
+  f.payment!.paymentConfirmed=true;
+  f.payment!.providerStatus='cancelled';
+  f.payment!.endsAt='2026-12-31T00:00:00.000Z';
+  assert.equal(reason(f),'provider-state-invalid');
+  f.payment!.providerStatus='active';
+  f.state='CANCELED';
+  assert.equal(reason(f),'subscription-not-active');
+  f.state='PAST_DUE';
+  assert.equal(reason(f),'subscription-not-active');
+});
