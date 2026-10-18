@@ -80,6 +80,24 @@ test('restricted stored MCP credentials only discover authorized tools', async (
   );
 });
 
+test('a limited file_write grant cannot indirectly read and move files via transfer',async()=>{
+ const limited=await listedTools({
+  kind:'stored',scope:'mcp',
+  credential:{id:'credential-transfer-limited',scope:'mcp',
+   createdAt:'2026-09-30T12:00:00.000Z',
+   allowedTools:['file_write','file_transfer_between_devices']}
+ });
+ assert.equal(limited.includes('file_write'),true);
+ assert.equal(limited.includes('file_transfer_between_devices'),false);
+ const authorized=await listedTools({
+  kind:'stored',scope:'mcp',
+  credential:{id:'credential-transfer-complete',scope:'mcp',
+   createdAt:'2026-09-30T12:00:00.000Z',
+   allowedTools:['file_*']}
+ });
+ assert.equal(authorized.includes('file_transfer_between_devices'),true);
+});
+
 test('auth-aware discovery respects user, operator, admin, and static roles', async () => {
   const staticTools = await listedTools({
     kind: 'static',

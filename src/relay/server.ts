@@ -12,6 +12,7 @@ import {
   type NexowireRelayConfig,
 } from './config.js';
 import { matchesBearerHeader } from '../security/tokens.js';
+import { safelyRecordScaleMetric, type ScaleTransportMetrics } from '../ops/scale-transport-metrics.js';
 
 type NodeServer = HttpServer | HttpsServer;
 
@@ -54,6 +55,7 @@ function wireRelayPair(
   options: {
     maxPayloadBytes: number;
     heartbeatMs: number;
+    metrics?: ScaleTransportMetrics;
   },
 ): () => void {
   const queue: Array<{
@@ -90,6 +92,13 @@ function wireRelayPair(
         closePeer(destination, 1011, 'Relay forwarding error');
       }
     });
+    if (options.metrics) {
+      const bytes = typeof data === 'string' ? Buffer.byteLength(data) :
+        data instanceof ArrayBuffer ? data.byteLength :
+        Array.isArray(data) ? data.reduce((sum, part) => sum + part.length, 0) : data.length;
+      safelyRecordScaleMetric(options.metrics,
+        destination === upstream ? 'relay.upstream_frames' : 'relay.downstream_frames', bytes);
+    }
   };
 
   downstream.on('pong', () => {
@@ -195,6 +204,7 @@ function wireRelayPair(
 
 export async function startRelayServer(
   config: NexowireRelayConfig,
+  options: { metrics?: ScaleTransportMetrics } = {},
 ): Promise<RelayServerHandle> {
   assertSafeRelayConfig(config);
 
@@ -225,6 +235,7 @@ export async function startRelayServer(
         : isLoopbackAddress(request.socket.remoteAddress);
 
     if (!authenticated) {
+      safelyRecordScaleMetric(options.metrics, 'relay.auth_denials');
       socket.write(
         'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n',
       );
@@ -238,6 +249,7 @@ export async function startRelayServer(
   });
 
   wss.on('connection', (downstream: WebSocket) => {
+    safelyRecordScaleMetric(options.metrics, 'relay.connections');
     const headers = config.upstreamAgentToken
       ? {
           Authorization:
@@ -253,6 +265,7 @@ export async function startRelayServer(
     wireRelayPair(downstream, upstream, {
       maxPayloadBytes: config.maxPayloadBytes,
       heartbeatMs: config.heartbeatMs,
+      metrics: options.metrics,
     });
   });
 

@@ -6,6 +6,7 @@ import { AgentBroker } from '../src/core/agent-broker.js';
 import { NexowireError } from '../src/core/errors.js';
 import { attachAgentWebSocketServer } from '../src/hub/agent-websocket.js';
 import { AGENT_PROTOCOL_VERSION } from '../src/protocol/agent.js';
+import { ScaleTransportMetrics } from '../src/ops/scale-transport-metrics.js';
 
 const queuedMessages = new WeakMap<WebSocket, unknown[]>();
 
@@ -16,10 +17,11 @@ interface HubFixture {
   port: number;
 }
 
-async function createHub(): Promise<HubFixture> {
+async function createHub(metrics?: ScaleTransportMetrics): Promise<HubFixture> {
   const http = createServer();
   const broker = new AgentBroker({
     reconnectGraceMs: 1_000,
+    metrics,
   });
   const wss = attachAgentWebSocketServer(
     http,
@@ -129,7 +131,8 @@ async function waitOffline(
 }
 
 test('same native-agent instance resumes a pending mutation with the same request ID', async (t) => {
-  const fixture = await createHub();
+  const metrics = new ScaleTransportMetrics();
+  const fixture = await createHub(metrics);
   t.after(() => closeHub(fixture));
 
   const instanceId = '11111111-1111-4111-8111-111111111111';
@@ -181,6 +184,12 @@ test('same native-agent instance resumes a pending mutation with the same reques
   assert.deepEqual(await resultPromise, {
     data: { written: true },
   });
+  const totals = metrics.snapshot();
+  assert.equal(totals['agent.connections'].events, 2);
+  assert.equal(totals['agent.disconnections'].events, 1);
+  assert.equal(totals['agent.resumed_requests'].events, 1);
+  assert.equal(totals['agent.rejected_requests'].events, 0);
+  assert.equal(totals['agent.tx_frames'].events, 2);
 });
 
 test('new native-agent process instance never replays a pending mutation', async (t) => {

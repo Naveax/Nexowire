@@ -1,5 +1,8 @@
 # Nexowire
 
+> **2026-10-14 — New priority: Scale v2 connection + user quotas (planning, not deployed).** Implementation scope is **S1–S5**, covering connection continuity/P2P feasibility, daily quota model, one-click signed onboarding, dormant subscription design, and capacity testing. Feature expansion **S6 is postponed**. Start with [Scale v2 vision](docs/SCALE_V2_VISION.md), [roadmap](docs/SCALE_V2_ROADMAP.md), [quotas and cost](docs/SCALE_V2_QUOTA_AND_COST.md), [no-disconnect rollout](docs/SCALE_V2_CONNECTION_ROLLOUT.md), and [master tracker #482](https://github.com/Naveax/Nexowire/issues/482). The effective Free-only 1,000 weighted units **per month** policy below remains unchanged; the proposed Free 1,000 / Plus 5,000 / Pro 10,000 **per day** is not activated.
+
+
 **Temporary Free-only policy:** hosted users have 1,000 weighted tool units per UTC month. Normal tool calls are 1x, dedicated skill tools and marked special-skill workflows are 5x. Paid checkout is paused. See [Free-only policy](docs/FREE_ONLY_POLICY.md).
 
 **AI-native remote computer control for ChatGPT.**

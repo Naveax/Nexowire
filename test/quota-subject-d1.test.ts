@@ -13,6 +13,7 @@ import {
   type D1ResultLike,
 } from '../src/product/d1-control-plane-store.js';
 import { ControlPlaneService } from '../src/product/control-plane-service.js';
+import { instrumentD1Database, ScaleControlPlaneMetrics } from '../src/ops/scale-control-plane-metrics.js';
 
 class SqliteD1Statement implements D1PreparedStatementLike {
   constructor(
@@ -468,4 +469,35 @@ test('D1 Broker failed receipt commits once and refuses invalid failures',async(
     assert.equal(await store.completeBridgeCommand(req,'d',hash,'failed','2026-10-10T14:00:20.000Z','TASK_FAILED'),true);
     assert.equal((await store.getBridgeCommand(req))?.failureCode,'TASK_FAILED');
   }finally{db.close()}
+});
+
+test('S1 opt-in D1 metrics observe real SQLite quota changes without SQL or account labels',async()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+  try {
+    const metrics=new ScaleControlPlaneMetrics();
+    const instrumented=instrumentD1Database(new SqliteD1Database(db),metrics);
+    const service=new ControlPlaneService(new D1ControlPlaneStore(instrumented),{
+      now:()=>new Date('2026-10-15T11:00:00.000Z'),
+    });
+    const account=await service.ensureAccount({id:'S1_ACCOUNT_ID_PRIVATE'});
+    const result=await service.chargeUsage({
+      accountId:account.id,eventId:'S1_PRIVATE_EVENT',toolName:'machine_health',
+      baseCredits:2,
+    });
+    assert.equal(result.status,'charged');
+    const totals=metrics.snapshot();
+    assert.ok(totals['d1.prepare'].events>0);
+    assert.ok(totals['d1.first'].events+totals['d1.all'].events>0);
+    assert.ok(totals['d1.run'].events+totals['d1.batch'].events>0);
+    assert.equal(totals['d1.failures'].events,0);
+    const publicAggregate=JSON.stringify(totals);
+    for(const secret of ['S1_ACCOUNT_ID_PRIVATE','S1_PRIVATE_EVENT','machine_health',
+      'usage_event','INSERT INTO','quota_subject_id']) {
+      assert.equal(publicAggregate.includes(secret),false,secret);
+    }
+  } finally {
+    db.close();
+  }
 });

@@ -208,6 +208,55 @@ test('D1 persists MCP OAuth registration, PKCE code and token rotation', async (
 });
 
 
+test('D1 atomically invalidates only the authenticated owner\'s OAuth access token', async () => {
+  const db=new DatabaseSync(':memory:');
+  db.exec('PRAGMA foreign_keys = ON');
+  applyMigrations(db);
+  try {
+    const adapter=new SqliteD1Database(db);
+    const control=new ControlPlaneService(new D1ControlPlaneStore(adapter),{
+      now:()=>new Date('2026-10-15T12:00:00.000Z'),
+    });
+    const account=await control.ensureAccount({id:'revocation-owner'});
+    await control.ensureAccount({id:'other-account'});
+    const oauth=new McpOAuthService(new D1McpOAuthStore(adapter),{
+      issuer:'https://auth.example.test',
+      resource:'https://mcp.example.test/mcp',
+      now:()=>new Date('2026-10-15T12:00:00.000Z'),
+    });
+    const registration=await oauth.registerClient({
+      redirect_uris:['https://chatgpt.com/oauth/callback/test'],
+      token_endpoint_auth_method:'none',
+    }) as {client_id:string};
+    const verifier='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~';
+    const codeChallenge=createHash('sha256').update(verifier,'ascii').digest('base64url');
+    const redirect=new URL(await oauth.authorize(account.id,new URLSearchParams({
+      response_type:'code',client_id:registration.client_id,
+      redirect_uri:'https://chatgpt.com/oauth/callback/test',
+      code_challenge:codeChallenge,code_challenge_method:'S256',
+      resource:'https://mcp.example.test/mcp',scope:'mcp',
+    })));
+    const token=await oauth.token(new URLSearchParams({
+      grant_type:'authorization_code',
+      code:redirect.searchParams.get('code')!,
+      client_id:registration.client_id,
+      redirect_uri:'https://chatgpt.com/oauth/callback/test',
+      code_verifier:verifier,
+      resource:'https://mcp.example.test/mcp',
+    }));
+    assert.ok(await oauth.authenticateAccessToken(token.access_token));
+    assert.equal(await oauth.invalidateAccessToken(token.access_token,'other-account'),false);
+    const decisions=await Promise.all(Array.from({length:12},()=>oauth.invalidateAccessToken(
+      token.access_token,account.id,
+    )));
+    assert.equal(decisions.filter(Boolean).length,1);
+    assert.equal(await oauth.authenticateAccessToken(token.access_token),null);
+    assert.equal(await oauth.invalidateAccessToken(token.access_token,account.id),false);
+    const row=db.prepare('SELECT expires_at FROM mcp_oauth_access_tokens').get() as {expires_at:string};
+    assert.equal(row.expires_at,'2026-10-15T12:00:00.000Z');
+  } finally {db.close();}
+});
+
 test('D1 stores only encrypted runtime config and decrypts with the matching key', async () => {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');

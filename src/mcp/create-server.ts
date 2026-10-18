@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -20,6 +21,7 @@ import { idempotencyEligibility } from '../operations/idempotency-policy.js';
 import {
   IdempotencyStoreError,
   operationFingerprint,
+  type IdempotencyRecord,
   type IdempotencyStore,
 } from '../operations/idempotency-store.js';
 import type { SkillRegistry } from '../skills/registry.js';
@@ -109,8 +111,20 @@ function applyToolRegistrationFilters(
         name,
         availableCapabilities,
       );
+    // A composite copy cannot borrow broader permissions than the caller
+    // has for its individual read, hash, write, move and cleanup operations.
+    const transferDependencies = name === 'file_transfer_between_devices'
+      ? ['file_read','file_stat','file_hash','file_write','file_move','file_delete']
+      : [];
+    const dependenciesAuthorized = transferDependencies.every((dependency) =>
+      isMcpToolAuthorized(input.authorization,dependency));
+    const dependenciesAvailable =
+      availableCapabilities === undefined ||
+      transferDependencies.every((dependency) =>
+        isMcpToolAvailableForCapabilities(dependency,availableCapabilities));
 
-    if (!authorized || !capabilityAvailable) {
+    if (!authorized || !capabilityAvailable ||
+        !dependenciesAuthorized || !dependenciesAvailable) {
       registered.disable();
     }
     return registered;
@@ -333,6 +347,8 @@ async function execute(
   const started = performance.now();
   let targetId: string | undefined;
   let idempotencyCreated = false;
+  let providerDispatched = false;
+  let persistedOutcome: 'succeeded' | 'failed' | 'unknown' | undefined;
 
   try {
     targetId = await resolveDevice(ctx, deviceId);
@@ -454,6 +470,9 @@ async function execute(
       ...(providerId ? { providerId } : {}),
     });
 
+    // A remote side effect may happen after dispatch, even if its response
+    // or the subsequent local journal/audit update fails.
+    providerDispatched = true;
     const result = await ctx.providers.execute(
       {
         targetId,
@@ -466,17 +485,23 @@ async function execute(
       providerId,
     );
 
+    // A native Agent can have executed a mutation while failing to
+    // persist its completion, or it can reject the already-seen request ID
+    // after reconnect. Neither response is proof the mutation failed.
+    const ambiguousAgentResult = !result.ok && (
+      result.error?.code === 'AGENT_OPERATION_COMPLETION_UNCONFIRMED' ||
+      result.error?.code === 'AGENT_OPERATION_ALREADY_RECORDED'
+    );
+    const resultStatus: 'succeeded' | 'failed' | 'unknown' = result.ok
+      ? 'succeeded' : ambiguousAgentResult ? 'unknown' : 'failed';
     if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
-      await ctx.idempotency.complete(
-        idempotencyKey,
-        result.ok ? 'succeeded' : 'failed',
-        result,
-      );
+      await ctx.idempotency.complete(idempotencyKey,resultStatus,result);
+      persistedOutcome = resultStatus;
     }
 
     await ctx.audit?.write({
       operationId,
-      status: result.ok ? 'succeeded' : 'failed',
+      status: resultStatus,
       capability,
       targetId,
       providerId: result.meta.providerId,
@@ -491,7 +516,7 @@ async function execute(
             idempotency: {
               key: idempotencyKey,
               replayed: false,
-              persistedStatus: result.ok ? 'succeeded' : 'failed',
+              persistedStatus: resultStatus,
               operationId,
             },
           }
@@ -508,23 +533,42 @@ async function execute(
         ? error.code
         : 'EXECUTION_FAILED';
 
-    if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
-      await ctx.idempotency.complete(
-        idempotencyKey,
-        errorCode === 'MUTATION_STATE_UNKNOWN' ? 'unknown' : 'failed',
-      );
+    // Do not overwrite a durably confirmed remote outcome just because the
+    // final audit write failed. Once provider execution started, an error in
+    // confirmation or journal persistence has an UNKNOWN side-effect state,
+    // never proof that the mutation did not run.
+    const recordedStatus = persistedOutcome ??
+      (providerDispatched || errorCode === 'MUTATION_STATE_UNKNOWN'
+        ? 'unknown' : 'failed');
+    let recoveryJournalFailed = false;
+    if (idempotencyKey && idempotencyCreated && ctx.idempotency &&
+        persistedOutcome === undefined) {
+      try {
+        await ctx.idempotency.complete(idempotencyKey, recordedStatus);
+      } catch {
+        // Never state that a status was persisted when the recovery write
+        // itself failed. The remote operation may already have executed.
+        recoveryJournalFailed = true;
+      }
     }
 
-    await ctx.audit?.write({
-      operationId,
-      status: 'failed',
-      capability,
-      ...(targetId ? { targetId } : {}),
-      ...(providerId ? { providerId } : {}),
-      durationMs: Math.round(performance.now() - started),
-      errorCode,
-      message,
-    });
+    // An unavailable audit sink must not mask the original failure or
+    // contradict an outcome already durably recorded in the journal.
+    let recoveryAuditFailed = false;
+    try {
+      await ctx.audit?.write({
+        operationId,
+        status: persistedOutcome ?? recordedStatus,
+        capability,
+        ...(targetId ? { targetId } : {}),
+        ...(providerId ? { providerId } : {}),
+        durationMs: Math.round(performance.now() - started),
+        errorCode,
+        message,
+      });
+    } catch {
+      recoveryAuditFailed = true;
+    }
     return toolResult(
       {
         ok: false,
@@ -533,15 +577,16 @@ async function execute(
           code: errorCode,
           message,
         },
+        ...(recoveryAuditFailed ? { recoveryAuditFailed: true } : {}),
+        ...(recoveryJournalFailed ? { recoveryJournalFailed: true } : {}),
         ...(idempotencyKey
           ? {
               idempotency: {
                 key: idempotencyKey,
                 replayed: false,
-                persistedStatus:
-                  errorCode === 'MUTATION_STATE_UNKNOWN'
-                    ? 'unknown'
-                    : 'failed',
+                ...(idempotencyCreated && !recoveryJournalFailed
+                  ? { persistedStatus: recordedStatus }
+                  : { outcomeUnconfirmed: providerDispatched }),
               },
             }
           : {}),
@@ -819,17 +864,50 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List idempotency operation records',
       description:
-        'List recent payload-free idempotency records. Records contain fingerprints and status only, never mutation input or output payloads.',
+        'List visible payload-free idempotency records, or retrieve one exact key. Records contain fingerprints and status only, never mutation input or output payloads.',
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
+        key: z.string().trim().min(1).max(160)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/).optional(),
       },
     },
-    async ({ limit }) =>
-      toolResult({
-        records: ctx.idempotency
-          ? await ctx.idempotency.list(limit ?? 100)
-          : [],
-      }),
+    async ({ limit, key }) => {
+      // Historical operation status must remain visible when a directly
+      // authorized device goes offline. Do not require a live provider route.
+      // Route-only grants remain limited to their currently authorized target.
+      const allowedDeviceIds = await authorizedTargetIds(
+        ctx, await allRoutingEntries(ctx),
+      );
+      const candidates = !ctx.idempotency
+        ? []
+        : key
+          ? [await ctx.idempotency.get(key)].filter(
+              (record): record is IdempotencyRecord => record !== undefined,
+            )
+          : await ctx.idempotency.list(limit ?? 100, allowedDeviceIds);
+      return toolResult({
+        records: candidates
+          .filter((record) =>
+            allowedDeviceIds === undefined ||
+            allowedDeviceIds.has(record.targetId))
+          .slice(0, limit ?? 100),
+      });
+    },
+  );
+
+  server.registerTool(
+    'agent_operation_status',
+    {
+      title: 'Inspect native Agent operation',
+      description:
+        'Inspect one exact Agent mutation request ID on an authorized online device. Operator/admin only. Reports payload-free durable status, not command input/results. A missing record does not prove no side effect. Do not replay unknown mutations.',
+      inputSchema: {
+        ...targetFields,
+        request_id: z.string().uuid(),
+      },
+    },
+    async ({ device_id, provider_id, request_id }) =>
+      await execute(ctx,'agent.operation.status',{request_id},device_id,provider_id),
   );
 
   server.registerTool(
@@ -5252,9 +5330,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         encoding: z.enum(['utf8', 'base64']).optional(),
         max_bytes: z.number().int().min(1).max(16_777_216).optional(),
         include_sha256: z.boolean().optional(),
+        offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
       },
     },
-    async ({ device_id, provider_id, path, encoding, max_bytes, include_sha256 }) =>
+    async ({ device_id, provider_id, path, encoding, max_bytes, include_sha256, offset_bytes }) =>
       await execute(
         ctx,
         'files.read',
@@ -5263,6 +5342,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(encoding ? { encoding } : {}),
           ...(max_bytes ? { max_bytes } : {}),
           ...(include_sha256 !== undefined ? { include_sha256 } : {}),
+          ...(offset_bytes !== undefined ? { offset_bytes } : {}),
         },
         device_id,
         provider_id,
@@ -5311,7 +5391,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         path: z.string().min(1).max(4096),
         content: z.string(),
         encoding: z.enum(['utf8', 'base64']).optional(),
-        mode: z.enum(['overwrite', 'append']).optional(),
+        mode: z.enum(['overwrite', 'append', 'create', 'write_at']).optional(),
+        offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
         create_parents: z.boolean().optional(),
       },
     },
@@ -5322,6 +5403,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       content,
       encoding,
       mode,
+      offset_bytes,
       create_parents,
       idempotency_key,
     }) =>
@@ -5333,6 +5415,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           content,
           ...(encoding ? { encoding } : {}),
           ...(mode ? { mode } : {}),
+          ...(offset_bytes !== undefined ? { offset_bytes } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
         },
         device_id,
@@ -5342,6 +5425,102 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       ),
   );
 
+
+  server.registerTool(
+    'file_transfer_between_devices',
+    {
+      title: 'Transfer file between Nexowire devices',
+      description:
+        'Copy an allowed regular file between two explicitly selected, authorized devices using bounded internal chunks. The file bytes never appear in the MCP tool response. Existing destination files are not overwritten.',
+      inputSchema: {
+        source_device_id: z.string().min(1).max(128),
+        destination_device_id: z.string().min(1).max(128),
+        source_path: z.string().min(1).max(4096),
+        destination_path: z.string().min(1).max(4000),
+        max_bytes: z.number().int().min(1).max(8_388_608).optional(),
+        create_parents: z.boolean().default(false),
+      },
+    },
+    async ({source_device_id,destination_device_id,source_path,
+      destination_path,max_bytes,create_parents}) => {
+      if(source_device_id===destination_device_id){
+        return toolResult({ok:false,error:{code:'DISTINCT_DEVICES_REQUIRED',
+          message:'Use normal file_copy for a single device.'}},true);
+      }
+      const remote=async (
+        capability:string,input:Record<string,unknown>,deviceId:string
+      ):Promise<Record<string,unknown>>=>{
+        const response=await execute(ctx,capability,input,deviceId);
+        const value=response.structuredContent as Record<string,unknown>;
+        if(value?.ok!==true){
+          const error=value?.error as Record<string,unknown>|undefined;
+          throw new Error(
+            'REMOTE_'+capability.replace(/\W/g,'_').toUpperCase()+': '+
+            String(error?.code??'UNAVAILABLE'),
+          );
+        }
+        const data=value.data;
+        if(!data||typeof data!=='object'||Array.isArray(data)){
+          throw new Error('Invalid remote capability response for '+capability);
+        }
+        return data as Record<string,unknown>;
+      };
+      try{
+        const maxAllowed=max_bytes??8_388_608;
+        const hash=async(device:string,path:string)=>{
+          const data=await remote('files.hash',
+            {path,max_bytes:maxAllowed},device);
+          if(typeof data.sha256!=='string')throw new Error('Invalid SHA-256 response.');
+          return data.sha256;
+        };
+        const report=await transferCrossDeviceFile(destination_path,{
+          statSource:async()=>{
+            const d=await remote('files.stat',{path:source_path},source_device_id);
+            return {size:Number(d.size),type:String(d.type)};
+          },
+          hashSource:()=>hash(source_device_id,source_path),
+          readSource:async(offsetBytes,maxBytes)=>{
+            const d=await remote('files.read',{
+              path:source_path,encoding:'base64',
+              offset_bytes:offsetBytes,max_bytes:maxBytes
+            },source_device_id);
+            return {sourceBytes:Number(d.size),offsetBytes:Number(d.offsetBytes),
+              bytesRead:Number(d.bytesRead),content:String(d.content)};
+          },
+          writeStage:async(stage,content,offsetBytes,first)=>{
+            const d=await remote('files.write',{
+              path:stage,content,encoding:'base64',
+              mode:first?'create':'write_at',
+              ...(first?{create_parents}:{offset_bytes:offsetBytes})
+            },destination_device_id);
+            return Number(d.bytesWritten);
+          },
+          hashStage:(stage)=>hash(destination_device_id,stage),
+          commitStage:async(stage,destination)=>{
+            await remote('files.move',{
+              source:stage,destination,overwrite:false,create_parents:false,
+              atomic_no_overwrite:true
+            },destination_device_id);
+          },
+          cleanupStage:async(stage)=>{
+            await remote('files.delete',{path:stage,recursive:false},
+              destination_device_id);
+          },
+        },{maxBytes:maxAllowed});
+        return toolResult({ok:true,data:{
+          ...report,sourceDeviceId:source_device_id,
+          destinationDeviceId:destination_device_id,
+          sourcePath:source_path
+        }});
+      }catch(error){
+        return toolResult({ok:false,error:{
+          code:error instanceof Error&&'code'in error&&
+            typeof error.code==='string'?error.code:'TRANSFER_FAILED',
+          message:error instanceof Error?error.message:'Cross-device transfer failed.',
+        }},true);
+      }
+    },
+  );
 
   server.registerTool(
     'file_stat',
@@ -5453,6 +5632,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         overwrite: z.boolean().optional(),
         recursive: z.boolean().optional(),
         create_parents: z.boolean().optional(),
+        atomic_no_overwrite: z.boolean().optional(),
       },
     },
     async ({
@@ -5463,6 +5643,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       overwrite,
       recursive,
       create_parents,
+      atomic_no_overwrite,
     }) =>
       await execute(
         ctx,
@@ -5473,6 +5654,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(overwrite !== undefined ? { overwrite } : {}),
           ...(recursive !== undefined ? { recursive } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
+          ...(atomic_no_overwrite !== undefined ? { atomic_no_overwrite } : {}),
         },
         device_id,
         provider_id,
@@ -6345,7 +6527,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
         capability: z.string().min(1).max(256).optional(),
-        status: z.enum(['started', 'succeeded', 'failed']).optional(),
+        status: z.enum(['started', 'succeeded', 'failed', 'unknown']).optional(),
         target_id: z.string().min(1).max(128).optional(),
         provider_id: z.string().min(1).max(128).optional(),
         operation_id: z.string().min(1).max(128).optional(),

@@ -394,18 +394,44 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-async function killPidTree(pid: number): Promise<void> {
+async function killPidTree(pid: number): Promise<'requested' | 'unconfirmed'> {
   if (process.platform === 'win32') {
-    await new Promise<void>((resolve) => {
+    // taskkill /T can fail when the shell PID has already exited while its
+    // descendants remain alive (and may still hold stdout/stderr pipes).
+    // Never discard a nonzero status or spawn error as a successful cleanup.
+    const outcome = await new Promise<{
+      code: number | null; error?: string;
+    }>((resolve) => {
+      let completed = false;
+      const settle = (result: {code:number|null;error?:string}) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
       const killer = spawn(
         'taskkill.exe',
         ['/PID', String(pid), '/T', '/F'],
-        { windowsHide: true, stdio: 'ignore' },
+        {windowsHide:true,stdio:'ignore'},
       );
-      killer.once('error', () => resolve());
-      killer.once('close', () => resolve());
+      killer.once('error', (error) =>
+        settle({code:null,error:error.message}));
+      killer.once('close', (code) => settle({code}));
+      const timer = setTimeout(() => {
+        killer.kill();
+        settle({code:null,error:'taskkill did not terminate within 10 seconds'});
+      },10_000);
     });
-    return;
+    if (outcome.code === 0) return 'requested';
+    // A gone root is not evidence its descendants were reaped.
+    if (!isPidAlive(pid)) return 'unconfirmed';
+    throw new ProcessManagerError(
+      'PROCESS_TREE_TERMINATION_UNCONFIRMED',
+      'Windows process-tree termination was not confirmed for the owned shell PID '+
+      pid+' (exitCode='+String(outcome.code)+
+      (outcome.error?', reason='+outcome.error.slice(0,180):'')+
+      '). Do not assume child processes stopped.',
+    );
   }
 
   try {
@@ -417,6 +443,7 @@ async function killPidTree(pid: number): Promise<void> {
       // It already exited or cannot be signaled.
     }
   }
+  return 'requested';
 }
 
 function summarize(session: ManagedSession) {
@@ -462,6 +489,8 @@ export class ProcessManager {
   private readonly workerEntrypoint?: string;
   private readonly workerExecArgv: string[];
   private persistChain: Promise<void> = Promise.resolve();
+  // Reserve slots before any async spawn/setup work to avoid oversubscription.
+  private pendingStarts = 0;
   private readonly durableMonitors = new Map<string, NodeJS.Timeout>();
 
   constructor(options: ProcessManagerOptions = {}) {
@@ -764,6 +793,7 @@ export class ProcessManager {
   private async startDurable(
     parsed: z.infer<typeof StartSchema>,
     cwd: string | undefined,
+    onRegistered: () => void,
   ) {
     if (!this.workerRoot || !this.workerEntrypoint) {
       throw new ProcessManagerError(
@@ -954,6 +984,7 @@ export class ProcessManager {
     };
 
     this.sessions.set(id, session);
+    onRegistered();
     this.emit({
       topic: 'process.started',
       data: {
@@ -977,22 +1008,32 @@ export class ProcessManager {
 
   async start(input: unknown, policy: PathPolicy) {
     const parsed = StartSchema.parse(input);
-    this.pruneExpiredInMemory();
-
-    if (this.sessions.size >= this.maxSessions) {
-      throw new ProcessManagerError(
-        'PROCESS_SESSION_LIMIT',
-        `Process session limit reached (${this.maxSessions}). Prune old sessions before starting another.`,
-      );
-    }
-
+    // Reject invalid paths before reclaiming any completed history.
     const cwd = parsed.cwd
       ? await policy.resolveExisting(parsed.cwd)
       : undefined;
     const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
+    // Reserve synchronously once preflight has completed. No awaits between
+    // checking the budget and reserving a slot for this start request.
+    // Running/orphaned sessions are never reclaimed automatically.
+    this.pruneExpiredInMemory();
+    while (this.sessions.size + this.pendingStarts >= this.maxSessions) {
+      if (!this.reclaimOldestExitedSession()) {
+        throw new ProcessManagerError(
+          'PROCESS_SESSION_LIMIT',
+          `Process session limit reached (${this.maxSessions}); ${this.sessions.size} retained, ${this.pendingStarts} starting. No completed session is available for safe automatic reclamation.`,
+        );
+      }
+    }
+    this.pendingStarts++;
+    let reservationHeld = true;
+    try {
 
     if(parsed.durable || uiTarget==='private_desktop'){
-      return await this.startDurable({...parsed,ui_target:uiTarget},cwd);
+      return await this.startDurable({...parsed,ui_target:uiTarget},cwd,()=>{
+        this.pendingStarts--;
+        reservationHeld=false;
+      });
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
@@ -1026,6 +1067,9 @@ export class ProcessManager {
       maxBufferBytes: parsed.max_buffer_bytes,
     };
     this.sessions.set(id, session);
+    // This session occupies its slot now: don't count its reservation twice.
+    this.pendingStarts--;
+    reservationHeld = false;
     this.emit({
       topic: 'process.started',
       data: {
@@ -1100,6 +1144,9 @@ export class ProcessManager {
 
     await this.persistState();
     return summarize(session);
+    } finally {
+      if (reservationHeld) this.pendingStarts--;
+    }
   }
 
   async read(input: unknown) {
@@ -1213,14 +1260,17 @@ export class ProcessManager {
 
     await new Promise<void>((resolve) => {
       let settled = false;
+      const child=session.child!;
+      const onClose=()=>finish();
       const finish = (): void => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        child.off('close',onClose);
         resolve();
       };
       const timer = setTimeout(finish, timeoutMs);
-      session.child!.once('close', finish);
+      child.once('close', onClose);
       if (session.status !== 'running') finish();
     });
   }
@@ -1254,12 +1304,13 @@ export class ProcessManager {
       );
     }
 
+    let treeCleanup: 'requested' | 'unconfirmed' | undefined;
     if (
       (session.status === 'running' ||
         session.status === 'orphaned') &&
       session.pid
     ) {
-      await killPidTree(session.pid);
+      treeCleanup = await killPidTree(session.pid);
       await this.waitForChildClose(session);
 
       for (let attempt = 0; attempt < 20; attempt++) {
@@ -1267,7 +1318,13 @@ export class ProcessManager {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      if (!isPidAlive(session.pid) && !session.exitedAt) {
+      if (isPidAlive(session.pid)) {
+        throw new ProcessManagerError(
+          'PROCESS_ROOT_TERMINATION_UNCONFIRMED',
+          'Managed process root is still alive after termination attempt; no success was verified.',
+        );
+      }
+      if (!session.exitedAt) {
         session.status = 'exited';
         session.exitCode = null;
         session.signal = null;
@@ -1276,7 +1333,14 @@ export class ProcessManager {
     }
 
     await this.persistState();
-    return summarize(session);
+    return {
+      ...summarize(session),
+      ...(process.platform === 'win32' ? {
+        // 'requested' means taskkill exited 0, NOT that all descendants
+        // were individually verified. An already-exited root is unknown.
+        treeCleanup:treeCleanup ?? 'unconfirmed',
+      } : {}),
+    };
   }
 
   list() {
@@ -1398,6 +1462,25 @@ export class ProcessManager {
       );
     }
     return session;
+  }
+
+  // When the 24-hour history fills the 128-slot budget, reclaim only the
+  // oldest *confirmed exited* session. Lost sessions may have an unknown
+  // process state and orphaned/running sessions must remain protected.
+  private reclaimOldestExitedSession(): boolean {
+    const oldest = [...this.sessions.values()]
+      .filter((session) => session.status === 'exited')
+      .sort((a, b) =>
+        (a.exitedAt ?? a.startedAt).localeCompare(b.exitedAt ?? b.startedAt),
+      )[0];
+    if (!oldest) return false;
+    this.sessions.delete(oldest.id);
+    this.stopDurableMonitor(oldest.id);
+    if (oldest.durable && oldest.workerDir) {
+      void fs.rm(oldest.workerDir, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
+    return true;
   }
 
   private pruneExpiredInMemory(): void {

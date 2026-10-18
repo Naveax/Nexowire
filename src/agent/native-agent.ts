@@ -8,7 +8,7 @@ import {
   HubRequestSchema,
   type AgentResponse,
 } from '../protocol/agent.js';
-import { capabilitiesForPlatform } from '../protocol/capabilities.js';
+import { capabilitiesForPlatform, isReadOnlyCapability } from '../protocol/capabilities.js';
 import { browserCapabilitiesAvailable } from './browser-manager.js';
 import { detectWsl } from './wsl-detection.js';
 import { executeCapability, normalizeAgentError } from './executors.js';
@@ -20,6 +20,7 @@ import {
   AgentRequestCache,
   fingerprintAgentRequest,
 } from './request-cache.js';
+import { AgentOperationJournal } from './operation-journal.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
@@ -320,6 +321,10 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
+  const operationJournal = new AgentOperationJournal(
+    env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
+      path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite'),
+  );
   const advertisedCapabilities = await capabilitiesForAgent(
     process.platform,
     env,
@@ -359,6 +364,7 @@ export async function runNativeAgent(
       processes.initialize(),
       taskGraphs.initialize(),
       runbooks.initialize(),
+      operationJournal.initialize(),
     ]);
   } catch (error) {
     await singletonLock?.close();
@@ -462,6 +468,33 @@ export async function runNativeAgent(
               request.data.requestId,
               fingerprint,
               async () => {
+                // Keep read-only calls on the existing cache-only path.
+                // Mutations reserve their ID on disk BEFORE executing, so a
+                // reconnect/restart cannot silently repeat a shell or write.
+                const mutation = !isReadOnlyCapability(request.data.capability);
+                if (mutation) {
+                  const begun = await operationJournal.begin(
+                    request.data.requestId,
+                    fingerprint,
+                    request.data.capability,
+                  );
+                  if (!begun.created) {
+                    return {
+                      type: 'response' as const,
+                      requestId: request.data.requestId,
+                      ok: false,
+                      error: {
+                        code: 'AGENT_OPERATION_ALREADY_RECORDED',
+                        message: 'This agent mutation request ID was already recorded; it will not be executed again. Inspect the local agent operation journal to reconcile.',
+                        details: {
+                          requestId: request.data.requestId,
+                          status: begun.record.status,
+                        },
+                      },
+                    };
+                  }
+                }
+                let outcome: AgentResponse;
                 try {
                   const data = await executeCapability(
                     request.data.capability,
@@ -469,6 +502,7 @@ export async function runNativeAgent(
                     policy,
                     {
                       processes,
+                      operationJournal,
                       taskGraphs,
                       runbooks,
                       privilegeMode: activePrivilegeMode,
@@ -478,20 +512,64 @@ export async function runNativeAgent(
                         : {}),
                     },
                   );
-                  return {
-                    type: 'response' as const,
+                  outcome = {
+                    type: 'response',
                     requestId: request.data.requestId,
                     ok: true,
                     data,
                   };
                 } catch (error) {
-                  return {
-                    type: 'response' as const,
+                  outcome = {
+                    type: 'response',
                     requestId: request.data.requestId,
                     ok: false,
                     error: normalizeAgentError(error),
                   };
                 }
+                if (mutation) {
+                  try {
+                    // A returned shell transport is not proof of a
+                    // successful command. Preserve exit-code/time-out
+                    // evidence independently of the agent response.
+                    const shellResult = outcome.ok &&
+                      (request.data.capability === 'shell.exec' ||
+                        request.data.capability === 'wsl.exec') &&
+                      typeof outcome.data === 'object' && outcome.data !== null
+                      ? outcome.data as {exitCode?:unknown;data?:{timedOut?:unknown}}
+                      : undefined;
+                    const exitCode = shellResult?.exitCode;
+                    const execution = shellResult &&
+                      (exitCode === null ||
+                        (typeof exitCode === 'number' && Number.isInteger(exitCode)))
+                      ? {
+                          processExitCode: exitCode as number | null,
+                          timedOut: shellResult.data?.timedOut === true,
+                          taskSuccess: exitCode === 0 &&
+                            shellResult.data?.timedOut !== true,
+                        }
+                      : undefined;
+                    await operationJournal.complete(
+                      request.data.requestId,
+                      outcome.ok ? 'succeeded' : 'failed',
+                      execution,
+                    );
+                  } catch {
+                    // Remote side effects may have completed, but the final
+                    // durable acknowledgement is NOT confirmed. Never return
+                    // the original success or suggest an automatic replay.
+                    return {
+                      type: 'response' as const,
+                      requestId: request.data.requestId,
+                      ok: false,
+                      error: {
+                        code: 'AGENT_OPERATION_COMPLETION_UNCONFIRMED',
+                        message: 'The mutation finished but its agent journal completion could not be persisted. Inspect state before any new attempt.',
+                        details: {requestId: request.data.requestId},
+                      },
+                    };
+                  }
+                }
+                return outcome;
               },
             );
           } catch (error) {

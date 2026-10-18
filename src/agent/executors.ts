@@ -39,6 +39,7 @@ import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
+import type { AgentOperationJournal } from './operation-journal.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
 import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
@@ -72,6 +73,8 @@ const FileReadInputSchema = z.object({
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   max_bytes: z.number().int().min(1).max(16_777_216).default(2_097_152),
   include_sha256: z.boolean().default(false),
+  // Optional fixed byte offset for low-payload, bounded cross-device reads.
+  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
 });
 
 const FileReadManyInputSchema = z.object({
@@ -100,7 +103,8 @@ const FileWriteInputSchema = z.object({
   path: z.string().min(1).max(4096),
   content: z.string().max(22_369_624),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
-  mode: z.enum(['overwrite', 'append']).default('overwrite'),
+  mode: z.enum(['overwrite', 'append', 'create', 'write_at']).default('overwrite'),
+  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
   create_parents: z.boolean().default(false),
 });
 
@@ -124,6 +128,8 @@ const FileTransferInputSchema = z.object({
   overwrite: z.boolean().default(false),
   recursive: z.boolean().default(false),
   create_parents: z.boolean().default(false),
+  // Same-directory staging commits must never race-overwrite another file.
+  atomic_no_overwrite: z.boolean().default(false),
 });
 
 const FileDeleteInputSchema = z.object({
@@ -486,24 +492,48 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const target = await policy.resolveExisting(parsed.path);
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Requested path is not a file.');
-  if (stat.size > parsed.max_bytes) {
-    throw new Error(
-      `File size ${stat.size} exceeds max_bytes ${parsed.max_bytes}.`,
-    );
+  // Legacy full-file reads keep their original strict size limit.
+  if (parsed.offset_bytes === undefined) {
+    if (stat.size > parsed.max_bytes) {
+      throw new Error(
+        `File size ${stat.size} exceeds max_bytes ${parsed.max_bytes}.`,
+      );
+    }
+    const content = await fs.readFile(target);
+    return {
+      data: {
+        path: target,
+        size: stat.size,
+        encoding: parsed.encoding,
+        ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
+        content: parsed.encoding === 'base64'
+          ? content.toString('base64') : content.toString('utf8'),
+      },
+    };
   }
-  const content = await fs.readFile(target);
-  return {
-    data: {
-      path: target,
-      size: stat.size,
-      encoding: parsed.encoding,
-      ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
-      content:
-        parsed.encoding === 'base64'
-          ? content.toString('base64')
-          : content.toString('utf8'),
-    },
-  };
+  if (parsed.offset_bytes > stat.size) {
+    throw new Error('Read offset exceeds file size.');
+  }
+  const maxRead = Math.min(parsed.max_bytes, stat.size - parsed.offset_bytes);
+  const buffer=Buffer.alloc(maxRead);
+  const handle=await fs.open(target,'r');
+  let bytesRead=0;
+  try {
+    while(bytesRead<maxRead){
+      const r=await handle.read(buffer,bytesRead,maxRead-bytesRead,
+        parsed.offset_bytes+bytesRead);
+      if(r.bytesRead===0)break;
+      bytesRead+=r.bytesRead;
+    }
+  }finally{await handle.close()}
+  const content=buffer.subarray(0,bytesRead);
+  return {data:{
+    path:target,size:stat.size,encoding:parsed.encoding,
+    offsetBytes:parsed.offset_bytes,bytesRead,
+    ...(parsed.include_sha256?{sha256:sha256Buffer(content)}:{}),
+    content:parsed.encoding==='base64'
+      ?content.toString('base64'):content.toString('utf8'),
+  }};
 }
 
 async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknown> {
@@ -562,10 +592,37 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       ? Buffer.from(parsed.content, 'base64')
       : Buffer.from(parsed.content, 'utf8');
 
-  if (parsed.mode === 'append') {
-    await fs.appendFile(target, content);
-  } else {
-    await fs.writeFile(target, content);
+  if(parsed.mode==='write_at'){
+    if(parsed.offset_bytes===undefined){
+      throw new Error('write_at requires an explicit offset_bytes.');
+    }
+    const info=await fs.lstat(target);
+    if(!info.isFile()||info.isSymbolicLink()||parsed.offset_bytes>info.size){
+      throw new Error('write_at target is not a regular file or offset creates a gap.');
+    }
+    const handle=await fs.open(target,'r+');
+    try{
+      // Revalidate the opened file, not just the pathname. A path may be
+      // swapped for another file or symlink between lstat and open.
+      const openedInfo=await handle.stat();
+      if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
+         openedInfo.ino!==info.ino||parsed.offset_bytes>openedInfo.size){
+        throw new Error('write_at target changed between validation and open.');
+      }
+      let written=0;
+      while(written<content.length){
+        const result=await handle.write(content,written,content.length-written,
+          parsed.offset_bytes+written);
+        if(result.bytesWritten<=0)throw new Error('Incomplete positioned file write.');
+        written+=result.bytesWritten;
+      }
+    }finally{await handle.close()}
+  }else{
+    if(parsed.offset_bytes!==undefined)
+      throw new Error('offset_bytes may only be used with write_at.');
+    if(parsed.mode==='append')await fs.appendFile(target,content);
+    else if(parsed.mode==='create')await fs.writeFile(target,content,{flag:'wx'});
+    else await fs.writeFile(target,content);
   }
 
   return { data: { path: target, bytesWritten: content.byteLength } };
@@ -637,6 +694,28 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const source = await policy.resolveExisting(parsed.source);
   const destination = await policy.resolveForCreate(parsed.destination);
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
+
+  if (parsed.atomic_no_overwrite) {
+    if (parsed.overwrite || parsed.recursive) {
+      throw new Error('atomic_no_overwrite requires overwrite=false and recursive=false.');
+    }
+    const sourceInfo = await fs.lstat(source);
+    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) {
+      throw new Error('atomic_no_overwrite requires a regular, non-symlink file.');
+    }
+    // fs.link is an atomic no-replace publish on the same filesystem.
+    // Unlike a check-then-rename, another process cannot win the race
+    // and have its destination silently overwritten. The transfer's stage
+    // lives in the same directory as the final destination.
+    const normalizeDirectory = (value: string) =>
+      process.platform === 'win32' ? value.toLowerCase() : value;
+    if (normalizeDirectory(path.dirname(source)) !== normalizeDirectory(path.dirname(destination))) {
+      throw new Error('atomic_no_overwrite requires the same source and destination directory.');
+    }
+    await fs.link(source, destination);
+    await fs.unlink(source);
+    return { data: { source, destination, atomicNoOverwrite: true } };
+  }
 
   if (!parsed.overwrite) {
     try {
@@ -2036,6 +2115,7 @@ async function workspaceSnapshot(
 
 export interface AgentExecutionContext {
   processes?: ProcessManager;
+  operationJournal?: AgentOperationJournal;
   taskGraphs?: TaskGraphStore;
   runbooks?: RunbookStore;
   privilegeMode?: 'direct' | 'broker';
@@ -2201,6 +2281,15 @@ export async function executeCapability(
     );
   }
   switch (capability) {
+    case 'agent.operation.status': {
+      // Operator-only MCP tool authorizes caller and target at the Hub.
+      // Agent returns only request metadata; missing IDs do NOT imply that
+      // no external side effect occurred.
+      const parsed=z.object({request_id:z.string().uuid()}).strict().parse(input);
+      if (!context.operationJournal) throw new Error('Agent operation journal is unavailable.');
+      const record=await context.operationJournal.inspect(parsed.request_id);
+      return {data:{found:record!==undefined,...(record?{record}:{})}};
+    }
     case 'shell.exec':
       return await executeShell(input, policy);
     case 'process.start':

@@ -179,6 +179,139 @@ test('process history can be explicitly pruned', async () => {
 });
 
 
+
+test('process capacity reclaims only the oldest exited session before retention expires', async () => {
+  const manager = new ProcessManager({ maxSessions: 2, exitedRetentionMs: 60_000 });
+  const policy = new PathPolicy(['*']);
+  const command = process.platform === 'win32'
+    ? "Write-Output 'done'"
+    : "printf 'done\n'";
+  const done = async (id: string) => {
+    let afterSeq = 0;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const result = await manager.read({
+        session_id: id, after_seq: afterSeq, wait_ms: 250,
+      });
+      afterSeq = result.nextSeq;
+      if (result.session.status === 'exited') return;
+    }
+    assert.fail('fixture did not exit');
+  };
+  const first = await manager.start({ command }, policy);
+  await done(first.sessionId);
+  const second = await manager.start({ command }, policy);
+  await done(second.sessionId);
+  assert.equal(manager.list().length, 2);
+  const third = await manager.start({ command }, policy);
+  assert.equal(manager.list().length, 2);
+  assert.ok(!manager.list().some(s => s.sessionId === first.sessionId));
+  assert.ok(manager.list().some(s => s.sessionId === second.sessionId));
+  assert.ok(manager.list().some(s => s.sessionId === third.sessionId));
+  await done(third.sessionId);
+});
+
+test('process capacity preserves active processes and refuses if no safe eviction exists', async () => {
+  const manager = new ProcessManager({ maxSessions: 1 });
+  const policy = new PathPolicy(['*']);
+  const started = await manager.start({
+    command: 'node -e "setInterval(() => {}, 1000)"',
+  }, policy);
+  try {
+    await assert.rejects(
+      manager.start({ command: 'node -e "console.log(1)"' }, policy),
+      (error: unknown) => error instanceof Error && 'code' in error &&
+        error.code === 'PROCESS_SESSION_LIMIT',
+    );
+    assert.equal(manager.list()[0]?.sessionId, started.sessionId);
+    assert.equal(manager.list()[0]?.status, 'running');
+  } finally {
+    await manager.stop({ session_id: started.sessionId });
+  }
+});
+
+test('concurrent process starts reserve capacity before asynchronous setup', async () => {
+  const manager = new ProcessManager({ maxSessions: 2 });
+  const policy = new PathPolicy(['*']);
+  const attempts = await Promise.allSettled(
+    Array.from({ length: 4 }, () => manager.start({
+      command: 'node -e "setInterval(() => {}, 1000)"',
+    }, policy)),
+  );
+  const accepted = attempts.filter(
+    (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof manager.start>>> =>
+      r.status === 'fulfilled',
+  );
+  const rejected = attempts.filter(r => r.status === 'rejected');
+  try {
+    assert.equal(accepted.length, 2, 'never accept over capacity; '+rejected.map(r=>String((r as PromiseRejectedResult).reason?.code??(r as PromiseRejectedResult).reason?.message)).join('|'));
+    assert.equal(rejected.length, 2, 'reject extra concurrent starts');
+    assert.equal(manager.list().length, 2);
+    for (const failure of rejected) {
+      assert.equal((failure as PromiseRejectedResult).reason?.code, 'PROCESS_SESSION_LIMIT');
+    }
+  } finally {
+    for (const result of accepted) {
+      await manager.stop({ session_id: result.value.sessionId });
+    }
+  }
+});
+
+test('failed start releases its capacity reservation for a later valid start', async () => {
+  const manager = new ProcessManager({ maxSessions: 1 });
+  const policy = new PathPolicy(['*']);
+  await assert.rejects(manager.start({
+    cwd: path.join(os.tmpdir(), 'nexowire-nonexistent-dir-test-20261016'),
+    command: 'node -e "console.log(1)"',
+  }, policy));
+  const start = await manager.start({ command: 'node -e "console.log(1)"' }, policy);
+  assert.ok(start.sessionId);
+  let afterSeq = 0;
+  for (let i = 0; i < 30; i++) {
+    const state = await manager.read({ session_id: start.sessionId, after_seq: afterSeq, wait_ms: 250 });
+    afterSeq = state.nextSeq;
+    if (state.session.status === 'exited') return;
+  }
+  assert.fail('fixture did not finish');
+});
+
+test('an invalid start does not discard completed session history under pressure', async () => {
+  const manager = new ProcessManager({ maxSessions: 1, exitedRetentionMs: 60_000 });
+  const policy = new PathPolicy(['*']);
+  const started = await manager.start({
+    command: 'node -e "console.log(1)"',
+  }, policy);
+  let afterSeq = 0;
+  for (let i = 0; i < 25; i++) {
+    const state = await manager.read({
+      session_id: started.sessionId, after_seq: afterSeq, wait_ms: 250,
+    });
+    afterSeq = state.nextSeq;
+    if (state.session.status === 'exited') break;
+  }
+  assert.equal(manager.list()[0]?.status, 'exited');
+  await assert.rejects(manager.start({
+    cwd: path.join(os.tmpdir(), 'nexowire-bad-cwd-retention-test'),
+    command: 'node -e "console.log(2)"',
+  }, policy));
+  assert.equal(manager.list().length, 1);
+  assert.equal(manager.list()[0]?.sessionId, started.sessionId);
+  const resumed = await manager.start({
+    command: 'node -e "console.log(2)"',
+  }, policy);
+  assert.equal(manager.list().length, 1);
+  assert.equal(manager.list()[0]?.sessionId, resumed.sessionId);
+  assert.notEqual(resumed.sessionId, started.sessionId);
+  let finalSeq = 0;
+  for (let i = 0; i < 25; i++) {
+    const state = await manager.read({
+      session_id: resumed.sessionId, after_seq: finalSeq, wait_ms: 250,
+    });
+    finalSeq = state.nextSeq;
+    if (state.session.status === 'exited') return;
+  }
+  assert.fail('second process did not exit');
+});
+
 test('process manager emits bounded process events without command payloads', async () => {
   const policy = new PathPolicy(['*']);
   const emitted: Array<{ topic: string; data: Record<string, unknown> }> = [];
