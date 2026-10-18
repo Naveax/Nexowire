@@ -494,6 +494,13 @@ export async function runNativeAgent(
                     };
                   }
                 }
+                // Persist a separate dispatch marker BEFORE the executor.
+                // If this CAS fails, no mutation can reach the target.
+                if(mutation){
+                  await operationJournal.markDispatched(
+                    request.data.requestId,fingerprint,
+                  );
+                }
                 let outcome: AgentResponse;
                 try {
                   const data = await executeCapability(
@@ -548,10 +555,23 @@ export async function runNativeAgent(
                             shellResult.data?.timedOut !== true,
                         }
                       : undefined;
+                    const evidence=outcome.ok
+                      ? execution
+                        ? {kind:'shell_exit' as const,
+                            verified:execution.processExitCode!==null &&
+                              !execution.timedOut}
+                        : request.data.capability==='files.write'
+                          ? {kind:'file_write_ack' as const,verified:false}
+                          : request.data.capability==='windows.service.control'
+                            ? {kind:'service_readback' as const,verified:false}
+                            : undefined
+                      : undefined;
                     await operationJournal.complete(
                       request.data.requestId,
                       outcome.ok ? 'succeeded' : 'failed',
                       execution,
+                      evidence,
+                      fingerprint,
                     );
                   } catch {
                     // Remote side effects may have completed, but the final
