@@ -15,6 +15,7 @@ import { executeWindowsAccessibilityCapability } from './windows-accessibility.j
 import { executeWindowsPointerCapability } from './windows-pointer.js';
 import { executeWindowsVirtualPointerCapability } from './windows-virtual-pointer.js';
 import { executeWindowsPrivateDesktopCapability } from './windows-private-desktop.js';
+import {executeWindowsPrivateFilePickerCapability} from './windows-private-file-picker.js';
 import {inspectWindowsPrivateWindowProvenance} from './windows-private-window-provenance-audit.js';
 import {resolveObservedPrivateUiaTarget} from './windows-private-uia-target.js';
 import {inspectWindowsPrivateProcessAncestry} from './windows-private-process-ancestry-audit.js';
@@ -2586,6 +2587,10 @@ export async function executeCapability(
       return await inspectWindowsPrivateWindowProvenance();
     case 'windows.private_desktop.accessibility.resolve':
       return await resolveObservedPrivateUiaTarget(input);
+    case 'windows.private_desktop.file_picker.prepare':
+    case 'windows.private_desktop.file_picker.select':
+    case 'windows.private_desktop.file_picker.cancel':
+      return await executeWindowsPrivateFilePickerCapability(capability,input,policy);
 case 'windows.private_desktop.process_audit':
       return await inspectWindowsPrivateProcessAncestry();
     case 'windows.private_desktop.owner_gui_audit':
