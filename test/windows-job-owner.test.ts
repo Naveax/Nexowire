@@ -164,6 +164,9 @@ test('Windows Job preserves separate stdin/stdout/stderr pipes', {
     shell:'cmd',
     command:'echo WINJOB_STDOUT & echo WINJOB_STDERR 1>&2',
   },new PathPolicy(['*']));
+  assert.equal(session.jobMembershipVerified, 'root_at_launch');
+  assert.equal(session.descendantCoverage, 'job_members_only');
+  assert.equal(session.outOfJobDescendants, 'unknown');
   let stdout='',stderr='',cursor=0,status='running';
   try{
     for(let attempt=0;attempt<30;attempt++){

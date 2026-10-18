@@ -25,4 +25,9 @@ if ($zig) {
   if ($LASTEXITCODE -ne 0) { throw "MSVC helper build failed: $LASTEXITCODE" }
 }
 if (!(Test-Path $OutputPath)) { throw 'Native helper output missing.' }
+# A build-produced checksum detects helper-only replacement. It does not
+# authenticate the publisher: the release signer gate remains required.
+$sha = (Get-FileHash -LiteralPath $OutputPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$manifest = [IO.Path]::ChangeExtension($OutputPath, '.sha256')
+[IO.File]::WriteAllText($manifest, $sha + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
 Write-Output "Windows Job helper built: $OutputPath"

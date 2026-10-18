@@ -1,4 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { verifyWindowsKernelJob } from './windows-job-kernel-attestation.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,17 +34,51 @@ function candidateBinary(): string {
   return path.resolve(moduleDir, '../../native/windows-job-owner.exe');
 }
 
+interface HelperIdentity { digest: string; signature: string }
+
+/**
+ * Build-produced SHA detects helper-only substitution; release signer and
+ * protected manifest provenance still require separate production acceptance.
+ */
+export async function verifyWindowsJobHelperBinary(helper: string): Promise<HelperIdentity> {
+  try {
+    const manifest = path.join(path.dirname(helper), 'windows-job-owner.sha256');
+    const expected = (await fs.readFile(manifest, 'utf8')).trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error('invalid SHA256 manifest');
+    const dir = path.dirname(helper);
+    const [dirLink, link, resolved, first] = await Promise.all([
+      fs.lstat(dir), fs.lstat(helper), fs.realpath(helper), fs.stat(helper, { bigint: true }),
+    ]);
+    if (dirLink.isSymbolicLink() || link.isSymbolicLink() || !link.isFile() ||
+        path.win32.normalize(resolved).toLowerCase() !==
+          path.win32.normalize(helper).toLowerCase()) {
+      throw new Error('helper path is a link or reparse redirection');
+    }
+    const handle = await fs.open(helper, 'r');
+    let actual: string;
+    try {
+      actual = createHash('sha256').update(await handle.readFile()).digest('hex');
+    } finally {
+      await handle.close();
+    }
+    const second = await fs.stat(helper, { bigint: true });
+    if (actual !== expected || first.dev !== second.dev ||
+        first.ino !== second.ino || first.size !== second.size ||
+        first.mtimeNs !== second.mtimeNs) {
+      throw new Error('helper hash or file identity changed');
+    }
+    return { digest: actual,
+      signature: [first.dev, first.ino, first.size, first.mtimeNs].join(':') };
+  } catch (cause) {
+    throw new WindowsJobOwnerError('WINDOWS_JOB_HELPER_UNTRUSTED',
+      'Windows Job helper image/path integrity unverified: ' +
+      (cause instanceof Error ? cause.message : String(cause)));
+  }
+}
 async function binaryPath(): Promise<string> {
   const candidate = candidateBinary();
-  try {
-    if ((await fs.stat(candidate)).isFile()) return candidate;
-  } catch {
-    // Fail closed below; never launch an arbitrary replacement EXE.
-  }
-  throw new WindowsJobOwnerError(
-    'WINDOWS_JOB_HELPER_UNAVAILABLE',
-    'Windows Job owner executable is missing. Refusing unmanaged process launch.',
-  );
+  await verifyWindowsJobHelperBinary(candidate);
+  return candidate;
 }
 
 export async function launchWindowsJob(
@@ -56,14 +92,18 @@ export async function launchWindowsJob(
   const helper = await binaryPath();
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-job-'));
   const marker = path.join(directory, 'assigned.txt');
+  const release = path.join(directory, 'verified.ok');
+  const jobName = 'Local\\Nexowire-' + randomUUID();
   let child: ChildProcessWithoutNullStreams | undefined;
+  let verified = false;
   try {
     // Invoked by Node with pipes. Native helper forwards inherited std handles
     // to the suspended shell and owns the Job until every member is gone.
     child = spawn(
       helper,
       ['--status', marker, '--cwd', options.cwd ?? '-', '--parent',
-        options.guardOnParentExit ? String(process.pid) : '0', '--', executable, ...args],
+        options.guardOnParentExit ? String(process.pid) : '0',
+        '--job', jobName, '--release', release, '--', executable, ...args],
       { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: options.env ?? process.env },
     );
     let failed: Error | undefined;
@@ -75,12 +115,18 @@ export async function launchWindowsJob(
       if (failed) throw failed;
       try {
         const line = (await fs.readFile(marker, 'utf8')).trim();
-        const match = /^NWJOB3 ([1-9][0-9]*) ([1-9][0-9]*)$/.exec(line);
+        const match = /^NWJOB4 ([1-9][0-9]*) ([1-9][0-9]*)$/.exec(line);
         if (!match) throw new Error('Invalid Windows Job attestation');
         const pid = Number(match[1]);
         if (!Number.isSafeInteger(pid) || pid > 0xffffffff) {
           throw new Error('Invalid owned Windows process ID');
         }
+        // Never trust helper-authored marker text without an independent
+        // Win32 kernel membership + job limit verification.
+        await verifyWindowsKernelJob(pid, match[2]!, jobName);
+        await verifyWindowsJobHelperBinary(helper);
+        await fs.writeFile(release, 'verified', { flag: 'wx', mode: 0o600 });
+        verified = true;
         return {
           child, pid, creationFiletime: match[2]!,
           guardianPid: child.pid ?? 0, closed: () => closed,
@@ -104,7 +150,16 @@ export async function launchWindowsJob(
     if (child && child.exitCode === null) child.kill();
     throw error;
   } finally {
-    await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    const cleanup = () => { void fs.rm(directory, { recursive: true, force: true })
+      .catch(() => undefined); };
+    // Never remove the verification gate while the native guardian still
+    // needs to observe it. Keep only this unique session's temp directory
+    // until the guardian's close event, including normal long-running tasks.
+    if (verified && child && child.exitCode === null && child.signalCode === null) {
+      child.once('close', cleanup);
+    } else {
+      await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 }
 

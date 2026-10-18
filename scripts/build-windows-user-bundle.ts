@@ -390,11 +390,35 @@ export async function buildWindowsUserBundle(
       path.join(root, 'dist', 'src'),
       path.join(appRoot, 'dist', 'src'),
     );
+    // A tag-scoped production bundle MUST use an Authenticode-valid helper
+    // from the explicitly pinned trusted publisher. PR bundles remain
+    // unsigned staging artifacts and are NEVER production acceptance.
+    if (process.env.GITHUB_REF_TYPE === 'tag') {
+      const expectedPublisher =
+        (process.env.NEXOWIRE_WINDOWS_JOB_PUBLISHER_THUMBPRINT ?? '').trim().toLowerCase();
+      if (!/^[a-f0-9]{40}$/.test(expectedPublisher)) {
+        fail('WINDOWS_JOB_TRUSTED_PUBLISHER_NOT_CONFIGURED: tagged release blocked.');
+      }
+      const helperSource = path.join(root, 'native', 'windows-job-owner.exe');
+      const actualPublisher = runPowerShell([
+        '$ErrorActionPreference = "Stop"',
+        '$signature = Get-AuthenticodeSignature -LiteralPath ' + psLiteral(helperSource),
+        'if ($signature.Status -ne "Valid" -or -not $signature.SignerCertificate) { throw "WINDOWS_JOB_HELPER_UNSIGNED_OR_INVALID" }',
+        '$signature.SignerCertificate.Thumbprint.ToLowerInvariant()',
+      ].join('; ')).trim().toLowerCase();
+      if (actualPublisher !== expectedPublisher) {
+        fail('WINDOWS_JOB_PUBLISHER_MISMATCH: tagged release blocked.');
+      }
+    }
     // The Job guardian is a required runtime dependency on Windows.
     // Fail the release rather than shipping a silently unmanaged shell.
     const bundledJobOwner=path.join(appRoot,'dist','native','windows-job-owner.exe');
     await fs.mkdir(path.dirname(bundledJobOwner),{recursive:true});
     await fs.copyFile(path.join(root,'native','windows-job-owner.exe'),bundledJobOwner);
+    await fs.copyFile(
+      path.join(root, 'native', 'windows-job-owner.sha256'),
+      path.join(appRoot, 'dist', 'native', 'windows-job-owner.sha256'),
+    );
     await copyTree(
       path.join(root, 'skills'),
       path.join(appRoot, 'skills'),

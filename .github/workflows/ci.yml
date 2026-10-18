@@ -43,7 +43,7 @@ jobs:
         shell: pwsh
         run: ./scripts/build-windows-job-owner.ps1
       - name: Physical Windows Job Object regressions
-        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
+        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-helper-trust.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
       - name: Verify Windows native-agent singleton lease on a real runner
         run: node --test --import tsx test/native-agent-singleton.test.ts
       - name: Verify Windows DPAPI and pre-logon Hub contracts
@@ -60,6 +60,8 @@ jobs:
       - name: Verify one-shot private shell worker denies owner Default desktop
         run: node --test --import tsx test/private-shell-oneshot-desktop-gate.test.ts
       - run: node --test --import tsx test/durable-process.test.ts
+      - name: Verify independent cross-project negative acceptance gates
+        run: node --test --import tsx test/qa-final-acceptance-negative.test.ts test/qa-agent-journal-negative.test.ts test/qa-shell-outcome-negative.test.ts test/qa-artifact-integrity-negative.test.ts test/qa-pr-intake-negative.test.ts
 
   linux-native-live:
     runs-on: ubuntu-latest
