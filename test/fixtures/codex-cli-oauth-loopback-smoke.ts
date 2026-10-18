@@ -6,6 +6,7 @@
  */
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +23,24 @@ const metrics = {
   callbackAttempted: false, loopbackOnly: true,
 };
 let phase = 'setup';
+function nativeCodexExe(): string {
+  // The fixture runs on Windows only and invokes the exact native Codex
+  // binary rather than a CMD/PowerShell wrapper that can orphan descendants.
+  if (process.platform !== 'win32' || process.arch !== 'x64') {
+    throw new Error('native_codex_windows_x64_required');
+  }
+  const installed = path.join(
+    process.env.APPDATA || '',
+    'npm','node_modules','@openai','codex','node_modules',
+    '@openai','codex-win32-x64','vendor',
+    'x86_64-pc-windows-msvc','bin','codex.exe',
+  );
+  if (!process.env.APPDATA || !existsSync(installed)) {
+    throw new Error('native_codex_binary_not_found');
+  }
+  return installed;
+}
+
 const checks = {
   callback: false, resource: false, pkce: false,
   state: false, noSecretOutput: true,
@@ -143,7 +162,8 @@ async function main() {
       issuer: origin, resource: expectedResource,
     });
     phase = 'register-codex-server';
-    const add = await runCli([
+    const binary = nativeCodexExe();
+    const add = await runCli(binary, [
       'mcp','add','isolated-nexowire-oauth',
       '--url',expectedResource,
       '--oauth-resource',expectedResource,
@@ -152,14 +172,19 @@ async function main() {
     assert.equal(metrics.cliAdd,true);
 
     phase = 'codex-login';
-    child = spawn('cmd.exe', ['/d','/s','/c',
-      'codex mcp login isolated-nexowire-oauth --scopes mcp,offline_access'],
-      {cwd:process.cwd(),env, windowsHide:true,stdio:['ignore','pipe','pipe']});
+    child = spawn(binary, [
+      'mcp','login','isolated-nexowire-oauth','--scopes','mcp,offline_access',
+    ], {cwd:process.cwd(),env, windowsHide:true,stdio:['ignore','pipe','pipe']});
     let output = '';
     let sentCallback = false;
     let commandExit: number | null = null;
-    child.stdout?.on('data',(data:Buffer)=>{output += data.toString('utf8');});
-    child.stderr?.on('data',(data:Buffer)=>{output += data.toString('utf8');});
+    const appendBounded = (data:Buffer) => {
+      // CLI output may include a local authorization URL. Hold at most 64 KiB
+      // in memory; never print, write or reflect it on failure.
+      output = (output + data.toString('utf8')).slice(-65_536);
+    };
+    child.stdout?.on('data',appendBounded);
+    child.stderr?.on('data',appendBounded);
     child.on('exit',(code)=>{commandExit=code;});
     const deadline = Date.now()+22_000;
     while(Date.now()<deadline && commandExit === null) {
@@ -176,8 +201,20 @@ async function main() {
       const target = approval.headers.get('location');
       if(!target)continue;
       const callback = new URL(target);
-      checks.callback = ['localhost','127.0.0.1'].includes(callback.hostname) &&
-        callback.protocol==='http:';
+      const registered = url.searchParams.get('redirect_uri');
+      const expected = registered ? new URL(registered) : null;
+      checks.callback =
+        expected !== null &&
+        callback.protocol === 'http:' &&
+        expected.protocol === 'http:' &&
+        ['localhost','127.0.0.1'].includes(callback.hostname) &&
+        ['localhost','127.0.0.1'].includes(expected.hostname) &&
+        callback.port !== '' &&
+        callback.port === expected.port &&
+        callback.pathname === expected.pathname &&
+        callback.searchParams.get('state') === url.searchParams.get('state') &&
+        Boolean(callback.searchParams.get('code')) &&
+        callback.hash === '';
       if(!checks.callback)continue;
       callback.hostname='127.0.0.1';
       metrics.callbackAttempted = true;
@@ -205,7 +242,7 @@ async function main() {
     assert.equal(lastTokenUsed || metrics.codeExchange>0,true);
   } finally {
     if(child && child.exitCode===null)child.kill();
-    listener.close();
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
     await rm(root,{recursive:true,force:true,maxRetries:4,retryDelay:100});
   }
 }
@@ -220,10 +257,10 @@ async function readBody(req: import('node:http').IncomingMessage):Promise<string
   }
   return Buffer.concat(bytes).toString('utf8');
 }
-async function runCli(args:string[],env:NodeJS.ProcessEnv,timeoutMs:number){
+async function runCli(binary:string,args:string[],env:NodeJS.ProcessEnv,timeoutMs:number){
   // Only fixtures and known static arguments. No user secrets in args.
   return new Promise<{exitCode:number|null}>((resolve,reject)=>{
-    const proc=spawn('cmd.exe',['/d','/s','/c','codex',...args],
+    const proc=spawn(binary,args,
       {cwd:process.cwd(),env, windowsHide:true,stdio:'ignore'});
     const timer=setTimeout(()=>{proc.kill();reject(new Error('cli_timeout'));},timeoutMs);
     proc.on('error',(err)=>{clearTimeout(timer);reject(err);});
