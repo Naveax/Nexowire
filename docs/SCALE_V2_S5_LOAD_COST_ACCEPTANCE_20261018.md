@@ -13,6 +13,18 @@
 - `scripts/s5-soak-local-runner.ts`: explicitly acknowledged (over five minutes) bounded synthetic loopback sampler, at most 32 clients and 1,440 minutes, stopping on an error. Recreates its database each minute and **does not establish persistent staging/WSS/ledger continuity**. It cannot count as a completed 24h acceptance soak.
 - `scripts/s5-soak-acceptance.ts`: *fail-closed evidence gate* requiring at least 24 actual hours, minute samples with no >2-minute gaps, exact source SHA, real completed-tool and provider counters, owner approval, and no incident. It checks submitted metadata, not signed provider attestations. Operational acceptance additionally requires independent evidence audit and SLO signoff.
 
+### Measured Work PC loopback sample (source `ec5248d5998b66faf7429e116f94c3d26bcd5841`)
+
+| Open WebSockets | Unique quota reservations | RPC p99 | Whole-run wall time | Jain equal-load index |
+| ---: | ---: | ---: | ---: | ---: |
+| 16 | 32 | 117.742 ms | 361.47 ms | 1.00000 |
+| 32 | 64 | 542.159 ms | 1,669.17 ms | 1.00000 |
+| 64 | 128 | 1,104.188 ms | 4,290.62 ms | 1.00000 |
+| 100 | 200 | 610.757 ms | 5,545.78 ms | 1.00000 |
+| 256 | 512 | 887.978 ms | 16,614.29 ms | 1.00000 |
+
+Single run per population; samples are subject to Work PC foreground activity, Windows scheduling, storage cache and Antivirus. No stable SLA confidence intervals. Connection counts are local TCP WebSocket connections; open WSS staging sessions, completed OS tool tasks and cloud requests: **not measured**. For CPU/RSS, actual bytes, socket teardown, latency p50/p95/p99/max, queue and replays, inspect the full machine-readable JSON source record.
+
 ### Reproduction
 
 From the isolated worktree with Node >=22 and dependencies installed:
