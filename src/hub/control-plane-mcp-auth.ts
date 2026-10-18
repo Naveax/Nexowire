@@ -128,10 +128,9 @@ export class ControlPlaneMcpClient {
       !['user', 'operator', 'admin'].includes(
         String(body.role),
       ) ||
-      (body.scopes !== undefined &&
-        (!Array.isArray(body.scopes) ||
-          !body.scopes.includes('mcp') ||
-          body.scopes.some((scope) => typeof scope !== 'string'))) ||
+      !Array.isArray(body.scopes) ||
+      !body.scopes.includes('mcp') ||
+      body.scopes.some((scope) => typeof scope !== 'string') ||
       !Array.isArray(body.allowedDeviceIds) ||
       body.allowedDeviceIds.some(
         (value) =>

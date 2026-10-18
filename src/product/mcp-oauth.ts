@@ -399,7 +399,11 @@ export class McpOAuthService {
       );
     }
     const redirectUri = normalizeRedirectUri(redirectRaw);
-    if (!client.redirectUris.some((registered) => registeredRedirectMatches(registered, redirectUri))) {
+    if (
+      !client.redirectUris.some((registered) =>
+        registeredRedirectMatches(registered, redirectUri)
+      )
+    ) {
       throw new McpOAuthError(
         'invalid_request',
         'redirect_uri is not registered for this client.',

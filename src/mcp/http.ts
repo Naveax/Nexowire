@@ -23,12 +23,32 @@ import {
   resolveMcpAuthorization,
   type BearerAuthorization,
 } from '../security/auth.js';
-import { OidcVerifier } from '../security/oidc.js';
+import { OidcVerificationError, OidcVerifier } from '../security/oidc.js';
 import { deniedMcpToolNames } from '../security/tool-authorization.js';
 import { createNexowireMcpServer, type McpContext } from './create-server.js';
 import { enforceHostedMcpMetering } from './hosted-metering.js';
 import { onlineCapabilityUnion } from './tool-capabilities.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+
+const OIDC_INFRASTRUCTURE_ERROR_CODES = new Set([
+  'OIDC_CONFIG_INVALID',
+  'OIDC_INSECURE_URL',
+  'OIDC_HTTP_ERROR',
+  'OIDC_HTTP_TIMEOUT',
+  'OIDC_HTTP_FAILED',
+  'OIDC_DISCOVERY_INVALID',
+  'OIDC_DISCOVERY_ISSUER_MISMATCH',
+  'OIDC_JWKS_INVALID',
+  'OIDC_JWKS_DUPLICATE_KID',
+  'OIDC_RESPONSE_TOO_LARGE',
+  'OIDC_KEY_INVALID',
+]);
+
+/** Invalid credentials get 401; unavailable issuer/verifier gets 503. */
+export function classifyMcpAuthFailure(error: unknown): 'token' | 'verification' {
+  if (!(error instanceof OidcVerificationError)) return 'verification';
+  return OIDC_INFRASTRUCTURE_ERROR_CODES.has(error.code) ? 'verification' : 'token';
+}
 
 /** Fingerprint the actual MCP router file loaded beside this HTTP module. */
 export function loadedMcpRouterSha256(): string {
@@ -221,7 +241,7 @@ export async function runHttpServer(
               'WWW-Authenticate',
               'Bearer resource_metadata="' +
                 resourceMetadataUrl +
-                '\", scope=\"mcp\"',
+                '", scope="mcp"',
             );
           }
           res.setHeader('Cache-Control', 'no-store');
@@ -237,18 +257,27 @@ export async function runHttpServer(
           authorization satisfies BearerAuthorization;
         next();
       })
-      .catch(() => {
-        if (resourceMetadataUrl) {
-          res.setHeader(
-            'WWW-Authenticate',
-            'Bearer resource_metadata="' +
-              resourceMetadataUrl +
-              '\", scope=\"mcp\"',
-          );
-        }
-        // A verifier outage is not evidence that the user token is invalid.
-        // Keep its cause private and do not force pointless OAuth logins.
+      .catch((error: unknown) => {
+        // Credentials with malformed/expired/mismatched JWT claims are not
+        // upstream outages. Real issuer / JWKS failures must not prompt login.
         res.setHeader('Cache-Control', 'no-store');
+        if (classifyMcpAuthFailure(error) === 'token') {
+          if (resourceMetadataUrl) {
+            res.setHeader(
+              'WWW-Authenticate',
+              'Bearer resource_metadata="' +
+                resourceMetadataUrl +
+                '", scope="mcp"',
+            );
+          }
+          res.status(401).json({
+            error: 'unauthorized',
+            code: 'MCP_AUTH_REQUIRED',
+            layer: 'token',
+            next_action: 'reauthorize',
+          });
+          return;
+        }
         res.setHeader('Retry-After', '5');
         res.status(503).json({
           error: 'service_unavailable',

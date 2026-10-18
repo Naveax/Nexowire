@@ -205,3 +205,79 @@ test('OAuth HTTP errors classify malicious callbacks as safe invalid_request, no
   assert.equal(error.error, 'invalid_request');
   assert.doesNotMatch(JSON.stringify(error), /evil\.example|nwx_mcp_|refresh_token/i);
 });
+
+test('OIDC invalid bearer differs from issuer outage, without disclosing secrets', async () => {
+  const { classifyMcpAuthFailure } = await import('../src/mcp/http.js');
+  const { OidcVerificationError } = await import('../src/security/oidc.js');
+  for (const name of [
+    'OIDC_TOKEN_MALFORMED',
+    'OIDC_TOKEN_EXPIRED',
+    'OIDC_SIGNATURE_INVALID',
+    'OIDC_ISSUER_MISMATCH',
+    'OIDC_AUDIENCE_MISMATCH',
+    'OIDC_KEY_NOT_FOUND',
+    'OIDC_ROLE_INVALID',
+  ]) {
+    assert.equal(classifyMcpAuthFailure(new OidcVerificationError(name, 'fixture')), 'token');
+  }
+  for (const name of [
+    'OIDC_JWKS_INVALID', 'OIDC_HTTP_TIMEOUT', 'OIDC_HTTP_FAILED',
+    'OIDC_DISCOVERY_ISSUER_MISMATCH', 'OIDC_CONFIG_INVALID',
+  ]) {
+    assert.equal(classifyMcpAuthFailure(new OidcVerificationError(name, 'fixture')), 'verification');
+  }
+  assert.equal(classifyMcpAuthFailure(new Error('opaque private error')), 'verification');
+});
+
+test('OIDC and hosted OAuth configured simultaneously route opaque token to correct verifier', async () => {
+  const { OidcVerifier, OidcVerificationError } = await import('../src/security/oidc.js');
+  let jwksFetches = 0;
+  let hostedCalls = 0;
+  const oidc = new OidcVerifier({
+    issuer: 'https://issuer.example.test', audience: 'separate-jwt-resource',
+    fetchFn: async () => { jwksFetches++; throw new Error('network unavailable'); },
+  });
+  const hostedToken = 'Bearer nwx_mcp_valid-looking-opaque-access-token';
+  const granted = await resolveMcpAuthorization(
+    hostedToken, [], undefined, oidc, async (header) => {
+      hostedCalls++;
+      assert.equal(header, hostedToken);
+      return {
+        accountId: 'authorized-account', role: 'user',
+        allowedDeviceIds: ['device-assigned'],
+      };
+    },
+  );
+  assert.equal(granted?.kind, 'control-plane');
+  assert.equal(hostedCalls, 1);
+  assert.equal(jwksFetches, 0);
+  await assert.rejects(
+    resolveMcpAuthorization('Bearer not-a-jwt', [], undefined, oidc, async () => {
+      throw new Error('should not contact hosted verifier for malformed JWT');
+    }),
+    (error: unknown) => error instanceof OidcVerificationError &&
+      error.code === 'OIDC_TOKEN_MALFORMED',
+  );
+  const denied = await resolveMcpAuthorization(
+    'Bearer nwx_mcp_bad-opaque-token', [], undefined, oidc, async () => {
+      hostedCalls++;
+      return undefined;
+    },
+  );
+  assert.equal(denied, undefined);
+  assert.equal(hostedCalls, 2);
+  assert.equal(jwksFetches, 0);
+});
+
+test('control-plane missing scope is denied, not merely wrong explicit scope', async () => {
+  for (const reply of [
+    {authenticated:true,accountId:'a',role:'user',allowedDeviceIds:['device-a']},
+    {authenticated:true,accountId:'a',role:'user',scopes:[],allowedDeviceIds:['device-a']},
+  ]) {
+    const client = new ControlPlaneMcpClient({
+      controlPlaneUrl: issuer, serviceToken: 'non-production-service-token',
+      fetchImpl: async () => Response.json(reply),
+    });
+    assert.equal(await client.authenticate('Bearer nwx_mcp_not-real'), undefined);
+  }
+});
