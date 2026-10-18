@@ -235,3 +235,72 @@ test('ping, pong, success ACK and reconnect metrics contain no credentials or pa
   assert.ok(metrics['agent.heartbeat_pings'].events >= 2);
   assert.equal(metrics['agent.ack_responses'].events, 1);
 });
+
+
+test('offline device is not dispatched or silently replaced by a different target', async (t) => {
+  const f = await fixture();
+  t.after(() => closeFixture(f));
+  await assert.rejects(
+    () => f.broker.request('sim-naveax', 'machine.snapshot', {}, 100),
+    (error: unknown) =>
+      error instanceof NexowireError && error.code === 'AGENT_OFFLINE',
+  );
+  await openAgent(f, 'sim-workpc', 'aaaa1111-1111-4111-8111-111111111111', ['machine.snapshot']);
+  await assert.rejects(
+    () => f.broker.request('sim-naveax', 'machine.snapshot', {}, 100),
+    (error: unknown) =>
+      error instanceof NexowireError && error.code === 'AGENT_OFFLINE',
+  );
+  assert.equal(f.broker.getConnectionHealth('sim-workpc')?.online, true);
+  assert.equal(f.broker.getConnectionHealth('sim-naveax'), undefined);
+});
+
+test('heartbeat timeout is distinguished from ordinary socket close', async (t) => {
+  const f = await fixture();
+  t.after(() => closeFixture(f));
+  await openAgent(f, 'stale-heartbeat', 'aaaa2222-2222-4222-8222-222222222222', ['machine.snapshot']);
+  const serverSocket = [...f.wss.clients][0]!;
+  f.broker.noteHeartbeatTimeout(serverSocket);
+  serverSocket.terminate();
+  await waitFor(() => f.broker.getConnectionHealth('stale-heartbeat')?.online === false);
+  assert.equal(f.broker.getConnectionHealth('stale-heartbeat')?.lastDisconnectReason, 'heartbeat_timeout');
+  assert.equal(f.broker.getConnectionHealth('stale-heartbeat')?.transport, 'websocket');
+});
+
+test('queued ACK/event from an old socket cannot affect a replacement socket', async (t) => {
+  const f = await fixture();
+  t.after(() => closeFixture(f));
+  const id = '12345678-1234-4234-8234-123456789abc';
+  const instance = 'aaaa3333-3333-4333-8333-333333333333';
+  const first = await openAgent(f, 'stale-frame', instance, ['machine.snapshot']);
+  const oldServerSocket = [...f.wss.clients][0]!;
+  let completed = false;
+  const promise = f.broker.request('stale-frame', 'machine.snapshot', {}, 2_000, id)
+    .then((result) => { completed = true; return result; });
+  await nextRequest(first);
+
+  const second = await openAgent(f, 'stale-frame', instance, ['machine.snapshot'], 2);
+  const continued = await nextRequest(second);
+  assert.equal(continued.requestId, id);
+
+  // Deterministic injection models a frame already queued on the old WSS
+  // transport just as its close handshake races with a replacement hello.
+  const deliver = (f.broker as unknown as {
+    handleMessage: (deviceId: string, socket: WebSocket, raw: string) => void;
+  }).handleMessage.bind(f.broker);
+  deliver('stale-frame', oldServerSocket, JSON.stringify({
+    type: 'response', requestId: id, ok: true, data: {data: {old: true}},
+  }));
+  deliver('stale-frame', oldServerSocket, JSON.stringify({
+    type: 'event', eventId: 'aaaa4444-4444-4444-8444-444444444444',
+    at: new Date().toISOString(), topic: 'sim.old.socket',
+    data: { leaked: true },
+  }));
+  await delay(30);
+  assert.equal(completed, false);
+  const staleEvents = await f.broker.readEvents({ topics: ['sim.old.socket'] });
+  assert.equal(staleEvents.events.length, 0);
+  answer(second, id, true);
+  assert.deepEqual(await promise, {data: {confirmed: true}});
+  assert.equal(f.metrics.snapshot()['agent.ack_responses'].events, 1);
+});

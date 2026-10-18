@@ -46,3 +46,12 @@ The telemetry intentionally excludes bearer secrets, URLs, IPs, command text, re
 - Tests use isolated localhost WebSocket endpoints, fake device IDs and no physical cable/Wi-Fi interruption. Separate harmless live read-only checks may confirm current connection availability but are NOT a proof of repeated real failure/recovery.
 - Full live two-PC sustained reconnect, deployed Hub build provenance, active-session owner revocation, authenticated ingress resilience, quotas and relay cost ceilings remain unaccepted. S2/07/13 owns Public WSS and OAuth.
 - Typecheck, unit tests and GitHub CI must all be traced to the PR HEAD. Green CI does not prove live deployment. No production rollout, new paid infrastructure, privilege changes, firewall edits, DNS edits or Tailscale modifications are authorized by this draft.
+
+
+## Follow-up hardening (2026-10-18, second development pass)
+
+- The outbound Agent hello now waits at most **1000 ms** by default (hard cap 1500 ms) for the optional Admin Bridge probe. Hub hello timeout defaults to 5000 ms; the old 5000 ms Bridge probe could race rejection. Timeout and probe errors result in non-elevated advertised state.
+- When WSS closes while the probe is pending, the completion cannot send a stale hello. WebSocket send errors are trapped and terminate the old socket, letting reconnect classify unacknowledged operations conservatively.
+- Deterministic tests cover stale ACK/event fencing, offline exact-ID isolation, heartbeat timeout classification, slow/rejected Bridge probe and verified Bridge elevation status. No real Agent restarts or service changes.
+- **Independent local Windows test environment finding:** TEMP and TMP both resolve to D:\Temp. Two existing workspace-intelligence tests fail individually with PathDeniedError concerning D:\ root. This is a path-ancestor traversal policy/test-fixture issue, assigned to the Filesystem Permissions/Path Safety workstream rather than weakening policy here.
+- Previous PR SHA c462d6a306f4ca9523f556542c2565df2323fb8c completed GitHub Actions run 39134929558 with 7/7 checks successful. That result does not cover a new commit until its own CI finishes.
