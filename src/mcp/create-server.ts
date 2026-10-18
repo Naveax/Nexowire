@@ -3,6 +3,7 @@ import { classifyFailure, redactDiagnosticText, redactDiagnosticValue } from '..
 import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
+import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
@@ -117,7 +118,9 @@ function applyToolRegistrationFilters(
     // has for its individual read, hash, write, move and cleanup operations.
     const transferDependencies = name === 'file_transfer_between_devices'
       ? ['file_read','file_stat','file_hash','file_write','file_move','file_delete']
-      : [];
+      : name === 'artifact_bridge_ingest_device_file'
+        ? ['file_read', 'file_stat', 'file_hash']
+        : [];
     const dependenciesAuthorized = transferDependencies.every((dependency) =>
       isMcpToolAuthorized(input.authorization,dependency));
     const dependenciesAvailable =
@@ -6524,6 +6527,38 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       inputSchema: {},
     },
     async () => toolResult({ checkpoints: await ctx.workspaces.list() }),
+  );
+
+  registerArtifactBridgeTools(
+    server, ctx.workspaces, ctx.toolAuthorization,
+    (deviceId) => {
+      const fetchSource = async (capability: string, request: Record<string, unknown>) => {
+        const response = await execute(ctx, capability, request, deviceId);
+        const value = response.structuredContent as Record<string, unknown>;
+        if (!value || value.ok !== true || !value.data ||
+            typeof value.data !== 'object' || Array.isArray(value.data)) {
+          throw new Error('ARTIFACT_SOURCE_UNAVAILABLE: ' + capability);
+        }
+        return value.data as Record<string, unknown>;
+      };
+      return {
+        stat: async (file) => {
+          const value = await fetchSource('files.stat', { path: file });
+          return { size: Number(value.size), type: String(value.type) };
+        },
+        sha256: async (file, maxBytes) => {
+          const value = await fetchSource('files.hash', { path: file, max_bytes: maxBytes });
+          return String(value.sha256);
+        },
+        read: async (file, offset, maxBytes) => {
+          const value = await fetchSource('files.read', {
+            path: file, encoding: 'base64', offset_bytes: offset, max_bytes: maxBytes,
+          });
+          return { sourceBytes: Number(value.size), offsetBytes: Number(value.offsetBytes),
+            bytesRead: Number(value.bytesRead), contentBase64: String(value.content) };
+        },
+      };
+    },
   );
 
   server.registerTool(
