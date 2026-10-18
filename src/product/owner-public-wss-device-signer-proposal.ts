@@ -1,4 +1,4 @@
-﻿import {
+import {
   createHash,createPublicKey,timingSafeEqual,
   verify as verifySignature,
 } from 'node:crypto';
@@ -40,8 +40,16 @@ export async function signOwnerWssEnrollmentProof(
   signer:OwnerWssDeviceExternalSigner,
   trustedDeviceSpkiSha256:string,
 ):Promise<DeviceOwnerWssEnrollmentRequest>{
+  // Snapshot every signed field before any asynchronous signer boundary.
+  // The callback can outlive the calling code's mutable request object.
+  const bound:UnsignedProof={
+    bearerToken:proof?.bearerToken,
+    deviceId:proof?.deviceId,
+    nonce:proof?.nonce,
+    signedAtMs:proof?.signedAtMs,
+  };
   if(!signer||typeof signer.deviceId!=='string'||
-    signer.deviceId!==proof?.deviceId||
+    signer.deviceId!==bound.deviceId||
     typeof signer.publicKeyPem!=='string'||
     signer.publicKeyPem.length>8192||
     typeof signer.signProof!=='function'||
@@ -58,15 +66,15 @@ export async function signOwnerWssEnrollmentProof(
   if(!timingSafeEqual(actual,expected)){
     throw new Error('Owner WSS secure signer is not the enrolled device key');
   }
-  const canonical=serializeOwnerWssDeviceProof(proof);
-  const raw=await signer.signProof(canonical);
+  const canonical=serializeOwnerWssDeviceProof(bound);
+  const raw=await signer.signProof(Buffer.from(canonical));
   if(!(raw instanceof Uint8Array)||raw.byteLength!==64||
     !verifySignature(null,canonical,publicKey,raw)){
     throw new Error('Owner WSS external device signing proof invalid');
   }
   return {
-    bearerToken:proof.bearerToken,deviceId:proof.deviceId,
-    nonce:proof.nonce,signedAtMs:proof.signedAtMs,
+    bearerToken:bound.bearerToken,deviceId:bound.deviceId,
+    nonce:bound.nonce,signedAtMs:bound.signedAtMs,
     deviceSignature:Buffer.from(raw).toString('base64url'),
   };
 }
