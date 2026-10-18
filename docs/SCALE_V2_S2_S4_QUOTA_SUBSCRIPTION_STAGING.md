@@ -71,3 +71,15 @@ npm test
 ```
 
 **Not claimed:** real-money validation, production billing, provider-confirmed settlement, live D1 Workers consistency, deployment, real Enterprise purchase, real tenant membership persistence, 850k completed calls, load acceptance, monthly-to-daily cutover, or remote device modifications. Local `node:sqlite` tests use SQLite WAL with two file handles in one process. Live Cloudflare transactions and compliance approvals remain separate **NO-GO** gates.
+
+## Hardened safety invariants (follow-up to PR #554)
+
+The S4 contract now explicitly binds a verified paid subscription to the **exact provider subscription ID and catalog variant ID** from the owner-maintained offer. An active subscription for another variant or account is not a paid quota entitlement. Identity records include server-resolved `quotaSubjectKind`: Free must use `free-cluster`, paid Plus/Pro/Enterprise must use `subscription` (prepaid Enterprise is **not implemented** by this fixture). The SQLite trigger independently verifies subject kind before any credit mutation.
+
+Each admitted root reserves a canonical lowercase **SHA-256 request fingerprint** of the server-owned root action, target and normalized arguments. The stable invocation ID and fingerprint are both required. A repeated ID with the same account/tenant/device and payload hash returns `duplicate`, while reuse with a different actor, device or fingerprint returns `conflict`. **Neither authorizes dispatch**, regardless of whether the original call succeeded; operation-result recovery belongs to the separate reconciliation contract. Store only the digest, not tool arguments, secrets or request JSON. Hash canonicalization and idempotency-key issuer authentication must be production-reviewed.
+
+`v2_quota_authority` now forbids same/lower revision updates, in-place subject/tenant reassignment, and row deletion; revocation and reactivation require strictly advancing epochs. This protects against accidental stale grant restoration within the staging DB. Grant issuance remains a privileged projection from authenticated account, plan, payment and consent stores; direct SQL insertion from external clients is **never allowed**. Database-owner compromise, backup restores and cross-database migrations still require out-of-band protections.
+
+Additional file-backed SQLite tests cover provider variant theft, Free/paid quota subject confusion, lost database write acknowledgements after commit, fingerprint collisions, revision regression and forbidden authority deletion. Local tests cannot establish guarantees for Cloudflare D1 rollback/trigger semantics across multiple deployed Worker isolates, or external provider billing identities. These remain deployment blockers.
+
+**Note:** Revenue settlement is deliberately not performed here. The `paymentConfirmed` property represents evidence consumed by a future *trusted* reconciler, not a boolean that clients or dashboard forms may post. Before a paid launch, validate signed and ordered webhooks, settlement and refund finality, tied account/provider IDs, encrypted and auditable consent receipts, and an explicit approval gate.

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -74,6 +75,7 @@ async function fixture(){
 }
 const req=(entitlement:Allowed,id:string,now=stamp,toolCredits=1)=>({
   entitlement,invocationId:id,now,toolCredits,
+  requestFingerprint:createHash('sha256').update('canonical-root:'+id).digest('hex'),
 });
 test('S2/S4 single atomic insert charges one logical root and retains 5x legacy weighting',async()=>{
   const f=await fixture();try{
@@ -144,9 +146,9 @@ test('revoked/stale epoch, forged cap, wrong tenant, stolen device and changed p
     assert.equal((await attempt(wrongDevice,'wrong-device-0003')).status,'revoked');
     const otherGrant={...grant,accountId:f.other.id};
     assert.equal((await attempt(otherGrant,'wrong-account-0004')).status,'revoked');
-    f.a.prepare('UPDATE v2_quota_authority SET state=? WHERE account_id=?').run('revoked',f.owner.id);
+    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=revision+1 WHERE account_id=?').run('revoked',f.owner.id);
     assert.equal((await attempt(grant,'revoked-epoch-005')).status,'revoked');
-    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=? WHERE account_id=?').run('active',6,f.owner.id);
+    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=? WHERE account_id=?').run('active',7,f.owner.id);
     assert.equal((await attempt(grant,'stale-epoch-0006')).status,'revoked');
     assert.deepEqual(f.count(grant.quotaSubjectId),{daily:0,monthly:0,v2:0,minute:0});
   }finally{f.close()}
@@ -156,12 +158,12 @@ test('enterprise tenant cannot share active subject with a different organizatio
     const sub=f.quota.quotaSubjectId;
     f.a.prepare("UPDATE quota_subjects SET kind='subscription' WHERE id=?").run(sub);
     f.a.prepare("UPDATE accounts SET plan_id='custom' WHERE id=?").run(f.owner.id);
-    f.a.prepare('UPDATE v2_quota_authority SET state=? WHERE account_id=?').run('revoked',f.owner.id);
+    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=revision+1 WHERE account_id=?').run('revoked',f.owner.id);
     const enterprise=f.auth(f.owner.id,'enterprise-alpha',sub,'enterprise',850000,1000000,600,2);
     // Another tenant holding the same resource would leak customer quota.
     f.auth(f.other.id,'enterprise-beta',sub,'enterprise',850000,1000000,600,1);
     assert.equal((await f.ledgers[0].reserve(req(enterprise,'enterprise-isolated-001'))).status,'revoked');
-    f.a.prepare('UPDATE v2_quota_authority SET state=? WHERE account_id=?').run('revoked',f.other.id);
+    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=revision+1 WHERE account_id=?').run('revoked',f.other.id);
     assert.equal((await f.ledgers[1].reserve(req(enterprise,'enterprise-isolated-002'))).status,'reserved');
   }finally{f.close()}
 });
@@ -199,7 +201,7 @@ test('enterprise 850,000 boundary can be seeded synthetically; no 850k live call
     const subject=f.quota.quotaSubjectId;
     f.a.prepare("UPDATE quota_subjects SET kind='subscription' WHERE id=?").run(subject);
     f.a.prepare("UPDATE accounts SET plan_id='custom' WHERE id=?").run(f.owner.id);
-    f.a.prepare("UPDATE v2_quota_authority SET state='revoked' WHERE account_id=?").run(f.owner.id);
+    f.a.prepare("UPDATE v2_quota_authority SET state='revoked',revision=revision+1 WHERE account_id=?").run(f.owner.id);
     const grant=f.auth(f.owner.id,'tenant-enterprise',subject,'enterprise',850000,2000000,600,2);
     f.a.prepare('INSERT INTO daily_request_periods(quota_subject_id,day_key,used_requests) VALUES (?,?,?)')
       .run(subject,'2026-10-18',849999);
@@ -222,6 +224,86 @@ test('owned device is accepted but a real device linked to a different account i
     assert.equal((await f.ledgers[0].reserve(req(own,'device-bound-0001'))).status,'reserved');
     const alien={...f.quota,deviceId:'device-beta-real'};
     assert.equal((await f.ledgers[1].reserve(req(alien,'device-bound-0002'))).status,'revoked');
+    assert.deepEqual(f.count(f.quota.quotaSubjectId),{daily:1,monthly:1,v2:1,minute:1});
+  }finally{f.close()}
+});
+
+test('stable root ID with a different signed request fingerprint is a conflict, never a free replay',async()=>{
+  const f=await fixture();try{
+    const original=req(f.quota,'fingerprint-immutability-001');
+    assert.equal((await f.ledgers[0].reserve(original)).status,'reserved');
+    const altered={...original,requestFingerprint:createHash('sha256').update('different action body').digest('hex')};
+    assert.equal((await f.ledgers[1].reserve(altered)).status,'conflict');
+    assert.equal((await f.ledgers[1].reserve({...original,now:rollover})).status,'duplicate');
+    await assert.rejects(
+      f.ledgers[0].reserve({...req(f.quota,'bad-hash-length-0001'),requestFingerprint:'0'.repeat(63)}),
+      /INVALID_REQUEST_FINGERPRINT/,
+    );
+    assert.deepEqual(f.count(f.quota.quotaSubjectId),{daily:1,monthly:1,v2:1,minute:1});
+  }finally{f.close()}
+});
+test('database authority revision cannot regress, delete, or change tenant/subject in place',async()=>{
+  const f=await fixture();try{
+    const id=f.owner.id, subject=f.quota.quotaSubjectId;
+    assert.throws(()=>f.a.prepare(
+      'UPDATE v2_quota_authority SET state=? WHERE account_id=?',
+    ).run('revoked',id),/v2_authority_epoch_regression/);
+    assert.throws(()=>f.a.prepare(
+      'UPDATE v2_quota_authority SET tenant_id=?,revision=? WHERE account_id=?',
+    ).run('tenant-stolen',2,id),/v2_authority_scope_immutable/);
+    assert.throws(()=>f.a.prepare(
+      'DELETE FROM v2_quota_authority WHERE account_id=?',
+    ).run(id),/v2_authority_delete_forbidden/);
+    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=revision+1 WHERE account_id=?')
+      .run('revoked',id);
+    assert.equal((await f.ledgers[0].reserve(req(f.quota,'stale-revision-001'))).status,'revoked');
+    const regranted={...f.quota,revision:2};
+    assert.equal((await f.ledgers[1].reserve(req(regranted,'revoked-at-epoch-002'))).status,'revoked');
+    f.a.prepare('UPDATE v2_quota_authority SET state=?,revision=revision+1 WHERE account_id=?')
+      .run('active',id);
+    const fresh={...f.quota,revision:3};
+    assert.equal((await f.ledgers[1].reserve(req(fresh,'new-epoch-003'))).status,'reserved');
+    assert.deepEqual(f.count(subject),{daily:1,monthly:1,v2:1,minute:1});
+  }finally{f.close()}
+});
+test('a Free quota subject mutated to subscription kind refuses admission before credit change',async()=>{
+  const f=await fixture();try{
+    const subject=f.quota.quotaSubjectId;
+    f.a.prepare("UPDATE quota_subjects SET kind='subscription' WHERE id=?").run(subject);
+    const before=f.count(subject);
+    assert.equal((await f.ledgers[0].reserve(req(f.quota,'subject-kind-001'))).status,'revoked');
+    assert.deepEqual(f.count(subject),before);
+    f.a.prepare("UPDATE quota_subjects SET kind='free-cluster' WHERE id=?").run(subject);
+    assert.equal((await f.ledgers[1].reserve(req(f.quota,'subject-kind-002'))).status,'reserved');
+  }finally{f.close()}
+});
+class UnacknowledgedStmt implements D1PreparedStatementLike {
+  constructor(private readonly actual:D1PreparedStatementLike){}
+  bind(...values:unknown[]):D1PreparedStatementLike {
+    return new UnacknowledgedStmt(this.actual.bind(...values));
+  }
+  async first<T>():Promise<T|null>{return this.actual.first<T>()}
+  async all<T>():Promise<D1ResultLike<T>>{return this.actual.all<T>()}
+  async run<T>():Promise<D1ResultLike<T>>{
+    await this.actual.run<T>(); // backend COMMITTED, ack lost
+    return {success:false,meta:{changes:0}};
+  }
+}
+test('committed D1 write with lost acknowledgement never dispatches root for a second time',async()=>{
+  const f=await fixture();try{
+    const adapter=new Adapter(f.a);
+    const uncertain:D1DatabaseLike={
+      prepare(sql:string){
+        const stmt=adapter.prepare(sql);
+        return sql.startsWith('INSERT INTO v2_quota_reservations ')
+          ?new UnacknowledgedStmt(stmt):stmt;
+      },
+      batch:items=>adapter.batch(items),
+    };
+    const candidate=req(f.quota,'ambiguous-write-0001');
+    const ledger=new ProposedV2QuotaD1Ledger(uncertain);
+    assert.equal((await ledger.reserve(candidate)).status,'duplicate');
+    assert.equal((await f.ledgers[1].reserve(candidate)).status,'duplicate');
     assert.deepEqual(f.count(f.quota.quotaSubjectId),{daily:1,monthly:1,v2:1,minute:1});
   }finally{f.close()}
 });

@@ -11,7 +11,7 @@ function paid():QuotaEntitlementSnapshotV2{
   return {
     identity:{
       accountId:'account-alpha',tenantId:'tenant-alpha',
-      quotaSubjectId:'quota-alpha-123',accountSubjectId:'quota-alpha-123',
+      quotaSubjectId:'quota-alpha-123',quotaSubjectKind:'subscription',accountSubjectId:'quota-alpha-123',
       tenantSubjectId:'quota-alpha-123',deviceId:'device-alpha',
       deviceOwnerAccountId:'account-alpha',membership:'member',
       membershipActive:true,
@@ -21,6 +21,7 @@ function paid():QuotaEntitlementSnapshotV2{
       accountId:'account-alpha',tenantId:'tenant-alpha',
       quotaSubjectId:'quota-alpha-123',
       effectiveAt:'2026-10-01T00:00:00.000Z',expiresAt:null,
+      expectedProviderSubscriptionId:'sub-alpha',expectedProviderVariantId:'variant-plus-alpha',
       monthlyWeightedCredits:100000,
       disclosure:{
         termsHash:sha,termsVersion:'v2-20261018',
@@ -30,7 +31,7 @@ function paid():QuotaEntitlementSnapshotV2{
     },
     payment:{
       provider:'lemonsqueezy',accountId:'account-alpha',
-      providerSubscriptionId:'sub-alpha',providerStatus:'active',
+      providerSubscriptionId:'sub-alpha',providerVariantId:'variant-plus-alpha',providerStatus:'active',
       paymentConfirmed:true,providerUpdatedAt:'2026-10-17T00:00:00.000Z',
       endsAt:null,trialEndsAt:null,
     },
@@ -44,6 +45,9 @@ function reason(s:QuotaEntitlementSnapshotV2){
 }
 test('dormant Free candidate has no payment and retains a separate finite monthly cap',()=>{
   const f=paid();f.contract.tier='free';f.contract.monthlyWeightedCredits=1000;
+  f.identity.quotaSubjectKind='free-cluster';
+  f.contract.expectedProviderSubscriptionId=null;
+  f.contract.expectedProviderVariantId=null;
   f.payment=null;f.state=null;f.candidateEntitlementsEnabled=false;
   f.contract.disclosure=null;
   const result=evaluateQuotaEntitlementV2(f,now);
@@ -152,4 +156,31 @@ test('one hosted root is billable, nested tasks, network retries, local work and
     {kind:'relay-byte-stream',streamId:'stream-01'},
   ] as const)assert.equal(billableInvocationV2(item).billable,false);
   assert.throws(()=>billableInvocationV2({kind:'hosted-root',invocationId:'bad'}),/INVOCATION_ID_INVALID/);
+});
+
+test('subscription and plan catalog variant must match the specific trusted contract',()=>{
+  const f=paid();
+  f.payment!.providerVariantId='variant-pro-stolen';
+  assert.equal(reason(f),'provider-plan-mismatch');
+  f.payment!.providerVariantId='variant-plus-alpha';
+  f.contract.expectedProviderSubscriptionId='subscription-for-other-owner';
+  assert.equal(reason(f),'provider-plan-mismatch');
+  f.contract.expectedProviderSubscriptionId='sub-alpha';
+  f.contract.expectedProviderVariantId=null;
+  assert.equal(reason(f),'provider-plan-mismatch');
+});
+test('account plan and persisted quota subject type must agree before any paid/free grant',()=>{
+  const f=paid();
+  f.identity.quotaSubjectKind='free-cluster';
+  assert.equal(reason(f),'subject-kind-mismatch');
+  f.identity.quotaSubjectKind='subscription';
+  f.contract.tier='free';
+  f.contract.monthlyWeightedCredits=1000;
+  f.contract.expectedProviderSubscriptionId=null;
+  f.contract.expectedProviderVariantId=null;
+  f.payment=null;
+  f.state=null;
+  assert.equal(reason(f),'subject-kind-mismatch');
+  f.identity.quotaSubjectKind='prepaid';
+  assert.equal(reason(f),'subject-kind-mismatch');
 });
