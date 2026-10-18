@@ -199,10 +199,10 @@ export class PathPolicy {
     scope: FileScope,
     cwd = process.cwd(),
   ): Promise<string> {
-    const target = await this.resolveExistingWithRoots(
-      requestedPath, cwd, this.availableRoots(requestedPath, cwd),
-    );
+    const roots = this.availableRoots(requestedPath, cwd);
+    const target = await this.resolveExistingWithRoots(requestedPath, cwd, roots);
     await this.assertScope(target, scope);
+    await this.assertPathStable(requestedPath, target, cwd, roots, scope, true);
     return target;
   }
 
@@ -211,11 +211,38 @@ export class PathPolicy {
     scope: FileScope,
     cwd = process.cwd(),
   ): Promise<string> {
-    const target = await this.resolveForCreateWithRoots(
-      requestedPath, cwd, this.availableRoots(requestedPath, cwd),
-    );
+    const roots = this.availableRoots(requestedPath, cwd);
+    const target = await this.resolveForCreateWithRoots(requestedPath, cwd, roots);
     await this.assertScope(target, scope);
+    await this.assertPathStable(requestedPath, target, cwd, roots, scope, false);
     return target;
+  }
+
+  private async assertPathStable(
+    requestedPath: string,
+    expected: string,
+    cwd: string,
+    roots: readonly string[],
+    scope: FileScope,
+    existing: boolean,
+  ): Promise<void> {
+    // In particular, the volume resolver may await an external process while a
+    // directory is replaced by a junction. Check the ORIGINAL caller path
+    // again after scope/volume approval, not only its prior canonical form.
+    // This reduces a deterministic race window; it is NOT an atomic Windows
+    // handle-relative check or a guarantee against later replacement.
+    let current: string;
+    try {
+      current = existing
+        ? await this.resolveExistingWithRoots(requestedPath, cwd, roots)
+        : await this.resolveForCreateWithRoots(requestedPath, cwd, roots);
+    } catch {
+      throw new PathDeniedError(requestedPath, 'PATH_CHANGED_DURING_AUTHORIZATION', scope);
+    }
+    const normalize = (s: string) => this.platform === 'win32' ? s.toLowerCase() : s;
+    if (normalize(current) !== normalize(expected)) {
+      throw new PathDeniedError(requestedPath, 'PATH_CHANGED_DURING_AUTHORIZATION', scope);
+    }
   }
 
   private async assertScope(target: string, scope: FileScope): Promise<void> {

@@ -98,6 +98,16 @@ approval authority as scoped grants.
   Real Windows filesystem ACL/token failures retain OS `EACCES` or `EPERM`
   and carry `OS_FILESYSTEM_PERMISSION_DENIED` attribution. A scoped grant
   never grants NTFS privileges.
+- Destination-overwriting `files.copy` now requires `delete` on an existing
+  file target or `recursive_delete` on an existing directory target. This
+  matches the existing `files.move` overwrite requirement and prevents
+  overwrites through a broader write-only scope.
+- After a slow volume identity or grant check, the Agent canonicalizes the
+  **original requested path** a second time. It returns
+  `PATH_CHANGED_DURING_AUTHORIZATION` if a directory was replaced by a
+  junction/symlink during that check. Deterministic temporary-directory tests
+  demonstrate denial for both existing files and new-file creation. This is
+  a **race narrowing only**, not an atomic security boundary.
 - Canonical path and symlink checks reduce path-escape exposure, but pathname
   `realpath` + `fs.*` is not an atomic handle-based security guarantee.
   Junction/reparse replacement and drive reassignment between checks and I/O

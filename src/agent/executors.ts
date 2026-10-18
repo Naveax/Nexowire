@@ -683,6 +683,19 @@ async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const source = await policy.authorizeExisting(parsed.source, 'read');
   const destination = await policy.authorizeForCreate(parsed.destination, 'write');
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
+  if (parsed.overwrite) {
+    try {
+      const replaced = await fs.lstat(destination);
+      if (replaced.isSymbolicLink()) {
+        throw new PathDeniedError(destination, 'COPY_TARGET_REPARSE_DENIED', 'delete');
+      }
+      await policy.authorizeExisting(destination,
+        replaced.isDirectory() ? 'recursive_delete' : 'delete');
+    } catch (error) {
+      if (!(typeof error === 'object' && error !== null &&
+        'code' in error && error.code === 'ENOENT')) throw error;
+    }
+  }
   await fs.cp(source, destination, {
     recursive: parsed.recursive,
     force: parsed.overwrite,

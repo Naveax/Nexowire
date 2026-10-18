@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { executeCapability } from '../src/agent/executors.js';
-import { PathPolicy } from '../src/agent/path-policy.js';
+import { PathPolicy, PathDeniedError } from '../src/agent/path-policy.js';
 
 test('native file capabilities round-trip content inside the allowlist', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-files-'));
@@ -130,6 +130,48 @@ test('file metadata, mkdir, copy, move, patch, and delete work together', async 
 
   await executeCapability('files.delete', { path: moved }, policy);
   await assert.rejects(() => fs.stat(moved));
+});
+
+test('copy overwrite cannot replace existing files without delete scope', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-copy-scope-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const source = path.join(root, 'source.txt');
+  const destination = path.join(root, 'destination.txt');
+  await fs.writeFile(source, 'new-data');
+  await fs.writeFile(destination, 'old-protected-data');
+  const restricted = new PathPolicy([root], { defaultScopes: ['read', 'write'] });
+  await assert.rejects(
+    () => executeCapability('files.copy',
+      { source, destination, overwrite: true }, restricted),
+    (error: unknown) => error instanceof PathDeniedError &&
+      error.details.scope === 'delete' &&
+      error.details.reason === 'SCOPE_NOT_GRANTED',
+  );
+  assert.equal(await fs.readFile(destination, 'utf8'), 'old-protected-data');
+  const allowed = new PathPolicy([root], { defaultScopes: ['read', 'write', 'delete'] });
+  await executeCapability('files.copy',
+    { source, destination, overwrite: true }, allowed);
+  assert.equal(await fs.readFile(destination, 'utf8'), 'new-data');
+});
+
+test('copy recursive overwrite requires recursive_delete for existing destination', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-copy-tree-scope-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const source = path.join(root, 'src');
+  const destination = path.join(root, 'dst');
+  await fs.mkdir(source);
+  await fs.mkdir(destination);
+  await fs.writeFile(path.join(source, 'new.txt'), 'source');
+  await fs.writeFile(path.join(destination, 'preserve.txt'), 'preserve');
+  const insufficient = new PathPolicy([root], { defaultScopes: ['read', 'write', 'delete'] });
+  await assert.rejects(
+    () => executeCapability('files.copy',
+      { source, destination, recursive: true, overwrite: true }, insufficient),
+    (error: unknown) => error instanceof PathDeniedError &&
+      error.details.scope === 'recursive_delete',
+  );
+  assert.equal(await fs.readFile(path.join(destination, 'preserve.txt'), 'utf8'), 'preserve');
+  await assert.rejects(() => fs.stat(path.join(destination, 'new.txt')));
 });
 
 test('file patch refuses ambiguous occurrence counts without changing the file', async () => {

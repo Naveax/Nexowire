@@ -301,6 +301,53 @@ test('destructive grants expire within fifteen minutes and reject volume roots',
   assert.equal(registry.active('owner','device').length, 1);
 });
 
+
+test('authorization fails if a directory becomes a junction after volume inspection', async t => {
+  const { dir } = await fixture(t);
+  for (const mode of ['new', 'existing'] as const) {
+    const root = path.join(dir, 'safe-' + mode);
+    const outside = path.join(dir, 'outside-' + mode);
+    await fs.mkdir(root);
+    await fs.mkdir(outside);
+    if (mode === 'existing') {
+      await fs.writeFile(path.join(root, 'item.txt'), 'authorized');
+      await fs.writeFile(path.join(outside, 'item.txt'), 'not-authorized');
+    }
+    let replaced = false;
+    const policy = new PathPolicy([root], {
+      platform: 'win32',
+      volumeResolver: async () => {
+        if (!replaced) {
+          await fs.rename(root, root + '-moved');
+          try {
+            await fs.symlink(outside, root, process.platform === 'win32' ? 'junction' : 'dir');
+          } catch (error) {
+            await fs.rename(root + '-moved', root);
+            t.skip('Junction/symlink not available: ' + String(error));
+            throw error;
+          }
+          replaced = true;
+        }
+        return { ...USB, busType: 'NVMe', driveType: 'Fixed' };
+      },
+    });
+    const target = path.join(root, 'item.txt');
+    await assert.rejects(
+      mode === 'new'
+        ? () => policy.authorizeForCreate(target, 'write')
+        : () => policy.authorizeExisting(target, 'write'),
+      (error: unknown) => error instanceof PathDeniedError &&
+        error.details.reason === 'PATH_CHANGED_DURING_AUTHORIZATION',
+    );
+    assert.equal(replaced, true);
+    if (mode === 'existing') {
+      assert.equal(await fs.readFile(path.join(outside, 'item.txt'), 'utf8'), 'not-authorized');
+    } else {
+      await assert.rejects(() => fs.stat(path.join(outside, 'item.txt')));
+    }
+  }
+});
+
 test('grant lifetime cannot exceed one day or start expired', () => {
   const store = new ScopedPathGrantRegistry(() => 1_000);
   const baseline = {
