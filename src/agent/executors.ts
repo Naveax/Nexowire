@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -434,6 +434,7 @@ function shellCommand(
 async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = ShellExecInputSchema.parse(input);
   const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
+  policy.assertUnrestrictedExecution();
   const cwd = parsed.cwd ? await policy.resolveExisting(parsed.cwd) : undefined;
   const command = shellCommand(parsed.shell, parsed.command);
   const result = uiTarget === 'private_desktop'
@@ -461,12 +462,13 @@ async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown
   };
 }
 
-async function executeWsl(input: unknown): Promise<unknown> {
+async function executeWsl(input: unknown, policy: PathPolicy): Promise<unknown> {
   if (process.platform !== 'win32') {
     throw new Error('wsl.exec is only available from a Windows native agent.');
   }
 
   const parsed = WslExecInputSchema.parse(input);
+  policy.assertUnrestrictedExecution();
   const uiTarget=requireWslHeadlessRouting(parsed.ui_target);
   const args: string[] = [];
   if (parsed.distro) args.push('--distribution', parsed.distro);
@@ -489,7 +491,7 @@ async function executeWsl(input: unknown): Promise<unknown> {
 
 async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileReadInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, 'read');
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Requested path is not a file.');
   // Legacy full-file reads keep their original strict size limit.
@@ -544,7 +546,7 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
 
   for (const requested of parsed.paths) {
     try {
-      const target = await policy.resolveExisting(requested);
+      const target = await policy.authorizeExisting(requested, 'read');
       const stat = await fs.stat(target);
       if (!stat.isFile()) throw new Error('Requested path is not a file.');
       if (stat.size > parsed.max_bytes_each) {
@@ -582,7 +584,7 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
 
 async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileWriteInputSchema.parse(input);
-  const target = await policy.resolveForCreate(parsed.path);
+  const target = await policy.authorizeForCreate(parsed.path, 'write');
   if (parsed.create_parents) {
     await fs.mkdir(path.dirname(target), { recursive: true });
   }
@@ -630,7 +632,7 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileStatInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, 'read');
   const stat = await fs.lstat(target);
   return {
     data: {
@@ -652,7 +654,7 @@ async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function hashFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileHashInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, 'read');
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Hash target is not a file.');
   if (stat.size > parsed.max_bytes) {
@@ -670,15 +672,15 @@ async function hashFile(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function makeDirectory(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileMkdirInputSchema.parse(input);
-  const target = await policy.resolveForCreate(parsed.path);
+  const target = await policy.authorizeForCreate(parsed.path, 'write');
   await fs.mkdir(target, { recursive: parsed.recursive });
   return { data: { path: target, created: true } };
 }
 
 async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileTransferInputSchema.parse(input);
-  const source = await policy.resolveExisting(parsed.source);
-  const destination = await policy.resolveForCreate(parsed.destination);
+  const source = await policy.authorizeExisting(parsed.source, 'read');
+  const destination = await policy.authorizeForCreate(parsed.destination, 'write');
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.cp(source, destination, {
     recursive: parsed.recursive,
@@ -691,8 +693,8 @@ async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileTransferInputSchema.parse(input);
-  const source = await policy.resolveExisting(parsed.source);
-  const destination = await policy.resolveForCreate(parsed.destination);
+  const source = await policy.authorizeExisting(parsed.source, 'move');
+  const destination = await policy.authorizeForCreate(parsed.destination, 'move');
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
 
   if (parsed.atomic_no_overwrite) {
@@ -725,7 +727,15 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
       if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')) throw error;
     }
   } else {
-    await fs.rm(destination, { recursive: true, force: true });
+    try {
+      const replaced = await fs.lstat(destination);
+      await policy.authorizeExisting(destination,
+        replaced.isDirectory() ? 'recursive_delete' : 'delete');
+      await fs.rm(destination, { recursive: replaced.isDirectory(), force: true });
+    } catch (error) {
+      if (!(typeof error === 'object' && error !== null &&
+        'code' in error && error.code === 'ENOENT')) throw error;
+    }
   }
 
   try {
@@ -741,7 +751,7 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function deletePath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileDeleteInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, parsed.recursive ? 'recursive_delete' : 'delete');
   const stat = await fs.lstat(target);
   if (stat.isDirectory() && !parsed.recursive) {
     await fs.rmdir(target);
@@ -764,7 +774,7 @@ function countOccurrences(text: string, needle: string): number {
 
 async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FilePatchInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, 'write');
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Patch target is not a file.');
   if (stat.size > parsed.max_bytes) {
@@ -810,9 +820,9 @@ async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
 
   const finalBuffer = Buffer.from(content, 'utf8');
   const finalSha256 = sha256Buffer(finalBuffer);
-  const temp = `${target}.nexowire-${process.pid}-${Date.now()}.tmp`;
+  const temp = `${target}.nexowire-${process.pid}-${randomUUID()}.tmp`;
   try {
-    await fs.writeFile(temp, finalBuffer);
+    await fs.writeFile(temp, finalBuffer, { flag: 'wx' });
     await fs.chmod(temp, stat.mode);
 
     const beforeCommitSha256 = await sha256File(target, parsed.max_bytes);
@@ -827,6 +837,11 @@ async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       );
     }
 
+    // Recheck symlinks/reparse transitions immediately before publishing.
+    if (await policy.authorizeExisting(target, 'write') !== target ||
+        (await fs.lstat(target)).isSymbolicLink()) {
+      throw new PathDeniedError(target, 'TARGET_CHANGED_BEFORE_PATCH');
+    }
     if (process.platform === 'win32') {
       await fs.copyFile(temp, target);
       await fs.rm(temp, { force: true });
@@ -859,7 +874,7 @@ async function listDirectory(
   policy: PathPolicy,
 ): Promise<unknown> {
   const parsed = FileListInputSchema.parse(input);
-  const root = await policy.resolveExisting(parsed.path);
+  const root = await policy.authorizeExisting(parsed.path, 'read');
   const entries: ListedEntry[] = [];
 
   const walk = async (dir: string, remainingDepth: number): Promise<void> => {
@@ -906,7 +921,7 @@ interface SearchMatch {
 
 async function searchText(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = SearchTextInputSchema.parse(input);
-  const root = await policy.resolveExisting(parsed.path);
+  const root = await policy.authorizeExisting(parsed.path, 'read');
   const rootStat = await fs.stat(root);
   if (!rootStat.isDirectory()) throw new Error('Search path is not a directory.');
 
@@ -2293,10 +2308,12 @@ export async function executeCapability(
     case 'shell.exec':
       return await executeShell(input, policy);
     case 'process.start':
+      policy.assertUnrestrictedExecution();
       return { data: await requireProcesses(context).start(input, policy) };
     case 'process.read':
       return { data: await requireProcesses(context).read(input) };
     case 'process.write':
+      policy.assertUnrestrictedExecution();
       return { data: await requireProcesses(context).write(input) };
     case 'process.stop':
       return { data: await requireProcesses(context).stop(input) };
@@ -2305,7 +2322,7 @@ export async function executeCapability(
     case 'process.prune':
       return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
-      return await executeWsl(input);
+      return await executeWsl(input, policy);
     case 'files.read':
       return await readFile(input, policy);
     case 'files.read_many':
@@ -2357,8 +2374,10 @@ export async function executeCapability(
     case 'workspace.detect':
       return await workspaceDetect(input, policy);
     case 'workspace.checks':
+      policy.assertUnrestrictedExecution();
       return await workspaceChecks(input, policy);
     case 'task.graph.run':
+      policy.assertUnrestrictedExecution();
       return await runTaskGraph(input, policy, context.taskGraphs);
     case 'task.graph.list':
       return { data: requireTaskGraphs(context).list() };
@@ -2395,6 +2414,7 @@ export async function executeCapability(
       };
     }
     case 'runbook.run':
+      policy.assertUnrestrictedExecution();
       return await executeDurableRunbook(
         input,
         requireRunbooks(context),
@@ -2608,7 +2628,7 @@ export function normalizeAgentError(error: unknown): {
     return {
       code: 'PATH_DENIED',
       message: error.message,
-      details: { path: error.requestedPath },
+      details: { path: error.requestedPath, ...error.details },
     };
   }
   if (
