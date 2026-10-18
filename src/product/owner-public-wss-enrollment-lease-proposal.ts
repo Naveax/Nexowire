@@ -68,6 +68,8 @@ export class ProposedOwnerPublicWssEnrollmentLease {
     }
   }
 
+  get deviceId():string{return this.snapshot.deviceId}
+
   invalidate():void{this.invalidated=true}
 }
 
@@ -103,17 +105,28 @@ export class ProposedEnrolledOwnerQuotaWsSession {
     frame:OutboundQuotaFrame,timeoutMs=5000,
   ):Promise<OutboundQuotaReply>{
     if(this.closed)throw new Error('Enrolled owner WSS session closed');
+    // Reject cross-device routing even before dialing. The owner RPC must
+    // still independently verify the complete signed frame and account.
+    if(frame?.envelope?.deviceId!==this.lease.deviceId){
+      this.close();
+      throw new Error('Owner WSS enrollment device binding mismatch');
+    }
     try{
       await this.lease.requireCurrent();
       if(this.closed)throw new Error('Enrolled owner WSS session closed');
-    }catch(e){
-      this.close();
-      throw e;
+      // Never retry: a lost response may represent a committed reservation.
+      const reply=await this.transport.reserve(frame,timeoutMs);
+      if(this.closed)throw new Error('Enrolled owner WSS session closed');
+      // The owner can revoke the session while the RPC is in flight. A
+      // successful transport reply is NOT an authorization after revocation.
+      await this.lease.requireCurrent();
+      if(this.closed)throw new Error('Enrolled owner WSS session closed');
+      return reply;
+    }catch(error){
+      this.close(); // Fail closed on uncertain responses/authority failures.
+      throw error;
     }
-    // One dispatch. Never automatically replay a mutating invocation.
-    return this.transport.reserve(frame,timeoutMs);
   }
-
   close():void{
     if(this.closed)return;
     this.closed=true;

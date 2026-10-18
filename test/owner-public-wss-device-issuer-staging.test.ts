@@ -175,3 +175,46 @@ test('increasing trusted revision prevents older signed enrollment reuse',async(
     verifySignedOwnerPublicWssEnrollment(next,verifyContext(6));
   }finally{db.close()}
 });
+
+test('rotating the device key rejects old possession proofs and accepts new key',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const oldProof=claim();
+    const rotated=generateKeyPairSync('ed25519');
+    db.prepare(
+      'UPDATE proposed_owner_rpc_device_keys SET public_key_pem=? WHERE device_id=?'
+    ).run(pem(rotated.publicKey),device);
+    await assert.rejects(issuer.issue(oldProof),/possession/);
+    const fresh=claim();
+    fresh.deviceSignature=sign(
+      null,serializeOwnerWssDeviceProof(fresh),rotated.privateKey,
+    ).toString('base64url');
+    const issued=await issuer.issue(fresh);
+    verifySignedOwnerPublicWssEnrollment(issued,verifyContext());
+    db.prepare(
+      'UPDATE proposed_owner_rpc_device_keys SET enabled=0 WHERE device_id=?'
+    ).run(device);
+    const denied=claim();
+    denied.deviceSignature=sign(
+      null,serializeOwnerWssDeviceProof(denied),rotated.privateKey,
+    ).toString('base64url');
+    await assert.rejects(issuer.issue(denied),/revoked/);
+  }finally{db.close()}
+});
+
+test('operator trust root or issuer identifier cannot be substituted',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const issued=await issuer.issue(claim());
+    const untrusted=generateKeyPairSync('ed25519');
+    assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+      issued,{...verifyContext(),operatorPublicKeyPem:pem(untrusted.publicKey)},
+    ),/signature/);
+    assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+      issued,{...verifyContext(),operatorId:'untrusted-operator'},
+    ),/mismatch/);
+    assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+      {...issued,operatorId:'untrusted-operator'},verifyContext(),
+    ),/mismatch/);
+  }finally{db.close()}
+});
