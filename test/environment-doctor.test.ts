@@ -175,10 +175,46 @@ test("malformed PnP and GPU vendor output fails closed", async () => {
   assert.equal(report.ready, false);
 });
 test("synthetic runner cannot claim live provenance or alter real host platform", async () => {
-  await assert.rejects(() => runEnvironmentDoctor({ platform: "linux" }), /Live runner requires/);
+  // An explicitly selected host platform is legitimate. Reject a different
+  // platform on every runner, including Linux CI and Windows/macOS hosts.
+  const otherPlatform = process.platform === "linux" ? "win32" : "linux";
+  await assert.rejects(() => runEnvironmentDoctor({ platform: otherPlatform }), /Live runner requires/);
   await assert.rejects(() => runEnvironmentDoctor({ origin: "synthetic_fixture" }), /Live runner requires/);
+  await assert.rejects(() => runEnvironmentDoctor({ architecture: "spoofed-architecture" }), /Live runner requires/);
+  await assert.rejects(() => runEnvironmentDoctor({ now: () => new Date(0) }), /Live runner requires/);
   assert.throws(() => createProbePlan("win32", { usbVidPid: ["1234:ABCD;format"] }), /Invalid USB/);
   assert.throws(() => createProbePlan("win32", { wslDistros: ["Ubuntu;rm"] }), /Invalid WSL/);
+});
+
+test("forged USB/GPU inventories cannot get live provenance from an injected runner", async () => {
+  const fake = new Fake(win);
+  const requirements = { requireNvidia: true, usbVidPid: ["1234:ABCD"] };
+  await assert.rejects(() => runEnvironmentDoctor({
+    platform: "win32", origin: "live_readonly", requirements,
+  }, fake), /synthetic_fixture/);
+  await assert.rejects(() => runEnvironmentDoctor({
+    platform: "linux", requirements,
+  }, fake), /synthetic_fixture/);
+  await assert.rejects(() => runEnvironmentDoctor({
+    origin: "live_readonly", architecture: "x64", requirements,
+  }, fake), /synthetic_fixture/);
+  assert.equal(fake.seen.length, 0, "reject before executing any untrusted probe");
+
+  // This malicious wrapper can forge JavaScript metadata; trust must instead
+  // depend solely on the runner being created internally by the live path.
+  Object.defineProperty(fake, "constructor", {
+    get() { throw new Error("untrusted constructor getter was evaluated"); },
+  });
+  const synthetic = await runEnvironmentDoctor({
+    platform: "win32", origin: "synthetic_fixture", requirements,
+  }, fake);
+  assert.equal(synthetic.origin, "synthetic_fixture");
+  assert.equal(synthetic.architecture, "synthetic");
+  assert.equal(synthetic.platform, "win32");
+  assert.equal(item(synthetic, "nvidia")?.status, "pass");
+  assert.equal(item(synthetic, "usb")?.status, "pass");
+  assert.ok(synthetic.physicalAcceptance.every((entry) => entry.status === "not_tested"));
+  assert.equal(synthetic.physicalAcceptance[0]?.code, "PHYSICAL_TEST_REQUIRED");
 });
 test("malformed OS response cannot claim pass", async () => {
   const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture" },

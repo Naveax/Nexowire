@@ -502,19 +502,31 @@ export interface DoctorOptions {
   readonly now?: () => Date;
 }
 export async function runEnvironmentDoctor(options: DoctorOptions = {},
-  runner: ProbeRunner = new ReadonlyProcessRunner()): Promise<DoctorReport> {
+  runner?: ProbeRunner): Promise<DoctorReport> {
+  // An explicitly supplied runner is ALWAYS synthetic. Never decide trust
+  // using .constructor or instanceof: these are spoofable JavaScript metadata.
+  // Only this function can create the live runner, after platform/provenance
+  // preflight has passed and before any OS probe is executed.
+  const injectedRunner = runner !== undefined;
+  const origin = options.origin ?? "live_readonly";
+  if (injectedRunner) {
+    if (origin !== "synthetic_fixture") {
+      throw new TypeError("Injected runner must use synthetic_fixture origin");
+    }
+    if (!runner || typeof runner.run !== "function") {
+      throw new TypeError("Invalid synthetic probe runner");
+    }
+  } else if (origin !== "live_readonly" ||
+      (options.platform !== undefined && options.platform !== process.platform) ||
+      (options.architecture !== undefined && options.architecture !== os.arch()) ||
+      options.now !== undefined) {
+    throw new TypeError("Live runner requires actual host platform and live_readonly origin; host provenance cannot be overridden");
+  }
   const platform = options.platform ?? (process.platform as DoctorPlatform);
   if (!["win32", "linux"].includes(platform)) throw new TypeError("Unsupported doctor platform");
-  const origin = options.origin ?? "live_readonly";
-  if (runner.constructor !== ReadonlyProcessRunner && origin !== "synthetic_fixture") {
-    throw new TypeError("Injected runner must use synthetic_fixture origin");
-  }
-  if (runner.constructor === ReadonlyProcessRunner &&
-      (origin !== "live_readonly" || platform !== process.platform)) {
-    throw new TypeError("Live runner requires actual host platform and live_readonly origin");
-  }
   const requirements = options.requirements ?? {};
-  const reportedArchitecture = options.architecture ?? (origin === "synthetic_fixture" ? "synthetic" : os.arch());
+  const reportedArchitecture = injectedRunner ? options.architecture ?? "synthetic" : os.arch();
+  const selectedRunner: ProbeRunner = runner ?? new ReadonlyProcessRunner();
   const plan = createProbePlan(platform, requirements);
   const responses = new Map<string, ProbeResult>();
   let next = 0;
@@ -522,7 +534,7 @@ export async function runEnvironmentDoctor(options: DoctorOptions = {},
     while (next < plan.length) {
       const probe = plan[next++]!;
       try {
-        responses.set(probe.id, await runner.run(probe));
+        responses.set(probe.id, await selectedRunner.run(probe));
       } catch {
         responses.set(probe.id, { exitCode: null, stdout: "", errorCode: "PROBE_ERROR" });
       }

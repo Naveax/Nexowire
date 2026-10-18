@@ -16,7 +16,9 @@ With no required versions, unavailable optional tools are warnings. Requirements
 
 ## Evidence contract
 
-- origin=live_readonly is host-observed. origin=synthetic_fixture identifies injected fake probe responses. Fixtures are not machine acceptance, and a caller cannot inject a runner while claiming live_readonly.
+- `origin=live_readonly` is host-observed and is allowed **only** when Doctor creates the OS probe runner internally. Any explicitly injected runner is always `synthetic_fixture`, regardless of its constructor/prototype or its claimed origin. Rejected provenance combinations fail before any probe executes. Fixtures are not machine acceptance, even if individual simulated checks have `status=pass` or `ready=true`.
+- Live probes require the actual host platform and architecture. A caller cannot override live platform, architecture, origin or generated-at clock; mismatched values fail closed. Synthetic fixtures may describe simulated Windows/Linux/USB/GPU inventories, but the resulting report remains clearly marked synthetic and physical acceptance remains `not_tested`.
+- The cross-platform negative test deliberately requests a platform **different** from the current host; requesting `linux` on a Linux CI runner is legitimate and cannot be used as a rejection test. GitHub `test (22)` run #39150689903 exposed this test defect (`Missing expected rejection`).
 - Each check includes name, required, status, stable code, probe IDs, a bounded observation, and an optional remediation plan with approvalRequired=true, execution=manual_only.
 - Error codes include OK, MISSING_DEPENDENCY, DRIVER_NOT_STARTED, DEVICE_NOT_PRESENT, VERSION_MISMATCH, PERMISSION_REQUIRED, UNSUPPORTED_HARDWARE, VIRTUALIZATION_DISABLED, SERVICE_NOT_RUNNING, PROBE_FAILED, PROBE_TIMED_OUT, INSUFFICIENT_EVIDENCE and PHYSICAL_TEST_REQUIRED.
 - A specific USB VID/PID requirement fails as DEVICE_NOT_PRESENT when it cannot be enumerated, and on Windows DRIVER_NOT_STARTED when PnP status is not OK. An expected WSL distro must be in the `wsl --list --verbose` output; this still does not prove it can boot.
