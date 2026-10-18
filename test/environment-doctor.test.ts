@@ -15,7 +15,7 @@ const ok = (stdout: string): ProbeResult => ({ exitCode: 0, stdout });
 const win = {
   os: ok('{"Caption":"Windows 11","Version":"10.0.26100"}'),
   hyperv: ok('{"VirtualizationFirmwareEnabled":true,"SLAT":true,"HypervisorPresent":false}'),
-  python: ok("Python 3.12.2"), rust: ok("rustc 1.84.0 (abc)"),
+  python: ok("Python 3.12.2"), node: ok("v22.14.0"), rust: ok("rustc 1.84.0 (abc)"),
   git: ok("git version 2.45.0.windows.1"),
   docker: ok("Docker version 27.1.1, build 123"),
   docker_daemon: ok('"27.1.1"'), ollama: ok("ollama version is 0.5.0"),
@@ -34,7 +34,7 @@ function item(report: Awaited<ReturnType<typeof runEnvironmentDoctor>>, name: st
 }
 test("read-only probe allowlist with bounded execution", () => {
   const plan = createProbePlan("win32", { pythonPackages: { torch: "2.5" } });
-  const known = new Set(["python.exe", "rustc", "git", "docker", "nvidia-smi",
+  const known = new Set(["python.exe", "node", "rustc", "git", "docker", "nvidia-smi",
     "nvcc", "ollama", "powershell.exe", "wsl.exe"]);
   assert.ok(plan.every((p) => known.has(p.file) && p.timeoutMs > 0 && p.timeoutMs <= 15000));
   assert.equal(plan.length, new Set(plan.map((p) => p.id)).size);
@@ -138,6 +138,104 @@ test("Docker client and daemon are a single result, independent from installatio
   assert.equal(report.checks.filter((c) => c.name === "docker").length, 1);
   assert.equal(item(report, "docker")?.code, "SERVICE_NOT_RUNNING");
   assert.equal(item(report, "docker")?.status, "fail");
+});
+test("target VID:PID must be present and Windows PnP OK, without physical acceptance", async () => {
+  const present = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { usbVidPid: ["1234:abcd"] } }, new Fake(win));
+  assert.equal(item(present, "usb")?.code, "OK");
+  assert.equal(item(present, "usb")?.required, true);
+  assert.equal(present.physicalAcceptance[0]?.status, "not_tested");
+  const absent = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { usbVidPid: ["FFFF:0001"] } }, new Fake(win));
+  assert.equal(item(absent, "usb")?.code, "DEVICE_NOT_PRESENT");
+  assert.equal(absent.ready, false);
+  const broken = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { usbVidPid: ["1234:ABCD"] } },
+    new Fake({ ...win, usb: ok('[{"InstanceId":"USB\\\\VID_1234&PID_ABCD\\\\SECRET","Status":"Error","Class":"USB"}]') }));
+  assert.equal(item(broken, "usb")?.code, "DRIVER_NOT_STARTED");
+  assert.equal(broken.ready, false);
+});
+test("required WSL distro is exact name match, distro enumeration not guest boot", async () => {
+  const pass = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { wslDistros: ["ubuntu"] } }, new Fake(win));
+  assert.equal(item(pass, "wsl")?.code, "OK");
+  assert.equal(item(pass, "wsl")?.observed?.distroBootTested, false);
+  const fail = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { wslDistros: ["Debian-13"] } }, new Fake(win));
+  assert.equal(item(fail, "wsl")?.code, "MISSING_DEPENDENCY");
+  assert.equal(fail.ready, false);
+});
+test("malformed PnP and GPU vendor output fails closed", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { usbVidPid: ["1234:ABCD"], requireNvidia: true } },
+    new Fake({ ...win, usb: ok("invalid-json"), nvidia: ok("garbage, 0, unknown") }));
+  assert.equal(item(report, "usb")?.code, "INSUFFICIENT_EVIDENCE");
+  assert.equal(item(report, "usb")?.status, "unknown");
+  assert.equal(item(report, "nvidia")?.status, "unknown");
+  assert.equal(report.ready, false);
+});
+test("synthetic runner cannot claim live provenance or alter real host platform", async () => {
+  await assert.rejects(() => runEnvironmentDoctor({ platform: "linux" }), /Live runner requires/);
+  await assert.rejects(() => runEnvironmentDoctor({ origin: "synthetic_fixture" }), /Live runner requires/);
+  assert.throws(() => createProbePlan("win32", { usbVidPid: ["1234:ABCD;format"] }), /Invalid USB/);
+  assert.throws(() => createProbePlan("win32", { wslDistros: ["Ubuntu;rm"] }), /Invalid WSL/);
+});
+test("malformed OS response cannot claim pass", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture" },
+    new Fake({ ...win, os: ok("not a JSON document") }));
+  assert.equal(item(report, "os")?.code, "INSUFFICIENT_EVIDENCE");
+  assert.equal(report.ready, false);
+});
+test("invalid volume and adapter JSON cannot become OK or PASS", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture" },
+    new Fake({ ...win, volumes: ok("invalid"), network: ok("partial-json:{") }));
+  assert.equal(item(report, "volumes")?.status, "unknown");
+  assert.equal(item(report, "network")?.status, "unknown");
+  assert.equal(item(report, "volumes")?.code, "INSUFFICIENT_EVIDENCE");
+});
+test("WSL and Hyper-V are unsupported requirements inside Linux guest", async () => {
+  const report = await runEnvironmentDoctor({ platform: "linux", origin: "synthetic_fixture",
+    requirements: { wslDistros: ["Ubuntu-24.04"], requireHyperV: true } },
+    new Fake({ ...win, os: ok('NAME="Ubuntu"\nVERSION_ID="24.04"') }));
+  assert.equal(item(report, "wsl")?.code, "UNSUPPORTED_HARDWARE");
+  assert.equal(item(report, "hyperv")?.code, "UNSUPPORTED_HARDWARE");
+  assert.equal(report.ready, false);
+});
+test("unrelated USB device presence does not imply expected hardware seen", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { usbVidPid: ["FFFF:1111"] } }, new Fake(win));
+  assert.equal(report.physicalAcceptance[0]?.hardwareSeen, false);
+  assert.equal(report.physicalAcceptance[0]?.status, "not_tested");
+});
+test("NVIDIA adapter without nvidia-smi cannot prove broken driver", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { requireNvidia: true } }, new Fake({ ...win,
+      nvidia: { exitCode: null, stdout: "", errorCode: "ENOENT" } }));
+  assert.equal(item(report, "nvidia")?.code, "MISSING_DEPENDENCY");
+  assert.equal(report.ready, false);
+});
+test("unknown AMD VRAM cannot satisfy a generic minimum from NVIDIA-only evidence", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { minGpuVramMiB: 8192 } }, new Fake({ ...win,
+      nvidia: { exitCode: null, stdout: "", errorCode: "ENOENT" },
+      gpu_windows: ok('{"Name":"Radeon RX 570 Series","Status":"OK"}') }));
+  assert.equal(item(report, "nvidia")?.code, "INSUFFICIENT_EVIDENCE");
+  assert.equal(item(report, "nvidia")?.status, "unknown");
+  assert.equal(report.ready, false);
+});
+test("hypervisor present with hidden CPU capability fields is inconclusive, not unsupported CPU", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { requireHyperV: true } }, new Fake({ ...win,
+      hyperv: ok('{"VirtualizationFirmwareEnabled":false,"SLAT":false,"HypervisorPresent":true}') }));
+  assert.equal(item(report, "hyperv")?.code, "INSUFFICIENT_EVIDENCE");
+  assert.equal(item(report, "hyperv")?.status, "unknown");
+});
+test("a failing PnP interface disqualifies the required VID:PID even if another interface is OK", async () => {
+  const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture",
+    requirements: { usbVidPid: ["1234:ABCD"] } }, new Fake({ ...win,
+      usb: ok('[{"Status":"OK","InstanceId":"USB\\\\VID_1234&PID_ABCD\\\\A"},{"Status":"Error","InstanceId":"USB\\\\VID_1234&PID_ABCD\\\\B"}]') }));
+  assert.equal(item(report, "usb")?.code, "DRIVER_NOT_STARTED");
+  assert.equal(report.ready, false);
 });
 test("optional DNS configuration is metadata, not verified connectivity", async () => {
   const report = await runEnvironmentDoctor({ platform: "win32", origin: "synthetic_fixture" },

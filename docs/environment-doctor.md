@@ -10,7 +10,7 @@ From repository root:
 node --import tsx scripts/run-environment-doctor.ts --require-nvidia --require-cuda --min-vram-mib=8192 --tool=python:3.11 --python-package=torch:2.5
 ```
 
-Other flags: --require-wsl, --require-hyperv, --tool=node:22, --tool=rust:1.82, --tool=git:2.40, --tool=docker:24, --tool=ollama:0.5, and repeatable --python-package=NAME:MINIMUM_VERSION.
+Other flags: --require-wsl, --wsl-distro=Ubuntu-22.04, --usb-vid-pid=1234:ABCD, --require-hyperv, --tool=node:22, --tool=rust:1.82, --tool=git:2.40, --tool=docker:24, --tool=ollama:0.5, and repeatable --python-package=NAME:MINIMUM_VERSION.
 
 With no required versions, unavailable optional tools are warnings. Requirements that are not conclusively satisfied set ready=false and CLI exit code 2. Invalid arguments use exit code 3. JSON is printed to stdout; probe stderr is never included in the report.
 
@@ -19,6 +19,7 @@ With no required versions, unavailable optional tools are warnings. Requirements
 - origin=live_readonly is host-observed. origin=synthetic_fixture identifies injected fake probe responses. Fixtures are not machine acceptance, and a caller cannot inject a runner while claiming live_readonly.
 - Each check includes name, required, status, stable code, probe IDs, a bounded observation, and an optional remediation plan with approvalRequired=true, execution=manual_only.
 - Error codes include OK, MISSING_DEPENDENCY, DRIVER_NOT_STARTED, DEVICE_NOT_PRESENT, VERSION_MISMATCH, PERMISSION_REQUIRED, UNSUPPORTED_HARDWARE, VIRTUALIZATION_DISABLED, SERVICE_NOT_RUNNING, PROBE_FAILED, PROBE_TIMED_OUT, INSUFFICIENT_EVIDENCE and PHYSICAL_TEST_REQUIRED.
+- A specific USB VID/PID requirement fails as DEVICE_NOT_PRESENT when it cannot be enumerated, and on Windows DRIVER_NOT_STARTED when PnP status is not OK. An expected WSL distro must be in the `wsl --list --verbose` output; this still does not prove it can boot.
 - The four physicalAcceptance gates (USB, gamepad, phone, virtual_machine) remain NOT_TESTED regardless of synthetic tests or enumerated devices. True functional acceptance requires an independently recorded real device test.
 
 ## Read-only evidence sources
