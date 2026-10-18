@@ -40,11 +40,12 @@ export interface FailureEvidence {
 /** Scrub secrets from diagnostic strings. Not an encryption/storage boundary. */
 export function redactDiagnosticText(value: string): string {
   return value
-    .replace(/-----BEGIN (?:[A-Z ]* )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z ]* )?PRIVATE KEY-----/gi, '[REDACTED PRIVATE KEY]')
+    .replace(/-----BEGIN (?:[A-Z ]* )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z ]* )?PRIVATE KEY-----|$)/gi, '[REDACTED PRIVATE KEY]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
-    .replace(/(["'](?:password|passwd|secret|client_secret|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key)["']\s*:\s*["'])([^"']+)(["'])/gi, '$1[REDACTED]$3')
+    .replace(/(["'](?:password|passwd|secret|client_secret|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|token)["']\s*:\s*["'])([^"']+)(["'])/gi, '$1[REDACTED]$3')
+    .replace(/(\b(?:password|passwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|bearer[_-]?token|private[_-]?key|authorization|credential|token)\s*[:=]\s*)(["'])([\s\S]*?)\2/gi, '$1$2[REDACTED]$2')
     .replace(/\b(?:sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9_]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g, '[REDACTED TOKEN]')
-    .replace(/((?:password|passwd|client_secret|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)\s*[:=]\s*["']?)([^\s,;"'&}]+)/gi, '$1[REDACTED]')
+    .replace(/((?:password|passwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|bearer[_-]?token|private[_-]?key|authorization|credential|token)\s*[:=]\s*["']?)([^\s,;"'&}]+)/gi, '$1[REDACTED]')
     .replace(/([?&](?:api_key|token|access_token|refresh_token|password|secret)=)[^&#\s]+/gi, '$1[REDACTED]');
 }
 
@@ -84,6 +85,8 @@ function publicCode(code: string): string {
 export function classifyFailure(evidence: FailureEvidence): FailureAttributionV2 {
   const code = publicCode(evidence.code);
   const observedAt = evidence.observedAt;
+  // A familiar code without proof of its emitter is not proof of origin.
+  const agentReported = observedAt === 'native_agent' || observedAt === 'windows_wsl';
   let causeLayer: FailureLayer = 'undetermined';
   let certainty: FailureAttributionV2['certainty'] = 'unknown';
   let nextAction = 'Inspect the correlated component logs and verify actual state before retrying.';
@@ -96,13 +99,14 @@ export function classifyFailure(evidence: FailureEvidence): FailureAttributionV2
       code === 'AGENT_OPERATION_ALREADY_RECORDED') {
     nextAction = 'Query the original operation ID and read back the target state; never blindly replay the mutation.';
     retrySafety = 'reconcile_first';
-  } else if (code === 'AGENT_OFFLINE' || code === 'AGENT_DISCONNECTED' ||
-             code === 'AGENT_RECONNECT_TIMEOUT' || code === 'AGENT_INSTANCE_CHANGED' ||
-             code === 'AGENT_CAPABILITY_CHANGED') {
+  } else if ((agentReported || observedAt === 'device_connection') &&
+             (code === 'AGENT_OFFLINE' || code === 'AGENT_DISCONNECTED' ||
+              code === 'AGENT_RECONNECT_TIMEOUT' || code === 'AGENT_INSTANCE_CHANGED' ||
+              code === 'AGENT_CAPABILITY_CHANGED')) {
     causeLayer = 'device_connection';
     certainty = 'confirmed'; // confirms the observed connection failure, not why it disconnected
     nextAction = 'Check target device and Agent connectivity. Reconcile mutations before any retry.';
-  } else if (code === 'PATH_DENIED' || code === 'AGENT_PATH_DENIED') {
+  } else if (agentReported && (code === 'PATH_DENIED' || code === 'AGENT_PATH_DENIED')) {
     causeLayer = 'native_agent';
     certainty = 'confirmed';
     nextAction = 'Inspect the explicit Agent path grant. Ask the owner for a scoped grant; do not switch to shell to bypass it.';
@@ -113,17 +117,17 @@ export function classifyFailure(evidence: FailureEvidence): FailureAttributionV2
     certainty = 'confirmed';
     nextAction = 'Check the exact OAuth client, credential scope and login flow. Reauthorize using the official provider flow.';
     retrySafety = 'after_reauthorization';
-  } else if (code === 'UAC_DENIED' || code === 'WINDOWS_UAC_DENIED' ||
-             code === 'ELEVATION_DENIED') {
+  } else if (agentReported && (code === 'UAC_DENIED' || code === 'WINDOWS_UAC_DENIED' ||
+             code === 'ELEVATION_DENIED')) {
     causeLayer = 'windows_wsl';
     certainty = 'confirmed';
     nextAction = 'Request the legitimate Windows elevation/owner-consent workflow; do not bypass UAC.';
     retrySafety = 'after_reauthorization';
-  } else if (code === 'SHELL_EXIT_NONZERO') {
+  } else if (agentReported && code === 'SHELL_EXIT_NONZERO') {
     causeLayer = 'operation';
     certainty = 'confirmed'; // exit was confirmed; meaning/root cause of exit is not
     nextAction = 'Inspect redacted stderr, command exit status, and application-specific postconditions.';
-  } else if (code === 'TASK_VERIFICATION_FAILED') {
+  } else if (observedAt === 'task_verification' && code === 'TASK_VERIFICATION_FAILED') {
     causeLayer = 'task_verification';
     certainty = 'confirmed';
     nextAction = 'Recheck the independent postcondition and its evidence; transport success is not task acceptance.';
@@ -134,9 +138,10 @@ export function classifyFailure(evidence: FailureEvidence): FailureAttributionV2
   } else if (code === 'UNAVAILABLE' || code === 'PROVIDER_UNHEALTHY' ||
              code === 'PROVIDER_EXECUTION_FAILED') {
     nextAction = 'Check Hub, provider and target health independently; source is not proven from this code alone.';
-  } else if (code === 'MCP_AUTHORIZATION_DENIED' ||
-             code === 'MCP_TARGET_NOT_AUTHORIZED' ||
-             code === 'DEVICE_SELECTION_REQUIRED') {
+  } else if (observedAt === 'mcp_hub' &&
+             (code === 'MCP_AUTHORIZATION_DENIED' ||
+              code === 'MCP_TARGET_NOT_AUTHORIZED' ||
+              code === 'DEVICE_SELECTION_REQUIRED')) {
     causeLayer = 'mcp_hub';
     certainty = 'confirmed';
     nextAction = 'Select an explicitly authorized device or request the missing scoped MCP permission.';

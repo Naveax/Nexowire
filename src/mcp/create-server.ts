@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { classifyFailure, redactDiagnosticText, redactDiagnosticValue } from '../protocol/error-contract-v2.js';
+import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { performance } from 'node:perf_hooks';
@@ -594,6 +595,7 @@ async function execute(
               ? 'MCP_AUTHORIZATION_DENIED' : errorCode,
             observedAt: 'mcp_hub',
             dispatched: providerDispatched ? 'unknown' : false,
+            readOnly: isReadOnlyCapability(capability),
             correlationId: operationId, operationId,
           }),
         },

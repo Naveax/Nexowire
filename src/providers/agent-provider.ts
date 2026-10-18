@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { classifyFailure, redactDiagnosticText } from '../protocol/error-contract-v2.js';
+import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type {
   Provider,
@@ -104,6 +105,7 @@ export class AgentProvider implements Provider {
           ? 'AuthRequiredError' : rawCode;
       const attribution = classifyFailure({
         code: diagnosticCode, observedAt: 'native_agent', dispatched: 'unknown',
+        readOnly: isReadOnlyCapability(request.capability),
         ...(request.requestId ? {operationId: request.requestId, correlationId: request.requestId} : {}),
       });
       return {

@@ -9,7 +9,9 @@ Errors gain `error.attribution`; completed shell/WSL invocations with failed, ti
 - `code`; `dispatchState` (not_dispatched/dispatched/unknown); `retrySafety` (read_only_retry/after_reauthorization/reconcile_first/manual_review)
 - `correlationId`, `operationId` when known; `nextAction` is a conservative, reviewable remediation.
 
-Layers: `upstream_client`, `mcp_hub`, `identity`, `device_connection`, `native_agent`, `windows_wsl`, `operation`, `task_verification`, `undetermined`. Cause attribution depends on **public observed error codes, never raw prose**. Confirmation of a connection error does not confirm its underlying physical/root cause. No secret prompts, policies, or account decisions are inferred.
+Layers: `upstream_client`, `mcp_hub`, `identity`, `device_connection`, `native_agent`, `windows_wsl`, `operation`, `task_verification`, `undetermined`. Cause attribution depends on **both the reporting boundary and a known error code, never raw prose**. A `PATH_DENIED`, shell exit, Windows UAC, connection or MCP-authorization code observed outside its trusted originating layer remains `undetermined`; code names alone are not provenance. Confirmation of a connection error does not confirm its underlying physical/root cause. No secret prompts, policies, or account decisions are inferred.
+
+Retry actions distinguish `read_only_retry` for genuinely read-only requests from `reconcile_first` for mutating requests where the dispatch result might be unknown. A confirmed read-only PATH_DENIED requires fresh explicit scope (`after_reauthorization`), not a blind retry. A mutation never silently changes to another execution surface.
 
 ## Example decisions
 
@@ -30,6 +32,6 @@ Use read-only device listing and Agent operation-status/permission diagnostics. 
 
 ## Redaction and boundaries
 
-`redactDiagnosticText` and `redactDiagnosticValue` redact common bearer tokens, API keys, passwords, access/refresh tokens and PEM private keys in MCP structured/text outputs and new provider diagnostic messages. Unknown credential formats, arbitrary binary payloads or screenshots require separate data-loss-prevention controls. Correlation metadata must not include secrets.
+`redactDiagnosticText` and `redactDiagnosticValue` redact common bearer tokens, API keys, passwords, access/refresh tokens and PEM private keys in MCP structured/text outputs and new provider diagnostic messages, including bare `token=`, quoted multiword values and truncated private-key blocks. Unknown credential formats, arbitrary binary payloads or screenshots require separate data-loss-prevention controls. Correlation metadata must not include secrets.
 
 This contract is not an authorization grant; it does not override upstream provider policies, Windows UAC, Agent grants or MCP authorization. Legacy clients ignore optional attribution fields. The live Agent 1.0.5 is not updated by this PR. Source tests, build and exact-head CI must be evaluated separately from deployed acceptance.

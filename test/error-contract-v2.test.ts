@@ -17,17 +17,17 @@ import {
 } from '../src/protocol/error-contract-v2.js';
 
 for (const tc of [
-  {code:'MUTATION_STATE_UNKNOWN',causeLayer:'undetermined',retrySafety:'reconcile_first'},
-  {code:'UNAVAILABLE',causeLayer:'undetermined',retrySafety:'reconcile_first'},
-  {code:'PATH_DENIED',causeLayer:'native_agent',retrySafety:'reconcile_first'},
-  {code:'AuthRequiredError',causeLayer:'identity',retrySafety:'reconcile_first'},
-  {code:'WINDOWS_UAC_DENIED',causeLayer:'windows_wsl',retrySafety:'reconcile_first'},
-  {code:'TIMEOUT',causeLayer:'undetermined',retrySafety:'reconcile_first'},
-  {code:'SHELL_EXIT_NONZERO',causeLayer:'operation',retrySafety:'reconcile_first'},
-  {code:'TASK_VERIFICATION_FAILED',causeLayer:'task_verification',retrySafety:'reconcile_first'},
+  {code:'MUTATION_STATE_UNKNOWN',observedAt:'mcp_hub',causeLayer:'undetermined',retrySafety:'reconcile_first'},
+  {code:'UNAVAILABLE',observedAt:'mcp_hub',causeLayer:'undetermined',retrySafety:'reconcile_first'},
+  {code:'PATH_DENIED',observedAt:'native_agent',causeLayer:'native_agent',retrySafety:'reconcile_first'},
+  {code:'AuthRequiredError',observedAt:'native_agent',causeLayer:'identity',retrySafety:'reconcile_first'},
+  {code:'WINDOWS_UAC_DENIED',observedAt:'windows_wsl',causeLayer:'windows_wsl',retrySafety:'reconcile_first'},
+  {code:'TIMEOUT',observedAt:'mcp_hub',causeLayer:'undetermined',retrySafety:'reconcile_first'},
+  {code:'SHELL_EXIT_NONZERO',observedAt:'native_agent',causeLayer:'operation',retrySafety:'reconcile_first'},
+  {code:'TASK_VERIFICATION_FAILED',observedAt:'task_verification',causeLayer:'task_verification',retrySafety:'reconcile_first'},
 ] as const) {
   test('contract v2 classifies '+tc.code+' without guessing',()=>{
-    const a=classifyFailure({code:tc.code,observedAt:'mcp_hub',dispatched:'unknown'});
+    const a=classifyFailure({code:tc.code,observedAt:tc.observedAt,dispatched:'unknown'});
     assert.equal(a.contractVersion,2);
     assert.equal(a.causeLayer,tc.causeLayer);
     assert.equal(a.retrySafety,tc.retrySafety);
@@ -35,6 +35,27 @@ for (const tc of [
     assert.equal(a.certainty,tc.causeLayer==='undetermined'?'unknown':'confirmed');
   });
 }
+
+test('unverified code origin cannot assert an Agent, UAC, task or device root cause',()=>{
+  for(const code of ['PATH_DENIED','WINDOWS_UAC_DENIED','SHELL_EXIT_NONZERO',
+    'TASK_VERIFICATION_FAILED','AGENT_DISCONNECTED']) {
+    const result=classifyFailure({code,observedAt:'mcp_hub',dispatched:'unknown'});
+    assert.equal(result.causeLayer,'undetermined',code);
+    assert.equal(result.certainty,'unknown',code);
+    assert.equal(result.retrySafety,'reconcile_first',code);
+  }
+  assert.equal(classifyFailure({code:'MCP_TARGET_NOT_AUTHORIZED',observedAt:'native_agent',
+    dispatched:'unknown'}).causeLayer,'undetermined');
+});
+
+test('read-only transport errors can be retried, but unknown mutations cannot',()=>{
+  const read=classifyFailure({code:'AGENT_DISCONNECTED',observedAt:'native_agent',
+    dispatched:'unknown',readOnly:true});
+  const write=classifyFailure({code:'AGENT_DISCONNECTED',observedAt:'native_agent',
+    dispatched:'unknown',readOnly:false});
+  assert.equal(read.retrySafety,'read_only_retry');
+  assert.equal(write.retrySafety,'reconcile_first');
+});
 
 test('upstream refusals are attributed only with explicit NOT DELIVERED evidence',()=>{
   const evidence=classifyUndeliveredUpstreamRefusal('upstream-123');
@@ -108,6 +129,33 @@ async function mcpRun(broker:SyntheticBroker,tool:string,args:Record<string,unkn
   }
 }
 
+test('redaction covers bare tokens, spaced secrets and truncated private key blocks',()=>{
+  const input=[
+    'token=bareSampleKey987',
+    'password="two word ExampleSecret123"',
+    'clientSecret=clientSampleABC123',
+    '-----BEGIN PRIVATE KEY-----',
+    'TRUNCATED_PRIVATE_PAYLOAD_987',
+  ].join('\n');
+  const masked=redactDiagnosticText(input);
+  for(const secret of ['bareSampleKey987','two word ExampleSecret123',
+    'clientSampleABC123','TRUNCATED_PRIVATE_PAYLOAD_987']) {
+    assert.ok(!masked.includes(secret),secret);
+  }
+  assert.ok(masked.includes('[REDACTED PRIVATE KEY]'));
+  assert.equal(redactDiagnosticText('tokensUsed=42'), 'tokensUsed=42');
+});
+
+test('read-only AgentProvider disconnect is safely retryable without losing original error',async()=>{
+  const broker=new SyntheticBroker(undefined,brokerError('AGENT_DISCONNECTED','lost'));
+  const result=await new AgentProvider(broker).execute({
+    targetId:'error-v2-test-device',capability:'files.read',input:{path:'synthetic'},
+  });
+  assert.equal(result.error?.code,'AGENT_DISCONNECTED');
+  assert.equal(result.error?.retryable,true);
+  assert.equal(result.error?.attribution?.retrySafety,'read_only_retry');
+});
+
 test('named AuthRequiredError adds identity evidence without altering legacy provider code',async()=>{
   const err=new Error('password=SensitiveFakePassword987');
   err.name='AuthRequiredError';
@@ -166,7 +214,7 @@ test('PATH_DENIED from Agent preserves existing MCP isError and adds scoped reme
   assert.equal(data.ok,false);
   assert.equal(data.error.code,'PATH_DENIED');
   assert.equal(data.error.attribution.causeLayer,'native_agent');
-  assert.equal(data.error.attribution.retrySafety,'reconcile_first');
+  assert.equal(data.error.attribution.retrySafety,'after_reauthorization');
   assert.ok(!JSON.stringify(response).includes('SecretKey987'));
   assert.equal(broker.calls,1);
 });
