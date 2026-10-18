@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
+import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
@@ -6503,6 +6504,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     },
     async () => toolResult({ checkpoints: await ctx.workspaces.list() }),
   );
+
+  registerArtifactBridgeTools(server, ctx.workspaces, ctx.toolAuthorization);
 
   server.registerTool(
     'audit_recent',
