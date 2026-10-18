@@ -55,3 +55,10 @@ The telemetry intentionally excludes bearer secrets, URLs, IPs, command text, re
 - Deterministic tests cover stale ACK/event fencing, offline exact-ID isolation, heartbeat timeout classification, slow/rejected Bridge probe and verified Bridge elevation status. No real Agent restarts or service changes.
 - **Independent local Windows test environment finding:** TEMP and TMP both resolve to D:\Temp. Two existing workspace-intelligence tests fail individually with PathDeniedError concerning D:\ root. This is a path-ancestor traversal policy/test-fixture issue, assigned to the Filesystem Permissions/Path Safety workstream rather than weakening policy here.
 - Previous PR SHA c462d6a306f4ca9523f556542c2565df2323fb8c completed GitHub Actions run 39134929558 with 7/7 checks successful. That result does not cover a new commit until its own CI finishes.
+
+
+## Simulated two-device continuity follow-up
+
+A dedicated deterministic test now holds a Work PC read-only request in flight while simulating disconnection of a distinct Naveax socket. Work PC responds normally during Naveax's offline interval; Naveax then reconnects using a new Agent instance ID, and the original read-only request resumes with the same request ID. The independent Work PC epoch remains 1 while Naveax increases to 2. This is **fault-injection evidence**, not physical network recovery evidence.
+
+A separate test removes a capability from the reconnected Agent hello and confirms AGENT_CAPABILITY_CHANGED, with no dispatch or fallback to a different device. Both tests are fully isolated from live production routes.

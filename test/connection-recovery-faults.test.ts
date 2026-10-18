@@ -304,3 +304,54 @@ test('queued ACK/event from an old socket cannot affect a replacement socket', a
   assert.deepEqual(await promise, {data: {confirmed: true}});
   assert.equal(f.metrics.snapshot()['agent.ack_responses'].events, 1);
 });
+
+
+test('simulated Naveax reconnect does not interrupt an in-flight Work PC request', async (t) => {
+  const f = await fixture({reconnectGraceMs: 800});
+  t.after(() => closeFixture(f));
+  const aInstance = 'aaaa5555-5555-4555-8555-555555555555';
+  const bInstance = 'bbbb6666-6666-4666-8666-666666666666';
+  const reqA = 'aaaa7777-7777-4777-8777-777777777777';
+  const reqB = 'bbbb8888-8888-4888-8888-888888888888';
+  const firstA = await openAgent(f, 'sim-naveax', aInstance, ['machine.snapshot']);
+  const firstB = await openAgent(f, 'sim-workpc', bInstance, ['machine.snapshot']);
+  const resultA = f.broker.request('sim-naveax', 'machine.snapshot', {}, 3_000, reqA);
+  const resultB = f.broker.request('sim-workpc', 'machine.snapshot', {}, 3_000, reqB);
+  assert.equal((await nextRequest(firstA)).requestId, reqA);
+  assert.equal((await nextRequest(firstB)).requestId, reqB);
+  firstA.terminate();
+  await waitFor(() => !f.broker.has('sim-naveax'));
+  assert.equal(f.broker.has('sim-workpc'), true);
+  answer(firstB, reqB, true);
+  assert.deepEqual(await resultB, {data: {confirmed: true}});
+  const secondA = await openAgent(
+    f, 'sim-naveax', 'aaaa9999-9999-4999-8999-999999999999',
+    ['machine.snapshot'], 2,
+  );
+  assert.equal((await nextRequest(secondA)).requestId, reqA);
+  answer(secondA, reqA, true);
+  assert.deepEqual(await resultA, {data: {confirmed: true}});
+  assert.equal(f.broker.getConnectionHealth('sim-naveax')?.epoch, 2);
+  assert.equal(f.broker.getConnectionHealth('sim-workpc')?.epoch, 1);
+  assert.equal(f.metrics.snapshot()['agent.resumed_requests'].events, 1);
+});
+
+test('capability removal on reconnect rejects a pending read instead of rerouting', async (t) => {
+  const f = await fixture();
+  t.after(() => closeFixture(f));
+  const first = await openAgent(f, 'capability-removed', 'cccc1111-1111-4111-8111-111111111111', ['machine.snapshot']);
+  const result = captured(f.broker.request('capability-removed', 'machine.snapshot', {}, 3_000));
+  await nextRequest(first);
+  first.terminate();
+  await waitFor(() => !f.broker.has('capability-removed'));
+  const second = await openAgent(
+    f, 'capability-removed', 'cccc2222-2222-4222-8222-222222222222',
+    [], 2,
+  );
+  const outcome = await result;
+  assert.equal(outcome.ok, false);
+  assert.ok(outcome.error instanceof NexowireError);
+  assert.equal(outcome.error.code, 'AGENT_CAPABILITY_CHANGED');
+  assert.deepEqual(inbound.get(second), []);
+  assert.equal(f.metrics.snapshot()['agent.rejected_requests'].events, 1);
+});
