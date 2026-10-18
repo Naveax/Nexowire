@@ -348,3 +348,11 @@ This ledger is updated through reviewed commits/PRs; issue comments store interm
 - Inputs do not select a WSS URL, owner account or operator key. Operator private key remains server-side. A lost response never allows reuse of a consumed nonce; the operation is only enrollment, not a mutating OS tool.
 - Staging sources: `src/product/owner-public-wss-device-issuer-proposal.ts`, `test/fixtures/scale-v2-owner-wss-device-enrollment-dev.sql`, `test/owner-public-wss-device-issuer-staging.test.ts`, `docs/SCALE_V2_S2_DEVICE_POPSIGNED_WSS_ISSUANCE.md`.
 - PRODUCTION NO-GO: actual OAuth issuer/DPAPI or HSM/operator key provisioning, real HTTPS endpoint, hard revocation/nonce retention operations and two off-tailnet device acceptance still required. Live services, quotas and payment left unchanged.
+
+
+## 2026-10-18 - Real two-PC public Quick Tunnel signed RPC and owner revocation reader (S2 staging)
+
+- Physical Work PC -> Cloudflare Quick Tunnel -> Naveax signed read-only owner quota RPC: public WSS TLS1.3, synthetic Naveax-held Ed25519 signing key, reserved HTTP 200, replayed signed nonce denied HTTP 409. All owner SQLite state in memory; no real OAuth/native execution. Tunnel and temporary owner WebSocket stopped; disposable device private key and token readiness deleted. Same ISP/LAN was not ruled out; off-network acceptance remains pending.
+- Added a limited, staging-only owner-controlled SQLite trusted state reader to re-check an existing signed enrollment before each quota request: account/device/session, revocable profile revision, enabled Ed25519 key, digest pinned to initial device key and trusted clock. Permanent lease invalidation on revocation; cannot authorize native OS execution.
+- Test fixtures/documentation: `src/product/owner-public-wss-owner-state-reader-proposal.ts`, `test/owner-public-wss-owner-state-reader-staging.test.ts`, `test/fixtures/scale-v2-public-signed-owner-smoke.ts`, `test/fixtures/scale-v2-public-signed-wss-client-smoke.cjs`, `docs/SCALE_V2_S2_PUBLIC_SIGNED_WSS_PHYSICAL_ACCEPTANCE_20261018.md`.
+- No named production Tunnel/zone account access (Cloudflare bot check encountered, not bypassed); no DNS/firewall, live Agent/Hub/Broker, hosted Free quota, billing or production OAuth settings changed. 24h and 850k/day acceptance NOT demonstrated.
