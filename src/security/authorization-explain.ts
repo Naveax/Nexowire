@@ -29,6 +29,8 @@ export interface DeviceAuthorizationFacts {
     readonly desiredMode: 'auto' | 'on' | 'off';
     readonly updatedAt: string;
   } | null;
+  /** Verified against the independent server-side revocation/lease ledger. */
+  readonly rootSessionAuthorized?: boolean;
   readonly now: Date;
 }
 
@@ -38,6 +40,8 @@ export type AuthorizationExplainReason =
   | 'ACCESS_MODE_SAFE'
   | 'DEVICE_OFFLINE'
   | 'ROOT_LEASE_EXPIRED_OR_REVOKED'
+  | 'ROOT_SESSION_MISSING_OR_REVOKED'
+  | 'BRIDGE_REPORTED_MODE_MISMATCH'
   | 'CORE_DISABLED_OR_REVOKED'
   | 'BROKER_DESIRED_OFF'
   | 'BROKER_AGENT_TELEMETRY_NOT_READY'
@@ -61,7 +65,7 @@ export interface AuthorizationExplain {
     readonly leaseUnexpired: boolean;
     readonly expiresAt: string | null;
     readonly duration: '15-minute-maximum-lease';
-    readonly sessionBound: false;
+    readonly sessionBound: boolean;
   };
   readonly core: {
     readonly enabled: boolean;
@@ -78,6 +82,8 @@ export interface AuthorizationExplain {
     readonly deviceTaskState: 'unverified';
     readonly authenticatedBrokerHealth: 'unverified';
     readonly lastAppliedAt: null;
+    readonly runtimeConsistency: 'UNVERIFIED' | 'REPORTED_MISMATCH';
+    readonly errorCode: 'BRIDGE_REPORTED_MODE_MISMATCH' | null;
   };
   readonly windows: {
     readonly adminToken: 'unverified';
@@ -124,6 +130,11 @@ export function explainDeviceAuthorization(
   if (facts.accessMode === 'safe') reasons.push('ACCESS_MODE_SAFE');
   if (!facts.online) reasons.push('DEVICE_OFFLINE');
   if (!rootActive) reasons.push('ROOT_LEASE_EXPIRED_OR_REVOKED');
+  if (!facts.rootSessionAuthorized) reasons.push('ROOT_SESSION_MISSING_OR_REVOKED');
+  const reportedMismatch =
+    (requestedMode === 'off' && telemetryReady) ||
+    (requestedMode === 'on' && facts.online && !telemetryReady);
+  if (reportedMismatch) reasons.push('BRIDGE_REPORTED_MODE_MISMATCH');
   if (!coreEnabled) reasons.push('CORE_DISABLED_OR_REVOKED');
   if (requestedMode === 'off') reasons.push('BROKER_DESIRED_OFF');
   if (!telemetryReady) reasons.push('BROKER_AGENT_TELEMETRY_NOT_READY');
@@ -135,7 +146,7 @@ export function explainDeviceAuthorization(
     'UPSTREAM_PROVIDER_POLICY_NOT_EVALUATED',
   );
   const denied = !ownerValid || facts.accessMode === 'safe' || !facts.online ||
-    requestedMode === 'off';
+    requestedMode === 'off' || reportedMismatch;
   return {
     version: 1,
     deviceId: facts.deviceId,
@@ -148,14 +159,14 @@ export function explainDeviceAuthorization(
     root: {
       // Old lease records have no logout-safe session binding. A live
       // clock lease is diagnostic only, never operational authorization.
-      policyActive: false,
+      policyActive: Boolean(rootActive && facts.rootSessionAuthorized),
       leaseUnexpired: rootActive,
       expiresAt: leaseOwned && Number.isFinite(expiry) && expiry > now
         ? facts.rootLease!.expiresAt : null,
       duration: '15-minute-maximum-lease',
       // The current ControlPlaneIdentity has no session generation/ID.
       // Never claim automatic logout revocation without a persisted binding.
-      sessionBound: false,
+      sessionBound: Boolean(facts.rootSessionAuthorized),
     },
     core: {
       enabled: coreEnabled,
@@ -172,6 +183,8 @@ export function explainDeviceAuthorization(
       deviceTaskState: 'unverified',
       authenticatedBrokerHealth: 'unverified',
       lastAppliedAt: null,
+      runtimeConsistency: reportedMismatch ? 'REPORTED_MISMATCH' : 'UNVERIFIED',
+      errorCode: reportedMismatch ? 'BRIDGE_REPORTED_MODE_MISMATCH' : null,
     },
     windows: {
       adminToken: 'unverified',

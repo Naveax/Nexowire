@@ -315,10 +315,17 @@ async function authenticate(request, env) {
 
   const cookieToken = sessionTokenFromRequest(request);
   if (!cookieToken) return null;
-  return verifySessionToken(
+  const identity = verifySessionToken(
     cookieToken,
     envValue(env, 'NEXOWIRE_SESSION_SECRET'),
   );
+  if (!identity) return null;
+  // Every request rechecks server-side revocation. Old cookies without a
+  // login ID keep regular access but are never eligible for ROOT grants.
+  if (identity.sessionId &&
+      await new ControlPlaneService(new D1ControlPlaneStore(env.DB))
+        .isControlPlaneSessionRevoked(identity)) return null;
+  return identity;
 }
 
 export default {
@@ -644,6 +651,20 @@ export default {
     }
 
     if (url.pathname === '/auth/logout') {
+      // A cookie clear alone does not revoke a replayed, signed login.
+      // D1 must persist revocation before announcing logout success.
+      const signed = sessionTokenFromRequest(request);
+      const identity = signed ? verifySessionToken(
+        signed,envValue(env,'NEXOWIRE_SESSION_SECRET'),
+      ) : null;
+      if (identity?.sessionId) {
+        try {
+          await service.logoutControlPlaneSession(identity);
+        } catch {
+          return Response.json({error:'LOGOUT_REVOCATION_UNCONFIRMED'},
+            {status:503,headers:{'cache-control':'no-store'}});
+        }
+      }
       return new Response(null, {
         status: 302,
         headers: {

@@ -37,6 +37,25 @@ import { resolveOwnerDeviceTarget, type DeviceTargetQuery, type TargetResolution
 export interface ControlPlaneIdentity {
   accountId: string;
   role: 'user' | 'admin' | 'service';
+  /** Set ONLY after verifying the login cookie HMAC; never from request JSON. */
+  sessionId?: string;
+  sessionExpiresAt?: string;
+}
+
+function boundLogin(identity: ControlPlaneIdentity, now: Date): {
+  sessionHash:string;expiresAt:string;
+}|null {
+  if (identity.role === 'service' ||
+      typeof identity.sessionId !== 'string' ||
+      !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(identity.sessionId) ||
+      typeof identity.sessionExpiresAt !== 'string') return null;
+  const expiry = Date.parse(identity.sessionExpiresAt);
+  if (!Number.isFinite(expiry) || expiry <= now.getTime() ||
+      expiry > now.getTime() + 91*24*60*60*1000) return null;
+  return {
+    sessionHash: createHash('sha256').update(identity.sessionId).digest('hex'),
+    expiresAt: new Date(expiry).toISOString(),
+  };
 }
 
 export interface InfrastructureSnapshot {
@@ -324,11 +343,15 @@ export class ControlPlaneService {
         // Lease issuance is distinct from actually executing elevated work.
         // Every elevated operation still requires the existing Broker and its
         // protected machine approval independently of this lease.
-        // An account-scoped lease cannot be revoked by logout: legacy
-        // session cookies have no login-instance binding or revocation DB.
-        // Keep its expiry visible, but NEVER claim effective ROOT until
-        // server-validated session-bound leases and logout CAS exist.
-        const active = false;
+        const bound = boundLogin(identity, this.now());
+        const grant = bound && unexpiredLease
+          ? await this.store.getRootSessionGrant({
+              deviceId: device.id, ownerAccountId: account.id,
+              sessionHash: bound.sessionHash, at: this.now().toISOString(),
+            }) : null;
+        // A live policy lease never proves an elevated Windows token.
+        // Here active means only session-bound ROOT owner policy.
+        const active = Boolean(grant && device.online);
         return {
         id: device.id,
         name: device.name,
@@ -337,7 +360,7 @@ export class ControlPlaneService {
         accessMode: device.accessMode,
         rootMode: {
           active: Boolean(active),
-          expiresAt: unexpiredLease && lease ? lease.expiresAt : null,
+          expiresAt: grant?.expiresAt ?? (unexpiredLease && lease ? lease.expiresAt : null),
         },
         persistentMaintenance: {
           enabled: Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id && device.accessMode === 'full'),
@@ -859,6 +882,12 @@ export class ControlPlaneService {
       this.store.getDeviceMaintenancePreference(deviceId),
       this.store.getDeviceBridgePreference(deviceId),
     ]);
+    const bound = boundLogin(identity,this.now());
+    const sessionGrant = bound
+      ? await this.store.getRootSessionGrant({
+          deviceId,ownerAccountId:account.id,sessionHash:bound.sessionHash,
+          at:this.now().toISOString(),
+        }) : null;
     return explainDeviceAuthorization({
       deviceId,
       ownerAccountId: device.ownerAccountId,
@@ -871,6 +900,7 @@ export class ControlPlaneService {
       rootLease,
       corePreference,
       bridgePreference,
+      rootSessionAuthorized: Boolean(sessionGrant),
       now: this.now(),
     }, capability);
   }
@@ -954,22 +984,46 @@ export class ControlPlaneService {
       throw new Error('ROOT_REQUIRES_FULL_ONLINE_DEVICE');
     }
     const now = this.now();
+    const bound = boundLogin(identity, now);
+    if (enabled && !bound) throw new Error('ROOT_SESSION_BINDING_REQUIRED');
+    if (enabled && await this.store.isControlPlaneSessionRevoked(bound!.sessionHash,now.toISOString())) {
+      throw new Error('ROOT_SESSION_REVOKED');
+    }
     const expiresAt = enabled
-      ? new Date(now.getTime() + ControlPlaneService.ROOT_LEASE_MS).toISOString()
+      ? new Date(Math.min(now.getTime() + ControlPlaneService.ROOT_LEASE_MS,
+          Date.parse(bound!.expiresAt))).toISOString()
       : new Date(0).toISOString();
     await this.store.putRootModeLease({
-      deviceId,
-      ownerAccountId: account.id,
-      expiresAt,
+      deviceId, ownerAccountId: account.id, expiresAt,
       updatedAt: now.toISOString(),
     });
-    return {
-      deviceId,
-      rootMode: {
-        // Persisted owner request is not a session-bound authorization grant.
-        active: false, expiresAt: enabled ? expiresAt : null,
-      },
-    };
+    if (enabled) {
+      // Atomic store admission prevents a logout/revocation racing activation.
+      const granted = await this.store.grantRootSession({
+        deviceId, ownerAccountId:account.id,
+        sessionHash:bound!.sessionHash, issuedAt:now.toISOString(),expiresAt,
+      });
+      if (!granted) throw new Error('ROOT_SESSION_REVOKED_OR_DEVICE_CHANGED');
+    }
+    return {deviceId,rootMode:{
+      active:enabled,expiresAt:enabled?expiresAt:null,
+    }};
+  }
+
+  async logoutControlPlaneSession(identity:ControlPlaneIdentity):Promise<void> {
+    const now=this.now();
+    const session=boundLogin(identity,now);
+    if (!session) return; // Legacy cookies have no active ROOT grants.
+    await this.store.revokeControlPlaneSession({
+      ownerAccountId:identity.accountId,sessionHash:session.sessionHash,
+      revokedAt:now.toISOString(),expiresAt:session.expiresAt,
+    });
+  }
+
+  async isControlPlaneSessionRevoked(identity:ControlPlaneIdentity):Promise<boolean> {
+    const session=boundLogin(identity,this.now());
+    return session !== null &&
+      this.store.isControlPlaneSessionRevoked(session.sessionHash,this.now().toISOString());
   }
 
   /** Stores a durable, owner-controlled maintenance preference, not OS elevation. */

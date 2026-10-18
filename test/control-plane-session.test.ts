@@ -17,14 +17,13 @@ test('signed session round-trips and expires', () => {
     { now, ttlSeconds: 120 },
   );
 
-  assert.deepEqual(
-    verifySessionToken(
-      token,
-      secret,
-      new Date('2026-10-02T12:01:00.000Z'),
-    ),
-    { accountId: 'acct-1', role: 'user' },
+  const verified = verifySessionToken(
+    token,secret,new Date('2026-10-02T12:01:00.000Z'),
   );
+  assert.equal(verified?.accountId,'acct-1');
+  assert.equal(verified?.role,'user');
+  assert.match(verified?.sessionId ?? '',/^[a-f0-9-]{36}$/);
+  assert.equal(verified?.sessionExpiresAt,'2026-10-02T12:02:00.000Z');
   assert.equal(
     verifySessionToken(
       token,

@@ -90,7 +90,8 @@ test('SAFE, broker OFF and forged ready telemetry never claim applied work', () 
   assert.equal(off.operation.decision,'denied');
   assert.equal(off.adminBridge.preferenceApplied,false);
   const telemetryLost = explainDeviceAuthorization(facts({adminBridgeReady:false}));
-  assert.equal(telemetryLost.operation.decision,'not-proven');
+  assert.equal(telemetryLost.operation.decision,'denied');
+  assert.equal(telemetryLost.adminBridge.errorCode,'BRIDGE_REPORTED_MODE_MISMATCH');
   assert.ok(telemetryLost.operation.reasons.includes('BROKER_AGENT_TELEMETRY_NOT_READY'));
   assert.equal(telemetryLost.operation.elevatedExecutionProven,false);
 });

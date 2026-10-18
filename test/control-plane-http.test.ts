@@ -325,7 +325,9 @@ test('public policy supports read only; authenticated account data remains prote
 
 test('ROOT site activation denies missing confirmation and unsafe devices', async () => {
   const { service, handler } = await setup();
-  const owner = { accountId: 'acct-1', role: 'user' } as const;
+  const owner = { accountId: 'acct-1', role: 'user',
+    sessionId:'815ca8ae-73c9-49ad-acdf-340816f76f05',
+    sessionExpiresAt:'2026-10-03T12:00:00.000Z' } as const;
   const challenge = await service.beginPairing(owner, 'root-http-test');
   const paired = await service.consumePairing({
     pairingId: challenge.pairingId, token: challenge.token,
@@ -366,11 +368,11 @@ test('ROOT site activation denies missing confirmation and unsafe devices', asyn
     body: enable,
   }));
   assert.equal(enabled.status, 200);
-  assert.equal((await enabled.json() as { rootMode: { active: boolean } }).rootMode.active, false); // awaiting session-bound ROOT support
+  assert.equal((await enabled.json() as { rootMode: { active: boolean } }).rootMode.active, true);
   const current = await handler(request('/api/v1/me/dashboard', owner));
   assert.equal((await current.json() as {
     devices: Array<{ rootMode: { active: boolean } }>;
-  }).devices[0]?.rootMode.active, false);
+  }).devices[0]?.rootMode.active, true);
   const off = await handler(request(route, owner, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

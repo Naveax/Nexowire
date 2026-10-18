@@ -1,5 +1,6 @@
 import {
   createHmac,
+  randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
 import type { ControlPlaneIdentity } from './control-plane-service.js';
@@ -13,6 +14,8 @@ interface SessionPayload {
   kind: 'session';
   accountId: string;
   role: ControlPlaneIdentity['role'];
+  /** Unique per authenticated login, absent on pre-migration cookies. */
+  sid?: string;
   iat: number;
   exp: number;
 }
@@ -110,6 +113,7 @@ export function issueSessionToken(
     kind: 'session',
     accountId: identity.accountId,
     role: identity.role,
+    sid: randomUUID(),
     iat: now,
     exp: now + ttl,
   };
@@ -131,13 +135,24 @@ export function verifySessionToken(
     !['user', 'admin', 'service'].includes(payload.role) ||
     !Number.isInteger(payload.iat) ||
     !Number.isInteger(payload.exp) ||
+    payload.exp <= payload.iat ||
+    payload.iat > Math.floor(now.getTime() / 1000) + 30 ||
     payload.exp <= Math.floor(now.getTime() / 1000)
   ) {
     return null;
   }
+  // A signed legacy cookie is allowed for normal login but cannot create
+  // an elevated maintenance lease without a unique per-login session ID.
+  const sid = payload.sid;
+  const sessionValid = typeof sid === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sid);
   return {
     accountId: payload.accountId,
     role: payload.role,
+    ...(sessionValid ? {
+      sessionId: sid,
+      sessionExpiresAt: new Date(payload.exp * 1000).toISOString(),
+    } : {}),
   };
 }
 
