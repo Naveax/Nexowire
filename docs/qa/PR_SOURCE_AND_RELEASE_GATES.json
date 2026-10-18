@@ -1,0 +1,368 @@
+{
+  "schema": "nexowire.qa-pr-intake.v1",
+  "date": "2026-10-18",
+  "entries": [
+    {
+      "pr": 480,
+      "headSha": "f9c37df006c1b068b63b79983e4f2129f6a8dce4",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "sourceReproducer": "test/private-shell-broker-guard.test.ts",
+      "physicalAcceptanceMissing": "Owner Windows multimonitor, COM/UAC focus and wrong-HWND denial",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 537,
+      "headSha": "7a79b97267aead35aa00b2be22eb990a4c1767d8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14"
+      ],
+      "sourceReproducer": "test/owner-public-wss-signed-enrollment-staging.test.ts",
+      "physicalAcceptanceMissing": "Named tunnel, full issuer, separate ISP, native Broker, 24h quota",
+      "ci": {
+        "status": "PASS",
+        "runId": 39083036133
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 538,
+      "headSha": "38ff93638a956d5f99dec9555aa16b4edba2f530",
+      "prState": "MERGED",
+      "requirements": [
+        "R01",
+        "R02",
+        "R03"
+      ],
+      "sourceReproducer": "test/agent-operation-journal.test.ts",
+      "physicalAcceptanceMissing": "Deployed v2 journal on two Agents and real crash/ACK recovery",
+      "ci": {
+        "status": "PASS",
+        "runId": 39111944673
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 542,
+      "headSha": "1b51a82684918b8f2a148bd48caaa50ee1710274",
+      "prState": "MERGED",
+      "requirements": [
+        "R08"
+      ],
+      "sourceReproducer": "test/agent-provider-task-outcome.test.ts",
+      "physicalAcceptanceMissing": "Real CMD/PowerShell/WSL Agent task postconditions",
+      "ci": {
+        "status": "PASS",
+        "runId": 39113252848
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 543,
+      "headSha": "243b55b4d8ac03c13bb350fbee6194c6fdac6b34",
+      "prState": "MERGED",
+      "requirements": [
+        "R07"
+      ],
+      "sourceReproducer": "test/process-manager-tree-cleanup.test.ts",
+      "physicalAcceptanceMissing": "Win32 Job Object containment and original orphan incident",
+      "ci": {
+        "status": "PASS",
+        "runId": 39117489971
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 545,
+      "headSha": "223029d1abd8c2caeb27adde57ffb910a8847806",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R13",
+        "R14"
+      ],
+      "sourceReproducer": "test/mcp-oauth.test.ts",
+      "physicalAcceptanceMissing": "Real Codex CLI and ChatGPT PKCE/OIDC independent issuer login",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 546,
+      "headSha": "74f999c9472d83fba7ade9eb45faa78248673241",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14"
+      ],
+      "sourceReproducer": "test/owner-public-wss-enrollment-lease-staging.test.ts",
+      "physicalAcceptanceMissing": "Persistent protected signing keys and real OAuth revocation WSS",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 547,
+      "headSha": "c462d6a306f4ca9523f556542c2565df2323fb8c",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R03",
+        "R06"
+      ],
+      "sourceReproducer": "test/connection-recovery-faults.test.ts",
+      "physicalAcceptanceMissing": "Two physical Agent reconnect/late ACK with no replay",
+      "ci": {
+        "status": "PASS",
+        "runId": 39134929558
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 548,
+      "headSha": "a48916b4f59326bcb8fda53702f478d2b18f26b8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04"
+      ],
+      "sourceReproducer": "test/windows-console-grant.test.ts",
+      "physicalAcceptanceMissing": "Real owner UAC physical console and Broker state",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 549,
+      "headSha": "e29221bc018a5aa498f3763df2aecab87778b18a",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R13"
+      ],
+      "sourceReproducer": "test/agent-provider-task-outcome.test.ts",
+      "physicalAcceptanceMissing": "Real upstream rejection vs Agent receipt independently attributed",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 550,
+      "headSha": "6052205115772c8bbd0be481c99bed140207b668",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R18"
+      ],
+      "sourceReproducer": "test/progress-supervisor.test.ts",
+      "physicalAcceptanceMissing": "Original crypto bot queue/completed/artifact counts validated",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 551,
+      "headSha": "64e1d62873d189bb9c2b857c7ce4cd3f0c14e504",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/console-ui-polish.test.ts",
+      "physicalAcceptanceMissing": "Fix CI regression, physical two Agent signed update/rollback and pairing",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39135168316,
+        "reason": "Ubuntu Node24 console-ui-polish legacy URL callback mismatch"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 552,
+      "headSha": "3927c61b6893a8d4397bfbc76ff6fcdf87393fc1",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-bridge-mcp.test.ts",
+      "physicalAcceptanceMissing": "Owner-scope new conversation retrieval across two devices",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135251173
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 553,
+      "headSha": "156d5def74b2439c5cea34917f39241340ff30b3",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R08",
+        "R22"
+      ],
+      "sourceReproducer": "test/linux-native-agent-live.test.ts",
+      "physicalAcceptanceMissing": "Fix Windows/WSL/Linux/macOS CI, physical USB, TOCTOU",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39135602721,
+        "reason": "Linux/macOS/WSL PATH_DENIED, Ubuntu task-artifact/workspace regression"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 554,
+      "headSha": "5c4b79e77d391ddc839b6ebbb6ecc52395e0458d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12"
+      ],
+      "sourceReproducer": "test/daily-quota-proposal.test.ts",
+      "physicalAcceptanceMissing": "Actual issuer, settled billing, signed webhooks and provider costs",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135456949
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 555,
+      "headSha": "325fc2b5122ac30deec5ab77c49dcc7ec14f435e",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R17",
+        "R21"
+      ],
+      "sourceReproducer": "test/wsl-detection.test.ts",
+      "physicalAcceptanceMissing": "Physical gamepad/USB/VM/CUDA drivers with proof",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135469895
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 556,
+      "headSha": "430513ec701e0d36cdd1b10e1e74eac7e4bbcf83",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "sourceReproducer": "test/private-file-picker-live.test.ts",
+      "physicalAcceptanceMissing": "Owner native picker focus and private default desktop isolation",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135559597
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 557,
+      "headSha": "073e0246ed8897a472d705dd7784cbd440d30252",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/s5-soak-acceptance.test.ts",
+      "physicalAcceptanceMissing": "100+ real WSS, 600/min, 24h success and cloud costs",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135626947
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 558,
+      "headSha": "07bd4555bc59499c316b77ddb82ae2b2abb45208",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R03",
+        "R20"
+      ],
+      "sourceReproducer": "test/agent-operation-reconciliation.test.ts",
+      "physicalAcceptanceMissing": "Two-device deployed journal crash/WAL and offline result",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135829286
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 559,
+      "headSha": "fa0b79e4f2479af1c15ae0858f0d88061bd239f3",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "physicalAcceptanceMissing": "Deployed guardian Job objects, crash/orphan and private GUI",
+      "ci": {
+        "status": "PASS",
+        "runId": 39137327997
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    }
+  ]
+}
