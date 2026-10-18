@@ -38,6 +38,7 @@ export class AgentProvider implements Provider {
         arch: agent.arch,
         agentVersion: agent.agentVersion,
         connectedAt: agent.connectedAt,
+        connectionHealth: this.broker.getConnectionHealth(agent.id),
       },
     }));
   }
@@ -110,6 +111,8 @@ export class AgentProvider implements Provider {
               'AGENT_RECONNECT_TIMEOUT',
               'AGENT_INSTANCE_CHANGED',
               'AGENT_CAPABILITY_CHANGED',
+              'AGENT_RETRY_LIMIT',
+              'MUTATION_STATE_UNKNOWN',
             ].includes(error.code),
         },
         meta: {
