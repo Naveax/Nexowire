@@ -192,3 +192,70 @@ test('Win32 Job launch is fail-closed when the requested image cannot be started
     (error:unknown)=>error instanceof Error &&
       'code' in error && error.code==='WINDOWS_JOB_LAUNCH_UNCONFIRMED');
 });
+
+
+test('Windows durable sidecar worker crash closes owned Job without killing Agent', {
+  skip:process.platform!=='win32',timeout:42_000,
+},async()=>{
+  const {promises:fs}=await import('node:fs');
+  const os=await import('node:os');
+  const path=await import('node:path');
+  const marker='NW_DURABLE_CRASH_'+randomBytes(12).toString('hex');
+  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'nw-job-worker-crash-'));
+  const manager=new ProcessManager({
+    stateFile:path.join(tmp,'state.json'),
+    workerRoot:path.join(tmp,'workers'),
+    workerEntrypoint:path.resolve('src/cli.ts'),
+    workerExecArgv:process.execArgv,
+  });
+  await manager.initialize();
+  let childProof:WinProc|undefined,workerProof:WinProc|undefined;
+  let ownedSessionId:string|undefined;
+  try{
+    const session=await manager.start({
+      shell:'powershell',durable:true,
+      command:"node -e \"const marker='"+marker+"';setInterval(() => {}, 1000)\"",
+    },new PathPolicy(['*']));
+    assert.equal(session.durable,true);
+    ownedSessionId=session.sessionId;
+    const statusFile=path.join(tmp,'workers',session.sessionId,'status.json');
+    const workerStatus=JSON.parse(await fs.readFile(statusFile,'utf8')) as {
+      workerPid:number;childPid:number;sessionId:string;
+    };
+    assert.equal(workerStatus.sessionId,session.sessionId);
+    for(let i=0;i<20;i++){
+      childProof=markedChild(marker);
+      if(childProof)break;
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    assert.ok(childProof,'unique durable shell child must be running before worker crash');
+    workerProof=exactProcess(workerStatus.workerPid);
+    assert.ok(workerProof?.CommandLine?.includes('process-worker') &&
+      workerProof.CommandLine?.includes(session.sessionId),
+      'verify exact worker PID and unique session directory before termination');
+    assert.equal(exactProcess(workerStatus.workerPid)?.CreationDate,workerProof!.CreationDate);
+    const kill=spawnSync('taskkill.exe',['/PID',String(workerStatus.workerPid),'/F'],
+      {windowsHide:true,stdio:'ignore',timeout:5000});
+    assert.equal(kill.status,0,'kill only exact marker-associated synthetic durable worker');
+    let lingering:WinProc|undefined;
+    for(let i=0;i<20;i++){
+      lingering=markedChild(marker);
+      if(!lingering)break;
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    assert.equal(lingering,undefined,
+      'guardian must reap durable descendants after their own sidecar dies');
+  }finally{
+    // Only stop the unique managed durable session created by this fixture.
+    if(ownedSessionId) await manager.stop({session_id:ownedSessionId}).catch(()=>undefined);
+    await manager.shutdown().catch(()=>undefined);
+    if(childProof){
+      const now=markedChild(marker);
+      if(now?.ProcessId===childProof.ProcessId && now.CreationDate===childProof.CreationDate){
+        spawnSync('taskkill.exe',['/PID',String(now.ProcessId),'/F'],
+          {windowsHide:true,stdio:'ignore',timeout:5000});
+      }
+    }
+    await fs.rm(tmp,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+  }
+});

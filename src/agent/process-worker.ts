@@ -443,8 +443,10 @@ export async function runProcessWorker(
   // stdout/stderr/console. Private-desktop launch is a distinct Win32 boundary
   // and is intentionally not represented as Job-contained here.
   if (process.platform === 'win32' && !fileInput) {
+    // Durable means independent of the Agent, not independent of the
+    // owning sidecar: worker crash must close this Job and reap its shell.
     job = await launchWindowsJob(shell.executable, shell.args,
-      {cwd: init.cwd, env: process.env});
+      {cwd: init.cwd, env: process.env, guardOnParentExit: true});
   }
   child = job?.child ?? spawn(shell.executable, shell.args, {
     ...(init.cwd ? { cwd: init.cwd } : {}),
