@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
+import {verifyAgentJournalWal} from './operation-journal-wal.js';
 
 const Fingerprint=z.string().regex(/^[a-f0-9]{64}$/);
 const Rec=z.object({
@@ -132,36 +133,18 @@ export class AgentOperationJournal{
       }catch(e){
         if((e as NodeJS.ErrnoException)?.code!=='ENOENT')throw e;
       }
-      // Validate suspect WAL headers *before* SQLite may ignore/reset a
-      // corrupt sidecar and silently lose an uncheckpointed reservation.
-      for(const suffix of ['-wal','-shm']){
-        const sidecar=this.file+suffix;
-        let stat;
-        try{stat=await fs.lstat(sidecar)}catch(e){
-          if((e as NodeJS.ErrnoException).code==='ENOENT')continue;
-          throw e;
-        }
+      // SQLite recovery may silently truncate invalid frames and discard a
+      // committed anti-replay tombstone. Validate the full WAL before opening.
+      await verifyAgentJournalWal(this.file);
+      const shm=this.file+'-shm';
+      try{
+        const stat=await fs.lstat(shm);
         if(!stat.isFile()||stat.isSymbolicLink()){
           throw new AgentOperationJournalError('AGENT_JOURNAL_SIDECAR_INVALID',
-            'Agent journal sidecar must be a regular file.');
+            'SQLite shared-memory sidecar is not a regular file.');
         }
-        if(suffix==='-wal'&&stat.size>0){
-          if(stat.size<32){
-            throw new AgentOperationJournalError('AGENT_JOURNAL_WAL_CORRUPT',
-              'Incomplete WAL header; refuse mutation dispatch.');
-          }
-          const handle=await fs.open(sidecar,'r');
-          try{
-            const header=Buffer.alloc(4);
-            const read=await handle.read(header,0,4,0);
-            const magic=header.readUInt32BE(0);
-            if(read.bytesRead!==4||
-               (magic!==0x377f0682&&magic!==0x377f0683)){
-              throw new AgentOperationJournalError('AGENT_JOURNAL_WAL_CORRUPT',
-                'Unrecognized WAL header; refuse mutation dispatch.');
-            }
-          }finally{await handle.close()}
-        }
+      }catch(e){
+        if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;
       }
       const db=new DatabaseSync(this.file);
       try{

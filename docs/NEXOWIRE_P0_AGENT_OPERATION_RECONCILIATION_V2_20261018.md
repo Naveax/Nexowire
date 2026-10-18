@@ -40,7 +40,15 @@ OAuth issuer, or production storage was restarted or upgraded by this change.
    This does **not** claim unbounded retention has become bounded: tombstones
    remain permanently until a separately verified immutable anti-replay
    retention scheme exists. Capacity exhaustion fails closed.
-7. The Hub's `IdempotencyStore` no longer silently trims historical keys
+7. Prior to SQLite open/recovery, `operation-journal-wal.ts` streams the
+   WAL header and every frame, validates page size, salts, framing and the
+   cumulative SQLite checksum (both endian variants). A torn or checksum-bad
+   tail blocks Agent startup rather than allowing SQLite's normal recovery
+   to discard it and possibly lose an anti-replay reservation. This is an
+   intentionally strict availability tradeoff. Files remain untouched on
+   validation failure; an operator must investigate and recover from a
+   separately trusted backup. Reference: https://www.sqlite.org/fileformat2.html.
+8. The Hub's `IdempotencyStore` no longer silently trims historical keys
    when full. It rejects new reservations with `IDEMPOTENCY_STORE_FULL`
    instead. Failed completion persistence restores the old in-memory status.
    A terminal Hub status only attests the Hub record, not the OS postcondition.
@@ -79,12 +87,16 @@ OAuth issuer, or production storage was restarted or upgraded by this change.
   metadata evidence distinctions, synthetic corrupt WAL header rejection
   and an isolated SQLite max-page-count SQLITE_FULL fault injection.
   Neither fault test modifies a production volume or live journal.
+- `test/agent-operation-wal-integrity.test.ts`: isolated real hot WAL created
+  by a deliberately killed test-only child (valid recovery to UNKNOWN),
+  modified frame bytes, damaged frame checksum, corrupted header checksum,
+  invalid page size and truncated frame. None touch the live Agent database.
 - `test/agent-operation-status.test.ts` and
   `test/mcp-agent-outcome-reconciliation.test.ts`: read-only status and
   Hub/MCP ambiguous-error handling.
 
-**Still unproven:** real ENOSPC volume fault, torn/malicious `-wal/-shm` byte
-corruption on Windows, full ACL/rollback/backup policy, independently
+**Still unproven:** real ENOSPC volume fault, exhaustive malicious or
+concurrent WAL/SHM tampering, full ACL/rollback/backup policy, independently
 verified postconditions for file/service effects, end-to-end two *live*
 upgraded Agent/Hub devices, authenticated offline Agent journal replication,
 and on-wire reconciliation across a real reconnect. PID liveness can
