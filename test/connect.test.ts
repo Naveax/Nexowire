@@ -105,22 +105,28 @@ test('approval URL only accepts a strict 127.0.0.1 callback', () => {
 test('loopback receiver rejects wrong state and accepts the matching state', async () => {
   const receiver = await startConnectLoopbackReceiver({
     state: 'expected-state',
+    expectedOrigin: 'https://example.com',
     timeoutMs: 30_000,
   });
 
   try {
-    const wrong = new URL(receiver.callbackUrl);
-    wrong.searchParams.set('state', 'wrong');
-    wrong.searchParams.set('pairing_id', 'pair-wrong');
-    wrong.searchParams.set('token', 'token-wrong');
-    const wrongResponse = await fetch(wrong);
-    assert.equal(wrongResponse.status, 400);
-
-    const good = new URL(receiver.callbackUrl);
-    good.searchParams.set('state', 'expected-state');
-    good.searchParams.set('pairing_id', 'pair-1');
-    good.searchParams.set('token', 'token-1');
-    const goodResponse = await fetch(good);
+    const postCallback = (data: Record<string, string>, origin = 'https://example.com') =>
+      fetch(receiver.callbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
+        body: new URLSearchParams(data),
+      });
+    assert.equal((await fetch(receiver.callbackUrl +
+      '?state=expected-state&pairing_id=pair-1&token=secret')).status, 400);
+    assert.equal((await postCallback({
+      state: 'wrong', pairing_id: 'pair-wrong', token: 'token-wrong',
+    })).status, 400);
+    assert.equal((await postCallback({
+      state: 'expected-state', pairing_id: 'pair-1', token: 'token-1',
+    }, 'https://attacker.example')).status, 400);
+    const goodResponse = await postCallback({
+      state: 'expected-state', pairing_id: 'pair-1', token: 'token-1',
+    });
     assert.equal(goodResponse.status, 200);
 
     assert.deepEqual(await receiver.result, {
@@ -205,22 +211,19 @@ test(
         approvalDeviceId ?? '',
         /^[0-9a-f-]{36}$/i,
       );
-      const callback = new URL(
-        approval.searchParams.get('callback')!,
-      );
-      callback.searchParams.set(
-        'state',
-        approval.searchParams.get('state')!,
-      );
-      callback.searchParams.set(
-        'pairing_id',
-        'pairing-123',
-      );
-      callback.searchParams.set(
-        'token',
-        'nwx_pair_test',
-      );
-      const response = await fetch(callback);
+      const callback = approval.searchParams.get('callback')!;
+      const response = await fetch(callback, {
+        method: 'POST',
+        headers: {
+          Origin: 'https://example.com',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          state: approval.searchParams.get('state')!,
+          pairing_id: 'pairing-123',
+          token: 'nwx_pair_test',
+        }),
+      });
       assert.equal(response.status, 200);
     };
 
