@@ -65,6 +65,28 @@ link across process creation. Do not use this PR as release approval.
 
 ## Separate acceptance blockers
 
+## Physical reproduction: second read-only named Job handle (BLOCKER)
+
+2026-10-19, isolated Work PC fixture
+`test/windows-job-named-handle-caveat.test.ts` +
+`test/fixtures/windows-job-hold-query.ps1`: **1/1 PASS**.
+
+- Launch a new Job guardian + uniquely marked PowerShell/Node synthetic
+  process through ProcessManager.
+- Independently verify the fixture guardian PID, command-line marker,
+  Win32 creation timestamp and unique `Local\\Nexowire-<uuid>` Job.
+- Open a second `JOB_OBJECT_QUERY` handle in a separate, **test-created**
+  PowerShell process. Force-stop only the identity-verified synthetic
+  guardian PID with `taskkill /PID`; **the Job root stays alive** despite
+  `KILL_ON_JOB_CLOSE`.
+- Close only the synthetic query handle; the root is then terminated by
+  the final Job handle closure. The test asserts that the root is gone.
+- The test illustrates a security gap, **not** a production-ready solution.
+  A redesign of the Job naming/handle ownership or an equivalent trusted
+  lifecycle control is required to close this blocker. Normal parent death
+  now calls `TerminateJobObject`, but an involuntary guardian kill cannot
+  execute that code.
+
 - A named Windows Job can be reopened with query rights by another
   process. A second Job handle can delay `KILL_ON_JOB_CLOSE` if the
   guardian is **forcibly killed** rather than exiting through its owner
