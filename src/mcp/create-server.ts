@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { classifyFailure, redactDiagnosticText, redactDiagnosticValue } from '../protocol/error-contract-v2.js';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { performance } from 'node:perf_hooks';
@@ -132,13 +133,25 @@ function applyToolRegistrationFilters(
 }
 
 function toolResult(data: unknown, isError = false) {
+  // Apply identical redaction to BOTH structured and text MCP channels.
+  const safeData = redactDiagnosticValue(data);
   const structured =
-    typeof data === 'object' && data !== null && !Array.isArray(data)
-      ? (data as Record<string, unknown>)
-      : { value: data };
-
+    typeof safeData === 'object' && safeData !== null && !Array.isArray(safeData)
+      ? (safeData as Record<string, unknown>)
+      : { value: safeData };
+  if (isError && structured.error && typeof structured.error === 'object' &&
+      !Array.isArray(structured.error)) {
+    const error = structured.error as Record<string, unknown>;
+    if (typeof error.code === 'string' && !error.attribution) {
+      error.attribution = classifyFailure({
+        code: error.code, observedAt: 'mcp_hub', dispatched: 'unknown',
+        ...(typeof structured.operationId === 'string'
+          ? {correlationId: structured.operationId, operationId: structured.operationId} : {}),
+      });
+    }
+  }
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+    content: [{ type: 'text' as const, text: JSON.stringify(safeData, null, 2) }],
     structuredContent: structured,
     ...(isError ? { isError: true } : {}),
   };
@@ -507,7 +520,7 @@ async function execute(
       providerId: result.meta.providerId,
       durationMs: Math.round(performance.now() - started),
       ...(result.error?.code ? { errorCode: result.error.code } : {}),
-      ...(result.error?.message ? { message: result.error.message } : {}),
+      ...(result.error?.message ? { message: redactDiagnosticText(result.error.message) } : {}),
     });
     return toolResult(
       idempotencyKey
@@ -524,7 +537,7 @@ async function execute(
       !result.ok,
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactDiagnosticText(error instanceof Error ? error.message : String(error));
     const errorCode =
       typeof error === 'object' &&
       error !== null &&
@@ -576,6 +589,13 @@ async function execute(
         error: {
           code: errorCode,
           message,
+          attribution: classifyFailure({
+            code: error instanceof McpTargetAuthorizationError
+              ? 'MCP_AUTHORIZATION_DENIED' : errorCode,
+            observedAt: 'mcp_hub',
+            dispatched: providerDispatched ? 'unknown' : false,
+            correlationId: operationId, operationId,
+          }),
         },
         ...(recoveryAuditFailed ? { recoveryAuditFailed: true } : {}),
         ...(recoveryJournalFailed ? { recoveryJournalFailed: true } : {}),

@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { classifyFailure, redactDiagnosticText } from '../protocol/error-contract-v2.js';
 import type { AgentBroker } from '../core/agent-broker.js';
 import type {
   Provider,
@@ -68,6 +69,14 @@ export class AgentProvider implements Provider {
           : 'unknown';
       return {
         ok: true,
+        ...(isShell && taskStatus !== 'succeeded' ? {
+          diagnostic: classifyFailure({
+            code: taskStatus === 'failed' ? 'SHELL_EXIT_NONZERO' :
+              taskStatus === 'timed_out' ? 'SHELL_TASK_TIMED_OUT' : 'SHELL_TASK_OUTCOME_UNKNOWN',
+            observedAt: 'native_agent', dispatched: true,
+            ...(request.requestId ? {operationId: request.requestId, correlationId: request.requestId} : {}),
+          }),
+        } : {}),
         ...(isShell ? {
           taskStatus,
           taskSuccess: taskStatus === 'succeeded' ? true :
@@ -87,17 +96,22 @@ export class AgentProvider implements Provider {
         },
       };
     } catch (error) {
+      const rawCode = typeof error === 'object' && error !== null &&
+        'code' in error && typeof error.code === 'string'
+          ? error.code : 'PROVIDER_ERROR';
+      const diagnosticCode = rawCode === 'PROVIDER_ERROR' &&
+        error instanceof Error && error.name === 'AuthRequiredError'
+          ? 'AuthRequiredError' : rawCode;
+      const attribution = classifyFailure({
+        code: diagnosticCode, observedAt: 'native_agent', dispatched: 'unknown',
+        ...(request.requestId ? {operationId: request.requestId, correlationId: request.requestId} : {}),
+      });
       return {
         ok: false,
         error: {
-          code:
-            typeof error === 'object' &&
-            error !== null &&
-            'code' in error &&
-            typeof error.code === 'string'
-              ? error.code
-              : 'PROVIDER_ERROR',
-          message: error instanceof Error ? error.message : String(error),
+          attribution,
+          code: rawCode === 'PROVIDER_ERROR' ? 'PROVIDER_ERROR' : attribution.code,
+          message: redactDiagnosticText(error instanceof Error ? error.message : String(error)),
           retryable:
             typeof error === 'object' &&
             error !== null &&
