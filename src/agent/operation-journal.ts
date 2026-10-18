@@ -1,7 +1,9 @@
 import {DatabaseSync} from 'node:sqlite';
+import {randomUUID} from 'node:crypto';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
+import {verifyAgentJournalWal} from './operation-journal-wal.js';
 
 const Fingerprint=z.string().regex(/^[a-f0-9]{64}$/);
 const Rec=z.object({
@@ -14,6 +16,10 @@ const Rec=z.object({
   processExitCode:z.number().int().nullable().optional(),
   taskSuccess:z.boolean().optional(),
   timedOut:z.boolean().optional(),
+  dispatchedAt:z.string().datetime().optional(),
+  evidenceKind:z.enum(['shell_exit','file_write_ack','service_readback']).optional(),
+  evidenceVerified:z.boolean().optional(),
+  archived:z.boolean().optional(),
 }).strict();
 export type AgentOperationRecord=z.infer<typeof Rec>;
 export class AgentOperationJournalError extends Error{
@@ -33,6 +39,9 @@ type DbRow={
   task_success:number|null;
   timed_out:number|null;
   has_execution:number;
+  dispatched_at:string|null;
+  evidence_kind:string|null;
+  evidence_verified:number|null;
 };
 
 /**
@@ -50,15 +59,23 @@ export class AgentOperationJournal{
   private loaded=false;
   private readonly maxRecords:number|undefined;
   private readonly now:()=>Date;
+  private readonly leaseId=randomUUID();
+  private readonly maxPageGrowth:number|undefined;
   constructor(private readonly file:string, options:{
-    maxRecords?:number;now?:()=>Date
+    maxRecords?:number;now?:()=>Date;maxPageGrowth?:number
   }={}){
     if(!path.isAbsolute(file))throw new Error('Agent journal path must be absolute');
     if(options.maxRecords!==undefined && (!Number.isSafeInteger(options.maxRecords) ||
       options.maxRecords<1||options.maxRecords>10_000_000)){
       throw new Error('Agent journal capacity invalid');
     }
+    if(options.maxPageGrowth!==undefined &&
+      (!Number.isSafeInteger(options.maxPageGrowth)||
+        options.maxPageGrowth<0||options.maxPageGrowth>1000)){
+      throw new Error('Journal test page-growth limit invalid');
+    }
     this.maxRecords=options.maxRecords;
+    this.maxPageGrowth=options.maxPageGrowth;
     this.now=options.now??(()=>new Date());
   }
   private time():string{
@@ -84,15 +101,23 @@ export class AgentOperationJournal{
         taskSuccess:row.task_success===1,
         timedOut:row.timed_out===1,
       }:{}),
+      ...(row.dispatched_at?{dispatchedAt:row.dispatched_at}:{}),
+      ...(row.evidence_kind?{
+        evidenceKind:row.evidence_kind,
+        evidenceVerified:row.evidence_verified===1,
+      }:{}),
     });
   }
   private read(db:DatabaseSync,id:string):AgentOperationRecord|undefined{
-    const row=db.prepare(
-      'SELECT request_id,fingerprint,capability,status,created_at,updated_at,'+
-      'process_exit_code,task_success,timed_out,has_execution '+
-      'FROM agent_operation_journal WHERE request_id=?',
-    ).get(id) as DbRow|undefined;
-    return row?this.map(row):undefined;
+    const fields='request_id,fingerprint,capability,status,created_at,updated_at,'+
+      'process_exit_code,task_success,timed_out,has_execution,'+
+      'dispatched_at,evidence_kind,evidence_verified';
+    const row=db.prepare('SELECT '+fields+
+      ' FROM agent_operation_journal WHERE request_id=?').get(id) as DbRow|undefined;
+    if(row)return this.map(row);
+    const archived=db.prepare('SELECT '+fields+
+      ' FROM agent_operation_archive WHERE request_id=?').get(id) as DbRow|undefined;
+    return archived?{...this.map(archived),archived:true}:undefined;
   }
   async initialize():Promise<void>{
     if(this.loaded)return;
@@ -108,11 +133,25 @@ export class AgentOperationJournal{
       }catch(e){
         if((e as NodeJS.ErrnoException)?.code!=='ENOENT')throw e;
       }
+      // SQLite recovery may silently truncate invalid frames and discard a
+      // committed anti-replay tombstone. Validate the full WAL before opening.
+      await verifyAgentJournalWal(this.file);
+      const shm=this.file+'-shm';
+      try{
+        const stat=await fs.lstat(shm);
+        if(!stat.isFile()||stat.isSymbolicLink()){
+          throw new AgentOperationJournalError('AGENT_JOURNAL_SIDECAR_INVALID',
+            'SQLite shared-memory sidecar is not a regular file.');
+        }
+      }catch(e){
+        if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;
+      }
       const db=new DatabaseSync(this.file);
       try{
         db.exec('PRAGMA busy_timeout=5000');
         db.exec('PRAGMA journal_mode=WAL');
         db.exec('PRAGMA synchronous=FULL');
+        db.exec('PRAGMA foreign_keys=ON');
         db.exec("CREATE TABLE IF NOT EXISTS agent_operation_journal ("+
           "request_id TEXT PRIMARY KEY NOT NULL,"+
           "fingerprint TEXT NOT NULL,"+
@@ -122,14 +161,62 @@ export class AgentOperationJournal{
           "created_at TEXT NOT NULL, updated_at TEXT NOT NULL,"+
           "process_exit_code INTEGER, task_success INTEGER, timed_out INTEGER,"+
           "has_execution INTEGER NOT NULL DEFAULT 0 CHECK(has_execution IN (0,1)))");
-        // SQLite transaction is atomic; a previous agent crash makes a
-        // reserved unfinished mutation ambiguous, never unseen.
+        // Retain v1 entries; migration adds only payload-free evidence columns.
+        const existing=db.prepare('PRAGMA table_info(agent_operation_journal)')
+          .all() as Array<{name:string}>;
+        for(const [name,sqlType] of [
+          ['dispatched_at','TEXT'],
+          ['evidence_kind','TEXT'],
+          ['evidence_verified','INTEGER'],
+        ] as const){
+          if(!existing.some(column=>column.name===name)){
+            db.exec('ALTER TABLE agent_operation_journal ADD COLUMN '+name+' '+sqlType);
+          }
+        }
+        db.exec('CREATE TABLE IF NOT EXISTS agent_operation_archive AS '+
+          'SELECT * FROM agent_operation_journal WHERE 0');
+        db.exec('CREATE UNIQUE INDEX IF NOT EXISTS agent_operation_archive_id '+
+          'ON agent_operation_archive(request_id)');
+        db.exec('CREATE TABLE IF NOT EXISTS agent_operation_owner ('+
+          'id INTEGER PRIMARY KEY CHECK(id=1),pid INTEGER NOT NULL,'+
+          'nonce TEXT NOT NULL)');
+        const integrity=db.prepare('PRAGMA quick_check').get() as
+          {quick_check:string}|undefined;
+        if(integrity?.quick_check!=='ok'){
+          throw new AgentOperationJournalError('AGENT_JOURNAL_CORRUPT',
+            'SQLite integrity check failed. Refusing mutations.');
+        }
+        // BEGIN IMMEDIATE serializes independent connections/processes.
+        // Never misclassify another live process's in-flight request.
         this.transaction(db,()=>{
+          const previous=db.prepare('SELECT pid FROM agent_operation_owner WHERE id=1')
+            .get() as {pid:number}|undefined;
+          if(previous){
+            let stillAlive=true;
+            try{process.kill(previous.pid,0)}catch(e){
+              stillAlive=(e as NodeJS.ErrnoException).code!=='ESRCH';
+            }
+            if(stillAlive){
+              throw new AgentOperationJournalError('AGENT_JOURNAL_IN_USE',
+                'Another journal owner may be executing mutations.');
+            }
+          }
+          db.prepare('INSERT OR REPLACE INTO agent_operation_owner(id,pid,nonce) '+
+            'VALUES(1,?,?)').run(process.pid,this.leaseId);
+          // Only a new exclusive owner may recover incomplete reservations.
           db.prepare(
             "UPDATE agent_operation_journal SET status='unknown',updated_at=? "+
             "WHERE status='in_progress'",
           ).run(this.time());
         });
+        if(this.maxPageGrowth!==undefined){
+          // Test-only deterministic SQLITE_FULL injection in an isolated DB.
+          // No real disk or live Agent is filled.
+          const pages=db.prepare('PRAGMA page_count').get() as
+            {page_count:number};
+          db.exec('PRAGMA max_page_count='+
+            (pages.page_count+this.maxPageGrowth));
+        }
         this.db=db;
         this.loaded=true;
       }catch(e){
@@ -191,10 +278,30 @@ export class AgentOperationJournal{
       return {created:true,record:this.read(db,requestId)!};
     });
   }
+  async markDispatched(requestId:string,fingerprint:string):Promise<AgentOperationRecord>{
+    await this.initialize();
+    z.string().uuid().parse(requestId);
+    Fingerprint.parse(fingerprint);
+    const db=this.sql();
+    return this.transaction(db,()=>{
+      const updated=db.prepare(
+        'UPDATE agent_operation_journal SET dispatched_at=? '+
+        "WHERE request_id=? AND fingerprint=? AND status='in_progress' "+
+        'AND dispatched_at IS NULL',
+      ).run(this.time(),requestId,fingerprint);
+      if(updated.changes!==1){
+        throw new AgentOperationJournalError('AGENT_JOURNAL_DISPATCH_DENIED',
+          'Dispatch marker CAS not confirmed; executor must not run.',{requestId});
+      }
+      return this.read(db,requestId)!;
+    });
+  }
   async complete(
     requestId:string,
     status:'succeeded'|'failed'|'unknown',
     execution?:{processExitCode:number|null;taskSuccess:boolean;timedOut:boolean},
+    evidence?:{kind:'shell_exit'|'file_write_ack'|'service_readback';verified:boolean},
+    expectedFingerprint?:string,
   ):Promise<AgentOperationRecord>{
     await this.initialize();
     z.string().uuid().parse(requestId);
@@ -208,10 +315,19 @@ export class AgentOperationJournal{
           'AGENT_JOURNAL_OUTCOME_INVALID','Invalid process outcome metadata.');
       }
     }
+    if(evidence){
+      z.object({
+        kind:z.enum(['shell_exit','file_write_ack','service_readback']),
+        verified:z.boolean(),
+      }).strict().parse(evidence);
+    }
+    if(expectedFingerprint!==undefined)Fingerprint.parse(expectedFingerprint);
     const db=this.sql();
     return this.transaction(db,()=>{
       const previous=this.read(db,requestId);
-      if(!previous||previous.status!=='in_progress'){
+      if(!previous||previous.status!=='in_progress'||
+         (expectedFingerprint!==undefined &&
+          previous.fingerprint!==expectedFingerprint)){
         throw new AgentOperationJournalError(
           'AGENT_JOURNAL_TRANSITION_DENIED',
           'Cannot transition absent or finalized Agent operation.',
@@ -220,18 +336,61 @@ export class AgentOperationJournal{
       }
       db.prepare(
         'UPDATE agent_operation_journal SET status=?,updated_at=?,'+
-        'process_exit_code=?,task_success=?,timed_out=?,has_execution=? '+
-        "WHERE request_id=? AND status='in_progress'",
+        'process_exit_code=?,task_success=?,timed_out=?,has_execution=?,'+
+        'evidence_kind=?,evidence_verified=? '+
+        "WHERE request_id=? AND status='in_progress' AND fingerprint=?",
       ).run(status,this.time(),execution?.processExitCode??null,
         execution?Number(execution.taskSuccess):null,
         execution?Number(execution.timedOut):null,Number(Boolean(execution)),
-        requestId);
+        evidence?.kind??null,evidence?Number(evidence.verified):null,
+        requestId,previous.fingerprint);
       return this.read(db,requestId)!;
     });
   }
+  /**
+   * Metadata-only archival. Never purge request IDs or UNKNOWN states:
+   * removing a tombstone would permit a replay after restart.
+   */
+  async archiveCompleted(before:string,limit=500):Promise<number>{
+    await this.initialize();
+    z.string().datetime().parse(before);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>1000){
+      throw new AgentOperationJournalError('AGENT_JOURNAL_ARCHIVE_LIMIT',
+        'Archive batch must contain 1..1000 records.');
+    }
+    const db=this.sql();
+    return this.transaction(db,()=>{
+      const rows=db.prepare(
+        "SELECT request_id FROM agent_operation_journal "+
+        "WHERE status IN ('succeeded','failed') AND updated_at<? "+
+        'ORDER BY updated_at,request_id LIMIT ?',
+      ).all(before,limit) as Array<{request_id:string}>;
+      for(const {request_id:id} of rows){
+        db.prepare('INSERT INTO agent_operation_archive '+
+          'SELECT * FROM agent_operation_journal WHERE request_id=?').run(id);
+        db.prepare('DELETE FROM agent_operation_journal WHERE request_id=?').run(id);
+      }
+      return rows.length;
+    });
+  }
+  async checkpoint():Promise<void>{
+    await this.initialize();
+    const row=this.sql().prepare('PRAGMA wal_checkpoint(TRUNCATE)')
+      .get() as {busy:number}|undefined;
+    if(row?.busy!==0)throw new AgentOperationJournalError(
+      'AGENT_JOURNAL_CHECKPOINT_BUSY','WAL checkpoint did not complete.');
+  }
   close():void{
-    this.db?.close();
-    this.db=undefined;
-    this.loaded=false;
+    if(!this.db)return;
+    try{
+      this.transaction(this.db,()=>{
+        this.db!.prepare('DELETE FROM agent_operation_owner '+
+          'WHERE id=1 AND pid=? AND nonce=?').run(process.pid,this.leaseId);
+      });
+    }finally{
+      this.db.close();
+      this.db=undefined;
+      this.loaded=false;
+    }
   }
 }

@@ -889,26 +889,34 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List idempotency operation records',
       description:
-        'List visible payload-free idempotency records, or retrieve one exact key. Records contain fingerprints and status only, never mutation input or output payloads.',
+        'List visible payload-free Hub idempotency records, query by exact key or operation_id even when Agent is offline. Hub status is NOT proof of remote OS side effects. Never automatically retry UNKNOWN.',
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
         key: z.string().trim().min(1).max(160)
           .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/).optional(),
+        operation_id: z.string().uuid().optional(),
       },
     },
-    async ({ limit, key }) => {
+    async ({ limit, key, operation_id }) => {
       // Historical operation status must remain visible when a directly
       // authorized device goes offline. Do not require a live provider route.
       // Route-only grants remain limited to their currently authorized target.
       const allowedDeviceIds = await authorizedTargetIds(
         ctx, await allRoutingEntries(ctx),
       );
+      if(key && operation_id){
+        return toolResult({ok:false,error:{
+          code:'IDEMPOTENCY_LOOKUP_AMBIGUOUS',
+          message:'Choose exactly one key or operation_id.',
+        }},true);
+      }
       const candidates = !ctx.idempotency
         ? []
-        : key
-          ? [await ctx.idempotency.get(key)].filter(
-              (record): record is IdempotencyRecord => record !== undefined,
-            )
+        : key || operation_id
+          ? [key
+              ? await ctx.idempotency.get(key)
+              : await ctx.idempotency.getByOperationId(operation_id!)
+            ].filter((record): record is IdempotencyRecord => record!==undefined)
           : await ctx.idempotency.list(limit ?? 100, allowedDeviceIds);
       return toolResult({
         records: candidates
