@@ -58,6 +58,7 @@ export interface AuthorizationExplain {
   };
   readonly root: {
     readonly policyActive: boolean;
+    readonly leaseUnexpired: boolean;
     readonly expiresAt: string | null;
     readonly duration: '15-minute-maximum-lease';
     readonly sessionBound: false;
@@ -145,7 +146,10 @@ export function explainDeviceAuthorization(
       devicePresence: facts.online ? 'reported-online' : 'reported-offline',
     },
     root: {
-      policyActive: rootActive,
+      // Old lease records have no logout-safe session binding. A live
+      // clock lease is diagnostic only, never operational authorization.
+      policyActive: false,
+      leaseUnexpired: rootActive,
       expiresAt: leaseOwned && Number.isFinite(expiry) && expiry > now
         ? facts.rootLease!.expiresAt : null,
       duration: '15-minute-maximum-lease',

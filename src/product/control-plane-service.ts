@@ -324,7 +324,11 @@ export class ControlPlaneService {
         // Lease issuance is distinct from actually executing elevated work.
         // Every elevated operation still requires the existing Broker and its
         // protected machine approval independently of this lease.
-        const active = Boolean(unexpiredLease && device.online);
+        // An account-scoped lease cannot be revoked by logout: legacy
+        // session cookies have no login-instance binding or revocation DB.
+        // Keep its expiry visible, but NEVER claim effective ROOT until
+        // server-validated session-bound leases and logout CAS exist.
+        const active = false;
         return {
         id: device.id,
         name: device.name,
@@ -961,7 +965,10 @@ export class ControlPlaneService {
     });
     return {
       deviceId,
-      rootMode: { active: enabled, expiresAt: enabled ? expiresAt : null },
+      rootMode: {
+        // Persisted owner request is not a session-bound authorization grant.
+        active: false, expiresAt: enabled ? expiresAt : null,
+      },
     };
   }
 

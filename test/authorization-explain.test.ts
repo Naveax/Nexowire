@@ -27,7 +27,8 @@ test('FULL, ROOT, CORE and reported Broker are distinct from verified OS elevati
   const result = explainDeviceAuthorization(facts(), 'windows.service.control');
   assert.equal(result.version, 1);
   assert.equal(result.access.mode, 'full');
-  assert.equal(result.root.policyActive, true);
+  assert.equal(result.root.leaseUnexpired, true);
+  assert.equal(result.root.policyActive, false); // logout binding is not implemented
   assert.equal(result.root.sessionBound, false);
   assert.equal(result.core.enabled, true);
   assert.equal(result.core.duration, 'indefinite-revocable');
@@ -52,6 +53,7 @@ test('expired lease, restart/snapshot reuse and CORE without expiry never revive
     ...initial, now: new Date(NOW.getTime() + 31_000),
   });
   assert.equal(expired.root.policyActive, false);
+  assert.equal(expired.root.leaseUnexpired, false);
   assert.equal(expired.root.expiresAt, null);
   assert.equal(expired.core.enabled, true);
   assert.equal(expired.operation.elevatedExecutionProven, false);
