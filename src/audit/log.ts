@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-export type AuditStatus = 'started' | 'succeeded' | 'failed';
+export type AuditStatus = 'started' | 'succeeded' | 'failed' | 'unknown';
 
 export interface AuditEvent {
   id: string;

@@ -39,6 +39,7 @@ import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
+import type { AgentOperationJournal } from './operation-journal.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
 import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
@@ -2114,6 +2115,7 @@ async function workspaceSnapshot(
 
 export interface AgentExecutionContext {
   processes?: ProcessManager;
+  operationJournal?: AgentOperationJournal;
   taskGraphs?: TaskGraphStore;
   runbooks?: RunbookStore;
   privilegeMode?: 'direct' | 'broker';
@@ -2279,6 +2281,15 @@ export async function executeCapability(
     );
   }
   switch (capability) {
+    case 'agent.operation.status': {
+      // Operator-only MCP tool authorizes caller and target at the Hub.
+      // Agent returns only request metadata; missing IDs do NOT imply that
+      // no external side effect occurred.
+      const parsed=z.object({request_id:z.string().uuid()}).strict().parse(input);
+      if (!context.operationJournal) throw new Error('Agent operation journal is unavailable.');
+      const record=await context.operationJournal.inspect(parsed.request_id);
+      return {data:{found:record!==undefined,...(record?{record}:{})}};
+    }
     case 'shell.exec':
       return await executeShell(input, policy);
     case 'process.start':
