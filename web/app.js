@@ -494,6 +494,11 @@ function render(snapshot) {
       const rootLeaseActive = device.rootMode?.active === true &&
         Date.parse(device.rootMode?.expiresAt ?? '') > Date.now();
       rootStateChip.textContent = rootLeaseActive ? 'ROOT izni açık' : 'ROOT kapalı';
+      if (!rootLeaseActive && device.rootMode?.expiresAt &&
+          Date.parse(device.rootMode.expiresAt) > Date.now()) {
+        // The stored 15-minute owner request is not a session-bound grant.
+        rootStateChip.textContent = 'ROOT BEKLEMEDE (oturum doğrulanmadı)';
+      }
       if (rootLeaseActive) rootStateChip.classList.add('elevated');
       const toggle = row.querySelector('.access-toggle');
       toggle.textContent = mode === 'full' ? 'SAFE moda dön' : 'Full Access aç';
@@ -520,6 +525,12 @@ function render(snapshot) {
           (active ? 'aktif' : 'beklemede') + ' · ' +
           new Date(expiresAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) +
           ' bitiş. ' + (ready ? 'Admin Bridge hazır.' : 'Yönetici işlemleri için Admin Bridge gerekli.');
+        if (!active) {
+          rootCopy.textContent =
+            'ROOT isteği kaydedildi; ancak oturum kapanışında iptal ' +
+            'doğrulanamadığından ROOT yetkisi ETKİN DEĞİL. ' +
+            'Bu istek işletim sistemi yönetici izni veya UAC onayı değildir.';
+        }
         const clock = document.createElement('strong');
         clock.className = 'root-clock';
         clock.dataset.expiresAt = expiresAt;

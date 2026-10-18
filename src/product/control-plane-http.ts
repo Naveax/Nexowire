@@ -254,6 +254,15 @@ export function createControlPlaneHttpHandler(
         return json(200, await service.dashboard(identity));
       }
 
+      if (request.method === 'GET' &&
+          path === '/api/v1/me/devices/authorization-explain') {
+        return json(200, await service.authorizationExplain(
+          identity,
+          url.searchParams.get('deviceId') ?? '',
+          url.searchParams.get('capability'),
+        ));
+      }
+
       if (request.method === 'POST' && path === '/api/v1/me/device-selection/auto') {
         const body = await readJsonObject(request);
         if (typeof body.enabled !== 'boolean') {

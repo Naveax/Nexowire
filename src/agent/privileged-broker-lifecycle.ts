@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import * as z from 'zod';
 import { isWindowsProcessElevated } from './privileged-broker.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
+import { PrivilegedBrokerModeDeniedError } from './privileged-broker-denial.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { hardenWindowsProgramDataAcl, verifyWindowsPrivateAcl } from '../security/windows-programdata-acl.js';
 import {inspectPrivilegedStackSourceChainReadOnly} from '../security/privileged-stack-source-audit.js';
@@ -679,23 +680,29 @@ export async function reconcilePrivilegedBrokerMode(
   if (process.platform !== 'win32' || !isWindowsProcessElevated()) {
     throw new Error('BROKER_MODE_LOCAL_ELEVATION_REQUIRED');
   }
-  if (mode !== 'off') {
-    await verifyBrokerTaskStartFiles(options);
+  try {
+    if (mode !== 'off') {
+      await verifyBrokerTaskStartFiles(options);
+    }
+    const result = await runPowerShellJson<unknown>(
+      privilegedBrokerModeTransitionScript,
+      {
+        ...lifecycleEnv(TASK_NAME_DEFAULT, launcherPath(options)),
+        NEXOWIRE_BROKER_DESIRED_MODE: mode,
+      },
+    );
+    return z.object({
+      requestedMode: z.enum(['auto','on','off']),
+      previousState: z.string(),
+      finalState: z.string(),
+      taskVerified: z.literal(true),
+      brokerHealthVerified: z.literal(false),
+    }).parse(result);
+  } catch (error) {
+    // Machine-readable denial; never expose raw PS output or silently
+    // fall back to a different elevated shell or Broker channel.
+    throw new PrivilegedBrokerModeDeniedError(error);
   }
-  const result = await runPowerShellJson<unknown>(
-    privilegedBrokerModeTransitionScript,
-    {
-      ...lifecycleEnv(TASK_NAME_DEFAULT, launcherPath(options)),
-      NEXOWIRE_BROKER_DESIRED_MODE: mode,
-    },
-  );
-  return z.object({
-    requestedMode: z.enum(['auto','on','off']),
-    previousState: z.string(),
-    finalState: z.string(),
-    taskVerified: z.literal(true),
-    brokerHealthVerified: z.literal(false),
-  }).parse(result);
 }
 
 export async function uninstallPrivilegedBrokerTask(
