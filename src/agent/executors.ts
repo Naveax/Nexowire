@@ -39,6 +39,7 @@ import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
+import type { ProgressSupervisor } from './progress-supervisor.js';
 import type { AgentOperationJournal } from './operation-journal.js';
 import type { TaskGraphStore, TaskGraphCheckpoint } from './task-graph-store.js';
 import type { RunbookStore } from './runbook-store.js';
@@ -2115,6 +2116,7 @@ async function workspaceSnapshot(
 
 export interface AgentExecutionContext {
   processes?: ProcessManager;
+  progressSupervisor?: ProgressSupervisor;
   operationJournal?: AgentOperationJournal;
   taskGraphs?: TaskGraphStore;
   runbooks?: RunbookStore;
@@ -2292,16 +2294,33 @@ export async function executeCapability(
     }
     case 'shell.exec':
       return await executeShell(input, policy);
-    case 'process.start':
-      return { data: await requireProcesses(context).start(input, policy) };
-    case 'process.read':
-      return { data: await requireProcesses(context).read(input) };
+    case 'process.start': {
+      const session = await requireProcesses(context).start(input, policy);
+      return { data: { ...session, progress: context.progressSupervisor?.snapshot(session.sessionId) ?? {
+        state: 'progress_unknown', completionEvidence: 'none', progressVerified: false,
+      } } };
+    }
+    case 'process.read': {
+      const read = await requireProcesses(context).read(input);
+      context.progressSupervisor?.recover([read.session]);
+      return { data: { ...read, progress: context.progressSupervisor?.snapshot(read.session.sessionId) ?? {
+        state: 'progress_unknown', completionEvidence: 'none', progressVerified: false,
+      } } };
+    }
     case 'process.write':
       return { data: await requireProcesses(context).write(input) };
     case 'process.stop':
       return { data: await requireProcesses(context).stop(input) };
-    case 'process.list':
-      return { data: requireProcesses(context).list() };
+    case 'process.list': {
+      const sessions = requireProcesses(context).list();
+      context.progressSupervisor?.recover(sessions);
+      return { data: sessions.map((session) => ({
+        ...session,
+        progress: context.progressSupervisor?.snapshot(session.sessionId) ?? {
+          state: 'progress_unknown', completionEvidence: 'none', progressVerified: false,
+        },
+      })) };
+    }
     case 'process.prune':
       return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
@@ -2364,7 +2383,24 @@ export async function executeCapability(
       return { data: requireTaskGraphs(context).list() };
     case 'task.graph.get': {
       const parsed = TaskGraphGetInputSchema.parse(input);
-      return { data: requireTaskGraphs(context).get(parsed.graph_id) };
+      const graph = requireTaskGraphs(context).get(parsed.graph_id);
+      const completedCount = graph.jobs.filter((job) => job.status === 'succeeded').length;
+      const failureCount = graph.jobs.filter((job) => job.status === 'failed').length;
+      return { data: { ...graph, progress: {
+        unit: 'graph_jobs_not_application_work',
+        completedCount,
+        failureCount,
+        pendingCount: graph.jobs.filter((job) => job.status === 'pending' || job.status === 'running').length,
+        lastRecordedJobCompletionAt: graph.jobs.filter((job) => job.status === 'succeeded' && job.completedAt)
+          .map((job) => job.completedAt!).sort().at(-1) ?? null,
+        lastVerifiedProgressAt: null,
+        progressVerified: false,
+        resultArtifactSha256: graph.jobs.flatMap((job) => job.artifacts ?? [])
+          .map((artifact) => artifact.sha256),
+        completionEvidence: 'persisted_job_status_not_application_result',
+        artifactHashSource: 'captured_at_job_finish_requires_reverify',
+        artifactReverificationRequired: true,
+      } } };
     }
     case 'task.artifact.list': {
       const parsed = TaskArtifactListInputSchema.parse(input);
@@ -2419,7 +2455,18 @@ export async function executeCapability(
           .max(128)
           .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
       }).parse(input);
-      return { data: requireRunbooks(context).get(parsed.runbook_id) };
+      const runbook = requireRunbooks(context).get(parsed.runbook_id);
+      return { data: { ...runbook, progress: {
+        unit: 'runbook_steps_not_application_work',
+        completedCount: runbook.steps.filter((step) => step.status === 'succeeded').length,
+        pendingCount: runbook.steps.filter((step) => step.status === 'pending' || step.status === 'running').length,
+        failureCount: runbook.steps.filter((step) => step.status === 'failed').length,
+        lastRecordedStepCompletionAt: runbook.steps.filter((step) => step.status === 'succeeded' && step.completedAt)
+          .map((step) => step.completedAt!).sort().at(-1) ?? null,
+        lastVerifiedProgressAt: null,
+        progressVerified: false,
+        completionEvidence: 'persisted_runbook_step_status_not_application_result',
+      } } };
     }
     case 'runbook.prune': {
       const parsed = z.object({
