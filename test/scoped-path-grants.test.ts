@@ -277,6 +277,30 @@ test('monotonic expiry does not extend after wall-clock rollback', () => {
   assert.deepEqual(registry.active('owner','device'), []);
 });
 
+test('destructive grants expire within fifteen minutes and reject volume roots', () => {
+  const registry = new ScopedPathGrantRegistry(() => 1000, () => 1000);
+  const base = {
+    id: 'usb-short-grant-01', ownerId: 'owner', deviceId: 'device',
+    root: path.join(os.tmpdir(), 'safe-subdirectory'),
+    scopes: ['usb_write'] as const,
+    volume: { volumeId: USB.volumeId, deviceId: USB.deviceId, partitionNumber: 1 },
+  };
+  assert.throws(() => registry.grantLocally({
+    ...base, expiresAt: 1000 + 15 * 60_000 + 1,
+  }));
+  assert.throws(() => registry.grantLocally({
+    ...base, root: path.parse(os.tmpdir()).root,
+    expiresAt: 1000 + 60_000,
+  }), /entire volume root/);
+  assert.throws(() => registry.grantLocally({
+    ...base, root: path.parse(os.tmpdir()).root,
+    scopes: ['recursive_delete'] as const, volume: undefined,
+    expiresAt: 1000 + 60_000,
+  }), /entire volume root/);
+  registry.grantLocally({ ...base, expiresAt: 1000 + 15 * 60_000 });
+  assert.equal(registry.active('owner','device').length, 1);
+});
+
 test('grant lifetime cannot exceed one day or start expired', () => {
   const store = new ScopedPathGrantRegistry(() => 1_000);
   const baseline = {

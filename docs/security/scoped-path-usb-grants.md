@@ -23,7 +23,9 @@ native file tools. The policy never attempts to partition or format a disk.
 
 `ScopedPathGrantRegistry.grantLocally` requires a target root, explicit scope
 set, owner ID, Agent device ID, unique grant ID and positive expiration time
-(maximum 24 hours). A USB grant also requires the previously observed volume,
+(maximum 24 hours for ordinary scopes, **15 minutes** for USB writes or
+recursive deletion). Destructive grants cannot target the entire drive root.
+A USB grant also requires the previously observed volume,
 disk and partition identities. `revoke(id)` takes effect immediately;
 expiration and Agent restart invalidate grants. Both wall-clock and monotonic
 timeouts apply, so moving the wall clock backward cannot extend a grant.

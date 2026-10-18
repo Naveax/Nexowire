@@ -34,6 +34,7 @@ const SCOPES = new Set<FileScope>([
   'read', 'write', 'delete', 'move', 'recursive_delete', 'usb_write',
 ]);
 const MAX_GRANT_MS = 24 * 60 * 60 * 1000;
+const MAX_DESTRUCTIVE_GRANT_MS = 15 * 60 * 1000;
 
 /**
  * Owner-approved grants are minted on the device, not through remote file/shell
@@ -54,12 +55,21 @@ export class ScopedPathGrantRegistry {
       throw new Error('Grant ID already exists; revoke explicitly before any replacement.');
     }
     const remaining = grant.expiresAt - this.now();
+    const destructive = grant.scopes.includes('usb_write') ||
+      grant.scopes.includes('recursive_delete');
+    const maxDuration = destructive ? MAX_DESTRUCTIVE_GRANT_MS : MAX_GRANT_MS;
     if (!/^[A-Za-z0-9_-]{8,128}$/.test(grant.id) ||
         !grant.ownerId.trim() || !grant.deviceId.trim() ||
         !path.isAbsolute(grant.root) ||
         !grant.scopes.length || grant.scopes.some(scope => !SCOPES.has(scope)) ||
-        !Number.isFinite(remaining) || remaining <= 0 || remaining > MAX_GRANT_MS) {
+        !Number.isFinite(remaining) || remaining <= 0 || remaining > maxDuration) {
       throw new Error('Invalid locally-approved scoped path grant.');
+    }
+    if (process.platform === 'win32' && unsafeWindowsPath(grant.root)) {
+      throw new Error('Unsafe Windows namespace in scoped grant root.');
+    }
+    if (destructive && path.resolve(grant.root) === path.parse(grant.root).root) {
+      throw new Error('Destructive permissions cannot target an entire volume root.');
     }
     if (grant.scopes.includes('usb_write') && !grant.volume) {
       throw new Error('USB write grants require verified volume identity.');
