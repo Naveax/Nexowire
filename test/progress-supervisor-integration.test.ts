@@ -10,7 +10,18 @@ import { ProgressSupervisor } from '../src/agent/progress-supervisor.js';
 import { TaskGraphStore } from '../src/agent/task-graph-store.js';
 import { RunbookStore } from '../src/agent/runbook-store.js';
 
-test('real managed synthetic process: process.start/read progress separated from PID and proof', async () => {
+test('real managed synthetic process: process.start/read progress separated from PID and proof', async (t) => {
+  // #559 requires an independently trusted native Job Object helper on
+  // Windows. Do not bypass Process Manager ownership to make this green.
+  // Its physical integration gate is SKIPPED when no helper is provisioned.
+  if (process.platform === 'win32') {
+    const helper = path.resolve('native/windows-job-owner.exe');
+    const available = await fs.stat(helper).then(s => s.isFile()).catch(() => false);
+    if (!available) {
+      t.skip('Windows Job Object helper not provisioned: process.start physical acceptance blocked');
+      return;
+    }
+  }
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-progress-integ-'));
   const progressSupervisor = new ProgressSupervisor({ stallAfterMs: 1000 });
   const manager = new ProcessManager({

@@ -184,3 +184,24 @@ is not automatically invoked for arbitrary process.read responses because
 no trusted per-session project/total/root binding has been provisioned.
 Unconfigured processes remain self-reported/unverified; no fabricated green
 status. The actual crypto model/trading bot was not started.
+
+
+### Post-merge #559 / #550 Windows acceptance note (2026-10-18)
+
+PR #550 merged into main as ca7fc2c while the verifier follow-up was in
+progress. This implementation therefore targets a separate DRAFT follow-up
+PR against main instead of rewriting a merged PR.
+
+The unrelated Win32 Job Object change from PR #559 makes Native Process
+Manager refuse process.start without its pinned native Job owner EXE.
+The isolated Work PC source worktree lacks native/windows-job-owner.exe.
+The existing process.start/read integration test is now conditionally
+SKIPPED **only** when that helper is absent, with explicit evidence.
+No native Process Manager code or runtime trust checks were weakened.
+The new independent result-file verifier tests execute controlled temporary
+Node worker subprocesses without invoking Native Process Manager; they do
+not substitute for a true Windows Job Object acceptance test.
+Linux CI can still run the original process.start/read integration test.
+
+Reviewers must distinguish targeted PASS, physical Win32 process-start
+SKIP, GitHub exact-head CI and production release gates.
