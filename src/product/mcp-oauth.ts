@@ -286,7 +286,7 @@ export class McpOAuthService {
     return {
       resource: this.resource,
       authorization_servers: [this.issuer],
-      scopes_supported: ['mcp', 'offline_access'],
+      scopes_supported: ['mcp'],
     };
   }
 

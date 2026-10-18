@@ -79,7 +79,7 @@ test('ChatGPT is an independent DCR OAuth client with canonical audience and iss
   assert.equal(protectedResource?.status, 200);
   assert.deepEqual(await protectedResource!.json(), {
     resource, authorization_servers: [issuer],
-    scopes_supported: ['mcp', 'offline_access'],
+    scopes_supported: ['mcp'],
   });
 });
 
@@ -97,7 +97,7 @@ test('Codex CLI DCR localhost/127.0.0.1 alias is limited to exact local callback
     client_id: codex.clientId, resource,
   }));
   assert.ok(refresh.refresh_token);
-  assert.notEqual(refresh.refresh_token, codex.issued.refresh_token);
+  assert.equal(refresh.refresh_token !== codex.issued.refresh_token, true);
   await assert.rejects(oauth.token(new URLSearchParams({
     grant_type: 'refresh_token', refresh_token: codex.issued.refresh_token!,
     client_id: codex.clientId, resource,
@@ -325,4 +325,48 @@ test('hosted verifier transport failures are 503-class, not invalid user credent
     accountId: 'fixture-account', eventId: 'fixture-event',
     toolName: 'machine_health',
   }), undefined);
+});
+
+test('independent ChatGPT and Codex public registrations cannot exchange each other OAuth codes or refresh grants', async () => {
+  const { oauth } = fixture();
+  const chatRedirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
+  const codexRedirect = 'http://127.0.0.1:39053/callback/independent';
+  const chat = await oauth.registerClient({redirect_uris:[chatRedirect]}) as {client_id:string};
+  const codex = await oauth.registerClient({redirect_uris:[codexRedirect]}) as {client_id:string};
+  assert.notEqual(chat.client_id,codex.client_id);
+  const params = new URLSearchParams({
+    response_type:'code',client_id:chat.client_id,redirect_uri:chatRedirect,
+    resource,code_challenge:pkce,code_challenge_method:'S256',
+    scope:'mcp offline_access',
+  });
+  const redirect = new URL(await oauth.authorize('fixture-owner',params));
+  const code = redirect.searchParams.get('code')!;
+  const exchange = new URLSearchParams({
+    grant_type:'authorization_code',code,client_id:codex.client_id,
+    redirect_uri:chatRedirect,code_verifier:verifier,resource,
+  });
+  await assert.rejects(oauth.token(exchange),
+    (error:unknown) => error instanceof McpOAuthError && error.code==='invalid_grant');
+  exchange.set('client_id',chat.client_id);
+  const issued = await oauth.token(exchange);
+  const access = await oauth.authenticateAccessToken(issued.access_token);
+  assert.equal(access?.clientId,chat.client_id);
+  const foreignRefresh = new URLSearchParams({
+    grant_type:'refresh_token',refresh_token:issued.refresh_token!,
+    client_id:codex.client_id,resource,
+  });
+  await assert.rejects(oauth.token(foreignRefresh),
+    (error:unknown) => error instanceof McpOAuthError && error.code==='invalid_grant');
+  foreignRefresh.set('client_id',chat.client_id);
+  const rotated = await oauth.token(foreignRefresh);
+  assert.equal((await oauth.authenticateAccessToken(rotated.access_token))?.clientId,chat.client_id);
+  const codexCode = new URL(await oauth.authorize('fixture-owner',new URLSearchParams({
+    ...Object.fromEntries(params),
+    client_id:codex.client_id,redirect_uri:codexRedirect,
+  }))).searchParams.get('code')!;
+  assert.ok(codexCode.startsWith('nwx_code_'));
+  await assert.rejects(oauth.token(new URLSearchParams({
+    grant_type:'authorization_code',code:codexCode,client_id:chat.client_id,
+    redirect_uri:codexRedirect,code_verifier:verifier,resource,
+  })), (error:unknown)=>error instanceof McpOAuthError && error.code==='invalid_grant');
 });
