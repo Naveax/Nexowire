@@ -95,22 +95,42 @@ function normalizeHttpsUrl(
 }
 
 function normalizeRedirectUri(input: string): string {
-  const value = normalizeHttpsUrl(
-    input,
-    'OAuth redirect URI',
-    {
-      allowLoopbackHttp: true,
-      allowPath: true,
-    },
-  );
-  const url = new URL(value);
-  if (url.hash) {
+  try {
+    const value = normalizeHttpsUrl(
+      input,
+      'OAuth redirect URI',
+      { allowLoopbackHttp: true, allowPath: true },
+    );
+    return new URL(value).toString();
+  } catch {
+    // Untrusted DCR / authorize input is a client error, never a 500.
+    // Do not echo attacker-controlled URI or secrets in the response.
     throw new McpOAuthError(
       'invalid_request',
-      'OAuth redirect URI must not contain a fragment.',
+      'OAuth redirect URI must use HTTPS or loopback HTTP without credentials or fragments.',
     );
   }
-  return url.toString();
+}
+
+/**
+ * Codex CLI 0.142.x can register a loopback 127.0.0.1 callback and use
+ * localhost at /authorize. Treat only these two *local* names as equivalent,
+ * with the exact same port, path and query. Never relax token-exchange
+ * binding to the redirect actually used to mint the authorization code.
+ */
+function registeredRedirectMatches(registered: string, requested: string): boolean {
+  if (registered === requested) return true;
+  const original = new URL(registered);
+  const candidate = new URL(requested);
+  const loopbackHosts = new Set(['127.0.0.1', 'localhost']);
+  return original.protocol === 'http:' &&
+    candidate.protocol === 'http:' &&
+    loopbackHosts.has(original.hostname) &&
+    loopbackHosts.has(candidate.hostname) &&
+    original.port !== '' &&
+    original.port === candidate.port &&
+    original.pathname === candidate.pathname &&
+    original.search === candidate.search;
 }
 
 function tokenHash(token: string): string {
@@ -288,6 +308,7 @@ export class McpOAuthService {
       scopes_supported: ['mcp', 'offline_access'],
       token_endpoint_auth_methods_supported: ['none'],
       authorization_response_iss_parameter_supported: false,
+      protected_resources: [this.resource],
     };
   }
 
@@ -378,7 +399,7 @@ export class McpOAuthService {
       );
     }
     const redirectUri = normalizeRedirectUri(redirectRaw);
-    if (!client.redirectUris.includes(redirectUri)) {
+    if (!client.redirectUris.some((registered) => registeredRedirectMatches(registered, redirectUri))) {
       throw new McpOAuthError(
         'invalid_request',
         'redirect_uri is not registered for this client.',

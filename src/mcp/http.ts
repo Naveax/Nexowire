@@ -221,10 +221,16 @@ export async function runHttpServer(
               'WWW-Authenticate',
               'Bearer resource_metadata="' +
                 resourceMetadataUrl +
-                '"',
+                '\", scope=\"mcp\"',
             );
           }
-          res.status(401).json({ error: 'unauthorized' });
+          res.setHeader('Cache-Control', 'no-store');
+          res.status(401).json({
+            error: 'unauthorized',
+            code: 'MCP_AUTH_REQUIRED',
+            layer: 'token',
+            next_action: 'reauthorize',
+          });
           return;
         }
         res.locals.nexowireAuthorization =
@@ -237,10 +243,19 @@ export async function runHttpServer(
             'WWW-Authenticate',
             'Bearer resource_metadata="' +
               resourceMetadataUrl +
-              '"',
+              '\", scope=\"mcp\"',
           );
         }
-        res.status(401).json({ error: 'unauthorized' });
+        // A verifier outage is not evidence that the user token is invalid.
+        // Keep its cause private and do not force pointless OAuth logins.
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Retry-After', '5');
+        res.status(503).json({
+          error: 'service_unavailable',
+          code: 'MCP_AUTH_VERIFIER_UNAVAILABLE',
+          layer: 'verification',
+          next_action: 'retry_later',
+        });
       });
   });
 
