@@ -62,6 +62,11 @@ export class ProposedOwnerPublicWssEnrollmentLease {
     try{
       const current=await this.trustedState();
       verifySignedOwnerPublicWssEnrollment(this.snapshot,current);
+      // Invalidation may happen while the async authority read runs.
+      // A late snapshot must never reactivate an invalidated lease.
+      if(this.invalidated){
+        throw new Error('Owner WSS enrollment lease invalidated');
+      }
     }catch{
       this.invalidated=true;
       throw new Error('Owner WSS enrollment lease expired, revoked or unavailable');

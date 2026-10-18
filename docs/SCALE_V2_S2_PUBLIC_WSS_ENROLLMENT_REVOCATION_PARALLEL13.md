@@ -50,3 +50,11 @@ No account, zone, tunnel ID, DNS state, independent ISP, DPAPI/CNG/TPM protectio
 - Test Ed25519 keypairs and synthetic bearer strings exist only in the test process. They are not saved to disk as private-key artifacts.
 - Parent PR #537's previous Quick Tunnel cleanup remains as documented there. Parallel-13 started **no new Quick Tunnel**.
 - Do not claim a named public Tunnel, production rollout, native grants or real persistent keystore based on these tests.
+
+## Parallel-13 follow-up: opaque signer seam and async revocation race
+
+- src/product/owner-public-wss-device-signer-proposal.ts adds a STAGING-only, key-material-free interface (OwnerWssDeviceExternalSigner). It never reads/exports private-key PEM; the implementation callback signs canonical proof bytes using the caller's OS-controlled handle. A trusted, independently supplied enrolled SPKI SHA-256 is checked in constant time before the signing callback; returned Ed25519 signatures must locally verify against the pinned public key. This reduces accidental key-material handling in caller code, but **does not prove OS key protection**.
+- An external signer callback is not by itself trustworthy. Windows CNG/TPM integration must pin handle identity, caller ACL and key non-exportability in the native Agent, and must undergo a physical test. The test fixture uses in-process ephemeral Ed25519 keys only.
+- Staging issuer integration verifies a real signed possession frame, then rejects replay of the same nonce. A rotated/stale key, wrong device, invalid algorithm, incorrect SPKI pin, signer error or forged signature must fail closed.
+- ProposedOwnerPublicWssEnrollmentLease.requireCurrent now rejects a late reader result if the lease was explicitly invalidated while the authority read was pending. The session continues to re-check fresh owner state before and after each outbound reservation.
+- Even with pre/post checks, **server-side native authorization revocation is still required** to prevent an operation already started at the owner from executing after grant revocation. No stage-local reservation grants a Broker dispatch.

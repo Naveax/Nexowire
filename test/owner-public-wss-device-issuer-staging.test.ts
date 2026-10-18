@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomBytes,sign} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomBytes,sign} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,8 @@ import {
   serializeOwnerWssDeviceProof,
   type DeviceOwnerWssEnrollmentRequest,
 } from '../src/product/owner-public-wss-device-issuer-proposal.js';
+import {signOwnerWssEnrollmentProof}
+  from '../src/product/owner-public-wss-device-signer-proposal.js';
 import {
   verifySignedOwnerPublicWssEnrollment,
   type TrustedOwnerPublicWssEnrollmentContext,
@@ -216,5 +218,31 @@ test('operator trust root or issuer identifier cannot be substituted',async()=>{
     assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
       {...issued,operatorId:'untrusted-operator'},verifyContext(),
     ),/mismatch/);
+  }finally{db.close()}
+});
+test('external Ed25519 signing handle produces a proof the real staging issuer accepts',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const spkiSha256=createHash('sha256').update(deviceKeys.publicKey.export({
+      type:'spki',format:'der',
+    })).digest('hex');
+    const unsigned=claim();
+    const signedProof=await signOwnerWssEnrollmentProof(
+      {
+        bearerToken:unsigned.bearerToken,deviceId:unsigned.deviceId,
+        nonce:unsigned.nonce,signedAtMs:unsigned.signedAtMs,
+      },
+      {
+        deviceId:device,publicKeyPem:pem(deviceKeys.publicKey),
+        async signProof(bytes){return sign(null,bytes,deviceKeys.privateKey)},
+      },
+      spkiSha256,
+    );
+    const enrolled=await issuer.issue(signedProof);
+    const profile=verifySignedOwnerPublicWssEnrollment(
+      enrolled,verifyContext(),
+    );
+    assert.equal(profile.expectedHostname,'edge.example.com');
+    await assert.rejects(issuer.issue(signedProof));
   }finally{db.close()}
 });

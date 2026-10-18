@@ -264,3 +264,23 @@ test('explicit close during an in-flight call refuses even a delayed 200',async(
   await assert.rejects(pending,/closed/);
   assert.equal(closes,1);
 });
+test('explicit lease invalidation during async owner read cannot be undone',async()=>{
+  let calls=0;
+  let finish!:(value:TrustedOwnerPublicWssEnrollmentContext)=>void;
+  const read=async()=>{
+    calls++;
+    if(calls===1)return {...trusted};
+    return new Promise<TrustedOwnerPublicWssEnrollmentContext>(resolve=>{
+      finish=resolve;
+    });
+  };
+  const lease=await ProposedOwnerPublicWssEnrollmentLease.establish(
+    signed(),read,
+  );
+  const pending=lease.requireCurrent();
+  lease.invalidate();
+  finish({...trusted});
+  await assert.rejects(pending,/revoked|unavailable/);
+  assert.equal(calls,2);
+  await assert.rejects(lease.requireCurrent(),/invalidated/);
+});
