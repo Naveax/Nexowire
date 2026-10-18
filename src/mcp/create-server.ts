@@ -553,7 +553,7 @@ async function execute(
     try {
       await ctx.audit?.write({
         operationId,
-        status: persistedOutcome ?? 'failed',
+        status: persistedOutcome ?? recordedStatus,
         capability,
         ...(targetId ? { targetId } : {}),
         ...(providerId ? { providerId } : {}),
@@ -888,6 +888,21 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           .slice(0, limit ?? 100),
       });
     },
+  );
+
+  server.registerTool(
+    'agent_operation_status',
+    {
+      title: 'Inspect native Agent operation',
+      description:
+        'Inspect one exact Agent mutation request ID on an authorized online device. Operator/admin only. Reports payload-free durable status, not command input/results. A missing record does not prove no side effect. Do not replay unknown mutations.',
+      inputSchema: {
+        ...targetFields,
+        request_id: z.string().uuid(),
+      },
+    },
+    async ({ device_id, provider_id, request_id }) =>
+      await execute(ctx,'agent.operation.status',{request_id},device_id,provider_id),
   );
 
   server.registerTool(
@@ -6507,7 +6522,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
         capability: z.string().min(1).max(256).optional(),
-        status: z.enum(['started', 'succeeded', 'failed']).optional(),
+        status: z.enum(['started', 'succeeded', 'failed', 'unknown']).optional(),
         target_id: z.string().min(1).max(128).optional(),
         provider_id: z.string().min(1).max(128).optional(),
         operation_id: z.string().min(1).max(128).optional(),

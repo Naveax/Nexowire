@@ -180,3 +180,28 @@ test('persistent audit query rejects invalid timestamp filters', async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('unknown mutation result is preserved and queryable separately from failure',async t=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-audit-unknown-'));
+  t.after(()=>fs.rm(root,{recursive:true,force:true}));
+  const audit=new AuditLog(path.join(root,'audit.jsonl'));
+  await audit.write({
+    operationId:'ambiguous-mutation-001',
+    status:'unknown',
+    capability:'shell.exec',
+    targetId:'device-unknown',
+    errorCode:'MUTATION_STATE_UNKNOWN',
+  });
+  await audit.write({
+    operationId:'definitive-failure-001',
+    status:'failed',
+    capability:'shell.exec',
+    targetId:'device-unknown',
+  });
+  const unknown=await audit.query({status:'unknown',limit:10});
+  assert.equal(unknown.events.length,1);
+  assert.equal(unknown.events[0]?.operationId,'ambiguous-mutation-001');
+  const failed=await audit.query({status:'failed',limit:10});
+  assert.equal(failed.events.length,1);
+  assert.equal(failed.events[0]?.operationId,'definitive-failure-001');
+});

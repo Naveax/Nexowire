@@ -12,6 +12,7 @@ export const MCP_TOOL_CAPABILITY_REQUIREMENTS = {
   browser_screenshot: 'browser.screenshot',
   machine_snapshot: 'machine.snapshot',
   machine_health: 'machine.health',
+  agent_operation_status: 'agent.operation.status',
   nexowire_update_status: 'nexowire.update.status',
   nexowire_update_check: 'nexowire.update.check',
   nexowire_update_apply: 'nexowire.update.apply',
