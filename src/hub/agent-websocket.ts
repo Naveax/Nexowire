@@ -148,12 +148,14 @@ export function attachAgentWebSocketServer(
   const heartbeat = setInterval(() => {
     for (const socket of wss.clients) {
       if (!alive.has(socket)) {
+        broker.noteHeartbeatTimeout(socket);
         socket.terminate();
         continue;
       }
       alive.delete(socket);
       try {
         socket.ping();
+        broker.noteHeartbeatPing(socket);
       } catch {
         socket.terminate();
       }

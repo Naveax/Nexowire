@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomBytes,sign} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomBytes,sign} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,8 @@ import {
   serializeOwnerWssDeviceProof,
   type DeviceOwnerWssEnrollmentRequest,
 } from '../src/product/owner-public-wss-device-issuer-proposal.js';
+import {signOwnerWssEnrollmentProof}
+  from '../src/product/owner-public-wss-device-signer-proposal.js';
 import {
   verifySignedOwnerPublicWssEnrollment,
   type TrustedOwnerPublicWssEnrollmentContext,
@@ -173,5 +175,74 @@ test('increasing trusted revision prevents older signed enrollment reuse',async(
       old,verifyContext(6),
     ),/mismatch/);
     verifySignedOwnerPublicWssEnrollment(next,verifyContext(6));
+  }finally{db.close()}
+});
+
+test('rotating the device key rejects old possession proofs and accepts new key',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const oldProof=claim();
+    const rotated=generateKeyPairSync('ed25519');
+    db.prepare(
+      'UPDATE proposed_owner_rpc_device_keys SET public_key_pem=? WHERE device_id=?'
+    ).run(pem(rotated.publicKey),device);
+    await assert.rejects(issuer.issue(oldProof),/possession/);
+    const fresh=claim();
+    fresh.deviceSignature=sign(
+      null,serializeOwnerWssDeviceProof(fresh),rotated.privateKey,
+    ).toString('base64url');
+    const issued=await issuer.issue(fresh);
+    verifySignedOwnerPublicWssEnrollment(issued,verifyContext());
+    db.prepare(
+      'UPDATE proposed_owner_rpc_device_keys SET enabled=0 WHERE device_id=?'
+    ).run(device);
+    const denied=claim();
+    denied.deviceSignature=sign(
+      null,serializeOwnerWssDeviceProof(denied),rotated.privateKey,
+    ).toString('base64url');
+    await assert.rejects(issuer.issue(denied),/revoked/);
+  }finally{db.close()}
+});
+
+test('operator trust root or issuer identifier cannot be substituted',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const issued=await issuer.issue(claim());
+    const untrusted=generateKeyPairSync('ed25519');
+    assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+      issued,{...verifyContext(),operatorPublicKeyPem:pem(untrusted.publicKey)},
+    ),/signature/);
+    assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+      issued,{...verifyContext(),operatorId:'untrusted-operator'},
+    ),/mismatch/);
+    assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+      {...issued,operatorId:'untrusted-operator'},verifyContext(),
+    ),/mismatch/);
+  }finally{db.close()}
+});
+test('external Ed25519 signing handle produces a proof the real staging issuer accepts',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const spkiSha256=createHash('sha256').update(deviceKeys.publicKey.export({
+      type:'spki',format:'der',
+    })).digest('hex');
+    const unsigned=claim();
+    const signedProof=await signOwnerWssEnrollmentProof(
+      {
+        bearerToken:unsigned.bearerToken,deviceId:unsigned.deviceId,
+        nonce:unsigned.nonce,signedAtMs:unsigned.signedAtMs,
+      },
+      {
+        deviceId:device,publicKeyPem:pem(deviceKeys.publicKey),
+        async signProof(bytes){return sign(null,bytes,deviceKeys.privateKey)},
+      },
+      spkiSha256,
+    );
+    const enrolled=await issuer.issue(signedProof);
+    const profile=verifySignedOwnerPublicWssEnrollment(
+      enrolled,verifyContext(),
+    );
+    assert.equal(profile.expectedHostname,'edge.example.com');
+    await assert.rejects(issuer.issue(signedProof));
   }finally{db.close()}
 });

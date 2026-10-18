@@ -86,6 +86,15 @@ function boundedTimeout(value: number | undefined): number {
   return timeoutMs;
 }
 
+/** Does not carry upstream response bodies, credentials or fetch error details. */
+export class ControlPlaneMcpVerifierUnavailableError extends Error {
+  readonly code = 'MCP_AUTH_VERIFIER_UNAVAILABLE';
+  constructor() {
+    super('Trusted MCP identity verifier is unavailable.');
+    this.name = 'ControlPlaneMcpVerifierUnavailableError';
+  }
+}
+
 export class ControlPlaneMcpClient {
   private readonly base: string;
   private readonly serviceToken: string;
@@ -120,6 +129,7 @@ export class ControlPlaneMcpClient {
     const body = await this.post(
       '/api/v1/internal/mcp/authenticate',
       { accessToken: token },
+      true,
     );
     if (
       body.authenticated !== true ||
@@ -128,6 +138,9 @@ export class ControlPlaneMcpClient {
       !['user', 'operator', 'admin'].includes(
         String(body.role),
       ) ||
+      !Array.isArray(body.scopes) ||
+      !body.scopes.includes('mcp') ||
+      body.scopes.some((scope) => typeof scope !== 'string') ||
       !Array.isArray(body.allowedDeviceIds) ||
       body.allowedDeviceIds.some(
         (value) =>
@@ -244,6 +257,7 @@ export class ControlPlaneMcpClient {
   private async post(
     path: string,
     payload: Record<string, unknown>,
+    requireVerifier = false,
   ): Promise<Record<string, unknown>> {
     const controller = new AbortController();
     const timer = setTimeout(
@@ -267,7 +281,10 @@ export class ControlPlaneMcpClient {
           signal: controller.signal,
         },
       );
-      if (!response.ok) return {};
+      if (!response.ok) {
+        if (requireVerifier) throw new ControlPlaneMcpVerifierUnavailableError();
+        return {};
+      }
       const value = await response.json();
       return (
         typeof value === 'object' &&
@@ -277,6 +294,10 @@ export class ControlPlaneMcpClient {
         ? value as Record<string, unknown>
         : {};
     } catch {
+      // A service-token rejection, transport timeout or upstream 5xx cannot
+      // establish that the *user's* access token is invalid. Keep secrets,
+      // upstream error bodies and network exceptions out of diagnostics.
+      if (requireVerifier) throw new ControlPlaneMcpVerifierUnavailableError();
       return {};
     } finally {
       clearTimeout(timer);

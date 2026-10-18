@@ -9,6 +9,7 @@ import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.
 import {privateShellExecutionEnvironment,assertNoObviousPrivateShellBrokerInvocation} from './windows-private-shell.js';
 import {assertNoObviousPrivateShellScriptBrokerInvocation} from './windows-private-shell-broker-guard.js';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
+import {launchWindowsJob, requestWindowsJobStop, type WindowsJobLaunch} from './windows-job-owner.js';
 
 const ShellSchema = z.enum(['pwsh', 'powershell', 'cmd', 'bash', 'sh']);
 
@@ -90,6 +91,8 @@ interface ManagedSession {
   shell: string;
   cwd?: string;
   child?: ChildProcessWithoutNullStreams;
+  job?: WindowsJobLaunch;
+  processCreationFiletime?: string;
   startedAt: string;
   exitedAt?: string;
   exitCode: number | null;
@@ -394,18 +397,44 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-async function killPidTree(pid: number): Promise<void> {
+async function killPidTree(pid: number): Promise<'requested' | 'unconfirmed'> {
   if (process.platform === 'win32') {
-    await new Promise<void>((resolve) => {
+    // taskkill /T can fail when the shell PID has already exited while its
+    // descendants remain alive (and may still hold stdout/stderr pipes).
+    // Never discard a nonzero status or spawn error as a successful cleanup.
+    const outcome = await new Promise<{
+      code: number | null; error?: string;
+    }>((resolve) => {
+      let completed = false;
+      const settle = (result: {code:number|null;error?:string}) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
       const killer = spawn(
         'taskkill.exe',
         ['/PID', String(pid), '/T', '/F'],
-        { windowsHide: true, stdio: 'ignore' },
+        {windowsHide:true,stdio:'ignore'},
       );
-      killer.once('error', () => resolve());
-      killer.once('close', () => resolve());
+      killer.once('error', (error) =>
+        settle({code:null,error:error.message}));
+      killer.once('close', (code) => settle({code}));
+      const timer = setTimeout(() => {
+        killer.kill();
+        settle({code:null,error:'taskkill did not terminate within 10 seconds'});
+      },10_000);
     });
-    return;
+    if (outcome.code === 0) return 'requested';
+    // A gone root is not evidence its descendants were reaped.
+    if (!isPidAlive(pid)) return 'unconfirmed';
+    throw new ProcessManagerError(
+      'PROCESS_TREE_TERMINATION_UNCONFIRMED',
+      'Windows process-tree termination was not confirmed for the owned shell PID '+
+      pid+' (exitCode='+String(outcome.code)+
+      (outcome.error?', reason='+outcome.error.slice(0,180):'')+
+      '). Do not assume child processes stopped.',
+    );
   }
 
   try {
@@ -417,6 +446,7 @@ async function killPidTree(pid: number): Promise<void> {
       // It already exited or cannot be signaled.
     }
   }
+  return 'requested';
 }
 
 function summarize(session: ManagedSession) {
@@ -427,6 +457,11 @@ function summarize(session: ManagedSession) {
     ...(session.command ? { command: session.command } : {}),
     shell: session.shell,
     ...(session.cwd ? { cwd: session.cwd } : {}),
+    ...(session.processCreationFiletime ? {
+      processCreationFiletime: session.processCreationFiletime,
+    } : {}),
+    ...(session.job ? { jobGuardianPid: session.job.guardianPid,
+      treeOwnership: 'windows_job' as const } : {}),
     status: session.status,
     recovered: session.recovered,
     durable: session.durable,
@@ -1010,7 +1045,12 @@ export class ProcessManager {
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
-    const child = spawn(shell.executable, shell.args, {
+    // On Windows the native guardian owns the entire Job lifetime. The root
+    // starts suspended and only resumes after a verified Job assignment.
+    const job = process.platform === 'win32'
+      ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env, guardOnParentExit: true })
+      : undefined;
+    const child = job?.child ?? spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
       windowsHide: true,
       env: process.env,
@@ -1022,11 +1062,12 @@ export class ProcessManager {
     const session: ManagedSession = {
       id,
       ...(parsed.name ? { name: parsed.name } : {}),
-      pid: child.pid ?? null,
+      pid: job?.pid ?? child.pid ?? null,
       command: parsed.command,
       shell: shell.label,
       ...(cwd ? { cwd } : {}),
       child,
+      ...(job ? { job, processCreationFiletime: job.creationFiletime } : {}),
       startedAt: new Date().toISOString(),
       exitCode: null,
       signal: null,
@@ -1114,6 +1155,13 @@ export class ProcessManager {
       });
       void this.persistState().catch(() => undefined);
     });
+    // Native guardian may have completed while its assignment marker was read.
+    if (job?.closed() && session.status === 'running') {
+      session.status = 'exited';
+      session.exitCode = child.exitCode;
+      session.signal = child.signalCode;
+      session.exitedAt = new Date().toISOString();
+    }
 
     await this.persistState();
     return summarize(session);
@@ -1233,14 +1281,17 @@ export class ProcessManager {
 
     await new Promise<void>((resolve) => {
       let settled = false;
+      const child=session.child!;
+      const onClose=()=>finish();
       const finish = (): void => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        child.off('close',onClose);
         resolve();
       };
       const timer = setTimeout(finish, timeoutMs);
-      session.child!.once('close', finish);
+      child.once('close', onClose);
       if (session.status !== 'running') finish();
     });
   }
@@ -1251,20 +1302,28 @@ export class ProcessManager {
 
     if (session.durable) {
       await this.refreshDurableSession(session);
+      let treeCleanup: 'requested' | 'unconfirmed' = 'unconfirmed';
       if (session.status === 'running') {
-        await this.workerControl(session, {
+        const result = await this.workerControl(session, {
           type: 'stop',
           commandId: randomUUID(),
         });
+        if (result.treeCleanup === 'requested') treeCleanup = 'requested';
         for (let attempt = 0; attempt < 100; attempt++) {
           await new Promise((resolve) => setTimeout(resolve, 50));
           await this.refreshDurableSession(session);
           if (session.status !== 'running') break;
         }
       }
+      // A worker response merely confirms an attempted Job handle closure.
+      // In particular, lost/active durable workers cannot claim tree cleanup.
+      if (session.status !== 'exited') treeCleanup = 'unconfirmed';
       this.stopDurableMonitor(session.id);
       await this.persistState();
-      return summarize(session);
+      return {
+        ...summarize(session),
+        ...(process.platform === 'win32' ? { treeCleanup } : {}),
+      };
     }
 
     if (session.status === 'orphaned' && session.recovered) {
@@ -1274,20 +1333,33 @@ export class ProcessManager {
       );
     }
 
+    let treeCleanup: 'requested' | 'unconfirmed' | undefined;
     if (
       (session.status === 'running' ||
         session.status === 'orphaned') &&
       session.pid
     ) {
-      await killPidTree(session.pid);
+      treeCleanup = session.job
+        ? requestWindowsJobStop(session.job)
+        : await killPidTree(session.pid);
       await this.waitForChildClose(session);
+      if (session.job && !session.job.closed()) {
+        throw new ProcessManagerError('PROCESS_TREE_TERMINATION_UNCONFIRMED',
+          'Windows Job guardian has not closed; the owned descendant tree is not confirmed stopped.');
+      }
 
       for (let attempt = 0; attempt < 20; attempt++) {
         if (!isPidAlive(session.pid)) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      if (!isPidAlive(session.pid) && !session.exitedAt) {
+      if (isPidAlive(session.pid)) {
+        throw new ProcessManagerError(
+          'PROCESS_ROOT_TERMINATION_UNCONFIRMED',
+          'Managed process root is still alive after termination attempt; no success was verified.',
+        );
+      }
+      if (!session.exitedAt) {
         session.status = 'exited';
         session.exitCode = null;
         session.signal = null;
@@ -1296,7 +1368,14 @@ export class ProcessManager {
     }
 
     await this.persistState();
-    return summarize(session);
+    return {
+      ...summarize(session),
+      ...(process.platform === 'win32' ? {
+        // 'requested' means taskkill exited 0, NOT that all descendants
+        // were individually verified. An already-exited root is unknown.
+        treeCleanup:treeCleanup ?? 'unconfirmed',
+      } : {}),
+    };
   }
 
   list() {
@@ -1357,7 +1436,8 @@ export class ProcessManager {
 
     await Promise.all(
       volatile.map(async (session) => {
-        await killPidTree(session.pid!);
+        if (session.job) requestWindowsJobStop(session.job);
+        else await killPidTree(session.pid!);
         await this.waitForChildClose(session);
       }),
     );
@@ -1392,7 +1472,8 @@ export class ProcessManager {
         }
 
         if (session.recovered || !session.pid) return;
-        await killPidTree(session.pid);
+        if (session.job) requestWindowsJobStop(session.job);
+        else await killPidTree(session.pid);
         await this.waitForChildClose(session);
         for (let attempt = 0; attempt < 20; attempt++) {
           if (!isPidAlive(session.pid)) break;

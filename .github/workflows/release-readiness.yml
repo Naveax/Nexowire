@@ -55,6 +55,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Compile native Windows Job guardian
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
       - name: Run full release gate
         if: runner.os == 'Linux'
         run: npm run release:check

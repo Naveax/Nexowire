@@ -189,7 +189,13 @@ export async function resolveMcpAuthorization(
   );
   if (local) return local;
 
-  if (oidc) {
+  // Hosted Nexowire OAuth tokens are opaque, not OIDC JWTs. When both
+  // mechanisms are configured, dispatch these only to the trusted
+  // control-plane verifier (which checks resource, scope and ownership).
+  const opaqueHostedToken =
+    Boolean(remoteVerifier) &&
+    (bearerFromHeader(header)?.startsWith('nwx_mcp_') ?? false);
+  if (oidc && !opaqueHostedToken) {
     const identity =
       await oidc.verifyBearerHeader(header);
     if (identity) {

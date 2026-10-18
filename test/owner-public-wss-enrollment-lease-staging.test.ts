@@ -128,3 +128,159 @@ test('caller mutation after valid enrollment cannot switch endpoint',async()=>{
   assert.equal(lease.profile.endpoint,data.profile.endpoint);
   await lease.requireCurrent();
 });
+
+/**
+ * Isolated transport seam: we intentionally avoid any public network,
+ * production owner URL or native Broker. TypeScript's private constructor
+ * emits a normal JS constructor, so Reflect.construct is test-only.
+ */
+async function localSession(
+  read:()=>Promise<TrustedOwnerPublicWssEnrollmentContext>,
+  transport:{reserve:(frame:unknown)=>Promise<unknown>;close:()=>void},
+):Promise<ProposedEnrolledOwnerQuotaWsSession>{
+  const lease=await ProposedOwnerPublicWssEnrollmentLease.establish(signed(),read);
+  return Reflect.construct(ProposedEnrolledOwnerQuotaWsSession,[
+    lease,transport,
+  ]) as ProposedEnrolledOwnerQuotaWsSession;
+}
+function quotaFrame(deviceId=trusted.deviceId){
+  return {
+    version:1 as const,kind:'reserve' as const,
+    requestId:'frame-000001',
+    envelope:{deviceId},
+  } as Parameters<ProposedEnrolledOwnerQuotaWsSession['reserve']>[0];
+}
+function quotaReply(){
+  return {
+    version:1 as const,kind:'decision' as const,
+    requestId:'frame-000001',httpStatus:200,
+    data:{decision:{status:'reserved',authorizesToolExecution:false}},
+  };
+}
+
+test('healthy in-flight reservation gets an independent post-response trust read',async()=>{
+  let reads=0;
+  let sends=0;
+  let closes=0;
+  const session=await localSession(
+    async()=>{reads++;return {...trusted}},
+    {reserve:async()=>{sends++;return quotaReply()},close:()=>{closes++}},
+  );
+  const result=await session.reserve(quotaFrame());
+  assert.equal(result.httpStatus,200);
+  assert.equal(reads,3); // establish, before send, AFTER response
+  assert.equal(sends,1);
+  assert.equal(closes,0);
+  session.close();
+  assert.equal(closes,1);
+});
+
+test('wrong enrolled device is rejected before trusted read or outbound send',async()=>{
+  let reads=0;
+  let sends=0;
+  let closes=0;
+  const session=await localSession(
+    async()=>{reads++;return {...trusted}},
+    {reserve:async()=>{sends++;return quotaReply()},close:()=>{closes++}},
+  );
+  await assert.rejects(
+    session.reserve(quotaFrame('different-device')),
+    /device binding mismatch/,
+  );
+  assert.equal(reads,1);
+  assert.equal(sends,0);
+  assert.equal(closes,1);
+  await assert.rejects(session.reserve(quotaFrame()),/closed/);
+});
+
+test('session revocation while WSS RPC is pending rejects a late 200',async()=>{
+  let generation=trusted.activeSessionGeneration;
+  let start!:()=>void;
+  let reply!: (value:ReturnType<typeof quotaReply>)=>void;
+  const began=new Promise<void>(resolve=>{start=resolve});
+  const waiting=new Promise<ReturnType<typeof quotaReply>>(resolve=>{
+    reply=resolve;
+  });
+  let closes=0;
+  let sends=0;
+  const session=await localSession(
+    async()=>({...trusted,activeSessionGeneration:generation}),
+    {reserve:async()=>{sends++;start();return waiting},
+      close:()=>{closes++}},
+  );
+  const pending=session.reserve(quotaFrame());
+  await began;
+  generation+=1;
+  reply(quotaReply());
+  await assert.rejects(pending,/revoked|unavailable/);
+  assert.equal(sends,1);
+  assert.equal(closes,1);
+  generation-=1;
+  await assert.rejects(session.reserve(quotaFrame()),/closed/);
+});
+
+test('trusted authority going offline before response invalidates the session',async()=>{
+  let offline=false;
+  let start!:()=>void;
+  let reply!:(value:ReturnType<typeof quotaReply>)=>void;
+  const began=new Promise<void>(resolve=>{start=resolve});
+  const waiting=new Promise<ReturnType<typeof quotaReply>>(resolve=>{
+    reply=resolve;
+  });
+  let closes=0;
+  const session=await localSession(
+    async()=>{
+      if(offline)throw new Error('independent owner trust state unreachable');
+      return {...trusted};
+    },
+    {reserve:async()=>{start();return waiting},
+      close:()=>{closes++}},
+  );
+  const pending=session.reserve(quotaFrame());
+  await began;
+  offline=true;
+  reply(quotaReply());
+  await assert.rejects(pending,/revoked|unavailable/);
+  assert.equal(closes,1);
+});
+
+test('explicit close during an in-flight call refuses even a delayed 200',async()=>{
+  let start!:()=>void;
+  let reply!:(value:ReturnType<typeof quotaReply>)=>void;
+  const began=new Promise<void>(resolve=>{start=resolve});
+  const waiting=new Promise<ReturnType<typeof quotaReply>>(resolve=>{
+    reply=resolve;
+  });
+  let closes=0;
+  const session=await localSession(
+    async()=>({...trusted}),
+    {reserve:async()=>{start();return waiting},
+      close:()=>{closes++}},
+  );
+  const pending=session.reserve(quotaFrame());
+  await began;
+  session.close();
+  reply(quotaReply());
+  await assert.rejects(pending,/closed/);
+  assert.equal(closes,1);
+});
+test('explicit lease invalidation during async owner read cannot be undone',async()=>{
+  let calls=0;
+  let finish!:(value:TrustedOwnerPublicWssEnrollmentContext)=>void;
+  const read=async()=>{
+    calls++;
+    if(calls===1)return {...trusted};
+    return new Promise<TrustedOwnerPublicWssEnrollmentContext>(resolve=>{
+      finish=resolve;
+    });
+  };
+  const lease=await ProposedOwnerPublicWssEnrollmentLease.establish(
+    signed(),read,
+  );
+  const pending=lease.requireCurrent();
+  lease.invalidate();
+  finish({...trusted});
+  await assert.rejects(pending,/revoked|unavailable/);
+  assert.equal(calls,2);
+  await assert.rejects(lease.requireCurrent(),/invalidated/);
+});

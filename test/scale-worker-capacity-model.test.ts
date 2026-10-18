@@ -27,6 +27,7 @@ test('real client call path produces one auth POST plus one quota POST per hoste
       if(path==='/api/v1/internal/mcp/authenticate') {
         return Response.json({
           authenticated:true,
+          scopes:['mcp'],
           accountId:'case-test',
           role:'user',
           allowedDeviceIds:['device-a'],
