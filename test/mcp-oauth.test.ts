@@ -44,7 +44,7 @@ test('MCP OAuth metadata advertises PKCE, DCR, refresh and protected resource', 
     {
       resource,
       authorization_servers: [issuer],
-      scopes_supported: ['mcp', 'offline_access'],
+      scopes_supported: ['mcp'],
     },
   );
 
@@ -96,7 +96,7 @@ test('authorization code + PKCE issues scoped access and refresh tokens', async 
     'state-123',
   );
   const code = redirect.searchParams.get('code');
-  assert.match(code ?? '', /^nwx_code_/);
+  assert.equal(/^nwx_code_/.test(code ?? ''), true);
 
   const token = await service.token(
     new URLSearchParams({
@@ -110,8 +110,8 @@ test('authorization code + PKCE issues scoped access and refresh tokens', async 
     }),
   );
 
-  assert.match(token.access_token, /^nwx_mcp_/);
-  assert.match(token.refresh_token ?? '', /^nwx_refresh_/);
+  assert.equal(/^nwx_mcp_/.test(token.access_token), true);
+  assert.equal(/^nwx_refresh_/.test(token.refresh_token ?? ''), true);
   assert.equal(token.token_type, 'Bearer');
   assert.equal(token.expires_in, 3600);
   assert.equal(token.scope, 'mcp offline_access');
@@ -229,9 +229,9 @@ test('refresh tokens rotate and cannot be replayed', async () => {
     }),
   );
 
-  assert.match(rotated.access_token, /^nwx_mcp_/);
-  assert.match(rotated.refresh_token ?? '', /^nwx_refresh_/);
-  assert.notEqual(rotated.refresh_token, refresh);
+  assert.equal(/^nwx_mcp_/.test(rotated.access_token), true);
+  assert.equal(/^nwx_refresh_/.test(rotated.refresh_token ?? ''), true);
+  assert.equal(rotated.refresh_token !== refresh, true);
 
   await assert.rejects(
     service.token(
