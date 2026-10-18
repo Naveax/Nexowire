@@ -1062,18 +1062,57 @@ export function assertNoPrivateDesktopBrokeredExecutable(
   );
 }
 
+
+/**
+ * Desktop CreateProcess only binds the immediate executable to
+ * WinSta0\NexowirePrivate. Command interpreters can shell out to WSLg,
+ * Explorer/COM or a user's existing Windows Terminal instance. There is
+ * no safe static interpreter preflight for -Command, /C or inline code.
+ * Direct private UI launches must be directly attached GUI executables,
+ * or the existing bounded, separately scanned PowerShell -File fixture.
+ */
+export function assertNoPrivateDesktopOpaqueLauncher(
+  executable:string,args:readonly string[],
+):void{
+  const name=path.win32.basename(executable.trim()
+    .replace(/^["']|["']$/g,'')).toLowerCase();
+  const normalized=path.win32.extname(name)?name:name+'.exe';
+  const dangerousExtensions=/\.(?:bat|cmd|ps1|vbs|vbe|js|jse|wsf|wsh|lnk|url|com)$/i;
+  const shellHost=normalized==='cmd.exe';
+  const powershell=['powershell.exe','pwsh.exe'].includes(normalized);
+  // The arguments of general script/compiled-code runners cannot attest
+  // indirect ShellExecute/WSLg/COM behavior. Reject even file-based runs.
+  const opaqueRuntime=['node.exe','python.exe','python3.exe','pythonw.exe',
+    'py.exe','deno.exe','bun.exe','ruby.exe','perl.exe','java.exe',
+    'dotnet.exe','msbuild.exe','git.exe'].includes(normalized);
+  const generalWrapper=['npm.exe','npx.exe','yarn.exe','pnpm.exe',
+    'pip.exe','pip3.exe'].includes(normalized);
+  const isPowerShellFile=args.some(a=>/^--?f(?:i(?:l(?:e)?)?)?(?::|$)/i.test(a.trim()));
+  if(dangerousExtensions.test(name)||shellHost||generalWrapper||
+      (powershell&&!isPowerShellFile)||opaqueRuntime){
+    throw new PrivateDesktopError(
+      'PRIVATE_DESKTOP_OPAQUE_WRAPPER_UNISOLATED',
+      'Direct private desktop launch cannot attest indirect shell, WSL, '+
+      'Terminal or GUI descendants from this command wrapper.',
+      {executable:name},
+    );
+  }
+}
+
 async function launch(
   executable: string,
   args: string[],
   cwd?: string,
 ): Promise<number> {
   assertNoPrivateDesktopBrokeredExecutable(executable);
+  assertNoPrivateDesktopOpaqueLauncher(executable,args);
   // A directly attached PowerShell/CMD child can still dispatch GUI to
   // Explorer/COM via its command string, bypassing the executable denylist.
   // Apply the same bounded command guard used by the private shell workers.
   await assertNoObviousPrivateShellScriptBrokerInvocation(executable,args,cwd);
   const resolvedExecutable = await resolveExecutable(executable);
   assertNoPrivateDesktopBrokeredExecutable(resolvedExecutable);
+  assertNoPrivateDesktopOpaqueLauncher(resolvedExecutable,args);
   await assertNoObviousPrivateShellScriptBrokerInvocation(resolvedExecutable,args,cwd);
   return z
     .object({ pid: z.number().int().positive() })

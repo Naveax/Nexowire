@@ -32,6 +32,7 @@ const PRIVATE_GUI_BROKER_EXECUTABLES=new Set([
   'sdclt.exe','slui.exe','hh.exe',
   // WSLg/MSYS shell entry points can redirect GUI outside the private desktop.
   'bash.exe','sh.exe','wsl.exe','wslhost.exe','wt.exe',
+  'windowsterminal.exe','wslconfig.exe',
 ]);
 
 export function isPrivateGuiBrokerExecutable(executable:string):boolean {
@@ -127,15 +128,19 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   // Inspect those prefixes at command boundaries, rather than silently
   // accepting quoted start/explorer invocations.
   const explicitBroker=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call)\s+)?["']*\s*(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
-  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt)(?:\.exe)?(?=\s|$|["'])/i;
+  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt|wsl|wslhost|wslconfig|wt|bash|sh|windowsterminal)(?:\.exe)?(?=\s|$|["'])/i;
   // Recursive command interpreters are unbounded launch surfaces: the
   // outer preflight cannot safely reason about a nested shell's arguments,
   // its environment, or downstream GUI descendants.
   const nestedShell=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call|@call)\s+)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:powershell|pwsh|cmd)(?:\.exe)?(?=\s|$|["'])/i;
+  // A bridge name inside quoted paths or a chained command may bypass
+  // command-boundary checks. Treat literal WSLg/Terminal references as
+  // dangerous even when not confidently parsed as the first executable.
+  const desktopBridgeReference=/(?:^|[^a-zA-Z0-9_])(?:wslhost|wslconfig|wsl|windowsterminal|wt|bash|sh)(?:\.exe)?(?=$|[\\/\s'";&|()])/i;
   const runAs=/(?:^|\s)-Verb\s+(?:RunAs|RunAsUser)(?=\s|$|['"])/i;
   const shellObject=/\b(?:ShellExecute(?:Ex)?|Shell\.Application|WScript\.Shell)\b/i;
   const dotNetProcessStart=/\b(?:System\.Diagnostics\.Process|\[Diagnostics\.Process\])(?:::|\]::)Start\s*\(/i;
-  if([explicitBroker,hostExecutable,nestedShell,runAs,shellObject,dotNetProcessStart]
+  if([explicitBroker,hostExecutable,nestedShell,desktopBridgeReference,runAs,shellObject,dotNetProcessStart]
     .some(pattern=>pattern.test(command))){
     throw Object.assign(new Error(
       'Shell command contains a known Windows GUI/elevation broker. '+

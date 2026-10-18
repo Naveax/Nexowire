@@ -89,7 +89,9 @@ test('real private desktop refuses shell broker before creating a GUI window',{
     await assert.rejects(
       desktop('windows.private_desktop.launch',entry),
       (error:unknown)=>error instanceof Error&&
-        'code' in error&&error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED',
+        'code' in error&&(
+          error.code==='AI_PRIVATE_SHELL_BROKER_NOT_ISOLATED'||
+          error.code==='PRIVATE_DESKTOP_OPAQUE_WRAPPER_UNISOLATED'),
       entry.executable+' '+entry.args.join(' '));
   }
   const after=await desktop('windows.private_desktop.status',{}) as {data:{launchedPids:number[];inputDesktop:string}};
@@ -101,7 +103,8 @@ test('direct desktop launch and shell workers share the same broker rejection se
   for(const name of [
     'explorer','control','rundll32','dllhost','mshta','wscript',
     'cscript','msiexec','fodhelper','computerdefaults','eventvwr',
-    'sdclt','slui','hh','bash','sh','wsl','wslhost','wt',
+    'sdclt','slui','hh','bash','sh','wsl','wslhost','wslconfig',
+    'wt','windowsterminal',
   ]){
     for(const executable of [
       name,name+'.exe',
