@@ -507,10 +507,22 @@ async function execute(
     // after reconnect. Neither response is proof the mutation failed.
     const ambiguousAgentResult = !result.ok && (
       result.error?.code === 'AGENT_OPERATION_COMPLETION_UNCONFIRMED' ||
-      result.error?.code === 'AGENT_OPERATION_ALREADY_RECORDED'
+      result.error?.code === 'AGENT_OPERATION_ALREADY_RECORDED' ||
+      (!isReadOnlyCapability(capability) && [
+        'MUTATION_STATE_UNKNOWN', 'IDEMPOTENCY_STATE_UNKNOWN',
+        'UNAVAILABLE', 'AGENT_TIMEOUT', 'TIMEOUT', 'ETIMEDOUT',
+      ].includes(result.error?.code ?? ''))
     );
+    // Successful delivery is not proof that a shell task succeeded.
+    const shellCapability = capability === 'shell.exec' || capability === 'wsl.exec';
+    // Never infer shell success from transport ok=true or a missing status.
+    const shellOutcome = shellCapability && result.taskStatus === 'succeeded' &&
+      result.taskSuccess === true ? 'succeeded'
+      : shellCapability && result.taskStatus === 'failed' &&
+        result.taskSuccess === false ? 'failed' : 'unknown';
     const resultStatus: 'succeeded' | 'failed' | 'unknown' = result.ok
-      ? 'succeeded' : ambiguousAgentResult ? 'unknown' : 'failed';
+      ? shellCapability ? shellOutcome : 'succeeded'
+      : ambiguousAgentResult ? 'unknown' : 'failed';
     if (idempotencyKey && idempotencyCreated && ctx.idempotency) {
       await ctx.idempotency.complete(idempotencyKey,resultStatus,result);
       persistedOutcome = resultStatus;
@@ -523,13 +535,15 @@ async function execute(
       targetId,
       providerId: result.meta.providerId,
       durationMs: Math.round(performance.now() - started),
-      ...(result.error?.code ? { errorCode: result.error.code } : {}),
+      ...(result.error?.code || result.diagnostic?.code
+        ? { errorCode: result.error?.code ?? result.diagnostic?.code } : {}),
       ...(result.error?.message ? { message: redactDiagnosticText(result.error.message) } : {}),
     });
     return toolResult(
       idempotencyKey
         ? {
             ...result,
+            operationId,
             idempotency: {
               key: idempotencyKey,
               replayed: false,
@@ -537,7 +551,7 @@ async function execute(
               operationId,
             },
           }
-        : result,
+        : { ...result, operationId },
       !result.ok,
     );
   } catch (error) {

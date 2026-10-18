@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { redactDiagnosticText } from '../protocol/error-contract-v2.js';
 
 export type AuditStatus = 'started' | 'succeeded' | 'failed' | 'unknown';
 
@@ -62,6 +63,18 @@ export class AuditLog {
       id: randomUUID(),
       at: new Date().toISOString(),
       ...input,
+      // Audit is a persistence boundary: sanitize every string field,
+      // including device/provider identifiers supplied by other components.
+      operationId: redactDiagnosticText(input.operationId),
+      capability: redactDiagnosticText(input.capability),
+      ...(input.targetId !== undefined
+        ? { targetId: redactDiagnosticText(input.targetId) } : {}),
+      ...(input.providerId !== undefined
+        ? { providerId: redactDiagnosticText(input.providerId) } : {}),
+      ...(input.errorCode !== undefined
+        ? { errorCode: redactDiagnosticText(input.errorCode) } : {}),
+      ...(input.message !== undefined
+        ? { message: redactDiagnosticText(input.message) } : {}),
     };
     this.recent.push(event);
     if (this.recent.length > this.maxRecent) {
