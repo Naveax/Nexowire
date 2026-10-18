@@ -30,10 +30,10 @@ test('CORE policy is owner-bound, indefinite, Broker-dependent and revoked by SA
   await assert.rejects(service.setDeviceCorePreference(outsider,id,true),/DEVICE_NOT_FOUND/);
   await assert.rejects(service.setDeviceCorePreference({accountId:owner.accountId,role:'service'},id,true),/CORE_REQUIRES_OWNER_LOGIN/);
   const granted = await service.setDeviceCorePreference(owner,id,true);
-  assert.equal(granted.persistentMaintenance.active,true);
+  assert.equal(granted.persistentMaintenance.active,false); // no trusted live local Broker attestation
   assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.enabled,true);
   now = new Date('2028-10-10T11:00:00Z');
-  assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.active,true);
+  assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.active,false);
   await store.putDevice({...device,online:false,privilegeMode:'broker',adminBridgeReady:false});
   assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.enabled,true);
   assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.active,false);
@@ -81,7 +81,7 @@ test('CORE HTTP activation requires authenticated owner and typed confirmation',
   assert.equal((await handle(req({accountId:'another',role:'user'},'core-preference-v1'))).status,404);
   const result=await handle(req(owner,'core-preference-v1'));
   assert.equal(result.status,200);
-  assert.equal((await result.json() as {persistentMaintenance:{active:boolean}}).persistentMaintenance.active,true);
+  assert.equal((await result.json() as {persistentMaintenance:{active:boolean}}).persistentMaintenance.active,false);
   const off=await handle(req(owner,null,JSON.stringify({deviceId:device.id,enabled:false})));
   assert.equal(off.status,200);
   assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.enabled,false);
@@ -103,7 +103,7 @@ test('Admin Bridge modes persist as desired-only policy and OFF invalidates CORE
   await service.setDeviceAccessMode(owner,id,'full');
   await service.setDevicePresence(id,true,new Date().toISOString(),{privilegeMode:'broker',adminBridgeReady:true});
   await service.setDeviceCorePreference(owner,id,true);
-  assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.active,true);
+  assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.active,false);
   await assert.rejects(service.setDeviceBridgePreference({...owner,role:'service'},id,'off'),/BRIDGE_REQUIRES_OWNER_LOGIN/);
   await assert.rejects(service.setDeviceBridgePreference(owner,id,'invalid'),/INVALID_BRIDGE_MODE/);
   const off=await service.setDeviceBridgePreference(owner,id,'off');
