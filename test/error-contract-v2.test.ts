@@ -156,6 +156,18 @@ test('read-only AgentProvider disconnect is safely retryable without losing orig
   assert.equal(result.error?.attribution?.retrySafety,'read_only_retry');
 });
 
+test('unknown vendor code remains unchanged in v1 while v2 attribution fails closed',async()=>{
+  const provider=new AgentProvider(new SyntheticBroker(undefined,
+    brokerError('VENDOR/403','vendor rejected without confirmed stage')));
+  const result=await provider.execute({
+    targetId:'error-v2-test-device',capability:'files.read',input:{path:'synthetic'},
+  });
+  assert.equal(result.error?.code,'VENDOR/403');
+  assert.equal(result.error?.attribution?.code,'UNCLASSIFIED_ERROR');
+  assert.equal(result.error?.attribution?.causeLayer,'undetermined');
+  assert.equal(result.error?.attribution?.retrySafety,'read_only_retry');
+});
+
 test('named AuthRequiredError adds identity evidence without altering legacy provider code',async()=>{
   const err=new Error('password=SensitiveFakePassword987');
   err.name='AuthRequiredError';

@@ -112,7 +112,8 @@ export class AgentProvider implements Provider {
         ok: false,
         error: {
           attribution,
-          code: rawCode === 'PROVIDER_ERROR' ? 'PROVIDER_ERROR' : attribution.code,
+          // Preserve the legacy provider code, even if the v2 classifier cannot safely categorize it.
+          code: redactDiagnosticText(rawCode),
           message: redactDiagnosticText(error instanceof Error ? error.message : String(error)),
           retryable:
             typeof error === 'object' &&
