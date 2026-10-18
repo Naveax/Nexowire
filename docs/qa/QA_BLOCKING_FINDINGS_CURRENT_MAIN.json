@@ -1,0 +1,226 @@
+{
+  "schema": "nexowire.qa.findings.v2",
+  "inspectedMainSha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+  "date": "2026-10-18",
+  "findingCount": 6,
+  "scope": "Review and reproducible tests, not live exploit or release approval",
+  "findings": [
+    {
+      "id": "QA-P0-559-HELPER",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "classification": "CONDITIONAL_TRUST_BOUNDARY",
+      "affected": [
+        {
+          "pr": 559,
+          "headSha": "34c6620055ad634d2e272ff9378e4bf4403fd81c",
+          "state": "MERGED"
+        },
+        {
+          "pr": 560,
+          "headSha": "7592ec27b1feba99f6d6cce68d05a4043efb5c24",
+          "state": "DRAFT"
+        }
+      ],
+      "source": "src/agent/windows-job-owner.ts",
+      "evidence": [
+        "git show 8660ac1fa9ec38fd81488a48b34affcb7d71fe65:src/agent/windows-job-owner.ts",
+        "https://github.com/Naveax/Nexowire/actions/runs/39149677381",
+        "2026-10-18 read-only agent presence shows both physical devices at 1.0.5"
+      ],
+      "observed": "Env override removed in merged main. Remaining helper verification uses fs.stat().isFile() then plain-text NWJOB3 pid/FILETIME marker; release-pinned digest/publisher and independent kernel Job membership not established at the JS trust boundary. No live exploit was attempted.",
+      "reproduction": [
+        "In isolated clone, run: git show 8660ac1fa9ec38fd81488a48b34affcb7d71fe65:src/agent/windows-job-owner.ts",
+        "Inspect candidateBinary(), binaryPath() and launchWindowsJob(): file type check and marker regex exist; no expected helper digest or publisher identity verification before spawn.",
+        "With approved disposable fixture only, substitute a benign test-only helper that emits an apparently valid marker; assert wrapper fails closed instead of reporting windows_job without OS-backed attestation."
+      ],
+      "expectedFix": "Trust exact installed binary with protected-path ACL plus cryptographic publisher/hash attestation bound to release; prevent replacement between check and exec; prove kernel Job membership independently and test spoofed markers. Require actual physical owner-authorized acceptance.",
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA-P0-553-PATH",
+      "requirements": [
+        "R05",
+        "R08",
+        "R21"
+      ],
+      "classification": "PRODUCTION_SECURITY_GAP_WITH_GREEN_CI",
+      "affected": [
+        {
+          "pr": 553,
+          "headSha": "a394918edb0a74f0b0a78817e9710e2ac042170d",
+          "state": "DRAFT"
+        }
+      ],
+      "source": "src/agent/scoped-path-grants.ts",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39151332824",
+        "docs/security/scoped-path-usb-grants.md at PR #553 head"
+      ],
+      "observed": "Exact-head CI now succeeds, superseding historical cross-platform FAIL. But real authenticated owner/physical-console grant issuance is unwired; realpath -> fs operations are vulnerable in principle to reparse/TOCTOU race absent handle-pinned atomic traversal. Developer reports a separate 28-FAIL/32-SKIP broad local Windows run, not conclusively classified.",
+      "reproduction": [
+        "In isolated PR #553 checkout, run: node --test --import tsx test/scoped-path-grants.test.ts test/agent-executors.test.ts",
+        "Inspect path normalization and final fs operations in src/agent/path-policy.ts and src/agent/executors.ts: determine whether a CreateFileW handle anchors the final target volume and file ID. Static source path checks alone do not provide handle guarantees.",
+        "On authorized disposable NTFS fixture only, race directory junction replacement between resolution and use; fail closed and assert no write outside verified volume. This physical race test is NOT_TESTED, not claimed reproduced."
+      ],
+      "expectedFix": "Implement owner-console grant issuance/revoke lifecycle; handle-based final path/volume/file-ID checks immune to reparse swaps, cross-platform safe lease integration, full Windows regression triage and isolated real USB hotplug evidence.",
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA-P1-563-DOCTOR",
+      "requirements": [
+        "R17",
+        "R21",
+        "R22"
+      ],
+      "classification": "HISTORICAL_REPRODUCED_FAILURE_CURRENT_HEAD_UNVERIFIED",
+      "affected": [
+        {
+          "pr": 563,
+          "headSha": "dbf5099c5850a6df85b3ac5b8eb42386a8d581ff",
+          "state": "DRAFT"
+        },
+        {
+          "pr": 563,
+          "headSha": "7a7628c75da79d8dbac18ff5eafe5a4ac9b8caa7",
+          "state": "HISTORICAL_RED_CI"
+        }
+      ],
+      "source": "test/environment-doctor.test.ts:178; src/diagnostics/environment-doctor.ts:517",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39150689903",
+        "GitHub job 117743532760 Ubuntu Node22: Missing expected rejection at test/environment-doctor.test.ts:178"
+      ],
+      "observed": "Prior Linux CI #39150689903 failed: platform linux was incorrectly expected to reject on Linux. Updated PR head dbf5099 adds host-platform-dependent test, injected-runner checks and live architecture equality. New CI #39154336693 is in progress, not yet confirmed PASS.",
+      "reproduction": [
+        "Historical exact SHA 7a7628c75da79d8dbac18ff5eafe5a4ac9b8caa7 on Linux Node22: node --test --import tsx test/environment-doctor.test.ts -> Missing expected rejection at line 178.",
+        "On new exact SHA dbf5099c5850a6df85b3ac5b8eb42386a8d581ff, test/environment-doctor.test.ts now supplies a deliberately different platform and rejects spoofed architecture or time origin. Re-run node --test --import tsx test/environment-doctor.test.ts across Linux, Windows, WSL2.",
+        "Review CI run 39154336693 for completed exact-head jobs; IN_PROGRESS is not a source PASS."
+      ],
+      "expectedFix": "Confirm new HEAD exact CI SUCCESS and no regressions, then physical USB/WSL/VM presence and provenance acceptance. Do not restore original Linux-specific wrong expectation.",
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA-P0-480-556-GUI",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "classification": "TRUST_BOUNDARY_NOT_PHYSICALLY_ACCEPTED",
+      "affected": [
+        {
+          "pr": 480,
+          "headSha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+          "state": "DRAFT"
+        },
+        {
+          "pr": 556,
+          "headSha": "af8d267d6bbe6f69fdb6cf668258b98e3d6f4f10",
+          "state": "DRAFT"
+        }
+      ],
+      "source": "src/agent/windows-private-shell-broker-guard.ts; src/agent/windows-private-file-picker.ts",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39134168129",
+        "https://github.com/Naveax/Nexowire/actions/runs/39150585588"
+      ],
+      "observed": "Private command guard is intentionally bounded static parser, not transitive COM/dynamic descendant containment. File picker checks exact PID/session/HWND and one-use grant, but selectionVerified is false after invoke. No observed escape; physical native-app acceptance remains incomplete.",
+      "reproduction": [
+        "In isolated #480 checkout: node --test --import tsx test/private-desktop-shell-broker-gate.test.ts; confirm direct WSL/Terminal and known CMD/PowerShell wrapper denials.",
+        "In isolated #556 checkout: node --test --import tsx test/private-file-picker-guard.test.ts test/private-file-picker-path-policy.test.ts; confirm wrong PID/HWND and revoked/expired grant fail closed.",
+        "On an explicitly approved private-desktop fixture, test WinForms/Common Item Dialog, indirect COM/ShellExecute child, focus switch, UAC and emergency stop; verify user Default desktop receives no input. This multi-app physical gate is NOT_TESTED here."
+      ],
+      "expectedFix": "Enforce runtime desktop/session/descendant provenance beyond static commands, use trusted native dialog identity and post-invoke application confirmation. Keep unknown mutation unknown and fail closed on focus changes; retain owner desktop isolation.",
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA-P1-551-INSTALL",
+      "requirements": [
+        "R19",
+        "R22"
+      ],
+      "classification": "MISSING_PHYSICAL_INSTALLER_AND_ROLLBACK_EVIDENCE",
+      "affected": [
+        {
+          "pr": 551,
+          "headSha": "3659db7a63254fae1badb39eca70be8853ea4df5",
+          "state": "DRAFT"
+        }
+      ],
+      "source": "src/update/agent-lifecycle-manager.ts",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39150815213",
+        "Both live physical Agents reported v1.0.5, no new signed rollout"
+      ],
+      "observed": "Exact-head CI now SUCCESS; previous legacy callback test failure is stale. The new lifecycle manager is described by its source as a dependency-injected isolated acceptance engine with no production adapter connected.",
+      "reproduction": [
+        "In isolated #551 checkout: node --test --import tsx test/agent-lifecycle-manager.test.ts test/machine-update-rollback-integrity.test.ts test/windows-binary-trust-s3.test.ts",
+        "Read src/update/agent-lifecycle-manager.ts header and UpgradeAdapter: simulator stage/stop/cutover/health methods are supplied by fixtures, not installed services.",
+        "Run only an explicitly approved disposable/signed test release to test rollback after post-update health failure, verify old version and original service identity; production update NOT_TESTED."
+      ],
+      "expectedFix": "Wire signed publisher and manifest checks into production update adapter with console approval, exact owner/device, atomic cutover, health validation and independently verified rollback; then test two real machines without touching existing services prematurely.",
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA-P1-564-FAIRNESS",
+      "requirements": [
+        "R12",
+        "R22"
+      ],
+      "classification": "DEMONSTRATED_SYNTHETIC_FAIRNESS_LIMIT_AND_MISSING_SOAK",
+      "affected": [
+        {
+          "pr": 564,
+          "headSha": "820ad41992c62fa890b249c7f820e0969b33a467",
+          "state": "MERGED"
+        }
+      ],
+      "source": "test/scale-s5-fairness-analysis.test.ts; test/s5-soak-acceptance.test.ts",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39150732602",
+        "PR #564 local fixture reports Jain fairness=0.5 for one noisy tenant consuming 600 shared slots"
+      ],
+      "observed": "Exact-head source CI SUCCESS; 620 local attempts yield 600 admitted/20 denied, but noisy tenant takes all capacity before other tenant. Real Cloudflare WSS/Durable Objects, 600/min under external traffic, 95/5 fairness, actual 24h completed tool soak and invoice costs are absent. Merge does not solve measured unfairness or external acceptance.",
+      "reproduction": [
+        "In isolated #564 checkout: node --test --import tsx test/s5-ingress-concurrent-rate.test.ts test/scale-s5-fairness-analysis.test.ts test/s5-soak-acceptance.test.ts",
+        "Verify 620 attempted/600 admitted/20 rejected and synthetic worst-case Jain=0.5; do not recast this as fair service.",
+        "Run operator-approved external WSS with separate authenticated tenants, noisy 95/5 load, verified native operation receipts, 24-hour uninterrupted evidence timestamps/hashes, provider counters and cost records. NOT_TESTED here."
+      ],
+      "expectedFix": "Define and enforce per-tenant fairness/admission (or document an explicit accepted risk) in real ingress; complete 24h cryptographically traceable native completions and costs with customer isolation and operator approval before S5 production gate.",
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    }
+  ]
+}

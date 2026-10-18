@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -14,11 +14,11 @@ const doc=JSON.parse(readFileSync(path.resolve(
 };
 const lookup=(n:number)=>doc.entries.find(x=>x.pr===n);
 const allowed=new Set(['PASS','FAIL','NOT_VERIFIED']);
-test('all 20 reviewed PRs are uniquely accounted for at exact SHA',()=>{
+test('all 25 reviewed PRs are uniquely accounted for at exact SHA',()=>{
  assert.equal(doc.schema,'nexowire.qa-pr-intake.v1');
- assert.equal(doc.entries.length,20);
+ assert.equal(doc.entries.length,25);
  const ids=doc.entries.map(x=>x.pr).sort((a,b)=>a-b);
- assert.deepEqual(ids,[480,537,538,542,543,...Array.from({length:15},(_,i)=>i+545)]);
+ assert.deepEqual(ids,[480,537,538,542,543,...Array.from({length:20},(_,i)=>i+545)]);
  for(const item of doc.entries){
   assert.match(item.headSha,/^[a-f0-9]{40}$/);
   assert.ok(item.sourceReproducer.startsWith('test/'));
@@ -39,11 +39,10 @@ test('negative: CI success on Job Objects and journal v2 must not close original
   assert.equal(entry.originalIncident,'BLOCKED');
  }
 });
-test('negative: exact SHA CI failure must not be converted to source acceptance',()=>{
- for(const n of [551,553]){
+test('negative: historical CI failure cannot be transferred to new unverified exact HEAD',()=>{
+ for(const n of [563]){
   const entry=lookup(n)!;
-  assert.equal(entry.ci.status,'FAIL');
-  assert.ok(entry.ci.runId);
+  assert.equal(entry.ci.status,'NOT_VERIFIED');
   assert.ok(entry.ci.reason);
  }
 });

@@ -1,64 +1,35 @@
-# Cross-project independent QA acceptance | 18 October 2026
+# Independent QA: source and release acceptance (2026-10-18)
 
-Independent read-only audit baseline: `f43580cce2a786880fcb6a8036cfc01a7a1a2621` (after clean QA-only rebase). Worktree: `test/parallel-16-independent-qa-20261018`.
-This is a **gate and fault-injection ledger**, not a product-fix declaration.
+**Snapshot main:** `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838`; previous main CI [39151346547](https://github.com/Naveax/Nexowire/actions/runs/39151346547) SUCCESS at 8660ac1; current main CI [39154393827](https://github.com/Naveax/Nexowire/actions/runs/39154393827) SUCCESS. **No final acceptance.**
 
-## PASS semantics
+## Grounded results
 
-Each R01–R22 has four independent statuses in `cross-project-final-acceptance.json`: source, staging, production and original incident. `PASS` requires level-specific evidence and the exact tested SHA. Source-only green CI never closes a physical original incident. `NOT_TESTED` is distinct from `FAIL` and `BLOCKED`. GitHub PR merges do not automatically modify this ledger. Tests deliberately reject a synthetic final PASS with missing lower stages.
+- The machine-readable [R01-R22](cross-project-final-acceptance.json) has 6 source PASS, 15 source BLOCKED, 0 current-head source FAIL, 1 source NOT_TESTED. All 22 staging, production and original incidents remain BLOCKED.
+- The [25-PR inventory](PR_SOURCE_AND_RELEASE_GATES.json) separates GitHub state, exact PR SHA, checked CI and missing original-incident gates. PR merge never changes acceptance status automatically.
+- #549, #552, #558, #559, #546, #555, #554, #557 and #561 are merged to the main line at the snapshot. #553, #563, #480, #556 and #551 remain DRAFT. #564, #550 and independent QA #560 were subsequently merged, but do not constitute production acceptance.
+- Both physical Nexowire Agents returned version 1.0.5. No Agent rollout, device restart, USB write, firmware operation, billing change or user-data deletion was performed.
+- Historic QA branch #560 CI [39150335922](https://github.com/Naveax/Nexowire/actions/runs/39150335922) SUCCESS. The existing tests cover structural release gating, not trusted external proof.
+- On a read-only detached QA checkout of main, 56 narrowly selected regressions produced **54 PASS / 2 FAIL**. Both process-tree failures were `WINDOWS_JOB_HELPER_UNAVAILABLE` because the native helper had not been compiled inside that disposable checkout; this is a missing test prerequisite, **not evidence of an ownership regression**. GitHub main CI has already compiled the native helper and passed separately.
 
-## Source / CI audit at baseline
+## Six blocking finding files
 
-- `main` moved from `8bf7ce1` to `a54cbbd` during the audit as #543 merged. Worktree aligned to `a54cbbd` before changing files.
-- CI workflow includes Ubuntu Node 22+24, Windows, Linux native, real WSL2 Ubuntu and macOS native. At inspection, main run `39133662035` still had Windows `browser-live` in progress. **Do not count the overall run as PASS until completed.**
-- Historic source CI `39116300377` completed successfully for `8bf7ce1`; it does not prove a live Agent upgrade. #538 and #542 cover Agent journal and shell-result reporting only.
-- The Windows Process Manager #543 is merged. `taskkill /T /F` returning success is a request acknowledgment, not independent descendant attestation. The issue remains OPEN until Job Object containment and real orphan cleanup are proven.
-- No source CI gives independent production OAuth/24-hour quota/cloud-cost/physical gamepad/GUI focus evidence.
+See [QA_BLOCKING_FINDINGS_CURRENT_MAIN.json](QA_BLOCKING_FINDINGS_CURRENT_MAIN.json) for affected SHA(s), exact isolated reproduction steps, expected correction, and four separate statuses. All findings keep production and original incident BLOCKED. No synthetic CI result is described as real two-device acceptance.
 
-## Critical original negative reproductions
-
-| Fault | Required assertion | Existing/QA source test | Physical release gate |
+| Finding | Component | What is proven | Release gate |
 |---|---|---|---|
-| MUTATION_STATE_UNKNOWN | No blind mutation retry; offline result stays UNKNOWN | `test/qa-agent-journal-negative.test.ts` | Restart real Agent during lost-ACK and reconcile |
-| Shell transport OK but exitCode=7 | `taskSuccess:false`; no user-facing PASS | `test/qa-shell-outcome-negative.test.ts` | Real CMD/PowerShell/WSL negative exit |
-| Windows killed parent, live child | `unconfirmed`; no tree-clean PASS | `test/process-manager-tree-cleanup.test.ts` | Windows Job Objects for race-free ownership |
-| PATH_DENIED / USB | No shell/WSL privilege bypass | `test/path-policy.test.ts` | Physical USB volume identity and ACL |
-| Permission / ROOT / CORE | Missing grant denies, explain no action | `test/windows-console-grant.test.ts` | Owner physical console and UAC |
-| Connection loss | Reconnect no mutation auto-replay | `test/native-session-continuity.test.ts` | Two real hosts/off-network |
-| Bot stuck RUNNING | Unknown/stuck, no fabricated completed percentage | `test/task-artifacts.test.ts` | Actual model completed count and artifact SHA |
-| Corrupt artifact | No succeeded task if artifact missing | `test/task-artifacts.test.ts` | Transfer and compare across chats/devices |
-| OAuth AuthRequiredError | Independent Codex vs ChatGPT issuer/scope proof | `test/mcp-oauth.test.ts` | Live Codex CLI / issuer discovery |
-| GUI focus drift | Deny HWND owner mismatch | `test/private-uia-mixed-owner-isolation.test.ts` | Physical Windows native dialog and focus change |
-| 24h Scale v2 | Benchmarks not production evidence | `test/owner-quota-local-capacity-benchmark.test.ts` | 100+ sockets, 600/min, 850k/day and cloud cost |
-| CI green only | Four-gate release remains BLOCKED | `test/qa-final-acceptance-negative.test.ts` | Independent original incident re-run |
+| QA-P0-559-HELPER | Win32 Job helper | Env override removed; binary type and marker trust are insufficient as independent release/publisher proof | Trusted helper binary + kernel membership + physical original child cleanup |
+| QA-P0-553-PATH | Filesystem/USB | Latest CI success; live console grant issuance and handle-relative TOCTOU protection missing | Real grants, handle pinning, USB/junction stress |
+| QA-P1-563-DOCTOR | Environment Doctor | Historical head Linux Node22 failed; latest #563 head fixes test and provenance paths, exact-head CI currently IN_PROGRESS | Correct tests plus fail-closed provenance across OS |
+| QA-P0-480-556-GUI | Private GUI/file picker | Static broker gate and UIA adapter are source-only; no demonstrated dynamic descendant containment | No Default desktop focus/input, real Common Dialog |
+| QA-P1-551-INSTALL | Lifecycle | Exact-head CI success; manager still fixture-driven without installed production adapter | Signed installer/rollback on actual authorized devices |
+| QA-P1-564-FAIRNESS | Scale S5 | Synthetic unfairness shown, live WSS 24h/cost absent | Real account-scoped fairness, 24-hour accepted completions |
 
-## PR correspondence
+## Evidence rules
 
-| PR | Original issue | Reproducer | What still blocks original incident closure |
-|---|---|---|---|
-| [#538](https://github.com/Naveax/Nexowire/pull/538) | Lost ACK / journal | Agent journal restart + MCP mutation failure | Real upgrade/reconciliation on both devices |
-| [#542](https://github.com/Naveax/Nexowire/pull/542) | False shell PASS | Provider returns `ok:true,exitCode:7` | Live Windows/WSL consumers must check `taskSuccess` and postconditions |
-| [#543](https://github.com/Naveax/Nexowire/pull/543) | Orphan child process | Lost parent and surviving uniquely marked node child | Windows Job Object lifetime + crash-proof ownership |
-| [#480](https://github.com/Naveax/Nexowire/pull/480) | GUI isolation | `bash` broker direct-launch path | Foreground HWND, multi-display, COM/UAC physical acceptance |
-| [#537](https://github.com/Naveax/Nexowire/pull/537) | Public signed WSS | Signed nonce replay rejected by isolated fixture | Named tunnel, real OAuth, broker, 24-hour quota and independent ISP |
+1. Exact source SHA and successful source CI are not equivalent to staging/production.
+2. A source FAIL remains FAIL if the matching test reproduces a defect; a known test-precondition failure is documented separately instead of mislabeled.
+3. Original incident closure needs an independent postcondition captured on the actual affected system, with operator authorization, receipt hashes and regression evidence.
+4. Tool/provider policy, OS UAC, real firmware, payment processors, or third-party OAuth authority cannot be bypassed to manufacture a PASS.
+5. The source-level QA manifest and optional reviewer metadata are **not** a cryptographically validated signature or evidence oracle.
 
-**Blocking release findings**: R07 child ownership not proven; R12 sustained real quota/throughput not demonstrated; R15 original cross-chat artifact retrieval not demonstrated; R18 original stuck-bot recovery not demonstrated; R22 physical release gates incomplete. These findings block **overall acceptance**, not necessarily the narrow isolated changes in each draft PR.
-
-All 12 historic project classes are mapped to individual requirements in the machine-readable JSON. Re-test the exact incidents after source/staging deployment. Third-party policies, UAC and firmware issues cannot be bypassed by Nexowire.
-
-## New independently checked PR intake | 20 entries
-
-The machine-readable `PR_SOURCE_AND_RELEASE_GATES.json` now records 20 known PRs (#480, #537, #538, #542, #543 and #545-#559); #537, #554 and #557 were merged while independent QA was running and remain production/incident BLOCKED. Each is tied to an exact source SHA, repro test and missing *physical* acceptance. This is a dated snapshot, not an ongoing live poll.
-
-**Blocking exact-head CI regressions:**
-
-- [#551 workflow 39135168316](https://github.com/Naveax/Nexowire/actions/runs/39135168316): Ubuntu Node24 job 117698096540 failed existing `console-ui-polish.test.ts` callback redirect regex. Regression may reflect changed POST trust contract rather than insecure behavior. Correct the legacy acceptance and re-run CI.
-- [#553 workflow 39135602721](https://github.com/Naveax/Nexowire/actions/runs/39135602721): Ubuntu Node24 job 117699532080 has multiple task-graph/artifact/execution failures; WSL2 job 117699532117 failed `PATH_DENIED`; native Linux job 117699532174 and macOS job 117699531828 failed `UNSANDBOXED_EXECUTION_DENIED`. Security behavior is intended fail-closed but the current full build regresses supported native cases. **No wildcard authorization bypass is acceptable as a fix.**
-- [#559 workflow 39137327997](https://github.com/Naveax/Nexowire/actions/runs/39137327997): exact-head CI passed. It does not verify *deployed* Win32 Job Object guardian ownership or original incident. #559 remains DRAFT.
-- [#558 workflow 39135829286](https://github.com/Naveax/Nexowire/actions/runs/39135829286): exact-head CI passed. It does not verify crash/reconnect in an upgraded Agent/Hub.
-
-**Independent Windows source regression:** existing eight scoped suites `process-manager-tree-cleanup`, `agent-operation-journal`, `agent-provider-task-outcome`, `mcp-post-mutation-journal-failure`, `path-policy`, `private-uia-mixed-owner-isolation`, `mcp-oauth`, `task-artifacts` passed **44/44** against `a54cbbd` before the latest integration merge. Newly authored QA negative files passed **15/15** plus later approval-only gate 8/8 on the isolated Windows worktree, with typecheck/build/continuation PASS. CI after rebasing must validate again.
-
-**Integrity limitation:** this draft gate validates status/evidence structure; an `independentReleaseApproval` object alone is **not** a cryptographically verified signature or production attestation. Source test assertions cannot autonomously establish trusted reviewer identity, external ISP, physical hardware or historical incident closure. Such evidence must be verified out-of-band before release.
-
-Latest QA source baseline: 43580cce2a786880fcb6a8036cfc01a7a1a2621. The independent 20-test suite must be rerun on this rebased tree; source tests executed previously at 54cbbd remain evidence tied to that older SHA only.
+**Release decision: BLOCKED.**
