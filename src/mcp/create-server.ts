@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { classifyFailure, redactDiagnosticText, redactDiagnosticValue } from '../protocol/error-contract-v2.js';
+import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
+import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
@@ -115,7 +118,9 @@ function applyToolRegistrationFilters(
     // has for its individual read, hash, write, move and cleanup operations.
     const transferDependencies = name === 'file_transfer_between_devices'
       ? ['file_read','file_stat','file_hash','file_write','file_move','file_delete']
-      : [];
+      : name === 'artifact_bridge_ingest_device_file'
+        ? ['file_read', 'file_stat', 'file_hash']
+        : [];
     const dependenciesAuthorized = transferDependencies.every((dependency) =>
       isMcpToolAuthorized(input.authorization,dependency));
     const dependenciesAvailable =
@@ -132,13 +137,25 @@ function applyToolRegistrationFilters(
 }
 
 function toolResult(data: unknown, isError = false) {
+  // Apply identical redaction to BOTH structured and text MCP channels.
+  const safeData = redactDiagnosticValue(data);
   const structured =
-    typeof data === 'object' && data !== null && !Array.isArray(data)
-      ? (data as Record<string, unknown>)
-      : { value: data };
-
+    typeof safeData === 'object' && safeData !== null && !Array.isArray(safeData)
+      ? (safeData as Record<string, unknown>)
+      : { value: safeData };
+  if (isError && structured.error && typeof structured.error === 'object' &&
+      !Array.isArray(structured.error)) {
+    const error = structured.error as Record<string, unknown>;
+    if (typeof error.code === 'string' && !error.attribution) {
+      error.attribution = classifyFailure({
+        code: error.code, observedAt: 'mcp_hub', dispatched: 'unknown',
+        ...(typeof structured.operationId === 'string'
+          ? {correlationId: structured.operationId, operationId: structured.operationId} : {}),
+      });
+    }
+  }
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+    content: [{ type: 'text' as const, text: JSON.stringify(safeData, null, 2) }],
     structuredContent: structured,
     ...(isError ? { isError: true } : {}),
   };
@@ -507,7 +524,7 @@ async function execute(
       providerId: result.meta.providerId,
       durationMs: Math.round(performance.now() - started),
       ...(result.error?.code ? { errorCode: result.error.code } : {}),
-      ...(result.error?.message ? { message: result.error.message } : {}),
+      ...(result.error?.message ? { message: redactDiagnosticText(result.error.message) } : {}),
     });
     return toolResult(
       idempotencyKey
@@ -524,7 +541,7 @@ async function execute(
       !result.ok,
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactDiagnosticText(error instanceof Error ? error.message : String(error));
     const errorCode =
       typeof error === 'object' &&
       error !== null &&
@@ -576,6 +593,14 @@ async function execute(
         error: {
           code: errorCode,
           message,
+          attribution: classifyFailure({
+            code: error instanceof McpTargetAuthorizationError
+              ? 'MCP_AUTHORIZATION_DENIED' : errorCode,
+            observedAt: 'mcp_hub',
+            dispatched: providerDispatched ? 'unknown' : false,
+            readOnly: isReadOnlyCapability(capability),
+            correlationId: operationId, operationId,
+          }),
         },
         ...(recoveryAuditFailed ? { recoveryAuditFailed: true } : {}),
         ...(recoveryJournalFailed ? { recoveryJournalFailed: true } : {}),
@@ -864,26 +889,34 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'List idempotency operation records',
       description:
-        'List visible payload-free idempotency records, or retrieve one exact key. Records contain fingerprints and status only, never mutation input or output payloads.',
+        'List visible payload-free Hub idempotency records, query by exact key or operation_id even when Agent is offline. Hub status is NOT proof of remote OS side effects. Never automatically retry UNKNOWN.',
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
         key: z.string().trim().min(1).max(160)
           .regex(/^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,159}$/).optional(),
+        operation_id: z.string().uuid().optional(),
       },
     },
-    async ({ limit, key }) => {
+    async ({ limit, key, operation_id }) => {
       // Historical operation status must remain visible when a directly
       // authorized device goes offline. Do not require a live provider route.
       // Route-only grants remain limited to their currently authorized target.
       const allowedDeviceIds = await authorizedTargetIds(
         ctx, await allRoutingEntries(ctx),
       );
+      if(key && operation_id){
+        return toolResult({ok:false,error:{
+          code:'IDEMPOTENCY_LOOKUP_AMBIGUOUS',
+          message:'Choose exactly one key or operation_id.',
+        }},true);
+      }
       const candidates = !ctx.idempotency
         ? []
-        : key
-          ? [await ctx.idempotency.get(key)].filter(
-              (record): record is IdempotencyRecord => record !== undefined,
-            )
+        : key || operation_id
+          ? [key
+              ? await ctx.idempotency.get(key)
+              : await ctx.idempotency.getByOperationId(operation_id!)
+            ].filter((record): record is IdempotencyRecord => record!==undefined)
           : await ctx.idempotency.list(limit ?? 100, allowedDeviceIds);
       return toolResult({
         records: candidates
@@ -6502,6 +6535,38 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       inputSchema: {},
     },
     async () => toolResult({ checkpoints: await ctx.workspaces.list() }),
+  );
+
+  registerArtifactBridgeTools(
+    server, ctx.workspaces, ctx.toolAuthorization,
+    (deviceId) => {
+      const fetchSource = async (capability: string, request: Record<string, unknown>) => {
+        const response = await execute(ctx, capability, request, deviceId);
+        const value = response.structuredContent as Record<string, unknown>;
+        if (!value || value.ok !== true || !value.data ||
+            typeof value.data !== 'object' || Array.isArray(value.data)) {
+          throw new Error('ARTIFACT_SOURCE_UNAVAILABLE: ' + capability);
+        }
+        return value.data as Record<string, unknown>;
+      };
+      return {
+        stat: async (file) => {
+          const value = await fetchSource('files.stat', { path: file });
+          return { size: Number(value.size), type: String(value.type) };
+        },
+        sha256: async (file, maxBytes) => {
+          const value = await fetchSource('files.hash', { path: file, max_bytes: maxBytes });
+          return String(value.sha256);
+        },
+        read: async (file, offset, maxBytes) => {
+          const value = await fetchSource('files.read', {
+            path: file, encoding: 'base64', offset_bytes: offset, max_bytes: maxBytes,
+          });
+          return { sourceBytes: Number(value.size), offsetBytes: Number(value.offsetBytes),
+            bytesRead: Number(value.bytesRead), contentBase64: String(value.content) };
+        },
+      };
+    },
   );
 
   server.registerTool(

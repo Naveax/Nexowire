@@ -39,6 +39,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Compile native Windows Job guardian
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Physical Windows Job Object regressions
+        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/windows-job-capacity-128.test.ts test/process-manager-tree-cleanup.test.ts test/process-manager.test.ts
       - name: Verify Windows native-agent singleton lease on a real runner
         run: node --test --import tsx test/native-agent-singleton.test.ts
       - name: Verify Windows DPAPI and pre-logon Hub contracts

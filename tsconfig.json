@@ -18,6 +18,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "scripts/run-environment-doctor.ts"
   ]
 }
