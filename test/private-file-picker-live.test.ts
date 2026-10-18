@@ -5,6 +5,7 @@ import path from 'node:path';
 import {promises as fs} from 'node:fs';
 import {executeWindowsPrivateDesktopCapability as desktop} from '../src/agent/windows-private-desktop.js';
 import {createPrivateFilePickerAdapter} from '../src/agent/windows-private-file-picker.js';
+import {PathPolicy} from '../src/agent/path-policy.js';
 
 test('live isolated WPF file picker adapter selects without physical desktop input',{
   skip:process.platform!=='win32',timeout:100_000,
@@ -93,9 +94,11 @@ test('live isolated WPF file picker adapter selects without physical desktop inp
     confirm_button:{automation_id:'NxConfirm',expected_class:button.className},
   });
   const pathValue=path.win32.join(root,'selected-fixture.txt');
+  await fs.writeFile(pathValue,'PRIVATE_PICKER_FILE_FIXTURE','utf8');
+  const policy=new PathPolicy([root]);
   const selected=await adapter.select({
     grant_id:prepared.data.grantId,path:pathValue,
-  });
+  },value=>policy.resolveExisting(value));
   assert.equal(selected.data.submitted,true);
   assert.equal(selected.data.selectionVerified,false);
   let observed:string|undefined;

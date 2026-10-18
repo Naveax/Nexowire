@@ -103,7 +103,9 @@ test('grant revocation and expiry forbid actions',async()=>{
 });
 test('invalid absolute/device/UNC paths are rejected without UIA writes',async()=>{
   for(const value of ['relative.txt','\\\\server\\share\\file.txt',
-    '\\\\?\\C:\\a.txt','\\\\.\\C:','C:\\Temp\\bad\n.txt']){
+    '\\\\?\\C:\\a.txt','\\\\.\\C:','C:\\Temp\\bad\n.txt',
+    'C:\\Temp\\file.txt:secret','C:\\Temp\\shortcut.lnk',
+    'C:\\Temp\\folder.\\foo.txt','C:\\Temp\\file.txt.']){
     const f=fixture();await f.adapter.prepare(input);
     await assert.rejects(f.adapter.select({grant_id:grantId,path:value}),
       errorCode('PICKER_PATH_UNSAFE'));

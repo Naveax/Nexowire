@@ -9,8 +9,10 @@
  * still be enforced at the MCP/Agent boundary.
  */
 import {createHash, randomUUID} from 'node:crypto';
+import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
+import type {PathPolicy} from './path-policy.js';
 import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
 
 const Hwnd=z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/);
@@ -70,9 +72,13 @@ function data<T>(raw:unknown):T {
   return (raw as{data:T}).data;
 }
 function requirePath(value:string):void{
-  if(!path.win32.isAbsolute(value) ||
+  // Root-relative, UNC, device namespace, ADS and shortcut files can
+  // bypass the intended local file selection scope. Refuse before UIA.
+  if(!/^[A-Za-z]:\\/.test(value) ||
     value.startsWith('\\\\?\\') || value.startsWith('\\\\.\\') ||
-    /[\u0000-\u001F]/.test(value) || /^(?:\\\\|\\\\\\\\)/.test(value)){
+    /[\u0000-\u001F]/.test(value) || value.substring(2).includes(':') ||
+    /(?:^|\\)[^\\]*[. ](?:\\|$)/.test(value) ||
+    /\.(?:lnk|url|website|search-ms)$/i.test(value)){
     reject('PICKER_PATH_UNSAFE','Use an absolute local Windows file path; UNC/device paths are not supported.');
   }
 }
@@ -148,9 +154,13 @@ export function createPrivateFilePickerAdapter(
         authorizesPhysicalConsole:false,ownerApprovalGranted:false,
       }};
     },
-    async select(raw:unknown){
+    async select(raw:unknown,verifyExistingPath?:(requested:string)=>Promise<string>){
       const request=Select.parse(raw);
       requirePath(request.path);
+      // The native UIA Edit can otherwise open files outside files.read's
+      // allowedRoots, silently bypassing the agent filesystem policy.
+      const safePath=verifyExistingPath?await verifyExistingPath(request.path):request.path;
+      requirePath(safePath);
       const permit=permits.get(request.grant_id);
       if(!permit||permit.used||permit.cancelled||now()>=permit.expiresAt)
         reject('PICKER_GRANT_INVALID','File-picker operation grant is invalid, expired, revoked or used.');
@@ -171,7 +181,7 @@ export function createPrivateFilePickerAdapter(
         editStarted=true;
         const edit=data<{processId:number;sessionId?:number;inputDesktop:string;actionCompleted:boolean}>(
           await dispatch('windows.private_desktop.accessibility.set_edit_value',{
-            ...common,...input.filename_edit,value:request.path,
+            ...common,...input.filename_edit,value:safePath,
           }));
         editApplied=true;
         if(!edit.actionCompleted||edit.processId!==input.expected_process_id||
@@ -193,7 +203,7 @@ export function createPrivateFilePickerAdapter(
           hwnd:input.hwnd,processId:input.expected_process_id,
           sessionId:input.expected_session_id,
           grantId:request.grant_id,
-          pathSha256:createHash('sha256').update(request.path,'utf8').digest('hex'),
+          pathSha256:createHash('sha256').update(safePath,'utf8').digest('hex'),
           desktopName:'NexowirePrivate',
           visibleDesktopChanged:false,touchesPhysicalInput:false,
           note:'InvokePattern returned; the owning application must independently confirm file acceptance.',
@@ -226,10 +236,15 @@ export function createPrivateFilePickerAdapter(
   };
 }
 const singleton=createPrivateFilePickerAdapter();
-export async function executeWindowsPrivateFilePickerCapability(capability:string,input:unknown){
+export async function executeWindowsPrivateFilePickerCapability(capability:string,input:unknown,policy:PathPolicy){
   switch(capability){
     case 'windows.private_desktop.file_picker.prepare':return singleton.prepare(input);
-    case 'windows.private_desktop.file_picker.select':return singleton.select(input);
+    case 'windows.private_desktop.file_picker.select':return singleton.select(input,async value=>{
+      const resolved=await policy.resolveExisting(value);
+      if(!(await fs.stat(resolved)).isFile())
+        reject('PICKER_TARGET_NOT_FILE','Open picker accepts existing regular files only.');
+      return resolved;
+    });
     case 'windows.private_desktop.file_picker.cancel':return singleton.cancel(input);
     default:reject('PICKER_UNSUPPORTED','Unknown private file picker capability.');
   }

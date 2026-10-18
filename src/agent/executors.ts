@@ -2543,7 +2543,7 @@ export async function executeCapability(
     case 'windows.private_desktop.file_picker.prepare':
     case 'windows.private_desktop.file_picker.select':
     case 'windows.private_desktop.file_picker.cancel':
-      return await executeWindowsPrivateFilePickerCapability(capability,input);
+      return await executeWindowsPrivateFilePickerCapability(capability,input,policy);
 case 'windows.private_desktop.process_audit':
       return await inspectWindowsPrivateProcessAncestry();
     case 'windows.private_desktop.owner_gui_audit':
