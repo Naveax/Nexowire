@@ -1,764 +1,764 @@
 {
-    "schema":  "nexowire.independent-qa.v1",
-    "capturedAt":  "2026-10-18",
-    "baselineSha":  "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
-    "branch":  "test/parallel-16-independent-qa-20261018",
-    "meaning":  "PASS is evidence for that exact level only; absence of original incident retest blocks Final Acceptance.",
-    "requirements":  [
-                         {
-                             "id":  "R01",
-                             "title":  "Hata kaynaÄŸÄ± ve correlation",
-                             "source":  "src/mcp/create-server.ts",
-                             "test":  "test/mcp-post-mutation-journal-failure.test.ts",
-                             "negativeCase":  "MUTATION_STATE_UNKNOWN sonucunu provider/Hub/Agent katmanÄ±na ayÄ±r; tahminÃ® sebep Ã¼retme",
-                             "physicalGate":  "Agent ve Hub fault injection + iki cihaz uÃ§tan uca hata izleme",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R02",
-                             "title":  "Agent Operation Journal",
-                             "source":  "src/agent/operation-journal.ts",
-                             "test":  "test/agent-operation-journal.test.ts",
-                             "negativeCase":  "ACK kaybÄ±/restart ardÄ±ndan aynÄ± requestId ikinci mutasyon Ã¼retmemeli",
-                             "physicalGate":  "Agent gÃ¼ncellenmiÅŸ iki cihaz, crash/WAL/disk dolmasÄ±",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "PASS",
-                                                           "evidence":  "CI https://github.com/Naveax/Nexowire/actions/runs/39116300377 sha 8bf7ce10972e78268e3cac945e833781b8d6846c; scope: existing source tests only"
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R03",
-                             "title":  "Operation reconciliation",
-                             "source":  "src/mcp/create-server.ts",
-                             "test":  "test/mcp-idempotency-continuity.test.ts",
-                             "negativeCase":  "Agent offline iken result=unknown korunmalÄ±; found:false baÅŸarÄ± veya hiÃ§ Ã§alÄ±ÅŸmadÄ± anlamÄ±na gelmemeli",
-                             "physicalGate":  "Hub offline/online dÃ¶nÃ¼ÅŸÃ¼, gerÃ§ek operation ID ile sorgu",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R04",
-                             "title":  "Authorization Explain",
-                             "source":  "src/agent/native-agent.ts",
-                             "test":  "test/windows-console-grant.test.ts",
-                             "negativeCase":  "owner-full-access fakat grantId boÅŸsa iÅŸlem deny",
-                             "physicalGate":  "GerÃ§ek UAC + ROOT/CORE console ve broker token doÄŸrulamasÄ±",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R05",
-                             "title":  "Path/USB izinleri",
-                             "source":  "src/agent/path-policy.ts",
-                             "test":  "test/path-policy.test.ts",
-                             "negativeCase":  "PATH_DENIED shell/WSL ile bypass edilmemeli; reparse/symlink/sibling deny",
-                             "physicalGate":  "USB Volume GUID, tak Ã§Ä±kar ve baÅŸka kullanÄ±cÄ± profili",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R06",
-                             "title":  "Connection/reconnect",
-                             "source":  "src/core/agent-broker.ts",
-                             "test":  "test/native-session-continuity.test.ts",
-                             "negativeCase":  "UNAVAILABLE+late ACK sonrasÄ± mutasyon replay edilmemeli",
-                             "physicalGate":  "Ä°ki fiziksel cihaz ve iki ayrÄ± aÄŸda kontrollÃ¼ disconnect",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R07",
-                             "title":  "Process child-tree ownership",
-                             "source":  "src/agent/process-manager.ts",
-                             "test":  "test/process-manager-tree-cleanup.test.ts",
-                             "negativeCase":  "Parent kapanÄ±p child kalÄ±rsa SUCCESS raporlanmamalÄ±",
-                             "physicalGate":  "Windows Job Object child containment ve root-crash doÄŸrulamasÄ±",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "FAIL",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R08",
-                             "title":  "Shell/WSL task exit truth",
-                             "source":  "src/providers/agent-provider.ts",
-                             "test":  "test/agent-provider-task-outcome.test.ts",
-                             "negativeCase":  "ok:true + exitCode:7 asla taskSuccess:true olmamalÄ±",
-                             "physicalGate":  "PowerShell/CMD/WSL gerÃ§ek exit/timeout ve baÅŸarÄ±sÄ±z gÃ¶rev tekrarÄ±",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "PASS",
-                                                           "evidence":  "CI https://github.com/Naveax/Nexowire/actions/runs/39116300377 sha 8bf7ce10972e78268e3cac945e833781b8d6846c; scope: existing source tests only"
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R09",
-                             "title":  "Broker/GUI focus",
-                             "source":  "src/agent/windows-accessibility.ts",
-                             "test":  "test/private-uia-mixed-owner-isolation.test.ts",
-                             "negativeCase":  "Odak farklÄ± HWND/process\u0027e kayarsa GUI mutasyonu durmalÄ±",
-                             "physicalGate":  "GerÃ§ek Windows Ã§oklu pencere/multimonitor ve owner grant",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R10",
-                             "title":  "Git/device/artifact SHA",
-                             "source":  "src/agent/task-graph-store.ts",
-                             "test":  "test/task-artifacts.test.ts",
-                             "negativeCase":  "Bozuk hash checkpoint PASS olmamalÄ±",
-                             "physicalGate":  "Ä°ki cihazda SHA256 ve commit eÅŸlemesi",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R11",
-                             "title":  "Reliability Doctor UI",
-                             "source":  "src/mcp/create-server.ts",
-                             "test":  "test/mcp-tool-authorization.test.ts",
-                             "negativeCase":  "Hata origin bilinmiyorsa origin=unknown; sahte tanÄ± yok",
-                             "physicalGate":  "KullanÄ±cÄ±nÄ±n requestId ile uÃ§tan uca hata bulmasÄ±",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R12",
-                             "title":  "Scale kapasite/kota",
-                             "source":  "src/mcp/create-server.ts",
-                             "test":  "test/owner-quota-local-capacity-benchmark.test.ts",
-                             "negativeCase":  "10k SQLite rezervasyonu 850k successful 24h olarak sayÄ±lmamalÄ±",
-                             "physicalGate":  "100+ canlÄ± WSS, 600/min, 24h, iki baÄŸÄ±msÄ±z ISP ve cloud maliyeti",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R13",
-                             "title":  "Upstream policy diagnosis",
-                             "source":  "src/providers/agent-provider.ts",
-                             "test":  "test/agent-provider-task-outcome.test.ts",
-                             "negativeCase":  "Agent\u0027a ulaÅŸmayan provider reddi Agent hatasÄ± gibi yazÄ±lmamalÄ±",
-                             "physicalGate":  "AyrÄ± ChatGPT/Codex istemci olaylarÄ±, sansÃ¼rlÃ¼ detaylar",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R14",
-                             "title":  "Codex OAuth",
-                             "source":  "src/mcp/create-server.ts",
-                             "test":  "test/mcp-oauth.test.ts",
-                             "negativeCase":  "YanlÄ±ÅŸ audience/scope/issuer AuthRequiredError; dispatch=deny",
-                             "physicalGate":  "GerÃ§ek Codex CLI callback ve canlÄ± auth-code/PKCE",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R15",
-                             "title":  "Cross-chat artifact continuity",
-                             "source":  "src/agent/task-graph-store.ts",
-                             "test":  "test/task-artifacts.test.ts",
-                             "negativeCase":  "Yeni sohbet bozuk/eksik artifact\u0027i tamamlandÄ± gÃ¶stermemeli",
-                             "physicalGate":  "Yeni sohbet+Work PC SHA/retrieve/grant",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R16",
-                             "title":  "Windows file picker/UIA",
-                             "source":  "src/agent/windows-accessibility.ts",
-                             "test":  "test/private-uia-target-resolution.test.ts",
-                             "negativeCase":  "Gizli/disabled control veya yanlÄ±ÅŸ owner HWND\u0027de invoke=deny",
-                             "physicalGate":  "Native Open File dialog Ã¼zerinde fiziksel fokus deÄŸiÅŸimi",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R17",
-                             "title":  "Environment Doctor",
-                             "source":  "src/agent/native-agent.ts",
-                             "test":  "test/wsl-detection.test.ts",
-                             "negativeCase":  "Eksik CUDA/usbipd fiziksel test PASS etmemeli",
-                             "physicalGate":  "USB/gamepad/driver/WSL/VM donanÄ±m preflight",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R18",
-                             "title":  "Progress watchdog",
-                             "source":  "src/agent/task-graph-store.ts",
-                             "test":  "test/task-artifacts.test.ts",
-                             "negativeCase":  "PID RUNNING fakat completed deÄŸiÅŸmiyor =\u003e stuck/unknown",
-                             "physicalGate":  "Kripto model botu gerÃ§ek sonuÃ§ artÄ±ÅŸÄ± ve restart",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R19",
-                             "title":  "Lifecycle/rollback",
-                             "source":  "src/agent/native-agent.ts",
-                             "test":  "test/machine-update-rollback-integrity.test.ts",
-                             "negativeCase":  "Hash/publisher yanlÄ±ÅŸsa apply deny, rollback durumunu kanÄ±tla",
-                             "physicalGate":  "GerÃ§ek 1.0.5-\u003eyeni Agent upgrade + rollback iki cihaz",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R20",
-                             "title":  "CAS/atomic append",
-                             "source":  "src/operations/idempotency-store.ts",
-                             "test":  "test/idempotency-journal-concurrency.test.ts",
-                             "negativeCase":  "Lost ACK append ikinci kez uygulanmamalÄ±",
-                             "physicalGate":  "Ä°ki cihaz ve eÅŸzamanlÄ± writer offset/hash yarÄ±ÅŸÄ±",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R21",
-                             "title":  "Hardware acceptance harness",
-                             "source":  "src/agent/native-agent.ts",
-                             "test":  "test/linux-native-agent-live.test.ts",
-                             "negativeCase":  "Sentetik USB pass gerÃ§ek USB varlÄ±ÄŸÄ±nÄ± kanÄ±tlamamalÄ±",
-                             "physicalGate":  "Fiziksel USB VID/PID, gamepad, telefon, VM gÃ¶zlemi",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         },
-                         {
-                             "id":  "R22",
-                             "title":  "Release/final gate",
-                             "source":  ".github/workflows/ci.yml",
-                             "test":  "test/qa-final-acceptance-negative.test.ts",
-                             "negativeCase":  "CI yeÅŸil ama production/incident eksikse final PASS reddedilmeli",
-                             "physicalGate":  "BaÄŸÄ±msÄ±z denetÃ§i, exact SHA, release ve orijinal olay retesti",
-                             "levels":  {
-                                            "source":  {
-                                                           "status":  "NOT_TESTED",
-                                                           "evidence":  null
-                                                       },
-                                            "staging":  {
-                                                            "status":  "BLOCKED",
-                                                            "evidence":  null
-                                                        },
-                                            "production":  {
-                                                               "status":  "BLOCKED",
-                                                               "evidence":  null
-                                                           },
-                                            "incident":  {
-                                                             "status":  "BLOCKED",
-                                                             "evidence":  null
-                                                         }
-                                        }
-                         }
-                     ],
-    "incidents":  [
-                      {
-                          "name":  "LG G3",
-                          "incident":  "LG Download Mode / LAF-driver hatasÄ±",
-                          "requirements":  [
-                                               "R17",
-                                               "R21",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "Device not present/driver mismatch ayrÄ±mÄ±; fiziksel telefonda bootloader kanÄ±tÄ±"
-                      },
-                      {
-                          "name":  "Debian/Win7",
-                          "incident":  "BÃ¶lÃ¼mleme dÃ¶ngÃ¼sÃ¼, aÄŸ, WSL ve PS2 kurulum",
-                          "requirements":  [
-                                               "R05",
-                                               "R17",
-                                               "R21"
-                                           ],
-                          "physicalGate":  "GerÃ§ek VM/disk kimliÄŸi; mevcut Win7 HDD\u0027ye dokunmama"
-                      },
-                      {
-                          "name":  "Syntavra",
-                          "incident":  "Eksik ortam ve Ã§alÄ±ÅŸtÄ±rma kabulÃ¼",
-                          "requirements":  [
-                                               "R17",
-                                               "R18",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "Hedef donanÄ±mda preflight ve gerÃ§ek output"
-                      },
-                      {
-                          "name":  "Roblox",
-                          "incident":  "AFK kesilmesi/rejoin ve GUI odaÄŸÄ±",
-                          "requirements":  [
-                                               "R09",
-                                               "R16",
-                                               "R18"
-                                           ],
-                          "physicalGate":  "GerÃ§ek Roblox oturumunda kullanÄ±cÄ± onaylÄ± UI test; Ã¼Ã§Ã¼ncÃ¼ taraf kurallarÄ± ayrÄ±"
-                      },
-                      {
-                          "name":  "PSMatrix",
-                          "incident":  "Komut sonucu ve yetki farkÄ±",
-                          "requirements":  [
-                                               "R01",
-                                               "R04",
-                                               "R08"
-                                           ],
-                          "physicalGate":  "GerÃ§ek Windows elevation/exit ve sonuÃ§"
-                      },
-                      {
-                          "name":  "NXB V11",
-                          "incident":  "A0 acceptance / yanlÄ±ÅŸ PASS ve tamamlanmayan iÅŸ",
-                          "requirements":  [
-                                               "R01",
-                                               "R08",
-                                               "R18",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "Orijinal v61+ evidence/harness, gerÃ§ek tamamlanma"
-                      },
-                      {
-                          "name":  "Catalog",
-                          "incident":  "Dosyalar/araÃ§lar arasÄ±nda checkpoint kaybÄ±",
-                          "requirements":  [
-                                               "R10",
-                                               "R15",
-                                               "R20"
-                                           ],
-                          "physicalGate":  "Yeni sohbette doÄŸru proje ve dosya SHA"
-                      },
-                      {
-                          "name":  "ReVoltVPN",
-                          "incident":  "AÄŸ kilitlenmesi/NetBridge etkileÅŸimi",
-                          "requirements":  [
-                                               "R06",
-                                               "R17",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "Ä°zolasyonlu gerÃ§ek network adapter deÄŸiÅŸimi; Ã¼retim aÄŸÄ±nÄ± bozma"
-                      },
-                      {
-                          "name":  "GuardAdaptive",
-                          "incident":  "USB/gamepad fiziksel sapma ve test karÄ±ÅŸmasÄ±",
-                          "requirements":  [
-                                               "R05",
-                                               "R17",
-                                               "R21"
-                                           ],
-                          "physicalGate":  "Ä°ki farklÄ± fiziksel kontrolcÃ¼, gerÃ§ek stick deÄŸerleri"
-                      },
-                      {
-                          "name":  "Scale v2",
-                          "incident":  "Public WSS, quota fairness ve 24h yÃ¼ksek kapasite",
-                          "requirements":  [
-                                               "R06",
-                                               "R12",
-                                               "R14",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "AyrÄ± iki fiziksel PC, gerÃ§ek OAuth, canlÄ± traffic 24h+ maliyet"
-                      },
-                      {
-                          "name":  "Kripto botu",
-                          "incident":  "RUNNING ama sonuÃ§/model sayÄ±sÄ± ilerlemiyor",
-                          "requirements":  [
-                                               "R07",
-                                               "R18",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "GerÃ§ek completed/pending counters; Ã§Ä±ktÄ± hash; stuck alarm"
-                      },
-                      {
-                          "name":  "Search-Tool",
-                          "incident":  "Native Windows Win+S davranÄ±ÅŸÄ± kayboluyor",
-                          "requirements":  [
-                                               "R04",
-                                               "R09",
-                                               "R16",
-                                               "R22"
-                                           ],
-                          "physicalGate":  "GerÃ§ek Windows 10/11 foreground/Search UI ve fallback"
-                      }
-                  ],
-    "pullRequests":  [
-                         {
-                             "pr":  "#538",
-                             "state":  "MERGED",
-                             "requirements":  [
-                                                  "R01",
-                                                  "R02",
-                                                  "R03"
-                                              ],
-                             "originalIncident":  "Lost ACK, durable reservation, unknown state",
-                             "reproducer":  "test/agent-operation-journal.test.ts + test/mcp-post-mutation-journal-failure.test.ts",
-                             "missingAcceptance":  "Agent 1.0.5 canlÄ± yÃ¼kseltilip iki cihaz crash/replay/Hub kabulÃ¼ yapÄ±lmadÄ±"
-                         },
-                         {
-                             "pr":  "#542",
-                             "state":  "MERGED",
-                             "requirements":  [
-                                                  "R08"
-                                              ],
-                             "originalIncident":  "ok:true + exitCode:7 yanlÄ±ÅŸ gÃ¶rev PASS",
-                             "reproducer":  "test/agent-provider-task-outcome.test.ts",
-                             "missingAcceptance":  "CanlÄ± Agent/WSL/PowerShell/CMD negatif exit acceptance ve tÃ¼ketici postcondition"
-                         },
-                         {
-                             "pr":  "#543",
-                             "state":  "MERGED",
-                             "requirements":  [
-                                                  "R07"
-                                              ],
-                             "originalIncident":  "Root Ã¶ldÃ¼ÄŸÃ¼nde child canlÄ±; Ã¶nceki taskkill sonucu kanÄ±tsÄ±z",
-                             "reproducer":  "test/process-manager-tree-cleanup.test.ts",
-                             "missingAcceptance":  "Windows Job Objects ve kalÄ±cÄ± descendant containment yok"
-                         },
-                         {
-                             "pr":  "#480",
-                             "state":  "OPEN_DRAFT",
-                             "requirements":  [
-                                                  "R09",
-                                                  "R16"
-                                              ],
-                             "originalIncident":  "Private-desktop broker yanlÄ±ÅŸ launcher Ã¼zerinden kaÃ§Ä±yor",
-                             "reproducer":  "test/private-shell-broker-guard.test.ts",
-                             "missingAcceptance":  "GerÃ§ek Windows focus deÄŸiÅŸimi, COM/ShellExecute/UAC ve 2-monitor soak"
-                         },
-                         {
-                             "pr":  "#537",
-                             "state":  "OPEN_DRAFT",
-                             "requirements":  [
-                                                  "R06",
-                                                  "R12",
-                                                  "R14"
-                                              ],
-                             "originalIncident":  "Public signed WSS; revoked device nonce tekrar kabulÃ¼",
-                             "reproducer":  "test/owner-public-wss-signed-enrollment-staging.test.ts",
-                             "missingAcceptance":  "Named Cloudflare tunnel, gerÃ§ek issuer/onboarding, 100 socket/600min/24h ve iki ISP"
-                         }
-                     ],
-    "independentReleaseApproval":  null
+  "schema": "nexowire.independent-qa.v1",
+  "capturedAt": "2026-10-18",
+  "baselineSha": "f43580cce2a786880fcb6a8036cfc01a7a1a2621",
+  "branch": "test/parallel-16-independent-qa-20261018",
+  "meaning": "PASS is evidence for that exact level only; absence of original incident retest blocks Final Acceptance.",
+  "requirements": [
+    {
+      "id": "R01",
+      "title": "Error attribution and correlation",
+      "source": "src/mcp/create-server.ts",
+      "test": "test/mcp-post-mutation-journal-failure.test.ts",
+      "negativeCase": "Classify lost ACK across provider/Hub/Agent; no invented cause",
+      "physicalGate": "Two-device Agent and Hub fault injection with correlation IDs",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R02",
+      "title": "Durable Agent operation journal",
+      "source": "src/agent/operation-journal.ts",
+      "test": "test/agent-operation-journal.test.ts",
+      "negativeCase": "Restart after reservation must not replay identical request ID",
+      "physicalGate": "Upgraded live Agents, crash/WAL/disk fault recovery",
+      "levels": {
+        "source": {
+          "status": "PASS",
+          "evidence": "CI https://github.com/Naveax/Nexowire/actions/runs/39116300377 sha 8bf7ce10972e78268e3cac945e833781b8d6846c; scope: existing source tests only"
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R03",
+      "title": "Hub and Agent reconciliation",
+      "source": "src/mcp/create-server.ts",
+      "test": "test/mcp-idempotency-continuity.test.ts",
+      "negativeCase": "Offline Agent and missing journal must not be treated as successful or never executed",
+      "physicalGate": "Hub to Agent recovery with original operation IDs",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R04",
+      "title": "FULL ROOT CORE and Broker authorization explain",
+      "source": "src/agent/native-agent.ts",
+      "test": "test/windows-console-grant.test.ts",
+      "negativeCase": "Missing grant or inactive broker must deny mutation",
+      "physicalGate": "Owner console physical approval, UAC and broker health",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R05",
+      "title": "Constrained filesystem and USB grants",
+      "source": "src/agent/path-policy.ts",
+      "test": "test/path-policy.test.ts",
+      "negativeCase": "PATH_DENIED cannot be bypassed by shell or WSL; reparse and sibling deny",
+      "physicalGate": "Physical USB Volume GUID hotplug and cross-user path tests",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R06",
+      "title": "Connection epoch and safe reconnect",
+      "source": "src/core/agent-broker.ts",
+      "test": "test/native-session-continuity.test.ts",
+      "negativeCase": "After UNAVAILABLE and late ACK no second mutation",
+      "physicalGate": "Two physical Windows Agents, off-network reconnect chaos",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R07",
+      "title": "Windows process child-tree ownership",
+      "source": "src/agent/process-manager.ts",
+      "test": "test/process-manager-tree-cleanup.test.ts",
+      "negativeCase": "Killed shell parent with live child must not be reported cleaned",
+      "physicalGate": "Job Object child containment and actual original orphan retest",
+      "levels": {
+        "source": {
+          "status": "FAIL",
+          "evidence": "main f43580cce2a786880fcb6a8036cfc01a7a1a2621: PR #543 only reports taskkill requested/unconfirmed; real Job Objects in open draft #559, not in main. Existing process-tree test 44/44 suite run on a54."
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R08",
+      "title": "Shell and WSL task exit status",
+      "source": "src/providers/agent-provider.ts",
+      "test": "test/agent-provider-task-outcome.test.ts",
+      "negativeCase": "ok true and exitCode 7 cannot imply taskSuccess true",
+      "physicalGate": "Real PowerShell CMD WSL exit, stderr and timeouts",
+      "levels": {
+        "source": {
+          "status": "PASS",
+          "evidence": "CI https://github.com/Naveax/Nexowire/actions/runs/39116300377 sha 8bf7ce10972e78268e3cac945e833781b8d6846c; scope: existing source tests only"
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R09",
+      "title": "Private GUI Broker and foreground focus",
+      "source": "src/agent/windows-accessibility.ts",
+      "test": "test/private-uia-mixed-owner-isolation.test.ts",
+      "negativeCase": "Different foreground HWND and grant must stop GUI input",
+      "physicalGate": "Actual owner Windows desktop, multimonitor and UAC conflict",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R10",
+      "title": "Git device and artifact SHA checkpoint",
+      "source": "src/agent/task-graph-store.ts",
+      "test": "test/task-artifacts.test.ts",
+      "negativeCase": "Corrupt artifact digest cannot count as success",
+      "physicalGate": "Two-device exact repository SHA and artifact manifest",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R11",
+      "title": "Reliability Doctor UI",
+      "source": "src/mcp/create-server.ts",
+      "test": "test/mcp-tool-authorization.test.ts",
+      "negativeCase": "Do not invent request origin or diagnostic stage",
+      "physicalGate": "Operator locates failed live request by correlation ID",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R12",
+      "title": "Scale sockets quotas and capacity",
+      "source": "src/mcp/create-server.ts",
+      "test": "test/owner-quota-local-capacity-benchmark.test.ts",
+      "negativeCase": "Local SQLite loops are not 24-hour production completed tool evidence",
+      "physicalGate": "100+ real WSS connections; 600/min; 850k/day completed tools; costs",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R13",
+      "title": "Upstream provider safety failure attribution",
+      "source": "src/providers/agent-provider.ts",
+      "test": "test/agent-provider-task-outcome.test.ts",
+      "negativeCase": "Provider rejection without tool delivery must not be labeled Agent rejection",
+      "physicalGate": "Independent client/provider/Agent receipts",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R14",
+      "title": "Codex OAuth and OIDC",
+      "source": "src/mcp/create-server.ts",
+      "test": "test/mcp-oauth.test.ts",
+      "negativeCase": "Wrong issuer audience scope or revoked session denies native dispatch",
+      "physicalGate": "Real Codex CLI and ChatGPT independent authenticated login",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R15",
+      "title": "Cross-chat artifact continuity",
+      "source": "src/agent/task-graph-store.ts",
+      "test": "test/task-artifacts.test.ts",
+      "negativeCase": "Missing or wrong-project artifact must not be reported available",
+      "physicalGate": "Authorized new conversation retrieval after two-device transfer",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R16",
+      "title": "Native Windows file picker UIA",
+      "source": "src/agent/windows-accessibility.ts",
+      "test": "test/private-uia-target-resolution.test.ts",
+      "negativeCase": "Wrong process/window, hidden or disabled control must fail closed",
+      "physicalGate": "Native Windows file picker with real focus shift",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R17",
+      "title": "Environment diagnostics",
+      "source": "src/agent/native-agent.ts",
+      "test": "test/wsl-detection.test.ts",
+      "negativeCase": "Missing CUDA or USB dependencies cannot produce physical PASS",
+      "physicalGate": "Windows Linux WSL CUDA USB gamepad hardware probes",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R18",
+      "title": "Progress supervisor watchdog",
+      "source": "src/agent/task-graph-store.ts",
+      "test": "test/task-artifacts.test.ts",
+      "negativeCase": "PID RUNNING without completed counter must not claim progress",
+      "physicalGate": "Original crypto bot stalled queue and verifiable result hashes",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R19",
+      "title": "Agent lifecycle and safe rollback",
+      "source": "src/agent/native-agent.ts",
+      "test": "test/machine-update-rollback-integrity.test.ts",
+      "negativeCase": "Wrong publisher hash or missing permissions deny update",
+      "physicalGate": "Actual two-device signed Agent upgrade and rollback",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R20",
+      "title": "CAS and idempotent append",
+      "source": "src/operations/idempotency-store.ts",
+      "test": "test/idempotency-journal-concurrency.test.ts",
+      "negativeCase": "After lost ACK same append must not occur twice",
+      "physicalGate": "Two-device concurrent writers and offset/hash races",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R21",
+      "title": "Physical hardware acceptance harness",
+      "source": "src/agent/native-agent.ts",
+      "test": "test/linux-native-agent-live.test.ts",
+      "negativeCase": "Synthetic USB/gamepad fixtures never count as real hardware",
+      "physicalGate": "Real USB VID/PID phone gamepad and VM behavior",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    },
+    {
+      "id": "R22",
+      "title": "Independent release and regression gates",
+      "source": ".github/workflows/ci.yml",
+      "test": "test/qa-final-acceptance-negative.test.ts",
+      "negativeCase": "CI green without deployed physical incident retest cannot mark final",
+      "physicalGate": "Independent reviewer and original project incident re-test evidence",
+      "levels": {
+        "source": {
+          "status": "NOT_TESTED",
+          "evidence": null
+        },
+        "staging": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "production": {
+          "status": "BLOCKED",
+          "evidence": null
+        },
+        "incident": {
+          "status": "BLOCKED",
+          "evidence": null
+        }
+      }
+    }
+  ],
+  "incidents": [
+    {
+      "name": "LG G3",
+      "incident": "LG Download Mode / LAF-driver hatasÃ„Â±",
+      "requirements": [
+        "R17",
+        "R21",
+        "R22"
+      ],
+      "physicalGate": "Device not present/driver mismatch ayrÃ„Â±mÃ„Â±; fiziksel telefonda bootloader kanÃ„Â±tÃ„Â±"
+    },
+    {
+      "name": "Debian/Win7",
+      "incident": "BÃƒÂ¶lÃƒÂ¼mleme dÃƒÂ¶ngÃƒÂ¼sÃƒÂ¼, aÃ„Å¸, WSL ve PS2 kurulum",
+      "requirements": [
+        "R05",
+        "R17",
+        "R21"
+      ],
+      "physicalGate": "GerÃƒÂ§ek VM/disk kimliÃ„Å¸i; mevcut Win7 HDD'ye dokunmama"
+    },
+    {
+      "name": "Syntavra",
+      "incident": "Eksik ortam ve ÃƒÂ§alÃ„Â±Ã…Å¸tÃ„Â±rma kabulÃƒÂ¼",
+      "requirements": [
+        "R17",
+        "R18",
+        "R22"
+      ],
+      "physicalGate": "Hedef donanÃ„Â±mda preflight ve gerÃƒÂ§ek output"
+    },
+    {
+      "name": "Roblox",
+      "incident": "AFK kesilmesi/rejoin ve GUI odaÃ„Å¸Ã„Â±",
+      "requirements": [
+        "R09",
+        "R16",
+        "R18"
+      ],
+      "physicalGate": "GerÃƒÂ§ek Roblox oturumunda kullanÃ„Â±cÃ„Â± onaylÃ„Â± UI test; ÃƒÂ¼ÃƒÂ§ÃƒÂ¼ncÃƒÂ¼ taraf kurallarÃ„Â± ayrÃ„Â±"
+    },
+    {
+      "name": "PSMatrix",
+      "incident": "Komut sonucu ve yetki farkÃ„Â±",
+      "requirements": [
+        "R01",
+        "R04",
+        "R08"
+      ],
+      "physicalGate": "GerÃƒÂ§ek Windows elevation/exit ve sonuÃƒÂ§"
+    },
+    {
+      "name": "NXB V11",
+      "incident": "A0 acceptance / yanlÃ„Â±Ã…Å¸ PASS ve tamamlanmayan iÃ…Å¸",
+      "requirements": [
+        "R01",
+        "R08",
+        "R18",
+        "R22"
+      ],
+      "physicalGate": "Orijinal v61+ evidence/harness, gerÃƒÂ§ek tamamlanma"
+    },
+    {
+      "name": "Catalog",
+      "incident": "Dosyalar/araÃƒÂ§lar arasÃ„Â±nda checkpoint kaybÃ„Â±",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "physicalGate": "Yeni sohbette doÃ„Å¸ru proje ve dosya SHA"
+    },
+    {
+      "name": "ReVoltVPN",
+      "incident": "AÃ„Å¸ kilitlenmesi/NetBridge etkileÃ…Å¸imi",
+      "requirements": [
+        "R06",
+        "R17",
+        "R22"
+      ],
+      "physicalGate": "Ã„Â°zolasyonlu gerÃƒÂ§ek network adapter deÃ„Å¸iÃ…Å¸imi; ÃƒÂ¼retim aÃ„Å¸Ã„Â±nÃ„Â± bozma"
+    },
+    {
+      "name": "GuardAdaptive",
+      "incident": "USB/gamepad fiziksel sapma ve test karÃ„Â±Ã…Å¸masÃ„Â±",
+      "requirements": [
+        "R05",
+        "R17",
+        "R21"
+      ],
+      "physicalGate": "Ã„Â°ki farklÃ„Â± fiziksel kontrolcÃƒÂ¼, gerÃƒÂ§ek stick deÃ„Å¸erleri"
+    },
+    {
+      "name": "Scale v2",
+      "incident": "Public WSS, quota fairness ve 24h yÃƒÂ¼ksek kapasite",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14",
+        "R22"
+      ],
+      "physicalGate": "AyrÃ„Â± iki fiziksel PC, gerÃƒÂ§ek OAuth, canlÃ„Â± traffic 24h+ maliyet"
+    },
+    {
+      "name": "Kripto botu",
+      "incident": "RUNNING ama sonuÃƒÂ§/model sayÃ„Â±sÃ„Â± ilerlemiyor",
+      "requirements": [
+        "R07",
+        "R18",
+        "R22"
+      ],
+      "physicalGate": "GerÃƒÂ§ek completed/pending counters; ÃƒÂ§Ã„Â±ktÃ„Â± hash; stuck alarm"
+    },
+    {
+      "name": "Search-Tool",
+      "incident": "Native Windows Win+S davranÃ„Â±Ã…Å¸Ã„Â± kayboluyor",
+      "requirements": [
+        "R04",
+        "R09",
+        "R16",
+        "R22"
+      ],
+      "physicalGate": "GerÃƒÂ§ek Windows 10/11 foreground/Search UI ve fallback"
+    }
+  ],
+  "pullRequests": [
+    {
+      "pr": "#538",
+      "state": "MERGED",
+      "requirements": [
+        "R01",
+        "R02",
+        "R03"
+      ],
+      "originalIncident": "Lost ACK, durable reservation, unknown state",
+      "reproducer": "test/agent-operation-journal.test.ts + test/mcp-post-mutation-journal-failure.test.ts",
+      "missingAcceptance": "Agent 1.0.5 canlÃ„Â± yÃƒÂ¼kseltilip iki cihaz crash/replay/Hub kabulÃƒÂ¼ yapÃ„Â±lmadÃ„Â±"
+    },
+    {
+      "pr": "#542",
+      "state": "MERGED",
+      "requirements": [
+        "R08"
+      ],
+      "originalIncident": "ok:true + exitCode:7 yanlÃ„Â±Ã…Å¸ gÃƒÂ¶rev PASS",
+      "reproducer": "test/agent-provider-task-outcome.test.ts",
+      "missingAcceptance": "CanlÃ„Â± Agent/WSL/PowerShell/CMD negatif exit acceptance ve tÃƒÂ¼ketici postcondition"
+    },
+    {
+      "pr": "#543",
+      "state": "MERGED",
+      "requirements": [
+        "R07"
+      ],
+      "originalIncident": "Root ÃƒÂ¶ldÃƒÂ¼Ã„Å¸ÃƒÂ¼nde child canlÃ„Â±; ÃƒÂ¶nceki taskkill sonucu kanÃ„Â±tsÃ„Â±z",
+      "reproducer": "test/process-manager-tree-cleanup.test.ts",
+      "missingAcceptance": "Windows Job Objects ve kalÃ„Â±cÃ„Â± descendant containment yok"
+    },
+    {
+      "pr": "#480",
+      "state": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "originalIncident": "Private-desktop broker yanlÃ„Â±Ã…Å¸ launcher ÃƒÂ¼zerinden kaÃƒÂ§Ã„Â±yor",
+      "reproducer": "test/private-shell-broker-guard.test.ts",
+      "missingAcceptance": "GerÃƒÂ§ek Windows focus deÃ„Å¸iÃ…Å¸imi, COM/ShellExecute/UAC ve 2-monitor soak"
+    },
+    {
+      "pr": "#537",
+      "state": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14"
+      ],
+      "originalIncident": "Public signed WSS; revoked device nonce tekrar kabulÃƒÂ¼",
+      "reproducer": "test/owner-public-wss-signed-enrollment-staging.test.ts",
+      "missingAcceptance": "Named Cloudflare tunnel, gerÃƒÂ§ek issuer/onboarding, 100 socket/600min/24h ve iki ISP"
+    }
+  ],
+  "independentReleaseApproval": null
 }

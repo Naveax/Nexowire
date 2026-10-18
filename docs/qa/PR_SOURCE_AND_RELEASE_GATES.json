@@ -23,7 +23,7 @@
     {
       "pr": 537,
       "headSha": "7a79b97267aead35aa00b2be22eb990a4c1767d8",
-      "prState": "OPEN_DRAFT",
+      "prState": "MERGED",
       "requirements": [
         "R06",
         "R12",
@@ -260,7 +260,7 @@
     {
       "pr": 554,
       "headSha": "5c4b79e77d391ddc839b6ebbb6ecc52395e0458d",
-      "prState": "OPEN_DRAFT",
+      "prState": "MERGED",
       "requirements": [
         "R12"
       ],
@@ -313,7 +313,7 @@
     {
       "pr": 557,
       "headSha": "073e0246ed8897a472d705dd7784cbd440d30252",
-      "prState": "OPEN_DRAFT",
+      "prState": "MERGED",
       "requirements": [
         "R12",
         "R22"

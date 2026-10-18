@@ -66,7 +66,7 @@ test('negative: a merged PR with no production or original incident evidence can
  assert.equal(releasePass(fake),false);
 });
 
-test('negative: four fabricated PASS strings cannot replace signed independent approval',()=>{
+test('negative: four fabricated PASS strings cannot replace independent approval',()=>{
  const fake=deepClone(manifest.requirements);
  for(const rec of fake)for(const level of stages){
   rec.levels[level]={status:'PASS',evidence:'claimed acceptance without verified physical receipt'};

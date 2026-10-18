@@ -1,6 +1,6 @@
 # Cross-project independent QA acceptance | 18 October 2026
 
-Independent read-only audit baseline: `a54cbbdd37e981a169631d688b53c7e3b3e90f48`. Worktree: `test/parallel-16-independent-qa-20261018`.
+Independent read-only audit baseline: `f43580cce2a786880fcb6a8036cfc01a7a1a2621` (after clean QA-only rebase). Worktree: `test/parallel-16-independent-qa-20261018`.
 This is a **gate and fault-injection ledger**, not a product-fix declaration.
 
 ## PASS semantics
@@ -48,7 +48,7 @@ All 12 historic project classes are mapped to individual requirements in the mac
 
 ## New independently checked PR intake | 20 entries
 
-The machine-readable `PR_SOURCE_AND_RELEASE_GATES.json` now records 20 known PRs (#480, #537, #538, #542, #543 and #545-#559). Each is tied to an exact source SHA, repro test and missing *physical* acceptance. This is a dated snapshot, not an ongoing live poll.
+The machine-readable `PR_SOURCE_AND_RELEASE_GATES.json` now records 20 known PRs (#480, #537, #538, #542, #543 and #545-#559); #537, #554 and #557 were merged while independent QA was running and remain production/incident BLOCKED. Each is tied to an exact source SHA, repro test and missing *physical* acceptance. This is a dated snapshot, not an ongoing live poll.
 
 **Blocking exact-head CI regressions:**
 
@@ -60,3 +60,5 @@ The machine-readable `PR_SOURCE_AND_RELEASE_GATES.json` now records 20 known PRs
 **Independent Windows source regression:** existing eight scoped suites `process-manager-tree-cleanup`, `agent-operation-journal`, `agent-provider-task-outcome`, `mcp-post-mutation-journal-failure`, `path-policy`, `private-uia-mixed-owner-isolation`, `mcp-oauth`, `task-artifacts` passed **44/44** against `a54cbbd` before the latest integration merge. Newly authored QA negative files passed **15/15** plus later approval-only gate 8/8 on the isolated Windows worktree, with typecheck/build/continuation PASS. CI after rebasing must validate again.
 
 **Integrity limitation:** this draft gate validates status/evidence structure; an `independentReleaseApproval` object alone is **not** a cryptographically verified signature or production attestation. Source test assertions cannot autonomously establish trusted reviewer identity, external ISP, physical hardware or historical incident closure. Such evidence must be verified out-of-band before release.
+
+Latest QA source baseline: 43580cce2a786880fcb6a8036cfc01a7a1a2621. The independent 20-test suite must be rerun on this rebased tree; source tests executed previously at 54cbbd remain evidence tied to that older SHA only.
