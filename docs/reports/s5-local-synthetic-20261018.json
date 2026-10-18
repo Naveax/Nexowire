@@ -1,0 +1,638 @@
+{
+  "schema": "nexowire-s5-local-synthetic-v1",
+  "observedAtUtc": "2026-10-18T14:20:03.930Z",
+  "sourceSha": "ec5248d5998b66faf7429e116f94c3d26bcd5841",
+  "host": {
+    "platform": "win32",
+    "release": "10.0.19045",
+    "cpu": "AMD Ryzen 5 2600X Six-Core Processor           ",
+    "logicalCores": 12,
+    "totalMemoryBytes": 17101815808,
+    "node": "v24.15.0"
+  },
+  "resultKind": "MEASURED_LOCAL_WS_SOCKETS_AND_OWNER_SQLITE_RESERVATIONS",
+  "providerCountersMeasured": false,
+  "tlsMeasured": false,
+  "mcpMeasured": false,
+  "nativeCompletionMeasured": false,
+  "stagingAuthorized": false,
+  "soak24hElapsed": false,
+  "productionAccepted": false,
+  "results": [
+    {
+      "kind": "SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE",
+      "clients": 16,
+      "mode": "isolated",
+      "callsPerClient": 2,
+      "sockets": {
+        "connected": 16,
+        "peak": 16,
+        "closed": 0
+      },
+      "rpc": {
+        "attempted": 40,
+        "reserved": 32,
+        "duplicate": 8,
+        "rateLimited": 0,
+        "backpressure": 0,
+        "other": 0,
+        "peakInFlight": 8,
+        "peakQueue": 8,
+        "perSecond": 88.53
+      },
+      "latencyMs": {
+        "p50": 64.855,
+        "p95": 117.535,
+        "p99": 117.742,
+        "max": 117.742
+      },
+      "cpuMs": {
+        "user": 78,
+        "system": 47
+      },
+      "memoryBytes": {
+        "rssStart": 57036800,
+        "rssPeak": 62869504,
+        "rssEnd": 62918656
+      },
+      "ioBytes": {
+        "sqlite": 4096,
+        "wal": 1479112,
+        "received": 1972,
+        "sent": 2128
+      },
+      "fairness": {
+        "jainIndex": 1,
+        "minUserSuccess": 2,
+        "maxUserSuccess": 2
+      },
+      "ledger": {
+        "rows": 32,
+        "dailyUsed": 32,
+        "toolExecutions": 0
+      },
+      "elapsedMs": 361.47,
+      "constraints": [
+        "loopback ws:// ONLY, not wss://, provider/Cloudflare or real MCP",
+        "synthetic bearer verifier and static UTC clock, not OAuth or customer identity",
+        "single event-loop SQLite writer; parallel network arrivals, NOT multi-process DB writes",
+        "reservation is not tool execution; physical success=0; 24h soak NOT RUN"
+      ]
+    },
+    {
+      "kind": "SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE",
+      "clients": 32,
+      "mode": "isolated",
+      "callsPerClient": 2,
+      "sockets": {
+        "connected": 32,
+        "peak": 32,
+        "closed": 0
+      },
+      "rpc": {
+        "attempted": 72,
+        "reserved": 64,
+        "duplicate": 8,
+        "rateLimited": 0,
+        "backpressure": 0,
+        "other": 0,
+        "peakInFlight": 8,
+        "peakQueue": 24,
+        "perSecond": 38.34
+      },
+      "latencyMs": {
+        "p50": 338.78,
+        "p95": 541.928,
+        "p99": 542.159,
+        "max": 542.159
+      },
+      "cpuMs": {
+        "user": 94,
+        "system": 78
+      },
+      "memoryBytes": {
+        "rssStart": 61870080,
+        "rssPeak": 66813952,
+        "rssEnd": 66834432
+      },
+      "ioBytes": {
+        "sqlite": 4096,
+        "wal": 2739832,
+        "received": 3572,
+        "sent": 3824
+      },
+      "fairness": {
+        "jainIndex": 1,
+        "minUserSuccess": 2,
+        "maxUserSuccess": 2
+      },
+      "ledger": {
+        "rows": 64,
+        "dailyUsed": 64,
+        "toolExecutions": 0
+      },
+      "elapsedMs": 1669.17,
+      "constraints": [
+        "loopback ws:// ONLY, not wss://, provider/Cloudflare or real MCP",
+        "synthetic bearer verifier and static UTC clock, not OAuth or customer identity",
+        "single event-loop SQLite writer; parallel network arrivals, NOT multi-process DB writes",
+        "reservation is not tool execution; physical success=0; 24h soak NOT RUN"
+      ]
+    },
+    {
+      "kind": "SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE",
+      "clients": 64,
+      "mode": "isolated",
+      "callsPerClient": 2,
+      "sockets": {
+        "connected": 64,
+        "peak": 64,
+        "closed": 0
+      },
+      "rpc": {
+        "attempted": 136,
+        "reserved": 128,
+        "duplicate": 8,
+        "rateLimited": 0,
+        "backpressure": 0,
+        "other": 0,
+        "peakInFlight": 8,
+        "peakQueue": 24,
+        "perSecond": 29.83
+      },
+      "latencyMs": {
+        "p50": 491.55,
+        "p95": 1103.948,
+        "p99": 1104.188,
+        "max": 1104.194
+      },
+      "cpuMs": {
+        "user": 125,
+        "system": 188
+      },
+      "memoryBytes": {
+        "rssStart": 64987136,
+        "rssPeak": 69521408,
+        "rssEnd": 69013504
+      },
+      "ioBytes": {
+        "sqlite": 94208,
+        "wal": 4128272,
+        "received": 6772,
+        "sent": 7216
+      },
+      "fairness": {
+        "jainIndex": 1,
+        "minUserSuccess": 2,
+        "maxUserSuccess": 2
+      },
+      "ledger": {
+        "rows": 128,
+        "dailyUsed": 128,
+        "toolExecutions": 0
+      },
+      "elapsedMs": 4290.62,
+      "constraints": [
+        "loopback ws:// ONLY, not wss://, provider/Cloudflare or real MCP",
+        "synthetic bearer verifier and static UTC clock, not OAuth or customer identity",
+        "single event-loop SQLite writer; parallel network arrivals, NOT multi-process DB writes",
+        "reservation is not tool execution; physical success=0; 24h soak NOT RUN"
+      ]
+    },
+    {
+      "kind": "SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE",
+      "clients": 100,
+      "mode": "isolated",
+      "callsPerClient": 2,
+      "sockets": {
+        "connected": 100,
+        "peak": 100,
+        "closed": 64
+      },
+      "rpc": {
+        "attempted": 208,
+        "reserved": 200,
+        "duplicate": 8,
+        "rateLimited": 0,
+        "backpressure": 0,
+        "other": 0,
+        "peakInFlight": 8,
+        "peakQueue": 24,
+        "perSecond": 36.06
+      },
+      "latencyMs": {
+        "p50": 337.471,
+        "p95": 571.428,
+        "p99": 610.757,
+        "max": 610.877
+      },
+      "cpuMs": {
+        "user": 172,
+        "system": 125
+      },
+      "memoryBytes": {
+        "rssStart": 66863104,
+        "rssPeak": 66863104,
+        "rssEnd": 62431232
+      },
+      "ioBytes": {
+        "sqlite": 167936,
+        "wal": 4140632,
+        "received": 10372,
+        "sent": 11032
+      },
+      "fairness": {
+        "jainIndex": 1,
+        "minUserSuccess": 2,
+        "maxUserSuccess": 2
+      },
+      "ledger": {
+        "rows": 200,
+        "dailyUsed": 200,
+        "toolExecutions": 0
+      },
+      "elapsedMs": 5545.78,
+      "constraints": [
+        "loopback ws:// ONLY, not wss://, provider/Cloudflare or real MCP",
+        "synthetic bearer verifier and static UTC clock, not OAuth or customer identity",
+        "single event-loop SQLite writer; parallel network arrivals, NOT multi-process DB writes",
+        "reservation is not tool execution; physical success=0; 24h soak NOT RUN"
+      ]
+    },
+    {
+      "kind": "SYNTHETIC_LOOPBACK_WS_OWNER_SQLITE",
+      "clients": 256,
+      "mode": "isolated",
+      "callsPerClient": 2,
+      "sockets": {
+        "connected": 256,
+        "peak": 256,
+        "closed": 192
+      },
+      "rpc": {
+        "attempted": 520,
+        "reserved": 512,
+        "duplicate": 8,
+        "rateLimited": 0,
+        "backpressure": 0,
+        "other": 0,
+        "peakInFlight": 8,
+        "peakQueue": 24,
+        "perSecond": 30.82
+      },
+      "latencyMs": {
+        "p50": 566.73,
+        "p95": 843.108,
+        "p99": 887.978,
+        "max": 888.315
+      },
+      "cpuMs": {
+        "user": 375,
+        "system": 422
+      },
+      "memoryBytes": {
+        "rssStart": 62046208,
+        "rssPeak": 77225984,
+        "rssEnd": 71880704
+      },
+      "ioBytes": {
+        "sqlite": 327680,
+        "wal": 4132392,
+        "received": 26284,
+        "sent": 27568
+      },
+      "fairness": {
+        "jainIndex": 1,
+        "minUserSuccess": 2,
+        "maxUserSuccess": 2
+      },
+      "ledger": {
+        "rows": 512,
+        "dailyUsed": 512,
+        "toolExecutions": 0
+      },
+      "elapsedMs": 16614.29,
+      "constraints": [
+        "loopback ws:// ONLY, not wss://, provider/Cloudflare or real MCP",
+        "synthetic bearer verifier and static UTC clock, not OAuth or customer identity",
+        "single event-loop SQLite writer; parallel network arrivals, NOT multi-process DB writes",
+        "reservation is not tool execution; physical success=0; 24h soak NOT RUN"
+      ]
+    }
+  ],
+  "costModel": {
+    "classification": "ASSUMPTIONS_ONLY_NOT_OBSERVED_BILL",
+    "matrix": [
+      {
+        "label": "100 users / mixed utilization",
+        "classification": "OFFLINE_PROJECTION_NOT_PROVIDER_METER",
+        "daily": {
+          "logicalCalls": "20500",
+          "workerRequests": "43575",
+          "d1RowsRead": "82000",
+          "d1RowsWritten": "41000",
+          "wsUpgrades": "100",
+          "relayGiBApprox": 0.0587
+        },
+        "monthly": {
+          "workerRequests": "1307250",
+          "d1RowsRead": "2460000",
+          "d1RowsWritten": "1230000",
+          "workerCpuMs": "1307250"
+        },
+        "freeEnvelope": {
+          "workerRequestHeadroom": "56425",
+          "d1ReadHeadroom": "4918000",
+          "d1WriteHeadroom": "59000",
+          "numericThresholdsFit": true,
+          "zeroExtraInvoiceProven": false,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "paidPartialUsd": {
+          "workersAndCpu": 5,
+          "d1Rows": 0,
+          "minimumPlanBaseIncluded": true,
+          "totalExcludingUnknown": 5,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "assumptions": {
+          "activeUsers": 100,
+          "callsPerUserDaily": 205,
+          "workerRequestsPerCall": 2,
+          "controlRequestsPerUserDaily": 4,
+          "d1ReadsPerCall": 4,
+          "d1WritesPerCall": 2,
+          "reconnectionsPerUserDaily": 1,
+          "connectionsPerUser": 1,
+          "retryBasisPoints": 500,
+          "days": 30,
+          "workerCpuMsPerRequest": 1,
+          "relayBytesPerCall": 10240,
+          "relayFractionBasisPoints": 3000
+        }
+      },
+      {
+        "label": "1000 users / mixed utilization",
+        "classification": "OFFLINE_PROJECTION_NOT_PROVIDER_METER",
+        "daily": {
+          "logicalCalls": "205000",
+          "workerRequests": "435750",
+          "d1RowsRead": "820000",
+          "d1RowsWritten": "410000",
+          "wsUpgrades": "1000",
+          "relayGiBApprox": 0.5865
+        },
+        "monthly": {
+          "workerRequests": "13072500",
+          "d1RowsRead": "24600000",
+          "d1RowsWritten": "12300000",
+          "workerCpuMs": "13072500"
+        },
+        "freeEnvelope": {
+          "workerRequestHeadroom": "-335750",
+          "d1ReadHeadroom": "4180000",
+          "d1WriteHeadroom": "-310000",
+          "numericThresholdsFit": false,
+          "zeroExtraInvoiceProven": false,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "paidPartialUsd": {
+          "workersAndCpu": 5.92,
+          "d1Rows": 0,
+          "minimumPlanBaseIncluded": true,
+          "totalExcludingUnknown": 5.92,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "assumptions": {
+          "activeUsers": 1000,
+          "callsPerUserDaily": 205,
+          "workerRequestsPerCall": 2,
+          "controlRequestsPerUserDaily": 4,
+          "d1ReadsPerCall": 4,
+          "d1WritesPerCall": 2,
+          "reconnectionsPerUserDaily": 1,
+          "connectionsPerUser": 1,
+          "retryBasisPoints": 500,
+          "days": 30,
+          "workerCpuMsPerRequest": 1,
+          "relayBytesPerCall": 10240,
+          "relayFractionBasisPoints": 3000
+        }
+      },
+      {
+        "label": "10000 users / mixed utilization",
+        "classification": "OFFLINE_PROJECTION_NOT_PROVIDER_METER",
+        "daily": {
+          "logicalCalls": "2050000",
+          "workerRequests": "4357500",
+          "d1RowsRead": "8200000",
+          "d1RowsWritten": "4100000",
+          "wsUpgrades": "10000",
+          "relayGiBApprox": 5.8651
+        },
+        "monthly": {
+          "workerRequests": "130725000",
+          "d1RowsRead": "246000000",
+          "d1RowsWritten": "123000000",
+          "workerCpuMs": "130725000"
+        },
+        "freeEnvelope": {
+          "workerRequestHeadroom": "-4257500",
+          "d1ReadHeadroom": "-3200000",
+          "d1WriteHeadroom": "-4000000",
+          "numericThresholdsFit": false,
+          "zeroExtraInvoiceProven": false,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "paidPartialUsd": {
+          "workersAndCpu": 43.23,
+          "d1Rows": 73,
+          "minimumPlanBaseIncluded": true,
+          "totalExcludingUnknown": 116.23,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "assumptions": {
+          "activeUsers": 10000,
+          "callsPerUserDaily": 205,
+          "workerRequestsPerCall": 2,
+          "controlRequestsPerUserDaily": 4,
+          "d1ReadsPerCall": 4,
+          "d1WritesPerCall": 2,
+          "reconnectionsPerUserDaily": 1,
+          "connectionsPerUser": 1,
+          "retryBasisPoints": 500,
+          "days": 30,
+          "workerCpuMsPerRequest": 1,
+          "relayBytesPerCall": 10240,
+          "relayFractionBasisPoints": 3000
+        }
+      },
+      {
+        "label": "100 users / future Free full usage",
+        "classification": "OFFLINE_PROJECTION_NOT_PROVIDER_METER",
+        "daily": {
+          "logicalCalls": "100000",
+          "workerRequests": "210525",
+          "d1RowsRead": "400000",
+          "d1RowsWritten": "200000",
+          "wsUpgrades": "100",
+          "relayGiBApprox": 0.2861
+        },
+        "monthly": {
+          "workerRequests": "6315750",
+          "d1RowsRead": "12000000",
+          "d1RowsWritten": "6000000",
+          "workerCpuMs": "6315750"
+        },
+        "freeEnvelope": {
+          "workerRequestHeadroom": "-110525",
+          "d1ReadHeadroom": "4600000",
+          "d1WriteHeadroom": "-100000",
+          "numericThresholdsFit": false,
+          "zeroExtraInvoiceProven": false,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "paidPartialUsd": {
+          "workersAndCpu": 5,
+          "d1Rows": 0,
+          "minimumPlanBaseIncluded": true,
+          "totalExcludingUnknown": 5,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "assumptions": {
+          "activeUsers": 100,
+          "callsPerUserDaily": 1000,
+          "workerRequestsPerCall": 2,
+          "controlRequestsPerUserDaily": 4,
+          "d1ReadsPerCall": 4,
+          "d1WritesPerCall": 2,
+          "reconnectionsPerUserDaily": 1,
+          "connectionsPerUser": 1,
+          "retryBasisPoints": 500,
+          "days": 30,
+          "workerCpuMsPerRequest": 1,
+          "relayBytesPerCall": 10240,
+          "relayFractionBasisPoints": 3000
+        }
+      },
+      {
+        "label": "1 Custom 850k per day",
+        "classification": "OFFLINE_PROJECTION_NOT_PROVIDER_METER",
+        "daily": {
+          "logicalCalls": "850000",
+          "workerRequests": "1785006",
+          "d1RowsRead": "3400000",
+          "d1RowsWritten": "1700000",
+          "wsUpgrades": "1",
+          "relayGiBApprox": 2.4319
+        },
+        "monthly": {
+          "workerRequests": "53550180",
+          "d1RowsRead": "102000000",
+          "d1RowsWritten": "51000000",
+          "workerCpuMs": "53550180"
+        },
+        "freeEnvelope": {
+          "workerRequestHeadroom": "-1685006",
+          "d1ReadHeadroom": "1600000",
+          "d1WriteHeadroom": "-1600000",
+          "numericThresholdsFit": false,
+          "zeroExtraInvoiceProven": false,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "paidPartialUsd": {
+          "workersAndCpu": 18.54,
+          "d1Rows": 1,
+          "minimumPlanBaseIncluded": true,
+          "totalExcludingUnknown": 19.54,
+          "excludedFactors": [
+            "Cloudflare Durable Objects: WebSocket messages, hibernation eligibility, duration",
+            "Additional paid Cloudflare features, custom tunnels, Argo, domain, taxes",
+            "D1/WSS/relay disk and operator network bandwidth where separately charged",
+            "D1 database storage, logs, egress contracts and other provider/ISP bills",
+            "OpenAI ingress / Secure MCP Tunnel / paid models and upstream fair-use rules",
+            "Real worker CPU timing, traffic class mix, retry rates and per-call D1 metadata"
+          ]
+        },
+        "assumptions": {
+          "activeUsers": 1,
+          "callsPerUserDaily": 850000,
+          "workerRequestsPerCall": 2,
+          "controlRequestsPerUserDaily": 4,
+          "d1ReadsPerCall": 4,
+          "d1WritesPerCall": 2,
+          "reconnectionsPerUserDaily": 1,
+          "connectionsPerUser": 1,
+          "retryBasisPoints": 500,
+          "days": 30,
+          "workerCpuMsPerRequest": 1,
+          "relayBytesPerCall": 10240,
+          "relayFractionBasisPoints": 3000
+        }
+      }
+    ]
+  }
+}
