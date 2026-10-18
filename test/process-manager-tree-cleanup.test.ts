@@ -69,7 +69,7 @@ test('Windows process.stop exposes bounded tree termination evidence and checks 
   }
 });
 
-test('Windows exited root does NOT certify descendants after lost shell PID', {
+test('Windows Job owner reaps descendants after the root PID is deliberately lost', {
   skip:process.platform!=='win32',
   timeout:23_000,
 },async()=>{
@@ -88,18 +88,32 @@ test('Windows exited root does NOT certify descendants after lost shell PID', {
     }
     assert.equal(descendants.length,1,'expected one own synthetic child');
     assert.ok(Number.isSafeInteger(started.pid) && Number(started.pid)>0);
-    // Recreate the earlier physical failure: only the shell root exits,
-    // while its tracked Node child inherits handles and keeps running.
+    // Verify the shell PID's Win32 creation time before touching this
+    // specifically owned test root. PID alone is reusable.
+    assert.equal(started.treeOwnership,'windows_job');
+    const rootProof=execFileSync('powershell.exe',[
+      '-NoProfile','-NonInteractive','-Command',
+      "$p=Get-CimInstance Win32_Process -Filter 'ProcessId="+String(started.pid)+"'; if($p){$p.CreationDate.ToUniversalTime().ToFileTimeUtc()}"
+    ],{encoding:'utf8',windowsHide:true,timeout:9000}).trim();
+    assert.ok(rootProof && Math.abs(Number(rootProof)-Number(started.processCreationFiletime))<10_000_000,
+      'native Job creation timestamp must identify this exact test process');
+    // Deliberately terminate only the confirmed synthetic shell root.
     const killed=spawnSync('taskkill.exe',['/PID',String(started.pid),'/F'],{
       windowsHide:true,stdio:'ignore',timeout:5000,
     });
     assert.equal(killed.status,0,'fixture root should be killed without /T');
     const result=await manager.stop({session_id:started.sessionId});
     const cleanup='treeCleanup' in result?result.treeCleanup:undefined;
-    assert.equal(cleanup,'unconfirmed',
-      'a missing root process may have live descendants; never report success');
-    assert.equal(findExactFixture(marker).length,1,
-      'owned child survives absent-root cleanup, verifying why result is uncertain');
+    assert.equal(cleanup,'requested',
+      'native Job guardian accepts cleanup despite missing root');
+    let lingering:RunningChild[]=[];
+    for(let i=0;i<15;i++){
+      lingering=findExactFixture(marker);
+      if(!lingering.length)break;
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    assert.deepEqual(lingering,[],
+      'Job handle closure must reap descendants when original parent is gone');
   }finally{
     // Test owns a unique marker + exact PID/creation timestamp; no broad
     // process termination and no mutation of real user applications.
