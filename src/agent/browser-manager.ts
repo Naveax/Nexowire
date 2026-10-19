@@ -6,6 +6,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import WebSocket from 'ws';
 import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
 import {resolveAiWorkspaceTarget} from './ai-workspace-default.js';
+import {isVerifiedOwnedBrowserProcess,removeOwnedBrowserProfile,type BrowserOwnedProcessEvidence} from './browser-session-cleanup.js';
 
 export type BrowserKind = 'edge' | 'chrome';
 
@@ -562,6 +563,64 @@ export async function browserCapabilitiesAvailable(
   return (await detectBrowserExecutable('auto', options)) !== undefined;
 }
 
+
+async function readWindowsBrowserProcess(
+  pid:number,
+):Promise<BrowserOwnedProcessEvidence|null>{
+  if(!Number.isSafeInteger(pid)||pid<=0)
+    throw new BrowserControlError('BROWSER_PROCESS_OWNERSHIP_UNKNOWN',
+      'Invalid browser process ID.');
+  // Read-only CIM query. No process name wildcard or broad taskkill.
+  const script='$ErrorActionPreference="Stop";'+
+    '$p=Get-CimInstance Win32_Process -Filter "ProcessId = '+pid+'";'+
+    'if($null -eq $p){"null"}else{'+
+    '[pscustomobject]@{pid=[int]$p.ProcessId;'+
+    'executablePath=[string]$p.ExecutablePath;'+
+    'commandLine=[string]$p.CommandLine}|ConvertTo-Json -Compress}';
+  return await new Promise<BrowserOwnedProcessEvidence|null>((resolve,reject)=>{
+    const child=spawn('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ['-NoProfile','-NonInteractive','-Command',script],
+      {windowsHide:true,stdio:['ignore','pipe','pipe']});
+    let stdout='',stderr='',settled=false;
+    const settle=(error?:Error,value?:BrowserOwnedProcessEvidence|null)=>{
+      if(settled)return;settled=true;clearTimeout(timer);
+      if(error)reject(error);else resolve(value??null);
+    };
+    const timer=setTimeout(()=>{
+      child.kill();
+      settle(new BrowserControlError('BROWSER_PROCESS_OWNERSHIP_UNKNOWN',
+        'Windows browser PID ownership probe timed out.',{pid}));
+    },12000);
+    child.stdout?.on('data',(data:Buffer)=>{
+      stdout+=data.toString('utf8').slice(0,8192);
+    });
+    child.stderr?.on('data',(data:Buffer)=>{
+      stderr+=data.toString('utf8').slice(0,4096);
+    });
+    child.once('error',error=>settle(error));
+    child.once('close',status=>{
+      if(status!==0){settle(new BrowserControlError(
+        'BROWSER_PROCESS_OWNERSHIP_UNKNOWN',
+        'Windows browser ownership inspection failed.',
+        {pid,exitCode:status}));return;}
+      try{
+        const parsed:unknown=JSON.parse(stdout.trim());
+        if(parsed===null){settle(undefined,null);return;}
+        if(!parsed||typeof parsed!=='object')throw new Error('CIM returned no process.');
+        const p=parsed as Record<string,unknown>;
+        if(typeof p.pid!=='number'||typeof p.executablePath!=='string'||
+           typeof p.commandLine!=='string')
+          throw new Error('CIM missing executable/command-line identity.');
+        settle(undefined,{pid:p.pid,executablePath:p.executablePath,
+          commandLine:p.commandLine});
+      }catch{
+        settle(new BrowserControlError('BROWSER_PROCESS_OWNERSHIP_UNKNOWN',
+          'Windows browser process identity response was invalid.',{pid}));
+      }
+    });
+  });
+}
+
 export class BrowserManager {
   private readonly sessions = new Map<string, BrowserSession>();
   private readonly rootDir: string;
@@ -684,11 +743,18 @@ export class BrowserManager {
         initialUrl,
       };
     } catch (error) {
-      if(child)await this.terminate(child);
-      await fs.rm(userDataDir, {
-        recursive: true,
-        force: true,
-      });
+      // Startup never reached a verified session. Keep the original
+      // failure as cause but fail loudly if its owned browser/process or
+      // locked profile cannot be cleaned up.
+      try{
+        if(child)await this.terminate(child,{executable:resolved.executable,
+          userDataDir,privateDesktop:uiTarget==='private_desktop'});
+        await removeOwnedBrowserProfile(this.rootDir,userDataDir);
+      }catch(cleanupError){
+        throw new BrowserControlError('BROWSER_START_CLEANUP_FAILED',
+          'Browser launch failed and session cleanup could not be verified.',
+          {startupError:String(error),cleanupError:String(cleanupError)});
+      }
       throw error;
     }
   }
@@ -712,30 +778,23 @@ export class BrowserManager {
     const session = this.requireSession(sessionId);
     const wasRunning =
       session.status === 'running' && isAlive(session.process);
-    if (wasRunning) await this.terminate(session.process);
-    session.status = 'exited';
-    session.exitCode = session.process.exitCode;
+    if(wasRunning)await this.terminate(session.process,{
+      executable:session.executable,userDataDir:session.userDataDir,
+      privateDesktop:session.uiTarget==='private_desktop',
+    });
+    session.status='exited';
+    session.exitCode=session.process.exitCode;
+    // Keep the session/ownership binding on failure. Never report stopped
+    // while a Windows Edge lockfile is still held by an unverified process.
+    await removeOwnedBrowserProfile(this.rootDir,session.userDataDir);
     this.sessions.delete(sessionId);
-
-    let removedProfile = false;
-    try {
-      await fs.rm(session.userDataDir, {
-        recursive: true,
-        force: true,
-        maxRetries: 4,
-        retryDelay: 100,
-      });
-      removedProfile = true;
-    } catch {
-      // Browser shutdown can briefly leave Windows profile files locked.
-    }
-    return { sessionId, stopped: wasRunning, removedProfile };
+    return {sessionId,stopped:wasRunning,removedProfile:true};
   }
 
   async stopAll(): Promise<void> {
-    await Promise.allSettled(
-      [...this.sessions.keys()].map((id) => this.stop(id)),
-    );
+    // A failed stop/profile unlink is an acceptance failure, not a
+    // successfully completed best-effort cleanup.
+    await Promise.all([...this.sessions.keys()].map(id=>this.stop(id)));
   }
 
   async tabs(sessionId: string) {
@@ -1842,33 +1901,61 @@ export class BrowserManager {
     );
   }
 
-  private async terminate(child: BrowserProcess): Promise<void> {
-    if (!child.pid || !isAlive(child)) return;
-
-    if (this.platform === 'win32') {
-      await new Promise<void>((resolve) => {
-        const killer = spawn(
-          'taskkill.exe',
-          ['/PID', String(child.pid), '/T', '/F'],
-          {
-            windowsHide: true,
-            stdio: 'ignore',
-          },
-        );
-        const timer = setTimeout(() => {
+  private async terminate(child: BrowserProcess,owner:{
+    executable:string;userDataDir:string;privateDesktop:boolean;
+  }): Promise<void>{
+    if(!child.pid||!isAlive(child))return;
+    if(this.platform==='win32'){
+      if(owner.privateDesktop){
+        const status=await executeWindowsPrivateDesktopCapability(
+          'windows.private_desktop.status',{}) as{
+            data:{running?:boolean;launchedPids?:number[]};
+          };
+        if(!status.data.running||!status.data.launchedPids?.includes(child.pid))
+          throw new BrowserControlError('BROWSER_PROCESS_OWNERSHIP_UNKNOWN',
+            'Private browser PID is not owned by active NexowirePrivate desktop.');
+      }else{
+        // PID alone is not an ownership grant. Confirm executable and the
+        // unique session profile flag on the native Windows process.
+        const evidence=await readWindowsBrowserProcess(child.pid);
+        if(!evidence)return; // Process already exited; only clean own profile.
+        if(!isVerifiedOwnedBrowserProcess(evidence,child.pid,owner.executable,
+          owner.userDataDir))
+          throw new BrowserControlError('BROWSER_PROCESS_OWNERSHIP_UNKNOWN',
+            'Browser PID/profile/executable mismatch; refusing to kill a possibly foreign process.',
+            {pid:child.pid});
+      }
+      const pid=child.pid;
+      const code=await new Promise<number>((resolve,reject)=>{
+        const killer=spawn('C:\\Windows\\System32\\taskkill.exe',
+          ['/PID',String(pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
+        const timer=setTimeout(()=>{
           killer.kill();
-          resolve();
-        }, 5_000);
-        killer.once('close', () => {
-          clearTimeout(timer);
-          resolve();
-        });
-        killer.once('error', () => {
-          clearTimeout(timer);
-          resolve();
-        });
+          reject(new BrowserControlError('BROWSER_PROCESS_STOP_TIMEOUT',
+            'Owned browser process tree did not terminate within bounded window.',
+            {pid}));
+        },8000);
+        killer.once('error',error=>{clearTimeout(timer);reject(error);});
+        killer.once('close',status=>{clearTimeout(timer);resolve(status??1);});
       });
-    } else if('kill' in child){
+      // The child handle's exit must be observed before declaring cleanup.
+      if('once' in child){
+        await new Promise<void>((resolve,reject)=>{
+          if(child.exitCode!==null||child.signalCode!==null){resolve();return;}
+          const timer=setTimeout(()=>{
+            child.off('exit',exited);
+            reject(new BrowserControlError('BROWSER_PROCESS_EXIT_UNVERIFIED',
+              'Owned browser did not report process exit.',{pid}));
+          },6000);
+          const exited=()=>{clearTimeout(timer);resolve();};
+          child.once('exit',exited);
+        });
+      }
+      if(code!==0 && isAlive(child))
+        throw new BrowserControlError('BROWSER_PROCESS_STOP_UNVERIFIED',
+          'Taskkill did not verify termination of owned browser process tree.',
+          {pid,exitCode:code});
+    }else if('kill' in child){
       child.kill('SIGKILL');
     }
   }
