@@ -461,7 +461,8 @@ function summarize(session: ManagedSession) {
       processCreationFiletime: session.processCreationFiletime,
     } : {}),
     ...(session.job ? { jobGuardianPid: session.job.guardianPid,
-      treeOwnership: 'windows_job' as const,
+      treeOwnership: session.status === 'orphaned' && session.job.closed()
+        ? 'unconfirmed' as const : 'windows_job' as const,
       jobMembershipVerified: 'root_at_launch' as const,
       descendantCoverage: 'job_members_only' as const,
       outOfJobDescendants: 'unknown' as const,
@@ -1142,7 +1143,28 @@ export class ProcessManager {
     child.once('error', (error) => {
       append('stderr', Buffer.from(`Process error: ${error.message}\n`));
     });
+    // A guardian can be force-killed while an attacker retains a duplicated
+    // unnamed Job handle. Node's 'exit' fires even when the root's inherited
+    // stdout/stderr pipes remain open indefinitely; do not report cleanup
+    // or a completed task merely because the guardian PID disappeared.
+    child.once('exit', () => {
+      if (job && session.pid && isPidAlive(session.pid)) {
+        session.status = 'orphaned';
+        session.exitCode = null;
+        session.signal = null;
+        delete session.exitedAt;
+        void this.persistState().catch(() => undefined);
+      }
+    });
     child.once('close', (code, signal) => {
+      if (job && session.pid && isPidAlive(session.pid)) {
+        session.status = 'orphaned';
+        session.exitCode = null;
+        session.signal = null;
+        delete session.exitedAt;
+        void this.persistState().catch(() => undefined);
+        return;
+      }
       session.status = 'exited';
       session.exitCode = code;
       session.signal = signal;
@@ -1161,7 +1183,9 @@ export class ProcessManager {
     });
     // Native guardian may have completed while its assignment marker was read.
     if (job?.closed() && session.status === 'running') {
-      session.status = 'exited';
+      // When a duplicated Job handle still exists, root lifetime may outlive
+      // the guardian. An unverified root is never silently marked completed.
+      session.status = session.pid && isPidAlive(session.pid) ? 'orphaned' : 'exited';
       session.exitCode = child.exitCode;
       session.signal = child.signalCode;
       session.exitedAt = new Date().toISOString();
@@ -1330,6 +1354,13 @@ export class ProcessManager {
       };
     }
 
+    if (session.status === 'orphaned' && session.job?.closed()) {
+      throw new ProcessManagerError(
+        'PROCESS_TREE_TERMINATION_UNCONFIRMED',
+        'The Windows Job guardian exited but the managed root may still be alive. ' +
+          'No safe Job handle remains for termination. Refusing unverified PID cleanup.',
+      );
+    }
     if (session.status === 'orphaned' && session.recovered) {
       throw new ProcessManagerError(
         'PROCESS_RECOVERY_VERIFICATION_REQUIRED',

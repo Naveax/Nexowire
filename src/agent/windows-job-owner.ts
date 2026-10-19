@@ -116,6 +116,10 @@ export async function launchWindowsJob(
     let failed: Error | undefined;
     let closed = false;
     child.once('error', (error) => { failed = error; });
+    // 'exit' occurs when the guardian PID dies. 'close' may NEVER fire while
+    // a surviving root holds the inherited stdout/stderr pipe handles open.
+    // Ownership is lost on guardian exit, regardless of stream lifetimes.
+    child.once('exit', () => { closed = true; });
     child.once('close', () => { closed = true; });
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {

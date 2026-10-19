@@ -106,3 +106,68 @@ image-locking/TOCTOU closure and runtime validation are pending.
    authorize production.
 
 **Decision: PRODUCTION BLOCKED; keep PR #576 DRAFT.**
+
+## 2026-10-19 follow-up: real Windows negative evidence, still not production
+
+These fixtures are isolated in the PR worktree and touch **only test-created
+processes**. The installed Agent, production installer, owner sessions, user
+programs and `main` remain untouched.
+
+- **P0 PROCESS_DUP_HANDLE proven:** a second Windows process with same-user
+  `PROCESS_DUP_HANDLE` duplicated the unnamed guardian Job's handle with
+  `JOB_OBJECT_QUERY`. After force-killing the identity-verified synthetic
+  guardian, the exact PID/creation-time root stayed alive until the test holder
+  closed its read-only handle. A Job name is not necessary for this exploit.
+  Test: `windows-job-duplicate-handle-risk.test.ts`.
+- **P0 false completion fixed:** `process-manager.ts` now observes the guardian
+  **`exit` event**, not solely the stream-dependent `close` event. If the
+  root still lives, the session becomes `orphaned` and
+  `treeOwnership=unconfirmed`; stopping refuses unsafe PID cleanup. This is
+  a truthful failure result, not physical containment repair.
+- **Marker and stdout spoofing tested:** a synthetic root writes a plausible
+  `NWJOB5` line to stdout. It remains ordinary process output, not proof.
+  A real kernel-attested Job was then queried with forged root PID, creation
+  FILETIME and guardian handle, and every counterfeit failed independently.
+  Test: `windows-job-attestation-spoof.test.ts`.
+- **Publisher/ACL read-only audit:** `scripts/audit-windows-job-helper-trust.ps1`
+  checks SHA-256, reparse flags, Authenticode, externally supplied trust anchors,
+  and Windows ACL inheritance/broad writable principals. It does not alter
+  installer, files, privileges or ACLs. On the isolated Work PC helper, the
+  hash matches but Authenticode is `NotSigned`, EXE and parent ACL inheritance
+  are unprotected, and production audit is **BLOCKED**. A synthetic EXE plus
+  its matching forged SHA-256 passes the developer integrity check but **fails**
+  the independent strict publisher audit, proving hash-only is not sufficient.
+  Test: `windows-job-helper-acl-publisher.test.ts`.
+- **Windows breakaway negative:** a C fixture running within a managed Job
+  attempts to spawn an additional **suspended** synthetic `cmd.exe` with
+  `CREATE_BREAKAWAY_FROM_JOB`. Windows refuses it. If the call unexpectedly
+  succeeds, the fixture terminates **only its newly created suspended child**
+  using the returned process handle and fails the test.
+  Test: `windows-job-breakaway.test.ts`.
+- **Hostile nested outer Job negative:** a stand-alone native fixture creates
+  an outer Job with `ACTIVE_PROCESS_LIMIT=1` containing its own suspended
+  helper. The helper's attempted nested shell creation fails closed; no root
+  is published. Only test-owned Job/process handles are ever terminated.
+  Test: `windows-job-hostile-nested.test.ts`.
+- Durable ProcessManager restart/reattachment remains a separate synthetic
+  test; **installed** Agent restart is still **unverified**.
+
+### Outstanding P0 production blockers
+
+1. Authenticode trusted publisher credentials and a **protected, signed,
+   rollback-bound manifest** have not been supplied. Production EXE trust
+   anchors cannot come only from a writable companion SHA-256 or mutable
+   process environment. Installed-file ACLs and real image identity at
+   CreateProcess time need independent acceptance.
+2. Cross-process `PROCESS_DUP_HANDLE` remains physically exploitable in
+   the same-user design. An isolated privileged broker/token or equivalent
+   enforceable Windows security descriptor boundary is required to prevent
+   an external process retaining the last unnamed Job handle.
+3. The breakaway/nested tests cover precisely their synthetic scenarios,
+   **not** all inherited Job combinations or UAC/COM/WMI/privileged broker
+   escapes, and do not prove containment of processes outside Job membership.
+4. Installed Agent power-loss/restart, actual durable-worker recovery,
+   access-denied variants and long-duration production soak have not occurred.
+5. CI PASS and Release Readiness PASS alone are source acceptance only.
+
+**Production acceptance must stay BLOCKED and PR #576 must remain DRAFT.**
