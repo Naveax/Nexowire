@@ -80,3 +80,44 @@ is not trusted publisher, binary integrity, token or authenticated transport pro
 
 All unfinished items are explicit blockers; no interface should claim that
 Admin Bridge has actually switched modes or that ROOT has Windows elevation.
+
+## 2026-10-19 follow-up: CI #39155386266 and reversible isolated ACL fixture
+
+- Run `39155386266` exact-head `4ad35ab` **FAILED**:
+  `test (24)` had precisely one source assertion failure in
+  `test/console-ui-polish.test.ts`. The assertion expected misleading
+  `ROOT izni açık` text, while the implementation safely states
+  `ROOT bakım politikası aktif (Windows yetkisi ayrı)`. Updated the assertion
+  to require the latter and forbid the former, without weakening privilege
+  separation. `test (22)` was canceled and must run at the new exact HEAD.
+- Created an **isolated, self-scoped Windows ACL setup/rollback fixture**
+  at `scripts/test-isolated-broker-acl-rollback.ps1`:
+  - Creates a random `nexowire-acl-fixture-*` directory under the OS temp root.
+    The script takes no destination path. It never reads/modifies installed
+    Nexowire sources, scheduled tasks, services or live Registry keys.
+  - Seeds a dummy launcher with synthetic Authenticated Users Modify access,
+    verifies that the bad write ACE is observable, applies an exact pinned
+    SYSTEM/Administrators/test-user DACL, and checks removal of unsafe ACEs.
+  - Restores the **original DACL exactly** for directory and file, then deletes
+    the temporary fixture. Tests cover normal flow and injected failure after
+    parent directory hardening. Nonzero exit on unverified restore/cleanup.
+  - Initial prototype was **BLOCKED**: `Set-Acl` of full descriptors raised
+    `PrivilegeNotHeldException` on the non-admin runner. Changed restoration
+    to Access/DACL-only `Directory.SetAccessControl` /
+    `File.SetAccessControl`. Both real isolated scenarios now PASS.
+  - The fixture's private ACL retains the current test-user SID for rollback.
+    **It is not a production protected install and cannot confer broker trust.**
+    Production source must have independently verified SYSTEM/Administrators
+    owner and ACL, publisher identity, binary hashes, and protected Guardian.
+- On 2026-10-19, fresh read-only task inventory: both Naveax and Work PC have
+  Broker task Running, and neither has a discoverable Bridge Guardian task.
+  ACL query on both protected Broker roots was not readable by this account;
+  current ACL is **UNVERIFIED**. An earlier authorized audit showed
+  `Authenticated Users: Modify` on Naveax. Do not infer this has been fixed.
+  P0 #271 and missing Guardian remain production BLOCKERS.
+- ROOT logout/replay/token revocation, CORE SAFE/OFF revocation, Guardian
+  owner/device/session/task/source verification, and mode AUTO/ON/OFF final
+  postcondition tests remain fail-closed. No existing live service ACL changed.
+- Never enable the production Bridge command fuse or merge to `main`
+  solely because test runner CI passes. Exact-head CI must be independently
+  verified for this follow-up commit, including formerly canceled `test (22)`.
