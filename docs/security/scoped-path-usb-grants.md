@@ -30,7 +30,9 @@ disk and partition identities. `revoke(id)` takes effect immediately;
 expiration and Agent restart invalidate grants. Both wall-clock and monotonic
 timeouts apply, so moving the wall clock backward cannot extend a grant.
 Grant IDs cannot be reused without explicit revocation; grant inspections return
-defensive copies. These records remain **in-memory**. The new Agent-side
+defensive copies. Local revoke now also increments an approval epoch: any
+physical-console YES received after a concurrent revoke is rejected and cannot
+create a new grant. This is covered by a deterministic deferred-prompt test. These records remain **in-memory**. The new Agent-side
 `ScopedPathGrantAuthority` is exposed through `files.grant.status`,
 `files.grant.request`, and `files.grant.revoke` (MCP `file_grant_*`). A remote
 caller can *request* but cannot silently mint a grant. Windows grant requests
@@ -64,6 +66,11 @@ rejects an unavailable session instead of pretending approval succeeded.
 `shell.exec`, `wsl.exec`, `process.start`, `process.write`,
 `task.graph.run`, `runbook.run` and `workspace.checks` are blocked by
 `UNSANDBOXED_EXECUTION_DENIED` without a short-lived explicit execution lease.
+**For the actual Windows Native Agent, they remain denied even when the startup
+lease is supplied** while `enforceWindowsNativeHandleBoundary` is enabled.
+A shell/WSL child cannot be guaranteed to respect USB and grant boundaries
+merely by parsing command text. This is an intentional compatibility change,
+not a hidden FULL ACCESS exception.
 Parsing PowerShell/CMD/Bash strings cannot impose a trustworthy filesystem
 boundary. Even `*` roots do not enable arbitrary shell execution: they would
 otherwise bypass the separate USB write permission. The actual Native Agent
@@ -73,13 +80,12 @@ unsandboxed execution semantics for compatibility. Such library-only policies
 **must not** be used at an untrusted dispatch boundary. Library clients can
 opt into strict enforcement with `enforceExecutionBoundary: true`.
 
-For transitional on-device configuration, an Agent process may start with
-`NEXOWIRE_UNRESTRICTED_EXEC_UNTIL` set to a timestamp at most 15 minutes in
-the future (ISO-8601). It is accepted only on Agent startup, expires during
-the session, and cannot be specified as a capability input. **It is a trusted
-environment configuration override, not proof of physical owner approval.**
-A future strict release should bind this override to the same physical-console
-approval authority as scoped grants.
+Library-only or explicitly non-strict transitional policies can still accept
+`NEXOWIRE_UNRESTRICTED_EXEC_UNTIL` for at most 15 minutes. This environment
+setting is **not** a secure filesystem sandbox or physical approval, and the
+production Windows Native Agent with its strict native-handle boundary ignores
+it as an authorization for arbitrary execution. Only a future OS-sandboxed
+native design could re-enable such execution safely.
 
 ### Non-goals and blockers
 
@@ -108,6 +114,15 @@ approval authority as scoped grants.
   junction/symlink during that check. Deterministic temporary-directory tests
   demonstrate denial for both existing files and new-file creation. This is
   a **race narrowing only**, not an atomic security boundary.
+- The physical Windows Native Agent sets
+  `enforceWindowsNativeHandleBoundary: true`. Until a verified handle-relative
+  mutation executor is connected, it refuses **all removable-volume mutations
+  even with a valid USB grant**, and refuses grant-only mutations outside the
+  default roots with `WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED`. Read-only volume
+  discovery and mock-root source tests remain available. This explicitly makes
+  real USB grant write capability unavailable instead of pretending the
+  `realpath` check provides atomicity. Native executable and other indirect
+  mutation paths remain separate blockers; source is not production accepted.
 - Canonical path and symlink checks reduce path-escape exposure, but pathname
   `realpath` + `fs.*` is not an atomic handle-based security guarantee.
   Junction/reparse replacement and drive reassignment between checks and I/O
@@ -141,6 +156,14 @@ npm run typecheck
 node --test --import tsx test/path-policy.test.ts test/scoped-path-grants.test.ts test/scoped-path-grant-approval.test.ts test/agent-executors.test.ts
 git diff --check
 ```
+
+The central integration's intermittent `VOLUME_GRANT_MISMATCH` was traced to
+`ScopedPathGrantRegistry` tests injecting a synthetic wall clock but leaving
+`performance.now()` real. Three seconds of CI load could expire the monotonic
+grant while the fake wall clock was unchanged. Both clocks are now injected
+and a synthetic long Windows volume lookup deterministically exhausts the
+monotonic budget. This is **correct fail-closed expiry**, not a permission
+failure to relax. Clock rollback still cannot resurrect a revoked/expired grant.
 
 Negative coverage: wrong owner, Agent ID, grant scope, expired/revoked grant,
 volume ID, disk ID, partition ID, drive-letter reassignment, unavailable

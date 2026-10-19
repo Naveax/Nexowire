@@ -353,6 +353,9 @@ export async function runNativeAgent(
   );
   const policy = new PathPolicy(parseAllowedRoots(env.NEXOWIRE_ALLOWED_ROOTS), {
     grants: grantRegistry,
+    // Fail closed on physical USB and on extended grant-only writes until
+    // native handle-relative I/O has passed independent Windows acceptance.
+    enforceWindowsNativeHandleBoundary: true,
     ownerId: localOwnerId,
     deviceId: identity.id,
     // Existing roots keep ordinary file mutation; recursive deletion needs an

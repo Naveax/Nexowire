@@ -230,6 +230,32 @@ test('removing path after approval denies issuance instead of granting stale per
   assert.deepEqual(authority.status().active,[]);
 });
 
+test('revoke during pending physical YES fences late authorization', async t => {
+  const root = await fixture(t);
+  const registry = new ScopedPathGrantRegistry();
+  let approve: ((value:boolean)=>void) | undefined;
+  let entered: (()=>void) | undefined;
+  const inDialog = new Promise<void>(resolve => { entered = resolve; });
+  const authority = new ScopedPathGrantAuthority(registry,'owner','device',{
+    platform:'win32', resolveVolume:async()=>VOLUME,
+    approve:async()=>{
+      entered?.();
+      return await new Promise<boolean>(resolve=>{ approve = resolve; });
+    },
+  });
+  const pending = authority.request({
+    path:root, scopes:['write','usb_write'],duration_minutes:1,
+  });
+  await inDialog;
+  const cancelled = authority.revoke({grant_id:'12345678-1234-4234-8234-123456789abc'});
+  assert.equal(cancelled.revoked,false);
+  approve?.(true);
+  await assert.rejects(pending, (e:unknown)=>
+    e instanceof ScopedGrantApprovalError &&
+    e.code==='GRANT_REVOKED_DURING_APPROVAL');
+  assert.deepEqual(authority.status().active,[]);
+});
+
 test('request cannot inject owner or disk identity through remote payload', async t=>{
   const root=await fixture(t);
   const authority=new ScopedPathGrantAuthority(new ScopedPathGrantRegistry(),'o','d',{

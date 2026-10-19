@@ -37,6 +37,8 @@ export class PathDeniedError extends Error {
         ? 'Approve a short-lived grant for the verified USB volume and exact target on the physical device.'
         : reason === 'UNSANDBOXED_EXECUTION_DENIED'
           ? 'Use scoped file tools, or explicitly authorize an unrestricted execution session on the physical device.'
+          : reason === 'WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED'
+            ? 'No verified atomic native Windows handle-based mutation executor is connected. Do not mutate this target until that native security gate is independently accepted.'
           : 'Choose a verified allowed root or request an owner-approved, target-scoped permission.',
     };
   }
@@ -66,6 +68,10 @@ export interface PathPolicyOptions {
   // The native Agent supplies a grant registry and is always strict.
   // Legacy library-only PathPolicy instances retain existing test semantics.
   enforceExecutionBoundary?: boolean;
+  // Only the trusted Native Agent may set this. When true, refuse mutations
+  // that depend on a scoped grant or removable volume until Windows native
+  // handle-relative filesystem I/O can pin target and volume atomically.
+  enforceWindowsNativeHandleBoundary?: boolean;
   // Local-only explicit override. Never accept this through remote tool input.
   unrestrictedExecutionUntil?: number;
   now?: () => number;
@@ -283,6 +289,15 @@ export class PathPolicy {
     if (!defaultAllowed && !grantAllowed) {
       throw new PathDeniedError(target, 'VOLUME_GRANT_MISMATCH', scope);
     }
+    // A trusted owner-issued exception is not a substitute for an atomic
+    // handle-relative Windows filesystem operation. Do not enable mutation
+    // outside normal roots just because pathname checks passed.
+    if (this.options.enforceWindowsNativeHandleBoundary &&
+        this.platform === 'win32' && MUTATIONS.has(scope) &&
+        !defaultAllowed && grantAllowed &&
+        (!volume || !isRemovableVolume(volume))) {
+      throw new PathDeniedError(target, 'WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED', scope);
+    }
     if (volume && isRemovableVolume(volume) && MUTATIONS.has(scope)) {
       if (!this.options.grants || !this.options.ownerId ||
           !this.options.deviceId ||
@@ -290,6 +305,15 @@ export class PathPolicy {
             target, 'usb_write', this.options.ownerId, this.options.deviceId, volume,
           )) {
         throw new PathDeniedError(target, 'USB_VOLUME_GRANT_REQUIRED', 'usb_write');
+      }
+      // Local physical Agent policy does not currently expose an atomic,
+      // authenticated Win32 handle-relative mutation executor. A consent grant
+      // alone is not a safe reparse/hotplug barrier. Keep REAL USB mutations
+      // unavailable until an independently verified native helper is wired.
+      // Injected resolvers in temporary synthetic tests are not a live device.
+      if (this.platform === 'win32' &&
+          this.options.enforceWindowsNativeHandleBoundary) {
+        throw new PathDeniedError(target, 'WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED', scope);
       }
     }
   }
@@ -314,6 +338,13 @@ export class PathPolicy {
   }
 
   assertUnrestrictedExecution(): void {
+    if (this.platform === 'win32' && this.options.enforceWindowsNativeHandleBoundary) {
+      // A startup environment lease cannot sandbox arbitrary Windows processes.
+      // Any shell/WSL/process may mutate USB files outside scoped file tools,
+      // so fail closed even for a previously accepted unrestricted lease until
+      // an independent native OS security boundary is available.
+      throw new PathDeniedError('<unrestricted process>', 'UNSANDBOXED_EXECUTION_DENIED');
+    }
     if (!(this.options.enforceExecutionBoundary ?? Boolean(this.options.grants))) return;
     // Arbitrary shells, WSL, task graphs and child processes are not file
     // sandboxes. Refuse to promise path confinement with only command parsing.

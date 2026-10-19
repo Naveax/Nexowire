@@ -51,7 +51,10 @@ test('read/write/delete/move/recursive-delete are distinct scopes', async t => {
 test('target-bound owner/device grants expire and can be revoked', async t => {
   const { allowed, denied } = await fixture(t);
   let clock = 1000;
-  const store = new ScopedPathGrantRegistry(() => clock);
+  let steady = 10_000;
+  // Both grant clocks must be under test control. Pairing a fake Date.now()
+  // with a live performance.now() makes a 3 s fixture expire under CI load.
+  const store = new ScopedPathGrantRegistry(() => clock, () => steady);
   store.grantLocally({
     id: 'grant-001', ownerId: 'owner-A', deviceId: 'device-A',
     root: allowed, scopes: ['write', 'move'], expiresAt: 4000,
@@ -84,6 +87,62 @@ test('target-bound owner/device grants expire and can be revoked', async t => {
   assert.equal(store.revoke('grant-001'), false);
   await assert.rejects(() => p.authorizeExisting(path.join(allowed, 'ok.txt'), 'write'),
     PathDeniedError);
+});
+
+test('fake wall time with advanced monotonic time denies VOLUME_GRANT_MISMATCH deterministically', async t => {
+  const { allowed } = await fixture(t);
+  let wall = 1_000;
+  let steady = 4_000;
+  const registry = new ScopedPathGrantRegistry(() => wall, () => steady);
+  registry.grantLocally({
+    id: 'grant-clock-divergence', ownerId: 'owner', deviceId: 'device',
+    root: allowed, scopes: ['write'], expiresAt: wall + 3_000,
+  });
+  const policy = new PathPolicy([allowed], {
+    defaultScopes: ['read'], grants: registry, ownerId: 'owner',
+    deviceId: 'device', now: () => wall,
+  });
+  const target = path.join(allowed, 'temporary.txt');
+  assert.equal(await policy.authorizeForCreate(target, 'write'),
+    path.join(await fs.realpath(allowed), 'temporary.txt'));
+  steady += 3_001;  // Simulated CI stall, no wall-clock advancement.
+  await assert.rejects(() => policy.authorizeForCreate(target, 'write'),
+    (error: unknown) => error instanceof PathDeniedError &&
+      error.details.reason === 'SCOPE_NOT_GRANTED');
+  assert.equal(registry.active('owner', 'device').length, 0);
+  wall += 3_001;
+  wall = 1_000; // Rollback cannot resurrect an expired monotonic grant.
+  assert.deepEqual(registry.active('owner', 'device'), []);
+});
+
+test('monotonic expiry during Windows volume lookup returns mismatch fail-closed', async t => {
+  const { allowed } = await fixture(t);
+  let wall = 1000;
+  let steady = 10_000;
+  const grants = new ScopedPathGrantRegistry(() => wall, () => steady);
+  grants.grantLocally({
+    id: 'grant-volume-stall-01', ownerId: 'owner-A', deviceId: 'device-A',
+    root: allowed, scopes: ['write'], expiresAt: wall + 3000,
+  });
+  const policy = new PathPolicy([allowed], {
+    platform: 'win32', grants, ownerId: 'owner-A', deviceId: 'device-A',
+    defaultScopes: ['read'], now: () => wall,
+    volumeResolver: async () => {
+      steady += 3001; // An async disk probe that exhausts the monotonic budget.
+      return { ...USB, busType: 'NVMe', driveType: 'Fixed' };
+    },
+  });
+  await assert.rejects(
+    () => policy.authorizeForCreate(path.join(allowed, 'never-written.txt'), 'write'),
+    (error: unknown) => error instanceof PathDeniedError &&
+      error.details.reason === 'VOLUME_GRANT_MISMATCH',
+  );
+  assert.deepEqual(grants.active('owner-A', 'device-A'), []);
+  await assert.rejects(() => fs.stat(path.join(allowed, 'never-written.txt')));
+  // Reverting the wall clock must not resurrect the same authorization.
+  wall = 100;
+  await assert.rejects(() => policy.authorizeForCreate(
+    path.join(allowed, 'never-written.txt'), 'write'), PathDeniedError);
 });
 
 test('USB writes require a separate exact-volume grant, including when root allows write', async t => {
@@ -119,6 +178,71 @@ test('USB writes require a separate exact-volume grant, including when root allo
   assert.equal(registry.revoke('usb-grant-001'), true);
   await assert.rejects(() => p.authorizeForCreate(destination, 'write'),
     PathDeniedError);
+});
+
+test('verified volume grant cannot bypass revoked USB grant during slow probe', async t => {
+  const { allowed } = await fixture(t);
+  const registry = new ScopedPathGrantRegistry();
+  registry.grantLocally({
+    id:'grant-revoke-during-probe', ownerId:'owner', deviceId:'device',
+    root: allowed, scopes:['usb_write'], expiresAt: Date.now()+60_000,
+    volume: { volumeId:USB.volumeId, deviceId:USB.deviceId,
+      partitionNumber: USB.partitionNumber },
+  });
+  const policy = new PathPolicy([allowed], {
+    platform: 'win32', grants: registry, ownerId:'owner', deviceId:'device',
+    defaultScopes:['write'], volumeResolver:async () => {
+      registry.revoke('grant-revoke-during-probe');
+      return {...USB};
+    },
+  });
+  await assert.rejects(() => policy.authorizeForCreate(
+    path.join(allowed,'new.bin'), 'write'),
+    (err: unknown) => err instanceof PathDeniedError &&
+      err.details.reason === 'USB_VOLUME_GRANT_REQUIRED');
+  await assert.rejects(() => fs.stat(path.join(allowed,'new.bin')));
+});
+
+test('native Windows handle gate denies synthetic USB mutation even with valid grant', async t => {
+  const { allowed } = await fixture(t);
+  const grants = new ScopedPathGrantRegistry();
+  grants.grantLocally({
+    id:'native-handle-gate-01', ownerId:'owner', deviceId:'device',
+    root:allowed, scopes:['usb_write'], expiresAt:Date.now() + 60_000,
+    volume:{volumeId:USB.volumeId, deviceId:USB.deviceId,
+      partitionNumber: USB.partitionNumber},
+  });
+  const policy = new PathPolicy([allowed], {
+    platform:'win32', grants, ownerId:'owner', deviceId:'device',
+    defaultScopes:['read','write'],
+    enforceWindowsNativeHandleBoundary:true,
+    volumeResolver:async()=>USB,
+  });
+  const target = path.join(allowed, 'blocked-usb.txt');
+  await assert.rejects(() => policy.authorizeForCreate(target, 'write'),
+    (e:unknown)=>e instanceof PathDeniedError &&
+      e.details.reason==='WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED');
+  await assert.rejects(() => fs.stat(target));
+  // Refusing the native helper is deliberate even after valid local consent.
+  assert.equal(grants.active('owner','device').length,1);
+});
+
+test('native Windows handle gate denies grant-only mutation of a fixed volume', async t => {
+  const { allowed } = await fixture(t);
+  const grants = new ScopedPathGrantRegistry();
+  grants.grantLocally({
+    id:'native-handle-gate-02', ownerId:'owner', deviceId:'device',
+    root:allowed, scopes:['write'], expiresAt:Date.now()+60_000,
+  });
+  const policy = new PathPolicy([allowed], {
+    platform:'win32', grants, ownerId:'owner', deviceId:'device',
+    defaultScopes:['read'], enforceWindowsNativeHandleBoundary:true,
+    volumeResolver:async()=>({...USB,busType:'NVMe',driveType:'Fixed'}),
+  });
+  await assert.rejects(()=>policy.authorizeForCreate(
+    path.join(allowed,'blocked-grant-only.txt'),'write'),
+    (e:unknown)=>e instanceof PathDeniedError &&
+      e.details.reason==='WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED');
 });
 
 test('unverifiable identity fails closed rather than allowing wrong USB/partition', async t => {
@@ -165,6 +289,17 @@ test('scoped shell execution cannot bypass file policy by selecting another cwd'
     unrestrictedExecutionUntil: Date.now() + 24 * 60 * 60_000,
   });
   assert.throws(() => overlong.assertUnrestrictedExecution(), PathDeniedError);
+});
+
+test('strict Native Agent rejects shell/WSL lease even with wildcard file roots', () => {
+  const policy = new PathPolicy(['*'], {
+    platform:'win32', grants:new ScopedPathGrantRegistry(),
+    enforceWindowsNativeHandleBoundary:true,
+    unrestrictedExecutionUntil:Date.now() + 10 * 60_000,
+  });
+  assert.throws(() => policy.assertUnrestrictedExecution(),
+    (error:unknown)=>error instanceof PathDeniedError &&
+      error.details.reason==='UNSANDBOXED_EXECUTION_DENIED');
 });
 
 test('path root cannot be implicitly deleted or formatted', async () => {

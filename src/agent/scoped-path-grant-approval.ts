@@ -146,6 +146,9 @@ async function assertNoReparseAncestors(root: string): Promise<void> {
 export class ScopedPathGrantAuthority {
   private pending = false;
   private lastPromptAt = 0;
+  // Revocation must fence an already-displayed, asynchronous approval prompt.
+  // Otherwise a delayed YES could mint a new grant after an owner revoked.
+  private revocationEpoch = 0;
   constructor(
     private readonly registry: ScopedPathGrantRegistry,
     private readonly ownerId: string,
@@ -164,6 +167,7 @@ export class ScopedPathGrantAuthority {
 
   revoke(input: unknown) {
     const { grant_id } = RevokeSchema.parse(input);
+    ++this.revocationEpoch; // Cancel any pending grant request, even for a stale ID.
     return { revoked: this.registry.revoke(grant_id),
       active: this.registry.active(this.ownerId, this.agentDeviceId).length };
   }
@@ -191,6 +195,7 @@ export class ScopedPathGrantAuthority {
     }
     this.pending = true;
     this.lastPromptAt = now();
+    const requestEpoch = this.revocationEpoch;
     try {
       const canonicalRoot = await fs.realpath(request.path);
       if (!(await fs.stat(canonicalRoot)).isDirectory() ||
@@ -222,6 +227,10 @@ export class ScopedPathGrantAuthority {
         timeoutMs: 90_000,
       });
       if (!approved) return { approved: false, grantId: null };
+      if (this.revocationEpoch !== requestEpoch) {
+        throw new ScopedGrantApprovalError('GRANT_REVOKED_DURING_APPROVAL',
+          'The local owner revoked permissions while approval was pending.');
+      }
       const canonicalAfter = await fs.realpath(request.path);
       await assertNoReparseAncestors(request.path);
       const after = await resolver(canonicalAfter);
@@ -230,6 +239,10 @@ export class ScopedPathGrantAuthority {
           isRemovableVolume(before) !== isRemovableVolume(after)) {
         throw new ScopedGrantApprovalError('VOLUME_CHANGED_DURING_APPROVAL',
           'The path or disk identity changed while the grant dialog was open.');
+      }
+      if (this.revocationEpoch !== requestEpoch) {
+        throw new ScopedGrantApprovalError('GRANT_REVOKED_DURING_APPROVAL',
+          'The local owner revoked permissions while approval was pending.');
       }
       const id = randomUUID();
       this.registry.grantLocally({
