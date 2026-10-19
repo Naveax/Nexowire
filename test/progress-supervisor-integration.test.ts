@@ -119,3 +119,88 @@ test('graph/runbook persisted counters are explicitly not independent applicatio
     await fs.rm(dir,{recursive:true,force:true});
   }
 });
+
+for (const mode of ['complete','false_progress'] as const) {
+  test(`managed synthetic worker ${mode}: process exit and actual result hash must reconcile`, async t => {
+    if (process.platform === 'win32') {
+      const helper = path.resolve('native/windows-job-owner.exe');
+      if (!(await fs.stat(helper).then(s=>s.isFile()).catch(()=>false))) {
+        t.skip('Windows native Job owner helper not provisioned: physical start blocked');
+        return;
+      }
+    }
+    const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-managed-proof-'));
+    const progressSupervisor=new ProgressSupervisor({stallAfterMs:2000});
+    const manager=new ProcessManager({
+      stateFile:path.join(root,'sessions.json'),
+      onEvent:event=>progressSupervisor.observeProcessEvent(event),
+    });
+    let sessionId:string|undefined;
+    let state='running';
+    try{
+      await manager.initialize();
+      const fixture=path.resolve('test/fixtures/progress-managed-proof-worker.cjs');
+      // The current Windows Job guardian invokes cmd.exe with Windows
+      // argument quoting already applied. Keep this fixture's controlled
+      // paths unquoted only when they contain no shell metacharacters;
+      // otherwise fail closed rather than passing ambiguous quoting.
+      const windows = process.platform==='win32';
+      if(windows && !/^[A-Za-z0-9_:./\\\\-]+$/.test(fixture+root)) {
+        throw new Error('UNSAFE_FIXTURE_PATH: native cmd quoting acceptance required');
+      }
+      const command=windows ? `node ${fixture} ${root} ${mode}` :
+        `node "${fixture}" "${root}" ${mode}`;
+      const started=await manager.start({
+        command,shell:windows?'cmd':'bash',cwd:root,
+      },new PathPolicy(['*']));
+      sessionId=started.sessionId;
+      assert.equal(progressSupervisor.snapshot(sessionId).progressVerified,false);
+      await manager.write({session_id:sessionId,input:sessionId,append_newline:true});
+      let last: Awaited<ReturnType<typeof manager.read>>|undefined;
+      const deadline=Date.now()+12_000;
+      let cursor=0;
+      const testEvents: Array<{stream:string;text:string}>=[];
+      while(Date.now()<deadline){
+        last=await manager.read({session_id:sessionId,after_seq:cursor,wait_ms:200});
+        cursor=last.nextSeq;
+        testEvents.push(...last.events);
+        state=last.session.status;
+        if(state==='exited' && progressSupervisor.snapshot(sessionId).completedCount===2)break;
+        await new Promise(resolve=>setTimeout(resolve,20));
+      }
+      assert.ok(last,'worker must report process outcome');
+      assert.equal(last.session.status,'exited','controlled worker must exit; events: '+JSON.stringify(testEvents).slice(0,2600));
+      assert.equal(last.session.exitCode,0,'OS-observed exit must be clean; controlled fixture events: '+JSON.stringify(testEvents).slice(0,2500));
+      assert.equal(progressSupervisor.snapshot(sessionId).completedCount,2);
+      const trusted={
+        runRoot:root,
+        scope:{ownerAccountId:'owner-fixture',deviceId:'device-fixture',
+          projectId:'project-fixture',runId:'run-fixture',sessionId},
+        expectedCount:2,
+      };
+      const evidence=await progressSupervisor.verifySessionFromDisk(sessionId,trusted);
+      const proof=progressSupervisor.snapshot(sessionId);
+      if(mode==='complete'){
+        assert.equal(evidence.status,'verified');
+        assert.equal(proof.state,'completed_verified');
+        assert.equal(proof.verifiedCompletedCount,2);
+        assert.equal(proof.verifiedPendingCount,0);
+        assert.equal(proof.verifiedFailureCount,0);
+        assert.equal(proof.progressVerified,true);
+        assert.ok(proof.lastVerifiedProgressAt);
+      }else{
+        assert.equal(evidence.status,'unverified');
+        assert.equal(evidence.reason,'SEALED_INCOMPLETE');
+        assert.equal(proof.state,'progress_mismatch');
+        assert.equal(proof.progressVerified,false);
+        assert.equal(proof.lastVerifiedProgressAt,null);
+      }
+    }finally{
+      if(sessionId && state==='running'){
+        try{await manager.stop({session_id:sessionId});}catch{/* test-owned only */}
+      }
+      await manager.shutdown();
+      await fs.rm(root,{recursive:true,force:true});
+    }
+  });
+}

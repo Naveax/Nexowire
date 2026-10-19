@@ -308,3 +308,48 @@ test('verified completion cache expires instead of hiding subsequent file change
     assert.equal(supervisor.snapshot(scope.sessionId).state,'progress_mismatch');
   });
 });
+
+test('matching result hashes and zero pending never override failed or unknown process exit',async()=>{
+  await withWorker('complete',async({request,supervisor})=>{
+    // Process outcome remains independent from application self-report.
+    const observed=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(observed.status,'verified');
+    supervisor.observeProcessEvent({topic:'process.exited',data:{
+      sessionId:scope.sessionId,exitCode:17,
+    }});
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'failed');
+    await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'failed');
+    assert.notEqual(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+  });
+  await withWorker('complete',async({request,supervisor})=>{
+    supervisor.observeProcessEvent({topic:'process.exited',data:{
+      sessionId:scope.sessionId,exitCode:null,
+    }});
+    const evidence=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(evidence.status,'verified');
+    const snapshot=supervisor.snapshot(scope.sessionId);
+    assert.equal(snapshot.state,'incomplete');
+    assert.notEqual(snapshot.state,'completed_verified');
+  });
+});
+
+test('oversized result with updated plausible hash still fails closed',async()=>{
+  await withWorker('complete',async({request,root,supervisor})=>{
+    const resultPath=path.join(root,'results','unit-0.json');
+    const body=Buffer.alloc(129*1024,0x20);
+    const manifestPath=path.join(root,'manifest.json');
+    await fs.writeFile(resultPath,body);
+    const manifest=JSON.parse(await fs.readFile(manifestPath,'utf8'));
+    manifest.artifacts[0].sha256=createHash('sha256').update(body).digest('hex');
+    await fs.writeFile(manifestPath,JSON.stringify(manifest));
+    supervisor.observeProcessEvent({topic:'process.exited',data:{
+      sessionId:scope.sessionId,exitCode:0,
+    }});
+    const evidence=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(evidence.status,'unverified');
+    assert.equal(evidence.reason,'FILE_UNTRUSTED');
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'progress_mismatch');
+    assert.equal(supervisor.snapshot(scope.sessionId).progressVerified,false);
+  });
+});

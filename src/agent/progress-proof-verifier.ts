@@ -97,7 +97,19 @@ async function readPinnedFile(file: string, maxBytes: number): Promise<Buffer> {
         opened.size !== before.size || opened.mtimeMs !== before.mtimeMs) {
       refuse('FILE_CHANGED');
     }
-    const data = await handle.readFile();
+    // A worker may append to its writable file during verification. Do not
+    // let FileHandle.readFile() allocate unbounded memory for that race.
+    // Read at most the originally attested byte length, then fail closed if
+    // the file changed or grew.
+    const data = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < data.length) {
+      const { bytesRead } = await handle.read(
+        data, offset, data.length - offset, offset,
+      );
+      if (bytesRead === 0) refuse('FILE_CHANGED');
+      offset += bytesRead;
+    }
     const closed = await handle.stat();
     const after = await lstat(file);
     if (data.length !== before.size || data.length > maxBytes ||

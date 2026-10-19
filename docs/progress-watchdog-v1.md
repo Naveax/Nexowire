@@ -195,8 +195,14 @@ PR against main instead of rewriting a merged PR.
 The unrelated Win32 Job Object change from PR #559 makes Native Process
 Manager refuse process.start without its pinned native Job owner EXE.
 The isolated Work PC source worktree lacks native/windows-job-owner.exe.
-The existing process.start/read integration test is now conditionally
+The controlled process.start/read integration tests are conditionally
 SKIPPED **only** when that helper is absent, with explicit evidence.
+When provisioned, the new bounded temporary fixture uses the real native
+Process Manager/Job guardian, receives the Agent-assigned session ID over
+stdin, emits result hashes/counters on stdout, and checks observed process
+exit plus on-disk proof. A genuine completed task reaches
+`completed_verified`; an inflated counter with a sealed but incomplete
+manifest reaches `progress_mismatch`.
 No native Process Manager code or runtime trust checks were weakened.
 The new independent result-file verifier tests execute controlled temporary
 Node worker subprocesses without invoking Native Process Manager; they do
@@ -205,3 +211,32 @@ Linux CI can still run the original process.start/read integration test.
 
 Reviewers must distinguish targeted PASS, physical Win32 process-start
 SKIP, GitHub exact-head CI and production release gates.
+
+### Follow-up #575: Windows Job pipe drain and bounded file reads (2026-10-19)
+
+- Initial GitHub CI run `39155483038` failed solely in Windows
+  `browser-live` > `Physical Windows Job Object regressions`:
+  `Windows Job preserves separate stdin/stdout/stderr pipes` observed
+  `status=exited` before `WINJOB_STDOUT` was read. The source-built
+  local native helper reproduced correct output 24/24 times; the
+  intermittent ordering hypothesis is **not** claimed proven solely
+  by the earlier CI failure.
+- The existing physical Windows Job test retains strict, separate
+  stdout/stderr content assertions and the Job-owned exit requirement,
+  but polls with a bounded 50 ms delay after early terminal observations
+  instead of spinning through the entire read budget before asynchronous
+  pipe callbacks can deliver their last events. Missing output still fails.
+- The result verifier reads at most each file's previously attested size
+  (128 KiB per result, 256 KiB for manifest) from the open handle.
+  A worker appending while scanned can no longer trigger an unbounded
+  `FileHandle.readFile()` allocation; stat/identity/mtime changes fail closed.
+- New negative tests cover matching file hashes with nonzero or
+  **unknown** OS exit, and a too-large file with a forged matching
+  manifest SHA-256. Neither can reach `completed_verified`.
+- A separately controlled Windows native Process Manager fixture now
+  tests complete versus forged-progress output end to end. Its command
+  parameters use guarded metacharacter-free test paths on Windows to
+  avoid pre-existing cmd.exe quoting ambiguity through the native helper.
+  Paths requiring different native quoting are **BLOCKED**, not silently
+  allowed. The production helper executable trust chain remains a separate
+  requirement.
