@@ -361,9 +361,20 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
+  // Fail closed: an independently provisioned, rollback-independent authority
+  // is mandatory for native mutating agents. Never auto-create one from a
+  // potentially rolled-back journal. Operator must attest legacy migration.
+  const authorityFile=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_FILE?.trim();
+  const authorityId=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_ID?.trim();
+  const authorityGeneration=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_GENERATION?.trim();
+  if(!authorityFile||!authorityId||!authorityGeneration){
+    throw new Error('AGENT_AUTHORITY_CONFIGURATION_REQUIRED: mutations cannot '+
+      'run without independent, pre-provisioned anti-replay storage.');
+  }
   const operationJournal = new AgentOperationJournal(
     env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
       path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite'),
+    {authority:{file:authorityFile,authorityId,generation:authorityGeneration}},
   );
   const advertisedCapabilities = await capabilitiesForAgent(
     process.platform,
