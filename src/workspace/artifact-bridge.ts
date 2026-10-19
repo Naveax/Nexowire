@@ -271,7 +271,7 @@ export class ArtifactBridgeStore {
       fail('PROJECT_BINDING_MISSING', 'Artifact exists without a pinned project repository.');
     }
   }
-  private async checkManifest(scope: ArtifactScope, artifactPath: string): Promise<ArtifactManifest | null> {
+  private async checkManifest(scope: ArtifactScope, artifactPath: string, verifyContent = true): Promise<ArtifactManifest | null> {
     const dir = this.dir(scope);
     const manifest = await existing(this.manifestFile(dir, artifactPath), manifestSchema);
     if (!manifest) return null;
@@ -279,14 +279,16 @@ export class ArtifactBridgeStore {
       return fail('SCOPE_MISMATCH', 'Persisted artifact does not belong to the requested scope/path.');
     }
     await this.projectGuard(scope, manifest.repository, false);
-    const file = this.objectFile(dir, manifest.sha256);
-    try {
-      if (await regularFile(file) !== manifest.size || await digestFile(file) !== manifest.sha256) {
-        return fail('CORRUPT_ARTIFACT', 'Stored artifact size or SHA-256 verification failed.');
+    if (verifyContent) {
+      const file = this.objectFile(dir, manifest.sha256);
+      try {
+        if (await regularFile(file) !== manifest.size || await digestFile(file) !== manifest.sha256) {
+          return fail('CORRUPT_ARTIFACT', 'Stored artifact size or SHA-256 verification failed.');
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fail('ARTIFACT_MISSING', 'Manifest exists but content is missing.');
+        throw error;
       }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fail('ARTIFACT_MISSING', 'Manifest exists but content is missing.');
-      throw error;
     }
     return manifest;
   }
@@ -450,7 +452,10 @@ export class ArtifactBridgeStore {
     });
   }
   async readChunk(scope: ArtifactScope, artifactPath: string, offset: number, maxBytes = 65536) {
-    const manifest = await this.get(scope, artifactPath);
+    // Do not verify one file path then reopen the same path for unverified bytes.
+    // Resolve only authenticated metadata, then verify AND extract from one
+    // pinned file descriptor. A concurrent replacement or mutation fails closed.
+    const manifest = await this.checkManifest(scope, artifactPath, false);
     if (!manifest) return fail('ARTIFACT_NOT_FOUND', 'No verified artifact exists for this scope.');
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > manifest.size ||
         !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 65536) {
@@ -458,10 +463,38 @@ export class ArtifactBridgeStore {
     }
     const length = Math.min(maxBytes, manifest.size - offset);
     const buf = Buffer.alloc(length);
-    const fd = await fs.open(this.objectFile(this.dir(scope), manifest.sha256), 'r');
+    const file = this.objectFile(this.dir(scope), manifest.sha256);
+    let fd: fs.FileHandle;
+    try { fd = await fs.open(file, 'r'); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return fail('ARTIFACT_MISSING', 'Artifact object disappeared before verified read.');
+      }
+      throw error;
+    }
     try {
-      const { bytesRead } = await fd.read(buf, 0, buf.length, offset);
-      if (bytesRead !== length) fail('ARTIFACT_CHANGED', 'Artifact was truncated during read.');
+      const before = await fd.stat();
+      if (!before.isFile() || before.size !== manifest.size) {
+        fail('CORRUPT_ARTIFACT', 'Stored content is not a regular file of the declared size.');
+      }
+      const whole = createHash('sha256');
+      const block = Buffer.allocUnsafe(65536);
+      let position = 0;
+      while (position < manifest.size) {
+        const n = Math.min(block.length, manifest.size - position);
+        const { bytesRead } = await fd.read(block, 0, n, position);
+        if (bytesRead !== n) fail('ARTIFACT_CHANGED', 'Artifact changed while being read.');
+        whole.update(block.subarray(0, n));
+        const begin = Math.max(position, offset);
+        const end = Math.min(position + n, offset + length);
+        if (end > begin) block.copy(buf, begin - offset, begin - position, end - position);
+        position += n;
+      }
+      const after = await fd.stat();
+      if (!after.isFile() || after.size !== manifest.size ||
+          whole.digest('hex') !== manifest.sha256) {
+        fail('CORRUPT_ARTIFACT', 'Artifact integrity failed during pinned-descriptor read.');
+      }
     } finally { await fd.close(); }
     return { artifactPath, offset, size: length, totalSize: manifest.size,
       sha256: manifest.sha256, chunkSha256: digest(buf), contentBase64: buf.toString('base64') };
