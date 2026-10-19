@@ -3,7 +3,7 @@
  * this module: tests supply fake process, filesystem, signature and health
  * probes. Never treat a staged release or a PID as a healthy upgraded Agent.
  */
-import { createHash, verify as verifySignature } from 'node:crypto';
+import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto';
 
 export type BrokerMode = 'off' | 'auto' | 'on';
 export interface AgentRuntime {
@@ -14,6 +14,10 @@ export interface AgentRuntime {
   brokerMode: BrokerMode;
   coreGrantId: string | null;
   privilegeMode: 'safe' | 'full' | 'root' | 'core';
+  /** Attested authenticated session epoch; not a bearer token or timestamp. */
+  authSessionEpoch: string;
+  /** Must come from owner authority, not a worker flag. */
+  authTokenValid: boolean;
 }
 export interface SignedAgentManifest {
   schemaVersion: 1;
@@ -35,12 +39,15 @@ export interface PublisherInspection {
   signatureValid: boolean;
   publisher: string;
   artifactSha256: string;
+  certificateSha256: string;
 }
 /** This is an independent trusted binary verifier, not a value from the manifest. */
 export type InspectPublisher = (artifact: Buffer) => Promise<PublisherInspection>;
 export interface ReleaseTrust {
   trustedManifestPublicKeyPem: string;
   trustedPublisher: string;
+  /** DER SHA-256 of the trusted first-party Authenticode signing certificate. */
+  trustedCertificateSha256: string;
   inspectPublisher: InspectPublisher;
 }
 export interface UpgradeContext {
@@ -49,13 +56,19 @@ export interface UpgradeContext {
   minimumFreeBytes: number;
   availableBytes: number;
   userApprovedDisruption: boolean;
+  /** Signed, retained OLD binary, not a version string or downloadable URL. */
+  rollbackRelease: SignedRelease;
 }
 export interface UpgradeAdapter {
   readRuntime(deviceId: string): Promise<AgentRuntime>;
   acquireDeviceLock(deviceId: string): Promise<() => Promise<void>>;
   stage(release: SignedRelease, deviceId: string): Promise<void>;
+  /** Independent readback from a protected, non-reparse staging slot. */
+  readStagedBytes(deviceId: string, slot: 'target' | 'rollback'): Promise<Buffer>;
+  stageRollback(release: SignedRelease, deviceId: string): Promise<void>;
   stopOwnedAgent(deviceId: string): Promise<void>;
-  cutover(deviceId: string, version: string): Promise<void>;
+  /** Implementation MUST atomically pin exactly these validated bytes. */
+  cutover(deviceId: string, version: string, expectedSha256: string): Promise<void>;
   startOwnedAgent(deviceId: string): Promise<void>;
   healthyRuntime(deviceId: string): Promise<AgentRuntime | null>;
 }
@@ -80,7 +93,9 @@ function assertIdentity(value: string, kind: string): void {
 }
 function version(value: string): number[] {
   if (!versionPattern.test(value)) fail('VERSION_INVALID');
-  return value.split('.').map(Number);
+  const parts = value.split('.').map(Number);
+  if (parts.some(part => !Number.isSafeInteger(part))) fail('VERSION_INVALID');
+  return parts;
 }
 function compare(a: string, b: string): number {
   const l = version(a);
@@ -123,11 +138,20 @@ export async function verifyAgentRelease(
   trust: ReleaseTrust,
 ): Promise<void> {
   const bytes = canonicalAgentManifest(release.manifest);
-  if (!trust.trustedManifestPublicKeyPem?.trim() ||
+  if (!trust?.trustedManifestPublicKeyPem?.trim() ||
       !trust.trustedPublisher?.trim() ||
-      !trust.inspectPublisher) fail('TRUST_ANCHOR_MISSING');
+      !hex64.test(trust.trustedCertificateSha256) ||
+      typeof trust.inspectPublisher !== 'function') fail('TRUST_ANCHOR_MISSING');
+  try {
+    if (createPublicKey(trust.trustedManifestPublicKeyPem).asymmetricKeyType !== 'ed25519') {
+      fail('MANIFEST_KEY_TYPE_INVALID');
+    }
+  } catch { fail('MANIFEST_KEY_TYPE_INVALID'); }
   if (!b64.test(release.manifestSignature) ||
       Buffer.from(release.manifestSignature, 'base64').toString('base64') !== release.manifestSignature) {
+    fail('MANIFEST_SIGNATURE_ENCODING_INVALID');
+  }
+  if (Buffer.from(release.manifestSignature, 'base64').length !== 64) {
     fail('MANIFEST_SIGNATURE_ENCODING_INVALID');
   }
   let verified = false;
@@ -139,22 +163,32 @@ export async function verifyAgentRelease(
   const actualHash = createHash('sha256').update(release.artifact).digest('hex');
   if (actualHash !== release.manifest.artifactSha256) fail('ARTIFACT_HASH_MISMATCH');
   if (release.manifest.publisher !== trust.trustedPublisher) fail('PUBLISHER_MISMATCH');
-  const independent = await trust.inspectPublisher(release.artifact);
-  if (!independent.signatureValid || independent.publisher !== trust.trustedPublisher ||
-      independent.artifactSha256 !== actualHash) fail('BINARY_SIGNATURE_UNTRUSTED');
+  let independent: PublisherInspection;
+  try {
+    independent = await trust.inspectPublisher(release.artifact);
+  } catch { fail('BINARY_SIGNATURE_UNTRUSTED'); }
+  if (!independent?.signatureValid || independent.publisher !== trust.trustedPublisher ||
+      independent.artifactSha256 !== actualHash ||
+      independent.certificateSha256 !== trust.trustedCertificateSha256) {
+    fail('BINARY_SIGNATURE_UNTRUSTED');
+  }
 }
 function sameAuthority(before: AgentRuntime, after: AgentRuntime): boolean {
   return before.ownerAccountId === after.ownerAccountId &&
     before.deviceId === after.deviceId &&
     before.brokerMode === after.brokerMode &&
     before.coreGrantId === after.coreGrantId &&
-    before.privilegeMode === after.privilegeMode;
+    before.privilegeMode === after.privilegeMode &&
+    before.authSessionEpoch === after.authSessionEpoch &&
+    before.authTokenValid === true && after.authTokenValid === true;
 }
 export async function preflightAgentUpgrade(
   release: SignedRelease, trust: ReleaseTrust, context: UpgradeContext,
   observed: AgentRuntime,
 ): Promise<void> {
   assertIdentity(context.expectedOwnerAccountId, 'OWNER');
+  assertIdentity(observed.authSessionEpoch, 'AUTH_SESSION_EPOCH');
+  if (observed.authTokenValid !== true) fail('TOKEN_REVOKED');
   assertIdentity(context.expectedDeviceId, 'DEVICE');
   if (!sameAuthority({ ...observed, ownerAccountId: context.expectedOwnerAccountId,
     deviceId: context.expectedDeviceId }, observed)) fail('DEVICE_OR_OWNER_MISMATCH');
@@ -163,8 +197,30 @@ export async function preflightAgentUpgrade(
       !Number.isSafeInteger(context.availableBytes) ||
       context.availableBytes < context.minimumFreeBytes) fail('INSUFFICIENT_DISK_SPACE');
   await verifyAgentRelease(release, trust);
+  if (!context.rollbackRelease?.manifest ||
+      context.rollbackRelease.manifest.version !== observed.agentVersion) {
+    fail('SIGNED_ROLLBACK_ARTIFACT_REQUIRED');
+  }
+  await verifyAgentRelease(context.rollbackRelease, trust);
+  if (inspectAgentHubCompatibility(context.rollbackRelease.manifest, observed) !== 'compatible') {
+    fail('ROLLBACK_VERSION_INCOMPATIBLE');
+  }
+  if (context.rollbackRelease.manifest.artifactSha256 === release.manifest.artifactSha256) {
+    fail('ROLLBACK_IDENTICAL_TO_TARGET');
+  }
   if (inspectAgentHubCompatibility(release.manifest, observed) !== 'compatible') fail('VERSION_INCOMPATIBLE');
   if (compare(release.manifest.version, observed.agentVersion) <= 0) fail('REPLAY_OR_DOWNGRADE');
+}
+/** Rehash the actually staged bytes, not a publisher supplied hash or an EXE path. */
+async function checkStagedHash(
+  adapter: UpgradeAdapter, deviceId: string, slot: 'target' | 'rollback',
+  release: SignedRelease,
+): Promise<void> {
+  const bytes = await adapter.readStagedBytes(deviceId, slot);
+  if (!Buffer.isBuffer(bytes) || bytes.length !== release.artifact.length ||
+      createHash('sha256').update(bytes).digest('hex') !== release.manifest.artifactSha256) {
+    fail('STAGED_' + slot.toUpperCase() + '_HASH_MISMATCH');
+  }
 }
 /**
  * Device-scoped, two-phase update. Adapter methods MUST themselves enforce
@@ -181,14 +237,22 @@ export async function upgradeIsolatedAgent(
   try {
     before = await adapter.readRuntime(context.expectedDeviceId);
     await preflightAgentUpgrade(release, trust, context, before);
+    // Preserve signed OLD bytes before preparing any destructive cutover.
+    await adapter.stageRollback(context.rollbackRelease, context.expectedDeviceId);
+    await checkStagedHash(adapter, before.deviceId, 'rollback', context.rollbackRelease);
     await adapter.stage(release, context.expectedDeviceId);
+    await checkStagedHash(adapter, before.deviceId, 'target', release);
     // Do not trust a long-running preflight across a blocking stage operation.
     const fresh = await adapter.readRuntime(context.expectedDeviceId);
     if (!sameAuthority(before, fresh) || fresh.agentVersion !== before.agentVersion ||
         fresh.hubVersion !== before.hubVersion) fail('PREFLIGHT_STALE');
+    // Recheck both protected slots as close to disruption as possible.
+    await checkStagedHash(adapter, before.deviceId, 'rollback', context.rollbackRelease);
+    await checkStagedHash(adapter, before.deviceId, 'target', release);
     potentiallyStopped = true;
     await adapter.stopOwnedAgent(context.expectedDeviceId);
-    await adapter.cutover(context.expectedDeviceId, release.manifest.version);
+    await adapter.cutover(context.expectedDeviceId, release.manifest.version,
+      release.manifest.artifactSha256);
     await adapter.startOwnedAgent(context.expectedDeviceId);
     const after = await adapter.healthyRuntime(context.expectedDeviceId);
     if (!after || !sameAuthority(before, after) ||
@@ -200,8 +264,11 @@ export async function upgradeIsolatedAgent(
     if (!potentiallyStopped || !before) throw error;
     const cause = error instanceof Error ? error.message : 'S3_UNKNOWN_FAILURE';
     try {
+      // If the old binary changed, do not launch a hash-unknown rollback EXE.
+      await checkStagedHash(adapter, before.deviceId, 'rollback', context.rollbackRelease);
       await adapter.stopOwnedAgent(before.deviceId);
-      await adapter.cutover(before.deviceId, before.agentVersion);
+      await adapter.cutover(before.deviceId, before.agentVersion,
+        context.rollbackRelease.manifest.artifactSha256);
       await adapter.startOwnedAgent(before.deviceId);
       const restored = await adapter.healthyRuntime(before.deviceId);
       if (restored && sameAuthority(before, restored) &&

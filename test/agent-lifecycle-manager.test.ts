@@ -12,12 +12,12 @@ const keys = generateKeyPairSync('ed25519');
 const artifact = Buffer.from('ISOLATED_AGENT_TEST_ARTIFACT_NOT_EXECUTABLE');
 const digest = createHash('sha256').update(artifact).digest('hex');
 const version = '1.0.6';
-function release(overrides: Partial<SignedAgentManifest> = {}): SignedRelease {
+function release(overrides: Partial<SignedAgentManifest> = {}, payload = artifact): SignedRelease {
   const manifest: SignedAgentManifest = {
     schemaVersion: 1,
     version,
     sourceSha: 'a'.repeat(40),
-    artifactSha256: digest,
+    artifactSha256: createHash('sha256').update(payload).digest('hex'),
     publisher: 'Nexowire Test Publisher',
     minAgentVersion: '1.0.4',
     maxAgentVersion: '1.0.6',
@@ -26,16 +26,22 @@ function release(overrides: Partial<SignedAgentManifest> = {}): SignedRelease {
     ...overrides,
   };
   const signature = sign(null, canonicalAgentManifest(manifest), keys.privateKey).toString('base64');
-  return { manifest, artifact, manifestSignature: signature };
+  return { manifest, artifact: payload, manifestSignature: signature };
 }
+function rollbackRelease(): SignedRelease {
+  return release({ version: '1.0.5' }, Buffer.from('SIGNED_OLD_AGENT_EXACT_ROLLBACK_BYTES_FIXTURE'));
+}
+const pinnedCertificate = 'c'.repeat(64);
 function trust(): ReleaseTrust {
   return {
     trustedManifestPublicKeyPem: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
     trustedPublisher: 'Nexowire Test Publisher',
+    trustedCertificateSha256: pinnedCertificate,
     inspectPublisher: async payload => ({
       signatureValid: true,
       publisher: 'Nexowire Test Publisher',
       artifactSha256: createHash('sha256').update(payload).digest('hex'),
+      certificateSha256: pinnedCertificate,
     }),
   };
 }
@@ -47,6 +53,8 @@ const base: AgentRuntime = {
   brokerMode: 'auto',
   coreGrantId: 'core-approved-123',
   privilegeMode: 'core',
+  authSessionEpoch: 'epoch-123',
+  authTokenValid: true,
 };
 function context(partial: Partial<UpgradeContext> = {}): UpgradeContext {
   return {
@@ -55,6 +63,7 @@ function context(partial: Partial<UpgradeContext> = {}): UpgradeContext {
     availableBytes: 2_000_000_000,
     minimumFreeBytes: 1_000_000_000,
     userApprovedDisruption: true,
+    rollbackRelease: rollbackRelease(),
     ...partial,
   };
 }
@@ -62,6 +71,8 @@ function adapter(failPhase?: string, mutate?: (runtime: AgentRuntime) => AgentRu
   const events: string[] = [];
   let activeVersion = base.agentVersion;
   let lock = false;
+  const staged: Partial<Record<'target' | 'rollback', Buffer>> = {};
+  const failureAt = (value: string) => failPhase === value;
   const api: UpgradeAdapter = {
     acquireDeviceLock: async id => {
       assert.equal(id, base.deviceId);
@@ -73,24 +84,45 @@ function adapter(failPhase?: string, mutate?: (runtime: AgentRuntime) => AgentRu
     readRuntime: async id => {
       assert.equal(id, base.deviceId);
       events.push('read');
-      if (failPhase === 'stale' && events.filter(e => e === 'read').length === 2) {
-        return { ...base, ownerAccountId: 'other-owner' };
+      if (events.filter(e => e === 'read').length === 2) {
+        if (failPhase === 'stale') return { ...base, ownerAccountId: 'other-owner' };
+        if (failPhase === 'token-revoked') return { ...base, authTokenValid: false };
+        if (failPhase === 'epoch-changed') return { ...base, authSessionEpoch: 'epoch-456' };
       }
       return { ...base };
     },
-    stage: async (_bundle, id) => {
+    stageRollback: async (bundle, id) => {
+      assert.equal(id, base.deviceId);
+      events.push('rollback-stage');
+      if (failureAt('rollback-stage')) throw new Error('ROLLBACK_DOWNLOAD_FAILED');
+      staged.rollback = Buffer.from(bundle.artifact);
+    },
+    stage: async (bundle, id) => {
       assert.equal(id, base.deviceId);
       events.push('stage');
-      if (failPhase === 'stage') throw new Error('NETWORK_INTERRUPTED');
+      if (failureAt('stage')) throw new Error('NETWORK_INTERRUPTED');
+      staged.target = Buffer.from(bundle.artifact);
+    },
+    readStagedBytes: async (id, slot) => {
+      assert.equal(id, base.deviceId);
+      events.push('hash:' + slot);
+      if (failureAt('corrupt-rollback') && slot === 'rollback') return Buffer.from('BROKEN');
+      if (failureAt('corrupt-target') && slot === 'target') return Buffer.from('BROKEN');
+      if (failureAt('rollback-corrupt-after-stop') && slot === 'rollback' &&
+          events.includes('stop')) return Buffer.from('BROKEN');
+      return Buffer.from(staged[slot] ?? Buffer.alloc(0));
     },
     stopOwnedAgent: async id => {
       assert.equal(id, base.deviceId);
       events.push('stop');
       if (failPhase === 'stop' && events.filter(e => e === 'stop').length === 1) throw new Error('SERVICE_STOP_FAILED');
     },
-    cutover: async (id, next) => {
+    cutover: async (id, next, expectedSha256) => {
       assert.equal(id, base.deviceId);
       events.push('switch:' + next);
+      const slot = next === version ? 'target' : 'rollback';
+      assert.equal(createHash('sha256').update(staged[slot] ?? Buffer.alloc(0)).digest('hex'),
+        expectedSha256);
       if (failPhase === 'cutover' && next === version) throw new Error('DISK_IO_ERROR');
       activeVersion = next;
     },
@@ -114,11 +146,12 @@ function adapter(failPhase?: string, mutate?: (runtime: AgentRuntime) => AgentRu
 test('trusted manifest is Ed25519 authenticated, bound to payload SHA-256 and publisher', async () => {
   await verifyAgentRelease(release(), trust());
   await assert.rejects(verifyAgentRelease({ ...release(), artifact: Buffer.from('tampered') }, trust()), /HASH_MISMATCH/);
-  await assert.rejects(verifyAgentRelease({ ...release(), manifestSignature: 'AA==' }, trust()), /SIGNATURE_INVALID/);
+  await assert.rejects(verifyAgentRelease({ ...release(), manifestSignature: 'AA==' }, trust()), /SIGNATURE_ENCODING_INVALID/);
   await assert.rejects(verifyAgentRelease(release(), { ...trust(), trustedPublisher: 'Other Corp' }), /PUBLISHER_MISMATCH/);
   await assert.rejects(verifyAgentRelease(release(), {
     ...trust(), inspectPublisher: async () => ({ signatureValid: false,
-      publisher: 'Nexowire Test Publisher', artifactSha256: digest }),
+      publisher: 'Nexowire Test Publisher', artifactSha256: digest,
+      certificateSha256: pinnedCertificate }),
   }), /BINARY_SIGNATURE_UNTRUSTED/);
   await assert.rejects(verifyAgentRelease(release(), { ...trust(), trustedManifestPublicKeyPem: '' }), /TRUST_ANCHOR_MISSING/);
 });
@@ -156,7 +189,8 @@ test('healthy update stays device-scoped and preserves CORE and Admin Bridge sta
   const result = await upgradeIsolatedAgent(release(), trust(), context(), instance.api);
   assert.deepEqual(result, { status: 'succeeded', deviceId: base.deviceId,
     fromVersion: '1.0.5', toVersion: '1.0.6' });
-  assert.deepEqual(instance.events, ['lock', 'read', 'stage', 'read',
+  assert.deepEqual(instance.events, ['lock', 'read', 'rollback-stage', 'hash:rollback',
+    'stage', 'hash:target', 'read', 'hash:rollback', 'hash:target',
     'stop', 'switch:1.0.6', 'start', 'health', 'unlock']);
   assert.equal(instance.isLocked(), false);
 });
@@ -197,9 +231,141 @@ test('foreign owner or expanded privilege during cutover triggers rollback', asy
     (r: AgentRuntime) => ({ ...r, coreGrantId: 'new-grant' }),
     (r: AgentRuntime) => ({ ...r, brokerMode: 'on' as const }),
     (r: AgentRuntime) => ({ ...r, deviceId: 'naveax' }),
+    (r: AgentRuntime) => ({ ...r, authTokenValid: false }),
+    (r: AgentRuntime) => ({ ...r, authSessionEpoch: 'reissued' }),
   ]) {
     const instance = adapter(undefined, mutate);
     const result = await upgradeIsolatedAgent(release(), trust(), context(), instance.api);
     assert.equal(result.status, 'rolled_back');
   }
+});
+
+
+test('release verifier rejects wrong pinned Authenticode certificate and wrong key algorithm', async () => {
+  await assert.rejects(verifyAgentRelease(release(), {
+    ...trust(), trustedCertificateSha256: 'f'.repeat(64),
+  }), /BINARY_SIGNATURE_UNTRUSTED/);
+  await assert.rejects(verifyAgentRelease(release(), {
+    ...trust(), inspectPublisher: async () => ({
+      signatureValid: true, publisher: 'Nexowire Test Publisher',
+      artifactSha256: digest, certificateSha256: 'e'.repeat(64),
+    }),
+  }), /BINARY_SIGNATURE_UNTRUSTED/);
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  await assert.rejects(verifyAgentRelease(release(), {
+    ...trust(),
+    trustedManifestPublicKeyPem: rsa.publicKey.export({type:'spki',format:'pem'}).toString(),
+  }), /MANIFEST_KEY_TYPE_INVALID/);
+  await assert.rejects(verifyAgentRelease(release(), {
+    ...trust(), trustedCertificateSha256: 'unverified',
+  }), /TRUST_ANCHOR_MISSING/);
+});
+
+test('a changed signed manifest cannot re-authorize substituted release bytes', async () => {
+  const original = release();
+  await assert.rejects(verifyAgentRelease({
+    ...original, manifest: { ...original.manifest, publisher:'Other Publisher' },
+  }, trust()), /MANIFEST_SIGNATURE_INVALID/);
+  await assert.rejects(verifyAgentRelease({
+    ...original, manifest: { ...original.manifest, minHubVersion:'1.0.5' },
+  }, trust()), /MANIFEST_SIGNATURE_INVALID/);
+  await assert.rejects(verifyAgentRelease({
+    ...original, manifestSignature: Buffer.alloc(64).toString('base64'),
+  }, trust()), /MANIFEST_SIGNATURE_INVALID/);
+});
+
+test('signed rollback artifact mandatory; no old signed package means no service stop', async () => {
+  for (const changed of [
+    { rollbackRelease: undefined as unknown as SignedRelease },
+    { rollbackRelease: release({version:'1.0.4'}) },
+    { rollbackRelease: release({version:'1.0.5'}) },
+    { rollbackRelease: release({version:'1.0.5', minHubVersion:'1.0.6'},
+      Buffer.from('OLD_HUB_INCOMPATIBLE')) },
+    { rollbackRelease: {...rollbackRelease(), artifact:Buffer.from('BROKEN')} },
+  ]) {
+    const fixture=adapter();
+    await assert.rejects(
+      upgradeIsolatedAgent(release(),trust(),context(changed),fixture.api),
+      /SIGNED_ROLLBACK_ARTIFACT_REQUIRED|ROLLBACK_IDENTICAL_TO_TARGET|ROLLBACK_VERSION_INCOMPATIBLE|ARTIFACT_HASH_MISMATCH/,
+    );
+    assert.equal(fixture.events.some(e => e === 'stop'),false);
+    assert.equal(fixture.isLocked(),false);
+  }
+});
+
+test('truncated rollback and target staging are denied before touching live process', async () => {
+  for (const phase of ['rollback-stage','corrupt-rollback','corrupt-target']) {
+    const fixture=adapter(phase);
+    await assert.rejects(
+      upgradeIsolatedAgent(release(),trust(),context(),fixture.api),
+      /ROLLBACK_DOWNLOAD_FAILED|STAGED_ROLLBACK_HASH_MISMATCH|STAGED_TARGET_HASH_MISMATCH/,
+    );
+    assert.equal(fixture.events.some(e=>e==='stop'),false);
+    assert.equal(fixture.isLocked(),false);
+  }
+});
+
+test('rollback binary altered after service disruption never runs without valid hash', async () => {
+  const fixture=adapter('rollback-corrupt-after-stop',
+    runtime=>({...runtime, ownerAccountId:'wrong-owner'}));
+  const result=await upgradeIsolatedAgent(release(),trust(),context(),fixture.api);
+  assert.equal(result.status,'rollback_unconfirmed');
+  assert.ok(fixture.events.includes('switch:1.0.6'));
+  assert.ok(!fixture.events.includes('switch:1.0.5'));
+  assert.equal(fixture.isLocked(),false);
+});
+
+test('token revoke and changed authentication epoch during staging fail before service stop', async () => {
+  for(const phase of ['token-revoked','epoch-changed']){
+    const fixture=adapter(phase);
+    await assert.rejects(
+      upgradeIsolatedAgent(release(),trust(),context(),fixture.api),
+      /PREFLIGHT_STALE/,
+    );
+    assert.ok(!fixture.events.includes('stop'));
+  }
+  await assert.rejects(
+    preflightAgentUpgrade(release(),trust(),context(),{
+      ...base, authTokenValid:false,
+    }),/TOKEN_REVOKED/,
+  );
+});
+
+test('old Hub outside target signed contract rejects release even if Agent version is valid', async () => {
+  const fixture=adapter();
+  await assert.rejects(
+    upgradeIsolatedAgent(release({minHubVersion:'1.0.6'}),trust(),context(),fixture.api),
+    /VERSION_INCOMPATIBLE/,
+  );
+  assert.ok(!fixture.events.includes('stop'));
+});
+
+test('interrupted stage, broken health and failed rollback are distinct in controlled fixture', async () => {
+  for(const [phase,expected] of [
+    ['stage',null],['health','rolled_back'],['rollback','rollback_unconfirmed'],
+  ] as const){
+    const fixture=adapter(phase,phase==='rollback'?r=>({...r,deviceId:'attacker'}):undefined);
+    if(phase==='stage'){
+      await assert.rejects(upgradeIsolatedAgent(release(),trust(),context(),fixture.api),
+        /NETWORK_INTERRUPTED/);
+    }else{
+      const result=await upgradeIsolatedAgent(release(),trust(),context(),fixture.api);
+      assert.equal(result.status,expected);
+    }
+  }
+});
+
+
+test('oversized semver components and publisher inspection outage fail closed', async () => {
+  assert.throws(() => canonicalAgentManifest({
+    ...release().manifest, version: '9007199254740992.0.0',
+  }), /VERSION_INVALID/);
+  assert.throws(() => canonicalAgentManifest({
+    ...release().manifest, maxHubVersion: '999999999999999999999999999999.0.0',
+  }), /VERSION_INVALID/);
+  await assert.rejects(verifyAgentRelease(release(), {
+    ...trust(), inspectPublisher: async () => {
+      throw new Error('PRIVATE_SIGNER_BACKEND_SECRET_DO_NOT_ECHO');
+    },
+  }), /BINARY_SIGNATURE_UNTRUSTED/);
 });

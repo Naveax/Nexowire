@@ -156,3 +156,43 @@ Any unsigned Setup.cmd plus archive checksum alone remains insufficient.
 Existing live Windows Agent v1.0.5 tasks, Hub and Broker were intentionally
 left untouched. No auto-restart, live nexowire.update.apply, production
 service mutation or main merge is part of this continuation.
+
+
+## S3 acceptance continuation: 2026-10-19 (PR #551)
+
+The isolated lifecycle engine now requires an independently signed **rollback
+binary** matching the observed installed Agent version, in addition to the
+target release. Both Ed25519 release manifests must verify with a pinned
+Ed25519 public key; a pinned first-party Authenticode certificate DER
+SHA-256 and exact publisher name must match an independent binary signature
+inspection result. Invalid certificate pins, other public-key algorithms,
+overlarge semantic-version integers and signer backend failures are denied.
+The Inspector API is still injected in the fixture; actual Authenticode on the
+release-owned Nexowire installer is not proven by this test.
+
+The authorized adapter MUST independently read back staged target and
+rollback bytes, which are SHA-256 verified twice before ANY process stop. The
+required cutover API includes expected version and SHA-256 so its future
+protected Windows implementation cannot silently select an arbitrary binary.
+On failure after stop, rollback bytes are rehashed yet again before even
+requesting a rollback cutover. A damaged old executable produces
+rollback_unconfirmed instead of launching an arbitrary replacement. A
+forged/new session epoch, revoked token, wrong owner/device, drift in CORE or
+Admin Bridge, or incompatible Agent/Hub contract is rejected.
+
+Actual file-backed temporary fixture tests use OS files in an isolated
+temporary directory for both staged artifacts and tamper their contents
+before cutover or after failure. These are NOT VM tests, signed first-party
+installer tests, or live service restarts. A standalone disposable Windows VM
+could not be inventoried on Work PC: Hyper-V Get-VM returned access denied,
+and VBoxManage was unavailable. Physical VM gate: BLOCKED/NOT_TESTED.
+
+Read-only file hashes from both live 1.0.5 version trees, all matching,
+plus the exact missing rollback/signing evidence and a strict staged canary
+sequence are retained in docs/agent-lifecycle-canary-rollout-20261019.md.
+
+The strict adapter itself is still isolated source code; the existing live
+nexowire.update.apply Powershell orchestration is NOT switched to this new
+trust gate. Its task-name/port-level health checks and lack of a crash-safe
+journal mean production remains BLOCKED even after a green CI and Release
+Readiness. Neither Work PC nor Naveax was upgraded/restarted.
