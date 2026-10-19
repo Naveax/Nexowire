@@ -1,9 +1,9 @@
 {
   "schema": "nexowire.independent-qa.v1",
-  "capturedAt": "2026-10-18",
-  "baselineSha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+  "capturedAt": "2026-10-19",
+  "baselineSha": "cb819d17ee581093d39626f13e985976def17f30",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "2026-10-18 independent snapshot; exact-main/source CI, staged runtime, deployed runtime, and original incident are non-interchangeable. Every PASS needs its own verified scope.",
+  "meaning": "Independent acceptance snapshot. A PASS is restricted to explicitly supported source-level tests. Old SQLite backup anti-rollback regression R02/R20 is FAIL. No staging, production or original incident PASS.",
   "requirements": [
     {
       "id": "R01",
@@ -14,20 +14,20 @@
       "physicalGate": "Two-device Agent and Hub fault injection with correlation IDs",
       "levels": {
         "source": {
-          "status": "PASS",
-          "evidence": "Merged #549 head 3818031243413763e453694eaab2665a198db86b; exact-head CI #39150296880 SUCCESS. Scope: source error attribution and redaction."
+          "status": "BLOCKED",
+          "evidence": "Merged #549 v2 classifier tested, but end-to-end mutation/audit failure-chain #565 DRAFT new exact-head CI 39281948778 queued; independent full source gate incomplete."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -40,20 +40,20 @@
       "physicalGate": "Upgraded live Agents, crash/WAL/disk fault recovery",
       "levels": {
         "source": {
-          "status": "PASS",
-          "evidence": "Merged #558 head 32fb3f9fcb4c8bcedc61d3aa98ab89aff0602f12; exact-head CI #39150004726 SUCCESS. SQLite journal source only."
+          "status": "FAIL",
+          "evidence": "Merged #567 exact head 911bd7d8c6e79298b6e48e5134e2b42f427cefab 39154550610 CI SUCCESS proves stale restored SQLite backup forgets later requestId: AgentOperationJournal.begin returns created:true. Metadata-only fixture, no actual duplicate mutation performed."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #558 head 32fb3f9fcb4c8bcedc61d3aa98ab89aff0602f12; exact-head CI #39150004726 SUCCESS. Reconciliation source only."
+          "evidence": "Merged #558 journal reconciliation and #567 negative durability coverage. Offline state remains UNKNOWN; normal source/CI only, physical Agent 1.0.5 unchanged."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Access/CORE effective authority not physically established; #548 DRAFT 822cb26f8e2531cf5c3f5dca309eb3aff22123c6."
+          "evidence": "#574 DRAFT new head 7855c5e6d7e8059369294ad96dab3aa87ed49def CI 39282427109 queued. Previous observed Authenticated Users: Modify Broker sources, Guardian service identity not physically attested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "PR #553 head a394918edb0a74f0b0a78817e9710e2ac042170d exact-head CI #39151332824 SUCCESS; physical USB grant issuance and handle-based reparse/TOCTOU protection absent."
+          "evidence": "#553 latest head ba3bb52dc9fc7ad7fc8e3a22dd766623218cae63 CI 39282648539 queued. Node realpath->fs TOCTOU, handle/volume file ID, physical USB hotplug unaccepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -144,20 +144,20 @@
       "physicalGate": "Two physical Windows Agents, off-network reconnect chaos",
       "levels": {
         "source": {
-          "status": "BLOCKED",
-          "evidence": "Connection Core #547 head 4bb72b47132ba53c5f8413915888b471a81a521f DRAFT; two-device chaos and original reconnect incident missing."
+          "status": "PASS",
+          "evidence": "Merged #547 + #569 head da6b3679cd666a82bfb88d1c181367364706e5f4 CI 39154685988 SUCCESS with synthetic WSS fault proxy; actual two-device chaos/late ACK remains staging BLOCKED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Merged #559 head 34c6620055ad634d2e272ff9378e4bf4403fd81c, CI #39149677381 SUCCESS. Native helper path pinned but no independently verified expected helper digest/publisher or live deployed Job membership proof."
+          "evidence": "Merged #559 helper source improved; #576 DRAFT head d1b1667d35707a3f8e895b4c36e342eb148e3ce3 exact CI 39176161922 SUCCESS. Trusted signed release manifest, PROCESS_DUP_HANDLE, deployed kernel proof missing."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -197,19 +197,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #542 head 1b51a82684918b8f2a148bd48caaa50ee1710274 with source tests. Shell task fields remain distinct from transport status."
+          "evidence": "Merged #542 source shell result separate from transport; QA lost-ACK and nonzero exit negative tests. Live Windows/WSL postconditions unaccepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Private desktop #480 and file picker #556 both DRAFT; COM/dynamic shell descendants and physical focus-soak unresolved."
+          "evidence": "Merged #570 synthetic WSL wrapper deny; #579 DRAFT helper hash check head 2fd06326a0722dff69394c3a0a69b5f36e004459 CI 39175699760 queued. Dynamic COM and physical default-focus acceptance incomplete."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -248,20 +248,20 @@
       "physicalGate": "Two-device exact repository SHA and artifact manifest",
       "levels": {
         "source": {
-          "status": "BLOCKED",
-          "evidence": "Merged artifact bridge #552 head 1b819e62388ea06c8e8eb241c1346e7aa3301f3e, CI #39150231483 SUCCESS; exact physical device and original checkpoint acceptance missing."
+          "status": "PASS",
+          "evidence": "Merged #552+#573 exact artifact hash and synthetic two-device fixture transfer on live Agent 1.0.5; true new Hub runtime staged deployment and checkpoint authority not proven."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -275,19 +275,19 @@
       "levels": {
         "source": {
           "status": "NOT_TESTED",
-          "evidence": "Consolidated Reliability Doctor UI request-correlation and operator error drill not independently tested."
+          "evidence": "Operator-facing consolidated Reliability Doctor UI cross-layer original incident not independently exercised."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Scale S5 #564 merged head 820ad41992c62fa890b249c7f820e0969b33a467 CI #39150732602 SUCCESS. Synthetic fairness Jain=0.5 under adversarial load; real 24h external WSS and billing unavailable."
+          "evidence": "Merged #566 quota isolated SQLite and #571 local protected shares/reconnect tests. Source acceptance for live 100+ authenticated real WSS native completions 24h and Cloudflare Worker/D1/DO billing not proven."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -327,19 +327,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Source error attribution merged #549; upstream OpenAI safety decisions not delivered to Hub cannot be independently inferred. Original incident not reproduced."
+          "evidence": "Merged #549 error attribution and #565 follow-up DRAFT CI queued. A provider-side refusal not delivered to Nexowire cannot yield known hidden cause; source end-to-end audit gate incomplete."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -352,20 +352,20 @@
       "physicalGate": "Real Codex CLI and ChatGPT independent authenticated login",
       "levels": {
         "source": {
-          "status": "BLOCKED",
-          "evidence": "Codex OAuth #545 DRAFT head 4658e8180be31f694a612d7c5e6f2f2a36725652; real independent Codex CLI login not accepted."
+          "status": "PASS",
+          "evidence": "Merged #577 actual Codex CLI against synthetic loopback issuer and #578 hardening, exact-head CI 39156085083 and 39175536451 SUCCESS. Real production OAuth issuer remains BLOCKED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #552 head 1b819e62388ea06c8e8eb241c1346e7aa3301f3e, exact-head CI #39150231483 SUCCESS. Source scoped artifact bridge only; new conversation retrieval not physically accepted."
+          "evidence": "Merged #552+#573 scoped bridge and crash lock/recovery; two physical Agents copied synthetic fixture hashes, not actual production Hub/new-chat original closure."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -405,19 +405,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "File-picker #556 head af8d267d6bbe6f69fdb6cf668258b98e3d6f4f10 exact-head CI #39150585588 SUCCESS; real common-dialog focus and owner desktop boundary remain open."
+          "evidence": "Merged #556+#570 source GUI guards; #579 DRAFT native helper verification. No signed helper and user-default-desktop non-interference or real app selection completion proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -431,19 +431,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "#563 corrected head dbf5099c5850a6df85b3ac5b8eb42386a8d581ff exact-head CI #39154336693 7/7 SUCCESS. Linux platform mismatch and spoofed live architecture/clock negative tests passed at source level. Physical hardware remains untested."
+          "evidence": "Merged #563 corrected host platform/architecture negative tests, CI 39154336693 SUCCESS. Real phone/gamepad/VM and driver acceptance not exercised."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -457,19 +457,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Progress watchdog #550 merged head 9c9e16e3587aea7ce065e15d44d17d105e812fac CI #39150723801 SUCCESS; live original crypto bot completed counts/artifact digest verifier remain unproven."
+          "evidence": "Merged #550 watchdog; #575 DRAFT head c6820b431bf88814172437373131527f457ff216 exact CI 39155483038 FAILED (Windows Job stdout marker). Independent completed-counter file proof not live-accepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Lifecycle #551 DRAFT head 3659db7a63254fae1badb39eca70be8853ea4df5 CI #39150815213 SUCCESS; isolated adapter, no installed two-device update/rollback acceptance."
+          "evidence": "#551 DRAFT head 3659db7a63254fae1badb39eca70be8853ea4df5 CI+readiness SUCCESS, but signed publisher installer and two-device rollback absent."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -508,20 +508,20 @@
       "physicalGate": "Two-device concurrent writers and offset/hash races",
       "levels": {
         "source": {
-          "status": "PASS",
-          "evidence": "Merged #558 WAL/CAS and #552 scoped artifact resume, exact-head source CI #39150004726 and #39150231483 SUCCESS. Real multi-device lost-ACK CAS outstanding."
+          "status": "FAIL",
+          "evidence": "Same confirmed stale-backup requestId replay as R02 via merged #567 test/agent-operation-durability-acceptance.test.ts; normal WAL CAS tests PASS but trusted anti-rollback reservation authority absent."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Merged #555 source diagnostics CI #39135469895 SUCCESS; #563 follow-up fails Linux. Physical USB/gamepad/VM acceptance not performed."
+          "evidence": "Physical USB/NTFS gamepad phone VM/WSL/driver source fixtures not equivalent to real hardware original incident; two running 1.0.5 Agents not upgraded."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Independent QA #560 merged with exact-head CI #39150335922 SUCCESS, but no independent deployment or original-incident gate. Current main ca7fc2c457cd47181e5b5d6c4db7b0ac32698838 integration retest not yet accepted."
+          "evidence": "#572 exact head 62a9b97a0bcb50bafae3755368a35b4b9ac79ca6 CI 39155406551 FAILED Windows browser-live durable-process.test.ts PROCESS_NOT_RUNNING; release gates incomplete."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent staging proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent production proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident evidence at ca7fc2c457cd47181e5b5d6c4db7b0ac32698838"
+          "evidence": "No independent incident proof at exact main cb819d17ee581093d39626f13e985976def17f30; source CI and merged PR do not authorize upgrade"
         }
       }
     }
@@ -761,11 +761,11 @@
     }
   ],
   "independentReleaseApproval": null,
-  "inspectedMainSha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+  "inspectedMainSha": "cb819d17ee581093d39626f13e985976def17f30",
   "inspectedMainCi": {
-    "runId": 39154393827,
-    "conclusion": "success",
-    "kind": "source_ci",
-    "scope": "Exact-main CI completed successfully; source test only, not production or incident"
+    "runId": null,
+    "conclusion": "NOT_VERIFIED",
+    "kind": "exact-main",
+    "scope": "Main source CI result for exact SHA not independently established in this snapshot"
   }
 }
