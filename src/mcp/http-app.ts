@@ -115,7 +115,13 @@ export function createNexowireMcpExpressApp(
     // are inflight. A claimed small Content-Length is enforced by Node's
     // HTTP message framing; chunked/unknown-length bodies use guarded path.
     const rawLength = req.headers['content-length'];
-    const smallBody =
+    // A tiny compressed Content-Length can inflate to the full 9.5 MiB
+    // parser limit. It must count as a large parser admission even when its
+    // wire representation is under the legacy 100 KiB fast-path boundary.
+    const contentEncoding = req.headers['content-encoding'];
+    const identityEncoded = contentEncoding === undefined ||
+      (typeof contentEncoding === 'string' && contentEncoding.trim().toLowerCase() === 'identity');
+    const smallBody = identityEncoded &&
       typeof rawLength === 'string' &&
       /^\d+$/.test(rawLength) &&
       Number(rawLength) <= 100 * 1024;

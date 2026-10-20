@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import {
   createNexowireMcpExpressApp,
   NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES,
@@ -122,6 +123,19 @@ test('issue #588: 9.5 MiB request and response envelopes are bounded independent
       });
       assert.equal(smallDuringLoad.status, 200,
         'ordinary small MCP calls must work while large parsers are busy');
+      // A gzip body may be tiny on the wire but expand to multi-MiB JSON.
+      // Do not let it bypass the four-large-parser concurrency admission.
+      const inflatedJson = Buffer.from(JSON.stringify({ payload: 'g'.repeat(8 * 1024 * 1024) }));
+      const compressedJson = gzipSync(inflatedJson);
+      assert.ok(compressedJson.byteLength < 100 * 1024);
+      const compressedDuringLoad = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+        body: new Uint8Array(compressedJson),
+      });
+      assert.equal(compressedDuringLoad.status, 503,
+        'small gzip wire body with >8MiB inflated JSON must acquire a guarded parser slot');
+
       const overloaded = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
