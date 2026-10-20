@@ -83,3 +83,69 @@ OS temp fixture; it accepts no caller-supplied path and deletes the fixture.
 
 No production ACL write, task restart, service control, forced token escalation,
 main merge or deployment was performed.
+
+## 2026-10-20 evening follow-up: P0 #271 real native `icacls` and migration stage gates
+
+**Read-only Windows inventory taken today, no ACL mutation:**
+
+| Target | Exact authorized observation | Acceptance |
+| --- | --- | --- |
+| Naveax `C:\ProgramData\NexowireStack` | `NT AUTHORITY\\Authenticated Users:(I)(M)` and `(I)(OI)(CI)(IO)(M)` | **P0 UNSAFE / NO-GO** |
+| Naveax `C:\ProgramData\NexowireStack\nexowire\node_modules\nexowire\dist\src\cli.js` | `NT AUTHORITY\\Authenticated Users:(I)(M)` | **P0 UNSAFE / NO-GO** |
+| Naveax `C:\ProgramData\Nexowire\privileged-broker` | `icacls` exit 5, ACCESS DENIED | **BLOCKED / ACL UNKNOWN**, never safe by inference |
+| Work PC `C:\ProgramData\NexowireStack` | path not found (icacls exit 2) | NOT APPLICABLE TO THIS DEVICE, not a proof about Naveax |
+| Work PC ...`dist\src\cli.js` | path not found (icacls exit 3) | NOT APPLICABLE TO THIS DEVICE |
+| Work PC `C:\ProgramData\Nexowire\privileged-broker` | `icacls` exit 5, ACCESS DENIED | **BLOCKED / ACL UNKNOWN** |
+
+The `(I)` ACE is inherited and is an effective write entry on the Stack
+directory and its CLI source. The second inheritance-only ACE propagates
+non-admin modification rights to descendants. This directly invalidates
+any claim that the existing elevated Stack's source chain is protected.
+A denied broker DACL is **unknown**, not evidence of safety. Do not grant
+additional tool permissions or escalate the current account to bypass this.
+
+**New code, DRAFT PR #574 only:**
+
+- `src/product/root-session-migration-preflight.ts` exports an explicitly
+  **read-only schema-only staging** validator for migration `0019`. Verifies
+  both required session tables, exact column shape and NOT NULL/PK, duration/hash
+  checks, revocation/grant indexes with correct ordered columns, base lease
+  table, and device FK CASCADE. Missing/partial/fake schema, absent required
+  index, provider error or reverted table throw
+  `ROOT_SESSION_MIGRATION_NOT_STAGED`, never a production-ready verdict.
+- `test/root-session-migration-staging.test.ts` uses actual ephemeral SQLite
+  to exercise pre-migration refused authentication/revocation/grant,
+  successful post-migration read-only introspection, partial schema, missing
+  indexes/tables, fake structures, tampered index order, missing lease shape
+  and query failure. No remote Cloudflare D1 migration was applied or verified.
+  Migration `0019` MUST be applied safely to an authorized staging binding
+  before a production runtime rollout, followed by an independent recheck.
+- `test/guardian-independent-attestation-negative.test.ts` verifies real
+  Ed25519 possession signatures with current owner/device/credential/nonce,
+  and compares a *synthetic* task snapshot/ACL callback with a signed bridge
+  receipt. A positive key-possession check is **not authorized enrollment**,
+  and an Ed25519-signed claimed `applied` receipt cannot independently
+  establish physical task source integrity, Hub channel, native UAC, or
+  privileged actuation. Revoked pairing, replayed challenge, rotated key,
+  missing or forged source ACL and missing Guardian remain denied.
+- Existing isolated Windows parent/updater/binary inherited ACL negatives
+  remain scoped strictly to randomized temp files. They do not remediate the
+  two actually unsafe Naveax Stack locations.
+
+**Required external physical gates, still BLOCKED:**
+1. Authorized installer/operator must separately remediate the actual
+   inheritance at the protected parent and confirm protected source and
+   updater/launcher/binary ownership, effective write/delete/replace rights
+   including shared ancestors; isolate and stage rollback beforehand.
+2. Reinspect actual Naveax + Work PC Broker ACLs with **authorized**
+   read-only trusted Windows context, never assuming an Access Denied means secure.
+3. Establish independent protected Guardian installation, current pairing,
+   protected key provenance, signed enrollment, true process/task/source
+   identity and separately authenticated Hub channel.
+4. Apply `0019` through approved *staging* Cloudflare migration only,
+   run read-only preflight against that staging D1, and verify migration
+   sequencing before production worker activation.
+5. Physical AUTO/ON/OFF healthy process/socket/task postconditions, owner
+   confirmation and UAC/console approvals remain NOT_TESTED.
+
+**Production verdict: NO-GO; no live ACL/service/UAC changes, no main merge.**
