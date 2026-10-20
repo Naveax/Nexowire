@@ -54,3 +54,26 @@ test('production trust audit is read-only and unsigned source build is BLOCKED',
   assert.match((strict.stdout??'')+(strict.stderr??''),
     /WINDOWS_JOB_PRODUCTION_TRUST_BLOCKED/);
 });
+test('trust audit computes SHA-256 when Get-FileHash cmdlet is unavailable', {
+  skip:process.platform!=='win32',timeout:15000,
+},()=>{
+  // The Windows CI runner may not register Microsoft.PowerShell.Utility.
+  // Shadow the command with a throwing function to assert this read-only
+  // trust audit uses the cryptographic provider rather than the cmdlet.
+  const auditScript=path.resolve('scripts/audit-windows-job-helper-trust.ps1');
+  const escaped=auditScript.replace(/'/g,"''");
+  const command="function Get-FileHash { throw 'TEST_GET_FILE_HASH_NOT_AVAILABLE' }; & '"+escaped+"'";
+  const result=spawnSync('powershell.exe',[
+    '-NoProfile','-NonInteractive','-Command',command,
+  ],{windowsHide:true,encoding:'utf8',timeout:10000,maxBuffer:8192});
+  assert.equal(result.status,0,
+    'portable SHA-256 audit failed: '+(result.stderr??'').slice(0,1400));
+  const data=JSON.parse(result.stdout.trim()) as {
+    companionManifestMatches:boolean;productionReady:boolean;
+    helperSha256:string;
+  };
+  assert.match(data.helperSha256,/^[0-9a-f]{64}$/);
+  assert.equal(data.companionManifestMatches,true);
+  assert.equal(data.productionReady,false,
+    'a source-built helper must never become production-trusted');
+});

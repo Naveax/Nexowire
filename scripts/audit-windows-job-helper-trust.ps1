@@ -20,7 +20,26 @@ $helper = Get-Item -LiteralPath $HelperPath -Force
 $parent = Get-Item -LiteralPath (Split-Path $HelperPath -Parent) -Force
 $linked = (($helper.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
           (($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
-$hash = (Get-FileHash -LiteralPath $HelperPath -Algorithm SHA256).Hash.ToLowerInvariant()
+# Use the .NET SHA-256 primitive directly. Certain stripped Windows test
+# environments do not expose the Get-FileHash PowerShell cmdlet even though
+# the cryptographic provider is available. A missing cmdlet must never turn
+# a fail-closed security decision into an unrelated command-not-found error.
+# Keep the file open only for a bounded read and always dispose both handles.
+$sha256 = [Security.Cryptography.SHA256]::Create()
+$stream = $null
+try {
+  $stream = [IO.File]::Open(
+    $HelperPath,
+    [IO.FileMode]::Open,
+    [IO.FileAccess]::Read,
+    [IO.FileShare]::Read
+  )
+  $digest = $sha256.ComputeHash($stream)
+  $hash = ([BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+} finally {
+  if ($null -ne $stream) { $stream.Dispose() }
+  $sha256.Dispose()
+}
 $manifest = Join-Path $helper.DirectoryName 'windows-job-owner.sha256'
 $manifestDigest = if (Test-Path -LiteralPath $manifest -PathType Leaf) {
   (Get-Content -LiteralPath $manifest -Raw).Trim().ToLowerInvariant()
