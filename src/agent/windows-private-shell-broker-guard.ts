@@ -131,7 +131,7 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   // Inspect those prefixes at command boundaries, rather than silently
   // accepting quoted start/explorer invocations.
   const explicitBroker=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call)\s+)?["']*\s*(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
-  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt|regsvr32|runas|schtasks|forfiles|wsl|wslhost|wslconfig|wt|bash|sh|windowsterminal)(?:\.exe)?(?=\s|$|["'])/i;
+  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:@?call\s+)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt|regsvr32|runas|schtasks|forfiles|wsl|wslhost|wslconfig|wt|bash|sh|windowsterminal)(?:\.exe)?(?=\s|$|["'])/i;
   // Recursive command interpreters are unbounded launch surfaces: the
   // outer preflight cannot safely reason about a nested shell's arguments,
   // its environment, or downstream GUI descendants.
