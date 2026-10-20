@@ -131,6 +131,25 @@ function adapter(failPhase?: string, mutate?: (runtime: AgentRuntime) => AgentRu
       events.push('start');
       if (failPhase === 'start' && activeVersion === version) throw new Error('SERVICE_START_FAILED');
     },
+    attestOwnedAgentBinary: async id => {
+      assert.equal(id, base.deviceId);
+      events.push('binary-attest');
+      const expected = activeVersion === version ? release().manifest.artifactSha256 : rollbackRelease().manifest.artifactSha256;
+      if (failPhase === 'wrong-image' && activeVersion === version) {
+        return { installedArtifactSha256:expected, runningImageSha256:'f'.repeat(64),
+          processCreationIdentity:'fixture-process-identity-0001',healthAuthenticated:true };
+      }
+      if (failPhase === 'untrusted-health' && activeVersion === version) {
+        return { installedArtifactSha256:expected, runningImageSha256:expected,
+          processCreationIdentity:'fixture-process-identity-0001',healthAuthenticated:false };
+      }
+      if (failPhase === 'rollback-wrong-image' && activeVersion === base.agentVersion) {
+        return { installedArtifactSha256:expected, runningImageSha256:'e'.repeat(64),
+          processCreationIdentity:'fixture-process-identity-0002',healthAuthenticated:true };
+      }
+      return { installedArtifactSha256:expected,runningImageSha256:expected,
+        processCreationIdentity:'fixture-process-identity-0001',healthAuthenticated:true };
+    },
     healthyRuntime: async id => {
       assert.equal(id, base.deviceId);
       events.push('health');
@@ -191,7 +210,7 @@ test('healthy update stays device-scoped and preserves CORE and Admin Bridge sta
     fromVersion: '1.0.5', toVersion: '1.0.6' });
   assert.deepEqual(instance.events, ['lock', 'read', 'rollback-stage', 'hash:rollback',
     'stage', 'hash:target', 'read', 'hash:rollback', 'hash:target',
-    'stop', 'switch:1.0.6', 'start', 'health', 'unlock']);
+    'stop', 'switch:1.0.6', 'start', 'health', 'binary-attest', 'unlock']);
   assert.equal(instance.isLocked(), false);
 });
 
@@ -368,4 +387,47 @@ test('oversized semver components and publisher inspection outage fail closed', 
       throw new Error('PRIVATE_SIGNER_BACKEND_SECRET_DO_NOT_ECHO');
     },
   }), /BINARY_SIGNATURE_UNTRUSTED/);
+});
+
+
+test('PID-like health is insufficient when the running process image hash is wrong', async () => {
+  for (const failure of ['wrong-image', 'untrusted-health']) {
+    const fixture = adapter(failure);
+    const result = await upgradeIsolatedAgent(release(), trust(), context(), fixture.api);
+    assert.equal(result.status, 'rolled_back');
+    assert.ok(fixture.events.includes('binary-attest'));
+    assert.ok(fixture.events.includes('switch:1.0.5'));
+  }
+});
+
+test('rollback is never verified by version/heartbeat alone when process image differs', async () => {
+  const fixture = adapter('rollback-wrong-image', runtime => ({
+    ...runtime, authSessionEpoch: 'untrusted-after-update',
+  }));
+  const result = await upgradeIsolatedAgent(release(), trust(), context(), fixture.api);
+  assert.equal(result.status, 'rollback_unconfirmed');
+  assert.ok(fixture.events.includes('binary-attest'));
+  assert.equal(fixture.isLocked(), false);
+});
+
+test('two-device staged canary fixture does not treat a source-pass as production approval', async () => {
+  const first=adapter();
+  const firstResult=await upgradeIsolatedAgent(release(),trust(),context(),first.api);
+  assert.equal(firstResult.status,'succeeded');
+  // Device 2 is deliberately not touched without a separately approved
+  // target-device rollout and independent physical VM evidence.
+  const second=adapter();
+  assert.equal(second.events.length,0);
+  assert.equal(second.isLocked(),false);
+  assert.equal(first.events.includes('binary-attest'),true);
+});
+
+test('failed first-device canary is a hard barrier for any subsequent rollout', async () => {
+  const first=adapter('health');
+  const second=adapter();
+  const firstResult=await upgradeIsolatedAgent(release(),trust(),context(),first.api);
+  assert.equal(firstResult.status,'rolled_back');
+  // A full rollback still represents a failed canary and blocks next device.
+  assert.equal(second.events.length,0);
+  assert.equal(first.events.includes('switch:1.0.5'),true);
 });

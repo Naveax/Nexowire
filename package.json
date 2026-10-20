@@ -29,6 +29,7 @@
     "release:check": "npm run check && npm run build && node --import tsx scripts/check-release-package.ts",
     "release:verify": "node --import tsx scripts/verify-release-candidate.ts",
     "s3:verify-windows-binary": "node --import tsx scripts/verify-windows-agent-binary.ts",
+    "s3:release-preflight": "node --import tsx scripts/verify-s3-release-bundle.ts",
     "release:tag:check": "node --import tsx scripts/check-release-tag.ts",
     "release:windows:user-bundle": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-job-owner.ps1 && node --import tsx scripts/build-windows-user-bundle.ts",
     "release:windows:user-bundle:smoke": "node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows",

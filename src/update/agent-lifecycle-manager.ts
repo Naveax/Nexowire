@@ -59,6 +59,13 @@ export interface UpgradeContext {
   /** Signed, retained OLD binary, not a version string or downloadable URL. */
   rollbackRelease: SignedRelease;
 }
+/** Supplied by a trusted native OS attestor, never worker stdout or a TCP port probe. */
+export interface AgentBinaryEvidence {
+  installedArtifactSha256: string;
+  runningImageSha256: string;
+  processCreationIdentity: string;
+  healthAuthenticated: boolean;
+}
 export interface UpgradeAdapter {
   readRuntime(deviceId: string): Promise<AgentRuntime>;
   acquireDeviceLock(deviceId: string): Promise<() => Promise<void>>;
@@ -71,6 +78,8 @@ export interface UpgradeAdapter {
   cutover(deviceId: string, version: string, expectedSha256: string): Promise<void>;
   startOwnedAgent(deviceId: string): Promise<void>;
   healthyRuntime(deviceId: string): Promise<AgentRuntime | null>;
+  /** Must bind actual process image, creation identity, installed bytes and authenticated health. */
+  attestOwnedAgentBinary(deviceId: string): Promise<AgentBinaryEvidence | null>;
 }
 export type UpgradeResult =
   | { status: 'succeeded'; deviceId: string; fromVersion: string; toVersion: string }
@@ -212,6 +221,15 @@ export async function preflightAgentUpgrade(
   if (compare(release.manifest.version, observed.agentVersion) <= 0) fail('REPLAY_OR_DOWNGRADE');
 }
 /** Rehash the actually staged bytes, not a publisher supplied hash or an EXE path. */
+function verifiedBinaryEvidence(
+  evidence: AgentBinaryEvidence | null, expectedSha256: string,
+): boolean {
+  return !!evidence && evidence.healthAuthenticated === true &&
+    evidence.installedArtifactSha256 === expectedSha256 &&
+    evidence.runningImageSha256 === expectedSha256 &&
+    typeof evidence.processCreationIdentity === 'string' &&
+    /^[A-Za-z0-9_.:@-]{16,128}$/.test(evidence.processCreationIdentity);
+}
 async function checkStagedHash(
   adapter: UpgradeAdapter, deviceId: string, slot: 'target' | 'rollback',
   release: SignedRelease,
@@ -257,7 +275,9 @@ export async function upgradeIsolatedAgent(
     const after = await adapter.healthyRuntime(context.expectedDeviceId);
     if (!after || !sameAuthority(before, after) ||
         after.agentVersion !== release.manifest.version ||
-        after.hubVersion !== before.hubVersion) fail('POST_UPDATE_HEALTH_UNCONFIRMED');
+        after.hubVersion !== before.hubVersion ||
+        !verifiedBinaryEvidence(await adapter.attestOwnedAgentBinary(before.deviceId),
+          release.manifest.artifactSha256)) fail('POST_UPDATE_HEALTH_UNCONFIRMED');
     return { status: 'succeeded', deviceId: before.deviceId,
       fromVersion: before.agentVersion, toVersion: after.agentVersion };
   } catch (error) {
@@ -273,7 +293,9 @@ export async function upgradeIsolatedAgent(
       const restored = await adapter.healthyRuntime(before.deviceId);
       if (restored && sameAuthority(before, restored) &&
           restored.agentVersion === before.agentVersion &&
-          restored.hubVersion === before.hubVersion) {
+          restored.hubVersion === before.hubVersion &&
+          verifiedBinaryEvidence(await adapter.attestOwnedAgentBinary(before.deviceId),
+            context.rollbackRelease.manifest.artifactSha256)) {
         return { status: 'rolled_back', deviceId: before.deviceId,
           fromVersion: before.agentVersion, error: cause };
       }

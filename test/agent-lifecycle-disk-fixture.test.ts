@@ -109,6 +109,16 @@ async function withDiskFixture(scenario:'clean'|'tamper-target'|'tamper-rollback
       assert.equal(stopped,true);
       events.push('start');
     },
+    attestOwnedAgentBinary:async id=>{
+      assert.equal(id,runtime.deviceId);
+      events.push('binary-attest');
+      const slot=selected==='1.0.6'?'target':'rollback';
+      const sha=createHash('sha256').update(await fs.readFile(artifactPath(slot))).digest('hex');
+      return {
+        installedArtifactSha256:sha,runningImageSha256:sha,
+        processCreationIdentity:'isolated-fixture-process-epoch-0001',healthAuthenticated:true,
+      };
+    },
     healthyRuntime:async id=>{
       assert.equal(id,runtime.deviceId);
       events.push('health');

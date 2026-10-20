@@ -196,3 +196,44 @@ nexowire.update.apply Powershell orchestration is NOT switched to this new
 trust gate. Its task-name/port-level health checks and lack of a crash-safe
 journal mean production remains BLOCKED even after a green CI and Release
 Readiness. Neither Work PC nor Naveax was upgraded/restarted.
+
+
+## 2026-10-20 S3 independent release gate continuation
+
+- A READ-ONLY offline release bundle audit exists in scripts/s3-release-bundle-audit.ts and scripts/verify-s3-release-bundle.ts.
+  Unit tests use deliberately unsigned fake executable bytes and an
+  injected fixture Authenticode inspector. They are source tests, NOT
+  first-party signed installer acceptance. The real CLI defaults to
+  Windows Get-AuthenticodeSignature through s3-windows-binary-trust.ts.
+- Trusted policy SHA-256 must be pinned OUT OF BAND with exact
+  Ed25519 manifest public key, signing certificate DER SHA-256,
+  publisher, old/target binary SHA-256 and Agent/Hub version bounds.
+  Fetching policy and SHA from one untrusted release is circular.
+- A passing offline result has executionSafe:false,
+  canaryApproved:false and productionApproved:false; no service is
+  stopped, restarted, modified or executed.
+- Isolated lifecycle adapter now requires actual installed AND
+  running process image SHA-256 plus process-creation identity and
+  authenticated health for both target and restored rollback binary.
+  PID/port/version alone cannot satisfy the API. Trusted native
+  production process-image attestation remains unimplemented.
+- Two simulated distinct devices have independent staged signed
+  rollback hashes and staged outcomes. Failure on canary one blocks
+  staging on canary two. Wrong Hub and revoked token fail before stop.
+  These are synthetic tests, not actual 2-device staging.
+- The existing production nexowire.update.apply path still uses its
+  prior checksum-oriented updater; it is NOT connected to this
+  isolated source S3 trust gate. DO NOT RUN IT FOR AN UNSIGNED RELEASE.
+- #588 live large-file transfers require a version-compatible, signed
+  native Agent/Hub rollout. Both live Agent 1.0.5 devices are unchanged.
+- Physical isolated VM/snapshot access remains unavailable: Hyper-V
+  permission denied on Work PC and Naveax; VirtualBox absent during
+  previous physical inventory. NO VM restarts, restores or real
+  installer tests executed in this continuation.
+- Production signer pins, Nexowire-signed native installer, signed
+  full old rollback archive/hash, fsynced external crash journal,
+  immutable protected stage paths and physical Win10/11 VM restore
+  evidence remain ABSENT: PRODUCTION NO-GO.
+
+A green source CI or Release Readiness check is not an approval to
+roll out or activate features. PR remains DRAFT for #00 coordination.

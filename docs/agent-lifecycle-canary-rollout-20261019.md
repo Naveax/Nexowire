@@ -73,3 +73,98 @@ Each physical VM run requires an authorized VM/snapshot ID, exact old/target bin
 6. Production gate: separate approval only after VM and canary acceptance, staged one-device rollout with full rollback evidence.
 
 Decision: SOURCE FIXTURE TESTS ONLY; VM BLOCKED; SIGNED_INSTALLER BLOCKED; ROLLBACK_BUNDLE BLOCKED; PRODUCTION BLOCKED; NO LIVE ROLLOUT.
+
+
+## 2026-10-20: offline installer cryptographic gate and #588 release dependency
+
+PR #551 now additionally provides an OPERATOR-ONLY and READ-ONLY
+two-release preflight, implemented in:
+- scripts/s3-release-bundle-audit.ts
+- scripts/verify-s3-release-bundle.ts
+- test/s3-release-bundle-audit.test.ts
+- test/s3-release-cli.test.ts
+
+Use only after a separately authorized release team provisions all the
+real Nexowire-owned signed binaries, signed Ed25519 manifests, and an
+OUT-OF-BAND trusted policy/digest:
+
+    npm run s3:release-preflight -- --trusted-policy "C:\operator\policy.json" --policy-sha256 <out-of-band SHA256> --bundle-root "C:\staging\release"
+
+The trusted policy JSON must have:
+- schemaVersion=1
+- trustedManifestPublicKeyPem (Ed25519, separately issued)
+- trustedPublisher (exact Authenticode signer Subject)
+- trustedCertificateSha256 (SHA256 of DER signing certificate)
+- expectedOwnerAccountId, expectedDeviceId
+- installedAgentVersion, targetVersion, hubVersion
+- targetArtifactSha256, rollbackArtifactSha256
+
+Under the isolated release bundle root:
+
+    target/installer.exe
+    target/manifest.json
+    target/manifest.sig
+    rollback/installer.exe
+    rollback/manifest.json
+    rollback/manifest.sig
+
+Manifest JSON uses the strict S3 SignedAgentManifest schema and exact
+canonical Ed25519 signature encoding used by agent-lifecycle-manager.ts.
+The trusted policy file digest comes from the OPERATOR OUTSIDE the
+release archive. A policy and its own checksum downloaded from the same
+untrusted GitHub release would be circular and is NOT accepted as a
+real independent root of trust.
+
+The CLI inspects actual native Windows Authenticode for the target and
+rollback installer.exe and cross-checks independently pinned publisher
+Subject, DER certificate hash, exact release bytes/hash, strict signed
+Ed25519 manifest, target/old version identity and BOTH Hub compatibility
+ranges. All material is read bounded, without launching any executable,
+installing services, prompting UAC, updating a device or invoking a Hub.
+
+A successful report explicitly includes:
+- status: offline_artifacts_verified
+- canaryApproved: false
+- productionApproved: false
+- executionSafe: false
+
+Even if the offline binary passes, this DOES NOT establish the OS
+process image identity after a mutable file-path cutover, protected
+ACL/handle, rollback restart identity, owner authenticated health, UAC
+consent, durable fsynced transaction journal, VM restore or live canary.
+Production launch remains strictly BLOCKED. In the absence of real
+independently signed Nexowire installer and retained complete old
+rollback package SHA256, this CLI must fail closed.
+
+The isolated upgrade adapter now also REQUIRES an OS-trusted binary
+attestation: installed artifact SHA-256, actual running image SHA-256,
+stable process-creation identity and authenticated health receipt.
+A PID, TCP port, worker-reported binary name or version alone does
+not satisfy that source contract. The real OS attestor remains unbuilt;
+fixture attestation is only a source acceptance test.
+
+### #588 coordination/deployment gate
+
+Issue #588 file transfer is owned by Artifact Bridge (#08), file grants
+(#05), reconnect (#06), QA (#16) and integrator (#00). PR #551 DOES NOT
+alter stream code, message size, quotas, chunks, resumable sessions or
+owner authorization. A source-only #588 implementation must not be
+represented as live on Work PC/Naveax, which still advertise Agent
+1.0.5. A signed, pin-verified, staged, rollback-safe rollout with
+version-negotiated Hub and native Agent acceptance is mandatory before
+claiming its large-file streaming capabilities work in production.
+
+### Two-device staged release rule
+
+First run the isolated signed Windows 10/11 VM matrix, including
+damaged installer, wrong publisher, wrong Hub, revoke, crash-at-cutover,
+false-positive health, failed rollback, durable restart recovery and
+restored signed OLD SHA256. Only AFTER a successful nonproduction first
+canary and a separate explicit approval may the second canary proceed.
+A test double that calls stage/cutover for only one fictional device
+does not establish this gate for real Naveax or Work PC.
+
+DO NOT update or restart Agent/Broker on Work PC or Naveax from this PR.
+DO NOT run nexowire.update.apply or activate future #588 features.
+The first-party Windows-signed installer and real VM recovery evidence
+are currently unavailable: PRODUCTION NO-GO.
