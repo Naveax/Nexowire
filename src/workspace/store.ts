@@ -32,6 +32,9 @@ export class WorkspaceStore {
   artifactBridge(): ArtifactBridgeStore {
     return this.bridge ??= new ArtifactBridgeStore(this.rootDir);
   }
+  transferJobsDirectory(): string {
+    return path.join(this.rootDir, 'cross-device-transfer-v1');
+  }
 
   async save(
     input: Omit<WorkspaceCheckpoint, 'updatedAt'>,
