@@ -115,12 +115,19 @@ test('issue #588: 9.5 MiB request and response envelopes are bounded independent
       // accept the deliberately incomplete test requests, not to authorize
       // a real user action or hide an observed failed result.
       await new Promise(resolve => setTimeout(resolve, 100));
-      const overloaded = await fetch(url, {
+      const smallDuringLoad = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: '{}',
       });
-      assert.equal(overloaded.status, 503, 'fifth concurrent JSON parser rejected');
+      assert.equal(smallDuringLoad.status, 200,
+        'ordinary small MCP calls must work while large parsers are busy');
+      const overloaded = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ payload: 'x'.repeat(221 * 1024) }),
+      });
+      assert.equal(overloaded.status, 503, 'fifth large JSON parser rejected');
       const error = await overloaded.json() as { code: string };
       assert.equal(error.code, 'MCP_JSON_PARSER_BUSY');
     } finally {
@@ -130,9 +137,9 @@ test('issue #588: 9.5 MiB request and response envelopes are bounded independent
     const recovered = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: '{}',
+      body: JSON.stringify({ payload: 'r'.repeat(221 * 1024) }),
     });
-    assert.equal(recovered.status, 200, 'parser capacity released on disconnect');
+    assert.equal(recovered.status, 200, 'large parser capacity released on disconnect');
 
     const oversizedResponse = await fetch(url, {
       method: 'POST',
