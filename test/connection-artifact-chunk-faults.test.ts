@@ -135,7 +135,7 @@ async function wsSource(dropReadOrdinal: number | undefined) {
   };
 }
 
-test('>220 KiB Artifact Bridge survives isolated WSS reader drop, store re-open and exact-offset resume', async t => {
+test('>220 KiB Artifact Bridge survives isolated localhost WebSocket drop, store re-open and exact-offset resume', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nw-conn-artifact-fault-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const first = await wsSource(5); // Four persisted 64-KiB chunks (256 KiB)

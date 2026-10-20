@@ -2,11 +2,12 @@
 
 **Scope:** test-only transport/fault-injector contribution from Connection Core owner to
 #08 Artifact Bridge owner. No edits to ArtifactBridgeStore, source ingest implementation,
-production adapters, or real user files. PR #547/#569 already merged. Current #580 is DRAFT.
+production adapters, or real user files. PR #547, #569, #580 and #584 are now MERGED. This separate Connection Core test follow-up must retain its own exact-head CI.
 
 ## Exact source and hardware boundary
 
-- Original branch / code base: `cb819d17ee581093d39626f13e985976def17f30`.
+- Original Connection Core / Journal source base: `cb819d17ee581093d39626f13e985976def17f30`.
+- Follow-up exact main base: `af0e0e6149be696837038875f463d23af59b80c6`. New isolated worktree/branch `test/connection-artifact-resume-20261020`.
 - Prior PR #580 HEAD `c25b1f83585c5363653b28c920bb34b9b7e525f0`;
   its **old exact-head CI SUCCESS** cannot prove any later test additions.
 - Two physical devices (independent `machine.health` RPC over existing v1.0.5 Agent):
@@ -75,8 +76,8 @@ physical production continuity.
 
 ## #08 owner handoff
 
-Owner: #08 Artifact Bridge, whose merged work includes PR #552 and #573.
-Current open #08 follow-up **PR #584** owns read verification / TOCTOU.
+Owner: #08 Artifact Bridge, whose merged work includes PR #552, #573 and #584.
+PR #584 has merged and owns verified-read / TOCTOU source changes. The present test-only handoff is coordinated in that PR's discussion without modifying the owner files.
 This Connection Core branch changes **test and documentation only** for
 the transfer boundary. Please adopt the harness for staged Agent/Hub
 reconnect/offset CAS, duplicate pending ACK, crossed device grants, crash
