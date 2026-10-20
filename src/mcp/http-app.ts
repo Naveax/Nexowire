@@ -4,14 +4,24 @@ import {
   localhostHostValidation,
 } from '@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js';
 
-// Issue #588: SDK 1.32.1 createMcpExpressApp() unconditionally installs
-// express.json() with the 100 KiB default. A 221 KiB file encoded as Base64
-// therefore fails HTTP 413 *before* Nexowire authentication or MCP routing.
-//
-// Keep the upstream Host-header/DNS-rebinding middleware and its ordering
-// unchanged. The deliberate 512 KiB request-body cap is NOT an unlimited
-// transfer mechanism; multi-GB files must use durable, bounded streaming.
-export const NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES = 512 * 1024;
+// Issue #588: the upstream SDK factory installs express.json() at a 100 KiB
+// default. Keep Host/DNS-rebinding validation before parsing while bounding
+// *each* incoming JSON body and each outgoing HTTP MCP body to 9.5 MiB.
+// These are transport envelopes, not a GB-file-transfer protocol.
+// Raw binary carried inside Base64 JSON has less usable capacity.
+export const NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES = 19 * 1024 * 1024 / 2;
+export const NEXOWIRE_MCP_RESPONSE_BODY_LIMIT_BYTES = 19 * 1024 * 1024 / 2;
+
+function responseChunkBytes(chunk: unknown, encoding?: unknown): number {
+  if (typeof chunk === 'string') {
+    return Buffer.byteLength(
+      chunk,
+      typeof encoding === 'string' ? encoding as BufferEncoding : 'utf8',
+    );
+  }
+  if (chunk instanceof Uint8Array) return chunk.byteLength;
+  return 0;
+}
 
 export function createNexowireMcpExpressApp(
   options: { host: string; allowedHosts?: string[] },
@@ -30,9 +40,65 @@ export function createNexowireMcpExpressApp(
     );
   }
 
-  // Host check first, bounded parsing second. express.json() defaults to
-  // 100 KiB; setting a finite 512 KiB cap accommodates a ~230 KiB binary file
-  // encoded as Base64 without relaxing per-request safety into unbounded RAM.
+  // Bind finite output accounting to the /mcp path only. MCP tool responses
+  // may use res.end() or multiple res.write() SSE chunks. Never silently
+  // truncate a successful mutation result: on overflow before headers send an
+  // explicit UNKNOWN status (no automatic replay); after streaming has started
+  // abort the connection rather than emitting a forged successful trailer.
+  app.use('/mcp', (_req, res, next) => {
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+    let outputBytes = 0;
+    let rejected = false;
+
+    const rejectOversizedResponse = (): void => {
+      if (rejected) return;
+      rejected = true;
+      res.write = originalWrite;
+      res.end = originalEnd;
+      if (res.headersSent) {
+        res.destroy(new Error('NEXOWIRE_MCP_RESPONSE_TOO_LARGE'));
+        return;
+      }
+      res.removeHeader('Content-Length');
+      res.removeHeader('ETag');
+      res.status(413);
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      originalEnd(JSON.stringify({
+        error: 'MCP_RESPONSE_TOO_LARGE',
+        code: 'MCP_RESPONSE_TOO_LARGE',
+        mutation_state: 'unknown',
+        automatically_retryable: false,
+        limit_bytes: NEXOWIRE_MCP_RESPONSE_BODY_LIMIT_BYTES,
+      }));
+    };
+
+    res.write = ((...args: unknown[]) => {
+      if (rejected) return false;
+      const length = responseChunkBytes(args[0], args[1]);
+      if (outputBytes + length > NEXOWIRE_MCP_RESPONSE_BODY_LIMIT_BYTES) {
+        rejectOversizedResponse();
+        return false;
+      }
+      outputBytes += length;
+      return Reflect.apply(originalWrite, res, args) as boolean;
+    }) as typeof res.write;
+
+    res.end = ((...args: unknown[]) => {
+      if (rejected) return res;
+      const length = responseChunkBytes(args[0], args[1]);
+      if (outputBytes + length > NEXOWIRE_MCP_RESPONSE_BODY_LIMIT_BYTES) {
+        rejectOversizedResponse();
+        return res;
+      }
+      outputBytes += length;
+      return Reflect.apply(originalEnd, res, args) as typeof res;
+    }) as typeof res.end;
+    next();
+  });
+
+  // Host check first, finite JSON parser second. 9.5 MiB below 10 MiB.
   app.use(express.json({ limit: NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES }));
   return app;
 }
