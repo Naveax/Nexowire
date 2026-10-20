@@ -98,7 +98,11 @@ test('issue #588: 9.5 MiB request and response envelopes are bounded independent
       body: JSON.stringify({ mode: 'oversized-response' }),
     });
     assert.equal(oversizedResponse.status, 413);
-    const json = await oversizedResponse.json();
+    const json = await oversizedResponse.json() as {
+      code: string;
+      mutation_state: string;
+      automatically_retryable: boolean;
+    };
     assert.equal(json.code, 'MCP_RESPONSE_TOO_LARGE');
     assert.equal(json.mutation_state, 'unknown');
     assert.equal(json.automatically_retryable, false);
