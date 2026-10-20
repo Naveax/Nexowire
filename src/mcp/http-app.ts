@@ -98,7 +98,41 @@ export function createNexowireMcpExpressApp(
     next();
   });
 
-  // Host check first, finite JSON parser second. 9.5 MiB below 10 MiB.
-  app.use(express.json({ limit: NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES }));
+  // SDK's original parser ran for every endpoint. The only JSON POST is
+  // /mcp; keeping parse admission per-route prevents unauthenticated clients
+  // from reserving unlimited 9.5 MiB parser buffers simultaneously.
+  // This is a parser-stage guard only: it releases immediately upon parse
+  // completion, NOT after a potentially long-running tool/SSE response.
+  const jsonParser = express.json({ limit: NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES });
+  const MAX_CONCURRENT_MCP_JSON_PARSERS = 4;
+  let parsingRequests = 0;
+  app.use('/mcp', (req, res, next) => {
+    if (req.method !== 'POST') {
+      next();
+      return;
+    }
+    if (parsingRequests >= MAX_CONCURRENT_MCP_JSON_PARSERS) {
+      res.setHeader('Retry-After', '1');
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({
+        error: 'MCP_JSON_PARSER_BUSY',
+        code: 'MCP_JSON_PARSER_BUSY',
+        automatically_retryable: false,
+      });
+      return;
+    }
+    parsingRequests += 1;
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      parsingRequests -= 1;
+    };
+    res.once('close', release);
+    jsonParser(req, res, (error?: unknown) => {
+      release();
+      next(error);
+    });
+  });
   return app;
 }
