@@ -15,30 +15,28 @@
 
 **Clarification:** “Source tested” does not imply an installed production Agent version was changed. All five known PRs are source-only. For #537, public Quick Tunnel fixture success (signed reserve/replay-deny) is not production SaaS authentication or authority. For #480, static executable denial is not transitive GUI containment. For #543, taskkill acceptance is not proof that every descendant died.
 
-## Incoming development PR inbox (16 expected; no fabricated metadata)
+## Incoming development PR inbox (live reconciled snapshot, 2026-10-18)
 
-Only three open PRs (#537, #480, at the time #543 before its merge) were returned by GitHub when this ledger was initialized. The following slots deliberately remain unfilled until each other development chat supplies an actual PR URL/number and accountable owner. These are **intake slots, not 16 existing PRs**.
+This table supersedes the initial empty slots. It reflects independently queried current GitHub PR metadata; listed file paths are intake-level summaries, **not a substitute for re-fetching changed files/diffs immediately before merge**. CI values are point-in-time, not immutable. A merged source PR is not automatically staging/production accepted.
 
-| Intake slot | Development conversation | Owner | PR / branch | Base SHA | HEAD SHA | Files | Dependencies | Tests / CI | Release |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| D01 | Assigned AI conversation 1 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D02 | Assigned AI conversation 2 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D03 | Assigned AI conversation 3 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D04 | Assigned AI conversation 4 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D05 | Assigned AI conversation 5 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D06 | Assigned AI conversation 6 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D07 | Assigned AI conversation 7 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D08 | Assigned AI conversation 8 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D09 | Assigned AI conversation 9 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D10 | Assigned AI conversation 10 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D11 | Assigned AI conversation 11 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D12 | Assigned AI conversation 12 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D13 | Assigned AI conversation 13 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D14 | Assigned AI conversation 14 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D15 | Assigned AI conversation 15 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-| D16 | Assigned AI conversation 16 (unverified) | Unassigned | Not reported | Unknown | Unknown | Unknown | Unknown | Not checked | No PR; no merge |
-
-**Required intake record:** exact PR URL, responsible developer, branch/ref, base + exact head SHA, all changed files, component and workstream ID(s), dependency predecessor, SHA-bound test evidence, current GitHub run ID and 7 check conclusions, review threads, blocking incidents, rollback plan if production is ever proposed, and the four separate acceptance states.
+| PR | Owner | Branch | Base SHA | HEAD SHA | Files | Touched paths / groups | Dependency | CI run / result | Source/merge | Staging | Production | Incident closed |
+|---|---|---|---|---|---|---:|---|---|---|---|---|---|
+| [#480](https://github.com/Naveax/Nexowire/pull/480) | Naveax | `fix/ai-screen-direct-bridge-broker-guard-20261014` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `ec3c54d77e3b9fabb4c85831222fb48b112cd7b2` | 4 | docs/ai-screen-displays.md; src/agent/windows-private-desktop.ts; src/agent/windows-private-shell-broker-guard.ts; test/private-desktop-shell-broker-gate.test.ts | #402 Windows GUI broker; security blocker | 39134168129 PASS; security hold | DRAFT HOLD | NO | NO | NO |
+| [#545](https://github.com/Naveax/Nexowire/pull/545) | Naveax | `fix/parallel-07-codex-oauth-compat-20261018` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `4658e8180be31f694a612d7c5e6f2f2a36725652` | 8 | docs/MCP_OAUTH_CODEX_COMPAT.md; src/hub/control-plane-mcp-auth.ts; src/mcp/http.ts; src/product/mcp-oauth.ts; 2 tests | OAuth/connection #547; failed prior CI | 39150306199 pending | DRAFT HOLD | NO | NO | NO |
+| [#546](https://github.com/Naveax/Nexowire/pull/546) | Naveax | `feat/parallel-13-public-wss-device-security-20261018` | `f43580cce2a786880fcb6a8036cfc01a7a1a2621` | `d70b102ed3594fdd8b2a0c6dc9fd6580cd9c3fef` | 6 | WSS revocation doc; src/product/owner-public-wss-enrollment-lease-proposal.ts; 2 tests | #537 merged; parent retargeted main | 39149991731 in_progress | DRAFT HOLD | NO | NO | NO |
+| [#547](https://github.com/Naveax/Nexowire/pull/547) | Naveax | `fix/parallel-06-connection-recovery-20261018` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `4bb72b47132ba53c5f8413915888b471a81a521f` | 10 | src/core/agent-broker.ts; src/hub/agent-websocket.ts; src/ops/scale-transport-metrics.ts; src/providers/agent-provider.ts; 3 tests; doc | R06 connection; overlaps #549 provider | 39150296541 pending | DRAFT HOLD | NO | NO | NO |
+| [#548](https://github.com/Naveax/Nexowire/pull/548) | Naveax | `fix/parallel-04-access-core-adminbridge-20261018` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `822cb26f8e2531cf5c3f5dca309eb3aff22123c6` | 12 | src/agent/privileged-broker-denial.ts; privileged-broker-lifecycle.ts; src/product/control-plane-http.ts; control-plane-service.ts; src/security/authorization-explain.ts; 3 tests | R04 authorization, Broker | 39150234440 in_progress | DRAFT HOLD | NO | NO | NO |
+| [#549](https://github.com/Naveax/Nexowire/pull/549) | Naveax | `fix/parallel-02-error-contract-20261018` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `3818031243413763e453694eaab2665a198db86b` | 6 | src/mcp/create-server.ts; src/protocol/error-contract-v2.ts; src/protocol/result.ts; src/providers/agent-provider.ts; test/error-contract-v2.test.ts; doc | R01 error contract; overlaps #552/#558 | 39150296880 pending | DRAFT HOLD | NO | NO | NO |
+| [#550](https://github.com/Naveax/Nexowire/pull/550) | Naveax | `feat/parallel-11-progress-watchdog-20261018` | `f43580cce2a786880fcb6a8036cfc01a7a1a2621` | `af032f4bc0316c78b62d9f907fef6ae44c81ef3d` | 7 | src/agent/executors.ts; native-agent.ts; progress-supervisor.ts; tests/fixture/doc | R18 progress; overlaps #553/#558 | 39150225474 in_progress | DRAFT HOLD | NO | NO | NO |
+| [#551](https://github.com/Naveax/Nexowire/pull/551) | Naveax | `feat/parallel-12-agent-lifecycle-onboarding-20261018` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `64e1d62873d189bb9c2b857c7ce4cd3f0c14e504` | 10 | src/connect.ts; src/update/agent-lifecycle-manager.ts; live-update.ts; web/connect.js; 5 tests/doc | R19 lifecycle; CI failed | 39135168316 failed | DRAFT HOLD | NO | NO | NO |
+| [#552](https://github.com/Naveax/Nexowire/pull/552) | Naveax | `feat/parallel-08-artifact-continuity-20261018` | `d952cf7a931df00ce902653cd55ff96cb4852bcc` | `1b819e62388ea06c8e8eb241c1346e7aa3301f3e` | 11 | src/mcp/artifact-bridge-tools.ts; create-server.ts; src/workspace/artifact-bridge.ts; artifact-checkpoint-adapter.ts; store.ts; 2 tests/doc | R15 artifact bridge; overlaps #549/#558 create-server | 39150231483 in_progress | DRAFT HOLD | NO | NO | NO |
+| [#553](https://github.com/Naveax/Nexowire/pull/553) | Naveax | `fix/parallel-05-scoped-path-usb-grants-20261018` | `d952cf7a931df00ce902653cd55ff96cb4852bcc` | `ab68ff012b31957b2a0b6d9a399c3b3f76dca734` | 10 | src/agent/executors.ts; native-agent.ts; path-policy.ts; scoped-path-grants.ts; tests/docs | R05 path+USB; CI failed | 39149700883 in_progress | DRAFT HOLD | NO | NO | NO |
+| [#554](https://github.com/Naveax/Nexowire/pull/554) | Naveax | `feat/parallel-14-quota-subscription-20261018` | `e1dfebf1964a8eea57e5ed6c88249ee8f9ba790e` | `5c4b79e77d391ddc839b6ebbb6ecc52395e0458d` | 6 | src/product/subscription-entitlements-v2-proposal.ts; v2-quota-d1-staging.ts; SQL fixture; 2 tests/doc | R12 quota; merged | 39135456949 PASS | SOURCE MERGED | NO | NO | NO |
+| [#555](https://github.com/Naveax/Nexowire/pull/555) | Naveax | `feat/parallel-10-environment-doctor-20261018` | `e1dfebf1964a8eea57e5ed6c88249ee8f9ba790e` | `325fc2b5122ac30deec5ab77c49dcc7ec14f435e` | 8 | src/diagnostics/environment-doctor.ts; runner; scripts/ai-screen-launch-sinks-baseline.json; tsconfig.json; test/doc | R17/R21 Doctor; merged | 39135469895 PASS | SOURCE MERGED | NO | NO | NO |
+| [#556](https://github.com/Naveax/Nexowire/pull/556) | Naveax | `fix/parallel-09-ai-screen-uia-filepicker-20261018` | `e1dfebf1964a8eea57e5ed6c88249ee8f9ba790e` | `430513ec701e0d36cdd1b10e1e74eac7e4bbcf83` | 12 | src/agent/executors.ts; windows-private-desktop.ts; windows-private-file-picker.ts; windows-private-shell-broker-guard.ts; src/mcp/create-server.ts; capabilities; 3 tests/docs | R09/R16 UIA; overlaps #480 broker guard | 39135559597 PASS | DRAFT HOLD | NO | NO | NO |
+| [#557](https://github.com/Naveax/Nexowire/pull/557) | Naveax | `test/parallel-15-scale-load-cost-20261018` | `e1dfebf1964a8eea57e5ed6c88249ee8f9ba790e` | `073e0246ed8897a472d705dd7784cbd440d30252` | 11 | scripts/bench-s5-loopback-ws-capacity.ts; scripts/s5-soak-*; src/ops/scale-s5-cost-envelope.ts; 3 tests/reports/docs | R12/R22 S5 load; merged | 39135626947 PASS | SOURCE MERGED | NO | NO | NO |
+| [#558](https://github.com/Naveax/Nexowire/pull/558) | Naveax | `fix/parallel-01-agent-reconciliation-20261018` | `e1dfebf1964a8eea57e5ed6c88249ee8f9ba790e` | `32fb3f9fcb4c8bcedc61d3aa98ab89aff0602f12` | 9 | src/agent/native-agent.ts; operation-journal.ts; src/mcp/create-server.ts; src/operations/agent-operation-reconciliation.ts; idempotency-store.ts; test/doc | R02/R03/R20 journal; overlaps #549/#552 | 39150004726 in_progress | DRAFT HOLD | NO | NO | NO |
+| [#559](https://github.com/Naveax/Nexowire/pull/559) | Naveax | `fix/parallel-03-windows-job-objects-20261018` | `e1dfebf1964a8eea57e5ed6c88249ee8f9ba790e` | `34c6620055ad634d2e272ff9378e4bf4403fd81c` | 16 | native/windows-job-owner.c; src/agent/process-manager.ts; process-worker.ts; windows-job-owner.ts; native build scripts; CI workflows; package.json; tests/docs | R07/#541 Job Objects; requires native binary/release gate | 39149677357 in_progress; independent run passed | DRAFT HOLD | NO | NO | NO |
 
 ## File conflict and merge precedence
 
@@ -61,3 +59,62 @@ Only three open PRs (#537, #480, at the time #543 before its merge) were returne
 Authoritative workstream registry: [`docs/NEXOWIRE_CROSS_PROJECT_RELIABILITY_BACKLOG_20261018.md`](NEXOWIRE_CROSS_PROJECT_RELIABILITY_BACKLOG_20261018.md) with R01 through R22. Not all 22 are complete; core observed cases map to R01/R02/R03 mutation honesty/reconciliation, R04 authorization, R05 USB grants, R06 connectivity, R07/#541 tree ownership, R08 shell outcome, R09/#402 GUI bridge, R10 cross-device SHA, R11 progress UI, R12 Scale v2, R13 provider policy, R14 OAuth, R15 cross-chat continuity, R16 Windows picker, R17 environment drivers, R18 watchdog, R19 lifecycle, R20 atomic append, R21 hardware proof, R22 release gates. App-specific LG bootloader, Windows partitioning, Roblox logic, hardware tests, trading algorithms, vendor policies and Windows UAC are not necessarily Nexowire defects; preserve separate issue scope. Exhaustiveness across all previous chats requires original incident IDs/evidence, not the count “22” alone.
 
 **Production controls:** No live Agent, Hub or Broker modification; no real user quota, billing, DNS or firewall change; no provider/Windows security bypass. Stop release immediately on unknown mutation state, missing exact-head CI, unresolved security review or absent rollback evidence.
+
+## Integration follow-up (2026-10-18, latest source-only merges)
+
+- #554 merged to `39c41fb30d14b8c43051a3dd365daebfba5e39c4`; exact-head 7/7 CI and 18/18 local quota tests. Dormant proposal; live monthly Free credits/payment unchanged.
+- #557 merged to `f43580cce2a786880fcb6a8036cfc01a7a1a2621`; exact-head 7/7 CI and 14/14 local synthetic load/cost tests. No 24h production throughput accepted.
+- #555 merged to `54ab323a58924b14fa6b93294e33dece7c68de44`; exact-head 7/7 CI and 12/12 local Doctor tests; hardware proof remains unverified.
+- #480 remains blocked: direct broker-name parity still permits literal nested `cmd /c wsl.exe`, `PowerShell -Command wsl.exe` etc in static preflight; review comment 6250934358. No native launch was tested.
+- In-flight changes to PR head SHA and existing queued/in_progress CI mean old test results are not merge authority. NEVER retrigger the same SHA/workflow/input CI already running. #545/#551/#553 had earlier failing CI; new exact-head run outcome must supersede that evidence.
+- #546 was retargeted from already-merged #537 to `main`, preserving its developer commits. Do not merge pending current exact-head CI/independent regression.
+- #548/#550/#552/#555 combined **previous-head** local integration preview passed 57/57 tests, but #548/#550/#552 subsequently changed heads; revalidate before merge.
+- Real Agent 1.0.5 remains installed on Work PC and Naveax; no production Agent/Hub/Broker, payment, user quotas, DNS or firewall were changed. No staging-accepted or incident-closed claims are inferred.
+
+## Central integration snapshot | 2026-10-19 (supersedes earlier intake/CI snapshots)
+
+Verified origin/main before ledger update: `5072c1a47620222b95d9142b3c79be44160ba221`. Metadata below is a **point-in-time GitHub API observation**, not live attestation. Pull requests and CI may move independently. Re-read exact SHA, review threads, diff and checks before each merge.
+
+| Open PR | Owner branch | Base SHA | Exact HEAD SHA | CI jobs current rollup | Source | Staging | Production | Original incident |
+|---|---|---|---|---|---|---|---|---|
+| [#578](https://github.com/Naveax/Nexowire/pull/578) test(p0): harden real Codex OAuth loopback smoke subprocess and callback | `fix/parallel-07-codex-oauth-smoke-hardening-20261019` | `5072c1a47620222b95d9142b3c79be44160ba221` | `d2f0500f305aeda5c4be48e33f5849737ad4f0bd` | S5/F0/active2 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#576](https://github.com/Naveax/Nexowire/pull/576) security(p0): independently kernel-attest Windows Job ownership and gate helper trust | `fix/windows-job-helper-trust-qa-20261018` | `04778ccfc49a5668cbaa615a94fce81200aa8f43` | `34bb03b7490972036e256c87dab755a13e1e04c1` | S5/F0/active5 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#575](https://github.com/Naveax/Nexowire/pull/575) feat(progress): independent scoped result proof and watchdog acceptance (follow-up #550) | `fix/parallel-11-progress-proof-acceptance-20261018` | `91edbfa25097a9488534532fd99ff55916ce28e3` | `c6820b431bf88814172437373131527f457ff216` | S9/F1/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#574](https://github.com/Naveax/Nexowire/pull/574) fix(p0): session-bound ROOT and fail-closed Guardian truth (follow-up #548) | `fix/parallel-04-access-core-adminbridge-20261018` | `fd28d017ea291e8a935b05fda89d7ed2765d35d0` | `4ad35ab006453971b9c7c2267a39214b97e813a5` | S5/F2/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#572](https://github.com/Naveax/Nexowire/pull/572) test(qa): refresh R01-R22 final acceptance and exact-head blocking findings | `test/qa16-final-acceptance-refresh-20261018` | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | `62a9b97a0bcb50bafae3755368a35b4b9ac79ca6` | S6/F1/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#565](https://github.com/Naveax/Nexowire/pull/565) test(p0): Error Contract v2 end-to-end failure-chain acceptance and audit safety | `test/parallel-02-error-acceptance-20261018` | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | `3ce04218de0c717971972bc5108f8ac6f4d3fb59` | S6/F1/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#562](https://github.com/Naveax/Nexowire/pull/562) docs(integration): reconcile 16 parallel PRs and exact-head release gates | `integration/cross-project-ledger-sync-20261018` | `54ab323a58924b14fa6b93294e33dece7c68de44` | `2a7cd86c394397be7a43970827c61b3369558fd1` | S6/F1/active0 (snapshot only) | OPEN | NO | NO | OPEN |
+| [#553](https://github.com/Naveax/Nexowire/pull/553) feat(p0): scoped filesystem permissions and USB volume-bound grants | `fix/parallel-05-scoped-path-usb-grants-20261018` | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | `76f7f3d8a82b16d928c2308d44996e134589ddac` | S6/F0/active1 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#551](https://github.com/Naveax/Nexowire/pull/551) feat(s3): isolated Agent lifecycle trust/rollback and secure one-click pairing (#485) | `feat/parallel-12-agent-lifecycle-onboarding-20261018` | `54ab323a58924b14fa6b93294e33dece7c68de44` | `3659db7a63254fae1badb39eca70be8853ea4df5` | S10/F0/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+| [#480](https://github.com/Naveax/Nexowire/pull/480) fix(ai-screen): unify direct desktop and worker GUI broker deny gates | `fix/ai-screen-direct-bridge-broker-guard-20261014` | `a54cbbdd37e981a169631d688b53c7e3b3e90f48` | `ec3c54d77e3b9fabb4c85831222fb48b112cd7b2` | S7/F0/active0 (snapshot only) | DRAFT | NO | NO | OPEN |
+
+### Source-integrated in this integration sequence (not production deployments)
+
+| PR | Main merge SHA | Separate stage/production/incident disposition |
+|---|---|---|
+| #561 | `6c3997ebc9f840398675cecf94b7b64132e8c4d8` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #560 | `453dcf4629ab7729a5bdf5b4a04161b1f53423bc` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #564 | `c2d4c7084b2a5173c67e8567745f00f1dc66ee7c` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #545 | `f45d0dbc02bc6309d416825f3c39fec004fbeaae` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #547 | `15911d33cbabd8b3b886204d0c677058eefcb3af` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #548 | `a85cdada5e845924c2cda30bb6d9e844acb1fa75` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #550 | `ca7fc2c457cd47181e5b5d6c4db7b0ac32698838` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #567 | `fd28d017ea291e8a935b05fda89d7ed2765d35d0` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #563 | `91edbfa25097a9488534532fd99ff55916ce28e3` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #566 | `2d8a1cf6474bd7748ff8cc900f288f850dded840` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #568 | `35f38314eaad93d0e7821364b20c2bbfc92c7464` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #569 | `04778ccfc49a5668cbaa615a94fce81200aa8f43` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #571 | `998288455c398f9e242f3bf5c28d4fcd870c7bae` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #573 | `871726aec37ec0bb1dc15620d8395b1d37445e59` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #577 | `5831361dceba041583ffa30b9a63476bf4b6e444` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+| #570 | `5072c1a47620222b95d9142b3c79be44160ba221` | staging NOT ACCEPTED; production NOT DEPLOYED; incident NOT CLOSED |
+
+### Negative / release blockers still not closed
+
+- **#553 P0 USB/path**: missing authenticated physical-console grant, handle-based reparse/TOCTOU atomic I/O and real hot-unplug/letter-change tests; previously observed broad Windows regression is not fully accepted. Source-only green CI is insufficient.
+- **#576/#541 WinJob**: current merged helper requires independently protected hash/Authenticode/ACL and kernel Job verification for real production. A marker or sidecar hash alone is not sufficient.
+- **#567 Journal**: restored old SQLite backup may lose request ID tombstone. Independent rollback watermark and restore preflight required.
+- **#551 Agent installer**: no signed first-party installer, independent trust chain, rollback journal or physical reboot/rollback acceptance.
+- **#480/#556**: superseded source by merged #570, but native/COM/GUI production boundary still lacks full independent acceptance; never merge stale duplicate source.
+- **#562 prior exact-head CI**: run 39150540747 failed in WSL2 Ubuntu installation before tests; not a PASS. This snapshot commit MUST earn its own exact-head CI before main merge.
+- **R01-R22**: continue four independent gates; physical/staging/production/original incident evidence remains separately blocked by exact workstream. No production Agent/Hub/Broker, DNS, user quota or payment changes authorized.

@@ -39,6 +39,10 @@ export interface DoctorRequirements {
   readonly requireNvidia?: boolean;
   readonly requireCuda?: boolean;
   readonly requireWsl?: boolean;
+  /** Match a named WSL distribution; enumeration alone does not verify it can boot. */
+  readonly wslDistros?: readonly string[];
+  /** Uppercase or lowercase 4-digit VID:PID; presence is NOT physical acceptance. */
+  readonly usbVidPid?: readonly string[];
   readonly requireHyperV?: boolean;
 }
 export interface FixPlan {
@@ -177,6 +181,16 @@ function safePackages(requirements: DoctorRequirements): string[] {
 }
 function validateRequirements(requirements: DoctorRequirements): void {
   safePackages(requirements);
+  if (requirements.usbVidPid !== undefined &&
+      (!Array.isArray(requirements.usbVidPid) || requirements.usbVidPid.length > 32 ||
+       requirements.usbVidPid.some((x) => typeof x !== "string" || !/^[0-9a-f]{4}:[0-9a-f]{4}$/i.test(x)))) {
+    throw new TypeError("Invalid USB VID:PID requirement");
+  }
+  if (requirements.wslDistros !== undefined &&
+      (!Array.isArray(requirements.wslDistros) || requirements.wslDistros.length > 16 ||
+       requirements.wslDistros.some((x) => typeof x !== "string" || !/^[a-z0-9][a-z0-9._+-]{0,127}$/i.test(x)))) {
+    throw new TypeError("Invalid WSL distribution requirement");
+  }
   if (requirements.minGpuVramMiB !== undefined &&
       (!Number.isSafeInteger(requirements.minGpuVramMiB) ||
         requirements.minGpuVramMiB < 0 || requirements.minGpuVramMiB > 1_048_576)) {
@@ -191,6 +205,7 @@ export function createProbePlan(platform: DoctorPlatform, requirements: DoctorRe
   validateRequirements(requirements);
   const plan: CommandProbe[] = [
     command("python", platform === "win32" ? "python.exe" : "python3", "--version"),
+    command("node", "node", "--version"),
     command("rust", "rustc", "--version"),
     command("git", "git", "--version"),
     command("docker", "docker", "--version"),
@@ -318,13 +333,18 @@ function toolCheck(name: CheckName, result: ProbeResult | undefined, required: b
     { installed: version, ...(minimum ? { minimum } : {}) });
 }
 function summaryInventory(name: CheckName, result: ProbeResult | undefined, platform: DoctorPlatform,
-  dnsConfig?: ProbeResult): DoctorCheck {
+  requirements: DoctorRequirements, dnsConfig?: ProbeResult): DoctorCheck {
+  const required = name === "usb" && !!requirements.usbVidPid?.length;
   if (!result || result.exitCode !== 0) {
     const code = failedCode(result);
-    return check(name, code === "MISSING_DEPENDENCY" ? "warning" : "unknown", code,
-      false, "Envanter doğrulanamadı.", [name]);
+    return check(name, code === "MISSING_DEPENDENCY" ? optionalStatus(required) : "unknown", code,
+      required, "Envanter doğrulanamadı.", [name]);
   }
   if (name === "usb") {
+    if (platform === "win32" && result.stdout.trim() && asJson(result.stdout) === null) {
+      return check(name, "unknown", "INSUFFICIENT_EVIDENCE", required,
+        "USB PnP çıktısı JSON olarak ayrıştırılamadı.", [name]);
+    }
     const entries = platform === "win32"
       ? asObjects(result.stdout).map((entry) => {
           const match = String(entry.InstanceId ?? "").match(/VID_([A-Fa-f0-9]{4}).PID_([A-Fa-f0-9]{4})/i);
@@ -334,11 +354,25 @@ function summaryInventory(name: CheckName, result: ProbeResult | undefined, plat
       : [...result.stdout.matchAll(/ID ([A-Fa-f0-9]{4}):([A-Fa-f0-9]{4})/g)]
         .map((m) => ({ vid: m[1]!.toUpperCase(), pid: m[2]!.toUpperCase() }));
     const count = entries.length;
-    return check(name, count ? "pass" : "warning", count ? "OK" : "DEVICE_NOT_PRESENT", false,
-      count ? "USB/PnP envanteri okundu; işlevsel fiziksel test yapılmadı." : "USB aygıtı listelenmedi.",
-      [name], { count, devices: entries.slice(0, 64), truncated: count > 64 });
+    const targets = (requirements.usbVidPid ?? []).map((x) => x.toUpperCase());
+    const observed = entries.map((e) => ({ ...e, id: `${e.vid}:${e.pid}` }));
+    const absent = targets.filter((target) => !observed.some((x) => x.id === target));
+    const unhealthy = platform === "win32" ? targets.filter((target) =>
+      !absent.includes(target) && observed.some((x) => x.id === target &&
+        "pnpStatus" in x && String(x.pnpStatus).toUpperCase() !== "OK")) : [];
+    const code: DoctorCode = absent.length ? "DEVICE_NOT_PRESENT" :
+      unhealthy.length ? "DRIVER_NOT_STARTED" : count ? "OK" : "DEVICE_NOT_PRESENT";
+    const status: DoctorStatus = code === "OK" ? "pass" : optionalStatus(required);
+    return check(name, status, code, required,
+      "USB/PnP envanteri okundu; bu, fiziksel işlevsellik ve sürücü işlev testi değildir.",
+      [name], { count, devices: entries.slice(0, 64), truncated: count > 64,
+        requiredVidPid: targets, absentVidPid: absent, unhealthyVidPid: unhealthy });
   }
   if (name === "volumes") {
+    if (result.stdout.trim() && asJson(result.stdout) === null) {
+      return check(name, "unknown", "INSUFFICIENT_EVIDENCE", required,
+        "Disk/volume envanteri JSON olarak ayrıştırılamadı.", [name]);
+    }
     const arr = platform === "win32"
       ? asObjects(result.stdout).map((e) => ({
           volumeGuid: String(e.DeviceID ?? "").match(/Volume\{[a-f0-9-]+\}/i)?.[0] ?? null,
@@ -350,6 +384,10 @@ function summaryInventory(name: CheckName, result: ProbeResult | undefined, plat
       [name], { count: arr.length, devices: arr.slice(0, 64) });
   }
   if (name === "network") {
+    if (result.stdout.trim() && asJson(result.stdout) === null) {
+      return check(name, "unknown", "INSUFFICIENT_EVIDENCE", required,
+        "Ağ adaptörü envanteri JSON olarak ayrıştırılamadı.", [name]);
+    }
     const arr = asObjects(result.stdout);
     const linuxLinks = Array.isArray(asJson(result.stdout)) ? asObjects(result.stdout) : [];
     const adapters = platform === "win32"
@@ -375,9 +413,14 @@ function gpuCheck(results: ReadonlyMap<string, ProbeResult>, requirements: Docto
     const gpus = smi.stdout.split(/\r?\n/).filter(Boolean).map((line) => {
       const parts = line.split(",").map((x) => x.trim());
       const vramMiB = Number(parts[1]);
-      return { model: parts[0] ?? "", vramMiB: Number.isFinite(vramMiB) ? vramMiB : null,
+      return { model: parts[0] ?? "", vramMiB: Number.isSafeInteger(vramMiB) && vramMiB > 0 ? vramMiB : null,
         driverVersion: parts[2] ?? "" };
     });
+    if (!gpus.length || gpus.some((gpu) => !gpu.model || gpu.vramMiB === null ||
+        !/^\d+(?:\.\d+){1,3}$/.test(gpu.driverVersion))) {
+      return check("nvidia", "unknown", "INSUFFICIENT_EVIDENCE", required,
+        "NVIDIA sorgusu başarılı döndü fakat GPU/model/VRAM/sürücü çıktısı eksik veya bozuk.", ["nvidia"]);
+    }
     const enough = requirements.minGpuVramMiB === undefined ||
       gpus.some((gpu) => gpu.vramMiB !== null && gpu.vramMiB >= requirements.minGpuVramMiB!);
     return check("nvidia", enough ? "pass" : optionalStatus(required), enough ? "OK" : "UNSUPPORTED_HARDWARE",
@@ -387,13 +430,19 @@ function gpuCheck(results: ReadonlyMap<string, ProbeResult>, requirements: Docto
   }
   const win = platform === "win32" ? asObjects(results.get("gpu_windows")?.stdout ?? "") : [];
   const nvidiaFound = win.some((entry) => /nvidia/i.test(String(entry.Name ?? "")));
-  const code: DoctorCode = nvidiaFound ? "DRIVER_NOT_STARTED"
+  const code: DoctorCode = smi?.errorCode === "ENOENT" && nvidiaFound ? "MISSING_DEPENDENCY"
     : smi?.timedOut ? "PROBE_TIMED_OUT"
+    : /access is denied|permission denied|unauthorized/i.test(smi?.stderr ?? "") ? "PERMISSION_REQUIRED"
+    : nvidiaFound ? "DRIVER_NOT_STARTED"
+    : requirements.minGpuVramMiB !== undefined && !requirements.requireNvidia && !requirements.requireCuda
+      && win.length ? "INSUFFICIENT_EVIDENCE"
     : platform === "win32" && win.length ? "DEVICE_NOT_PRESENT"
     : failedCode(smi);
-  return check("nvidia", code === "PROBE_TIMED_OUT" || code === "PROBE_FAILED" ? "unknown" : optionalStatus(required),
-    code, required, nvidiaFound ? "PnP'de NVIDIA görüldü fakat nvidia-smi sürücüyle konuşamadı."
-      : "NVIDIA sürücüsü/GPU kullanılabilirliği doğrulanamadı.", ["nvidia", "gpu_windows"],
+  return check("nvidia", code === "PROBE_TIMED_OUT" || code === "PROBE_FAILED" ||
+    code === "INSUFFICIENT_EVIDENCE" ? "unknown" : optionalStatus(required),
+    code, required, nvidiaFound ?
+      "Windows NVIDIA adaptörü bulundu; nvidia-smi yok veya iletişim doğrulanamadı. Sürücü nedeni tek başına kanıtlanmadı." :
+      "Ekran kartının kullanılabilirliği veya toplam VRAM kapasitesi doğrulanamadı.", ["nvidia", "gpu_windows"],
     { detectedVideoAdapters: win.slice(0, 12).map((entry) => ({
       model: String(entry.Name ?? ""), pnpStatus: String(entry.Status ?? ""),
     })) });
@@ -453,14 +502,31 @@ export interface DoctorOptions {
   readonly now?: () => Date;
 }
 export async function runEnvironmentDoctor(options: DoctorOptions = {},
-  runner: ProbeRunner = new ReadonlyProcessRunner()): Promise<DoctorReport> {
+  runner?: ProbeRunner): Promise<DoctorReport> {
+  // An explicitly supplied runner is ALWAYS synthetic. Never decide trust
+  // using .constructor or instanceof: these are spoofable JavaScript metadata.
+  // Only this function can create the live runner, after platform/provenance
+  // preflight has passed and before any OS probe is executed.
+  const injectedRunner = runner !== undefined;
+  const origin = options.origin ?? "live_readonly";
+  if (injectedRunner) {
+    if (origin !== "synthetic_fixture") {
+      throw new TypeError("Injected runner must use synthetic_fixture origin");
+    }
+    if (!runner || typeof runner.run !== "function") {
+      throw new TypeError("Invalid synthetic probe runner");
+    }
+  } else if (origin !== "live_readonly" ||
+      (options.platform !== undefined && options.platform !== process.platform) ||
+      (options.architecture !== undefined && options.architecture !== os.arch()) ||
+      options.now !== undefined) {
+    throw new TypeError("Live runner requires actual host platform and live_readonly origin; host provenance cannot be overridden");
+  }
   const platform = options.platform ?? (process.platform as DoctorPlatform);
   if (!["win32", "linux"].includes(platform)) throw new TypeError("Unsupported doctor platform");
-  const origin = options.origin ?? "live_readonly";
-  if (runner.constructor !== ReadonlyProcessRunner && origin !== "synthetic_fixture") {
-    throw new TypeError("Injected runner must use synthetic_fixture origin");
-  }
   const requirements = options.requirements ?? {};
+  const reportedArchitecture = injectedRunner ? options.architecture ?? "synthetic" : os.arch();
+  const selectedRunner: ProbeRunner = runner ?? new ReadonlyProcessRunner();
   const plan = createProbePlan(platform, requirements);
   const responses = new Map<string, ProbeResult>();
   let next = 0;
@@ -468,7 +534,7 @@ export async function runEnvironmentDoctor(options: DoctorOptions = {},
     while (next < plan.length) {
       const probe = plan[next++]!;
       try {
-        responses.set(probe.id, await runner.run(probe));
+        responses.set(probe.id, await selectedRunner.run(probe));
       } catch {
         responses.set(probe.id, { exitCode: null, stdout: "", errorCode: "PROBE_ERROR" });
       }
@@ -479,14 +545,18 @@ export async function runEnvironmentDoctor(options: DoctorOptions = {},
     requirements.tools?.[name] !== undefined;
   const checks: DoctorCheck[] = [];
   const osResult = result("os");
-  checks.push(osResult?.exitCode === 0 ? check("os", "pass", "OK", true,
-    "OS bilgisi salt-okunur alındı.", ["os"], { platform, architecture: options.architecture ?? os.arch(),
-      release: os.release() }) : check("os", "unknown", failedCode(osResult),
-      true, "OS sorgusu başarısız oldu.", ["os"]));
+  const osMetadata = platform === "win32" ? asObjects(osResult?.stdout ?? "")[0] :
+    Object.fromEntries((osResult?.stdout ?? "").split(/\r?\n/).filter((line) => /^(NAME|VERSION_ID)=/.test(line))
+      .map((line) => { const p = line.indexOf("="); return [line.slice(0, p), line.slice(p + 1).replace(/^"|"$/g, "")]; }));
+  const osVerified = osResult?.exitCode === 0 && !!osMetadata &&
+    (platform === "win32" ? typeof osMetadata.Version === "string" && typeof osMetadata.Caption === "string"
+      : typeof osMetadata.NAME === "string");
+  checks.push(osVerified ? check("os", "pass", "OK", true,
+    "OS bilgisi salt-okunur alındı.", ["os"], { platform, architecture: reportedArchitecture,
+      osMetadata }) : check("os", "unknown", osResult?.exitCode === 0 ? "INSUFFICIENT_EVIDENCE" : failedCode(osResult),
+      true, "OS sorgusu geçerli tanımlanabilir metadata üretmedi.", ["os"]));
   for (const tool of ["python", "node", "rust", "git", "ollama"] as const) {
-    checks.push(tool === "node" ? toolCheck("node",
-      { exitCode: 0, stdout: process.version }, requiredTool("node"), requirements.tools?.node)
-      : toolCheck(tool, result(tool), requiredTool(tool), requirements.tools?.[tool]));
+    checks.push(toolCheck(tool, result(tool), requiredTool(tool), requirements.tools?.[tool]));
   }
   const docker = toolCheck("docker", result("docker"), requiredTool("docker"), requirements.tools?.docker);
   const dockerDaemon = result("docker_daemon");
@@ -507,10 +577,12 @@ export async function runEnvironmentDoctor(options: DoctorOptions = {},
       const firmware = obj.VirtualizationFirmwareEnabled === true;
       const slat = obj.SLAT === true;
       const ready = firmware && slat;
-      checks.push(check("hyperv", ready ? "pass" : optionalStatus(!!requirements.requireHyperV),
-        ready ? "OK" : slat ? "VIRTUALIZATION_DISABLED" : "UNSUPPORTED_HARDWARE", !!requirements.requireHyperV,
+      const ambiguousHypervisor = !ready && obj.HypervisorPresent === true;
+      checks.push(check("hyperv", ready ? "pass" : ambiguousHypervisor ? "unknown" : optionalStatus(!!requirements.requireHyperV),
+        ready ? "OK" : ambiguousHypervisor ? "INSUFFICIENT_EVIDENCE" : slat ? "VIRTUALIZATION_DISABLED" : "UNSUPPORTED_HARDWARE", !!requirements.requireHyperV,
         ready ? "CPU SLAT ve firmware virtualization bildirildi; gerçek VM açılışı test edilmedi." :
-          "Firmware virtualization veya SLAT hazır görünmüyor.", ["hyperv"],
+          ambiguousHypervisor ? "Hypervisor etkin, ancak firmware/SLAT bayrakları güvenilir şekilde görülemiyor." :
+            "Firmware virtualization veya SLAT hazır görünmüyor.", ["hyperv"],
         { firmwareVirtualization: firmware, slat, hypervisorPresent: obj.HypervisorPresent === true,
           vmBootTested: false }));
     }
@@ -519,25 +591,35 @@ export async function runEnvironmentDoctor(options: DoctorOptions = {},
       ? wsl.stdout.replace(/\0/g, "").split(/\r?\n/).filter((x) =>
         x.trim() && /\s[12]\s*$/.test(x)).slice(0, 30)
       : [];
-    checks.push(wsl?.exitCode === 0 ? check("wsl", distros.length ? "pass" : optionalStatus(!!requirements.requireWsl),
-      distros.length ? "OK" : "MISSING_DEPENDENCY", !!requirements.requireWsl,
+    const distroNames = distros.map((row) => row.trim().replace(/^\*\s*/, "").split(/\s{2,}/)[0] ?? "");
+    const requested = requirements.wslDistros ?? [];
+    const absent = requested.filter((name) => !distroNames.some((seen) => seen.toLowerCase() === name.toLowerCase()));
+    const required = !!(requirements.requireWsl || requested.length);
+    const installed = distros.length > 0 && absent.length === 0;
+    checks.push(wsl?.exitCode === 0 ? check("wsl", installed ? "pass" : optionalStatus(required),
+      installed ? "OK" : "MISSING_DEPENDENCY", required,
       "WSL dağıtım listesi sorgulandı; dağıtım başlatılmadı.", ["wsl"],
-      { distroRows: distros, distroBootTested: false }) : check("wsl",
-      failedCode(wsl) === "PROBE_FAILED" ? "unknown" : optionalStatus(!!requirements.requireWsl),
-      failedCode(wsl), !!requirements.requireWsl, "WSL listeleme başarısız.", ["wsl"]));
+      { distroNames, requiredDistros: requested, missingDistros: absent, distroBootTested: false }) : check("wsl",
+      failedCode(wsl) === "PROBE_FAILED" ? "unknown" : optionalStatus(required),
+      failedCode(wsl), required, "WSL listeleme başarısız.", ["wsl"]));
   } else {
-    checks.push(check("hyperv", "not_tested", "INSUFFICIENT_EVIDENCE", !!requirements.requireHyperV,
-      "Hyper-V Windows'a özgüdür; bu sistemde test edilmedi.", []));
-    checks.push(check("wsl", "not_tested", "INSUFFICIENT_EVIDENCE", !!requirements.requireWsl,
-      "WSL Windows'a özgüdür; bu sistemde test edilmedi.", []));
+    checks.push(check("hyperv", requirements.requireHyperV ? "fail" : "not_tested",
+      requirements.requireHyperV ? "UNSUPPORTED_HARDWARE" : "INSUFFICIENT_EVIDENCE",
+      !!requirements.requireHyperV, "Hyper-V Windows üzerinde desteklenir; bu Linux konukta doğrulanmadı.", []));
+    const wslRequired = !!(requirements.requireWsl || requirements.wslDistros?.length);
+    checks.push(check("wsl", wslRequired ? "fail" : "not_tested",
+      wslRequired ? "UNSUPPORTED_HARDWARE" : "INSUFFICIENT_EVIDENCE", wslRequired,
+      "WSL Windows konuk yöneticisinden sorgulanmalıdır; Linux içinde WSL dağıtımı listelenemez.", []));
   }
-  checks.push(summaryInventory("usb", result("usb"), platform));
-  checks.push(summaryInventory("volumes", result("volumes"), platform));
-  checks.push(summaryInventory("network", result("network"), platform, result("dns_config")));
-  const usbCount = Number(checks.find((c) => c.name === "usb")?.observed?.count ?? 0);
+  checks.push(summaryInventory("usb", result("usb"), platform, requirements));
+  checks.push(summaryInventory("volumes", result("volumes"), platform, requirements));
+  checks.push(summaryInventory("network", result("network"), platform, requirements, result("dns_config")));
+  const usbCheck = checks.find((c) => c.name === "usb");
+  const usbCount = Number(usbCheck?.observed?.count ?? 0);
   const physicalAcceptance: PhysicalAcceptance[] = [
     { subject: "usb", status: "not_tested", code: "PHYSICAL_TEST_REQUIRED",
-      hardwareSeen: usbCount > 0, reason: "VID/PID ve PnP envanteri fiziksel tak-çıkar veya veri aktarımını doğrulamaz." },
+      hardwareSeen: usbCheck?.status === "unknown" ? null :
+        (usbCount > 0 && (!requirements.usbVidPid?.length || usbCheck?.status === "pass")), reason: "VID/PID ve PnP envanteri fiziksel tak-çıkar veya veri aktarımını doğrulamaz." },
     { subject: "gamepad", status: "not_tested", code: "PHYSICAL_TEST_REQUIRED",
       hardwareSeen: null, reason: "Giriş/axis drift ve fiziksel tuş testi yapılmadı." },
     { subject: "phone", status: "not_tested", code: "PHYSICAL_TEST_REQUIRED",
@@ -549,7 +631,7 @@ export async function runEnvironmentDoctor(options: DoctorOptions = {},
     !entry.required || entry.status === "pass");
   return {
     schemaVersion: 1, generatedAt: (options.now?.() ?? new Date()).toISOString(),
-    origin, platform, architecture: options.architecture ?? os.arch(),
+    origin, platform, architecture: reportedArchitecture,
     readonly: true, permissionsChanged: false, ready, checks, physicalAcceptance,
     safety: {
       mutatingActionsPerformed: false, automaticRemediation: false,

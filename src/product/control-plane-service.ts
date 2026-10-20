@@ -1,3 +1,4 @@
+import { explainDeviceAuthorization, type AuthorizationExplain } from '../security/authorization-explain.js';
 import {
   createHash,
   type KeyObject,
@@ -323,7 +324,11 @@ export class ControlPlaneService {
         // Lease issuance is distinct from actually executing elevated work.
         // Every elevated operation still requires the existing Broker and its
         // protected machine approval independently of this lease.
-        const active = Boolean(unexpiredLease && device.online);
+        // An account-scoped lease cannot be revoked by logout: legacy
+        // session cookies have no login-instance binding or revocation DB.
+        // Keep its expiry visible, but NEVER claim effective ROOT until
+        // server-validated session-bound leases and logout CAS exist.
+        const active = false;
         return {
         id: device.id,
         name: device.name,
@@ -336,7 +341,11 @@ export class ControlPlaneService {
         },
         persistentMaintenance: {
           enabled: Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id && device.accessMode === 'full'),
-          active: Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id && device.accessMode === 'full' && device.online && device.privilegeMode === 'broker' && device.adminBridgeReady === true && bridgePreference?.desiredMode !== 'off'),
+          // Agent-reported Broker readiness is *not* a signed local task/token
+          // attestation. Until the separate protected Guardian acceptance
+          // is wired into this read, CORE must remain PAUSED rather than
+          // advertising effective elevated access from stale telemetry.
+          active: false,
           updatedAt: maintenance?.ownerAccountId === account.id ? maintenance.updatedAt : null,
         },
         bridgePreference: {
@@ -827,6 +836,45 @@ export class ControlPlaneService {
     await this.store.deleteDeviceFolder(account.id, folderId);
   }
 
+  /** Owner-only diagnostic, not an execution grant or local Windows proof. */
+  async authorizationExplain(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+    capability: string | null = null,
+  ): Promise<AuthorizationExplain> {
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
+    const account = await this.requireAccount(identity.accountId);
+    const deviceId = boundedId('deviceId', deviceIdInput);
+    const device = await this.store.getDevice(deviceId);
+    // Never reveal existence, policy, or telemetry of another owner's device.
+    if (!device || device.ownerAccountId !== account.id) {
+      throw new Error('DEVICE_NOT_FOUND');
+    }
+    if (capability !== null &&
+        (!/^[a-z0-9._:-]{1,128}$/.test(capability))) {
+      throw new Error('INVALID_CAPABILITY');
+    }
+    const [rootLease, corePreference, bridgePreference] = await Promise.all([
+      this.store.getRootModeLease(deviceId),
+      this.store.getDeviceMaintenancePreference(deviceId),
+      this.store.getDeviceBridgePreference(deviceId),
+    ]);
+    return explainDeviceAuthorization({
+      deviceId,
+      ownerAccountId: device.ownerAccountId,
+      requesterAccountId: account.id,
+      requesterRole: identity.role,
+      accessMode: device.accessMode,
+      online: device.online,
+      privilegeMode: device.privilegeMode,
+      adminBridgeReady: device.adminBridgeReady,
+      rootLease,
+      corePreference,
+      bridgePreference,
+      now: this.now(),
+    }, capability);
+  }
+
   async setDeviceAccessMode(
     identity: ControlPlaneIdentity,
     deviceIdInput: string,
@@ -836,6 +884,9 @@ export class ControlPlaneService {
     accessMode: 'safe' | 'full';
     updatedAt: string;
   }> {
+    // A service credential may report device presence, but it is never
+    // authorized to switch owner policy to FULL or silently revert SAFE.
+    if (identity.role === 'service') throw new Error('OWNER_LOGIN_REQUIRED');
     const account = await this.requireAccount(identity.accountId);
     const deviceId = boundedId('deviceId', deviceIdInput);
     const mode = modeInput.trim().toLowerCase();
@@ -914,7 +965,10 @@ export class ControlPlaneService {
     });
     return {
       deviceId,
-      rootMode: { active: enabled, expiresAt: enabled ? expiresAt : null },
+      rootMode: {
+        // Persisted owner request is not a session-bound authorization grant.
+        active: false, expiresAt: enabled ? expiresAt : null,
+      },
     };
   }
 
@@ -937,7 +991,7 @@ export class ControlPlaneService {
     await this.store.putDeviceMaintenancePreference({
       deviceId, ownerAccountId: account.id, enabled, updatedAt,
     });
-    return { deviceId, persistentMaintenance: { enabled, active: enabled, updatedAt } };
+    return { deviceId, persistentMaintenance: { enabled, active: false, updatedAt } };
   }
 
   /** Desired device Broker mode. This endpoint never executes host commands. */

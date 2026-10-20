@@ -1,0 +1,61 @@
+{
+  "schema": "nexowire-s5-reconnect-loopback-v1",
+  "sourceSha": "d9658894fcf05de0104fb9ea792d3c56fdf81e61",
+  "atUtc": "2026-10-18T18:34:12.563Z",
+  "classification": "OBSERVED_LOCAL_WS_ONLY_NOT_STAGING_PROVIDER_OR_NATIVE",
+  "host": {
+    "cpu": "AMD Ryzen 5 2600X Six-Core Processor           ",
+    "totalMemoryBytes": 17101815808,
+    "node": "v24.15.0"
+  },
+  "sockets": {
+    "kind": "SYNTHETIC_LOOPBACK_WS_NO_REAL_NATIVE_TOOL",
+    "socketsPerRound": 120,
+    "rounds": 3,
+    "opened": 360,
+    "closed": 360,
+    "peakOpen": 21,
+    "requests": 360,
+    "uniqueReservations": 120,
+    "duplicates": 240,
+    "backpressure": 0,
+    "peakQueue": 8,
+    "peakProcessing": 4,
+    "latencyMs": {
+      "p50": 1.8,
+      "p95": 3.744,
+      "p99": 4.945
+    },
+    "reportedNativeCompleted": 0,
+    "verifiedNativeCompleted": 0
+  },
+  "localProcess": {
+    "cpuUserMs": 563,
+    "cpuSystemMs": 281,
+    "rssStartBytes": 73822208,
+    "rssEndBytes": 89272320
+  },
+  "quota": {
+    "canonicalSqliteReservations": null,
+    "observed": false,
+    "fixtureIdempotentAdmittedIds": 120
+  },
+  "native": {
+    "reportedCompletions": 0,
+    "verifiedCompletions": 0,
+    "proof": "no native OS operation was invoked"
+  },
+  "cloud": {
+    "workerRequests": null,
+    "d1RowsRead": null,
+    "d1RowsWritten": null,
+    "durableObjectRequests": null,
+    "durableObjectDurationGbSeconds": null,
+    "costUsd": null,
+    "observed": false
+  },
+  "soak": {
+    "actual24hRun": false,
+    "productionAccepted": false
+  }
+}

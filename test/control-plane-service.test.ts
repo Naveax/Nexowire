@@ -453,9 +453,9 @@ test('ROOT DANGER lease needs FULL online device, works without Broker, expires 
   });
   await assert.rejects(service.setDeviceRootMode(other, id, true), /DEVICE_NOT_FOUND/);
   const granted = await service.setDeviceRootMode(owner, id, true);
-  assert.equal(granted.rootMode.active, true);
+  assert.equal(granted.rootMode.active, false); // unsessioned lease cannot become effective ROOT
   assert.equal(granted.rootMode.expiresAt, '2026-10-02T12:15:00.000Z');
-  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, true);
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
   assert.equal((await service.dashboard(owner)).devices[0]?.adminBridgeReady, false);
   const withBroker = await store.getDevice(id);
   assert.ok(withBroker);

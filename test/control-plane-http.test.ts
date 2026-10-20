@@ -366,11 +366,11 @@ test('ROOT site activation denies missing confirmation and unsafe devices', asyn
     body: enable,
   }));
   assert.equal(enabled.status, 200);
-  assert.equal((await enabled.json() as { rootMode: { active: boolean } }).rootMode.active, true);
+  assert.equal((await enabled.json() as { rootMode: { active: boolean } }).rootMode.active, false); // awaiting session-bound ROOT support
   const current = await handler(request('/api/v1/me/dashboard', owner));
   assert.equal((await current.json() as {
     devices: Array<{ rootMode: { active: boolean } }>;
-  }).devices[0]?.rootMode.active, true);
+  }).devices[0]?.rootMode.active, false);
   const off = await handler(request(route, owner, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
