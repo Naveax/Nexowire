@@ -296,12 +296,12 @@ test('Windows helper path cannot be replaced by inherited environment', {
 
 
 test('Windows Job fast-exit stdout and stderr are drained before exited status', {
-  skip:process.platform!=='win32',timeout:35_000,
+  skip:process.platform!=='win32',timeout:140_000,
 },async()=>{
   // Reproduce #565: short-lived synthetic commands must never finalize
   // before the guardian's inherited pipes have been fully consumed.
   const manager=new ProcessManager();
-  for(let iteration=0;iteration<12;iteration++){
+  for(let iteration=0;iteration<64;iteration++){
     const marker='NW_JOB_STREAM_'+randomBytes(6).toString('hex');
     const session=await manager.start({
       shell:'cmd',command:'echo '+marker+'_OUT & echo '+marker+'_ERR 1>&2',
@@ -309,7 +309,7 @@ test('Windows Job fast-exit stdout and stderr are drained before exited status',
     assert.equal(session.treeOwnership,'windows_job');
     let stdout='',stderr='',cursor=0,status='running';
     try{
-      for(let i=0;i<35;i++){
+      for(let i=0;i<55;i++){
         const read=await manager.read({
           session_id:session.sessionId,after_seq:cursor,wait_ms:250,
         });

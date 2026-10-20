@@ -1050,10 +1050,32 @@ export class ProcessManager {
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
+    // Buffer native pipe data from the instant the guardian is spawned. The
+    // session is not registered until independent kernel proof succeeds; no
+    // marker or output data is ever accepted as proof of Job membership.
+    const pendingOutput: Array<{stream: 'stdout' | 'stderr'; chunk: Buffer}> = [];
+    let earlyOutputBytes = 0;
+    let earlyOutputTruncated = false;
+    let outputSink: ((stream: 'stdout' | 'stderr', chunk: Buffer) => void) | undefined;
+    const receiveOutput = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
+      if (outputSink) { outputSink(stream, chunk); return; }
+      // Bound pre-registration memory even if output starts before we get a
+      // usable session. Never silently claim early bytes were preserved.
+      const limit = parsed.max_buffer_bytes;
+      if (earlyOutputBytes + chunk.length > limit) {
+        earlyOutputTruncated = true;
+        const room = Math.max(0, limit - earlyOutputBytes);
+        if (room) { pendingOutput.push({stream, chunk: Buffer.from(chunk.subarray(0,room))}); earlyOutputBytes += room; }
+        return;
+      }
+      pendingOutput.push({stream, chunk: Buffer.from(chunk)});
+      earlyOutputBytes += chunk.length;
+    };
     // On Windows the native guardian owns the entire Job lifetime. The root
     // starts suspended and only resumes after a verified Job assignment.
     const job = process.platform === 'win32'
-      ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env, guardOnParentExit: true })
+      ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env,
+          guardOnParentExit: true, onOutput: receiveOutput })
       : undefined;
     const child = job?.child ?? spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
@@ -1138,8 +1160,19 @@ export class ProcessManager {
       }
     };
 
-    child.stdout.on('data', (chunk: Buffer) => append('stdout', chunk));
-    child.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
+    if (job) {
+      // JS callbacks execute serially. Switching the sink and flushing the
+      // bounded queue is atomic with respect to subsequent data callbacks.
+      outputSink = append;
+      for (const event of pendingOutput) append(event.stream, event.chunk);
+      pendingOutput.length = 0;
+      if (earlyOutputTruncated) append('stderr',Buffer.from(
+        '[Nexowire] Pre-registration pipe output exceeded session buffer; early output truncated.\n',
+      ));
+    } else {
+      child.stdout.on('data', (chunk: Buffer) => append('stdout', chunk));
+      child.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
+    }
     child.once('error', (error) => {
       append('stderr', Buffer.from(`Process error: ${error.message}\n`));
     });

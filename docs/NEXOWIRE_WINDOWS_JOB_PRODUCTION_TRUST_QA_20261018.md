@@ -171,3 +171,46 @@ programs and `main` remain untouched.
 5. CI PASS and Release Readiness PASS alone are source acceptance only.
 
 **Production acceptance must stay BLOCKED and PR #576 must remain DRAFT.**
+
+## 2026-10-20 fast-exit native pipe capture regression (#582 / #597)
+
+Two independent GitHub-hosted Windows browser-live logs show `Windows Job
+fast-exit stdout and stderr are drained before exited status` failing
+with an absent stdout marker, in iteration 1 and iteration 11 respectively.
+The guardian's stdout/stderr were not subscribed to by ProcessManager until
+**after** `launchWindowsJob` had awaited status marker, separate PowerShell
+Win32 Job attestation, digest recheck and release gate. A root that exits
+immediately after gate release could write to inherited native pipes before
+ProcessManager attached its stream listeners. Waiting for `close` or adding
+test delays cannot recover bytes already lost in that startup gap.
+
+The Job launcher now subscribes to both native pipes **immediately after
+Node.spawn**, before any asynchronous security proof. It passes the actual
+bytes to a callback, temporarily bounded by the ProcessManager session output
+quota while the session has not yet registered. Session registration installs
+an output sink and synchronously replays the pre-registration chunks in their
+captured callback order, then continues live streaming. If this queue is
+over capacity, it emits an explicit truncation diagnostic; output is never
+misrepresented as intact or as a security/Job membership proof. Kernel
+`IsProcessInJob` / creation FILETIME / breakaway limits attestation and the
+suspended-root verification gate are **unchanged**.
+
+The same early-capture path applies to isolated durable workers that use
+ProcessManager to launch their shells, so a first-party `NW_DURABLE_READY`
+can no longer be lost *solely because* the reader subscribed after guardian
+attestation. The durable test still requires the real shell output before
+stdin writes and fails on premature exit. This does not establish a physical
+installed Agent restart.
+
+Local Work PC (isolated fixture PIDs only):
+- Fast-exit iteration stress (64 unique real Windows Job launches):
+  **64/64** with both real stdout and stderr markers.
+- Combined Job/ProcessManager/durable Windows suite:
+  **35 PASS, 0 FAIL, 1 SKIP** (local symlink privilege unavailable).
+- `npm run typecheck` and `npm run build`: PASS.
+- The broader release acceptance gates remain **BLOCKED**, especially
+  signed Authenticode publisher and protected rollback manifest, installed
+  helper ACL/image binding, same-user `PROCESS_DUP_HANDLE` retention,
+  out-of-Job broker descendants, and installed Agent restart/soak.
+- Hosted exact-HEAD CI must be verified after this patch; local PASS never
+  upgrades production acceptance.

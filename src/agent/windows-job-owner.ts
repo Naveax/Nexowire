@@ -92,7 +92,8 @@ async function binaryPath(): Promise<string> {
 export async function launchWindowsJob(
   executable: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; guardOnParentExit?: boolean }
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; guardOnParentExit?: boolean;
+    onOutput?: (stream: 'stdout' | 'stderr', chunk: Buffer) => void }
 ): Promise<WindowsJobLaunch> {
   if (process.platform !== 'win32') {
     throw new WindowsJobOwnerError('WINDOWS_JOB_WINDOWS_ONLY', 'Windows only');
@@ -113,6 +114,15 @@ export async function launchWindowsJob(
         '--release', release, '--', executable, ...args],
       { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: options.env ?? process.env },
     );
+    // Register both pipe readers immediately after spawn, before any async
+    // marker polling or kernel attestation. A fast root can resume and exit
+    // while launchWindowsJob is still completing its awaits. Node may close
+    // unconsumed inherited pipes before ProcessManager receives the child.
+    // These bytes are application OUTPUT only, never attestation evidence.
+    if (options.onOutput) {
+      child.stdout.on('data', (chunk: Buffer) => options.onOutput?.('stdout', chunk));
+      child.stderr.on('data', (chunk: Buffer) => options.onOutput?.('stderr', chunk));
+    }
     let failed: Error | undefined;
     let closed = false;
     child.once('error', (error) => { failed = error; });
