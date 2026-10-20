@@ -5356,14 +5356,14 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'file_read',
     {
       title: 'Read file',
-      description: 'Read a text or base64 file from an allowed agent path.',
+      description: 'Read a file within policy. For large binary files use base64, offset_bytes and <=65536 max_bytes per request; total file size has no small fixed ceiling.',
       inputSchema: {
         ...targetFields,
         path: z.string().min(1).max(4096),
         encoding: z.enum(['utf8', 'base64']).optional(),
         max_bytes: z.number().int().min(1).max(16_777_216).optional(),
         include_sha256: z.boolean().optional(),
-        offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+        offset_bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
       },
     },
     async ({ device_id, provider_id, path, encoding, max_bytes, include_sha256, offset_bytes }) =>
@@ -5459,7 +5459,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'file_write',
     {
       title: 'Write file',
-      description: 'Write or append a file inside the native agent path allowlist.',
+      description: 'For resumable large binary files write <=65536-byte base64 chunks to an exclusive staging file via write_at, then hash and atomically publish. Identical retries are accepted, conflicting bytes denied.',
       inputSchema: {
         ...targetFields,
         ...idempotencyField,
@@ -5467,7 +5467,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         content: z.string(),
         encoding: z.enum(['utf8', 'base64']).optional(),
         mode: z.enum(['overwrite', 'append', 'create', 'write_at']).optional(),
-        offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+        offset_bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+        expected_chunk_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
         create_parents: z.boolean().optional(),
       },
     },
@@ -5479,6 +5480,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       encoding,
       mode,
       offset_bytes,
+      expected_chunk_sha256,
       create_parents,
       idempotency_key,
     }) =>
@@ -5491,6 +5493,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(encoding ? { encoding } : {}),
           ...(mode ? { mode } : {}),
           ...(offset_bytes !== undefined ? { offset_bytes } : {}),
+          ...(expected_chunk_sha256 ? { expected_chunk_sha256 } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
         },
         device_id,
@@ -5616,11 +5619,11 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Hash file',
       description:
-        'Compute a SHA-256 digest for one allowed file so later edits can detect stale content.',
+        'Compute streaming SHA-256 with bounded memory. Explicit max_bytes can exceed 256 MiB and safely address multi-GiB files; default request budget remains bounded.',
       inputSchema: {
         ...targetFields,
         path: z.string().min(1).max(4096),
-        max_bytes: z.number().int().min(1).max(268_435_456).optional(),
+        max_bytes: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
       },
     },
     async ({ device_id, provider_id, path, max_bytes }) =>
@@ -5699,7 +5702,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     'file_move',
     {
       title: 'Move file or directory',
-      description: 'Move or rename a file or directory between allowed paths.',
+      description: 'Move/rename; atomic_no_overwrite can verify expected_size_bytes and streaming expected_sha256 before publishing a staged upload.',
       inputSchema: {
         ...targetFields,
         source: z.string().min(1).max(4096),
@@ -5708,6 +5711,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         recursive: z.boolean().optional(),
         create_parents: z.boolean().optional(),
         atomic_no_overwrite: z.boolean().optional(),
+        expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+        expected_size_bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
       },
     },
     async ({
@@ -5719,6 +5724,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       recursive,
       create_parents,
       atomic_no_overwrite,
+      expected_sha256,
+      expected_size_bytes,
     }) =>
       await execute(
         ctx,
@@ -5730,6 +5737,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
           ...(recursive !== undefined ? { recursive } : {}),
           ...(create_parents !== undefined ? { create_parents } : {}),
           ...(atomic_no_overwrite !== undefined ? { atomic_no_overwrite } : {}),
+          ...(expected_sha256 ? { expected_sha256 } : {}),
+          ...(expected_size_bytes !== undefined ? { expected_size_bytes } : {}),
         },
         device_id,
         provider_id,

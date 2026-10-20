@@ -69,13 +69,35 @@ const WslExecInputSchema = z.object({
   max_output_bytes: z.number().int().min(1024).max(16_777_216).default(2_097_152),
 });
 
+// At most 64 KiB of binary per ranged MCP response: encoded Base64 plus
+// duplicated MCP text/structured payload stays below typical relay budgets.
+// The *total* file size is never limited by this per-request bound.
+const FILE_STREAM_CHUNK_BYTES = 64 * 1024;
+const SAFE_FILE_OFFSET = Number.MAX_SAFE_INTEGER;
+// Serialize this Agent's overlapping chunk writes per canonical target. This
+// is NOT an OS interprocess lock or a replacement for native handle checks.
+const fileChunkLocks = new Map<string, Promise<void>>();
+async function withFileChunkLock<T>(target: string, action: () => Promise<T>): Promise<T> {
+  const before = fileChunkLocks.get(target) ?? Promise.resolve();
+  let release!: () => void;
+  const signal = new Promise<void>(resolve => { release = resolve; });
+  const current = before.then(() => signal);
+  fileChunkLocks.set(target, current);
+  await before;
+  try { return await action(); }
+  finally {
+    release();
+    if (fileChunkLocks.get(target) === current) fileChunkLocks.delete(target);
+  }
+}
 const FileReadInputSchema = z.object({
   path: z.string().min(1).max(4096),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
-  max_bytes: z.number().int().min(1).max(16_777_216).default(2_097_152),
+  // Defaults depend on mode: 2 MiB for legacy full read, 64 KiB for range.
+  max_bytes: z.number().int().min(1).max(16_777_216).optional(),
   include_sha256: z.boolean().default(false),
-  // Optional fixed byte offset for low-payload, bounded cross-device reads.
-  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+  // Fixed-size binary chunks; offsets may address arbitrarily large files.
+  offset_bytes: z.number().int().min(0).max(SAFE_FILE_OFFSET).optional(),
 });
 
 const FileReadManyInputSchema = z.object({
@@ -105,7 +127,8 @@ const FileWriteInputSchema = z.object({
   content: z.string().max(22_369_624),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   mode: z.enum(['overwrite', 'append', 'create', 'write_at']).default('overwrite'),
-  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+  offset_bytes: z.number().int().min(0).max(SAFE_FILE_OFFSET).optional(),
+  expected_chunk_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
   create_parents: z.boolean().default(false),
 });
 
@@ -115,7 +138,9 @@ const FileStatInputSchema = z.object({
 
 const FileHashInputSchema = z.object({
   path: z.string().min(1).max(4096),
-  max_bytes: z.number().int().min(1).max(268_435_456).default(67_108_864),
+  // Per-request budget, not a hard overall file-size ceiling. Explicitly
+  // chosen limits up to the safe JS integer bound support multi-GiB hashes.
+  max_bytes: z.number().int().min(1).max(SAFE_FILE_OFFSET).default(67_108_864),
 });
 
 const FileMkdirInputSchema = z.object({
@@ -131,6 +156,8 @@ const FileTransferInputSchema = z.object({
   create_parents: z.boolean().default(false),
   // Same-directory staging commits must never race-overwrite another file.
   atomic_no_overwrite: z.boolean().default(false),
+  expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+  expected_size_bytes: z.number().int().min(0).max(SAFE_FILE_OFFSET).optional(),
 });
 
 const FileDeleteInputSchema = z.object({
@@ -492,14 +519,16 @@ async function executeWsl(input: unknown, policy: PathPolicy): Promise<unknown> 
 
 async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileReadInputSchema.parse(input);
+  const maxBytes = parsed.max_bytes ??
+    (parsed.offset_bytes === undefined ? 2_097_152 : FILE_STREAM_CHUNK_BYTES);
   const target = await policy.authorizeExisting(parsed.path, 'read');
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Requested path is not a file.');
   // Legacy full-file reads keep their original strict size limit.
   if (parsed.offset_bytes === undefined) {
-    if (stat.size > parsed.max_bytes) {
+    if (stat.size > maxBytes) {
       throw new Error(
-        `File size ${stat.size} exceeds max_bytes ${parsed.max_bytes}.`,
+        `File size ${stat.size} exceeds max_bytes ${maxBytes}.`,
       );
     }
     const content = await fs.readFile(target);
@@ -514,10 +543,13 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       },
     };
   }
-  if (parsed.offset_bytes > stat.size) {
-    throw new Error('Read offset exceeds file size.');
+  if (!Number.isSafeInteger(stat.size) || parsed.offset_bytes > stat.size) {
+    throw new Error('Read offset exceeds file size or file size is not representable safely.');
   }
-  const maxRead = Math.min(parsed.max_bytes, stat.size - parsed.offset_bytes);
+  if (maxBytes > FILE_STREAM_CHUNK_BYTES) {
+    throw new Error('Ranged file reads must not exceed 65536 bytes per request.');
+  }
+  const maxRead = Math.min(maxBytes, stat.size - parsed.offset_bytes);
   const buffer=Buffer.alloc(maxRead);
   const handle=await fs.open(target,'r');
   let bytesRead=0;
@@ -594,32 +626,86 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
     parsed.encoding === 'base64'
       ? Buffer.from(parsed.content, 'base64')
       : Buffer.from(parsed.content, 'utf8');
+  if (parsed.mode === 'write_at' && content.length > FILE_STREAM_CHUNK_BYTES) {
+    throw new Error('Positioned file chunks must not exceed 65536 bytes per request.');
+  }
+  if (parsed.mode === 'write_at' && parsed.encoding === 'base64' &&
+      content.toString('base64') !== parsed.content) {
+    throw new FileConflictError('Positioned chunk is not canonical Base64.', {
+      reason:'INVALID_CHUNK_ENCODING',
+    });
+  }
+  if (parsed.expected_chunk_sha256 &&
+      sha256Buffer(content) !== parsed.expected_chunk_sha256.toLowerCase()) {
+    throw new FileConflictError('Chunk SHA-256 does not match expected_chunk_sha256.', {
+      expectedSha256: parsed.expected_chunk_sha256.toLowerCase(),
+      actualSha256: sha256Buffer(content),
+    });
+  }
 
+  let replayed = false;
+  let resumedBytes = 0;
   if(parsed.mode==='write_at'){
+    await withFileChunkLock(target, async () => {
     if(parsed.offset_bytes===undefined){
       throw new Error('write_at requires an explicit offset_bytes.');
     }
+    if(!Number.isSafeInteger(parsed.offset_bytes + content.length)){
+      throw new Error('Chunk offset plus length exceeds safe integer precision.');
+    }
     const info=await fs.lstat(target);
-    if(!info.isFile()||info.isSymbolicLink()||parsed.offset_bytes>info.size){
+    if(!info.isFile()||info.isSymbolicLink()||
+       !Number.isSafeInteger(info.size)||parsed.offset_bytes>info.size){
       throw new Error('write_at target is not a regular file or offset creates a gap.');
     }
     const handle=await fs.open(target,'r+');
     try{
-      // Revalidate the opened file, not just the pathname. A path may be
-      // swapped for another file or symlink between lstat and open.
+      // Pin the open file identity. A concurrent swap must not let us edit
+      // another file after the initial path check.
       const openedInfo=await handle.stat();
       if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
-         openedInfo.ino!==info.ino||parsed.offset_bytes>openedInfo.size){
-        throw new Error('write_at target changed between validation and open.');
+         openedInfo.ino!==info.ino||!Number.isSafeInteger(openedInfo.size)||
+         parsed.offset_bytes>openedInfo.size){
+        throw new FileConflictError('write_at target changed between validation and open.', {
+          path:target,offsetBytes:parsed.offset_bytes,
+        });
       }
-      let written=0;
+      // Retry after lost acknowledgement / ENOSPC must be idempotent:
+      // compare previously written prefix, never overwrite existing data.
+      const overlap=Math.min(content.length,openedInfo.size-parsed.offset_bytes);
+      if(overlap){
+        // Comparing existing bytes is itself a READ. A write-only permission
+        // must not become a byte-by-byte content oracle via replay conflicts.
+        await policy.authorizeExisting(target, 'read');
+        const previous=Buffer.alloc(overlap);
+        let compared=0;
+        while(compared<overlap){
+          const result=await handle.read(previous,compared,overlap-compared,
+            parsed.offset_bytes+compared);
+          if(result.bytesRead<=0)break;
+          compared+=result.bytesRead;
+        }
+        if(compared!==overlap||
+           !previous.equals(content.subarray(0,overlap))){
+          throw new FileConflictError('Resumed chunk conflicts with existing stage bytes.', {
+            path:target,offsetBytes:parsed.offset_bytes,overlapBytes:overlap,
+          });
+        }
+        resumedBytes=overlap;
+      }
+      replayed=overlap===content.length;
+      let written=overlap;
       while(written<content.length){
         const result=await handle.write(content,written,content.length-written,
           parsed.offset_bytes+written);
         if(result.bytesWritten<=0)throw new Error('Incomplete positioned file write.');
         written+=result.bytesWritten;
       }
+      // Report success only if bytes are persisted; a failed sync retains
+      // the partially written staged file for safe offset-based recovery.
+      await handle.sync();
     }finally{await handle.close()}
+    });
   }else{
     if(parsed.offset_bytes!==undefined)
       throw new Error('offset_bytes may only be used with write_at.');
@@ -628,7 +714,9 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
     else await fs.writeFile(target,content);
   }
 
-  return { data: { path: target, bytesWritten: content.byteLength } };
+  return { data: { path: target, bytesWritten: content.byteLength,
+    ...(parsed.mode==='write_at'?{replayed,resumedBytes}:{}),
+  } };
 }
 
 async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
@@ -716,8 +804,29 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
       throw new Error('atomic_no_overwrite requires overwrite=false and recursive=false.');
     }
     const sourceInfo = await fs.lstat(source);
-    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) {
+    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink() ||
+        !Number.isSafeInteger(sourceInfo.size)) {
       throw new Error('atomic_no_overwrite requires a regular, non-symlink file.');
+    }
+    if (parsed.expected_size_bytes !== undefined &&
+        sourceInfo.size !== parsed.expected_size_bytes) {
+      throw new FileConflictError('Stage size does not match expected_size_bytes.', {
+        actualSize:sourceInfo.size,expectedSize:parsed.expected_size_bytes,
+      });
+    }
+    if (parsed.expected_sha256) {
+      const actual = await sha256File(source);
+      if (actual !== parsed.expected_sha256.toLowerCase()) {
+        throw new FileConflictError('Stage SHA-256 does not match expected_sha256.', {
+          actualSha256:actual,expectedSha256:parsed.expected_sha256.toLowerCase(),
+        });
+      }
+      const afterHash = await fs.lstat(source);
+      if (afterHash.dev !== sourceInfo.dev || afterHash.ino !== sourceInfo.ino ||
+          afterHash.size !== sourceInfo.size ||
+          afterHash.mtimeMs !== sourceInfo.mtimeMs) {
+        throw new FileConflictError('Stage changed while verifying SHA-256.', {path:source});
+      }
     }
     // fs.link is an atomic no-replace publish on the same filesystem.
     // Unlike a check-then-rename, another process cannot win the race
