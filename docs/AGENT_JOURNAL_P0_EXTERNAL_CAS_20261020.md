@@ -80,8 +80,8 @@ separately provisioned localhost HTTPS CAS, commits a disposable file
 mutation with prior remote reservation, then disconnects CAS and proves
 the next file mutation cannot execute.
 
-Linux and macOS native-live CI fixtures explicitly provision a *test-only*
-isolated CA/CAS, bind it to a deterministic disposable Agent identity, and
+Linux, macOS and first-party relay native-live CI fixtures explicitly
+provision a *test-only* isolated CA/CAS, bind it to a deterministic disposable Agent identity, and
 set the CAS variables for that child. This fixes their previous
 `AGENT_AUTHORITY_CONFIGURATION_REQUIRED` failure **without bypassing the
 native mutation guard**. Live production credentials are never used.
