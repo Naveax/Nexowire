@@ -183,6 +183,46 @@ test('Windows Job preserves separate stdin/stdout/stderr pipes', {
   }
 });
 
+test('Windows Job fast-exit stdout and stderr are drained before exited status', {
+  skip:process.platform!=='win32',timeout:28_000,
+},async()=>{
+  // Multiple isolated, short-lived commands target the race between the
+  // guardian assignment marker, guardian exit and stream data delivery.
+  // No user processes, existing PIDs or external files are involved.
+  const manager=new ProcessManager();
+  for(let iteration=0;iteration<12;iteration++){
+    const marker='NW_JOB_STREAM_'+randomBytes(6).toString('hex');
+    const session=await manager.start({
+      shell:'cmd',
+      command:'echo '+marker+'_OUT & echo '+marker+'_ERR 1>&2',
+    },new PathPolicy(['*']));
+    assert.equal(session.treeOwnership,'windows_job',
+      'every fixture must be contained in its verified native Job');
+    let stdout='',stderr='',cursor=0,status='running';
+    try {
+      for(let attempt=0;attempt<35;attempt++){
+        const read=await manager.read({
+          session_id:session.sessionId,after_seq:cursor,wait_ms:250,
+        });
+        cursor=read.nextSeq;
+        status=read.session.status;
+        for(const event of read.events){
+          if(event.stream==='stdout')stdout+=event.text;
+          else stderr+=event.text;
+        }
+        if(status==='exited')break;
+      }
+      assert.equal(status,'exited','fixture must finish promptly');
+      assert.ok(stdout.includes(marker+'_OUT'),
+        'must not announce exited before stdout is captured: iteration '+iteration);
+      assert.ok(stderr.includes(marker+'_ERR'),
+        'must not announce exited before stderr is captured: iteration '+iteration);
+    }finally{
+      if(status==='running')await manager.stop({session_id:session.sessionId});
+    }
+  }
+});
+
 test('Win32 Job launch is fail-closed when the requested image cannot be started', {
   skip:process.platform!=='win32',timeout:14_000,
 },async()=>{
