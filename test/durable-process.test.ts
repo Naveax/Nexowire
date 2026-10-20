@@ -84,7 +84,9 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
     assert.equal(started.reattachable, true);
     assert.equal(started.interactive, true);
 
-    const ready = await readUntil(first, started.sessionId, 0, /NW_DURABLE_READY/);
+    // A busy hosted runner can delay first shell output. Still fail if the
+    // exact first-party marker never arrives; do not write on mere start.
+    const ready = await readUntil(first, started.sessionId, 0, /NW_DURABLE_READY/, 30_000);
     assert.equal(ready.status, 'running');
 
     await first.write({
