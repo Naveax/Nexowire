@@ -115,7 +115,14 @@ export function createNexowireMcpExpressApp(
     // are inflight. A claimed small Content-Length is enforced by Node's
     // HTTP message framing; chunked/unknown-length bodies use guarded path.
     const rawLength = req.headers['content-length'];
-    const smallBody =
+    // A small compressed wire body can expand into multi-MiB JSON. Only
+    // identity encoding may bypass the four-large-parser admission gate.
+    // Security regression from #600; never trust compressed Content-Length.
+    const contentEncoding = req.headers['content-encoding'];
+    const identityEncoded = contentEncoding === undefined ||
+      (typeof contentEncoding === 'string' &&
+        contentEncoding.trim().toLowerCase() === 'identity');
+    const smallBody = identityEncoded &&
       typeof rawLength === 'string' &&
       /^\d+$/.test(rawLength) &&
       Number(rawLength) <= 100 * 1024;
