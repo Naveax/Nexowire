@@ -115,8 +115,9 @@ export function explainDeviceAuthorization(
     facts.requesterAccountId === facts.ownerAccountId;
   const leaseOwned = facts.rootLease?.ownerAccountId === facts.ownerAccountId;
   const expiry = leaseOwned ? Date.parse(facts.rootLease!.expiresAt) : Number.NaN;
-  const rootActive = ownerValid && facts.accessMode === 'full' && facts.online &&
-    Number.isFinite(expiry) && expiry > now;
+  const leaseUnexpired = Boolean(ownerValid && leaseOwned &&
+    Number.isFinite(expiry) && expiry > now);
+  const rootActive = leaseUnexpired && facts.accessMode === 'full' && facts.online;
   const coreOwned = facts.corePreference?.ownerAccountId === facts.ownerAccountId;
   const coreEnabled = Boolean(ownerValid && coreOwned &&
     facts.corePreference?.enabled && facts.accessMode === 'full');
@@ -157,15 +158,15 @@ export function explainDeviceAuthorization(
       devicePresence: facts.online ? 'reported-online' : 'reported-offline',
     },
     root: {
-      // Old lease records have no logout-safe session binding. A live
-      // clock lease is diagnostic only, never operational authorization.
+      // Lease expiry is diagnostic by itself; only a persisted,
+      // unrevoked login-bound grant establishes the owner policy.
       policyActive: Boolean(rootActive && facts.rootSessionAuthorized),
-      leaseUnexpired: rootActive,
-      expiresAt: leaseOwned && Number.isFinite(expiry) && expiry > now
+      leaseUnexpired,
+      expiresAt: leaseUnexpired
         ? facts.rootLease!.expiresAt : null,
       duration: '15-minute-maximum-lease',
-      // The current ControlPlaneIdentity has no session generation/ID.
-      // Never claim automatic logout revocation without a persisted binding.
+      // This boolean reflects verified server-side session binding,
+      // not OS elevation, UAC consent, or a Guardian attestation.
       sessionBound: Boolean(facts.rootSessionAuthorized),
     },
     core: {

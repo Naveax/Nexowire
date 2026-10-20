@@ -59,6 +59,10 @@ test('expired lease, restart/snapshot reuse and CORE without expiry never revive
   assert.equal(expired.operation.elevatedExecutionProven, false);
   const reboot = explainDeviceAuthorization(facts({online:false}));
   assert.equal(reboot.root.policyActive, false);
+  // An offline device still has an unexpired recorded owner lease;
+  // this is NOT a live authenticated ROOT grant or Windows privilege.
+  assert.equal(reboot.root.leaseUnexpired, true);
+  assert.equal(reboot.root.sessionBound, false);
   assert.equal(reboot.core.state, 'PAUSED_UNVERIFIED');
   assert.equal(reboot.operation.decision, 'denied');
   assert.ok(reboot.operation.reasons.includes('DEVICE_OFFLINE'));
@@ -70,6 +74,7 @@ test('owner transfer, mismatched CORE/ROOT owners and service impersonation fail
   }));
   assert.equal(switched.core.enabled, false);
   assert.equal(switched.root.policyActive, false);
+  assert.equal(switched.root.leaseUnexpired, false);
   assert.equal(switched.core.updatedAt, null);
   const outsider = explainDeviceAuthorization(facts({requesterAccountId:'attacker'}));
   assert.equal(outsider.operation.decision, 'denied');
