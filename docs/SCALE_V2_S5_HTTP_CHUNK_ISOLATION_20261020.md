@@ -21,6 +21,25 @@
 - The opt-in report runner has **two** explicit modes: `--ack-4mib-loopback` (4 × 1 MiB for a small, source-pinned report), and `--ack-38mib-loopback` (4 × 9.5 MiB = 38 MiB, **NOT EXECUTED** because Work PC storage is >96% full and its CPU was at 77%). Both modes are loopback-only, cap RSS growth to 128 MiB, use a 45s deadline and require at least 3 GiB free RAM. Neither mode is included in GitHub CI. The 4 MiB mode's result is saved separately as `docs/reports/s5-http-4mib-loopback-20261020.json`; it remains a synthetic MCP *fixture*, not a true Hub parser measurement.
 - This cannot by itself prove that actual Hub #598 parser shares fair ingress with MCP small requests or handles a 9.5 MiB JSON request safely. After #598 source and operator-approved **isolated** staging endpoint are available, an independently reviewed test adapter should target that real endpoint using first-party auth, small MCP and bounded saturation with a strict explicit canary budget. **Never use customer traffic.**
 
+## Actual measured bounded local HTTP sample (code-pinned)
+
+Source commit **`e975c77effc3e3d5d07b442a1cb59dbbe69f928a`**; immutable JSON: [S5 4-MiB local HTTP sample](reports/s5-http-4mib-loopback-20261020.json).
+
+| Field | One Work PC measurement |
+| --- | ---: |
+| Concurrent large HTTP handlers, each 1 MiB | 4 |
+| Real loopback bytes received | 4,194,304 |
+| Small synthetic MCP route successes during large transfers | 20 / 20 |
+| Small response p50 / p95 / p99 | 26.401 / 27.187 / 27.491 ms |
+| Large response p50 / p95 / p99 | 82.334 / 87.340 / 87.340 ms |
+| Socket backpressure write events | 64 |
+| Fifth large rejected / over-length Content-Length rejected | 429 × 1 / 413 × 1 |
+| Peak process RSS growth | 8,462,336 bytes |
+| Authenticated public WSS / independently verified native completions | 0 / 0 |
+| Actual Cloudflare Worker/D1/DO meter and bill | **Not measured** |
+
+All four receiver SHA-256 digests were equal to the corresponding sender digests, but requests intentionally used identical test content. This is a single **synthetic MCP fixture** run with genuine local HTTP byte transport, not a meaningful production p99 SLO. It does not demonstrate four real 9.5 MiB parsers being exercised at once.
+
 ## #596 64 KiB transfer metadata audit
 
 `src/ops/scale-s5-chunk-receipt-audit.ts` is an independent rolling **metadata-only** QA adapter. It checks owner/account, transfer, source and destination device, epoch, monotonic exact offset, 1–65,536-byte chunks, declared sender/receiver chunk digest equality, duplicate-last idempotency, oversized/out-of-order/cross-scope rejection and bounded p95/p99 sample-memory. It never modifies the #08 Artifact Bridge store, #05 Agent executor or #06 Connection Core.
