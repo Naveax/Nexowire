@@ -4,6 +4,7 @@ import type {IncomingMessage,ServerResponse} from 'node:http';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
+import {verifyAgentJournalWal} from './operation-journal-wal.js';
 
 const uuid=z.string().uuid();
 const hash=z.string().regex(/^[0-9a-f]{64}$/);
@@ -16,6 +17,16 @@ const answer=z.object({
   created:z.boolean(),sequence:z.number().int().positive().safe(),
 }).strict();
 export type CasReservation=z.infer<typeof answer>;
+export type CasRequest=z.infer<typeof input>;
+/**
+ * Authoritative monotonic CAS, hosted in a DIFFERENT backup/security domain
+ * from BOTH the Agent and this reference CAS gateway's SQLite cache.
+ * This interface must be backed by verified conditional-create durable
+ * storage. In-memory and local SQLite implementations are TEST ONLY.
+ */
+export interface MonotonicTrustRoot {
+  reserve(request:CasRequest):Promise<CasReservation>;
+}
 export class MutationCasError extends Error{
   constructor(readonly code:string,message:string){
     super(message);this.name='MutationCasError';
@@ -56,15 +67,46 @@ export class RemoteMutationCasClient{
       });
     }catch{return fail('CAS_UNAVAILABLE')}
     if(!response.ok)fail('CAS_NOT_AUTHORIZED_OR_UNAVAILABLE');
-    const content=await response.text();
+    let content:string;
+    try{content=await response.text()}catch{return fail('CAS_INVALID_PROOF')}
     if(content.length>2000)fail('CAS_INVALID_PROOF');
-    const parsed=answer.safeParse(JSON.parse(content));
+    let decoded:unknown;
+    try{decoded=JSON.parse(content)}catch{return fail('CAS_INVALID_PROOF')}
+    const parsed=answer.safeParse(decoded);
     if(!parsed.success)return fail('CAS_INVALID_PROOF');
     const r=parsed.data;
     if(r.authorityId!==this.settings.authorityId||
        r.deviceId!==body.deviceId||r.epoch!==body.epoch||
        r.requestId!==body.requestId)fail('CAS_SCOPE_MISMATCH');
     return r;
+  }
+}
+/**
+ * HTTPS client for an independently operated MONOTONIC witness service.
+ * Credential resolver must come from an owner-authorized enrollment store,
+ * never from unauthenticated request input.
+ *
+ * The witness endpoint itself must enforce atomic durable create-if-absent.
+ * Transport security alone does NOT prove non-rollback storage provenance.
+ */
+export class HttpsMonotonicTrustRoot implements MonotonicTrustRoot {
+  constructor(private readonly config:{
+    endpoint:string;authorityId:string;
+    tokenForEnrolledDevice:(deviceId:string,epoch:string)=>string|undefined;
+    timeoutMs?:number;
+  }){}
+  async reserve(request:CasRequest):Promise<CasReservation>{
+    const inputRecord=input.parse(request);
+    const credential=this.config.tokenForEnrolledDevice(
+      inputRecord.deviceId,inputRecord.epoch);
+    if(!credential)fail('CAS_WITNESS_ENROLLMENT_MISSING');
+    return new RemoteMutationCasClient({
+      endpoint:this.config.endpoint,token:credential!,
+      authorityId:this.config.authorityId,
+      deviceId:inputRecord.deviceId,epoch:inputRecord.epoch,
+      timeoutMs:this.config.timeoutMs,
+    }).reserve(inputRecord.requestId,inputRecord.fingerprint,
+      inputRecord.capability);
   }
 }
 function equal(a:string,b:string):boolean{
@@ -104,6 +146,7 @@ export async function provisionIndependentCasDatabase(
 export async function createIndependentCasHandler(options:{
   dbFile:string;authorityId:string;
   credentials:()=>readonly IndependentCasCredential[];
+  trustRoot:MonotonicTrustRoot;
   maxPageGrowthForTest?:number;
 }):Promise<{
   handler:(req:IncomingMessage,res:ServerResponse)=>void;
@@ -111,8 +154,13 @@ export async function createIndependentCasHandler(options:{
 }>{
   if(!path.isAbsolute(options.dbFile)||!uuid.safeParse(options.authorityId).success)
     fail('CAS_SERVER_CONFIG_INVALID');
+  if(!options.trustRoot||typeof options.trustRoot.reserve!=='function')
+    fail('CAS_TRUST_ROOT_REQUIRED');
   const stat=await fs.lstat(options.dbFile).catch(()=>fail('CAS_SERVER_UNAVAILABLE'));
   if(!stat.isFile()||stat.isSymbolicLink())fail('CAS_SERVER_UNAVAILABLE');
+  // A corrupt hot WAL can make SQLite silently discard recent cache rows.
+  // Even though the witness is authoritative, require explicit recovery.
+  await verifyAgentJournalWal(options.dbFile);
   const db=new DatabaseSync(options.dbFile);
   try{
     db.exec('PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA busy_timeout=5000');
@@ -156,6 +204,19 @@ export async function createIndependentCasHandler(options:{
         respond(res,403,{error:'invalid_scope'});return;
       }
       const body=checked.data;
+      // The rollback-independent witness MUST commit first. An uncertain
+      // response or missing witness denies execution, never falls back to a
+      // locally restored SQLite row or a newly minted epoch.
+      let proof:CasReservation;
+      try {
+        const raw=await options.trustRoot.reserve(body);
+        proof=answer.parse(raw);
+        if(proof.authorityId!==options.authorityId||
+           proof.deviceId!==body.deviceId||proof.epoch!==body.epoch||
+           proof.requestId!==body.requestId)throw new Error('Witness scope mismatch');
+      }catch{
+        respond(res,503,{error:'trust_root_unavailable'});return;
+      }
       db.exec('BEGIN IMMEDIATE');
       try{
         const old=db.prepare('SELECT sequence,epoch,fingerprint,capability FROM reservations '+
@@ -165,19 +226,21 @@ export async function createIndependentCasHandler(options:{
             old.fingerprint!==body.fingerprint||old.capability!==body.capability)){
           db.exec('ROLLBACK');respond(res,409,{error:'historical_conflict'});return;
         }
-        let sequence=old?.sequence;
-        if(!old){
+        if(old&&proof.created){
+          // Witness says new but local cache already has the ID: witness
+          // rollback, fork or inconsistent provenance. Hard fail closed.
+          db.exec('ROLLBACK');respond(res,503,{error:'trust_root_divergence'});return;
+        }
+        if(!old&&proof.created){
           const result=db.prepare('INSERT INTO reservations '+
             '(device_id,epoch,request_id,fingerprint,capability) VALUES(?,?,?,?,?)')
             .run(body.deviceId,body.epoch,body.requestId,body.fingerprint,body.capability);
-          sequence=Number(result.lastInsertRowid);
+          // Local row is an OPTIONAL cache, not a source of CAS truth.
+          if(Number(result.lastInsertRowid)<1)
+            throw new Error('Local cache write not confirmed');
         }
         db.exec('COMMIT');
-        respond(res,200,{
-          authorityId:options.authorityId,deviceId:body.deviceId,
-          epoch:body.epoch,requestId:body.requestId,
-          created:!old,sequence,
-        });
+        respond(res,200,proof);
       }catch(e){
         try{db.exec('ROLLBACK')}catch{}
         respond(res,503,{error:'reservation_unavailable'});

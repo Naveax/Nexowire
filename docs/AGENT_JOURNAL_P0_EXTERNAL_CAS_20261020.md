@@ -16,7 +16,7 @@ The native Agent now requires **separately authenticated HTTPS CAS** for
 every mutating request, before any local `begin()`, `markDispatched()`
 or `executeCapability()`. It does **not** create a remote authority on
 startup and does not trust the two local SQLite databases as a replay
-authority. The remote service owns a durable transactionally unique
+authority. The external trusted **monotonic witness** owns an atomic durable unique
 `(device_id,request_id)` tombstone across Agent/Hub restarts and Agent
 volume restores. The server binds request to a configured per-device token
 and epoch, persists only opaque request UUID, SHA-256 fingerprint, capability,
@@ -53,7 +53,33 @@ CAS => no mutation, and no automatic migration/bootstrap.
 
 ## Reference CAS backend and negative evidence
 `src/agent/remote-mutation-cas.ts` includes a separately provisioned
-**reference** SQLite WAL/FULL CAS handler. Operator must explicitly call
+**reference gateway/cache** SQLite WAL/FULL CAS handler. From #587 onward
+the handler requires a `MonotonicTrustRoot` implementation, and refuses
+startup with `CAS_TRUST_ROOT_REQUIRED` if it has none. The witness must
+atomically reserve the request ID **before** the gateway cache transaction.
+A missing witness, invalid/scope-mismatched proof or timeout returns 503,
+not a new local reservation. A witness refusal or duplicate may never be
+overridden by the cache. `HttpsMonotonicTrustRoot` is an HTTPS adapter for
+a separate enrolled monotonic service; it does not automatically manufacture
+a durable service or trust provenance.
+A successful external reservation followed by local `SQLITE_FULL` is
+conservatively UNKNOWN to the Agent; replay remains denied by the witness.
+
+**Negative #587 test:** rollback BOTH Agent-local databases and the remote
+reference gateway SQLite cache, but preserve the test-only witness outside
+these snapshots. The historical UUID still returns `created:false`.
+Additional tests cover witness missing/403, malformed proof, wrong
+device/epoch, corrupted remote WAL header, token rotation and HTTPS
+witness adapter. The test-only witness is an in-memory Map in
+`test/fixtures/`, **not production durability evidence**. The rollback
+gateway handler uses a loopback, non-keepalive test transport while other
+tests exercise real TLS and certificate verification. The production client
+accepts HTTPS only.
+
+Operator must explicitly provision a real external witness and the cache.
+`createIndependentCasHandler` is a library entrypoint, not a standalone
+production service. The backend needs a deployment with independently
+verifiable immutable trust provenance and retention guarantees. Operator must explicitly call
 `provisionIndependentCasDatabase()` once. Server refuses to create
 missing/unprovisioned storage on process restart or after data loss.
 Server must be hosted on a separately owned host/storage and reachable
@@ -87,9 +113,10 @@ set the CAS variables for that child. This fixes their previous
 native mutation guard**. Live production credentials are never used.
 
 ## Remaining security and physical acceptance gates
-- **Remote service must actually be deployed and authenticated in a separate
-  rollback/backup/security domain.** The included reference SQLite backend
-  cannot itself detect a rollback of its **own** remote database. Operator
+- **The monotonic witness must be deployed and authenticated in a separate
+  rollback/backup/security domain.** The included gateway SQLite cache is
+  explicitly **not** an independent trusted root and cannot itself detect a
+  rollback of its **own** database. Operator
   must attest remote retention, immutable audit, restore policy, ACL/service
   identity, quorum/replication or real managed monotonic storage. Do not
   claim production anti-rollback from source HTTPS tests alone.
@@ -104,6 +131,9 @@ native mutation guard**. Live production credentials are never used.
   trust/pinning, power-loss durability, concurrent CAS requests, stale
   backup restore and two upgraded Agents/Hub on **separate physical devices**
   before production signoff. Never silently adopt a new empty CAS database.
+- Windows Job fast-exit stdout drain failure on PR #582 exact head
+  `0e322c94` was assigned to PR #576 owner in PR comments; #01 does not
+  edit shared process-manager/Job code or delete/skip the failing test.
 - CI exact-head success is independent of release acceptance; #587 remains
   BLOCKED until independent physical authority is attested.
 
