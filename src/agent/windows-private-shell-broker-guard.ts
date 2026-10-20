@@ -28,6 +28,9 @@ function isPowerShellParameterAlias(value:string,canonical:string):boolean{
 const PRIVATE_GUI_BROKER_EXECUTABLES=new Set([
   'explorer.exe','control.exe','rundll32.exe','dllhost.exe',
   'mshta.exe','wscript.exe','cscript.exe','msiexec.exe',
+  // These can load DLL/COM code, impersonate another logon or dispatch
+  // scheduled tasks and shell commands outside lpDesktop provenance.
+  'regsvr32.exe','runas.exe','schtasks.exe','forfiles.exe',
   'fodhelper.exe','computerdefaults.exe','eventvwr.exe',
   'sdclt.exe','slui.exe','hh.exe',
   // WSLg/MSYS shell entry points can redirect GUI outside the private desktop.
@@ -128,7 +131,7 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   // Inspect those prefixes at command boundaries, rather than silently
   // accepting quoted start/explorer invocations.
   const explicitBroker=/(?:^|[;&|\r\n])\s*["']*\s*(?:(?:&|call)\s+)?["']*\s*(?:start-process|saps|invoke-item|ii|invoke-expression|iex|start)(?=\s|$|[('"\x22])/i;
-  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt|wsl|wslhost|wslconfig|wt|bash|sh|windowsterminal)(?:\.exe)?(?=\s|$|["'])/i;
+  const hostExecutable=/(?:^|[;&|\r\n])\s*["']*\s*(?:&\s*)?["']*\s*(?:(?:[A-Za-z]:[\\/][^\s"';&|]+[\\/])?)(?:explorer|control|rundll32|mshta|msiexec|wscript|cscript|dllhost|fodhelper|computerdefaults|eventvwr|slui|sdclt|regsvr32|runas|schtasks|forfiles|wsl|wslhost|wslconfig|wt|bash|sh|windowsterminal)(?:\.exe)?(?=\s|$|["'])/i;
   // Recursive command interpreters are unbounded launch surfaces: the
   // outer preflight cannot safely reason about a nested shell's arguments,
   // its environment, or downstream GUI descendants.
@@ -140,7 +143,11 @@ export function assertNoObviousPrivateShellBrokerInvocation(
   const runAs=/(?:^|\s)-Verb\s+(?:RunAs|RunAsUser)(?=\s|$|['"])/i;
   const shellObject=/\b(?:ShellExecute(?:Ex)?|Shell\.Application|WScript\.Shell)\b/i;
   const dotNetProcessStart=/\b(?:System\.Diagnostics\.Process|\[Diagnostics\.Process\])(?:::|\]::)Start\s*\(/i;
-  if([explicitBroker,hostExecutable,nestedShell,desktopBridgeReference,runAs,shellObject,dotNetProcessStart]
+  // A COM object or WMI/CIM Win32_Process.Create may bootstrap GUI in the
+  // caller's physical user session rather than the requested desktop.
+  const comActivation=/(?:\s-ComObject\b|\bGetTypeFromProgID\s*\()/i;
+  const wmiProcessCreate=/\b(?:Invoke-CimMethod|Invoke-WmiMethod)\b[^\r\n;&|]*\bWin32_Process\b[^\r\n;&|]*\bCreate\b/i;
+  if([explicitBroker,hostExecutable,nestedShell,desktopBridgeReference,runAs,shellObject,dotNetProcessStart,comActivation,wmiProcessCreate]
     .some(pattern=>pattern.test(command))){
     throw Object.assign(new Error(
       'Shell command contains a known Windows GUI/elevation broker. '+
