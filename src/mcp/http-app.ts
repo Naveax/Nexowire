@@ -117,7 +117,7 @@ export function createNexowireMcpExpressApp(
     const rawLength = req.headers['content-length'];
     const smallBody =
       typeof rawLength === 'string' &&
-      /^\\d+$/.test(rawLength) &&
+      /^\d+$/.test(rawLength) &&
       Number(rawLength) <= 100 * 1024;
     if (smallBody) {
       jsonParser(req, res, next);
