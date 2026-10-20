@@ -1,0 +1,104 @@
+{
+  "schema": "S5_LOCAL_TCP_STREAM_E2E_V1",
+  "provenance": {
+    "sourceHead": "7c0d69e7f8c7b625ad05f0ea20ae5b21379f8ba7",
+    "startUtc": "2026-10-20T11:09:30.500Z",
+    "endedAtUtc": "2026-10-20T11:09:36.130Z",
+    "limitations": "No actual Nexowire Artifact Bridge, Agent File API, WSS, provider cloud or persistent file store"
+  },
+  "stream": {
+    "classification": "LOCAL_STREAM_ONLY_NOT_NEXOWIRE_INGEST",
+    "maxConcurrent": 2,
+    "peakActiveTransfers": 2,
+    "observedRssBaselineBytes": 74579968,
+    "observedRssPeakBytes": 162676736,
+    "samples": [
+      {
+        "kind": "REAL_LOOPBACK_TCP_BYTES_NO_ARTIFACT_API",
+        "requestedBytes": 226304,
+        "transmittedBytes": 226304,
+        "receivedBytes": 226304,
+        "emittedChunks": 4,
+        "senderSha256": "08c346a98accb677c450f629f9f8f8fee1281575fcbae015844979dabbd18167",
+        "receiverSha256": "08c346a98accb677c450f629f9f8f8fee1281575fcbae015844979dabbd18167",
+        "elapsedMs": 49.294,
+        "throughputMiBps": 4.378,
+        "backpressureEvents": 0,
+        "backpressureStallMs": {
+          "p95": 0,
+          "p99": 0
+        },
+        "rssPeakBytes": 78602240,
+        "rssGrowthPeakBytes": 4022272,
+        "cpuUserMs": 31,
+        "cpuSystemMs": 16,
+        "maxSocketWritableLengthBytes": 0,
+        "completedNativeTools": 0,
+        "actualArtifactStoreCommit": false
+      },
+      {
+        "kind": "REAL_LOOPBACK_TCP_BYTES_NO_ARTIFACT_API",
+        "requestedBytes": 268435457,
+        "transmittedBytes": 268435457,
+        "receivedBytes": 268435457,
+        "emittedChunks": 4097,
+        "senderSha256": "45db833f69eab47590bba03189416ba4114e0aa6bb28781a1ae20d13f7b5272d",
+        "receiverSha256": "45db833f69eab47590bba03189416ba4114e0aa6bb28781a1ae20d13f7b5272d",
+        "elapsedMs": 2178.906,
+        "throughputMiBps": 117.49,
+        "backpressureEvents": 4053,
+        "backpressureStallMs": {
+          "p95": 2.371,
+          "p99": 3.191
+        },
+        "rssPeakBytes": 148185088,
+        "rssGrowthPeakBytes": 73605120,
+        "cpuUserMs": 1453,
+        "cpuSystemMs": 985,
+        "maxSocketWritableLengthBytes": 65536,
+        "completedNativeTools": 0,
+        "actualArtifactStoreCommit": false
+      },
+      {
+        "kind": "REAL_LOOPBACK_TCP_BYTES_NO_ARTIFACT_API",
+        "requestedBytes": 1073741824,
+        "transmittedBytes": 1073741824,
+        "receivedBytes": 1073741824,
+        "emittedChunks": 16384,
+        "senderSha256": "61c4848e6ff94c6b16b605860eed1ad805d1d18694fac867455569ae790ae871",
+        "receiverSha256": "61c4848e6ff94c6b16b605860eed1ad805d1d18694fac867455569ae790ae871",
+        "elapsedMs": 5556.513,
+        "throughputMiBps": 184.288,
+        "backpressureEvents": 16341,
+        "backpressureStallMs": {
+          "p95": 1.256,
+          "p99": 2.62
+        },
+        "rssPeakBytes": 162676736,
+        "rssGrowthPeakBytes": 88096768,
+        "cpuUserMs": 3375,
+        "cpuSystemMs": 2672,
+        "maxSocketWritableLengthBytes": 65536,
+        "completedNativeTools": 0,
+        "actualArtifactStoreCommit": false
+      }
+    ],
+    "stagingWssConnections": 0,
+    "nativeToolCompletions": 0,
+    "providerCountersMeasured": false,
+    "externalNetworkRequests": 0,
+    "diskFileBytesCreated": 0,
+    "constraints": [
+      "Actual bytes cross TCP loopback, but NOT authenticated WSS nor Nexowire Agent/Hub artifact API",
+      "Memory safety guards, local-only binding, limited chunks, zero 1-GiB temp files",
+      "No resumable artifact, owner grant, storage quota or native tool completion is verified",
+      "Cloudflare request/egress/billing values remain unknown; this benchmark is not production acceptance"
+    ]
+  },
+  "physicalStagingStatus": "BLOCKED",
+  "actualArtifactApiLargeFilesVerified": false,
+  "actualAuthenticatedWss100Plus": false,
+  "nativeToolCompletionsVerified": 0,
+  "continuous24HourSoakVerified": false,
+  "productionAcceptance": "NO_GO"
+}
