@@ -20,24 +20,61 @@ $helper = Get-Item -LiteralPath $HelperPath -Force
 $parent = Get-Item -LiteralPath (Split-Path $HelperPath -Parent) -Force
 $linked = (($helper.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
           (($parent.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
-$hash = (Get-FileHash -LiteralPath $HelperPath -Algorithm SHA256).Hash.ToLowerInvariant()
+# Use the .NET SHA-256 primitive directly. Certain stripped Windows test
+# environments do not expose the Get-FileHash PowerShell cmdlet even though
+# the cryptographic provider is available. A missing cmdlet must never turn
+# a fail-closed security decision into an unrelated command-not-found error.
+# Keep the file open only for a bounded read and always dispose both handles.
+$sha256 = [Security.Cryptography.SHA256]::Create()
+$stream = $null
+try {
+  $stream = [IO.File]::Open(
+    $HelperPath,
+    [IO.FileMode]::Open,
+    [IO.FileAccess]::Read,
+    [IO.FileShare]::Read
+  )
+  $digest = $sha256.ComputeHash($stream)
+  $hash = ([BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+} finally {
+  if ($null -ne $stream) { $stream.Dispose() }
+  $sha256.Dispose()
+}
 $manifest = Join-Path $helper.DirectoryName 'windows-job-owner.sha256'
 $manifestDigest = if (Test-Path -LiteralPath $manifest -PathType Leaf) {
   (Get-Content -LiteralPath $manifest -Raw).Trim().ToLowerInvariant()
 } else { '' }
 $hashMatches = $manifestDigest -match '^[0-9a-f]{64}$' -and $hash -eq $manifestDigest
-$auth = Get-AuthenticodeSignature -LiteralPath $HelperPath
-$validSigner = $auth.Status -eq 'Valid' -and $null -ne $auth.SignerCertificate
-$thumbprint = if ($auth.SignerCertificate) {
+# Unavailable signature or ACL providers mean missing evidence, never trust.
+$auth = $null
+$authError = ''
+try {
+  $auth = Get-AuthenticodeSignature -LiteralPath $HelperPath -ErrorAction Stop
+} catch {
+  $authError = $_.Exception.GetType().Name
+}
+$authAvailable = $null -ne $auth
+$validSigner = $authAvailable -and $auth.Status -eq 'Valid' -and $null -ne $auth.SignerCertificate
+$thumbprint = if ($authAvailable -and $auth.SignerCertificate) {
   $auth.SignerCertificate.Thumbprint.ToLowerInvariant()
 } else { '' }
-$acl = Get-Acl -LiteralPath $HelperPath
-$parentAcl = Get-Acl -LiteralPath $parent.FullName
+$acl = $null
+$parentAcl = $null
+$aclError = ''
+try {
+  $acl = Get-Acl -LiteralPath $HelperPath -ErrorAction Stop
+  $parentAcl = Get-Acl -LiteralPath $parent.FullName -ErrorAction Stop
+} catch {
+  $aclError = $_.Exception.GetType().Name
+  $acl = $null
+  $parentAcl = $null
+}
+$aclAvailable = $null -ne $acl -and $null -ne $parentAcl
 # Deny broad low-trust groups WRITE_DAC/WRITE_OWNER/DELETE and data writes.
 # These SIDs are stable across localized Windows installations.
 $untrustedSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
 $unsafe=@()
-foreach($entry in $acl.Access) {
+foreach($entry in $(if ($aclAvailable) { $acl.Access } else { @() })) {
   if ($entry.AccessControlType -ne 'Allow') { continue }
   $identity=try { $entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
     catch { $entry.IdentityReference.Value }
@@ -57,18 +94,22 @@ $evidence=[ordered]@{
   helperSha256=$hash
   companionManifestMatches=[bool]$hashMatches
   pathReparseDetected=[bool]$linked
-  authenticodeStatus=[string]$auth.Status
+  authenticodeStatus=$(if ($authAvailable) { [string]$auth.Status } else { 'UNAVAILABLE' })
+  authenticodeEvidenceAvailable=[bool]$authAvailable
+  authenticodeEvidenceError=$authError
   publisherValid=[bool]$validSigner
   externallyPinnedPublisherMatches=[bool]$expectedPublisherOK
   externallyPinnedReleaseSha256Matches=[bool]$expectedShaOK
-  fileAclProtected=[bool]$acl.AreAccessRulesProtected
-  parentAclProtected=[bool]$parentAcl.AreAccessRulesProtected
-  broadWriteGrantFound=($unsafe.Count -gt 0)
+  aclEvidenceAvailable=[bool]$aclAvailable
+  aclEvidenceError=$aclError
+  fileAclProtected=[bool]($aclAvailable -and $acl.AreAccessRulesProtected)
+  parentAclProtected=[bool]($aclAvailable -and $parentAcl.AreAccessRulesProtected)
+  broadWriteGrantFound=$(if ($aclAvailable) { $unsafe.Count -gt 0 } else { $null })
   productionReady=$false
 }
 $ready= $hashMatches -and (-not $linked) -and $validSigner -and
   $expectedPublisherOK -and $expectedShaOK -and
-  $acl.AreAccessRulesProtected -and $parentAcl.AreAccessRulesProtected -and
+  $aclAvailable -and $acl.AreAccessRulesProtected -and $parentAcl.AreAccessRulesProtected -and
   ($unsafe.Count -eq 0)
 # Deliberately do NOT declare productionReady based solely on file-level
 # evidence: the caller's signer trust anchor, installation identity, rollback
