@@ -5,7 +5,7 @@ import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import {
   createIndependentCasHandler,provisionIndependentCasDatabase,
-  type IndependentCasCredential,
+  type IndependentCasCredential,type MonotonicTrustRoot,
 } from '../../src/agent/remote-mutation-cas.js';
 
 function opensslBinary():string{
@@ -13,6 +13,32 @@ function opensslBinary():string{
     try{execFileSync(bin,['version'],{stdio:'ignore'});return bin}catch{}
   }
   throw new Error('OpenSSL required for isolated HTTPS CAS tests');
+}
+/**
+ * Deliberately TEST-ONLY monotonic trust boundary. Its state is held outside
+ * the rollback fixture and never copied/restored alongside SQLite.
+ * NOT a production durable store and must never be imported by src/.
+ */
+export function isolatedMonotonicWitness(authorityId:string):MonotonicTrustRoot{
+  const records=new Map<string,{fingerprint:string;capability:string;
+    epoch:string;sequence:number}>();
+  let lastSequence=0;
+  return {
+    async reserve(request){
+      const key=request.deviceId+':'+request.requestId;
+      const old=records.get(key);
+      if(old&&(old.fingerprint!==request.fingerprint||
+        old.capability!==request.capability||old.epoch!==request.epoch))
+        throw new Error('Witness historical request mismatch');
+      if(old)return {authorityId,deviceId:request.deviceId,epoch:request.epoch,
+        requestId:request.requestId,created:false,sequence:old.sequence};
+      const sequence=++lastSequence;
+      records.set(key,{fingerprint:request.fingerprint,
+        capability:request.capability,epoch:request.epoch,sequence});
+      return {authorityId,deviceId:request.deviceId,epoch:request.epoch,
+        requestId:request.requestId,created:true,sequence};
+    },
+  };
 }
 /**
  * Tests only. Remote DB and TLS key are in their own disposable directory
@@ -35,9 +61,10 @@ export async function isolatedRemoteCas(root:string,deviceId=randomUUID(),maxPag
     token:randomUUID()+randomUUID(),deviceId,epoch,
   }];
   const dbFile=path.join(remote,'persistent-reservations.sqlite');
+  const trustRoot=isolatedMonotonicWitness(authorityId);
   await provisionIndependentCasDatabase(dbFile,authorityId);
   const backend=await createIndependentCasHandler({
-    dbFile,authorityId,credentials:()=>credentials,maxPageGrowthForTest,
+    dbFile,authorityId,credentials:()=>credentials,trustRoot,maxPageGrowthForTest,
   });
   const server=createHttpsServer({
     key:await fs.readFile(privateKey),cert:await fs.readFile(certificate),
@@ -47,7 +74,7 @@ export async function isolatedRemoteCas(root:string,deviceId=randomUUID(),maxPag
   if(!address||typeof address==='string')throw new Error('No isolated HTTPS port');
   let stopped=false;
   return {
-    root:remote,dbFile,authorityId,epoch,deviceId,credentials,
+    root:remote,dbFile,authorityId,epoch,deviceId,credentials,trustRoot,
     certificate,
     url:'https://localhost:'+address.port+'/v1/reservations',
     settings:{
