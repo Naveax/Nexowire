@@ -45,6 +45,38 @@ async function readUntil(
   );
 }
 
+/**
+ * The durable worker alone may attest final exit. Do not mistake a received
+ * quit/echo, a dead PID or the transport's success for an exited process.
+ * A completed atomic .tmp status is a valid recovery candidate; partial
+ * status records and stale running data are not evidence of completion.
+ */
+async function requireDurableExitRecord(
+  workerDir: string, sessionId: string, timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const filename of ['status.json', 'status.json.tmp']) {
+      let entry: unknown;
+      try {
+        entry = JSON.parse(await fs.readFile(path.join(workerDir, filename), 'utf8'));
+      } catch {
+        // A concurrently written temp file may be incomplete. Never trust it.
+        continue;
+      }
+      if (!entry || typeof entry !== 'object') continue;
+      const proof = entry as Record<string, unknown>;
+      if (proof.version === 1 && proof.sessionId === sessionId &&
+          proof.status === 'exited' && proof.exitCode === 0 &&
+          typeof proof.exitedAt === 'string' && !Number.isNaN(Date.parse(proof.exitedAt))) {
+        return;
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error('Worker never durably confirmed exited status after quit; refuse task success');
+}
+
 test('durable process stdin/stdout reattaches across ProcessManager restart', async () => {
   const root = await fs.mkdtemp(
     path.join(os.tmpdir(), 'nexowire-durable-process-'),
@@ -134,6 +166,12 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
       input: 'quit',
       append_newline: true,
     });
+    // Synchronize against actual durable worker completion, not command echo
+    // or the (possibly already dead) worker PID. The original exited assertion
+    // remains mandatory below; lost, orphaned and unknown are NOT accepted.
+    await requireDurableExitRecord(
+      path.join(workerRoot, started.sessionId), started.sessionId,
+    );
 
     let finalStatus = 'running';
     let finalCursor = after.nextSeq;
@@ -261,6 +299,48 @@ test('durable process recovers terminal status from a completed atomic temp reco
     assert.equal(recovered.exitCode, 0);
     assert.equal(recovered.exitedAt, exitedAt);
     assert.equal(recovered.recovered, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('durable dead worker without terminal evidence remains lost, never exited', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-durable-lost-negative-'));
+  const stateFile = path.join(root, 'sessions.json');
+  const workerDir = path.join(root, 'worker');
+  const sessionId = '22222222-2222-4222-8222-222222222222';
+  const unavailablePid = 2_147_483_000;
+  const startedAt = new Date(Date.now() - 1_000).toISOString();
+  try {
+    await fs.mkdir(workerDir, { recursive: true });
+    await fs.writeFile(path.join(workerDir, 'events.jsonl'), '', 'utf8');
+    await fs.writeFile(path.join(workerDir, 'status.json'), JSON.stringify({
+      version: 1, sessionId, workerPid: unavailablePid,
+      childPid: unavailablePid - 1, status: 'running', startedAt,
+      exitCode: null, signal: null, nextSeq: 1, maxBufferBytes: 4_194_304,
+    }) + '\n', 'utf8');
+    await fs.writeFile(stateFile, JSON.stringify({
+      version: 1, sessions: [{
+        id: sessionId, pid: unavailablePid - 1, shell: 'bash',
+        startedAt, exitCode: null, signal: null, status: 'running',
+        durable: true, workerDir, workerPid: unavailablePid,
+      }],
+    }) + '\n', 'utf8');
+    const manager = new ProcessManager({
+      stateFile, workerRoot: path.join(root, 'workers'),
+      exitedRetentionMs: 60_000_000,
+    });
+    await manager.initialize();
+    const recovered = manager.list().find(entry => entry.sessionId === sessionId);
+    assert.ok(recovered);
+    assert.equal(recovered.status, 'lost');
+    assert.equal(recovered.exitCode, null);
+    assert.equal(recovered.recovered, true);
+    await assert.rejects(requireDurableExitRecord(workerDir, sessionId, 120),
+      /never durably confirmed exited status/);
+    const detail = await manager.read({ session_id: sessionId, after_seq: 0, wait_ms: 0 });
+    assert.equal(detail.session.status, 'lost');
+    assert.equal(detail.session.exitCode, null);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
