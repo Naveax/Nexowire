@@ -25,10 +25,11 @@ export const STAGING_ARTIFACT_BUDGET:Readonly<ArtifactBudgetPolicy>={
   maxConcurrentGlobal:16,
   maxConcurrentPerOwner:2,
 };
-type Phase='OPEN'|'COMPLETE'|'RELEASED';
+type Phase='OPEN'|'CANCEL_PENDING'|'COMPLETE'|'RELEASED';
 export type BudgetDecision=
   | 'RESERVED'|'ALREADY_RESERVED'|'CHUNK_PENDING'|'CHUNK_COMMITTED'
   | 'CHUNK_ALREADY_COMMITTED'|'COMPLETE'|'ALREADY_COMPLETE'|'RELEASED'
+  | 'CANCEL_PENDING'|'ALREADY_CANCEL_PENDING'
   | 'DENIED_OWNER'|'DENIED_CAPACITY'|'DENIED_RATE'
   | 'DENIED_CONCURRENCY'|'DENIED_REPLAY'|'DENIED_OFFSET'
   | 'DENIED_PENDING'|'DENIED_STATE';
@@ -53,8 +54,15 @@ export interface TrustedDurableFinalReceipt extends TrustedArtifactIdentity {
   sessionId:string;storedSizeBytes:number;storedSha256:string;
   durableStorageVerified:true;
 }
+export interface TrustedArtifactCancel extends TrustedArtifactIdentity {
+  sessionId:string;
+  /** CAS fence: the owner verified the current durable logical offset. */
+  expectedOffsetBytes:number;
+}
 export interface TrustedRemovedReceipt extends TrustedArtifactIdentity {
   sessionId:string;durableDeletionVerified:true;
+  /** Required before releasing an interrupted/uncertain partial upload. */
+  writersStoppedVerified?:true;
 }
 
 const idRe=/^[A-Za-z0-9_.:@-]{8,128}$/;
@@ -206,6 +214,10 @@ export class StagingArtifactByteBudget {
     if(!isPositive(bytes)||bytes>ARTIFACT_CHUNK_BYTES)throw Error('CHUNK_SIZE_INVALID');
     return this.transaction(()=>{
       this.trustedClock(t);
+      const scoped=this.session(x.sessionId);
+      // A tombstoned session must never reopen from a replay.
+      if(scoped && subjectMatch(scoped,x) && scoped.state!=='OPEN')
+        return 'DENIED_STATE';
       const prev=this.chunk(x.requestId);
       if(prev){
         if(!subjectMatch(prev,x)||prev.session_id!==x.sessionId||
@@ -284,6 +296,28 @@ export class StagingArtifactByteBudget {
       return 'COMPLETE';
     });
   }
+  /**
+   * Durable cancellation tombstone. Stop new chunks/commit and retain the
+   * full storage reservation until all in-flight writers are fenced and
+   * an independent durable deletion receipt has been verified by #08.
+   * NO 60-second byte-budget credit is refunded after cancellation.
+   */
+  requestCancel(x:TrustedArtifactCancel):BudgetDecision {
+    id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
+    id(x.sessionId,'SESSION');count(x.expectedOffsetBytes,'OFFSET');
+    return this.transaction(()=>{
+      const s=this.session(x.sessionId);
+      if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
+      if(s.state==='CANCEL_PENDING')return s.offset_bytes===x.expectedOffsetBytes
+        ?'ALREADY_CANCEL_PENDING':'DENIED_OFFSET';
+      if(s.state!=='OPEN')return 'DENIED_STATE';
+      if(s.offset_bytes!==x.expectedOffsetBytes)return 'DENIED_OFFSET';
+      this.db.prepare(
+        'UPDATE budget_artifact_sessions SET state=? WHERE session_id=?'
+      ).run('CANCEL_PENDING',x.sessionId);
+      return 'CANCEL_PENDING';
+    });
+  }
   acknowledgeDeletion(x:TrustedRemovedReceipt):BudgetDecision {
     id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
     id(x.sessionId,'SESSION');
@@ -292,7 +326,10 @@ export class StagingArtifactByteBudget {
       const s=this.session(x.sessionId);
       if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
       if(s.state==='RELEASED')return 'RELEASED';
-      if(s.state!=='COMPLETE')return 'DENIED_STATE';
+      if(s.state!=='COMPLETE'&&s.state!=='CANCEL_PENDING')return 'DENIED_STATE';
+      // Cancelled writes may have an unknown in-flight write/ACK.
+      if(s.state==='CANCEL_PENDING'&&x.writersStoppedVerified!==true)
+        throw Error('WRITER_FENCE_REQUIRED');
       this.db.prepare('UPDATE budget_artifact_sessions SET state=? WHERE session_id=?')
         .run('RELEASED',x.sessionId);
       return 'RELEASED';
