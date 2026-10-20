@@ -285,3 +285,64 @@ SKIP, GitHub exact-head CI and production release gates.
   output-proof durable WAL after Agent crash, protected cross-owner handles,
   physical 2-device acceptance and representative long-running workloads.
   No live crypto bot or GPU benchmark launched.
+
+
+### #575 follow-up: #588/#596 one-call transfer receipts (2026-10-20)
+
+`src/agent/one-call-transfer-watchdog.ts` is a standalone, read-only
+observer of the current **#596** `artifact_bridge_ingest_device_file`
+response and the proposed **#597** single-call `transfer_status` /
+`transfer_cancel` status/cancel responses. It never changes
+`src/workspace/artifact-bridge.ts`, `src/mcp/artifact-bridge-*`
+(#08 owned), or ProcessManager (#03 owned), and does not initiate transfers.
+
+**Provenance levels are distinct:**
+
+1. `PARTIAL`, `COMPLETE`, `ALREADY_PRESENT` responses contain
+   `state`, `sha256`, `size`, `offset`, `transferredBytes`, and
+   `artifactPath`. Their byte offsets and derived 65,536-byte chunk
+   counts are **receipt claims**, not independently attested immutable
+   content. These receipts provide NO per-chunk hash list or
+   requestId binding on their own; the authenticated invoker must
+   pin scope/UUID and validate source authenticity. The observer refuses
+   regressions, overflows, invalid hashes and offsets, and inconsistent
+   reported transfer bytes.
+2. Only after an externally authenticated `ArtifactBridgeStore.get`
+   and independently content-hashed `readChunk` response match the
+   pinned account/project/device/artifact/SHA-256/size does the adapter
+   expose `storageVerified=true` and a
+   `lastVerifiedChunkSha256`. It expires after **30 seconds**.
+   It uses bounded 64 KiB reads, not one giant MCP payload. The
+   filesystem/storage verification does NOT prove a worker completed a
+   valid task.
+3. `workerCompletedVerified=false` is deliberately invariant.
+   Worker-reported completed counters, PID liveness, or even a valid
+   stored artifact must NEVER be promoted into
+   `ProgressSupervisor.completed_verified` without its separate
+   trusted request/output/exit/immutable-attestation contract.
+4. A lost mutation response sets `mutation_unknown`; no automatic
+   replay, cancel or retry is performed. The proposed status receipt
+   can explicitly reconcile a reported offset/cancel state but does
+   NOT prove on-disk content. Cancel is a terminal noncompletion.
+   Zero persisted-byte growth under a running/lying worker generates
+   `NO_STORAGE_PROGRESS`; lost child PID generates
+   `WORKER_PID_LOST`. A 1 GiB+ transfer can be represented by
+   bounded integer metrics without allocating its contents in RAM.
+
+**Integration blocker:** At inspection, PR #596 (HEAD
+`22675eeb46b7360622a0800ac5d293fee63b2e68`) remains DRAFT.
+It still provides at most 32 chunks per MCP ingest call and may return
+`PARTIAL`. The #597 child QA demanding one-call background transfer
+plus authenticated `status/cancel` is also OPEN/DRAFT and intentionally
+red against that contract. The proposed status/cancel receipt observer
+is therefore a *contract adapter*, not a claim that those endpoints
+exist or that background copy execution has been accepted.
+The existing store-backed tests exercise the actual begin/putChunk/
+commit/get/readChunk APIs and use synthetic receipt DTOs only for
+interfaces that #596/#597 have not implemented.
+
+Production remains **NO-GO** pending authenticated single-call transfer
+execution, durable owner-bound status/cancel receipts, trusted immutable
+artifact handoff, full provenance and end-to-end two-device acceptance.
+No live crypto/GPU workload, production deploy, automatic replay, or
+unsigned Job helper installation was attempted.
