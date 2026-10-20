@@ -92,6 +92,48 @@ test('issue #588: 9.5 MiB request and response envelopes are bounded independent
     });
     assert.equal(deniedHost, 403, 'unapproved Host must be rejected');
 
+    // Hold four genuinely incomplete JSON requests open. The fifth client
+    // must be rejected before allocating a fifth 9.5 MiB parser buffer.
+    const unfinished: ReturnType<typeof request>[] = [];
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        const client = request({
+          hostname: '127.0.0.1',
+          port: address.port,
+          path: '/mcp',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Transfer-Encoding': 'chunked',
+          },
+        });
+        client.on('error', () => {}); // expected on synthetic teardown
+        unfinished.push(client);
+        client.write('{"payload":"part');
+      }
+      // A finite wait is only used to allow the local HTTP event loop to
+      // accept the deliberately incomplete test requests, not to authorize
+      // a real user action or hide an observed failed result.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const overloaded = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      assert.equal(overloaded.status, 503, 'fifth concurrent JSON parser rejected');
+      const error = await overloaded.json() as { code: string };
+      assert.equal(error.code, 'MCP_JSON_PARSER_BUSY');
+    } finally {
+      for (const client of unfinished) client.destroy();
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const recovered = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(recovered.status, 200, 'parser capacity released on disconnect');
+
     const oversizedResponse = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
