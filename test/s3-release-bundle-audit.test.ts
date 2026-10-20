@@ -9,13 +9,17 @@ import {
 } from '../src/update/agent-lifecycle-manager.js';
 import {
   auditOfflineReleaseBundles,
-  type BinaryInspector,
+  type BinaryInspector, type AclInspector,
 } from '../scripts/s3-release-bundle-audit.js';
 
 const keys=generateKeyPairSync('ed25519');
 const SHA=(value:Buffer)=>createHash('sha256').update(value).digest('hex');
 const publisher='Nexowire Fixture Publisher';
 const certificateSha='c'.repeat(64);
+const protectedAcl:AclInspector=()=>({
+  status:'protected_tree_inspected',inspectedNodes:9,
+  p0LegacyRuntimeExposed:false,executionSafe:false,productionApproved:false,
+});
 
 type Fixture={
   root:string; policyFile:string; policySha:string;
@@ -83,7 +87,7 @@ async function isolated<T>(run:(fx:Fixture)=>Promise<T>):Promise<T>{
 
 test('bounded offline signature audit validates two pinned releases but NEVER claims safe execution',async()=>{
   await isolated(async fx=>{
-    const result=await auditOfflineReleaseBundles(fx.request(),fx.goodInspector);
+    const result=await auditOfflineReleaseBundles(fx.request(),fx.goodInspector,protectedAcl);
     assert.equal(result.status,'offline_artifacts_verified');
     assert.equal(result.signedManifestAndAuthenticodeVerified,true);
     assert.equal(result.canaryApproved,false);
@@ -96,11 +100,11 @@ test('bounded offline signature audit validates two pinned releases but NEVER cl
 test('release-owned policy cannot silently replace independently pinned trust hash',async()=>{
   await isolated(async fx=>{
     const wrong= {...fx.request(),trustedPolicySha256:'f'.repeat(64)};
-    await assert.rejects(auditOfflineReleaseBundles(wrong,fx.goodInspector),
+    await assert.rejects(auditOfflineReleaseBundles(wrong,fx.goodInspector,protectedAcl),
       /S3_OFFLINE_POLICY_HASH_MISMATCH/);
     await fs.writeFile(fx.policyFile,JSON.stringify({...fx.policy,
       trustedPublisher:'Untrusted Remote Publisher'}));
-    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector),
+    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector,protectedAcl),
       /S3_OFFLINE_POLICY_HASH_MISMATCH/);
   });
 });
@@ -113,7 +117,7 @@ test('missing first-party Authenticode proof is NO-GO even when hashes match',as
       ((pins:Parameters<BinaryInspector>[0])=>({...fx.goodInspector(pins),publisherSubject:'Other Corp'})),
       ((pins:Parameters<BinaryInspector>[0])=>({...fx.goodInspector(pins),certificateSha256:'0'.repeat(64)})),
     ]){
-      await assert.rejects(auditOfflineReleaseBundles(fx.request(),inspector));
+      await assert.rejects(auditOfflineReleaseBundles(fx.request(),inspector,protectedAcl));
     }
   });
 });
@@ -125,7 +129,7 @@ test('target, rollback and signature modifications fail closed',async()=>{
         path.join(fx.bundleRoot,'target','manifest.sig'):
         path.join(fx.bundleRoot,changed,'installer.exe');
       await fs.appendFile(filename,'CORRUPTION');
-      await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector));
+      await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector,protectedAcl));
     });
   }
 });
@@ -137,7 +141,7 @@ test('wrong Hub and unsafe version matrix block both signed releases',async()=>{
     await fs.writeFile(fx.policyFile,bytes);
     await assert.rejects(auditOfflineReleaseBundles({
       ...fx.request(),trustedPolicySha256:SHA(bytes),
-    },fx.goodInspector),/S3_OFFLINE_HUB_CONTRACT_MISMATCH/);
+    },fx.goodInspector,protectedAcl),/S3_OFFLINE_HUB_CONTRACT_MISMATCH/);
   });
 });
 
@@ -145,7 +149,7 @@ test('rollback package must match independently pinned old SHA, not merely its v
   await isolated(async fx=>{
     const file=path.join(fx.bundleRoot,'rollback','installer.exe');
     await fs.writeFile(file,Buffer.from('FOREIGN_ROLLBACK_PAYLOAD'));
-    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector),
+    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector,protectedAcl),
       /S3_ARTIFACT_HASH_MISMATCH|S3_OFFLINE_ARTIFACT_CHANGED/);
   });
 });
@@ -154,7 +158,7 @@ test('manifest signer mismatch is rejected independently of a matching file SHA'
   await isolated(async fx=>{
     const file=path.join(fx.bundleRoot,'target','manifest.sig');
     await fs.writeFile(file,Buffer.alloc(64,1).toString('base64'));
-    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector),
+    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector,protectedAcl),
       /S3_MANIFEST_SIGNATURE_INVALID/);
   });
 });
@@ -167,6 +171,39 @@ test('symlinked installer is rejected when supported by isolated OS fixture',asy
     catch{t.diagnostic('OS denied creating symlink; no security control bypass');return;}
     await fs.unlink(original);
     await fs.rename(symlink,original);
-    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector));
+    await assert.rejects(auditOfflineReleaseBundles(fx.request(),fx.goodInspector,protectedAcl));
+  });
+});
+
+
+test('P0 #271 ACL gate rejects untrusted writable staging before attempting Authenticode',async()=>{
+  await isolated(async fx=>{
+    let authenticodeCalls=0;
+    const validButUnsafe:AclInspector=()=>({
+      status:'protected_tree_inspected',inspectedNodes:0,
+      p0LegacyRuntimeExposed:false,executionSafe:false,productionApproved:false,
+    });
+    await assert.rejects(
+      auditOfflineReleaseBundles(fx.request(),()=>{
+        authenticodeCalls++;
+        return fx.goodInspector({filePath:'C:\\never.exe',
+          expectedSha256:'a'.repeat(64),
+          expectedCertificateSha256:'b'.repeat(64),
+          expectedPublisherSubject:publisher});
+      },validButUnsafe),
+      /S3_OFFLINE_ACL_UNTRUSTED/);
+    assert.equal(authenticodeCalls,0);
+  });
+});
+
+test('real Windows operator preflight cannot bless a current-user-writable installer directory',async(t)=>{
+  if(process.platform!=='win32'){t.skip('Windows ACL gate only');return;}
+  await isolated(async fx=>{
+    // Intentionally use the *real* Windows inspector for the ACL stage but
+    // a synthetic signature inspector. A writable staging root must fail
+    // prior to trusting that synthetic Authenticode result.
+    await assert.rejects(
+      auditOfflineReleaseBundles(fx.request(),fx.goodInspector),
+      /S3_OFFLINE_ACL_UNTRUSTED/);
   });
 });

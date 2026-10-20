@@ -17,6 +17,10 @@ import {
   inspectSignedWindowsBinary,
   type WindowsBinaryTrustPins,
 } from './s3-windows-binary-trust.js';
+import {
+  inspectWindowsProtectedExecutableTree,
+  type WindowsAclAudit,
+} from './s3-windows-acl-preflight.js';
 
 const SHA = z.string().regex(/^[a-f0-9]{64}$/);
 const Identifier = z.string().regex(/^[A-Za-z0-9_.:@-]{1,128}$/);
@@ -54,6 +58,7 @@ export interface ReleaseBundleAuditResult {
 export type BinaryInspector = (
   pins: WindowsBinaryTrustPins,
 ) => { fileSha256: string; certificateSha256: string; publisherSubject: string; status: string };
+export type AclInspector = (root: string) => WindowsAclAudit;
 
 class AuditError extends Error { constructor(public readonly code: string) { super(code); } }
 function deny(code: string): never { throw new AuditError('S3_OFFLINE_' + code); }
@@ -113,6 +118,7 @@ function compareVersions(a:string,b:string):number {
 export async function auditOfflineReleaseBundles(
   input: ReleaseBundleAuditOptions,
   inspectBinary: BinaryInspector = inspectSignedWindowsBinary,
+  inspectAcl: AclInspector = inspectWindowsProtectedExecutableTree,
 ): Promise<ReleaseBundleAuditResult> {
   if (!SHA.safeParse(input.trustedPolicySha256).success) deny('POLICY_PIN_INVALID');
   await checkDirectory(path.dirname(input.trustedPolicyPath));
@@ -124,6 +130,21 @@ export async function auditOfflineReleaseBundles(
   await checkDirectory(input.bundleRoot);
   const targetRoot=path.join(input.bundleRoot, 'target');
   const rollbackRoot=path.join(input.bundleRoot, 'rollback');
+  // P0 #271: integrity of a signed binary is meaningless if unprivileged
+  // users can replace its path or an imported executable before elevation.
+  // Inspect all ancestors and the complete bounded target/rollback trees.
+  // No ACL changes are made here, ever.
+  for (const protectedRoot of [targetRoot, rollbackRoot]) {
+    let audit: WindowsAclAudit;
+    try { audit = inspectAcl(protectedRoot); }
+    catch { deny('ACL_UNTRUSTED'); }
+    if (audit?.status !== 'protected_tree_inspected' ||
+        !Number.isSafeInteger(audit.inspectedNodes) || audit.inspectedNodes < 1 ||
+        audit.p0LegacyRuntimeExposed !== false ||
+        audit.executionSafe !== false || audit.productionApproved !== false) {
+      deny('ACL_UNTRUSTED');
+    }
+  }
   const target=await loadRelease(targetRoot);
   const rollback=await loadRelease(rollbackRoot);
   if(target.manifest.artifactSha256 !== policy.targetArtifactSha256 ||

@@ -168,3 +168,55 @@ DO NOT update or restart Agent/Broker on Work PC or Naveax from this PR.
 DO NOT run nexowire.update.apply or activate future #588 features.
 The first-party Windows-signed installer and real VM recovery evidence
 are currently unavailable: PRODUCTION NO-GO.
+
+
+## 2026-10-20 late: root P0 #271 ACL-integrity preflight
+
+GitHub issue #271 records that elevated legacy Nexowire Stack code under
+C:\ProgramData\NexowireStack inherited NT AUTHORITY\Authenticated Users:
+Modify on the executable/import path. ADMIN file ownership alone is
+NOT an effective integrity guarantee.
+
+This S3 branch adds operator-only READ-ONLY
+scripts/s3-windows-acl-preflight.ts. The operator release audit now
+requires an ACL inspection of both target and retained rollback trees
+and their drive-root-to-target ancestors BEFORE inspecting/managing
+signed binaries. The scan uses a fixed Windows PowerShell OS executable
+under System32 and reads NTFS owner, inherited+explicit ACEs,
+reparse/symlink bits and recursively enumerated files. It rejects:
+- unknown/untrusted owner SID, unresolved principal SID, reparse point,
+  duplicate nodes, oversized/unavailable/incomplete enumeration;
+- ANY Allow ACE granting a write/append/delete/write-DAC/write-owner/
+  generic-write or full-control bit to a principal other than SYSTEM
+  (S-1-5-18) or Administrators (S-1-5-32-544), including inherited
+  Authenticated Users, Everyone and BUILTIN Users.
+- explicit Deny is NOT counted as a safe override for a conflicting
+  unprivileged Allow; effective group/token privileges are not proved.
+
+The scanner is intentionally conservative; a legitimate custom updater
+service identity needs independently reviewed delegation policy, not
+a silent allowlist exemption. This scan cannot prove SYSTEM's future
+effective token, every dynamic import, ACL-protected atomic launch or
+fully prevent TOCTOU after inspection. Its result always includes
+executionSafe:false and productionApproved:false. It NEVER changes
+any ACL, file, task, Agent or Broker. All ACL migration/remediation,
+full live import-chain inventory and privileged integrity acceptance
+remain under the P0 #271 owner, NOT #551.
+
+Tests include source snapshots of #271 inherited Authenticated Users
+Modify and writable parent, conflicting Deny+Allow, reparse/unknown
+owner/unprivileged sid, scan fail-closed; real Windows read-only NTFS
+scans ONLY of temporary USER-WRITABLE directories reject preflight.
+Production release cannot launch from those writable roots even if
+a synthetic certificate-inspector fixture claims a valid signature.
+No live legacy runtime security configuration was changed.
+
+Dependency gates: #271 privileged ACL repair/provenance must be
+physically reviewed with approved elevated authority, and signed
+Nexowire-owned installer plus complete signed Agent 1.0.5 rollback
+package must be available with OUT-OF-BAND pins. Before staging #588
+large-file streams or #598 bounded HTTP messages on a real Agent,
+require successful Windows 10/11 isolated signed-install/rollback VM
+crash acceptance, explicit ownership, compatibility and safe canary.
+#551 adds source tests, not the actual Windows installer or VM evidence.
+Both real Agent 1.0.5 devices remain unchanged. Production NO-GO.
