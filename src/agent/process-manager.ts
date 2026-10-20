@@ -1138,8 +1138,7 @@ export class ProcessManager {
     child.once('error', (error) => {
       append('stderr', Buffer.from(`Process error: ${error.message}\n`));
     });
-    const markExited = (code: number | null, signal: NodeJS.Signals | null): void => {
-      if (session.status === 'exited') return;
+    child.once('close', (code, signal) => {
       session.status = 'exited';
       session.exitCode = code;
       session.signal = signal;
@@ -1155,26 +1154,13 @@ export class ProcessManager {
         },
       });
       void this.persistState().catch(() => undefined);
-    };
-    child.once('close', markExited);
-    // The guardian can exit before start() observes its assignment marker.
-    // Its exit is NOT proof stdout/stderr have drained into process events.
-    // If Node already emitted 'close' before this handler was attached, only
-    // finalize after both readable streams are demonstrably drained/closed.
-    const finalizeEarlyClosedGuardian = (): void => {
-      if (!job?.closed() || session.status !== 'running') return;
-      const done = (stream: typeof child.stdout) =>
-        stream.readableEnded || stream.destroyed;
-      if (done(child.stdout) && done(child.stderr)) {
-        markExited(child.exitCode, child.signalCode);
-      }
-    };
-    if (job) {
-      child.stdout.once('end', finalizeEarlyClosedGuardian);
-      child.stderr.once('end', finalizeEarlyClosedGuardian);
-      child.stdout.once('close', finalizeEarlyClosedGuardian);
-      child.stderr.once('close', finalizeEarlyClosedGuardian);
-      finalizeEarlyClosedGuardian();
+    });
+    // Native guardian may have completed while its assignment marker was read.
+    if (job?.closed() && session.status === 'running') {
+      session.status = 'exited';
+      session.exitCode = child.exitCode;
+      session.signal = child.signalCode;
+      session.exitedAt = new Date().toISOString();
     }
 
     await this.persistState();
