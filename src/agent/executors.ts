@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream, promises as fs } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -308,22 +308,53 @@ function sha256Buffer(content: Uint8Array): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
+function assertSameOpenFile(
+  target: string,
+  before: import('node:fs').Stats,
+  opened: import('node:fs').Stats,
+): void {
+  // File identifiers from an actual open handle must match the file authorized
+  // by pathname checks; a junction/file swap cannot silently switch the read.
+  if (!before.isFile() || !opened.isFile() ||
+      !Number.isSafeInteger(before.size) || !Number.isSafeInteger(opened.size) ||
+      before.dev !== opened.dev || before.ino !== opened.ino ||
+      before.size !== opened.size) {
+    throw new FileConflictError('Target file changed before handle validation.', {
+      path: target, reason: 'FILE_IDENTITY_MISMATCH',
+    });
+  }
+}
+
 async function sha256File(target: string, maxBytes?: number): Promise<string> {
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error('Hash target is not a file.');
+  const stat = await fs.lstat(target);
+  if (!stat.isFile() || stat.isSymbolicLink() ||
+      !Number.isSafeInteger(stat.size)) {
+    throw new Error('Hash target is not a regular file.');
+  }
   if (maxBytes !== undefined && stat.size > maxBytes) {
     throw new Error(`File size ${stat.size} exceeds hash max_bytes ${maxBytes}.`);
   }
-
-  return await new Promise<string>((resolve, reject) => {
+  const handle = await fs.open(target, 'r');
+  try {
+    const opened = await handle.stat();
+    assertSameOpenFile(target, stat, opened);
     const hash = createHash('sha256');
-    const stream = createReadStream(target);
-    stream.on('data', (chunk: string | Buffer) => {
-      hash.update(chunk);
-    });
-    stream.once('error', reject);
-    stream.once('end', () => resolve(hash.digest('hex')));
-  });
+    // Stream from the verified descriptor, not from a second pathname open.
+    for await (const block of handle.createReadStream({
+      autoClose: false, highWaterMark: 256 * 1024,
+    })) hash.update(block);
+    const ending = await handle.stat();
+    if (ending.dev !== opened.dev || ending.ino !== opened.ino ||
+        ending.size !== opened.size || ending.mtimeMs !== opened.mtimeMs ||
+        ending.ctimeMs !== opened.ctimeMs) {
+      throw new FileConflictError('File changed during streaming SHA-256.', {
+        path: target, reason: 'FILE_CHANGED_DURING_HASH',
+      });
+    }
+    return hash.digest('hex');
+  } finally {
+    await handle.close();
+  }
 }
 
 interface ProcessResult {
@@ -522,8 +553,8 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const maxBytes = parsed.max_bytes ??
     (parsed.offset_bytes === undefined ? 2_097_152 : FILE_STREAM_CHUNK_BYTES);
   const target = await policy.authorizeExisting(parsed.path, 'read');
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error('Requested path is not a file.');
+  const stat = await fs.lstat(target);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Requested path is not a regular file.');
   // Legacy full-file reads keep their original strict size limit.
   if (parsed.offset_bytes === undefined) {
     if (stat.size > maxBytes) {
@@ -531,7 +562,20 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
         `File size ${stat.size} exceeds max_bytes ${maxBytes}.`,
       );
     }
-    const content = await fs.readFile(target);
+    const handle = await fs.open(target, 'r');
+    let content: Buffer;
+    try {
+      const opened = await handle.stat();
+      assertSameOpenFile(target, stat, opened);
+      content = await handle.readFile();
+      const after = await handle.stat();
+      if (after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+          after.ctimeMs !== opened.ctimeMs || content.length !== opened.size) {
+        throw new FileConflictError('Read target changed during content capture.', {
+          path: target, reason: 'FILE_CHANGED_DURING_READ',
+        });
+      }
+    } finally { await handle.close(); }
     return {
       data: {
         path: target,
@@ -554,11 +598,20 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const handle=await fs.open(target,'r');
   let bytesRead=0;
   try {
+    const opened = await handle.stat();
+    assertSameOpenFile(target, stat, opened);
     while(bytesRead<maxRead){
       const r=await handle.read(buffer,bytesRead,maxRead-bytesRead,
         parsed.offset_bytes+bytesRead);
       if(r.bytesRead===0)break;
       bytesRead+=r.bytesRead;
+    }
+    const after = await handle.stat();
+    if (after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+        after.ctimeMs !== opened.ctimeMs) {
+      throw new FileConflictError('Ranged read target changed during transfer.', {
+        path: target, reason: 'FILE_CHANGED_DURING_READ',
+      });
     }
   }finally{await handle.close()}
   const content=buffer.subarray(0,bytesRead);

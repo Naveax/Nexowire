@@ -147,6 +147,82 @@ test('ENOSPC midway through a chunk is recoverable without publishing a partial 
   assert.deepEqual(await fs.readFile(final),payload);
 });
 
+test('Agent ranged/full read and SHA deny a pathname swap before opening the OS handle', async t => {
+  for (const capability of ['range', 'full', 'hash'] as const) {
+    const { dir, policy } = await temporary(t);
+    const source=path.join(dir,'approved.bin');
+    const outsider=path.join(dir,'unapproved-content.bin');
+    await fs.writeFile(source,Buffer.from('authorized content'));
+    await fs.writeFile(outsider,Buffer.from('sensitive replacement'));
+    const realOpen=fs.open;
+    let swapped=false;
+    (fs as unknown as {open:typeof fs.open}).open=async (...args:Parameters<typeof fs.open>)=>{
+      if(String(args[0])===source && !swapped){
+        swapped=true;
+        await fs.rename(source,source+'.old');
+        await fs.copyFile(outsider,source);
+      }
+      return realOpen(...args);
+    };
+    try {
+      await assert.rejects(
+        () => capability==='hash'
+          ? cmd('files.hash',{path:source,max_bytes:65536},policy)
+          : cmd('files.read',{
+              path:source,encoding:'base64',max_bytes:65536,
+              ...(capability==='range'?{offset_bytes:0}:{}),
+            },policy),
+        (e:unknown) => normalizeAgentError(e).code==='FILE_CONFLICT',
+      );
+    } finally {
+      (fs as unknown as {open:typeof fs.open}).open=realOpen;
+    }
+    assert.equal(swapped,true);
+    assert.equal((await fs.readFile(source+'.old','utf8')),'authorized content');
+    assert.equal((await fs.readFile(source,'utf8')),'sensitive replacement');
+  }
+});
+
+test('streaming hash rejects concurrent on-handle mutation rather than returning stale SHA',async t=>{
+  const {dir,policy}=await temporary(t);
+  const source=path.join(dir,'streaming.bin');
+  await fs.writeFile(source,Buffer.alloc(4*MiB,0x11));
+  const originalOpen=fs.open;
+  let mutated=false;
+  (fs as unknown as {open:typeof fs.open}).open=async (...args:Parameters<typeof fs.open>)=>{
+    const handle=await originalOpen(...args);
+    if(String(args[0])!==source||mutated)return handle;
+    let callCount=0;
+    return new Proxy(handle,{
+      get(target,property){
+        if(property==='stat'){
+          return async ()=>{
+            callCount++;
+            if(callCount===2){
+              mutated=true;
+              const writer=await originalOpen(source,'r+');
+              try{await writer.write(Buffer.from([0xFF]),0,1,MiB);await writer.sync();}
+              finally{await writer.close();}
+            }
+            return target.stat();
+          };
+        }
+        const value=Reflect.get(target,property,target);
+        return typeof value==='function'?value.bind(target):value;
+      },
+    });
+  };
+  try {
+    // Strict FAIL-CLOSED when the file's metadata changes during hash.
+    await assert.rejects(()=>cmd('files.hash',{
+      path:source,max_bytes:4*MiB,
+    },policy),(e:unknown)=>normalizeAgentError(e).code==='FILE_CONFLICT');
+  } finally {
+    (fs as unknown as {open:typeof fs.open}).open=originalOpen;
+  }
+  assert.equal(mutated,true);
+});
+
 test('write-only permission cannot use resumable chunks to read existing secret bytes',async t=>{
   const {dir}=await temporary(t);
   const file=path.join(dir,'secret.stage');
