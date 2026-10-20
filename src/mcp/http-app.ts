@@ -111,6 +111,18 @@ export function createNexowireMcpExpressApp(
       next();
       return;
     }
+    // Preserve the original SDK's 100 KiB fast path while large uploads
+    // are inflight. A claimed small Content-Length is enforced by Node's
+    // HTTP message framing; chunked/unknown-length bodies use guarded path.
+    const rawLength = req.headers['content-length'];
+    const smallBody =
+      typeof rawLength === 'string' &&
+      /^\\d+$/.test(rawLength) &&
+      Number(rawLength) <= 100 * 1024;
+    if (smallBody) {
+      jsonParser(req, res, next);
+      return;
+    }
     if (parsingRequests >= MAX_CONCURRENT_MCP_JSON_PARSERS) {
       res.setHeader('Retry-After', '1');
       res.setHeader('Cache-Control', 'no-store');
