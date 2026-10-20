@@ -34,7 +34,9 @@ async function readUntil(
       };
     }
     if (read.session.status !== 'running') {
-      break;
+      throw new Error('Durable worker exited before expected output: '+pattern+
+        ' status='+read.session.status+' exitCode='+String(read.session.exitCode)+
+        ' captured='+text.slice(-2048));
     }
   }
 
@@ -63,8 +65,8 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
 
   const command =
     process.platform === 'win32'
-      ? "while (($line = [Console]::ReadLine()) -ne $null) { Write-Output ('echo:' + $line); if ($line -eq 'quit') { break } }"
-      : "while IFS= read -r line; do printf 'echo:%s\\n' \"$line\"; [ \"$line\" = quit ] && break; done";
+      ? "Write-Output 'NW_DURABLE_READY'; while (($line = [Console]::ReadLine()) -ne $null) { Write-Output ('echo:' + $line); if ($line -eq 'quit') { break } }"
+      : "printf 'NW_DURABLE_READY\\n'; while IFS= read -r line; do printf 'echo:%s\\n' \"$line\"; [ \"$line\" = quit ] && break; done";
 
   let second: ProcessManager | undefined;
   try {
@@ -82,6 +84,9 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
     assert.equal(started.reattachable, true);
     assert.equal(started.interactive, true);
 
+    const ready = await readUntil(first, started.sessionId, 0, /NW_DURABLE_READY/);
+    assert.equal(ready.status, 'running');
+
     await first.write({
       session_id: started.sessionId,
       input: 'before',
@@ -90,7 +95,7 @@ test('durable process stdin/stdout reattaches across ProcessManager restart', as
     const before = await readUntil(
       first,
       started.sessionId,
-      0,
+      ready.nextSeq,
       /echo:before/,
     );
 

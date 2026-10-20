@@ -1143,26 +1143,24 @@ export class ProcessManager {
     child.once('error', (error) => {
       append('stderr', Buffer.from(`Process error: ${error.message}\n`));
     });
-    // A guardian can be force-killed while an attacker retains a duplicated
-    // unnamed Job handle. Node's 'exit' fires even when the root's inherited
-    // stdout/stderr pipes remain open indefinitely; do not report cleanup
-    // or a completed task merely because the guardian PID disappeared.
-    child.once('exit', () => {
+    // An externally retained Job handle can keep the root alive after the
+    // guardian exits. Also, 'exit' precedes stdio drain, while 'close' may
+    // never fire if a retained root still owns those pipes.
+    const markUnconfirmed = (): void => {
+      if (session.status === 'exited') return;
+      session.status = 'orphaned';
+      session.exitCode = null;
+      session.signal = null;
+      delete session.exitedAt;
+      void this.persistState().catch(() => undefined);
+    };
+    const markExited = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): void => {
+      if (session.status === 'exited') return;
       if (job && session.pid && isPidAlive(session.pid)) {
-        session.status = 'orphaned';
-        session.exitCode = null;
-        session.signal = null;
-        delete session.exitedAt;
-        void this.persistState().catch(() => undefined);
-      }
-    });
-    child.once('close', (code, signal) => {
-      if (job && session.pid && isPidAlive(session.pid)) {
-        session.status = 'orphaned';
-        session.exitCode = null;
-        session.signal = null;
-        delete session.exitedAt;
-        void this.persistState().catch(() => undefined);
+        markUnconfirmed();
         return;
       }
       session.status = 'exited';
@@ -1180,15 +1178,27 @@ export class ProcessManager {
         },
       });
       void this.persistState().catch(() => undefined);
+    };
+    child.once('exit', () => {
+      if (job && session.pid && isPidAlive(session.pid)) markUnconfirmed();
     });
-    // Native guardian may have completed while its assignment marker was read.
-    if (job?.closed() && session.status === 'running') {
-      // When a duplicated Job handle still exists, root lifetime may outlive
-      // the guardian. An unverified root is never silently marked completed.
-      session.status = session.pid && isPidAlive(session.pid) ? 'orphaned' : 'exited';
-      session.exitCode = child.exitCode;
-      session.signal = child.signalCode;
-      session.exitedAt = new Date().toISOString();
+    child.once('close', markExited);
+    // The guardian can close while launchWindowsJob is still reading its
+    // attestation marker. Final status requires BOTH output streams drained.
+    const finalizeEarlyClosedGuardian = (): void => {
+      if (!job?.closed() || session.status === 'exited') return;
+      const drained = (stream: typeof child.stdout) =>
+        stream.readableEnded || stream.destroyed;
+      if (drained(child.stdout) && drained(child.stderr)) {
+        markExited(child.exitCode, child.signalCode);
+      }
+    };
+    if (job) {
+      child.stdout.once('end', finalizeEarlyClosedGuardian);
+      child.stderr.once('end', finalizeEarlyClosedGuardian);
+      child.stdout.once('close', finalizeEarlyClosedGuardian);
+      child.stderr.once('close', finalizeEarlyClosedGuardian);
+      finalizeEarlyClosedGuardian();
     }
 
     await this.persistState();

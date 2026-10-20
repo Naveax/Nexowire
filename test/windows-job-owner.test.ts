@@ -293,3 +293,41 @@ test('Windows helper path cannot be replaced by inherited environment', {
     else process.env[key]=original;
   }
 });
+
+
+test('Windows Job fast-exit stdout and stderr are drained before exited status', {
+  skip:process.platform!=='win32',timeout:35_000,
+},async()=>{
+  // Reproduce #565: short-lived synthetic commands must never finalize
+  // before the guardian's inherited pipes have been fully consumed.
+  const manager=new ProcessManager();
+  for(let iteration=0;iteration<12;iteration++){
+    const marker='NW_JOB_STREAM_'+randomBytes(6).toString('hex');
+    const session=await manager.start({
+      shell:'cmd',command:'echo '+marker+'_OUT & echo '+marker+'_ERR 1>&2',
+    },new PathPolicy(['*']));
+    assert.equal(session.treeOwnership,'windows_job');
+    let stdout='',stderr='',cursor=0,status='running';
+    try{
+      for(let i=0;i<35;i++){
+        const read=await manager.read({
+          session_id:session.sessionId,after_seq:cursor,wait_ms:250,
+        });
+        cursor=read.nextSeq;
+        status=read.session.status;
+        for(const event of read.events){
+          if(event.stream==='stdout')stdout+=event.text;
+          else stderr+=event.text;
+        }
+        if(status==='exited')break;
+      }
+      assert.equal(status,'exited','synthetic fast-exit must finish');
+      assert.ok(stdout.includes(marker+'_OUT'),'stdout lost, iteration '+iteration);
+      assert.ok(stderr.includes(marker+'_ERR'),'stderr lost, iteration '+iteration);
+    }finally{
+      if(status==='running'||status==='orphaned'){
+        await manager.stop({session_id:session.sessionId}).catch(()=>undefined);
+      }
+    }
+  }
+});
