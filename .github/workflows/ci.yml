@@ -60,7 +60,7 @@ jobs:
         run: node --test --import tsx test/private-shell-oneshot-desktop-gate.test.ts
       - run: node --test --import tsx test/durable-process.test.ts
       - name: Verify independent cross-project negative acceptance gates
-        run: node --test --import tsx test/qa-final-acceptance-negative.test.ts test/qa-agent-journal-negative.test.ts test/qa-shell-outcome-negative.test.ts test/qa-artifact-integrity-negative.test.ts test/qa-pr-intake-negative.test.ts test/qa-current-release-blockers.test.ts
+        run: node --test --import tsx test/qa-final-acceptance-negative.test.ts test/qa-agent-journal-negative.test.ts test/qa-shell-outcome-negative.test.ts test/qa-artifact-integrity-negative.test.ts test/qa-pr-intake-negative.test.ts test/qa-current-release-blockers.test.ts test/qa-release-evidence-20261020.test.ts
 
   linux-native-live:
     runs-on: ubuntu-latest
@@ -138,3 +138,15 @@ jobs:
         run: node --test --import tsx test/platform-secret-store.test.ts test/macos-keychain-live.test.ts
         env:
           NEXOWIRE_LIVE_MACOS_KEYCHAIN_TEST: "1"
+
+  qa-independent-negative-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify unresolved P0 rollback and one-call transfer acceptance
+        run: node --test --import tsx test/qa-rollback-source-negative.test.ts test/qa-transfer-onecall-source-negative.test.ts

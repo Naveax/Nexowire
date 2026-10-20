@@ -1,6 +1,6 @@
 {
   "schema": "nexowire.qa-pr-intake.v1",
-  "date": "2026-10-19",
+  "date": "2026-10-20",
   "entries": [
     {
       "pr": 480,
@@ -201,17 +201,16 @@
     },
     {
       "pr": 551,
-      "headSha": "3659db7a63254fae1badb39eca70be8853ea4df5",
+      "headSha": "5099cd1b43ef0e77e39e8b6c6e130749bb9d9456",
       "prState": "OPEN_DRAFT",
       "requirements": [
-        "R19",
-        "R22"
+        "R19"
       ],
-      "sourceReproducer": "test/console-ui-polish.test.ts",
-      "physicalAcceptanceMissing": "Fix CI regression, physical two Agent signed update/rollback and pairing",
+      "sourceReproducer": "test/agent-lifecycle-manager.test.ts",
+      "physicalAcceptanceMissing": "Nexowire-signed first-party Authenticode installer + signed rollback archive + isolated VM crash/canary missing",
       "ci": {
         "status": "PASS",
-        "runId": 39150815213
+        "runId": 39413853520
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -454,18 +453,17 @@
     },
     {
       "pr": 565,
-      "headSha": "1c6c3ee2e840e5fdcfe84b60f6afa7a2c5b7e120",
-      "prState": "OPEN_DRAFT",
+      "headSha": "75abbd7d3cd17ca10e8c16e70081161428cc2078",
+      "prState": "MERGED",
       "requirements": [
         "R01",
         "R13"
       ],
       "sourceReproducer": "test/error-contract-chain-acceptance.test.ts",
-      "physicalAcceptanceMissing": "E2E failure attribution/UNKNOWN and audit on native physical Agent",
+      "physicalAcceptanceMissing": "Actual upstream rejection source and two-host audit correlation",
       "ci": {
-        "status": "NOT_VERIFIED",
-        "runId": null,
-        "activeRunId": 39281948778
+        "status": "PASS",
+        "runId": 39412566535
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -579,17 +577,17 @@
     },
     {
       "pr": 572,
-      "headSha": "62a9b97a0bcb50bafae3755368a35b4b9ac79ca6",
+      "headSha": "6b3d7eddcab9951dd35c9bd190cc7b61a1d078c8",
       "prState": "OPEN_DRAFT",
       "requirements": [
+        "R07",
         "R22"
       ],
       "sourceReproducer": "test/durable-process.test.ts",
-      "physicalAcceptanceMissing": "Windows durable reattach source CI failure before final acceptance",
+      "physicalAcceptanceMissing": "Actual Windows browser-live NW_DURABLE_READY timeout not fixed, no retries or fake PASS",
       "ci": {
         "status": "FAIL",
-        "runId": 39155406551,
-        "reason": "Windows browser-live durable worker PROCESS_NOT_RUNNING in 39155406551, not browser DOM error"
+        "runId": 39284185988
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -616,18 +614,17 @@
     },
     {
       "pr": 574,
-      "headSha": "7855c5e6d7e8059369294ad96dab3aa87ed49def",
+      "headSha": "0a64f7068e16701bd3006d35c361d5d10c1fe17b",
       "prState": "OPEN_DRAFT",
       "requirements": [
         "R04",
         "R22"
       ],
       "sourceReproducer": "test/isolated-broker-acl-rollback.test.ts",
-      "physicalAcceptanceMissing": "Remove Authenticated Users Modify in live Broker after approved rollout",
+      "physicalAcceptanceMissing": "Physical unsafe inherited Authenticated Users Modify on Naveax legacy executable and unverified protected Broker ACL",
       "ci": {
-        "status": "NOT_VERIFIED",
-        "runId": null,
-        "activeRunId": 39282427109
+        "status": "PASS",
+        "runId": 39411740328
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -653,17 +650,17 @@
     },
     {
       "pr": 576,
-      "headSha": "d1b1667d35707a3f8e895b4c36e342eb148e3ce3",
+      "headSha": "5fdae89bf1f0440995e61f8dbfc22524a616c63e",
       "prState": "OPEN_DRAFT",
       "requirements": [
         "R07",
         "R19"
       ],
       "sourceReproducer": "test/windows-job-helper-trust.test.ts",
-      "physicalAcceptanceMissing": "Signed publisher+release attestation and PROCESS_DUP_HANDLE isolation",
+      "physicalAcceptanceMissing": "Trusted signed helper publisher + negative PROCESS_DUP_HANDLE and physical Windows Job crash proof",
       "ci": {
         "status": "PASS",
-        "runId": 39176161922
+        "runId": 39412019534
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -721,8 +718,83 @@
       "staging": "BLOCKED",
       "production": "BLOCKED",
       "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 582,
+      "headSha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R07",
+        "R20"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "physicalAcceptanceMissing": "Independent monotonic authority and Windows stdout/stderr fast-exit race, physical rollback canary",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39416566585
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 596,
+      "headSha": "22675eeb46b7360622a0800ac5d293fee63b2e68",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-large-streaming.test.ts",
+      "physicalAcceptanceMissing": "1GiB isolated store not one-call cross-device owner-scoped transfer; native Agent 1.0.5 cannot accept 1GiB writes",
+      "ci": {
+        "status": "PASS",
+        "runId": 39416958508
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 597,
+      "headSha": "ab6d04d45a47f27344903a1ada08019d6ed0ead3",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R15",
+        "R22"
+      ],
+      "sourceReproducer": "test/artifact-588-single-call-contract.test.ts",
+      "physicalAcceptanceMissing": "One-call transfer_start/status/cancel absent plus Windows Job fast-exit streams",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39468688109
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 598,
+      "headSha": "fd7ae72724d39c711589335fc72c1bda3d94621c",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15"
+      ],
+      "sourceReproducer": "test/mcp-http-body-limit.test.ts",
+      "physicalAcceptanceMissing": "9.5MiB request/response, 4 concurrent large parsers source CI PASS only; live provider/tool cap unverified",
+      "ci": {
+        "status": "PASS",
+        "runId": 39486329477
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
     }
   ],
-  "inspectedMainSha": "cb819d17ee581093d39626f13e985976def17f30",
-  "meaning": "GitHub HEAD and CI snapshot recorded 2026-10-19. PR #572 head is historical failing SHA: a new PR update creates a new commit and CI run; do not treat this record as newest HEAD after update."
+  "inspectedMainSha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+  "meaning": "Frozen exact-head statuses from GitHub. Source CI SUCCESS is only that branch source proof, not deployed release. QA red acceptance on #572/#597 and physical P0 remain release blockers."
 }

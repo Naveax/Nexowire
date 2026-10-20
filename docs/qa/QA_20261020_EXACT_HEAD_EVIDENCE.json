@@ -1,0 +1,97 @@
+{
+  "schema": "nexowire.qa16-evidence.20261020.v1",
+  "reviewedMainSha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+  "evaluatedHead": {
+    "pr": 572,
+    "sha": "6b3d7eddcab9951dd35c9bd190cc7b61a1d078c8",
+    "run": 39284185988,
+    "result": "FAIL"
+  },
+  "historicalSourceHeads": [
+    {
+      "pr": 582,
+      "head": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "run": 39416566585,
+      "status": "FAIL",
+      "job": 118606925439,
+      "signal": "Windows Job fast-exit stdout/stderr iteration 1 missing stdout before exited"
+    },
+    {
+      "pr": 597,
+      "head": "ab6d04d45a47f27344903a1ada08019d6ed0ead3",
+      "run": 39468688109,
+      "status": "FAIL",
+      "job": 118786718880,
+      "signal": "Windows Job stdout missing before exited iteration 11; transfer_start ABI absence from Ubuntu test"
+    },
+    {
+      "pr": 596,
+      "head": "22675eeb46b7360622a0800ac5d293fee63b2e68",
+      "run": 39416958508,
+      "status": "PASS",
+      "signal": "1GiB bounded isolated v2 store only"
+    },
+    {
+      "pr": 598,
+      "head": "fd7ae72724d39c711589335fc72c1bda3d94621c",
+      "run": 39486329477,
+      "status": "PASS",
+      "signal": "9.5MiB HTTP ingress/egress finite cap and at most 4 concurrent large parsers"
+    },
+    {
+      "pr": 551,
+      "head": "5099cd1b43ef0e77e39e8b6c6e130749bb9d9456",
+      "run": 39413853520,
+      "status": "PASS",
+      "signal": "Signed-trust contract tests; first-party signer/complete rollback VM proof absent"
+    }
+  ],
+  "actualAclReadOnly": {
+    "device": "Naveax",
+    "agentVersion": "1.0.5",
+    "date": "2026-10-20",
+    "authorization": "read-only icacls",
+    "stack": "C:\\ProgramData\\NexowireStack",
+    "stackAce": "NT AUTHORITY\\Authenticated Users:(I)(M)",
+    "cli": "C:\\ProgramData\\NexowireStack\\nexowire\\node_modules\\nexowire\\dist\\src\\cli.js",
+    "cliAce": "NT AUTHORITY\\Authenticated Users:(I)(M)",
+    "protectedBroker": {
+      "path": "C:\\ProgramData\\Nexowire\\privileged-broker",
+      "icaclsExitCode": 5,
+      "status": "UNKNOWN_DENIED"
+    },
+    "workPc": {
+      "stack": "NOT_PRESENT",
+      "protectedBroker": "UNKNOWN_DENIED",
+      "icaclsExitCode": 5
+    },
+    "conclusion": "P0 UNSAFE: inherited Modify exists on the elevated legacy executable tree. Broker Access Denied does not establish safe ACL."
+  },
+  "sourceNegativeExperiments": [
+    {
+      "file": "test/qa-rollback-source-negative.test.ts",
+      "kind": "isolated SQLite metadata-only",
+      "outcome": "FAIL",
+      "observed": "old snapshot re-admits completed requestId, created:true",
+      "scope": "main journal, not PR #582 joint authority fixture"
+    },
+    {
+      "file": "test/qa-transfer-onecall-source-negative.test.ts",
+      "kind": "in-memory scoped MCP ABI",
+      "outcome": "FAIL",
+      "observed": "missing transfer_start/status/cancel API; start checked first",
+      "scope": "no live transfer or large file"
+    }
+  ],
+  "requiredReleaseGates": [
+    "Signed Nexowire-owned first-party Authenticode installer and full 1.0.5 rollback bundle (#551)",
+    "Independently non-co-restorable monotonic mutation authority (#587)",
+    "Trusted Job helper and fast-exit stdout/stderr drain ordering (#576/#582/#597)",
+    "Physical ACL remediation of Naveax legacy executable tree (#271)",
+    "One logical MCP call durable cross-device transfer and scoped status/cancel (#597)",
+    "Two-device authorized staged canary and independent original incident re-test"
+  ],
+  "staging": "BLOCKED",
+  "production": "BLOCKED",
+  "originalIncident": "BLOCKED"
+}

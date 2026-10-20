@@ -1,8 +1,8 @@
 {
   "schema": "nexowire.qa.findings.v2",
-  "inspectedMainSha": "cb819d17ee581093d39626f13e985976def17f30",
-  "date": "2026-10-19",
-  "findingCount": 11,
+  "inspectedMainSha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+  "date": "2026-10-20",
+  "findingCount": 16,
   "scope": "Review and reproducible tests, not live exploit or release approval",
   "findings": [
     {
@@ -400,6 +400,192 @@
       ],
       "disposition": {
         "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-587-JOINT-CO-ROLLBACK",
+      "requirements": [
+        "R02",
+        "R20"
+      ],
+      "classification": "INDEPENDENT_ACCEPTANCE_BLOCKER",
+      "affected": [
+        {
+          "pr": 582,
+          "headSha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "src/agent/operation-journal-authority.ts; test/qa-rollback-source-negative.test.ts",
+      "observed": "Issue #587 established that simultaneously restoring old Agent journal and old separate SQLite authority re-admits later B as created:true. Independent QA red source test reproduces stale-Journal-only vulnerability on current merged main, not the joint J+A variant.",
+      "reproduction": [
+        "Review issue #587 step-by-step disposable J+A WAL snapshots then inspect PR #582 code: two backup files can be jointly restored.",
+        "On current main run node --test --import tsx test/qa-rollback-source-negative.test.ts; observe created:true instead of false; no mutation dispatch.",
+        "On PR #582 only, provision both SQLite stores and snapshot both pre-B, reserve B, restore both and call begin(B) again; must reject or fail closed."
+      ],
+      "expectedFix": "Use external or otherwise non-co-restorable authenticated monotonic CAS root, bind device/account/epoch and validate fail-closed on unavailable/stale authority; verify restart/cold WAL and physical signed canary.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/issues/587",
+        "https://github.com/Naveax/Nexowire/pull/582",
+        "https://github.com/Naveax/Nexowire/actions/runs/39416566585"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-588-TRANSFER-ONECALL",
+      "requirements": [
+        "R15",
+        "R22"
+      ],
+      "classification": "INDEPENDENT_ACCEPTANCE_BLOCKER",
+      "affected": [
+        {
+          "pr": 596,
+          "headSha": "22675eeb46b7360622a0800ac5d293fee63b2e68",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 597,
+          "headSha": "ab6d04d45a47f27344903a1ada08019d6ed0ead3",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "test/qa-transfer-onecall-source-negative.test.ts",
+      "observed": "Current main in-memory authorized MCP tool advertisement has no transfer_start contract. #596 passed 1GiB bounded isolated store CI but #597 exact head fails one logical transfer API and Windows Job fast-exit race.",
+      "reproduction": [
+        "Run node --test --import tsx test/qa-transfer-onecall-source-negative.test.ts in isolated checkout.",
+        "The in-memory MCP server with synthetic scoped owner cannot satisfy transfer_start/status/cancel; no 1GiB allocation, network or user file touched.",
+        "Inspect #597 test/artifact-588-single-call-contract.test.ts intentionally RED until durable server-side transfer_start/status/cancel and owner scope implemented."
+      ],
+      "expectedFix": "Implement one bounded authenticated transfer_start, durable scoped status/cancel, owner grants, 64-bit offsets and hash/receipt reconciliation without chat-level chunk calls; retest physical two-device canary.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/596",
+        "https://github.com/Naveax/Nexowire/pull/597",
+        "https://github.com/Naveax/Nexowire/actions/runs/39468688109"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-598-HTTP-BODY-CAP",
+      "requirements": [
+        "R12",
+        "R15",
+        "R22"
+      ],
+      "classification": "INDEPENDENT_ACCEPTANCE_BLOCKER",
+      "affected": [
+        {
+          "pr": 598,
+          "headSha": "fd7ae72724d39c711589335fc72c1bda3d94621c",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "test/mcp-http-body-limit.test.ts",
+      "observed": "Source CI 39486329477 PASS: finite 9.5MiB request/response envelope and four concurrent large parsers. Nexowire server-side SDK/HTTP cap, not ChatGPT or 1GiB file transfer; provider/production proxy limits unverified.",
+      "reproduction": [
+        "Checkout #598 SHA fd7ae72 and run loopback HTTP body/parser abuse tests, near-limit requests, 413 oversized responses and fifth large parser rejected 503.",
+        "Hold four synthetic large parsers; ensure small 100KiB POST still admitted without body cap bypass.",
+        "Stage actual signed release/proxy with approved owner and run true external traffic probes without affecting production users."
+      ],
+      "expectedFix": "Keep bounded parsers, fail-closed unknown mutation on oversized output; verify proxy/effective provider delivery limits and separate durable large-file orchestration before production.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/598",
+        "https://github.com/Naveax/Nexowire/actions/runs/39486329477"
+      ],
+      "disposition": {
+        "source": "PASS",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-271-LEGACY-ACL",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "classification": "INDEPENDENT_ACCEPTANCE_BLOCKER",
+      "affected": [
+        {
+          "pr": 574,
+          "headSha": "0a64f7068e16701bd3006d35c361d5d10c1fe17b",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "C:\\ProgramData\\NexowireStack; ...\\dist\\src\\cli.js",
+      "observed": "Actual read-only icacls Naveax 2026-10-20: legacy Stack folder and cli.js NT AUTHORITY\\Authenticated Users:(I)(M). Broker icacls ACCESS DENIED exit 5 on both devices, not secure attestation. Work PC legacy Stack paths absent.",
+      "reproduction": [
+        "On authorized Naveax Agent 1.0.5 execute read-only icacls.exe C:\\ProgramData\\NexowireStack and inspect inherited Authenticated Users (M).",
+        "Run read-only icacls against actual legacy ...\\dist\\src\\cli.js. Must show no untrusted Modify for safe release; current result has (I)(M).",
+        "Broker protected path icacls returns status 5. Require independently approved elevated owner audit; do not infer safe ACL."
+      ],
+      "expectedFix": "Stage signed protected runtime and ACL migration rollback; verify full import tree, parent/updater effective write rights and post-updater ACL. No live ACL/service write without owner approval.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/issues/271",
+        "https://github.com/Naveax/Nexowire/pull/574"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-582-597-WINDOWS-PIPE-RACE",
+      "requirements": [
+        "R07",
+        "R08",
+        "R22"
+      ],
+      "classification": "INDEPENDENT_ACCEPTANCE_BLOCKER",
+      "affected": [
+        {
+          "pr": 582,
+          "headSha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 597,
+          "headSha": "ab6d04d45a47f27344903a1ada08019d6ed0ead3",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 572,
+          "headSha": "6b3d7eddcab9951dd35c9bd190cc7b61a1d078c8",
+          "state": "HISTORICAL_FAILED_HEAD"
+        }
+      ],
+      "source": "test/windows-job-owner.test.ts; test/durable-process.test.ts",
+      "observed": "Windows CI #582 iteration 1 and #597 iteration 11: exited observed without expected stdout/stderr. Separate #572 durable worker NW_DURABLE_READY timeout; do not conflate races or claim fixed.",
+      "reproduction": [
+        "Inspect #582 CI 39416566585 browser-live job 118606925439, test/windows-job-owner.test.ts:216 fast-exit drain failure iteration 1.",
+        "Inspect #597 CI 39468688109 browser-live job 118786718880 iteration 11 and Ubuntu artifact start API red failure.",
+        "Inspect #572 CI 39284185988 browser-live job 118165352355 timeout /NW_DURABLE_READY/. Run exact tests on isolated signed helper fixture; preserve failed signals."
+      ],
+      "expectedFix": "ProcessManager Job helper owner must await child stdout/stderr close and complete verified buffer before terminal success; durable worker must prove actual ready without fake marker or unsafe retry.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39416566585",
+        "https://github.com/Naveax/Nexowire/actions/runs/39468688109",
+        "https://github.com/Naveax/Nexowire/actions/runs/39284185988"
+      ],
+      "disposition": {
+        "source": "FAIL",
         "staging": "BLOCKED",
         "production": "BLOCKED",
         "incident": "BLOCKED"
