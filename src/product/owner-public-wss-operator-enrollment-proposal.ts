@@ -113,15 +113,22 @@ export function verifySignedOwnerPublicWssEnrollment(
     now>=envelope.expiresAtMs){
     throw new Error('Owner WSS enrollment expired or outside trusted clock window');
   }
-  if(!BASE64URL.test(envelope.signature)||
-    Buffer.from(envelope.signature,'base64url').length!==64){
+  // Ed25519 is 64 bytes. Its 86-character unpadded base64url encoding
+  // has four unused tail bits. Reject alternate textual encodings of
+  // identical bytes to preserve a unique signed enrollment receipt.
+  if(!BASE64URL.test(envelope.signature)){
+    throw new Error('Invalid owner WSS enrollment signature encoding');
+  }
+  const signatureBytes=Buffer.from(envelope.signature,'base64url');
+  if(signatureBytes.length!==64||
+    signatureBytes.toString('base64url')!==envelope.signature){
     throw new Error('Invalid owner WSS enrollment signature encoding');
   }
   let valid=false;
   try{
     const key=createPublicKey(context.operatorPublicKeyPem);
     if(key.asymmetricKeyType!=='ed25519')throw new Error('Wrong key algorithm');
-    valid=verifySignature(null,bytes,key,Buffer.from(envelope.signature,'base64url'));
+    valid=verifySignature(null,bytes,key,signatureBytes);
   }catch{valid=false}
   if(!valid)throw new Error('Invalid operator Ed25519 WSS enrollment signature');
   const profile=validateOwnerPublicWssTrustProfile(envelope.profile);

@@ -102,3 +102,15 @@ test('extra envelope/profile fields, bad signature and non-Ed25519 key denied',(
     }).toString(),
   }),/signature/);
 });
+
+test('operator receipt rejects alternate base64url spelling of the same signed bytes',()=>{
+  const good=enroll();
+  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const end=alphabet.indexOf(good.signature.at(-1)!);
+  const altered=good.signature.slice(0,-1)+alphabet[end^1];
+  assert.notEqual(altered,good.signature);
+  assert.deepEqual(Buffer.from(altered,'base64url'),Buffer.from(good.signature,'base64url'));
+  assert.throws(()=>verifySignedOwnerPublicWssEnrollment(
+    {...good,signature:altered},ctx,
+  ),/signature encoding/);
+});
