@@ -6627,7 +6627,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       return {
         stat: async (file) => {
           const value = await fetchSource('files.stat', { path: file });
-          return { size: Number(value.size), type: String(value.type) };
+          return { size: Number(value.size), type: String(value.type),
+              ...(typeof value.modifiedAt === 'string' ? { modifiedAt: value.modifiedAt } : {}) };
         },
         sha256: async (file, maxBytes) => {
           const value = await fetchSource('files.hash', { path: file, max_bytes: maxBytes });
