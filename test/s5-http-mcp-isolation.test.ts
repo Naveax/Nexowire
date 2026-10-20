@@ -26,6 +26,15 @@ test('four overlapping bounded HTTP uploads do not starve small synthetic MCP ro
     assert.equal(r.externalWssAuthenticated,0);
     assert.equal(r.actualNativeToolCompletions,0);
     assert.equal(r.cloudflareMeterReadings,null);
+    process.stdout.write('S5_LOCAL_HTTP_MEASURED '+JSON.stringify({
+      peakLarge:r.largePeakActive,largeBytesReceived:r.bytesReceived,
+      smallRequests:r.smallSuccessful,smallDuringLarge:r.smallArrivedDuringLarge,
+      smallP95Ms:r.smallLatencyMs.p95,smallP99Ms:r.smallLatencyMs.p99,
+      largeP95Ms:r.largeLatencyMs.p95,largeP99Ms:r.largeLatencyMs.p99,
+      tcpBackpressureWrites:r.backpressureWrites,http413:r.http413Count,
+      http429:r.http429Count,rssGrowthPeakBytes:r.rssGrowthPeakBytes,
+      staging:'NOT_TESTED',actualNativeToolCompletions:0,
+    })+'\n');
   });
 test('HTTP fixture refuses fifth source-concurrency slot and unbounded workload',
   async()=>{

@@ -9,20 +9,24 @@ import path from 'node:path';
 import {runS5LocalHttpIsolation,S5_HTTP_MAX_BYTES} from './bench-s5-http-mcp-isolation.js';
 
 async function main(){
-  if(process.argv.length!==3||process.argv[2]!=='--ack-38mib-loopback'){
-    throw new Error('Explicit --ack-38mib-loopback required; no automatic/CI heavy HTTP workload');
+  const mode=process.argv[2];
+  if(process.argv.length!==3||
+     (mode!=='--ack-4mib-loopback'&&mode!=='--ack-38mib-loopback')){
+    throw new Error('Explicit --ack-4mib-loopback or --ack-38mib-loopback required; no automatic HTTP workload');
   }
+  const fullBoundary=mode==='--ack-38mib-loopback';
   if(freemem()<3*1024*1024*1024)throw new Error('Preflight BLOCKED: low free memory');
   const head=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
   if(!/^[a-f0-9]{40}$/.test(head))throw new Error('Cannot pin source commit');
   const startedUtc=new Date().toISOString();
   const result=await runS5LocalHttpIsolation({
-    largeRequests:4,largeRequestBytes:S5_HTTP_MAX_BYTES,smallRequests:20,
+    largeRequests:4,largeRequestBytes:fullBoundary?S5_HTTP_MAX_BYTES:1024*1024,smallRequests:20,
     probeFifthRequest:true,probeOverLimit:true,perChunkPauseMs:1,
     runLimitMs:45000,rssGrowthBudgetBytes:128*1024*1024,
   });
   const evidence={
-    kind:'S5_4X_9_5MIB_HTTP_LOOPBACK_NO_MCP_PRODUCTION_PARSER',
+    kind:'S5_BOUNDED_LOCAL_HTTP_LOOPBACK_NO_MCP_PRODUCTION_PARSER',
+    declaredLargeRequestBodyBytes:fullBoundary?S5_HTTP_MAX_BYTES:1024*1024,
     sourceHead:head,startedUtc,completedUtc:new Date().toISOString(),
     host:{platform:process.platform,node:process.version,cpuModel:cpus()[0]?.model,
       totalMemoryBytes:totalmem()},
@@ -35,7 +39,9 @@ async function main(){
     stagingAcceptance:'BLOCKED',
     productionAcceptance:'NO_GO',
   };
-  const f=path.resolve('docs/reports/s5-http-9-5mib-loopback-20261020.json');
+  const f=path.resolve(fullBoundary?
+    'docs/reports/s5-http-9-5mib-loopback-20261020.json':
+    'docs/reports/s5-http-4mib-loopback-20261020.json');
   if(existsSync(f))throw new Error('Evidence file already exists, do not overwrite');
   mkdirSync(path.dirname(f),{recursive:true});
   writeFileSync(f,JSON.stringify(evidence,null,2)+'\n',{flag:'wx'});
