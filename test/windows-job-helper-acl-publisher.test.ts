@@ -77,3 +77,39 @@ test('trust audit computes SHA-256 when Get-FileHash cmdlet is unavailable', {
   assert.equal(data.productionReady,false,
     'a source-built helper must never become production-trusted');
 });
+
+test('trust audit fails closed when signature and ACL providers are unavailable', {
+  skip:process.platform!=='win32',timeout:15000,
+},()=>{
+  // CI and locked-down service accounts may lack PowerShell.Security.
+  // Missing verification evidence must produce explicit NO-GO, not PASS.
+  const auditScript=path.resolve('scripts/audit-windows-job-helper-trust.ps1');
+  const escaped=auditScript.replace(/'/g,"''");
+  const injected=[
+    "function Get-AuthenticodeSignature { throw 'TEST_SIGNATURE_PROVIDER_UNAVAILABLE' }",
+    "function Get-Acl { throw 'TEST_ACL_PROVIDER_UNAVAILABLE' }",
+    "& '"+escaped+"'",
+  ].join('; ');
+  const result=spawnSync('powershell.exe',[
+    '-NoProfile','-NonInteractive','-Command',injected,
+  ],{windowsHide:true,encoding:'utf8',timeout:10000,maxBuffer:8192});
+  assert.equal(result.status,0,
+    'read-only audit should report failed evidence, not crash: '+(result.stderr??'').slice(0,1000));
+  const data=JSON.parse(result.stdout.trim()) as {
+    productionReady:boolean;provisionalFileTrustChecksPassed:boolean;
+    authenticodeStatus:string;publisherValid:boolean;
+    authenticodeEvidenceAvailable:boolean;
+    aclEvidenceAvailable:boolean;fileAclProtected:boolean;
+    parentAclProtected:boolean;broadWriteGrantFound:null|boolean;
+  };
+  assert.equal(data.authenticodeStatus,'UNAVAILABLE');
+  assert.equal(data.authenticodeEvidenceAvailable,false);
+  assert.equal(data.publisherValid,false);
+  assert.equal(data.aclEvidenceAvailable,false);
+  assert.equal(data.fileAclProtected,false);
+  assert.equal(data.parentAclProtected,false);
+  assert.equal(data.broadWriteGrantFound,null,
+    'unknown ACL is not evidence that no broad write grant exists');
+  assert.equal(data.provisionalFileTrustChecksPassed,false);
+  assert.equal(data.productionReady,false);
+});
