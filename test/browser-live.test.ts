@@ -31,11 +31,19 @@ test(
 
     const manager = new BrowserManager({ rootDir: root });
     t.after(async () => {
-      await manager.stopAll();
-      await new Promise<void>((resolve) =>
-        server.close(() => resolve()),
-      );
-      await fs.rm(root, { recursive: true, force: true });
+      try {
+        // stopAll verifies owned PID and releases every UUID profile.
+        // The test-owned root must then be empty; never force-remove a
+        // locked profile or silently erase evidence of leaked handles.
+        await manager.stopAll();
+        await fs.rmdir(root);
+      } finally {
+        // Always close only our own ephemeral HTTP listener even when
+        // browser termination or filesystem cleanup fails loudly.
+        await new Promise<void>((resolve, reject) =>
+          server.close(error => error ? reject(error) : resolve()),
+        );
+      }
     });
 
     const address = server.address();
@@ -161,5 +169,11 @@ test(
     assert.ok(screenshot.height > 0);
     assert.match(screenshot.sha256, /^[a-f0-9]{64}$/);
     assert.ok(screenshot.base64.length > 100);
+
+    // Require actual browser PID/profile cleanup as part of this positive
+    // acceptance, not only functional CDP success. t.after covers failures.
+    const stopped=await manager.stop(started.id);
+    assert.equal(stopped.stopped,true,'Live Edge process ownership must still be active');
+    assert.equal(stopped.removedProfile,true,'Session lockfile must be released');
   },
 );

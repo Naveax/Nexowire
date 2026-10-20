@@ -3,7 +3,7 @@
   "capturedFromMain": "6c6c1f9cac7df6d2fd1e0dea12527a3fc15391e1",
   "limitOfAudit": "DIRECT_NODE_CHILD_PROCESS_CALLS_ONLY",
   "observedAtBaseline": {
-    "src/agent/browser-manager.ts#spawn": 2,
+    "src/agent/browser-manager.ts#spawn": 3,
     "src/agent/executors.ts#spawn": 2,
     "src/agent/executors.ts#spawnSync": 1,
     "src/agent/native-agent-lifecycle.ts#spawn": 1,
