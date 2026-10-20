@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { createHash } from 'node:crypto';
 import { verifyResultFiles, type ProgressProofReport, type ProgressProofRequest } from './progress-proof-verifier.js';
 
 /**
@@ -73,7 +74,40 @@ interface SessionProgress {
   evidence?: ProgressProofReport;
   proofGeneration: number;
   pendingReconnect: boolean;
+  trustedRequestId?: string;
+  lastProgressOutputSha256?: string;
+  lastProcessExitedAt?: string;
+  reconnectAtMs?: number;
+  lastOutputSeq?: number;
+  completionAttested: boolean;
 }
+
+/**
+ * Out-of-band evidence supplied only by a trusted scheduler and immutable
+ * storage adapter. A worker's own manifest or stdout MUST NOT supply this.
+ * An object with these fields does not itself cryptographically establish
+ * storage immutability; production must authenticate the supplying provider.
+ */
+export interface TrustedCompletionAttestation {
+  authority: 'trusted_storage_adapter';
+  requestId: string;
+  sessionId: string;
+  immutableArtifactSha256: string;
+  outputProofSha256: string;
+  committedAt: string;
+  exitCode: 0;
+  exitObservedAt: string;
+}
+const CompletionAttestationSchema = z.object({
+  authority: z.literal('trusted_storage_adapter'),
+  requestId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  immutableArtifactSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  outputProofSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  committedAt: z.string().datetime(),
+  exitCode: z.literal(0),
+  exitObservedAt: z.string().datetime(),
+}).strict();
 
 export interface SupervisorOptions {
   now?: () => number;
@@ -137,8 +171,21 @@ export class ProgressSupervisor {
       id: sessionId, status: 'running', exitCode: null, startedMs,
       lastOutputMs: startedMs, invalidRecords: 0, stdoutFragment: '',
       droppingOversizedLine: false, seenWarningCodes: new Set(),
-      proofGeneration: 0, pendingReconnect: false,
+      proofGeneration: 0, pendingReconnect: false, completionAttested: false,
     });
+  }
+
+  /** Bind an externally assigned invocation UUID, never from worker output. */
+  bindTrustedRequest(sessionId: string, requestId: string): boolean {
+    if (!z.string().uuid().safeParse(requestId).success) return false;
+    const tracked = this.sessions.get(sessionId);
+    if (!tracked || tracked.trustedRequestId && tracked.trustedRequestId !== requestId) return false;
+    if (!tracked) return false;
+    tracked.trustedRequestId = requestId;
+    tracked.proofGeneration++;
+    tracked.evidence = undefined;
+    tracked.completionAttested = false;
+    return true;
   }
 
   recover(sessions: ReadonlyArray<{ sessionId: string; status: string; startedAt?: string; exitCode?: number | null }>): void {
@@ -153,6 +200,7 @@ export class ProgressSupervisor {
         if (tracked.status !== session.status || tracked.exitCode !== newExitCode) {
           tracked.proofGeneration++;
           tracked.evidence = undefined;
+          tracked.completionAttested = false;
         }
         if ((session.status === 'lost' || session.status === 'orphaned') &&
             tracked.status !== session.status) {
@@ -178,13 +226,32 @@ export class ProgressSupervisor {
     if (event.topic === 'process.exited') {
       tracked.proofGeneration++;
       tracked.evidence = undefined;
+      tracked.completionAttested = false;
+      tracked.lastProcessExitedAt = typeof event.data.exitedAt === 'string' &&
+        Number.isFinite(Date.parse(event.data.exitedAt)) ? event.data.exitedAt :
+        new Date(now).toISOString();
       tracked.status = 'exited';
       tracked.exitCode = typeof event.data.exitCode === 'number' ? event.data.exitCode : null;
       return;
     }
     if (event.topic !== 'process.output') return;
+    if (event.data.stream !== 'stdout' || typeof event.data.text !== 'string') {
+      tracked.lastOutputMs = now;
+      return;
+    }
+    if (typeof event.data.seq === 'number' &&
+        (!Number.isSafeInteger(event.data.seq) ||
+         event.data.seq <= (tracked.lastOutputSeq ?? 0))) return;
+    // A queued pre-reconnect stdout event is NOT new worker activity.
+    if (tracked.pendingReconnect) {
+      const eventTime = typeof event.data.at === 'string' ? Date.parse(event.data.at) : NaN;
+      if (!Number.isFinite(eventTime) ||
+          eventTime < (tracked.reconnectAtMs ?? now) ||
+          eventTime > now + 2000 ||
+          typeof event.data.seq !== 'number') return;
+    }
+    if (typeof event.data.seq === 'number') tracked.lastOutputSeq = event.data.seq;
     tracked.lastOutputMs = now;
-    if (event.data.stream !== 'stdout' || typeof event.data.text !== 'string') return;
     // Never split/duplicate a possibly multi-megabyte output event in memory.
     // Scan newline boundaries and retain at most MAX_LINE_BYTES per session.
     const chunk = event.data.text;
@@ -219,7 +286,12 @@ export class ProgressSupervisor {
             if (parsed !== undefined) {
               const result = WorkerProgressSchema.safeParse(parsed);
               if (!result.success) this.invalid(tracked);
-              else this.observeMetrics(id, result.data);
+              else if (this.observeMetrics(id, result.data)) {
+                // Hash exact captured stdout record bytes, not an invented
+                // string reconstructed from mutable progress counters.
+                tracked.lastProgressOutputSha256 = createHash('sha256')
+                  .update(raw + '\n', 'utf8').digest('hex');
+              }
             }
           }
         }
@@ -259,6 +331,8 @@ export class ProgressSupervisor {
     }
     tracked.proofGeneration++;
     tracked.evidence = undefined;
+    tracked.completionAttested = false;
+    tracked.lastProgressOutputSha256 = undefined;
     tracked.pendingReconnect = false;
     tracked.lastHeartbeatMs = now;
     tracked.lastOutputMs = now;
@@ -280,6 +354,8 @@ export class ProgressSupervisor {
     for (const tracked of this.sessions.values()) {
       tracked.proofGeneration++;
       tracked.evidence = undefined;
+      tracked.completionAttested = false;
+      tracked.lastProgressOutputSha256 = undefined;
       if (tracked.status !== 'running') continue;
       tracked.sample = undefined;
       tracked.lastHeartbeatMs = undefined;
@@ -291,6 +367,7 @@ export class ProgressSupervisor {
       tracked.stdoutFragment = '';
       tracked.droppingOversizedLine = false;
       tracked.pendingReconnect = true;
+      tracked.reconnectAtMs = this.now();
       tracked.seenWarningCodes.clear();
     }
   }
@@ -302,6 +379,7 @@ export class ProgressSupervisor {
    */
   async verifySessionFromDisk(
     sessionId: string, request: ProgressProofRequest,
+    attestation?: TrustedCompletionAttestation,
   ): Promise<ProgressProofReport> {
     const tracked = this.sessions.get(sessionId);
     const unverified = (reason: string): ProgressProofReport => ({
@@ -337,10 +415,40 @@ export class ProgressSupervisor {
     } else {
       tracked.evidence = report;
     }
+    tracked.completionAttested = false;
+    if (tracked.evidence.status === 'verified' && attestation) {
+      const parsed = CompletionAttestationSchema.safeParse(attestation);
+      const at = parsed.success ? parsed.data : null;
+      const committedAt = at ? Date.parse(at.committedAt) : NaN;
+      const exitObservedAt = tracked.lastProcessExitedAt === undefined ?
+        NaN : Date.parse(tracked.lastProcessExitedAt);
+      const proofAt = tracked.evidence.verifiedAt === null ?
+        NaN : Date.parse(tracked.evidence.verifiedAt);
+      if (!at || !tracked.trustedRequestId ||
+          at.requestId !== tracked.trustedRequestId ||
+          at.sessionId !== sessionId ||
+          at.immutableArtifactSha256 !== tracked.evidence.artifactSha256 ||
+          at.outputProofSha256 !== tracked.lastProgressOutputSha256 ||
+          tracked.status !== 'exited' || tracked.exitCode !== 0 ||
+          at.exitObservedAt !== tracked.lastProcessExitedAt ||
+          !Number.isFinite(committedAt) ||
+          !Number.isFinite(exitObservedAt) || !Number.isFinite(proofAt) ||
+          committedAt < tracked.startedMs - 2_000 ||
+          committedAt > exitObservedAt + 2_000 ||
+          committedAt > proofAt + 2_000 ||
+          exitObservedAt > proofAt + 2_000) {
+        tracked.evidence = unverified('TRUSTED_COMPLETION_CORRELATION_MISMATCH');
+      } else {
+        tracked.completionAttested = true;
+      }
+    }
     return tracked.evidence;
   }
 
   private invalid(tracked: SessionProgress): void {
+    tracked.proofGeneration++;
+    tracked.evidence = undefined;
+    tracked.completionAttested = false;
     tracked.invalidRecords = Math.min(65535, tracked.invalidRecords + 1);
     // Rejected records do not update heartbeat, work counts or proof timestamps.
   }
@@ -372,7 +480,7 @@ export class ProgressSupervisor {
     } else if (sample) {
       state = this.stalled(tracked, now) ? 'stalled' : 'active';
     }
-    if (freshProof && tracked.evidence && tracked.status === 'exited' &&
+    if (freshProof && tracked.completionAttested && tracked.evidence && tracked.status === 'exited' &&
         tracked.exitCode === 0 && tracked.evidence.sealed &&
         tracked.evidence.pendingCount === 0 && tracked.evidence.failureCount === 0) {
       state = 'completed_verified';
@@ -388,6 +496,10 @@ export class ProgressSupervisor {
       lastReportedProgressAt: tracked.lastReportedProgressMs === undefined ? null : new Date(tracked.lastReportedProgressMs).toISOString(),
       lastVerifiedProgressAt: freshProof ? tracked.evidence!.verifiedAt : null,
       progressVerified: freshProof,
+      completionAttested: freshProof && tracked.completionAttested,
+      requestIdCorrelated: freshProof && tracked.completionAttested ? tracked.trustedRequestId : null,
+      outputProofSha256: freshProof && tracked.completionAttested ? tracked.lastProgressOutputSha256 : null,
+      verificationReasonForCompletion: freshProof && !tracked.completionAttested ? 'IMMUTABLE_ATTESTATION_REQUIRED' : null,
       verifiedCompletedCount: freshProof ? tracked.evidence!.completedCount : null,
       verifiedPendingCount: freshProof ? tracked.evidence!.pendingCount : null,
       verifiedFailureCount: freshProof ? tracked.evidence!.failureCount : null,
@@ -405,7 +517,7 @@ export class ProgressSupervisor {
   }
 
   private stalled(item: SessionProgress, now: number): boolean {
-    if (!item.sample || item.sample.pending_count === 0) return false;
+    if (!item.sample || item.status !== 'running') return false;
     const anchor = item.lastCompletedAdvanceMs ?? item.startedMs;
     return now - anchor >= this.stallAfterMs;
   }

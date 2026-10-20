@@ -9,6 +9,7 @@ import { ProcessManager } from '../src/agent/process-manager.js';
 import { ProgressSupervisor } from '../src/agent/progress-supervisor.js';
 import { TaskGraphStore } from '../src/agent/task-graph-store.js';
 import { RunbookStore } from '../src/agent/runbook-store.js';
+import { createHash } from 'node:crypto';
 
 test('real managed synthetic process: process.start/read progress separated from PID and proof', async (t) => {
   // #559 requires an independently trusted native Job Object helper on
@@ -154,6 +155,7 @@ for (const mode of ['complete','false_progress'] as const) {
         command,shell:windows?'cmd':'bash',cwd:root,
       },new PathPolicy(['*']));
       sessionId=started.sessionId;
+      assert.equal(progressSupervisor.bindTrustedRequest(sessionId,'550e8400-e29b-41d4-a716-446655440001'),true);
       assert.equal(progressSupervisor.snapshot(sessionId).progressVerified,false);
       await manager.write({session_id:sessionId,input:sessionId,append_newline:true});
       let last: Awaited<ReturnType<typeof manager.read>>|undefined;
@@ -182,7 +184,17 @@ for (const mode of ['complete','false_progress'] as const) {
       const proof=progressSupervisor.snapshot(sessionId);
       if(mode==='complete'){
         assert.equal(evidence.status,'verified');
-        assert.equal(proof.state,'completed_verified');
+        assert.equal(proof.state,'reported_complete');
+        const rawOutput=testEvents.filter(e=>e.stream==='stdout').map(e=>e.text).join('');
+        const accepted=await progressSupervisor.verifySessionFromDisk(sessionId,trusted,{
+          authority:'trusted_storage_adapter',requestId:'550e8400-e29b-41d4-a716-446655440001',
+          sessionId,immutableArtifactSha256:evidence.artifactSha256!,
+          outputProofSha256:createHash('sha256').update(rawOutput).digest('hex'),
+          committedAt:last.session.startedAt,exitCode:0,
+          exitObservedAt:last.session.exitedAt!,
+        });
+        assert.equal(accepted.status,'verified');
+        assert.equal(progressSupervisor.snapshot(sessionId).state,'completed_verified');
         assert.equal(proof.verifiedCompletedCount,2);
         assert.equal(proof.verifiedPendingCount,0);
         assert.equal(proof.verifiedFailureCount,0);

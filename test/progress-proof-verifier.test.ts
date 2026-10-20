@@ -13,7 +13,7 @@ import {verifyProgressProofRequestFile} from '../scripts/verify-progress-proof.j
 
 const fixture = path.resolve('test/fixtures/progress-result-worker-fixture.cjs');
 const scope = {ownerAccountId:'owner-fixture',deviceId:'device-fixture',
-  projectId:'project-fixture',runId:'run-fixture',sessionId:'session-fixture'};
+  projectId:'project-fixture',runId:'run-fixture',sessionId:'550e8400-e29b-41d4-a716-446655440000'};
 async function withWorker(mode:'complete'|'false_progress'|'tampered'|'failed'|'gpu_silent',
   run: (args:{request:ProgressProofRequest; supervisor:ProgressSupervisor;
     root:string; output:string; clock:{now:number}})=>Promise<void>) {
@@ -21,6 +21,7 @@ async function withWorker(mode:'complete'|'false_progress'|'tampered'|'failed'|'
   const clock = {now:Date.now()};
   const supervisor = new ProgressSupervisor({now:()=>clock.now,stallAfterMs:100});
   supervisor.register(scope.sessionId);
+  assert.equal(supervisor.bindTrustedRequest(scope.sessionId,'550e8400-e29b-41d4-a716-446655440001'),true);
   try {
     const output=execFileSync(process.execPath,[fixture,root,mode,scope.runId,scope.sessionId], {
       encoding:'utf8', timeout:5000, windowsHide:true, maxBuffer:16384,
@@ -35,7 +36,7 @@ async function withWorker(mode:'complete'|'false_progress'|'tampered'|'failed'|'
 }
 
 test('controlled worker: PID and heartbeat are not verified completion; actual result files are',async()=>{
-  await withWorker('complete',async({request,supervisor,clock})=>{
+  await withWorker('complete',async({request,supervisor,clock,output})=>{
     const before=supervisor.snapshot(scope.sessionId);
     assert.equal(before.state,'active');
     assert.equal(before.progressVerified,false);
@@ -56,7 +57,17 @@ test('controlled worker: PID and heartbeat are not verified completion; actual r
     const terminal=await supervisor.verifySessionFromDisk(scope.sessionId,request);
     assert.equal(terminal.status,'verified');
     const after=supervisor.snapshot(scope.sessionId);
-    assert.equal(after.state,'completed_verified');
+    assert.equal(after.state,'reported_complete');
+    assert.equal(after.verificationReasonForCompletion,'IMMUTABLE_ATTESTATION_REQUIRED');
+    const accepted=await supervisor.verifySessionFromDisk(scope.sessionId,request,{
+      authority:'trusted_storage_adapter',requestId:'550e8400-e29b-41d4-a716-446655440001',
+      sessionId:scope.sessionId,immutableArtifactSha256:disk.artifactSha256!,
+      outputProofSha256:createHash('sha256').update(output).digest('hex'),
+      committedAt:new Date(clock.now).toISOString(),exitCode:0,
+      exitObservedAt:new Date(clock.now).toISOString(),
+    });
+    assert.equal(accepted.status,'verified');
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
     assert.equal(after.completionEvidence,'result_files_rehashed_scope_bound');
     assert.equal(after.resultArtifactSha256Verified,disk.artifactSha256);
     assert.equal(after.progressVerified,true);
@@ -288,11 +299,19 @@ test('operator-only offline verifier checks files but cannot assert process comp
 
 
 test('verified completion cache expires instead of hiding subsequent file changes',async()=>{
-  await withWorker('complete',async({request,supervisor,clock,root})=>{
+  await withWorker('complete',async({request,supervisor,clock,root,output})=>{
     supervisor.observeProcessEvent({topic:'process.exited',data:{
       sessionId:scope.sessionId,exitCode:0,
     }});
-    await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    const original=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(original.status,'verified');
+    await supervisor.verifySessionFromDisk(scope.sessionId,request,{
+      authority:'trusted_storage_adapter',requestId:'550e8400-e29b-41d4-a716-446655440001',
+      sessionId:scope.sessionId,immutableArtifactSha256:original.artifactSha256!,
+      outputProofSha256:createHash('sha256').update(output).digest('hex'),
+      committedAt:new Date(clock.now).toISOString(),exitCode:0,
+      exitObservedAt:new Date(clock.now).toISOString(),
+    });
     assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
     clock.now+=30_100;
     const expired=supervisor.snapshot(scope.sessionId);
@@ -351,5 +370,122 @@ test('oversized result with updated plausible hash still fails closed',async()=>
     assert.equal(evidence.reason,'FILE_UNTRUSTED');
     assert.equal(supervisor.snapshot(scope.sessionId).state,'progress_mismatch');
     assert.equal(supervisor.snapshot(scope.sessionId).progressVerified,false);
+  });
+});
+
+test('completed_verified rejects absent or forged requestId, immutable hash, output SHA and timestamps',async()=>{
+  await withWorker('complete',async({request,supervisor,output,clock})=>{
+    supervisor.observeProcessEvent({topic:'process.exited',data:{
+      sessionId:scope.sessionId,exitCode:0,exitedAt:new Date(clock.now).toISOString(),
+    }});
+    const fileProof=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(fileProof.status,'verified');
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'reported_complete');
+    const valid={
+      authority:'trusted_storage_adapter' as const,
+      requestId:'550e8400-e29b-41d4-a716-446655440001',
+      sessionId:scope.sessionId,
+      immutableArtifactSha256:fileProof.artifactSha256!,
+      outputProofSha256:createHash('sha256').update(output).digest('hex'),
+      committedAt:new Date(clock.now).toISOString(),
+      exitCode:0 as const,exitObservedAt:new Date(clock.now).toISOString(),
+    };
+    for(const altered of [
+      {...valid,requestId:'550e8400-e29b-41d4-a716-446655440002'},
+      {...valid,immutableArtifactSha256:'a'.repeat(64)},
+      {...valid,outputProofSha256:'b'.repeat(64)},
+      {...valid,committedAt:new Date(clock.now+60_000).toISOString()},
+      {...valid,exitObservedAt:new Date(clock.now+10_000).toISOString()},
+    ]){
+      const result=await supervisor.verifySessionFromDisk(scope.sessionId,request,altered);
+      assert.equal(result.status,'unverified');
+      assert.equal(result.reason,'TRUSTED_COMPLETION_CORRELATION_MISMATCH');
+      assert.notEqual(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+      assert.equal(supervisor.snapshot(scope.sessionId).completionAttested,false);
+    }
+    const accepted=await supervisor.verifySessionFromDisk(scope.sessionId,request,valid);
+    assert.equal(accepted.status,'verified');
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    // A lost child/Job invalidates even a previously accepted local proof.
+    supervisor.recover([{sessionId:scope.sessionId,status:'lost',exitCode:null}]);
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'lost');
+    assert.equal(supervisor.snapshot(scope.sessionId).completionAttested,false);
+    assert.equal(supervisor.snapshot(scope.sessionId).progressVerified,false);
+  });
+});
+
+test('stalled zero-result worker and stale reconnect event cannot forge completion',async()=>{
+  let now=10_000;
+  const p=new ProgressSupervisor({now:()=>now,stallAfterMs:100});
+  p.register('stalled',now);
+  p.observeMetrics('stalled',{completed_count:0,pending_count:2,failure_count:0});
+  now+=150;
+  assert.equal(p.snapshot('stalled').state,'stalled');
+  assert.equal(p.scan()[0]?.code,'NO_COMPLETIONS');
+  assert.equal(p.snapshot('stalled').progressVerified,false);
+
+  p.register('claimed-done',now);
+  p.observeMetrics('claimed-done',{completed_count:2,pending_count:0,failure_count:0});
+  now+=150;
+  assert.equal(p.snapshot('claimed-done').state,'stalled');
+  assert.notEqual(p.snapshot('claimed-done').state,'completed_verified');
+
+  p.register('reconnected',now);
+  p.observeProcessEvent({topic:'process.output',data:{
+    sessionId:'reconnected',stream:'stdout',seq:1,at:new Date(now).toISOString(),
+    text:PROGRESS_PREFIX+JSON.stringify({completed_count:1,pending_count:1,failure_count:0})+'\n',
+  }});
+  assert.equal(p.snapshot('reconnected').completedCount,1);
+  now+=100;
+  p.invalidateOnReconnect();
+  p.observeProcessEvent({topic:'process.output',data:{
+    sessionId:'reconnected',stream:'stdout',seq:2,at:new Date(now-200).toISOString(),
+    text:PROGRESS_PREFIX+JSON.stringify({completed_count:2,pending_count:0,failure_count:0})+'\n',
+  }});
+  assert.equal(p.snapshot('reconnected').state,'progress_unknown');
+  assert.equal(p.snapshot('reconnected').progressVerified,false);
+  assert.equal(p.snapshot('reconnected').completionAttested,false);
+  now+=1;
+  p.observeProcessEvent({topic:'process.output',data:{
+    sessionId:'reconnected',stream:'stdout',seq:3,at:new Date(now).toISOString(),
+    text:PROGRESS_PREFIX+JSON.stringify({completed_count:2,pending_count:0,failure_count:0})+'\n',
+  }});
+  assert.equal(p.snapshot('reconnected').completedCount,2);
+  assert.equal(p.snapshot('reconnected').progressVerified,false);
+  assert.equal(p.snapshot('reconnected').state,'active');
+});
+
+test('invalid forged stdout after accepted proof invalidates cached acceptance',async()=>{
+  await withWorker('complete',async({request,supervisor,output,clock})=>{
+    supervisor.observeProcessEvent({topic:'process.exited',data:{
+      sessionId:scope.sessionId,exitCode:0,exitedAt:new Date(clock.now).toISOString(),
+    }});
+    const disk=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    await supervisor.verifySessionFromDisk(scope.sessionId,request,{
+      authority:'trusted_storage_adapter',requestId:'550e8400-e29b-41d4-a716-446655440001',
+      sessionId:scope.sessionId,immutableArtifactSha256:disk.artifactSha256!,
+      outputProofSha256:createHash('sha256').update(output).digest('hex'),
+      committedAt:new Date(clock.now).toISOString(),
+      exitCode:0,exitObservedAt:new Date(clock.now).toISOString(),
+    });
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    supervisor.observeProcessEvent({topic:'process.output',data:{
+      sessionId:scope.sessionId,stream:'stdout',
+      text:PROGRESS_PREFIX+'{"completed_count":9999,"pending_count":0,"failure_count":-1}\n',
+    }});
+    assert.notEqual(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    assert.equal(supervisor.snapshot(scope.sessionId).progressVerified,false);
+  });
+});
+
+test('reconnect during asynchronous file scan cannot inherit pre-reconnect proof',async()=>{
+  await withWorker('complete',async({request,supervisor})=>{
+    const checking=supervisor.verifySessionFromDisk(scope.sessionId,request);
+    supervisor.invalidateOnReconnect();
+    const result=await checking;
+    assert.equal(result.status,'unverified');
+    assert.equal(result.reason,'PROOF_RACE_REVERIFY');
+    assert.equal(supervisor.snapshot(scope.sessionId).progressVerified,false);
+    assert.equal(supervisor.snapshot(scope.sessionId).restartAllowed,false);
   });
 });

@@ -240,3 +240,48 @@ SKIP, GitHub exact-head CI and production release gates.
   Paths requiring different native quoting are **BLOCKED**, not silently
   allowed. The production helper executable trust chain remains a separate
   requirement.
+
+
+### #575 strict completion correlation and #588 observer adapter (2026-10-20)
+
+- `completed_verified` now requires all previously independent JSON file
+  SHA-256/count/scope checks **plus** an externally bound UUID `requestId`,
+  exact captured stdout progress-line SHA-256, observed OS exit 0,
+  Agent-observed exit timestamp, bounded timestamp ordering, and an
+  out-of-band trusted storage attestation of the result set SHA-256.
+  File-consistency `progressVerified:true` **alone** no longer means
+  `completed_verified`: without trusted attestation a clean exit remains
+  `reported_complete` and `verificationReasonForCompletion` is
+  `IMMUTABLE_ATTESTATION_REQUIRED`.
+- `TrustedCompletionAttestation` is a **boundary contract**, not a
+  cryptographic token or implementation of immutable storage. A normal
+  worker cannot supply it from stdout or from its own manifest. Until an
+  independently authenticated Agent-owned immutable storage provider is
+  connected, real production work must not receive this attestation.
+  The isolated unit tests explicitly simulate the provider for acceptance
+  policy testing; their success does NOT establish storage immutability.
+- Additional negative acceptance: forged requestId, immutable digest,
+  stdout hash, commit/exit timestamps, unknown/nonzero exit, lost child,
+  malformed telemetry after proof, 0 new results, pending-zero process
+  stalled without actual exit, and stale stdout replay from an older
+  Hub reconnect epoch. Invalid telemetry now invalidates cached proof.
+  `mutation_unknown` remains non-retryable without outside reconciliation.
+- New stand-alone `artifact-transfer-progress-adapter.ts` for issue #588
+  consumes **actual** ArtifactBridge `begin`, `putChunk`, and `commit`
+  receipts. Reports 65,536-byte chunk counters, last acknowledged chunk
+  SHA-256, confirmed offsets, previously persisted resume offset,
+  remaining bytes, full-file SHA-256, and only confirmed-complete storage
+  results. Duplicate acknowledged chunks do not increase counts.
+  `mutation_unknown` strictly blocks automatic replay; an operator must
+  reconcile through the owning Artifact Bridge API. The adapter does
+  not touch `src/workspace/artifact-bridge.ts`, the ingest/store
+  implementation, native Process Manager, or live Agent.
+- Adapter test invokes a real isolated `ArtifactBridgeStore` with
+  2x64KiB+123-byte payload, reconstructs the adapter from its durable
+  resume offset, re-reads the committed manifest, and verifies negative
+  lost-response/offset/sha/oversized-chunk scenarios.
+- **Not production accepted**: missing actual immutable storage attestation,
+  signed/ACL-controlled authoritativeness for requestId/exitedAt,
+  output-proof durable WAL after Agent crash, protected cross-owner handles,
+  physical 2-device acceptance and representative long-running workloads.
+  No live crypto bot or GPU benchmark launched.
