@@ -60,6 +60,8 @@ jobs:
       - name: Verify one-shot private shell worker denies owner Default desktop
         run: node --test --import tsx test/private-shell-oneshot-desktop-gate.test.ts
       - run: node --test --import tsx test/durable-process.test.ts
+      - name: Verify independent cross-project negative acceptance gates
+        run: node --test --import tsx test/qa-final-acceptance-negative.test.ts test/qa-agent-journal-negative.test.ts test/qa-shell-outcome-negative.test.ts test/qa-artifact-integrity-negative.test.ts test/qa-pr-intake-negative.test.ts
 
   linux-native-live:
     runs-on: ubuntu-latest

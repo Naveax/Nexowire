@@ -1,0 +1,30 @@
+{
+  "kind": "S5_READ_ONLY_EVIDENCE_AUDIT",
+  "staging": {
+    "sourceAcceptance": "SOURCE_TESTS_MUST_BE_VERIFIED_SEPARATELY",
+    "stagingStatus": "BLOCKED",
+    "productionStatus": "NO_GO",
+    "native24HourSoakStatus": "NOT_VERIFIED",
+    "independentlyAuthenticatedEvidence": false,
+    "reasons": [
+      "no externally approved bounded staging authorization",
+      "no measured external authenticated WSS staging evidence"
+    ],
+    "note": "Manifest fields and SHA strings cannot authenticate a provider, an owner approval or an OS tool completion; require independent verifier artifacts."
+  },
+  "cloudflare": {
+    "usageDelta": null,
+    "status": "UNVERIFIED_OPERATOR_IMPORT_ONLY",
+    "issue": "NO_ACCOUNT_METER_EXPORT"
+  },
+  "native": {
+    "independentlyVerifiedToolCompletions": null,
+    "status": "BLOCKED_NO_AUTHENTICATED_AGENT_JOURNAL_RECEIPTS"
+  },
+  "priorLocalTests": "SOURCE_ONLY_DO_NOT_COUNT_AS_PUBLIC_WSS",
+  "cloudResourcesCreated": 0,
+  "externalRequestsIssued": 0,
+  "newAgentToolExecutions": 0,
+  "paidResourcesChanged": false,
+  "productionAcceptance": "NO_GO"
+}

@@ -66,7 +66,11 @@ export function estimateS5Cost(x:S5CostInput):CostEnvelope{
     throw new Error('Projected monthly provider usage exceeds precise cost bounds');
   }
   // CPU is a declared assumption, not runtime measured.
-  const monthCpu=BigInt(Math.ceil(Number(monthlyWorker)*x.workerCpuMsPerRequest));
+  const estimatedCpuMs=Math.ceil(Number(monthlyWorker)*x.workerCpuMsPerRequest);
+  if(!Number.isSafeInteger(estimatedCpuMs)){
+    throw new Error('Projected Worker CPU exceeds precise arithmetic bounds');
+  }
+  const monthCpu=BigInt(estimatedCpuMs);
   const cpuAbove=above(monthCpu,30_000_000n);
   const paidWorkers=5+
     Number(above(monthlyWorker,10_000_000n))/1_000_000*0.30+

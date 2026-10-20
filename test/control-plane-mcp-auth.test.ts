@@ -25,6 +25,7 @@ test('control-plane MCP client authenticates account and device scope', async ()
       });
       return Response.json({
         authenticated: true,
+        scopes: ['mcp'],
         accountId: 'acct-1',
         role: 'user',
         allowedDeviceIds: [
@@ -91,6 +92,7 @@ test('control-plane MCP access mode fails closed to SAFE when server omits mode 
     serviceToken: 'service-token-0123456789',
     fetchImpl: async () => Response.json({
       authenticated: true,
+        scopes: ['mcp'],
       accountId: 'acct-safe',
       role: 'user',
       allowedDeviceIds: ['device-safe'],
@@ -208,7 +210,7 @@ test('AUTO consent and revocation are read on each independent OAuth authenticat
     fetchImpl:async()=>{
       requests++;
       return Response.json({
-        authenticated:true,accountId:'owner-1',role:'user',
+        authenticated:true,scopes:['mcp'],accountId:'owner-1',role:'user',
         allowedDeviceIds:['device-a'],
         autoSelectDevices:enabled,
         ownerDevices:[{id:'device-a',name:'Naveax',folderId:null}],
@@ -230,7 +232,7 @@ test('AUTO and owner folder payloads fail closed against malformed or foreign me
     controlPlaneUrl:'https://control.example.test',
     serviceToken:'service-token-0123456789',
     fetchImpl:async()=>Response.json({
-      authenticated:true,accountId:'owner-1',role:'user',
+      authenticated:true,scopes:['mcp'],accountId:'owner-1',role:'user',
       allowedDeviceIds:['device-a'],
       autoSelectDevices:'true',
       ownerDevices:[

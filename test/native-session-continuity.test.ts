@@ -130,7 +130,7 @@ async function waitOffline(
   assert.equal(broker.has(deviceId), false);
 }
 
-test('same native-agent instance resumes a pending mutation with the same request ID', async (t) => {
+test('same native-agent instance never blindly replays a pending mutation', async (t) => {
   const metrics = new ScaleTransportMetrics();
   const fixture = await createHub(metrics);
   t.after(() => closeHub(fixture));
@@ -151,6 +151,10 @@ test('same native-agent instance resumes a pending mutation with the same reques
     4_000,
     requestId,
   );
+  const observed = resultPromise.then(
+    () => ({ ok: true as const }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
   const original = await nextRequest(first);
   assert.equal(original.requestId, requestId);
   assert.equal(original.capability, 'files.write');
@@ -164,32 +168,21 @@ test('same native-agent instance resumes a pending mutation with the same reques
     instanceId,
     ['files.write'],
   );
-  const resumed = await nextRequest(second);
-  assert.equal(resumed.requestId, requestId);
-  assert.equal(resumed.capability, 'files.write');
-  assert.deepEqual(resumed.input, {
-    path: 'x.txt',
-    content: 'hello',
-  });
-
-  second.send(
-    JSON.stringify({
-      type: 'response',
-      requestId,
-      ok: true,
-      data: { data: { written: true } },
-    }),
-  );
-
-  assert.deepEqual(await resultPromise, {
-    data: { written: true },
-  });
+  const outcome = await observed;
+  assert.equal(outcome.ok, false);
+  assert.ok(!outcome.ok && outcome.error instanceof NexowireError);
+  if (!outcome.ok && outcome.error instanceof NexowireError) {
+    assert.equal(outcome.error.code, 'MUTATION_STATE_UNKNOWN');
+  }
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(queuedMessages.get(second)?.length ?? 0, 0);
   const totals = metrics.snapshot();
   assert.equal(totals['agent.connections'].events, 2);
   assert.equal(totals['agent.disconnections'].events, 1);
-  assert.equal(totals['agent.resumed_requests'].events, 1);
-  assert.equal(totals['agent.rejected_requests'].events, 0);
-  assert.equal(totals['agent.tx_frames'].events, 2);
+  assert.equal(totals['agent.resumed_requests'].events, 0);
+  assert.equal(totals['agent.rejected_requests'].events, 1);
+  assert.equal(totals['agent.tx_frames'].events, 1);
+  assert.equal(totals['agent.reconnects'].events, 1);
 });
 
 test('new native-agent process instance never replays a pending mutation', async (t) => {

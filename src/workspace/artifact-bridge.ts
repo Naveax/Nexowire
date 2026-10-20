@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
+import { hostname } from 'node:os';
 import * as z from 'zod';
 
 const shaSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -34,6 +35,10 @@ const sessionSchema = z.object({
   expectedPreviousSha256: shaSchema.optional(),
   offset: z.number().int().min(0),
   chunks: z.array(chunkSchema).max(4096),
+}).strict();
+const lockSchema = z.object({
+  version: z.literal(1), id: z.string().uuid(), host: z.string().min(1).max(256),
+  pid: z.number().int().positive(), createdAt: z.string().datetime(),
 }).strict();
 const projectSchema = z.object({
   version: z.literal(1), scope: scopeSchema, repository: z.string().min(1).max(512),
@@ -118,19 +123,141 @@ export class ArtifactBridgeStore {
   private objectFile(dir: string, sha: string): string {
     return path.join(dir, 'objects', shaSchema.parse(sha));
   }
-  // Cross-process lock is deliberately fail-closed, never silently stolen after a crash.
+  // Scope-local cross-process lock. Recovery is intentionally operator-only
+  // and never triggered by normal request handling.
   private async locked<T>(dir: string, body: () => Promise<T>): Promise<T> {
     await fs.mkdir(dir, { recursive: true });
     const lock = path.join(dir, '.mutation.lock');
+    const recovery = path.join(dir, '.recovery.lock');
+    try { await fs.stat(recovery); return fail('BRIDGE_RECOVERING', 'Scope is in offline maintenance.'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     let handle: fs.FileHandle;
     try { handle = await fs.open(lock, 'wx', 0o600); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') return fail('BRIDGE_BUSY', 'A writer already holds the artifact scope lock.');
       throw error;
     }
-    try { return await body(); }
-    finally { await handle.close(); await fs.rm(lock, { force: true }); }
+    try {
+      const owner = lockSchema.parse({
+        version: 1, id: randomUUID(), host: hostname(), pid: process.pid,
+        createdAt: new Date().toISOString(),
+      });
+      await handle.writeFile(JSON.stringify(owner) + '\n');
+      await handle.sync();
+      try { await fs.stat(recovery); return fail('BRIDGE_RECOVERING', 'Scope entered offline maintenance.'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      return await body();
+    } finally {
+      await handle.close();
+      await fs.rm(lock, { force: true });
+    }
   }
+
+  // Explicit operator recovery only: requires the Hub to be stopped, a
+  // caller-pinned nonce and a demonstrably absent PID on the SAME host.
+  // Never steal an active lock or automatically delete a legacy/invalid lock.
+  async recoverAbandonedLock(
+    scope: ArtifactScope,
+    options: { expectedId: string; confirmedHubOffline: true; minAgeMs?: number },
+  ): Promise<{ recovered: true; ownerPid: number; quarantinedLock: string }> {
+    const dir = this.dir(scope);
+    if (options.confirmedHubOffline !== true) {
+      return fail('HUB_OFFLINE_REQUIRED', 'Stop all Hub writers before performing lock recovery.');
+    }
+    const minAgeMs = options.minAgeMs ?? 60_000;
+    if (!Number.isSafeInteger(minAgeMs) || minAgeMs < 0 || minAgeMs > 604_800_000) {
+      return fail('RECOVERY_AGE_INVALID', 'Lock recovery age bound is invalid.');
+    }
+    const recovery = path.join(dir, '.recovery.lock');
+    const guard = await fs.open(recovery, 'wx', 0o600);
+    try {
+      const lock = path.join(dir, '.mutation.lock');
+      const owner = await existing(lock, lockSchema);
+      if (!owner || owner.id !== options.expectedId || owner.host !== hostname()) {
+        return fail('RECOVERY_LOCK_MISMATCH', 'Lock owner identity was not verified on this host.');
+      }
+      const stat = await fs.lstat(lock);
+      if (!stat.isFile() || stat.isSymbolicLink() || Date.now() - stat.mtimeMs < minAgeMs) {
+        return fail('RECOVERY_LOCK_UNSAFE', 'Lock is not old enough or is not a regular file.');
+      }
+      let pidAlive = true;
+      try { process.kill(owner.pid, 0); }
+      catch (error) { pidAlive = (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
+      if (pidAlive) return fail('RECOVERY_OWNER_ALIVE', 'Lock owner PID may still be running.');
+      // Quarantine preserves evidence. Operators must stop all Hub workers;
+      // this procedure does not prove arbitrary remote processes are offline.
+      const quarantine = path.join(dir, '.recovered-' + owner.id + '.lock');
+      await fs.rename(lock, quarantine);
+      return { recovered: true, ownerPid: owner.pid, quarantinedLock: quarantine };
+    } finally {
+      await guard.close();
+      await fs.rm(recovery, { force: true });
+    }
+  }
+
+
+  // Offline operator maintenance only. Completed manifests, checkpoint
+  // metadata and published content-addressed objects are NEVER pruned here.
+  async pruneExpiredSessions(
+    scope: ArtifactScope,
+    options: { olderThanMs: number; dryRun?: boolean; confirmedHubOffline?: true },
+  ): Promise<{ candidateSessionIds: string[]; deleted: number; dryRun: boolean }> {
+    const olderThanMs = options.olderThanMs;
+    if (!Number.isSafeInteger(olderThanMs) || olderThanMs < 60_000 ||
+        olderThanMs > 365 * 24 * 3600 * 1000) {
+      return fail('RETENTION_AGE_INVALID', 'Retention threshold must be at least 60 seconds.');
+    }
+    const dryRun = options.dryRun !== false;
+    if (!dryRun && options.confirmedHubOffline !== true) {
+      return fail('HUB_OFFLINE_REQUIRED', 'Session deletion requires operator-confirmed offline maintenance.');
+    }
+    const dir = this.dir(scope);
+    return this.locked(dir, async () => {
+      const sessionsDir = path.join(dir, 'sessions');
+      let names: string[];
+      try { names = await fs.readdir(sessionsDir); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return { candidateSessionIds: [], deleted: 0, dryRun };
+        }
+        throw error;
+      }
+      if (names.length > 20_000) {
+        return fail('RETENTION_SCAN_LIMIT', 'The number of staged objects exceeds the safe scan bound.');
+      }
+      for (const name of names) {
+        if (!/^[a-f0-9]{64}\.(?:json|part)$/.test(name)) {
+          return fail('RETENTION_UNKNOWN_ENTRY', 'Unrecognized staging entry requires operator review.');
+        }
+      }
+      const candidates: string[] = [];
+      for (const name of names.filter(x => x.endsWith('.json'))) {
+        const id = name.slice(0, -5);
+        // A missing or corrupt stage is an error, never silent deletion.
+        await this.loadSession(scope, id);
+        const jsonStat = await fs.stat(path.join(sessionsDir, name));
+        const partStat = await fs.stat(this.partFile(dir, id));
+        if (Date.now() - Math.max(jsonStat.mtimeMs, partStat.mtimeMs) >= olderThanMs) {
+          candidates.push(id);
+        }
+      }
+      for (const name of names.filter(x => x.endsWith('.part'))) {
+        if (!names.includes(name.slice(0, -5) + '.json')) {
+          return fail('RETENTION_ORPHAN_STAGE', 'Orphaned stage requires manual review before pruning.');
+        }
+      }
+      if (!dryRun) {
+        for (const id of candidates) {
+          // Never remove a file not verified in this scope and with this ID.
+          await this.loadSession(scope, id);
+          await fs.rm(this.partFile(dir, id));
+          await fs.rm(this.sessionFile(dir, id));
+        }
+      }
+      return { candidateSessionIds: candidates, deleted: dryRun ? 0 : candidates.length, dryRun };
+    });
+  }
+
   private async projectGuard(scope: ArtifactScope, repository: string, bind: boolean): Promise<void> {
     const file = path.join(this.dir(scope), 'project.json');
     const pinned = await existing(file, projectSchema);
@@ -144,7 +271,7 @@ export class ArtifactBridgeStore {
       fail('PROJECT_BINDING_MISSING', 'Artifact exists without a pinned project repository.');
     }
   }
-  private async checkManifest(scope: ArtifactScope, artifactPath: string): Promise<ArtifactManifest | null> {
+  private async checkManifest(scope: ArtifactScope, artifactPath: string, verifyContent = true): Promise<ArtifactManifest | null> {
     const dir = this.dir(scope);
     const manifest = await existing(this.manifestFile(dir, artifactPath), manifestSchema);
     if (!manifest) return null;
@@ -152,14 +279,16 @@ export class ArtifactBridgeStore {
       return fail('SCOPE_MISMATCH', 'Persisted artifact does not belong to the requested scope/path.');
     }
     await this.projectGuard(scope, manifest.repository, false);
-    const file = this.objectFile(dir, manifest.sha256);
-    try {
-      if (await regularFile(file) !== manifest.size || await digestFile(file) !== manifest.sha256) {
-        return fail('CORRUPT_ARTIFACT', 'Stored artifact size or SHA-256 verification failed.');
+    if (verifyContent) {
+      const file = this.objectFile(dir, manifest.sha256);
+      try {
+        if (await regularFile(file) !== manifest.size || await digestFile(file) !== manifest.sha256) {
+          return fail('CORRUPT_ARTIFACT', 'Stored artifact size or SHA-256 verification failed.');
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fail('ARTIFACT_MISSING', 'Manifest exists but content is missing.');
+        throw error;
       }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return fail('ARTIFACT_MISSING', 'Manifest exists but content is missing.');
-      throw error;
     }
     return manifest;
   }
@@ -323,7 +452,10 @@ export class ArtifactBridgeStore {
     });
   }
   async readChunk(scope: ArtifactScope, artifactPath: string, offset: number, maxBytes = 65536) {
-    const manifest = await this.get(scope, artifactPath);
+    // Do not verify one file path then reopen the same path for unverified bytes.
+    // Resolve only authenticated metadata, then verify AND extract from one
+    // pinned file descriptor. A concurrent replacement or mutation fails closed.
+    const manifest = await this.checkManifest(scope, artifactPath, false);
     if (!manifest) return fail('ARTIFACT_NOT_FOUND', 'No verified artifact exists for this scope.');
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > manifest.size ||
         !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 65536) {
@@ -331,10 +463,38 @@ export class ArtifactBridgeStore {
     }
     const length = Math.min(maxBytes, manifest.size - offset);
     const buf = Buffer.alloc(length);
-    const fd = await fs.open(this.objectFile(this.dir(scope), manifest.sha256), 'r');
+    const file = this.objectFile(this.dir(scope), manifest.sha256);
+    let fd: fs.FileHandle;
+    try { fd = await fs.open(file, 'r'); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return fail('ARTIFACT_MISSING', 'Artifact object disappeared before verified read.');
+      }
+      throw error;
+    }
     try {
-      const { bytesRead } = await fd.read(buf, 0, buf.length, offset);
-      if (bytesRead !== length) fail('ARTIFACT_CHANGED', 'Artifact was truncated during read.');
+      const before = await fd.stat();
+      if (!before.isFile() || before.size !== manifest.size) {
+        fail('CORRUPT_ARTIFACT', 'Stored content is not a regular file of the declared size.');
+      }
+      const whole = createHash('sha256');
+      const block = Buffer.allocUnsafe(65536);
+      let position = 0;
+      while (position < manifest.size) {
+        const n = Math.min(block.length, manifest.size - position);
+        const { bytesRead } = await fd.read(block, 0, n, position);
+        if (bytesRead !== n) fail('ARTIFACT_CHANGED', 'Artifact changed while being read.');
+        whole.update(block.subarray(0, n));
+        const begin = Math.max(position, offset);
+        const end = Math.min(position + n, offset + length);
+        if (end > begin) block.copy(buf, begin - offset, begin - position, end - position);
+        position += n;
+      }
+      const after = await fd.stat();
+      if (!after.isFile() || after.size !== manifest.size ||
+          whole.digest('hex') !== manifest.sha256) {
+        fail('CORRUPT_ARTIFACT', 'Artifact integrity failed during pinned-descriptor read.');
+      }
     } finally { await fd.close(); }
     return { artifactPath, offset, size: length, totalSize: manifest.size,
       sha256: manifest.sha256, chunkSha256: digest(buf), contentBase64: buf.toString('base64') };

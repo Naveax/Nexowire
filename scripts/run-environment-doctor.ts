@@ -4,6 +4,8 @@ import { runEnvironmentDoctor, type DoctorRequirements } from "../src/diagnostic
 function parseArgs(args: readonly string[]): DoctorRequirements {
   const tools: Record<string, string> = {};
   const pythonPackages: Record<string, string> = {};
+  const usbVidPid: string[] = [];
+  const wslDistros: string[] = [];
   let minGpuVramMiB: number | undefined;
   let requireNvidia = false, requireCuda = false, requireWsl = false, requireHyperV = false;
   for (const arg of args) {
@@ -12,6 +14,8 @@ function parseArgs(args: readonly string[]): DoctorRequirements {
     else if (arg === "--require-wsl") requireWsl = true;
     else if (arg === "--require-hyperv") requireHyperV = true;
     else if (arg.startsWith("--min-vram-mib=")) minGpuVramMiB = Number(arg.slice("--min-vram-mib=".length));
+    else if (arg.startsWith("--usb-vid-pid=")) usbVidPid.push(arg.slice("--usb-vid-pid=".length));
+    else if (arg.startsWith("--wsl-distro=")) wslDistros.push(arg.slice("--wsl-distro=".length));
     else if (arg.startsWith("--python-package=")) {
       const input = arg.slice("--python-package=".length);
       const cut = input.lastIndexOf(":");
@@ -27,7 +31,8 @@ function parseArgs(args: readonly string[]): DoctorRequirements {
       tools[name] = input.slice(cut + 1);
     } else throw new TypeError("Unknown option: " + arg);
   }
-  return { tools, pythonPackages, ...(minGpuVramMiB === undefined ? {} : { minGpuVramMiB }),
+  return { tools, pythonPackages, usbVidPid, wslDistros,
+    ...(minGpuVramMiB === undefined ? {} : { minGpuVramMiB }),
     requireNvidia, requireCuda, requireWsl, requireHyperV };
 }
 try {

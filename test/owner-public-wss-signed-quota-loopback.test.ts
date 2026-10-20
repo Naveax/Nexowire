@@ -127,6 +127,8 @@ async function sendThroughTlsTestEdge(input:{
   trust:OwnerPublicWssTrustProfile;
   request:OutboundQuotaFrame;
   serverName?:string;
+  /** STAGING ONLY: simulate an application losing an already received ACK. */
+  dropReply?:boolean;
 }){
   const opts=createOwnerPublicWssClientOptions(input.trust);
   // Test-only transport override: actual TCP goes to local ephemeral WSS,
@@ -144,6 +146,10 @@ async function sendThroughTlsTestEdge(input:{
       timer=setTimeout(()=>reject(new Error('Bounded staging WSS timeout')),5000);
       socket.once('open',()=>socket.send(JSON.stringify(input.request)));
       socket.once('message',raw=>{
+        if(input.dropReply){
+          reject(new Error('Simulated application-lost WSS ACK'));
+          return;
+        }
         try{resolve(JSON.parse(raw.toString()))}catch(e){reject(e)}
       });
       socket.once('error',reject);
@@ -202,4 +208,36 @@ test('wrong CA, SPKI and SNI prevent quota spend over the same WSS test edge',
     }),/Unexpected owner WSS TLS SNI hostname/);
     assert.equal(x.used(),0);
   }finally{other.remove();await x.close()}
+});
+
+test('application-dropped ACK: new connection cannot replay nonce or double-charge logical invocation',
+  {skip:!openssl,timeout:25000},async()=>{
+  const x=await fixture();
+  try{
+    const first=x.request(
+      'ack-loss-nonce-0001','ack-loss-logical-0001','ack-loss-frame-0001',
+    );
+    // Reply reaches the test transport, but application deliberately drops
+    // it. This does not claim physical packet loss / separate-ISP coverage.
+    await assert.rejects(sendThroughTlsTestEdge({
+      localStagingUrl:x.hub.url,trust:x.trust,request:first,dropReply:true,
+    }),/application-lost/);
+    assert.equal(x.used(),1);
+    const reused=await sendThroughTlsTestEdge({
+      localStagingUrl:x.hub.url,trust:x.trust,
+      request:{...first,requestId:'ack-loss-frame-0002'},
+    });
+    assert.equal(reused.httpStatus,409);
+    assert.equal(x.used(),1);
+    const reconciled=await sendThroughTlsTestEdge({
+      localStagingUrl:x.hub.url,trust:x.trust,
+      request:x.request(
+        'ack-loss-nonce-0002','ack-loss-logical-0001','ack-loss-frame-0003',
+      ),
+    });
+    assert.equal(reconciled.httpStatus,200);
+    assert.equal(reconciled.data.decision?.status,'duplicate');
+    assert.equal(reconciled.data.decision?.authorizesToolExecution,false);
+    assert.equal(x.used(),1);
+  }finally{await x.close()}
 });
