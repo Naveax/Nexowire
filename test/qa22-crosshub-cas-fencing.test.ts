@@ -68,6 +68,9 @@ class Cas {
 }
 class Grants {
   enabled = true;
+  generation = 1;
+  private readonly originalGeneration = new Map<string, number>();
+  rePair() { this.generation++; }
   readonly adapter: TrustedTransferCoreGrants = {
     assertCurrent: async (job) => { this.check(job); },
   };
@@ -77,9 +80,14 @@ class Grants {
         job.sourceDeviceId !== input.sourceDeviceId ||
         job.targetDeviceId !== input.targetDeviceId)
       throw new TransferTrustError('CORE_OWNER_REVOKED', 'Current grant denied.');
+    const old = this.originalGeneration.get(job.id);
+    if (old !== undefined && old !== this.generation)
+      throw new TransferTrustError('CORE_GRANT_EPOCH_STALE', 'Re-pair invalidated this job grant.');
+    if (old === undefined) this.originalGeneration.set(job.id, this.generation);
   }
 }
 type Hooks = {
+  beforeRead?: (device: string, file: string, offset: number) => Promise<void>;
   beforeWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   afterWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
@@ -108,6 +116,7 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
     read: async (device, file, offset, max) => {
       const value = fileContent(device, file);
       if (!value) throw notFound();
+      await hooks.beforeRead?.(device, file, offset);
       const chunk = value.subarray(offset, offset + max);
       return { sourceBytes: value.length, offsetBytes: offset,
         bytesRead: chunk.length, contentBase64: chunk.toString('base64') };
@@ -287,4 +296,161 @@ test('#22 two Hub concurrent start/publication => one destination, one winner', 
     assert.deepEqual(fx.target, bytes);
     assert.equal(fx.writes.filter(x => x.id === first.id).length, 3);
     assert.equal(fx.writes.filter(x => x.id === second.id).length, 3);
+  }));
+
+/**
+ * Follow-up #22 acceptance: synthetic external CAS, TEMP-only journal and
+ * mock Native provider are NON-AUTHORITATIVE; no signed Agent evidence.
+ * Explicit Promise gates eliminate timing-based ordering or 120ms sleeps.
+ */
+test('#22 next: published once while second Hub source chunk waits then CORE revoked', async () =>
+  temp(async root => {
+    const reading = gate(), releaseRead = gate();
+    let hold = true;
+    const fx = mock('normal', { beforeRead: async (device, _file, offset) => {
+      if (hold && device === input.sourceDeviceId && offset === 0) {
+        reading.open();
+        await releaseRead.promise;
+      }
+    } });
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const parked = await hubB.start(input);
+    try {
+      await expectGate(reading.promise, 'Hub B parked in source read');
+      hold = false;
+      const winner = await hubA.start(input);
+      await hubA.waitForIdle(winner.id);
+      assert.equal((await stored(root, winner.id)).state, 'COMPLETED');
+      assert.equal(fx.publications, 1);
+      fx.grants.enabled = false;
+      releaseRead.open();
+      await hubB.waitForIdle(parked.id);
+      const denied = await stored(root, parked.id);
+      assert.equal(denied.state, 'MUTATION_UNKNOWN');
+      assert.equal(denied.errorCode, 'CORE_OWNER_REVOKED');
+      assert.equal(denied.bytesConfirmed, 0);
+      assert.equal(fx.writes.filter(w => w.id === parked.id).length, 0);
+      assert.equal(fx.publications, 1);
+      assert.deepEqual(fx.target, bytes);
+      await assert.rejects(hubB.status(parked.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+    } finally {
+      releaseRead.open();
+      await hubB.waitForIdle(parked.id);
+    }
+  }));
+
+test('#22 next: two publishers race; one commits, CORE revoke denies other Native publish', async () =>
+  temp(async root => {
+    const twoAtPublish = gate();
+    const held = new Map<string, ReturnType<typeof gate>>();
+    const fx = mock('normal', { beforePublish: async job => {
+      const admission = gate();
+      held.set(job.id, admission);
+      if (held.size === 2) twoAtPublish.open();
+      await admission.promise;
+    } });
+    const a = fx.hub(root), b = fx.hub(root);
+    const [first, second] = await Promise.all([a.start(input), b.start(input)]);
+    try {
+      await expectGate(twoAtPublish.promise, 'both Native publishers');
+      assert.equal(held.size, 2);
+      held.get(first.id)!.open();
+      await a.waitForIdle(first.id);
+      assert.equal((await stored(root, first.id)).state, 'COMPLETED');
+      assert.equal(fx.publications, 1);
+      fx.grants.enabled = false;
+      held.get(second.id)!.open();
+      await b.waitForIdle(second.id);
+      const loser = await stored(root, second.id);
+      assert.equal(loser.state, 'MUTATION_UNKNOWN');
+      assert.equal(loser.bytesConfirmed, bytes.length);
+      // The outer worker retains the more specific trusted CORE revoke provenance.
+      assert.equal(loser.errorCode, 'CORE_OWNER_REVOKED');
+      assert.equal(fx.publications, 1);
+      assert.deepEqual(fx.target, bytes);
+      assert.equal(fx.writes.filter(w => w.id === first.id).length, 3);
+      assert.equal(fx.writes.filter(w => w.id === second.id).length, 3);
+    } finally {
+      for (const entry of held.values()) entry.open();
+      await Promise.all([a.waitForIdle(first.id), b.waitForIdle(second.id)]);
+    }
+  }));
+
+test('#22 next: restored old journal and CORE re-pair cannot revive in-flight Native epoch lease', async () =>
+  temp(async root => {
+    const entered = gate(), dispatch = gate();
+    const fx = mock('normal', { beforeWrite: async (_job, env) => {
+      if (env.offset === 0) { entered.open(); await dispatch.promise; }
+    } });
+    const hubA = fx.hub(root), first = await hubA.start(input);
+    const filename = path.join(root, first.id + '.json');
+    try {
+      await expectGate(entered.promise, 'old Hub Native write held');
+      const snapshot = await fs.readFile(filename, 'utf8');
+      const previous = JSON.parse(snapshot) as TransferJob;
+      assert.equal(previous.pending?.offset, 0);
+      const greater = await fx.cas.authority.acquire(previous, 'resume');
+      assert.ok(greater.epoch > previous.fencing!.epoch);
+      fx.grants.rePair();
+      // Local-only restore; independent emulator epoch + grant generation
+      // must NOT roll back together with this synthetic TEMP journal.
+      await fs.writeFile(filename, snapshot);
+      dispatch.open();
+      await hubA.waitForIdle(first.id);
+      const stale = await stored(root, first.id);
+      assert.equal(stale.state, 'MUTATION_UNKNOWN');
+      assert.equal(stale.bytesConfirmed, 0);
+      assert.equal(fx.writes.filter(w => w.id === first.id).length, 0);
+      assert.equal(fx.publications, 0);
+      const hubB = fx.hub(root);
+      await assert.rejects(hubB.status(first.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_GRANT_EPOCH_STALE');
+      await assert.rejects(hubB.cancel(first.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_GRANT_EPOCH_STALE');
+      await assert.rejects(hubB.start({ ...input, resumeTransferId: first.id }),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_GRANT_EPOCH_STALE');
+      const fresh = await hubB.start(input);
+      await hubB.waitForIdle(fresh.id);
+      assert.equal((await stored(root, fresh.id)).state, 'COMPLETED');
+      assert.equal(fx.writes.filter(w => w.id === first.id).length, 0);
+      assert.equal(fx.writes.filter(w => w.id === fresh.id).length, 3);
+      assert.equal(fx.publications, 1);
+      assert.deepEqual(fx.target, bytes);
+    } finally {
+      dispatch.open();
+      await hubA.waitForIdle(first.id);
+    }
+  }));
+
+test('#22 next: dispatched lost ACK and local rollback after re-pair do not replay old lease', async () =>
+  temp(async root => {
+    const fx = mock('lost-ack'), oldHub = fx.hub(root);
+    const old = await oldHub.start(input);
+    await oldHub.waitForIdle(old.id);
+    const filename = path.join(root, old.id + '.json');
+    const snapshot = await fs.readFile(filename, 'utf8');
+    const previous = JSON.parse(snapshot) as TransferJob;
+    assert.equal(previous.state, 'MUTATION_UNKNOWN');
+    assert.equal(previous.pending?.offset, 0);
+    assert.equal(fx.writes.filter(w => w.id === old.id).length, 1);
+    const next = await fx.cas.authority.acquire(previous, 'resume');
+    assert.ok(next.epoch > previous.fencing!.epoch);
+    fx.grants.rePair();
+    await fs.writeFile(filename, snapshot);
+    const otherHub = fx.hub(root);
+    await assert.rejects(otherHub.start({ ...input, resumeTransferId: old.id }),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_GRANT_EPOCH_STALE');
+    assert.equal(fx.writes.filter(w => w.id === old.id).length, 1);
+    assert.equal(fx.publications, 0);
+    const replacement = await otherHub.start(input);
+    await otherHub.waitForIdle(replacement.id);
+    assert.equal((await stored(root, replacement.id)).state, 'COMPLETED');
+    assert.equal(fx.writes.filter(w => w.id === old.id).length, 1);
+    assert.equal(fx.writes.filter(w => w.id === replacement.id).length, 3);
+    assert.equal(fx.publications, 1);
+    assert.deepEqual(fx.target, bytes);
   }));
