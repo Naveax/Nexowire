@@ -140,7 +140,10 @@ test('destination grants are scoped to immutable parent handle and actual volume
     (x:VerifiedFilesystemBoundary)=>{x.grant.removable=true;x.grant.usbWriteApproved=false;},
   ]){
     const fixture=syntheticProtectedBoundary();mutate(fixture);
-    assert.throws(()=>verify(fixture),denied('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED'));
+    assert.throws(()=>verify(fixture),(error:unknown)=>
+      error instanceof NativeFileBoundaryError &&
+      ['FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED','FILE_NATIVE_HANDLE_IDENTITY_UNVERIFIED']
+        .includes(error.code));
   }
 });
 

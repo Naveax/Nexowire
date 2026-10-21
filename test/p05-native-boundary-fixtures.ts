@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type {NativeEffectiveAcl} from '../src/agent/windows-native-relative-access.js';
 import {
   PINNED_FILE_PROTECTED_COMPONENTS,
   type NativeFileId,
@@ -27,6 +28,14 @@ export function syntheticNativeHandle(
     observedAfter:{...id},noFollowVerified:true,
   };
 }
+export function syntheticEffectiveAcl(fileId:string):NativeEffectiveAcl {
+  return {provider:'native-verified',observedFileId:fileId,
+    ownerSid:'S-1-5-18',daclProtected:true,
+    ancestorsVerified:true,descendantsVerified:true,
+    aces:[{sid:'S-1-5-18',type:'allow',accessMask:0x001f01ff,inheritOnly:false},
+      {sid:'S-1-5-11',type:'allow',accessMask:0x00000001,inheritOnly:false}],
+  };
+}
 export function syntheticProtectedBoundary():VerifiedFilesystemBoundary{
   const protectedComponents = Object.fromEntries(
     (['parent','updater','module'] as ProtectedRole[]).map(role=>[
@@ -38,6 +47,7 @@ export function syntheticProtectedBoundary():VerifiedFilesystemBoundary{
         ancestorChainChecked:true,descendantsChecked:true,
         provider:'native-verified',
         pinnedPublisherAndDigest:true,
+        effectiveAcl:syntheticEffectiveAcl('protected-'+role),
       },
     ]),
   ) as VerifiedFilesystemBoundary['protectedComponents'];
@@ -48,6 +58,11 @@ export function syntheticProtectedBoundary():VerifiedFilesystemBoundary{
     sourceDaclProtected:true,
     sourceUntrustedWriteOrDeleteOrOwnerRights:false,
     sourcePublisherAndDigestVerified:true,
+    sourceEffectiveAcl:syntheticEffectiveAcl('source-id'),
+    destinationRelativeChain:{
+      grantRoot:syntheticNativeHandle(path.win32.dirname(DEST),'dest-parent-id'),
+      steps:[],destinationLeaf:path.win32.basename(DEST),
+    },
     destinationParent:syntheticNativeHandle(path.win32.dirname(DEST),'dest-parent-id'),
     protectedComponents,
     grant:{
