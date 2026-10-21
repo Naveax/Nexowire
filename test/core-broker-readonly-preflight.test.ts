@@ -20,7 +20,8 @@ const ownerId = "owner-synthetic";
 const deviceId = "device-synthetic";
 const headSha = "a".repeat(64);
 const expectations = {
-  ownerId, deviceId, minimumGrantEpoch: 43, observedNow: new Date(now),
+  ownerId, deviceId, minimumGrantEpoch: 43,
+  pinnedPublisherThumbprint: "b".repeat(40), observedNow: new Date(now),
 };
 function probe<T>(value: T, observedAt = now): ProbeEnvelope<T> {
   return { state: "reported", observedAt, value };
@@ -29,6 +30,7 @@ function validSource(): BrokerReadonlyProvider {
   return {
     readRunningImage: async () => probe<RunningBrokerImage>({
       pid: 1600, running: true, authenticodeValid: true, publisherPinned: true,
+    publisherThumbprint: "b".repeat(40),
       imageBoundToRunningPid: true, imageSha256: headSha, version: "1.0.5",
     }),
     readWindowsToken: async () => probe<BrokerTokenEvidence>({
@@ -37,6 +39,8 @@ function validSource(): BrokerReadonlyProvider {
     readParentImports: async () => probe<ParentImportEvidence>({
       parentChainProtected: true, importTreeProtected: true,
       noUntrustedWrite: true, boundToRunningImage: true,
+      updaterPathProtected: true, updaterImportsProtected: true,
+      updaterNoUntrustedWrite: true, updaterBoundToRunningImage: true,
     }),
     readOwnerCoreGrant: async () => probe<OwnerCoreGrantEvidence>({
       ownerId, deviceId, epoch: 43, active: true,
@@ -90,6 +94,7 @@ test("forged token with High claim but incorrect PID must fail independent bindi
 test("unsigned or unpinned running Broker image does not count as valid Authenticode", async () => {
   const p = replace("readRunningImage", async () => probe<RunningBrokerImage>({
     pid: 1600, running: true, authenticodeValid: false, publisherPinned: false,
+    publisherThumbprint: "b".repeat(40),
     imageBoundToRunningPid: true, imageSha256: headSha, version: "1.0.5",
   }));
   const r = await inspectCoreBrokerPreflight(p, expectations);
@@ -99,6 +104,7 @@ test("unsigned or unpinned running Broker image does not count as valid Authenti
 test("missing running-image hash or unbound image denies trust", async () => {
   const p = replace("readRunningImage", async () => probe<RunningBrokerImage>({
     pid: 1600, running: true, authenticodeValid: true, publisherPinned: true,
+    publisherThumbprint: "b".repeat(40),
     imageBoundToRunningPid: false, imageSha256: "not-hash", version: "1.0.5",
   }));
   codeReport((await inspectCoreBrokerPreflight(p, expectations)).items,
@@ -108,6 +114,8 @@ test("protected parent but writable import tree is blocked", async () => {
   const p = replace("readParentImports", async () => probe<ParentImportEvidence>({
     parentChainProtected: true, importTreeProtected: false,
     noUntrustedWrite: false, boundToRunningImage: true,
+    updaterPathProtected: true, updaterImportsProtected: true,
+    updaterNoUntrustedWrite: true, updaterBoundToRunningImage: true,
   }));
   const r = await inspectCoreBrokerPreflight(p, expectations);
   codeReport(r.items, "parentImports", "PARENT_OR_IMPORT_UNTRUSTED");
