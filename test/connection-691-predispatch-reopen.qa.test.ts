@@ -59,6 +59,9 @@ const inspect = (
   worker: f.worker, checkpoint: f.checkpoint, route: f.route,
   authorize: async () => true,
   workerLease: { check: async () => true },
+  ownerAdmission: {ownerEpoch:71,grantGeneration:9,
+    deviceEpoch:randomUUID(),sessionEpoch:randomUUID(),privilege:'CORE'},
+  ownerEpochWitness:{assertFresh:async c=>/^[0-9a-f]{64}$/.test(c.challengeNonce)},
   sessionWitness: { currentEpoch: async () => 5 },
   stageReadback: {
     inspect: async (w, p) => ({

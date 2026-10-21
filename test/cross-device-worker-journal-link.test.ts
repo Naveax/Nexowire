@@ -65,6 +65,9 @@ const check = (
 )=> inspectOneCallWorkerConnectionJournal({
   worker,checkpoint,route:route(),authorize:authorized,
   workerLease:lease,sessionWitness:{currentEpoch:async r=>r.epoch},
+  ownerAdmission:{ownerEpoch:71,grantGeneration:9,
+    deviceEpoch:randomUUID(),sessionEpoch:randomUUID(),privilege:'CORE'},
+  ownerEpochWitness:{assertFresh:async p=>/^[0-9a-f]{64}$/.test(p.challengeNonce)},
   stageReadback:rightReadback,...override,
 });
 
