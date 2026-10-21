@@ -366,7 +366,8 @@ test('#22 next: two publishers race; one commits, CORE revoke denies other Nativ
       const loser = await stored(root, second.id);
       assert.equal(loser.state, 'MUTATION_UNKNOWN');
       assert.equal(loser.bytesConfirmed, bytes.length);
-      assert.equal(loser.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+      // The outer worker retains the more specific trusted CORE revoke provenance.
+      assert.equal(loser.errorCode, 'CORE_OWNER_REVOKED');
       assert.equal(fx.publications, 1);
       assert.deepEqual(fx.target, bytes);
       assert.equal(fx.writes.filter(w => w.id === first.id).length, 3);
