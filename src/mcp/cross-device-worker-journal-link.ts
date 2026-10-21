@@ -33,6 +33,9 @@ export interface FencedWorkerJournalSnapshot {
     offset: number;
     length: number;
     sha256: string;
+    /** #691: false is durably reserved but not yet dispatched. Missing on
+     * legacy journals means dispatch status is UNKNOWN, not false. */
+    dispatched?: boolean;
   };
 }
 
@@ -68,6 +71,7 @@ export type WorkerReconciliationDecision =
   | 'epoch_stale'
   | 'cancel_pending'
   | 'mutation_unknown'
+  | 'reservation_unresolved'
   | 'readback_verified_not_committed'
   | 'prefix_consistent'
   | 'unverified_completion';
@@ -149,7 +153,9 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
   }
   if (!input.authorize || !input.workerLease || !input.sessionWitness || !worker.fencing ||
       !Number.isSafeInteger(worker.fencing.epoch) ||
-      worker.fencing.epoch < 1 || worker.fencing.token.length < 32) {
+      worker.fencing.epoch < 1 ||
+      typeof worker.fencing.token !== 'string' ||
+      worker.fencing.token.length < 32 || worker.fencing.token.length > 256) {
     return denied('authority_blocked', offset, id);
   }
   let current = false, leased = false;
@@ -179,6 +185,8 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
         pending.offset !== offset ||
         pending.offset + pending.length > worker.bytesTotal ||
         !sha.test(pending.sha256) ||
+        (worker.pending.dispatched !== undefined &&
+         typeof worker.pending.dispatched !== 'boolean') ||
         !Number.isSafeInteger(worker.pending.epoch) ||
         !worker.fencing || worker.pending.epoch !== worker.fencing.epoch) {
       return denied('journal_mismatch', offset, id);
@@ -186,6 +194,13 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
     if (worker.state === 'CANCELLED' || worker.state === 'CANCEL_REQUESTED' ||
         checkpoint.status === 'cancelled' || checkpoint.status === 'cancel_pending') {
       return denied('cancel_pending', offset, id);
+    }
+    // A #691 pending reservation with dispatched=false is not a receipt.
+    // Never promote a matching stale stage from a previous incarnation to
+    // evidence that this newly reserved mutation executed. A legacy record
+    // with no flag is POSSIBLY dispatched and retains UNKNOWN semantics.
+    if (worker.pending.dispatched === false) {
+      return denied('reservation_unresolved', offset, id);
     }
     if (!input.stageReadback) return denied('mutation_unknown', offset, id);
     let observation: Awaited<ReturnType<TrustedStageReadback['inspect']>>;
