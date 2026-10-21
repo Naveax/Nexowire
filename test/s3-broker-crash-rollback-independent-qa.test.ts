@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHash, generateKeyPairSync, sign} from 'node:crypto';
+import {createHash, generateKeyPairSync, sign, type KeyObject} from 'node:crypto';
 import path from 'node:path';
 import {
   assessS3CrashRecovery, CRASH_PHASES,
@@ -38,7 +38,7 @@ const ownerFields=['schemaVersion','role','ownerAccountId','deviceId','ownerEpoc
   'dpapiBlobSha256','taskName','approvedAtUnix'];
 const commandFields=['schemaVersion','ownerAccountId','deviceId','ownerEpoch',
   'requestId','capability','inputSha256','sequence'];
-function detached(record:object,fields:readonly string[],key:ReturnType<typeof generateKeyPairSync>['privateKey']):string{
+function detached(record:object,fields:readonly string[],key:KeyObject):string{
   const data=record as Record<string,unknown>;
   const canonical=JSON.stringify(Object.fromEntries(fields.map(k=>[k,data[k]])));
   return sign(null,Buffer.from(canonical),key).toString('base64');
@@ -119,7 +119,18 @@ const recoveryPins:S3RecoveryPins={
   minimumIndependentSequence:20,
 };
 function recovery(phase:S3CrashRecord['phase'],sequence=20):S3CrashRecord{
-  return {schemaVersion:1,phase,sequence,...recoveryPins};
+  return {
+    schemaVersion:1,phase,sequence,
+    transactionId:recoveryPins.transactionId,
+    ownerAccountId:recoveryPins.ownerAccountId,
+    deviceId:recoveryPins.deviceId,
+    oldAgentVersion:recoveryPins.oldAgentVersion,
+    targetAgentVersion:recoveryPins.targetAgentVersion,
+    hubVersion:recoveryPins.hubVersion,
+    oldArtifactSha256:recoveryPins.oldArtifactSha256,
+    targetArtifactSha256:recoveryPins.targetArtifactSha256,
+    installerHelperSha256:recoveryPins.installerHelperSha256,
+  };
 }
 function bootstrapFixture():CoreBootstrapEvidence{
   const root='C:\\ProtectedFixture\\Nexowire';
