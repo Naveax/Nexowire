@@ -31,9 +31,9 @@ const X:Exit = Object.freeze({
  stdoutComplete:true,stderrComplete:true,exitCode:0,exitedAt:2000,
 });
 type Readback = Readonly<{kind:'independent_readback';requestId:string;ownerId:string;
- deviceId:string;sessionId:string;ownerEpoch:number;coreEpoch:number;targetId:string;
- targetGeneration:number;launchNonce:string;observedDigest:string;observedAt:number;
- observer:string}>;
+ deviceId:string;sessionId:string;ownerEpoch:number;coreEpoch:number;intentDigest:string;targetId:string;
+ targetGeneration:number;pid:number;startFiletime:string;launchNonce:string;
+ observedDigest:string;observedAt:number;observer:string}>;
 type SignedReadback = Readonly<{report:Readback;signature:string}>;
 class IndependentFixtureObserver {
  readonly #private:KeyObject;readonly publicKey:KeyObject;
@@ -41,8 +41,9 @@ class IndependentFixtureObserver {
  measure(b:Binding,x:Exit,observedDigest:string,observedAt=x.exitedAt+10):SignedReadback{
   const report:Readback={
    kind:'independent_readback',requestId:b.requestId,ownerId:b.ownerId,deviceId:b.deviceId,
-   sessionId:b.sessionId,ownerEpoch:b.ownerEpoch,coreEpoch:b.coreEpoch,targetId:b.targetId,
-   targetGeneration:b.targetGeneration,launchNonce:x.launchNonce,observedDigest,observedAt,
+   sessionId:b.sessionId,ownerEpoch:b.ownerEpoch,coreEpoch:b.coreEpoch,intentDigest:b.intentDigest,
+   targetId:b.targetId,targetGeneration:b.targetGeneration,pid:x.pid,
+   startFiletime:x.startFiletime,launchNonce:x.launchNonce,observedDigest,observedAt,
    observer:'separate-fixture-observer',
   };
   return {report,signature:signature(this.#private,report)};
@@ -70,8 +71,9 @@ function classify(b:Binding,x:Exit|undefined,s:SignedReadback|undefined,key:KeyO
  if(!w||!authentic(key,w,s.signature)||w.kind!=='independent_readback'||
   w.observer!=='separate-fixture-observer'||w.requestId!==b.requestId||
   w.ownerId!==b.ownerId||w.deviceId!==b.deviceId||w.sessionId!==b.sessionId||
-  w.ownerEpoch!==b.ownerEpoch||w.coreEpoch!==b.coreEpoch||w.targetId!==b.targetId||
-  w.targetGeneration!==b.targetGeneration||w.launchNonce!==x.launchNonce||
+  w.ownerEpoch!==b.ownerEpoch||w.coreEpoch!==b.coreEpoch||w.intentDigest!==b.intentDigest||
+  w.targetId!==b.targetId||w.targetGeneration!==b.targetGeneration||
+  w.pid!==x.pid||w.startFiletime!==x.startFiletime||w.launchNonce!==x.launchNonce||
   !Number.isSafeInteger(w.observedAt)||w.observedAt<=x.exitedAt||
   w.observedAt>x.exitedAt+2000||!validHash(w.observedDigest))return 'unknown';
  return x.exitCode!==0||w.observedDigest!==b.expectedDigest?'failed':'succeeded';
@@ -219,10 +221,13 @@ test('forged report contents and caller-approved flag cannot counterfeit signatu
 test('wrong target, generation, session, epoch, device or run nonce rejects readback',()=>{
  const o=new OwnerAuthority();o.initialize(B);const w=new IndependentFixtureObserver();
  for(const d of [{targetId:'other'},{targetGeneration:49},{sessionId:'old'},
-  {coreEpoch:6},{ownerEpoch:10},{requestId:'other'},{deviceId:'other'}]){
+  {coreEpoch:6},{ownerEpoch:10},{intentDigest:hash('other-intent')},
+  {requestId:'other'},{deviceId:'other'}]){
   assert.equal(classify(B,X,w.measure({...B,...d},X,B.expectedDigest),w.publicKey,o),'unknown');
  }
  assert.equal(classify(B,X,w.measure(B,{...X,launchNonce:'old-process'},B.expectedDigest),w.publicKey,o),'unknown');
+ assert.equal(classify(B,X,w.measure(B,{...X,pid:502},B.expectedDigest),w.publicKey,o),'unknown');
+ assert.equal(classify(B,X,w.measure(B,{...X,startFiletime:'old-filetime'},B.expectedDigest),w.publicKey,o),'unknown');
 });
 test('readback before process exit or excessively stale fails closed',()=>{
  const o=new OwnerAuthority();o.initialize(B);const w=new IndependentFixtureObserver();
