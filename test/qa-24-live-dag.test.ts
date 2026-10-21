@@ -38,6 +38,14 @@ test('QA24 stale 38->50 pattern: any newly opened PR blocks old snapshot',()=>{
   assert.equal(report.gate,'NO_GO');
 });
 
+test('QA24 same-SHA CI lifecycle transition invalidates cached result',()=>{
+  const s=sample();const cached=old();
+  cached.nodes[0]!.ci!.status='in_progress';
+  cached.nodes[0]!.ci!.conclusion=null;
+  assert.ok(codes(s,cached).includes('CI_STATE_CHANGED'));
+  assert.ok(codes(s,cached).includes('STALE_SNAPSHOT'));
+});
+
 test('QA24 false green from old SHA cannot pass a new SHA',()=>{
   const s=sample();s.nodes[0]!.head_sha=E;
   assert.ok(codes(s).includes('HEAD_MOVED'));
