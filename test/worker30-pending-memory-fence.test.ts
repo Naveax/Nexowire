@@ -103,7 +103,7 @@ function dbFixture(){
 }
 function begin(owner:Tenant,id:string){
   return {ownerId:owner,deviceId:'device-'+owner,projectId:'project-worker30',
-    sessionId:'session-'+id,rootInvocationId:'root-'+id,sizeBytes:CHUNK*2,
+    sessionId:'session-'+id,rootInvocationId:'root30-'+id,sizeBytes:CHUNK*2,
     sourceSha256:SHA,physicalFreeBytes:8*1024**3,now:NOW};
 }
 function stage(owner:Tenant,id:string,requestId:string){
