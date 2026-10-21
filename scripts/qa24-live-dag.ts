@@ -85,7 +85,7 @@ export function auditLiveSnapshot(prior:OldSnapshot|LiveSnapshot,live:LiveSnapsh
         add('CI_EVIDENCE_CHANGED',[n.pr],'Workflow run changed: old result is not reusable');
       const oldCi=previous.ci;
       if(oldCi&&('status' in oldCi)&&
-        (oldCi.status!==(n.ci.workflow_status??'')||oldCi.conclusion!==n.ci.conclusion))
+        (![n.ci.status,n.ci.workflow_status].includes(oldCi.status)||oldCi.conclusion!==n.ci.conclusion))
         add('CI_STATE_CHANGED',[n.pr],'CI state changed since the previous snapshot');
     }
     if(!sha40.test(n.head_sha)||!sha40.test(n.base_sha))
