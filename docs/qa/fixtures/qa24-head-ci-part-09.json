@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 9,
+  "ids": [
+    664,
+    665,
+    666,
+    667,
+    668,
+    669,
+    670,
+    671
+  ],
+  "nodes": [
+    {
+      "pr": 664,
+      "head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+      "head_ref": "test/24-live-dag-drift-gates-20261021",
+      "base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "base_ref": "test/24-integration-dag-provenance-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39632679723,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f"
+      }
+    },
+    {
+      "pr": 665,
+      "head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+      "head_ref": "feat/parallel-10-broker-preflight-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39644548125,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138"
+      }
+    },
+    {
+      "pr": 666,
+      "head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "head_ref": "test/06-journal-634-failclosed-20261021",
+      "base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "base_ref": "fix/06-transfer-grant-epoch-followup-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631675531,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9"
+      }
+    },
+    {
+      "pr": 667,
+      "head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "head_ref": "fix/08-cancel-native-dispatch-race-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631999739,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458"
+      }
+    },
+    {
+      "pr": 668,
+      "head_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "head_ref": "feat/parallel-14-trusted-cleanup-admission-20261021",
+      "base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "base_ref": "test/parallel-14-core-quota-fencing-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39632010226,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "72a4f923d92c1830afa8947852d1557194540b5a"
+      }
+    },
+    {
+      "pr": 669,
+      "head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "head_ref": "feat/04-core-effective-authority-20261021",
+      "base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "base_ref": "feat/04-core-delegation-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39632774193,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8"
+      }
+    },
+    {
+      "pr": 670,
+      "head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "head_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39633083937,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d"
+      }
+    },
+    {
+      "pr": 671,
+      "head_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "head_ref": "fix/13-owner-wss-receipt-replay-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39632434610,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "1e9425c970219834d6488add77d53c1cdade750d"
+      }
+    }
+  ]
+}
