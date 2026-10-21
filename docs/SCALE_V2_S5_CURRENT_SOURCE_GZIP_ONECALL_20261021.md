@@ -2,6 +2,12 @@
 
 **Release decision: PRODUCTION NO-GO.** This is a **bounded Work PC SOURCE/localhost-only** review and execution record, not staging acceptance or live-cloud pricing evidence. Tracking #487 / #482, DRAFT S5 PR #606, DRAFT parser #598, DRAFT artifact one-call #596 and merged QA #597 (#588).
 
+## Post-merge branch isolation update
+
+While this source-only review was in progress, **#606 was merged** at `d21b01ab653e1d5e7fc4f6fcb89d02c75785c1cc`. Then the default `main` advanced through #605 to **`4c5c810134c020cd04a5ef2be5c1138ea1954ad0`**. The 21 October gzip/503 changes and recorded JSON were therefore cherry-picked *alone* onto a new isolated S5 branch based on this newer main; the merged #606 commits were not proposed twice. The measured JSON still accurately identifies the historical measurement-source commit `e71b89dfebdc7362d270534c976307b9d4a47342`, rather than claiming its timing was measured after the cherry-pick.
+
+The new pull request must use the independent rebased HEAD's own CI; the original #606 run 7/7 is valid **only** for its original SHA. No production deployment, cloud account access or physical native file operation was added.
+
 ## Git and CI provenance
 
 - Reviewed remote `main` SHA: `37d68d938b9c94b8647b92fb592a2b30c075427c`. This S5-only branch was rebased onto that exact commit. Main also includes #601's cancellation byte-budget fencing and #603's noncanonical signature rejection; no code in their ownership areas was changed.

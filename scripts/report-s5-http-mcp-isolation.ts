@@ -11,10 +11,11 @@ import {runS5LocalHttpIsolation,S5_HTTP_MAX_BYTES} from './bench-s5-http-mcp-iso
 async function main(){
   const mode=process.argv[2];
   if(process.argv.length!==3||
-     (mode!=='--ack-4mib-loopback'&&mode!=='--ack-38mib-loopback')){
+     (mode!=='--ack-4mib-loopback'&&mode!=='--ack-38mib-loopback'&&mode!=='--ack-4mib-main-review')){
     throw new Error('Explicit --ack-4mib-loopback or --ack-38mib-loopback required; no automatic HTTP workload');
   }
   const fullBoundary=mode==='--ack-38mib-loopback';
+  const mainReview=mode==='--ack-4mib-main-review';
   if(freemem()<3*1024*1024*1024)throw new Error('Preflight BLOCKED: low free memory');
   const head=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
   if(!/^[a-f0-9]{40}$/.test(head))throw new Error('Cannot pin source commit');
@@ -41,7 +42,8 @@ async function main(){
   };
   const f=path.resolve(fullBoundary?
     'docs/reports/s5-http-9-5mib-loopback-20261021.json':
-    'docs/reports/s5-http-4mib-loopback-20261021.json');
+    (mainReview?'docs/reports/s5-http-4mib-main4c-20261021.json':
+      'docs/reports/s5-http-4mib-loopback-20261021.json'));
   if(existsSync(f))throw new Error('Evidence file already exists, do not overwrite');
   mkdirSync(path.dirname(f),{recursive:true});
   writeFileSync(f,JSON.stringify(evidence,null,2)+'\n',{flag:'wx'});
