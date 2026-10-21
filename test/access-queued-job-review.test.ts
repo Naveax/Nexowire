@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
+import {installedBrokerSigningBytes,type InstalledBrokerNonceRecord}
+  from '../src/product/access-native-broker-proof.js';
 import {
   casReadbackSigningBytes,reviewQueuedAccess,
   type CasReadbackRecord,type QueuedAccessRequest,
@@ -12,6 +14,12 @@ import type {ProductDeviceRecord} from '../src/product/control-plane-store.js';
 
 const keys=generateKeyPairSync('ed25519');
 const forgedKeys=generateKeyPairSync('ed25519');
+const brokerKeys=generateKeyPairSync('ed25519');
+const brokerIdentity={
+  pid:8123,creationFiletime:'134092000001239777',
+  volumeSerialHex:'a0b1c2d3',imageFileIdHex:'ab'.repeat(16),
+  imageSha256:'c'.repeat(64),brokerVersion:'1.0.5',
+};
 const t0=Date.parse('2026-10-21T19:00:00.000Z');
 const ids={
   authority:randomUUID(),request:randomUUID(),owner:randomUUID(),
@@ -37,15 +45,36 @@ function queued(patch:Partial<QueuedAccessRequest>={}):QueuedAccessRequest{
     cachedUiEffective:true,...patch,
   };
 }
-function record(job:QueuedAccessRequest):CasReadbackRecord{
+function record(job:QueuedAccessRequest,nonce:string):CasReadbackRecord{
   return {
     kind:'nexowire.access.cas-readback.v1',
     authorityId:ids.authority,
-    requestId:job.requestId,
+    requestId:job.requestId,challengeNonce:nonce,
     deviceId:job.deviceId,ownerId:job.ownerId,
     deviceEpoch:job.deviceEpoch,sessionEpoch:job.sessionEpoch,
     ownerEpoch:job.ownerEpoch,grantGeneration:job.grantGeneration,
     privilege:job.mode,revoked:false,
+    observedAtMs:t0,expiresAtMs:t0+4000,
+  };
+}
+function nativeRecord(job:QueuedAccessRequest,nonce:string):InstalledBrokerNonceRecord{
+  return {
+    kind:'nexowire.access.installed-broker-nonce.v1',
+    source:'protected-installed-broker-process',
+    requestId:job.requestId,challengeNonce:nonce,
+    deviceId:job.deviceId,ownerId:job.ownerId,
+    deviceEpoch:job.deviceEpoch,sessionEpoch:job.sessionEpoch,
+    ownerEpoch:job.ownerEpoch,grantGeneration:job.grantGeneration,
+    privilege:job.mode,brokerPid:brokerIdentity.pid,
+    creationFiletime:brokerIdentity.creationFiletime,
+    volumeSerialHex:brokerIdentity.volumeSerialHex,
+    imageFileIdHex:brokerIdentity.imageFileIdHex,
+    imageSha256:brokerIdentity.imageSha256,
+    brokerVersion:brokerIdentity.brokerVersion,
+    nativeTokenIntegrity:'high',enabledAdministrators:true,
+    publisherAndReleasePinned:true,
+    protectedParentImportUpdaterTree:true,
+    processDupHandleBoundaryVerified:true,
     observedAtMs:t0,expiresAtMs:t0+4000,
   };
 }
@@ -64,26 +93,51 @@ function fixture(options:{
   externalGeneration?:number;
   currentOwnerEpoch?:number;
   currentGeneration?:number;
+  currentOwnerId?:string;
+  currentDeviceEpoch?:string;
+  currentSessionEpoch?:string;
   signingKey?:typeof keys.privateKey;
+  nativeSigningKey?:typeof brokerKeys.privateKey;
+  nativeProofUnavailable?:boolean;
+  nativePinnedProcess?:Partial<typeof brokerIdentity>;
+  nativePinnedKey?:typeof brokerKeys.publicKey;
+  mutateNative?:(record:InstalledBrokerNonceRecord)=>InstalledBrokerNonceRecord;
   mutateReadback?:(record:CasReadbackRecord)=>CasReadbackRecord;
   readThrows?:boolean;
   highWaterThrows?:boolean;
   clock?:number;
+  clockSequence?:number[];
 }={}){
-  let projected=0,read=0,high=0;
+  let projected=0,read=0,high=0,tick=0;
   const dependencies:QueuedAccessDependencies={
     authorityId:ids.authority,
     independentCasPublicKey:keys.publicKey,
+    installedBroker:{
+      publicKey:options.nativePinnedKey??brokerKeys.publicKey,
+      process:{...brokerIdentity,...options.nativePinnedProcess},
+    },
+    readInstalledBroker:async(job,nonce)=>{
+      if(options.nativeProofUnavailable)throw Error('NATIVE_BROKER_UNAVAILABLE');
+      const baseline=nativeRecord(job,nonce);
+      const raw=options.mutateNative?.(baseline)??baseline;
+      // Invalid native token claims are still returned as hostile data;
+      // the fixture must not throw before exercising the Access parser.
+      let bytes:Buffer;
+      try{bytes=installedBrokerSigningBytes(raw)}
+      catch{bytes=installedBrokerSigningBytes(baseline)}
+      return {statement:raw,signature:sign(null,bytes,
+        options.nativeSigningKey??brokerKeys.privateKey).toString('base64url')};
+    },
     effectiveAuthority:{
       project:async()=>{projected++;return options.positiveStatus===false?
         {...positive,effective:false,state:'PAUSED_UNVERIFIED' as const,
           authoritySource:'none' as const,actualElevatedTokenVerified:false}:positive;
       },
     } as unknown as AccessEffectiveAuthority,
-    readCas:async(job)=>{
+    readCas:async(job,nonce)=>{
       read++;
       if(options.readThrows)throw Error('CAS_UNAVAILABLE');
-      const data={...record(job),revoked:options.casRevoked??false,
+      const data={...record(job,nonce),revoked:options.casRevoked??false,
         ownerEpoch:options.externalOwnerEpoch??job.ownerEpoch,
         grantGeneration:options.externalGeneration??job.grantGeneration};
       const output=options.mutateReadback?.(data)??data;
@@ -95,11 +149,14 @@ function fixture(options:{
       high++;
       if(options.highWaterThrows)throw Error('CAS_HIGHWATER_UNAVAILABLE');
       return {
+        ownerId:options.currentOwnerId??ids.owner,
+        deviceEpoch:options.currentDeviceEpoch??ids.deviceEpoch,
+        sessionEpoch:options.currentSessionEpoch??ids.sessionEpoch,
         ownerEpoch:options.currentOwnerEpoch??8,
         grantGeneration:options.currentGeneration??9,
       };
     },
-    now:()=>options.clock??t0,
+    now:()=>options.clockSequence?.[tick++]??options.clock??t0,
   };
   const ctx={device,session,corePreferenceEnabled:true,
     bridgeDesiredMode:'auto' as const};
@@ -234,13 +291,14 @@ test('queued revoke while CAS response pending denies at external high-water rea
  const gate=new Promise<void>(r=>{release=r});
  const f=fixture();
  const original=f.dependencies.readCas;
- f.dependencies.readCas=async job=>{
+ f.dependencies.readCas=async (job,nonce)=>{
    await gate;
-   return original(job);
+   return original(job,nonce);
  };
  let generation=9;
  f.dependencies.readHighWater=async()=>({
-   ownerEpoch:8,grantGeneration:generation,
+   ownerId:ids.owner,deviceEpoch:ids.deviceEpoch,
+   sessionEpoch:ids.sessionEpoch,ownerEpoch:8,grantGeneration:generation,
  });
  const outstanding=reviewQueuedAccess(queued(),f.ctx,f.dependencies);
  generation=10; // External #702 revoke/re-pair fencing advances before readback.
@@ -257,4 +315,101 @@ test('no proof grants a real high Broker token or dispatch, even all synthetic b
  assert.equal(r.elevatedDispatchAllowed,false);
  assert.equal(r.cachedUiTrusted,false);
  assert.equal('brokerInstalled' in r,false);
+});
+
+
+test('old signed #712-style CAS claim and native token proof cannot replay across nonce',async()=>{
+ for(const tamper of [
+   {mutateReadback:(r:CasReadbackRecord)=>({...r,challengeNonce:'f'.repeat(64)})},
+   {mutateNative:(r:InstalledBrokerNonceRecord)=>({...r,challengeNonce:'e'.repeat(64)})},
+ ]){
+   const f=fixture(tamper);
+   const result=await reviewQueuedAccess(queued(),f.ctx,f.dependencies);
+   assert.equal(result.status,'DENIED');
+   assert.equal(result.elevatedDispatchAllowed,false);
+ }
+});
+
+test('installed signed Broker PID creation FILETIME image ID and updater ancestry are mandatory',async()=>{
+ const modified:Array<(r:InstalledBrokerNonceRecord)=>InstalledBrokerNonceRecord>=[
+  r=>({...r,brokerPid:r.brokerPid+1}),
+  r=>({...r,creationFiletime:'134092000001239778'}),
+  r=>({...r,volumeSerialHex:'12345678'}),
+  r=>({...r,imageFileIdHex:'ac'.repeat(16)}),
+  r=>({...r,imageSha256:'d'.repeat(64)}),
+  r=>({...r,brokerVersion:'1.0.4'}),
+  r=>({...r,ownerEpoch:r.ownerEpoch+1}),
+  r=>({...r,deviceEpoch:randomUUID()}),
+  r=>({...r,sessionEpoch:randomUUID()}),
+  r=>({...r,enabledAdministrators:false as true}),
+  r=>({...r,processDupHandleBoundaryVerified:false as true}),
+  r=>({...r,protectedParentImportUpdaterTree:false as true}),
+  r=>({...r,publisherAndReleasePinned:false as true}),
+ ];
+ for(const mutateNative of modified){
+   const f=fixture({mutateNative});
+   const result=await reviewQueuedAccess(queued(),f.ctx,f.dependencies);
+   assert.equal(result.status,'DENIED',String(mutateNative));
+   assert.equal(result.reason,'INSTALLED_BROKER_NONCE_TOKEN_UNVERIFIED');
+ }
+});
+
+test('self-inspecting PowerShell token, forged native signature or missing installed provider are denied',async()=>{
+ const scenarios=[
+   {nativeSigningKey:forgedKeys.privateKey},
+   {nativeProofUnavailable:true},
+   {nativePinnedProcess:{creationFiletime:'134092000001239778'}},
+   {nativePinnedProcess:{imageFileIdHex:'ee'.repeat(16)}},
+   {nativePinnedProcess:{imageSha256:'ff'.repeat(64)}},
+ ];
+ for(const options of scenarios){
+   const f=fixture(options);
+   const result=await reviewQueuedAccess(queued(),f.ctx,f.dependencies);
+   assert.equal(result.status,'DENIED');
+   assert.equal(result.elevatedDispatchAllowed,false);
+ }
+ // #709's test PowerShell token can never sign as the installed Broker.
+ const f=fixture();
+ f.dependencies.readInstalledBroker=async (job,nonce)=>{
+   const valid=nativeRecord(job,nonce);
+   return {statement:{...valid,source:'own-inspecting-powershell-token'},
+     signature:sign(null,installedBrokerSigningBytes(valid),
+       brokerKeys.privateKey).toString('base64url')};
+ };
+ const result=await reviewQueuedAccess(queued(),f.ctx,f.dependencies);
+ assert.equal(result.status,'DENIED');
+ assert.equal(result.reason,'INSTALLED_BROKER_NONCE_TOKEN_UNVERIFIED');
+});
+
+test('native and external CAS authority must have independent pinned signers',async()=>{
+ const f=fixture({nativePinnedKey:keys.publicKey,nativeSigningKey:keys.privateKey});
+ const result=await reviewQueuedAccess(queued(),f.ctx,f.dependencies);
+ assert.equal(result.status,'DENIED');
+ assert.equal(result.reason,'BROKER_CAS_SIGNING_KEYS_NOT_INDEPENDENT');
+});
+
+test('reconnect must have current independently read owner/device/session epoch even if signed old CAS is green',async()=>{
+ for(const patch of [
+  {currentOwnerId:randomUUID()},
+  {currentDeviceEpoch:randomUUID()},
+  {currentSessionEpoch:randomUUID()},
+ ]){
+   const f=fixture(patch);
+   const result=await reviewQueuedAccess(queued(),f.ctx,f.dependencies);
+   assert.equal(result.status,'DENIED');
+   assert.equal(result.reason,'INDEPENDENT_CAS_HIGHWATER_ADVANCED');
+ }
+});
+
+test('ROOT expiry while waiting for fresh nonce-bound witnesses denies after second clock check',async()=>{
+ const f=fixture({clockSequence:[t0-1,t0]});
+ const job=queued({mode:'ROOT',
+   rootIssuedAt:new Date(t0-900_000).toISOString(),
+   rootExpiresAt:new Date(t0).toISOString(),
+ });
+ const result=await reviewQueuedAccess(job,f.ctx,f.dependencies);
+ assert.equal(result.status,'DENIED');
+ assert.equal(result.reason,'ROOT_OR_READBACK_EXPIRED_DURING_REVIEW');
+ assert.equal(result.noAdditionalPerCommandUacAfterBootstrap,true);
+ assert.equal(result.elevatedDispatchAllowed,false);
 });
