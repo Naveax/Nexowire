@@ -255,9 +255,9 @@ test('w20: SYSTEM high integrity and image-handle requirement fail closed on tok
   deniedBootstrap(e=>Object.assign(e.task,mutation),
    /S3_CORE_DELEGATION_EFFECTIVE_TASK_OR_HIGH_TOKEN_INVALID/);
  }
- await deniedInstall(e=>{e.token.adminSidDenyOnly=true},
+ await deniedInstall(e=>{Object.assign(e.token as unknown as Record<string,unknown>,{adminSidDenyOnly:true})},
   /S3_CORE_INSTALL_EFFECTIVE_HIGH_TOKEN_OR_PROCESS_UNVERIFIED/);
- await deniedInstall(e=>{e.token.nativeImageHandleVerified=false},
+ await deniedInstall(e=>{Object.assign(e.token as unknown as Record<string,unknown>,{nativeImageHandleVerified:false})},
   /S3_CORE_INSTALL_EFFECTIVE_HIGH_TOKEN_OR_PROCESS_UNVERIFIED/);
 });
 test('w20: DPAPI key is bound to protected SYSTEM identity and owner/device/epoch',()=>{
