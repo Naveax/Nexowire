@@ -7,14 +7,14 @@ Date: **2026-10-21**, repository `Naveax/Nexowire`. This QA update is **SOURCE-O
 - `main` HEAD at observation: `754cc4364822be5fda528f54042fb22a84f19924`.
 - #630: `merged:true`, closed; not counted among open PRs.
 - Original #646: `65b96fa17b7050685e24dd6a0851da0d80131975`, exact-head CI **failure** on [run 39627296601](https://github.com/Naveax/Nexowire/actions/runs/39627296601). Node22/24, Linux, WSL2, security, hosted Windows `browser-live` all completed successfully; macOS job was **cancelled**, so the aggregate is not PASS. No new run or rerun was requested.
-- 50 open PRs as observed via GitHub; machine-readable [50-PR snapshot](./p0-integration-dag-open50-20261021.json), 26 parent-child edges. Its CI histogram at time of observation was **27 successful, 22 failed, 1 in_progress**. Exact CI run IDs correspond to the queried PR HEAD; no release-readiness or specialized QA workflow is substituted for primary CI.
-- Current parent SHA mismatches: **#609 on #576** and **#622 on #618**. All 12 newly observed PRs #638-#649 were independently compared against the recorded base SHA, and each reported `ahead`; this **does not** waive its CI or inherited parent hazards.
+- Initial 50 open PRs grew to **67 open PRs** during the same review. [Latest frozen 67-PR snapshot](./p0-integration-dag-open67-20261021.json) records **41 parent-child edges**; its sampled primary CI outcomes were **31 successful, 24 failed, 12 queued/in_progress**. The earlier [50-PR snapshot](./p0-integration-dag-open50-20261021.json) is deliberately retained as drift evidence, not current truth. Exact CI run IDs correspond to the queried PR HEAD; no release-readiness or specialized QA workflow is substituted for primary CI.
+- Current parent SHA mismatches: **#609 on #576** and **#622 on #618**. The 29 newly observed PRs #638-#666 were independently compared against recorded base SHA, each reporting `ahead`; this **does not** waive CI, incomplete old-path coverage, or inherited parent hazards. #643 progressed from in_progress to success on the same SHA, which is also a snapshot-drift event.
 - Known independent Windows Job ownership collision: #576, #629, #633 all edit `.github/workflows/ci.yml`, `native/windows-job-owner.c`, `src/agent/process-manager.ts` and `src/agent/windows-job-owner.ts`. A changed-path overlap is a **review blocker**, not a proven Git merge conflict.
 - Separate source QA #638 may pass its own specialized hosted Windows workflow while primary CI fails. A primary CI failure dominates. #643 was still pending during this capture; no approval is inferred.
 
 ## How to get truly fresh current GitHub data
 
-The committed 50-PR JSON is a **dated frozen evidence snapshot**. It is *not* auto-updated by GitHub and can go stale instantly. The independent read-only refresh tool retrieves **all** open PR pages from GitHub REST, each current SHA and parent base, every changed-files page, the HEAD-specific `CI` workflow, and the real exact `compare/{baseSHA}...{headSHA}` merge base. It then re-reads the open PR set and `main` to reject a torn snapshot if branches move while auditing.
+The committed 50-PR and 67-PR JSON files are **dated frozen evidence snapshots**. It is *not* auto-updated by GitHub and can go stale instantly. The independent read-only refresh tool retrieves **all** open PR pages from GitHub REST, each current SHA and parent base, every changed-files page, the HEAD-specific `CI` workflow, and the real exact `compare/{baseSHA}...{headSHA}` merge base. It then re-reads the open PR set and `main` to reject a torn snapshot if branches move while auditing.
 
 ```bash
 # Run only in a checked-out copy of the exact QA branch with Node >=22.
@@ -27,7 +27,7 @@ node --import tsx scripts/qa24-live-dag.ts \
 # A 0 exit is never production authorization: the output's gate remains NO_GO.
 ```
 
-The token is sourced only from `GH_TOKEN` or `GITHUB_TOKEN`, is never included in output or error messages, and must not be committed. **No live refresh was executed from an untrusted/unauthorized runner.** A missing token, unreadable repository, API pagination overflow, HTTP errors, malformed PR/commit metadata, or mid-collection PR movement fails closed; the CLI does not silently reuse a previous green run.
+The token is sourced only from `GH_TOKEN` or `GITHUB_TOKEN`, is never included in output or error messages, and must not be committed. **No unauthenticated live refresh was executed. The GitHub connector was used to independently pin the observed 67-head state; the on-demand full scanner still requires an authorized read-only token.** A missing token, unreadable repository, API pagination overflow, HTTP errors, malformed PR/commit metadata, or mid-collection PR movement fails closed; the CLI does not silently reuse a previous green run.
 
 ### Deterministic tests
 
@@ -52,3 +52,4 @@ The hermetic fixture suite verifies old→new open-set discovery, HEAD rebases, 
 Resolve stale bases #609/#622 and broken parent CI before interpreting child green. #04 owns #574→#621 durable owner/ROOT/CORE grant truth; #01 owns #582→#607→#614→#631 independently deployed CAS and revocation; #12 owns #551→#632 signed installer/rollback/bootstrap; #03 owns #620→#633 elevated Broker contract and #576 Windows Job signed executable reconciliation, with #629/#638 QA reviewed rather than pasted into different owners. Then require separate trusted Windows physical high-token, ACL/AuthentiCode, UAC, owner epoch/revoke/re-pair, durable CORE and 15m ROOT readback. No broad P0 merge until the integrator verifies fresh heads/CI and a conflict-free, exact SHA merge rehearsal.
 
 The Artifact #596→#616→#634 chain, with #640/#641 new independent QA, remains separately **red/blocked** and must not be merged to accelerate CORE. #00 owns release decisions; #24 owns only this evidence-gathering and test code.
+\n**Snapshot self-reference:** #664 appears as a node in the 67-PR file at the SHA observed *before that file was committed*. Writing the evidence necessarily advances #664 HEAD, so that recorded head must immediately be considered stale. This is the intended fail-closed behavior, not a green CI claim.\n
