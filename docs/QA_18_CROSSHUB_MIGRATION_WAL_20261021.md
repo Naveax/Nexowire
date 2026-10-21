@@ -42,6 +42,7 @@ restoring both authority and immutable high-water records together.
 | Two signed but competing re-pair grants for one device/generation | Exactly one valid owner/device/session epoch and cleared CORE/ROOT; historical UUID preserved | SQL transaction simulator |
 | Two Hub objects, 32 historical collisions and 32 fresh duplicates after re-pair | Historical UUID fails globally, fresh ID has exactly one created winner | Synthetic shared witness |
 | Re-pair COMMIT applies but ACK lost | UNKNOWN, no implicit retry; new epoch exists, historical UUID and revoked CORE remain | Fault injection, not real PG |
+| **NEGATIVE: witness itself co-rolled back after revoke + re-pair** | **UNSAFE: revoked CORE resurrects and previously reserved UUID is accepted again** | Deliberate physical release blocker, not safety PASS |
 | SQL simulator unavailable | Fail closed with explicit unavailable errors; no local authorization fallback | Not remote PG outage proof |
 | Disposable Node child exits during real TEMP SQLite WAL writes after dispatch marker | Restart makes \`in_progress\` => UNKNOWN, external synthetic witness returns \`created:false\`; never dispatch again | **Actual local TEMP SQLite WAL**, not live Agent |
 | Corrupt real TEMP SQLite WAL magic after child crash | WAL validator and journal startup reject; external tombstone still denies replay | Actual local TEMP WAL corruption |
