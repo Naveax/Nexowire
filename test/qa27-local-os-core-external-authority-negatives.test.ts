@@ -57,12 +57,13 @@ test('OS-approved once-enrolled Broker, owner absent later: only contract-candid
 });
 test('owner absent during approval cannot substitute Remote Assistance or consent.exe for native OS evidence',async()=>{
   let dispatchCalls=0;
+  const fakeBroker={
+    probe:async()=>({reachable:true,elevated:true,version:'1.0.5'}),
+    execute:async()=>{dispatchCalls++;return null;},
+  };
   const observed=await inspectWindowsUacStatus({
     platform:'win32',accessMode:'full',consentCount:async()=>7,
-    broker:{
-      probe:async()=>({reachable:true,elevated:true,version:'1.0.5'}),
-      execute:async()=>{dispatchCalls++;return null;},
-    },
+    broker:fakeBroker,
   });
   assert.equal(observed.observation,'pending');
   assert.equal(observed.autoClickConsentSupported,false);
