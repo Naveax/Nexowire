@@ -7,6 +7,10 @@
 import {createHash,createPublicKey,verify} from 'node:crypto';
 import path from 'node:path';
 import {evaluateCapturedAclNodes,type CapturedAclNode} from './s3-windows-acl-preflight.js';
+import {assessProtectedCoreInstallerStage,
+  type CoreStageManifest,type CoreStagePins,type CoreStageReadback,
+  type CoreStageSignatureInspector,
+} from './s3-core-broker-install-gate.js';
 
 const H=/^[a-f0-9]{64}$/;
 const ID=/^[A-Za-z0-9_.:@-]{1,128}$/;
@@ -247,4 +251,62 @@ export function assessCoreStopRevokeSource(e:CoreStopRevokeEvidence):{
     }
   }else refuse('UNKNOWN_LIFECYCLE_OPERATION');
   return{status:'source_only_revocation_readback',commandAllowed:false,productionAccepted:false};
+}
+
+
+/**
+ * Cross-links the pinned installer/rollback/import staging graph with the
+ * signed owner enrollment, actual Task Scheduler action and DPAPI owner.
+ * This avoids two individually valid but DIFFERENT security snapshots being
+ * accidentally combined into a purported "installed CORE" approval.
+ */
+export async function assessCoreLinkedStageAndDelegation(
+  bootstrap:CoreBootstrapEvidence,
+  stage:CoreStageManifest,stageSignature:string,
+  stagePins:CoreStagePins,stageReadback:CoreStageReadback,
+  inspect:CoreStageSignatureInspector,
+):Promise<SourceResult>{
+  await assessProtectedCoreInstallerStage(
+    stage,stageSignature,stagePins,stageReadback,inspect);
+  const roles=['installer','broker','helper','updater','rollback'] as const;
+  const byRole=new Map(roles.map(role=>[
+    role,stage.files.find(f=>f.role===role),
+  ] as const));
+  if(roles.some(role=>!byRole.get(role))){
+    refuse('CROSS_STAGE_REQUIRED_ROLE_MISSING');
+  }
+  const broker=byRole.get('broker')!;
+  const installer=byRole.get('installer')!;
+  const updater=byRole.get('updater')!;
+  const rollback=byRole.get('rollback')!;
+  const b=bootstrap;
+  if(!b||!b.task||!b.record||!b.pins||!b.ownerKey||!b.physicalConsent||!b.recovery||
+    stage.ownerAccountId!==b.pins.ownerAccountId||
+    stage.deviceId!==b.pins.deviceId||
+    stage.transactionId!==b.pins.transactionId||
+    stage.targetBrokerVersion!==b.record.brokerVersion||
+    stage.rollbackBrokerVersion!==b.recovery.oldBrokerVersion||
+    stagePins.ownerAccountId!==b.pins.ownerAccountId||
+    stagePins.deviceId!==b.pins.deviceId||
+    stagePins.transactionId!==b.pins.transactionId||
+    stagePins.publisherSubject!==b.pins.trustedPublisherSubject||
+    stagePins.certificateSha256!==b.pins.trustedSignerCertificateSha256||
+    b.task.actionPath.toLowerCase()!==broker.path.toLowerCase()||
+    b.task.actionSha256!==broker.sha256||
+    b.task.runningImageSha256!==broker.sha256||
+    b.record.brokerSha256!==broker.sha256||
+    b.record.updaterSha256!==updater.sha256||
+    b.record.installerSha256!==installer.sha256||
+    b.physicalConsent.approvedInstallerSha256!==installer.sha256||
+    b.recovery.oldBrokerSha256!==rollback.sha256||
+    b.ownerKey.boundBrokerSha256!==broker.sha256){
+    refuse('CROSS_STAGE_TASK_OWNER_DPAPI_BINDING_MISMATCH');
+  }
+  for(const imported of stage.files.filter(f=>
+    f.role==='import-executable'||f.role==='import-resource')){
+    if(!b.protectedImportPaths.some(p=>p.toLowerCase()===imported.path.toLowerCase())){
+      refuse('CROSS_STAGE_IMPORT_GRAPH_NOT_BOUND_TO_TASK');
+    }
+  }
+  return assessCoreInstalledBrokerSource(b);
 }
