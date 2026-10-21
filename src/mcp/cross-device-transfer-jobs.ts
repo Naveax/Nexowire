@@ -269,6 +269,28 @@ export class CrossDeviceTransferJobs {
     }
     return this.public(job);
   }
+  /** A cancellation is side-effect-free only if NO target chunk was ever
+   * confirmed and there is NO potentially dispatched pending Native intent.
+   * This is a durable safety property, not an inference from worker liveness.
+   */
+  private settleCancellation(job: TransferJob): void {
+    if (job.pending || job.bytesConfirmed > 0) {
+      job.state = 'MUTATION_UNKNOWN';
+      job.errorCode = 'TRANSFER_CANCEL_AFTER_MUTATION';
+    } else {
+      job.state = 'CANCELLED';
+      delete job.errorCode;
+    }
+  }
+  private async settleCancelIfRequested(id: string): Promise<boolean> {
+    const current = await this.load(id);
+    if (current.state === 'CANCELLED' || current.state === 'MUTATION_UNKNOWN') return true;
+    if (current.state !== 'CANCEL_REQUESTED') return false;
+    await this.update(id, record => {
+      if (record.state === 'CANCEL_REQUESTED') this.settleCancellation(record);
+    });
+    return true;
+  }
   async cancel(id: string, account: string, source: string, target: string) {
     const original = await this.load(id);
     this.assertOwner(original, account, source, target);
@@ -279,8 +301,14 @@ export class CrossDeviceTransferJobs {
       if (record.state === 'COMPLETED' || record.state === 'PUBLISHING') {
         fail('TRANSFER_FINALIZED', 'Already committed or publishing; cannot cancel.');
       }
-      if (record.state !== 'CANCELLED') {
-        record.state = runningElsewhere ? 'CANCEL_REQUESTED' : 'CANCELLED';
+      // UNKNOWN is an already-persisted potentially real Native side effect.
+      // A later cancellation can never erase its pending request ID or
+      // re-label the operation as side-effect-free CANCELLED.
+      if (record.state === 'MUTATION_UNKNOWN' || record.state === 'CANCELLED') return;
+      if (runningElsewhere) {
+        record.state = 'CANCEL_REQUESTED';
+      } else {
+        this.settleCancellation(record);
       }
     });
     // Leave the owned stage in quarantine. Never delete it while remote
@@ -389,9 +417,16 @@ export class CrossDeviceTransferJobs {
     const running = this.runWithLease(id).catch(async (error: unknown) => {
       if (error instanceof TransferJobError && error.code === 'TRANSFER_WORKER_BUSY') return;
       await this.update(id, job => {
-        if (job.state === 'CANCEL_REQUESTED') job.state = 'CANCELLED';
-        else {
-          job.state = job.state === 'MUTATION_UNKNOWN' ? 'MUTATION_UNKNOWN' : 'FAILED';
+        if (job.state === 'CANCEL_REQUESTED') {
+          this.settleCancellation(job);
+        } else if (job.state === 'MUTATION_UNKNOWN' || job.state === 'CANCELLED') {
+          // Preserve settled journal evidence across worker error handling.
+        } else if (job.pending) {
+          job.state = 'MUTATION_UNKNOWN';
+          job.errorCode = error instanceof TransferJobError || error instanceof TransferTrustError
+            ? error.code : 'TRANSFER_WRITE_OUTCOME_UNKNOWN';
+        } else {
+          job.state = 'FAILED';
           job.errorCode = error instanceof TransferJobError || error instanceof TransferTrustError
             ? error.code : 'TRANSFER_REMOTE_ERROR';
         }
@@ -524,15 +559,20 @@ export class CrossDeviceTransferJobs {
 
   private async run(id: string): Promise<void> {
     let job = await this.update(id, current => {
-      current.state = current.state === 'CANCEL_REQUESTED' ||
-        current.state === 'CANCELLED' ? 'CANCELLED' : 'RUNNING';
+      if (current.state === 'CANCEL_REQUESTED') this.settleCancellation(current);
+      else if (current.state === 'QUEUED') current.state = 'RUNNING';
+      // A completed cancellation or unknown pending mutation is NEVER
+      // converted back into RUNNING by a stale async worker.
     });
-    if (job.state === 'CANCELLED') return;
+    if (job.state !== 'RUNNING') return;
     let offset = job.bytesConfirmed;
     while (offset < job.bytesTotal || (job.bytesTotal === 0 && offset === 0)) {
+      if (await this.settleCancelIfRequested(id)) return;
       job = await this.load(id);
-      if (job.state === 'CANCEL_REQUESTED') {
-        await this.update(id, current => { current.state = 'CANCELLED'; });
+      if (job.state !== 'RUNNING') {
+        // Cancellation may race between the first journal read and this
+        // snapshot. Resolve the request even if no further write will start.
+        await this.settleCancelIfRequested(id);
         return;
       }
       // Mandatory external CAS before every potential mutation. A local PID
@@ -552,14 +592,22 @@ export class CrossDeviceTransferJobs {
         }
         content = r.contentBase64;
       }
+      // Source reads are side-effect-free on every execution path. A cancel
+      // during an in-flight read must not become a Native side effect.
+      if (await this.settleCancelIfRequested(id)) return;
       if (this.trust) {
         try { await this.strictlyWrite(job, offset, content, size); }
         catch (error) {
-          await this.update(id, current => {
-            current.state = 'MUTATION_UNKNOWN';
-            current.errorCode = error instanceof TransferTrustError ? error.code :
-              'TRANSFER_WRITE_OUTCOME_UNKNOWN';
+          const settled = await this.update(id, current => {
+            if (current.state === 'CANCEL_REQUESTED') {
+              this.settleCancellation(current);
+            } else if (current.state !== 'CANCELLED') {
+              current.state = 'MUTATION_UNKNOWN';
+              current.errorCode = error instanceof TransferTrustError ? error.code :
+                'TRANSFER_WRITE_OUTCOME_UNKNOWN';
+            }
           });
+          if (settled.state === 'CANCELLED') return;
           throw error;
         }
         offset += size;
@@ -586,9 +634,9 @@ export class CrossDeviceTransferJobs {
       offset += size;
       const updated = await this.update(id, current => {
         current.bytesConfirmed = offset;
-        if (current.state === 'CANCEL_REQUESTED') current.state = 'CANCELLED';
+        if (current.state === 'CANCEL_REQUESTED') this.settleCancellation(current);
       });
-      if (updated.state === 'CANCELLED') return;
+      if (updated.state !== 'RUNNING') return;
       if (job.bytesTotal === 0) break;
     }
     // Verify source AND staged target from Agent, not caller-asserted hashes.
@@ -602,9 +650,11 @@ export class CrossDeviceTransferJobs {
       return fail('TRANSFER_DESTINATION_HASH_MISMATCH', 'Target stage SHA-256 mismatch.');
     }
     const before = await this.update(id, current => {
-      current.state = current.state === 'CANCEL_REQUESTED' ? 'CANCELLED' : 'PUBLISHING';
+      if (current.state === 'CANCEL_REQUESTED') this.settleCancellation(current);
+      else if (current.state === 'RUNNING') current.state = 'PUBLISHING';
+      // Never republish or downgrade UNKNOWN/pending after a stale callback.
     });
-    if (before.state === 'CANCELLED') return;
+    if (before.state !== 'PUBLISHING') return;
     await this.assertCurrentCore(before, 'PUBLISH');
     await this.assertFence(before, 'PUBLISH', before.bytesTotal);
     try {

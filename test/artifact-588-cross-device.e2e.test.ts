@@ -118,6 +118,11 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
   const sockets: WebSocket[] = [];
   const counts = { reads: 0, writes: 0, atomicMoves: 0 };
   let pauseSourceReads = false;
+  let readHeld = false;
+  let signalReadEntered!: () => void;
+  let releaseSourceRead!: () => void;
+  const readEntered = new Promise<void>(resolve => { signalReadEntered = resolve; });
+  const readReleased = new Promise<void>(resolve => { releaseSourceRead = resolve; });
   t.after(async () => {
     await client.close();
     await server.close();
@@ -143,8 +148,12 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
           (msg.input as { atomic_no_overwrite?: boolean })?.atomic_no_overwrite) counts.atomicMoves++;
       void (async () => {
         try {
-          if (name === 'source' && msg.capability === 'files.read' && pauseSourceReads) {
-            await new Promise(resolve => setTimeout(resolve, 120));
+          if (name === 'source' && msg.capability === 'files.read' &&
+              pauseSourceReads && !readHeld) {
+            // Deterministic read barrier, not a 120ms race lottery.
+            readHeld = true;
+            signalReadEntered();
+            await readReleased;
           }
           const result = await executeCapability(msg.capability, msg.input, new PathPolicy([allowedRoot]));
           socket.send(JSON.stringify({ type: 'response', requestId: msg.requestId, ok: true, data: result }));
@@ -244,8 +253,15 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
   const started = pending.structuredContent as { ok: boolean; data?: { id: string } };
   assert.equal(started.ok, true);
   assert.ok(started.data?.id);
-  await client.callTool({ name: 'artifact_bridge_transfer_cancel',
-    arguments: { transfer_id: started.data.id } });
+  try {
+    await readEntered; // prove source read in-flight, no write dispatched
+    const response = await client.callTool({ name: 'artifact_bridge_transfer_cancel',
+      arguments: { transfer_id: started.data.id } });
+    assert.equal((response.structuredContent as {data?: {state?: string}}).data?.state,
+      'CANCEL_REQUESTED');
+  } finally {
+    releaseSourceRead();
+  }
   let cancelled = false;
   for (let i = 0; i < 100; i++) {
     const response = await client.callTool({ name: 'artifact_bridge_transfer_status',
@@ -257,7 +273,15 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
     await new Promise(resolve => setTimeout(resolve, 20));
   }
   assert.equal(cancelled, true, 'cancel must prevent any publication');
-  await new Promise(resolve => setTimeout(resolve, 160));
+  // Completion follows the barrier. No wall-clock sleep is evidence of a
+  // stopped worker; ensure its persistent journal is side-effect-free.
+  const durable = JSON.parse(await fs.readFile(path.join(root, 'hub-state',
+    'cross-device-transfer-v1', started.data.id + '.json'), 'utf8')) as {
+      state: string; bytesConfirmed: number; pending?: unknown;
+    };
+  assert.equal(durable.state, 'CANCELLED');
+  assert.equal(durable.bytesConfirmed, 0);
+  assert.equal(durable.pending, undefined);
   await assert.rejects(fs.stat(otherDest), (e: unknown) =>
     e instanceof Error && 'code' in e && e.code === 'ENOENT');
 });
