@@ -1,15 +1,17 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 const rd=(n:string)=>JSON.parse(readFileSync(path.resolve('docs/qa',n),'utf8').replace(/^\uFEFF/,'')) as any;
 const snap=()=>rd('QA_20261021_PR650_652_666_676_EXACT_EVIDENCE.json');
-test('77 currently open PRs are separate from 85 historical reviewed exact-HEAD entries',()=>{
+test('historical 77 open PR snapshot is distinct from 111 reviewed HEADs and non-atomic current pages',()=>{
  const x=snap(),l=rd('PR_SOURCE_AND_RELEASE_GATES.json');
  assert.equal(x.repo.openPrCount,77);
- assert.equal(l.entries.length,85);
- assert.equal(l.openPrCountAtSnapshot,77);
- assert.equal(new Set(l.entries.map((p:any)=>p.pr)).size,85);
+ assert.equal(l.entries.length,111);
+ assert.equal(l.openPrCountAtSnapshot,null);
+ assert.equal(l.authoritativeOpenCount,null);
+ assert.equal(x.repo.openPrCount,77,'historical 21 Oct snapshot, not current open count');
+ assert.equal(new Set(l.entries.map((p:any)=>p.pr)).size,111);
  assert.equal(x.mainSha,'754cc4364822be5fda528f54042fb22a84f19924');
  assert.equal(x.mainCi.runId,39622251466);
  assert.equal(x.prs.length,13);
@@ -72,8 +74,8 @@ test('669-673, 675-676 source CI SUCCESS cannot be physical CORE, ACL, OAuth D1,
 });
 test('R01-R22, 33 blocker findings and old #572 CI stay fail closed',()=>{
  const e=snap(),m=rd('cross-project-final-acceptance.json'),f=rd('QA_BLOCKING_FINDINGS_CURRENT_MAIN.json'),l=rd('PR_SOURCE_AND_RELEASE_GATES.json');
- assert.equal(f.findingCount,33);
- assert.equal(f.findings.length,33);
+ assert.equal(f.findingCount,39);
+ assert.equal(f.findings.length,39);
  assert.equal(m.baselineSha,e.mainSha);
  assert.equal(m.requirements.length,22);
  assert.equal(e.priorQa.runId,39632915464);
