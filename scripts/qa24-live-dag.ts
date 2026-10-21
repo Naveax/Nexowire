@@ -83,6 +83,10 @@ export function auditLiveSnapshot(prior:OldSnapshot|LiveSnapshot,live:LiveSnapsh
         add('BASE_MOVED',[n.pr],'Base SHA or parent changed');
       if(previous.ci?.run_id!==undefined&&previous.ci.run_id!==n.ci.run_id)
         add('CI_EVIDENCE_CHANGED',[n.pr],'Workflow run changed: old result is not reusable');
+      const oldCi=previous.ci;
+      if(oldCi&&('status' in oldCi)&&
+        (oldCi.status!==(n.ci.workflow_status??'')||oldCi.conclusion!==n.ci.conclusion))
+        add('CI_STATE_CHANGED',[n.pr],'CI state changed since the previous snapshot');
     }
     if(!sha40.test(n.head_sha)||!sha40.test(n.base_sha))
       add('INVALID_SHA',[n.pr],'Invalid exact HEAD/base SHA');
@@ -132,7 +136,7 @@ export function auditLiveSnapshot(prior:OldSnapshot|LiveSnapshot,live:LiveSnapsh
       const a=ids[i]!,b=ids[j]!;
       if(!ancestors(a,b)&&!ancestors(b,a))add('OWNER_COLLISION',[a,b],path);
     }
-  const hasDrift=findings.some(f=>['NEW_OPEN_PR','HEAD_MOVED','BASE_MOVED','NO_LONGER_OPEN','MAIN_MOVED','INCOMPLETE_LIVE_SNAPSHOT'].includes(f.code));
+  const hasDrift=findings.some(f=>['NEW_OPEN_PR','HEAD_MOVED','BASE_MOVED','NO_LONGER_OPEN','MAIN_MOVED','CI_EVIDENCE_CHANGED','CI_STATE_CHANGED','INCOMPLETE_LIVE_SNAPSHOT'].includes(f.code));
   if(hasDrift)add('STALE_SNAPSHOT',[],'Pinned historical graph differs from live GitHub');
   findings.sort((a,b)=>a.code.localeCompare(b.code)||((a.prs[0]??0)-(b.prs[0]??0))||
     a.detail.localeCompare(b.detail));
