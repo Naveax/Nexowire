@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
 import path from 'node:path';
 import {
-  assessProtectedCoreInstallerStage,
+  assessProtectedCoreInstallerStage,assessCoreSignedWindowsImportDag,
+  type CoreSignedImportDag,type CoreNativeImportDagReadback,
   type CoreStageManifest,type CoreStagePins,
   type CoreStageReadback,type CoreStageSignatureInspector,
 } from '../scripts/s3-core-broker-install-gate.js';
 import type {CapturedAclNode} from '../scripts/s3-windows-acl-preflight.js';
-import {assessCoreLinkedStageAndDelegation,
-  type CoreBootstrapEvidence,
+import {assessCoreLinkedStageAndDelegation,assessCoreOfflineRePairBootstrap,
+  type CoreBootstrapEvidence,type CoreOfflineRePairWitness,
 } from '../scripts/s3-core-bootstrap-delegation-audit.js';
 
 const keys=generateKeyPairSync('ed25519');
@@ -312,4 +313,153 @@ test('signed import resource and DLL cannot be omitted from owner protected impo
  await assert.rejects(assessCoreLinkedStageAndDelegation(
   e,f.manifest,f.signature,f.pins,f.readback,f.inspect),
   /S3_CORE_DELEGATION_CROSS_STAGE_IMPORT_GRAPH_NOT_BOUND_TO_TASK/);
+});
+
+
+const importKey=generateKeyPairSync('ed25519');
+function dagFixture(f:ReturnType<typeof setup>){
+  const get=(role:string,contains?:string)=>{
+    const v=f.manifest.files.find(z=>z.role===role&&(!contains||z.path.includes(contains)));
+    assert.ok(v);return v.path;
+  };
+  const broker=get('broker'),installer=get('installer'),helper=get('helper');
+  const updater=get('updater'),rollback=get('rollback');
+  const dll=get('import-executable','runtime'),upDll=get('import-executable','updater');
+  const config=get('import-resource');
+  const dag:CoreSignedImportDag={
+    schemaVersion:1,stageManifestSha256:f.pins.manifestSha256,
+    modules:[
+      {path:installer,imports:[helper]},
+      {path:broker,imports:[dll,config]},
+      {path:helper,imports:[]},
+      {path:updater,imports:[upDll]},
+      {path:rollback,imports:[]},
+      {path:dll,imports:[]},
+      {path:upDll,imports:[]},
+    ],
+  };
+  const bytes=()=>Buffer.from(JSON.stringify({
+    schemaVersion:dag.schemaVersion,stageManifestSha256:dag.stageManifestSha256,
+    modules:dag.modules.map(m=>({path:m.path,imports:m.imports})),
+  }));
+  const pins={
+    independentGraphKeyPem:importKey.publicKey.export({type:'spki',format:'pem'}).toString(),
+    independentGraphSha256:H(bytes()),
+  };
+  let signature=sign(null,bytes(),importKey.privateKey).toString('base64');
+  const native:CoreNativeImportDagReadback={
+    provider:'synthetic-fixture',modules:dag.modules.map(m=>({path:m.path,imports:[...m.imports]})),
+    importResolutionComplete:true,nativeImageHandlesVerified:true,
+    sawUnknownWindowsSystemDependency:false,
+  };
+  return{dag,pins,native,signature:()=>signature,reseal:()=>{
+    pins.independentGraphSha256=H(bytes());
+    signature=sign(null,bytes(),importKey.privateKey).toString('base64');
+  }};
+}
+type DagFixture=ReturnType<typeof dagFixture>;
+async function inspectDag(f:ReturnType<typeof setup>,d:DagFixture){
+  return assessCoreSignedWindowsImportDag(
+    f.manifest,f.signature,f.pins,f.readback,d.dag,d.signature(),d.pins,d.native,f.inspect);
+}
+test('signed Windows import DAG and native readback positive source still denies physical Broker',async()=>{
+ const f=setup(),d=dagFixture(f);
+ assert.deepEqual(await inspectDag(f,d),{
+  status:'signed_import_dag_source_only',genuineNativeLoaderEvidence:false,
+  actuallyInstalled:false,productionApproved:false,
+ });
+ d.native.provider='trusted-native-win32-read-only';
+ assert.equal((await inspectDag(f,d)).productionApproved,false);
+});
+test('import DAG requires second independently pinned signature and exact release identity',async()=>{
+ const f=setup(),d=dagFixture(f);
+ d.pins.independentGraphSha256=H('forged');
+ await assert.rejects(inspectDag(f,d),/IMPORT_DAG_INDEPENDENT_PIN_MISMATCH/);
+ const a=dagFixture(f);
+ a.pins.independentGraphKeyPem=generateKeyPairSync('ed25519').publicKey.export({format:'pem',type:'spki'}).toString();
+ await assert.rejects(inspectDag(f,a),/IMPORT_DAG_SIGNATURE_INVALID/);
+ const b=dagFixture(f);b.dag.stageManifestSha256=H('different-stage');b.reseal();
+ await assert.rejects(inspectDag(f,b),/IMPORT_DAG_INDEPENDENT_PIN_MISMATCH/);
+});
+test('DAG closes transitive DLL/config graph: missing, extra, duplicate and orphan imports fail',async()=>{
+ const f=setup();
+ const changes=[
+  (d:DagFixture)=>{d.dag.modules.pop()},
+  (d:DagFixture)=>{d.dag.modules[1]!.imports.pop()},
+  (d:DagFixture)=>{d.dag.modules[1]!.imports.push('C:\\evil\\rogue.dll')},
+  (d:DagFixture)=>{d.dag.modules[1]!.imports.push(d.dag.modules[1]!.imports[0]!)},
+  (d:DagFixture)=>{d.dag.modules[1]!.imports.push(d.dag.modules[1]!.path)},
+  (d:DagFixture)=>{d.dag.modules[0]!.imports=[]},
+ ];
+ for(const change of changes){
+  const d=dagFixture(f);change(d);d.reseal();
+  await assert.rejects(inspectDag(f,d),/S3_CORE_INSTALL_(?:IMPORT_DAG_|STAGE_PATH_)/);
+ }
+});
+test('native resolver missing an import, unknown system dependency or forged handles is rejected',async()=>{
+ const f=setup(),d=dagFixture(f);
+ d.native.modules[1]!.imports.pop();
+ await assert.rejects(inspectDag(f,d),/IMPORT_DAG_(?:NATIVE_DEPENDENCY_MISMATCH|UNREACHABLE_DECLARED_FILE)/);
+ for(const field of ['nativeImageHandlesVerified','importResolutionComplete'] as const){
+  const z=dagFixture(f);z.native[field]=false;
+  await assert.rejects(inspectDag(f,z),/IMPORT_DAG_NATIVE_READBACK_UNAVAILABLE/);
+ }
+ const z=dagFixture(f);z.native.sawUnknownWindowsSystemDependency=true;
+ await assert.rejects(inspectDag(f,z),/IMPORT_DAG_NATIVE_READBACK_UNAVAILABLE/);
+});
+function oldWitness(f:ReturnType<typeof setup>,b:CoreBootstrapEvidence):CoreOfflineRePairWitness{
+ const rollback=f.manifest.files.find(z=>z.role==='rollback')!;
+ return{
+  provider:'independent-monotonic-owner-witness',previousOwnerAccountId:'previous-owner',
+  deviceId:device,previousTransactionId:'old-txn',
+  previousOwnerEpoch:11,previousDpapiBlobSha256:H('old-dpapi-blob'),
+  previousBrokerSha256:rollback.sha256,previousBrokerVersion:'1.0.5',
+  previousTaskState:'disabled',previousTaskReadbackVerified:true,
+  previousDpapiKeyUnusable:true,previousOwnerRevoked:true,
+  externalNewOwnerEpoch:b.record.ownerEpoch,
+  externalReadbackVerified:true,externalRevokeCommitted:true,
+  pendingUnknownMutation:false,priorRollbackSignatureVerified:true,
+  previousSignedJournalVerified:true,
+ };
+}
+const repair=(f:ReturnType<typeof setup>,b:CoreBootstrapEvidence,d:DagFixture,w:CoreOfflineRePairWitness)=>
+  assessCoreOfflineRePairBootstrap(
+    b,f.manifest,f.signature,f.pins,f.readback,d.dag,d.signature(),d.pins,d.native,w,f.inspect);
+test('offline re-pair source denies installation even with all positive synthetic receipts',async()=>{
+ const f=setup(),b=bootstrap(f),d=dagFixture(f),w=oldWitness(f,b);
+ assert.deepEqual(await repair(f,b,d,w),{
+  status:'offline_repair_source_gate_only',newOwnerUacApprovedByThisModule:false,
+  perCoreCommandUacRequired:'not_after_physically_accepted_broker',
+  canInstall:false,canExecuteElevated:false,productionAccepted:false,
+ });
+});
+test('offline re-pair denies stale owner epoch, active task, retained DPAPI key, crash and forged rollback',async()=>{
+ const f=setup();
+ const bad=[
+  {previousTaskState:'running'},{previousTaskState:'unknown'},
+  {previousTaskReadbackVerified:false},{previousDpapiKeyUnusable:false},
+  {previousOwnerRevoked:false},{externalReadbackVerified:false},
+  {externalRevokeCommitted:false},{pendingUnknownMutation:true},
+  {priorRollbackSignatureVerified:false},{previousSignedJournalVerified:false},
+  {previousOwnerEpoch:12},{externalNewOwnerEpoch:11},
+  {deviceId:'foreign-device'},{previousTransactionId:txn},
+  {previousBrokerSha256:H('forged-rollback')},
+  {previousBrokerVersion:'1.0.4'},
+ ];
+ for(const change of bad){
+  const b=bootstrap(f),d=dagFixture(f),w=oldWitness(f,b);
+  Object.assign(w,change);
+  await assert.rejects(repair(f,b,d,w),
+    /OFFLINE_REPAIR_REVOKE_OR_DPAPI_EPOCH_UNTRUSTED/);
+ }
+});
+test('old DPAPI blob or old UAC consent transaction cannot silently re-enroll CORE',async()=>{
+ const f=setup(),b=bootstrap(f),d=dagFixture(f),w=oldWitness(f,b);
+ w.previousDpapiBlobSha256=b.ownerKey.blobSha256;
+ await assert.rejects(repair(f,b,d,w),
+   /OFFLINE_REPAIR_REVOKE_OR_DPAPI_EPOCH_UNTRUSTED/);
+ const next=bootstrap(f),nw=oldWitness(f,next);
+ next.physicalConsent.transactionId='old-txn';
+ await assert.rejects(repair(f,next,dagFixture(f),nw),
+   /LOCAL_OS_CONSENT_NOT_ATTESTED/);
 });

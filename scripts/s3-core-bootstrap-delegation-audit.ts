@@ -7,9 +7,10 @@
 import {createHash,createPublicKey,verify} from 'node:crypto';
 import path from 'node:path';
 import {evaluateCapturedAclNodes,type CapturedAclNode} from './s3-windows-acl-preflight.js';
-import {assessProtectedCoreInstallerStage,
+import {assessProtectedCoreInstallerStage,assessCoreSignedWindowsImportDag,
   type CoreStageManifest,type CoreStagePins,type CoreStageReadback,
-  type CoreStageSignatureInspector,
+  type CoreStageSignatureInspector,type CoreSignedImportDag,
+  type CoreImportDagPins,type CoreNativeImportDagReadback,
 } from './s3-core-broker-install-gate.js';
 
 const H=/^[a-f0-9]{64}$/;
@@ -309,4 +310,85 @@ export async function assessCoreLinkedStageAndDelegation(
     }
   }
   return assessCoreInstalledBrokerSource(b);
+}
+
+
+/**
+ * Single new owner-approved Windows bootstrap after an OFFLINE revoke/re-pair.
+ * No service registration or DPAPI unseal. Authoritative external-CAS and
+ * native Windows facts are still NOT implemented in this source adapter.
+ */
+export interface CoreOfflineRePairWitness {
+  provider:'independent-monotonic-owner-witness';
+  previousOwnerAccountId:string;
+  deviceId:string;
+  previousTransactionId:string;
+  previousOwnerEpoch:number;
+  previousDpapiBlobSha256:string;
+  previousBrokerSha256:string;
+  previousBrokerVersion:string;
+  previousTaskState:'disabled'|'deleted'|'stopped'|'running'|'unknown';
+  previousTaskReadbackVerified:boolean;
+  previousDpapiKeyUnusable:boolean;
+  previousOwnerRevoked:boolean;
+  externalNewOwnerEpoch:number;
+  externalReadbackVerified:boolean;
+  externalRevokeCommitted:boolean;
+  pendingUnknownMutation:boolean;
+  priorRollbackSignatureVerified:boolean;
+  previousSignedJournalVerified:boolean;
+}
+export async function assessCoreOfflineRePairBootstrap(
+  bootstrap:CoreBootstrapEvidence,
+  stage:CoreStageManifest,stageSignature:string,
+  stagePins:CoreStagePins,stageReadback:CoreStageReadback,
+  dag:CoreSignedImportDag,dagSignature:string,
+  dagPins:CoreImportDagPins,nativeDag:CoreNativeImportDagReadback,
+  w:CoreOfflineRePairWitness,
+  inspect:CoreStageSignatureInspector,
+):Promise<{
+  status:'offline_repair_source_gate_only';
+  newOwnerUacApprovedByThisModule:false;
+  perCoreCommandUacRequired:'not_after_physically_accepted_broker';
+  canInstall:false;canExecuteElevated:false;productionAccepted:false;
+}>{
+  await assessCoreSignedWindowsImportDag(stage,stageSignature,stagePins,
+    stageReadback,dag,dagSignature,dagPins,nativeDag,inspect);
+  await assessCoreLinkedStageAndDelegation(bootstrap,stage,stageSignature,
+    stagePins,stageReadback,inspect);
+  const b=bootstrap;
+  const old=stage.files.find(f=>f.role==='rollback');
+  const newKey=b.ownerKey.blobSha256;
+  if(!w||w.provider!=='independent-monotonic-owner-witness'||
+    !old||w.deviceId!==b.pins.deviceId||
+    !Number.isSafeInteger(w.previousOwnerEpoch)||
+    !Number.isSafeInteger(w.externalNewOwnerEpoch)||
+    w.externalNewOwnerEpoch<=w.previousOwnerEpoch||
+    w.externalNewOwnerEpoch!==b.record.ownerEpoch||
+    w.previousTransactionId===b.record.transactionId||
+    w.previousDpapiBlobSha256===newKey||
+    w.previousBrokerSha256!==old.sha256||
+    w.previousBrokerVersion!==stage.rollbackBrokerVersion||
+    w.previousTaskReadbackVerified!==true||
+    !['disabled','deleted'].includes(w.previousTaskState)||
+    w.previousDpapiKeyUnusable!==true||
+    w.previousOwnerRevoked!==true||
+    w.externalReadbackVerified!==true||
+    w.externalRevokeCommitted!==true||
+    w.pendingUnknownMutation!==false||
+    w.priorRollbackSignatureVerified!==true||
+    w.previousSignedJournalVerified!==true||
+    !/^[A-Za-z0-9_.:@-]{1,128}$/.test(w.previousOwnerAccountId)){
+    refuse('OFFLINE_REPAIR_REVOKE_OR_DPAPI_EPOCH_UNTRUSTED');
+  }
+  // Re-pairing reuses NO previous UAC grant. The separate new owner
+  // local Windows consent is checked in assessCoreLinkedStageAndDelegation,
+  // where it must match the NEW transaction and installer hash.
+  // This source module does not and cannot attest real physical consent.
+  return{
+    status:'offline_repair_source_gate_only',
+    newOwnerUacApprovedByThisModule:false,
+    perCoreCommandUacRequired:'not_after_physically_accepted_broker',
+    canInstall:false,canExecuteElevated:false,productionAccepted:false,
+  };
 }
