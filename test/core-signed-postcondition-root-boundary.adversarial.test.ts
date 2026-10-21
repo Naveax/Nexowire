@@ -160,6 +160,8 @@ function canonicalSignature(sig:string):Buffer|null{
   return bytes.length===64&&bytes.toString('base64url')===sig?bytes:null;
 }
 function checkWitness(w:Witness):boolean{
+  const required=['protocol','issuer','event','seq','atMs','launchId','scope','signature'];
+  if(Object.keys(w).sort().join(',')!==required.sort().join(','))return false;
   if(w.protocol!=='nexowire.test-only.witness.v1'||
      w.issuer!=='independent-witness-fixture'||
      !Number.isSafeInteger(w.seq)||w.seq<1||
@@ -170,6 +172,8 @@ function checkWitness(w:Witness):boolean{
   return verify(null,witnessBytes(unsigned),witnessKey.publicKey,sig);
 }
 function checkObservation(o:Observation):boolean{
+  const required=['protocol','issuer','effect','observedAtMs','launchId','outputDigest','scope','signature'];
+  if(Object.keys(o).sort().join(',')!==required.sort().join(','))return false;
   if(o.protocol!=='nexowire.test-only.postcondition.v1'||
      o.issuer!=='independent-observer-fixture'||
      !Number.isSafeInteger(o.observedAtMs)||o.observedAtMs<1||
@@ -189,13 +193,20 @@ interface Entry {
  * atomic fence. Merely signing a made-up observation is no proof of OS effect.
  */
 class TestOnlyEvidenceOracle {
+  constructor(private trustedGeneration=7,
+    private trustedSessionEpoch='session-epoch-25'){}
+  // Synthetic trusted owner re-pair event: NOT an external authority.
+  rePair(generation:number,sessionEpoch:string):void{
+    this.trustedGeneration=generation;
+    this.trustedSessionEpoch=sessionEpoch;
+  }
   private readonly entries=new Map<string,Entry>();
   private lastSeq=0;
   private lastWitnessMs=0;
   readonly syntheticLaunchIds:string[]=[];
   witness(w:Witness,r:Request,c:CoreBrokerContext):boolean{
     if(!checkWitness(w)||!sameScope(w.scope,scope(r,
-       w.scope.grantGeneration,w.scope.sessionEpoch)))return false;
+       this.trustedGeneration,this.trustedSessionEpoch)))return false;
     if(w.scope.requestId!==r.requestId||
        w.launchId!=='synthetic-launch:'+r.requestId||
        w.seq<=this.lastSeq||w.atMs<this.lastWitnessMs)return false;
@@ -351,6 +362,7 @@ test('duplicate lost ACK and re-pair cannot revive historical requestId or old r
   c.enrollment={...c.enrollment!,ownerAccountId:'owner-26',ownerEpoch:26,
     credentialBinding:shaD,enrollmentId:'c2600000-0000-4000-8000-000000002026'};
   const freshScope=scope(fresh,8,'session-epoch-26');
+  oracle.rePair(8,'session-epoch-26');
   const reused=request(r.requestId,'CORE','owner-26',26,shaD);
   assert.equal(oracle.witness(makeWitness('RESERVED',reused,3,expiry-1,
     scope(reused,8,'session-epoch-26')),reused,c),false);
