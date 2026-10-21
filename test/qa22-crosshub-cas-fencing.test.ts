@@ -601,7 +601,7 @@ test('#22 gate: CORE re-pair during pending Native publish cannot authenticate s
       assert.equal(rejected.state, 'MUTATION_UNKNOWN');
       assert.equal(rejected.errorCode, 'CORE_GRANT_EPOCH_STALE');
       assert.equal(fx.publications, 0);
-      assert.deepEqual(fx.publishedReceipts, []);
+      assert.equal(fx.publishedReceipts.length, 0);
       await assert.rejects(b.status(old.id, input.accountId,
         input.sourceDeviceId, input.targetDeviceId),
       (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_GRANT_EPOCH_STALE');
