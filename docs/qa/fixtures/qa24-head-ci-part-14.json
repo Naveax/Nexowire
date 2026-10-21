@@ -1,0 +1,113 @@
+{
+  "census_count": 111,
+  "part": 14,
+  "ids": [
+    704,
+    705,
+    706,
+    707,
+    708,
+    709,
+    710
+  ],
+  "nodes": [
+    {
+      "pr": 704,
+      "head_sha": "98876d163aac7a7a580725e814b19dda621fbad0",
+      "head_ref": "test/21-replay-640-651-677-on-691-20261021",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658648859,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "98876d163aac7a7a580725e814b19dda621fbad0"
+      }
+    },
+    {
+      "pr": 705,
+      "head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+      "head_ref": "test/qa17-700-unavailable-filetime-acceptance-20261021",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658856961,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5"
+      }
+    },
+    {
+      "pr": 706,
+      "head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea",
+      "head_ref": "test/20-agent105-preswitch-repair-qa-20261021",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658875463,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea"
+      }
+    },
+    {
+      "pr": 707,
+      "head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996",
+      "head_ref": "test/p05-transitive-import-handle-20261021",
+      "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "base_ref": "test/p05-native-relative-acl-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39659960377,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996"
+      }
+    },
+    {
+      "pr": 708,
+      "head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac",
+      "head_ref": "test/22-691-crosshub-dispatch-20261021",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39659365444,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac"
+      }
+    },
+    {
+      "pr": 709,
+      "head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "head_ref": "fix/03-protected-tree-hosted-path-binding-20261021",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658979397,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88"
+      }
+    },
+    {
+      "pr": 710,
+      "head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0",
+      "head_ref": "qa/18-crossbroker-revoke-drain-20261021",
+      "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "base_ref": "fix/01-broker-dispatch-external-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658983007,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0"
+      }
+    }
+  ]
+}
