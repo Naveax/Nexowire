@@ -24,6 +24,41 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_576_JOB_COMPAT_ACCEPTANCE_20261021.md",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/private-desktop-job-compat-negative.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "merge_base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "status": "ahead"
       }
     },
     {
@@ -38,6 +73,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_21OCT_ISSUER_TOCTOU_OWNER_DEVICE_REGRESSION.md",
+        "src/product/owner-public-wss-device-issuer-proposal.ts",
+        "test/owner-public-wss-device-issuer-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     },
     {
@@ -52,6 +99,22 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd"
+      },
+      "files": [
+        "docs/CONNECTION_06_596_33504656_INTEGRATION_20261021.md",
+        "docs/CONNECTION_06_CORE_ROOT_GRANT_616_ACCEPTANCE_20261021.md",
+        "docs/CONNECTION_06_DURABLE_CROSS_DEVICE_588_ACCEPTANCE.md",
+        "src/mcp/cross-device-transfer-continuity.ts",
+        "src/mcp/cross-device-transfer-owner-grant.ts",
+        "test/cross-device-transfer-continuity.test.ts",
+        "test/cross-device-transfer-owner-grant.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     },
     {
@@ -66,6 +129,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_MONOTONIC_WITNESS_20261021.md",
+        "sql/agent-monotonic-witness.sql",
+        "src/agent/postgres-monotonic-witness.ts",
+        "src/agent/witness-signed-provenance.ts",
+        "test/postgres-monotonic-witness.test.ts",
+        "test/witness-signed-provenance.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "merge_base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "status": "ahead"
       }
     },
     {
@@ -80,6 +158,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30"
+      },
+      "files": [
+        "docs/SCALE_V2_S5_CURRENT_SOURCE_GZIP_ONECALL_20261021.md",
+        "docs/reports/s5-http-4mib-loopback-20261021.json",
+        "docs/reports/s5-http-4mib-main4c-20261021.json",
+        "scripts/bench-s5-http-mcp-isolation.ts",
+        "scripts/report-s5-http-mcp-isolation.ts",
+        "test/s5-http-mcp-isolation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     },
     {
@@ -94,6 +187,36 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4"
+      },
+      "files": [
+        "docs/ARTIFACT_STORE_JOB_FAILCLOSED_20261021.md",
+        "docs/SCALE_V2_ARTIFACT_CANCEL_FENCING_STAGING.md",
+        "docs/SCALE_V2_S2_SIGNATURE_CANONICALITY_SECURITY_ACCEPTANCE_20261020.md",
+        "docs/SCALE_V2_S2_WSS_STREAM_SCOPE_BACKPRESSURE_ACCEPTANCE_20261020.md",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/ops/scale-v2-artifact-byte-budget-staging.ts",
+        "src/product/owner-public-wss-device-issuer-proposal.ts",
+        "src/product/owner-public-wss-operator-enrollment-proposal.ts",
+        "src/product/owner-public-wss-stream-flow-proposal.ts",
+        "src/workspace/artifact-job-budget-staging.ts",
+        "src/workspace/artifact-job-checkpoint.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-588-cross-device.e2e.test.ts",
+        "test/artifact-store-job-failclosed.test.ts",
+        "test/owner-public-wss-device-issuer-staging.test.ts",
+        "test/owner-public-wss-signed-enrollment-staging.test.ts",
+        "test/owner-public-wss-stream-flow-staging.test.ts",
+        "test/owner-public-wss-stream-wss-loopback.test.ts",
+        "test/scale-v2-artifact-cancel-fencing-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "merge_base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "status": "ahead"
       }
     },
     {
@@ -108,6 +231,22 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "4e66122dea21e86abbcb57058affc516485d7465"
+      },
+      "files": [
+        "docs/CORE_REAL_WINDOWS_ADMIN_EXECUTION_TARGET_20261021.md",
+        "docs/QA_02_HYPERV_617_DENIAL_AUDIT_20261021.md",
+        "src/protocol/hyperv-elevation-evidence.ts",
+        "test/hyperv-elevation-evidence.test.ts",
+        "test/qa-02-core-grant-epoch-provenance.test.ts",
+        "test/qa-02-hyperv-denial-provenance.test.ts",
+        "test/qa-02-hyperv-unknown-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     },
     {
@@ -122,6 +261,22 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/HYPERV_TYPED_NO_ELEVATION_617.md",
+        "scripts/audit-hyperv-launcher-trust.ps1",
+        "src/security/hyperv-vm-admission.ts",
+        "src/security/privilege.ts",
+        "test/hyperv-launcher-trust.test.ts",
+        "test/hyperv-vm-admission.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     }
   ]
