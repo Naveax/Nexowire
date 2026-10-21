@@ -53,6 +53,9 @@ const jobSchema = z.object({
     requestId: z.string().uuid(), offset: z.number().int().nonnegative(),
     length: z.number().int().positive().max(65536),
     sha256: hex, epoch: z.number().int().positive(),
+    /** false = intent durably reserved, never dispatched; absent on old
+     * journals means UNKNOWN and must be treated as possibly dispatched. */
+    dispatched: z.boolean().optional(),
   }).strict().optional(),
   state: stateSchema, errorCode: z.string().optional(),
   createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
@@ -274,11 +277,18 @@ export class CrossDeviceTransferJobs {
    * This is a durable safety property, not an inference from worker liveness.
    */
   private settleCancellation(job: TransferJob): void {
-    if (job.pending || job.bytesConfirmed > 0) {
+    if (job.bytesConfirmed > 0 ||
+        (job.pending && job.pending.dispatched !== false)) {
+      // Any confirmed prior write or intent which may have reached Native
+      // stays UNKNOWN. Legacy pending entries have no dispatched flag and
+      // are conservatively considered possibly dispatched.
       job.state = 'MUTATION_UNKNOWN';
       job.errorCode = 'TRANSFER_CANCEL_AFTER_MUTATION';
     } else {
+      // The worker has not crossed its durable dispatch transition.
+      // Its subsequent guarded transition MUST refuse Native dispatch.
       job.state = 'CANCELLED';
+      delete job.pending;
       delete job.errorCode;
     }
   }
@@ -513,10 +523,23 @@ export class CrossDeviceTransferJobs {
           current.pending) throw new TransferTrustError('PENDING_MUTATION_UNKNOWN',
           'Durable job revision or prior write outcome is unknown.');
       current.pending = { requestId: envelope.requestId, offset, length,
-        sha256: envelope.sha256, epoch: envelope.epoch };
+        sha256: envelope.sha256, epoch: envelope.epoch, dispatched: false };
     });
     await this.assertCurrentCore(job, 'WRITE');
     await this.assertFence(job, 'WRITE', offset);
+    // The journal transition is the last cancellable point before dispatch.
+    // Cancellation of a still-reserved intent is side-effect-free and clears
+    // it; cancellation once dispatched=true conservatively remains UNKNOWN.
+    await this.update(job.id, current => {
+      if (current.state !== 'RUNNING' ||
+          current.pending?.requestId !== envelope.requestId ||
+          current.pending.dispatched !== false ||
+          current.bytesConfirmed !== offset) {
+        throw new TransferTrustError('TRANSFER_PRE_DISPATCH_CANCELLED',
+          'Native write was cancelled or superseded before dispatch.');
+      }
+      current.pending.dispatched = true;
+    });
     const receipt = await this.remote.writeFenced(job, envelope, encoded, offset === 0);
     if (receipt.requestId !== envelope.requestId ||
         receipt.epoch !== envelope.epoch || receipt.offset !== offset ||
@@ -602,7 +625,11 @@ export class CrossDeviceTransferJobs {
             if (current.state === 'CANCEL_REQUESTED') {
               this.settleCancellation(current);
             } else if (current.state !== 'CANCELLED') {
-              current.state = 'MUTATION_UNKNOWN';
+              // Reserved-only intents have not crossed the Native dispatch
+              // fence; no external write may have occurred for this intent.
+              const notDispatched = current.pending?.dispatched === false;
+              current.state = !notDispatched || current.bytesConfirmed > 0
+                ? 'MUTATION_UNKNOWN' : 'FAILED';
               current.errorCode = error instanceof TransferTrustError ? error.code :
                 'TRANSFER_WRITE_OUTCOME_UNKNOWN';
             }
