@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -46,12 +46,12 @@ test('#617 P0 Hyper-V source contract blocks release regardless of green source-
  assert.equal(m.baselineSha,'4c5c810134c020cd04a5ef2be5c1138ea1954ad0');
  assert.equal(m.inspectedMainCi.runId,39596766086);
  assert.equal(m.requirements.length,22);
- assert.equal(l.entries.length,48);
+ assert.equal(l.entries.length,57);
  const pr618=l.entries.find((x:any)=>x.pr===618);
  assert.ok(pr618);
  assert.equal(pr618.prState,'OPEN_DRAFT');
  assert.equal(pr618.production,'BLOCKED');
- assert.equal(f.findingCount,19);
+ assert.equal(f.findingCount,22);
  assert.ok(f.findings.some((x:any)=>x.id==='QA16-617-HYPERV-ADMINBRIDGE'));
  for(const k of ['R01','R03','R04','R07','R09','R19','R20','R21','R22']){
   const r=m.requirements.find((x:any)=>x.id===k);

@@ -3,7 +3,7 @@
   "capturedAt": "2026-10-21",
   "baselineSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "R01-R22 source-only snapshot at #605 main with P0 #617 physical UAC/Hyper-V Broker untrusted; no VM start or independent Running state. Feature #618 diagnostic is not deployed.",
+  "meaning": "QA MASTER CORE is real persistent, revocable high-integrity broad owner-authorized command delegation after one signed protected Broker/UAC bootstrap; ROOT real <=15 min, FULL standard-user. Current main cannot prove it. PR exact green is source-only; all staging/production/original incident BLOCKED.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Hyper-V RunAs lost ACK: MUTATION_STATE_UNKNOWN, no independent VMId+Running and typed denial attribution; unauthenticated Broker 401 is NOT verified source. Generic #565 Error Contract otherwise source PASS."
+          "evidence": "P0 CORE signed broker elevated shell UNKNOWN/lost ACK has no verified execution chain; #619 old-base negative CI green, no live authenticated requestId+running-result reconciliation; never retry unknown."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 J+A joint SQLite backup co-rollback and #617 lost ACK must never re-dispatch Start-VM without independent reservation/readback."
+          "evidence": "#587 joint J+A co-rollback admits forgotten IDs; #614 external signed Postgres witness source CI 39598693419 PASS on simulated SQL only, no real storage/restore domain; CORE/ROOT revocation epoch must be anchored externally."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Hyper-V read-only Get-VM access denied: no trusted immutable VM GUID Running/Off state; generic Connection Core/source reconciliation success does not attest this VM."
+          "evidence": "Privileged VMId Running readback and elevated command side-effect attestation missing. #613 source connection epoch checkpoint PASS but cannot certify actual Hyper-V/Windows admin postcondition."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Typed hyperv.vm.start classifies as standard on main; Broker allowlist lacks Hyper-V; CORE/FULL and ready are policy, not token. #271 inherited Authenticated Users Modify and #617 UAC not attested."
+          "evidence": "CORE must be persistent real elevated broad shell via signed protected Broker after once approved UAC; ROOT same elevated command <=900s. Current main only CORE preference PAUSED_UNVERIFIED, ROOT status diagnostic; no explicit windows.elevated.shell.exec and no source trustworthy session/epoch/token proof. FULL only standard shell."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -123,15 +123,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -145,19 +145,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "New main #603 canonical Ed25519 device owner WSS signatures rejected with 2 new tests, local source subset 16/16 PASS; #569 synthetic reconnect fault tests. Physical WSS owner device production not verified."
+          "evidence": "Merged generic reconnect source PASS. #612 signed owner enrollment, #613 current epoch checkpoint CI green only on separate branches; production cannot claim owner revoke/re-pair freshness."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Admin Bridge typed scoped Hyper-V Broker dispatch not implemented; owner/ACL/publisher/token/version/local UAC authorization absent; Windows Job fast-exit independent gate remains open."
+          "evidence": "Latest #618 CI 39605003581 Windows Job fast-exit stdout iteration4 FAIL; latest #576 CI 39598258315 signed surrogate UNAVAILABLE and inherited Modify fixture null FAIL; #608 older combination CI+release green. Elevated Broker real process ownership cannot be attested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -201,15 +201,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#617 secure UAC local console approval never attested; RunAs UNKNOWN cannot infer consent or click Secure Desktop."
+          "evidence": "One-time UAC requires real LOCAL Windows-approved signed Broker bootstrap; no physical Secure Desktop input, consent.exe presence not approval; no UAC per CORE command after valid enrollment expected."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -249,19 +249,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged artifact store digest and #601 staging CANCEL_PENDING tombstone source tests; no live stage/commit across signed two-device release."
+          "evidence": "Hash and checkpoint source; #616 stacked cross-Hub/Artifact worker source CI success but no physical signed multi-device proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -279,15 +279,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#601 merge fenced byte quota cancellation source 5/5 PASS, but Cloudflare actual staging and 24h real authenticated WSS work/cost not accepted. #598 9.5MiB four-parser source gate passes only as #608 combined branch."
+          "evidence": "#610 quota receipt, #615 compressed HTTP fairness source exact CI green; no actual Cloudflare 24h tenant quota/real work proof or signed rollout."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -331,15 +331,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -357,15 +357,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Main SHA 37d68d938b9c94b8647b92fb592a2b30c075427c lacks public artifact_bridge_transfer_start/status/cancel. #597 child HEAD 2ba9e72e30511318eabb8fc0f37b1aceaa5cd401 CI 39502962661 SUCCESS merged into #596 branch ONLY; #596 HEAD 335046569a38f3a1a3fc82bf851f9b7df7640fdb CI 39557944551 SUCCESS including one-call source contract, not main or physical >256MiB. Keep independent main RED contract."
+          "evidence": "Main still lacks public one-call durable transfer_start/status/cancel; #616 source green stacked #596 branch not merged or physically Agent 1.0.5 tested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -409,15 +409,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -435,15 +435,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -461,15 +461,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#551 real first-party signed installer/rollback not accepted; #617 signed Broker binary/import ACL/version, admin token and local Hyper-V approval missing."
+          "evidence": "#551 latest head 9fdee368 source CI 39606595530 and Release Readiness 39606595531 SUCCESS, still no Nexowire first-party signed native installer, signed rollback archive, protected actual Broker ACL or physically approved one-time UAC and two device canary."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 independent monotonic witness missing, #617 mutating Hyper-V Start-VM unknown must never be auto-replayed; exact GUID and trusted state readback required."
+          "evidence": "P0 external independent monotonic CAS owner/device/CORE/ROOT epoch and re-pair grant revocation not physically provisioned, #587 co-rollback; #614 Postgres SQL simulated PASS only. Never replay lost ACK."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#617 exact VMId GUID absent and Get-VM denied; real Running status unverified; no isolated signed VM physical canary or live Start-VM."
+          "evidence": "Exact authorized Hyper-V VM GUID/Running or Off independent readback unavailable after denied Get-VM. No real signed VM canary or two-Agent up-to-date deployment."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#618 diagnostics pure, no executor; new exact-head CI pending; #617 main Hyper-V typed privilege/Broker support missing, independent two-source RED gates. No production acceptance."
+          "evidence": "#618/#620/#576 current HEAD CI red; #619 CI green on old-base; #608 source-compatible green; #614/#616/#609/#610/#612/#613/#615 CI green but NO physical trust or acceptance. Own CORE QA 5 pass/3 intentional fail, earlier Hyper-V 5 pass/2 fail; source gate stays red."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     }
@@ -766,6 +766,6 @@
     "headSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
     "runId": 39596766086,
     "conclusion": "PASS",
-    "scope": "source integration, not VM state"
+    "scope": "unchanged exact-main source CI, no elevated Windows/physical signed Broker acceptance"
   }
 }

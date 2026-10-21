@@ -2,7 +2,7 @@
   "schema": "nexowire.qa.findings.v2",
   "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
   "date": "2026-10-21",
-  "findingCount": 19,
+  "findingCount": 22,
   "scope": "Review and reproducible tests, not live exploit or release approval",
   "findings": [
     {
@@ -702,6 +702,134 @@
         "https://github.com/Naveax/Nexowire/issues/617",
         "https://github.com/Naveax/Nexowire/pull/618",
         "docs/qa/QA_20261021_HYPERV_617_ACCEPTANCE.json"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-P0-CORE-REAL-ELEVATION",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "classification": "P0_CORE_ELEVATED_ADMIN_RELEASE_BLOCKER",
+      "affected": [
+        {
+          "pr": 618,
+          "headSha": "512a1764d65efbfb448577687225d71e3a845a8d",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 620,
+          "headSha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "src/security/authorization-explain.ts; src/security/privilege.ts; docs/qa/QA_20261021_CORE_MASTER_ACCEPTANCE.json",
+      "observed": "User requires a persistent revocable real elevated broad administrative shell after one signed Broker local UAC bootstrap, not SAFE alias, per-operation UAC or VM-only permission. Current main has only owner CORE preference PAUSED_UNVERIFIED and lacks distinct elevated executor; ROOT not proven.",
+      "reproduction": [
+        "Run node --test --import tsx test/qa-core-broker-p0-negative.test.ts in the isolated QA checkout: 5 policy/deny source tests PASS and three actual implementation/TTL RED assertions FAIL.",
+        "Check main src/security/privilege.ts; no dedicated scoped windows.elevated.shell.exec capability, current shell.exec is user-level and excluded from privileged broker.",
+        "Check #618 owner correction vs #620 typed Hyper-V disabled source; neither is running protected signed elevated CORE Broker."
+      ],
+      "expectedFix": "Real high-integrity signed version-matched Broker executable and immutable import tree, authentic one-time LOCAL owner UAC approval, revocable owner/device/epoch scoped CORE high-shell/process with ROOT authenticated signed <=900s lease and no repeated UAC command; fail closed on loss.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/618",
+        "https://github.com/Naveax/Nexowire/pull/620",
+        "https://github.com/Naveax/Nexowire/issues/271"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-P0-TRUSTED-BROKER-JOB-CI",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "classification": "P0_CORE_ELEVATED_ADMIN_RELEASE_BLOCKER",
+      "affected": [
+        {
+          "pr": 576,
+          "headSha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 620,
+          "headSha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 608,
+          "headSha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "src/security/authorization-explain.ts; src/security/privilege.ts; docs/qa/QA_20261021_CORE_MASTER_ACCEPTANCE.json",
+      "observed": "#576 latest exact CI 39598258315 FAIL OS Authenticode surrogate UNAVAILABLE and inherited Modify ACL fixture null; #620 CI 39604898508 FAIL same conceptual trust fixtures; #618 CI 39605003581 Windows Job fast-exit iteration4. #608 older combined CI 39503650650 + release 39503650638 SUCCESS, separate SHA only.",
+      "reproduction": [
+        "Inspect exact Github Windows CI jobs 119215889947, 119238458644, 119239318873; classify assertion and fixture source, never delete red tests.",
+        "Compare #608 combined source HEAD d34c0d3 against present #576 a3946c1 and #620 4ba879f without inferring current success.",
+        "Use isolated signed Windows fixture and independently protected ACL/owner with no installed real service modifications; rerun exact-head CI."
+      ],
+      "expectedFix": "Fix native trusted publisher verification and DACL fixture while retaining test, prove actual kernel Job process ownership and drained outputs, require signed source and protected import/parent/updater ACL and unforgeable Broker token.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39598258315",
+        "https://github.com/Naveax/Nexowire/actions/runs/39604898508",
+        "https://github.com/Naveax/Nexowire/actions/runs/39605003581",
+        "https://github.com/Naveax/Nexowire/actions/runs/39503650650"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-P0-WITNESS-OWNER-EPOCH",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "classification": "P0_CORE_ELEVATED_ADMIN_RELEASE_BLOCKER",
+      "affected": [
+        {
+          "pr": 614,
+          "headSha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+          "state": "OPEN_DRAFT"
+        },
+        {
+          "pr": 619,
+          "headSha": "6f6c2b3812afadadaa0f123f5d40105eead6d054",
+          "state": "OPEN_DRAFT"
+        }
+      ],
+      "source": "src/security/authorization-explain.ts; src/security/privilege.ts; docs/qa/QA_20261021_CORE_MASTER_ACCEPTANCE.json",
+      "observed": "#614 PostgreSQL monotonic witness CI 39598693419 SUCCESS only with in-memory SQL contract simulator, no actual independent durable externally attested DB. #587 old joint J+A rollback threat remains; CORE revoke/re-pair/ROOT expiry must anchor epoch against replay.",
+      "reproduction": [
+        "Review #614 test/postgres-monotonic-witness.test.ts and signed-provenance fixtures for owner/device epoch; confirm no real PostgreSQL or physical monotonic attestation asserted.",
+        "Use existing QA stale rollback fixture that currently FAILS and the synthetic lost ACK no-replay #619 old-base success only as diagnostic, never readmit a mutation.",
+        "Physical staged two-device signed rollback/restore independent monotonic witness required before durable CORE admin commands."
+      ],
+      "expectedFix": "Commit reservation before dispatch in independent non-co-restorable CAS trust domain; signed owner/device/session epoch and revoke/re-pair, stale clock/old snapshot denial with no UNKNOWN blind retry.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/issues/587",
+        "https://github.com/Naveax/Nexowire/pull/614",
+        "https://github.com/Naveax/Nexowire/pull/619"
       ],
       "disposition": {
         "source": "FAIL",

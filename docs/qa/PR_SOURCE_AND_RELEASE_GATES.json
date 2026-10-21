@@ -201,16 +201,20 @@
     },
     {
       "pr": 551,
-      "headSha": "ce4ffdf7f6e57a4070341fe7e1cc2b12855b5a03",
+      "headSha": "9fdee36897ded643594795ba354fc25e894b65c3",
       "prState": "OPEN_DRAFT",
       "requirements": [
-        "R19"
+        "R04",
+        "R19",
+        "R22"
       ],
       "sourceReproducer": "test/agent-lifecycle-manager.test.ts",
-      "physicalAcceptanceMissing": "Actual signed native Nexowire installer, complete rollback archive and VM/real two-device canary absent",
+      "physicalAcceptanceMissing": "Latest exact-head CI 39606595530 and Release Readiness 39606595531 SUCCESS only for source, signed first-party installer, actual high token, signed rollback and VM/two-agent physical acceptance still BLOCKED",
       "ci": {
         "status": "PASS",
-        "runId": 39492494717
+        "runId": 39606595530,
+        "releaseReadinessRunId": 39606595531,
+        "reason": "Latest exact-head CI 39606595530 and Release Readiness 39606595531 SUCCESS only for source, signed first-party installer, actual high token, signed rollback and VM/two-agent physical acceptance still BLOCKED"
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -577,20 +581,23 @@
     },
     {
       "pr": 572,
-      "headSha": "3c9dcaf9fc956c51c8c454c587d0f606b16c125b",
+      "headSha": "99df8e60a2a7189429e9a8e8e6c45107328e71a4",
       "prState": "OPEN_DRAFT",
       "requirements": [
+        "R01",
+        "R02",
+        "R04",
         "R07",
         "R15",
         "R20",
         "R22"
       ],
-      "sourceReproducer": "test/qa-transfer-onecall-source-negative.test.ts",
-      "physicalAcceptanceMissing": "QA red: prior Windows READY failure, independently red current-main snapshot replay and missing public one-call tools",
+      "sourceReproducer": "test/qa-hyperv-617-source-negative.test.ts",
+      "physicalAcceptanceMissing": "Historical QA CI browser-live durable READY and intentional red source assertions",
       "ci": {
         "status": "FAIL",
-        "runId": 39493135449,
-        "reason": "Historical QA HEAD; next QA commit/CI not verified yet."
+        "runId": 39604979439,
+        "reason": "Historical QA CI browser-live durable READY and intentional red source assertions"
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -653,17 +660,19 @@
     },
     {
       "pr": 576,
-      "headSha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "headSha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
       "prState": "OPEN_DRAFT",
       "requirements": [
         "R07",
-        "R19"
+        "R19",
+        "R22"
       ],
-      "sourceReproducer": "test/windows-job-helper-trust.test.ts",
-      "physicalAcceptanceMissing": "Independent physical guardian/helper publisher/trusted release and Job teardown absent",
+      "sourceReproducer": "test/windows-job-helper-acl-publisher.test.ts",
+      "physicalAcceptanceMissing": "Real Authenticode surrogate UNAVAILABLE and inherited Modify ACL detector null; historical green cannot override current red",
       "ci": {
-        "status": "PASS",
-        "runId": 39492594206
+        "status": "FAIL",
+        "runId": 39598258315,
+        "reason": "Real Authenticode surrogate UNAVAILABLE and inherited Modify ACL detector null; historical green cannot override current red"
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -841,18 +850,157 @@
     {
       "pr": 608,
       "headSha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
-      "prState": "OPEN_DRAFT",
+      "prState": "OPEN_DRAFT_COMBINED",
       "requirements": [
         "R07",
         "R12",
         "R22"
       ],
       "sourceReproducer": "test/windows-job-owner.test.ts",
-      "physicalAcceptanceMissing": "Combined Win32 Job+HTTP CI and Readiness green, but unsigned dev helper, parent #598 red, real signed agent deployment and production not tested",
+      "physicalAcceptanceMissing": "Combined old #576 Job+#598 HTTP, Release 39503650638 green, unsigned production",
       "ci": {
         "status": "PASS",
         "runId": 39503650650,
-        "reason": "Combined cross-PR source CI SUCCESS and Release Readiness 39503650638 SUCCESS."
+        "reason": "Combined old #576 Job+#598 HTTP, Release 39503650638 green, unsigned production"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 609,
+      "headSha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+      "prState": "OPEN_DRAFT_STACKED",
+      "requirements": [
+        "R01",
+        "R07",
+        "R22"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "physicalAcceptanceMissing": "#599 errors combined with old #576 Job source; not latest parent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39596941696,
+        "reason": "#599 errors combined with old #576 Job source; not latest parent"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 610,
+      "headSha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/scale-v2-artifact-cancel-fencing-staging.test.ts",
+      "physicalAcceptanceMissing": "Synthetic cancellation receipt, no real Cloudflare staging",
+      "ci": {
+        "status": "PASS",
+        "runId": 39597505104,
+        "reason": "Synthetic cancellation receipt, no real Cloudflare staging"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 612,
+      "headSha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/owner-public-wss-signed-enrollment-staging.test.ts",
+      "physicalAcceptanceMissing": "Async signed device enrollment source race fixed, no production",
+      "ci": {
+        "status": "PASS",
+        "runId": 39597637188,
+        "reason": "Async signed device enrollment source race fixed, no production"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 613,
+      "headSha": "d019e99efd46fcb76262528ffe122ad1c0a4087d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/connection-core.test.ts",
+      "physicalAcceptanceMissing": "Owner epoch checkpoint source verified, no live Agent disconnect",
+      "ci": {
+        "status": "PASS",
+        "runId": 39598086598,
+        "reason": "Owner epoch checkpoint source verified, no live Agent disconnect"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 614,
+      "headSha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "prState": "OPEN_DRAFT_STACKED",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/postgres-monotonic-witness.test.ts",
+      "physicalAcceptanceMissing": "Synthetic PostgreSQL contract+signed provenance, no real external independent storage",
+      "ci": {
+        "status": "PASS",
+        "runId": 39598693419,
+        "reason": "Synthetic PostgreSQL contract+signed provenance, no real external independent storage"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 615,
+      "headSha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/mcp-http-json-limit.test.ts",
+      "physicalAcceptanceMissing": "S5 9.5MiB gzip and local fairness source only",
+      "ci": {
+        "status": "PASS",
+        "runId": 39598738701,
+        "reason": "S5 9.5MiB gzip and local fairness source only"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 616,
+      "headSha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "prState": "OPEN_DRAFT_STACKED",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-588-cross-device-worker.test.ts",
+      "physicalAcceptanceMissing": "CrossHub source adapter 1GiB physical signed two device unverified",
+      "ci": {
+        "status": "PASS",
+        "runId": 39598755514,
+        "reason": "CrossHub source adapter 1GiB physical signed two device unverified"
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -860,26 +1008,63 @@
     },
     {
       "pr": 618,
-      "headSha": "2abdaebeebe91d287530064f40054286c8f84fe2",
+      "headSha": "512a1764d65efbfb448577687225d71e3a845a8d",
       "prState": "OPEN_DRAFT",
       "requirements": [
-        "R01",
-        "R03",
         "R04",
         "R07",
-        "R09",
-        "R19",
-        "R20",
         "R21",
         "R22"
       ],
       "sourceReproducer": "test/hyperv-elevation-evidence.test.ts",
-      "physicalAcceptanceMissing": "Signed version-matched Broker/ACL/token + real local UAC + exact owner-scoped VM GUID and independent Running/Off readback; no runtime executor deployed",
+      "physicalAcceptanceMissing": "browser-live Windows Job fast-exit iteration 4",
       "ci": {
-        "status": "NOT_VERIFIED",
-        "runId": null,
-        "activeRunId": 39604629612,
-        "reason": "Exact HEAD CI queued, not PASS; previous 54e43ff run cancelled; local 8/8 source negatives author-reported."
+        "status": "FAIL",
+        "runId": 39605003581,
+        "reason": "browser-live Windows Job fast-exit iteration 4"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 619,
+      "headSha": "6f6c2b3812afadadaa0f123f5d40105eead6d054",
+      "prState": "OPEN_DRAFT_OLD_PARENT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-02-hyperv-denial-provenance.test.ts",
+      "physicalAcceptanceMissing": "Old #618 base 14d0d6; source success does not apply to latest #618",
+      "ci": {
+        "status": "PASS",
+        "runId": 39604390404,
+        "reason": "Old #618 base 14d0d6; source success does not apply to latest #618"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 620,
+      "headSha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R21",
+        "R22"
+      ],
+      "sourceReproducer": "test/hyperv-launcher-trust.test.ts",
+      "physicalAcceptanceMissing": "Windows Authenticode surrogate and disposable parent Modify ACL tests fail, typed dispatch OFF",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39604898508,
+        "reason": "Windows Authenticode surrogate and disposable parent Modify ACL tests fail, typed dispatch OFF"
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -887,5 +1072,5 @@
     }
   ],
   "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
-  "meaning": "Exact PR CI provenance separate from main/physical. #618 source-only negative explanation not permission or Hyper-V execution proof."
+  "meaning": "Independent SHA-pinned branch CI. CURRENT #576 red overrides older green. #618/#620 red, #619 old-base green, stacked green not physical; no production acceptance."
 }
