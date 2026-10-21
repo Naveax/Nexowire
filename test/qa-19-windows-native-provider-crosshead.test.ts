@@ -61,8 +61,8 @@ function nativeSigner(file: string): { status: string; thumbprint: string } {
   const command = [
     "$ErrorActionPreference='Stop'",
     "$native=Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'",
-    'Microsoft.PowerShell.Core\Import-Module -Name $native -Force -ErrorAction Stop',
-    '$v=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath ' + psQuote(file) + ' -ErrorAction Stop',
+    'Microsoft.PowerShell.Core\\Import-Module -Name $native -Force -ErrorAction Stop',
+    '$v=Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath ' + psQuote(file) + ' -ErrorAction Stop',
     "[ordered]@{status=[string]$v.Status;thumbprint=$(if($v.SignerCertificate){[string]$v.SignerCertificate.Thumbprint}else{''})} | ConvertTo-Json -Compress",
   ].join('\n');
   return JSON.parse(mustSucceed('pwsh.exe', [
