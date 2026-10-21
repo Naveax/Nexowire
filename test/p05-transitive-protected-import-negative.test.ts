@@ -159,6 +159,7 @@ test('hardlink aliases with distinct manifest keys cannot silently reuse same na
     module.handle.observedAfter.fileId=updater.handle.fileId;
     module.open.openedFileId=updater.handle.fileId;
     module.open.afterReadback.fileId=updater.handle.fileId;
-    // keep module on same volume to make duplicate physical-ID check material
+    module.effectiveAcl.observedFileId=updater.handle.fileId;
+    // same synthetic volume; duplicate file ID cannot be trusted as two DLLs
   },'IMPORT_HARDLINK_OR_ALIAS_COLLISION');
 });
