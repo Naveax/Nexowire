@@ -52,7 +52,8 @@ function fixture(){
     revoked:false,unknown:false,coreHigh:true,signatureValid:true,
     protectedImage:true,source:'NOT_DISPATCHED' as
       'NOT_DISPATCHED'|'WRITE_UNKNOWN'|'WRITERS_QUIESCENT'|'DELETED',
-    stoppedThrough:0,deletedAt:0,fencingEpoch:0,
+    stoppedThrough:0,deletedAt:0,fencingEpoch:0,revokeEpoch:0,
+    activeWriters:0,staleReadback:false,readbackUnavailable:false,
     actualDeletion:false,writerStopped:false,
     corruptProof:false,
   };
@@ -91,6 +92,23 @@ function fixture(){
       r.sessionId===scope.sessionId,
   };
   const trusted:TrustedFencedDeletionAuthority={
+    async readbackCurrent(binding,witness){
+      if(evidence.readbackUnavailable)throw Error('INDEPENDENT_READBACK_UNAVAILABLE');
+      return {
+        ownerId:binding.ownerId,deviceId:binding.deviceId,
+        projectId:binding.projectId,sessionId:binding.sessionId,
+        rootInvocationId:binding.rootInvocationId,
+        ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
+        writerRevokeEpoch:evidence.revokeEpoch,
+        writerStoppedThroughEpoch:evidence.stoppedThrough,
+        deletionEpoch:evidence.deletedAt,
+        fencingEpoch:evidence.staleReadback
+          ? witness.fencingEpoch+1 : evidence.fencingEpoch,
+        receiptId:witness.receiptId,
+        inFlightNativeWriters:evidence.activeWriters,
+        deletionState:'VERIFIED_ABSENT' as const,
+      };
+    },
     async withVerifiedFencedDeletion(binding,apply){
       if(evidence.source!=='DELETED'||!evidence.actualDeletion||
          !evidence.writerStopped||evidence.unknown||
@@ -130,7 +148,7 @@ function fixture(){
     verifiedDelete(){
       evidence.source='DELETED';evidence.writerStopped=true;
       evidence.actualDeletion=true;evidence.stoppedThrough=71;
-      evidence.deletedAt=73;evidence.fencingEpoch=74;
+      evidence.revokeEpoch=72;evidence.deletedAt=73;evidence.fencingEpoch=74;
     },
     close(){other.close();db.close();rmSync(folder,{recursive:true,force:true})},
   };
@@ -173,7 +191,7 @@ test('#640 cancellation before native write: no artificial UNKNOWN and cleanup r
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
      /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
    f.verifiedDelete();
-   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),'RELEASED');
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),'RELEASED_FIRST');
    assert.deepEqual(f.stats(),{admittedBytes:0,occupiedBytes:0,
      totalSessions:1,releasedSessions:1});
  }finally{f.close()}
@@ -194,7 +212,7 @@ test('#640 post-write lost ACK: cannot release UNKNOWN or refund admitted bytes'
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
      /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
    f.verifiedDelete();
-   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),'RELEASED');
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),'RELEASED_FIRST');
    assert.equal(f.stats().admittedBytes,CHUNK);
  }finally{f.close()}
 });
@@ -243,7 +261,7 @@ test('two Hub-like handles retry same trusted cancellation cleanup without doubl
      f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
      f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
    ]);
-   assert.deepEqual(results,['RELEASED','RELEASED']);
+   assert.deepEqual(results,['RELEASED_FIRST','RELEASED_ALREADY']);
    assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
       totalSessions:1,releasedSessions:1});
    f.evidence.revoked=true;
@@ -261,5 +279,86 @@ test('deletion proof absent in #610 budget verifier refuses even an otherwise va
      /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
    assert.equal(f.stats().occupiedBytes,SIZE);
    // Both independent authorities must agree. No client supplied flag can substitute.
+ }finally{f.close()}
+});
+
+test('missing external monotonic CAS readback never releases a signed-looking cleanup receipt',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   const noReadback=new StagingArtifactFencedCleanupAdmission(
+     f.first,f.core,{
+       withVerifiedFencedDeletion:f.trusted.withVerifiedFencedDeletion,
+     } as TrustedFencedDeletionAuthority);
+   await assert.rejects(()=>noReadback.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_REQUIRED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+test('cross-Hub revoke epoch MUST exceed highest dispatched writer epoch',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.revokeEpoch=scope.dispatchedWriterEpoch;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   f.evidence.revokeEpoch=72;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+ }finally{f.close()}
+});
+test('new Hub fencing epoch invalidates old deleted receipt at independent CAS readback',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.staleReadback=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+   f.evidence.staleReadback=false;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+ }finally{f.close()}
+});
+test('active writer or unreachable external readback: no cleanup refund',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.activeWriters=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   f.evidence.activeWriters=0;f.evidence.readbackUnavailable=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_READBACK_UNAVAILABLE/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+test('UNKNOWN, revoke, repeated Hub receipts: exactly one disk release and zero minute refunds',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);
+   f.evidence.source='WRITE_UNKNOWN';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.verifiedDelete();
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   f.evidence.revoked=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /AUTHORITY_STALE_REVOKED_UNKNOWN/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+   assert.equal(f.second.stageChunk({...baseChunk(),now:advanced}),
+     'DENIED_STATE');
+ }finally{f.close()}
+});
+test('persisted revoke epoch newer than physical deletion: deny old receipt',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.revokeEpoch=f.evidence.fencingEpoch+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
  }finally{f.close()}
 });
