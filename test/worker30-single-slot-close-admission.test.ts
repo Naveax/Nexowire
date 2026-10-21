@@ -37,7 +37,8 @@ test('QA30 only a witnessed parser close opens a single quiet-gzip admission slo
     app.post('/mcp',(req,res)=>{
       if(typeof req.body?.data==='string'){
         acceptedCompressed++;
-        res.json({parsedBytes:req.body.data.length});
+        res.json({parsedBytes:req.body.data.length,sha256:createHash('sha256')
+          .update(JSON.stringify(req.body)).digest('hex')});
       }else{
         acceptedFramed++;
         res.json({ok:true,tenant:req.headers['x-qa30-tenant']});
@@ -130,6 +131,7 @@ test('QA30 only a witnessed parser close opens a single quiet-gzip admission slo
       const afterVerifiedClose=await gzipPost('quiet');
       assert.equal(afterVerifiedClose.status,200);
       assert.equal(afterVerifiedClose.body.parsedBytes,1024*1024);
+      assert.equal(afterVerifiedClose.body.sha256,digest);
       assert.equal(acceptedCompressed,1);
       const summary={p50:quantileMs(latencies,.5),
         p95:quantileMs(latencies,.95),p99:quantileMs(latencies,.99)};
