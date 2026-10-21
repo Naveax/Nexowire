@@ -17,7 +17,7 @@ import {assessCoreLinkedStageAndDelegation,type CoreBootstrapEvidence}
 import {
  assessCoreSignedWindowsImportDag,
  type CoreSignedImportDag,type CoreNativeImportDagReadback,
- type CoreImportDagPins,type CoreStageSignatureInspector as SignInspect,
+ type CoreImportDagPins,
 } from '../scripts/s3-core-broker-install-gate.js';
 import {
  assessCoreOfflineRePairBootstrap,type CoreOfflineRePairWitness,
