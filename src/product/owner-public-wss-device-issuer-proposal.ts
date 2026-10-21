@@ -87,18 +87,26 @@ export class ProposedOwnerWssEnrollmentIssuer {
 
   async issue(request:DeviceOwnerWssEnrollmentRequest):
     Promise<SignedOwnerPublicWssEnrollment>{
-    const bytes=serializeOwnerWssDeviceProof(request);
-    if(!SIGNATURE.test(request.deviceSignature)){
+    // Pin every signed input before the first asynchronous authentication
+    // boundary. A shared mutable request must never switch device identity,
+    // nonce replay key, token or signature between proof and DB admission.
+    const pinned:DeviceOwnerWssEnrollmentRequest={
+      bearerToken:request?.bearerToken,deviceId:request?.deviceId,
+      nonce:request?.nonce,signedAtMs:request?.signedAtMs,
+      deviceSignature:request?.deviceSignature,
+    };
+    const bytes=serializeOwnerWssDeviceProof(pinned);
+    if(!SIGNATURE.test(pinned.deviceSignature)){
       throw new Error('Malformed Ed25519 device possession signature encoding');
     }
-    const signatureBytes=Buffer.from(request.deviceSignature,'base64url');
+    const signatureBytes=Buffer.from(pinned.deviceSignature,'base64url');
     // Reject alternate spellings of the same Ed25519 signature BEFORE
     // owner lookup and before consuming an irreversible nonce.
     if(signatureBytes.length!==64||
-      signatureBytes.toString('base64url')!==request.deviceSignature){
+      signatureBytes.toString('base64url')!==pinned.deviceSignature){
       throw new Error('Malformed Ed25519 device possession signature encoding');
     }
-    const authenticated=await this.authenticate(request.bearerToken);
+    const authenticated=await this.authenticate(pinned.bearerToken);
     if(!authenticated||!ID.test(authenticated.accountId)||
       !Number.isSafeInteger(authenticated.sessionGeneration)||
       authenticated.sessionGeneration<0){
@@ -106,7 +114,7 @@ export class ProposedOwnerWssEnrollmentIssuer {
     }
     const now=(this.config.clock??Date.now)();
     if(!Number.isSafeInteger(now)||now<=0||
-      Math.abs(request.signedAtMs-now)>60_000){
+      Math.abs(pinned.signedAtMs-now)>60_000){
       throw new Error('Device enrollment proof expired or invalid clock');
     }
     let begun=false;
@@ -120,17 +128,17 @@ export class ProposedOwnerWssEnrollmentIssuer {
       }|undefined;
       const d=this.db.prepare(
         'SELECT owner_account_id,enabled FROM proposed_owner_quota_devices WHERE device_id=?'
-      ).get(request.deviceId) as {
+      ).get(pinned.deviceId) as {
         owner_account_id:string;enabled:number
       }|undefined;
       const k=this.db.prepare(
         'SELECT public_key_pem,enabled FROM proposed_owner_rpc_device_keys WHERE device_id=?'
-      ).get(request.deviceId) as {
+      ).get(pinned.deviceId) as {
         public_key_pem:string;enabled:number
       }|undefined;
       const revision=this.db.prepare(
         'SELECT revision,enabled FROM proposed_owner_wss_profile_revisions WHERE device_id=?'
-      ).get(request.deviceId) as {
+      ).get(pinned.deviceId) as {
         revision:number;enabled:number
       }|undefined;
       const last=this.db.prepare(
@@ -153,11 +161,11 @@ export class ProposedOwnerWssEnrollmentIssuer {
       // Atomic replay exclusion. A failed signing operation rolls back nonce use.
       this.db.prepare(
         'INSERT INTO proposed_owner_wss_enrollment_nonces(device_id,nonce,consumed_at_ms) VALUES(?,?,?)'
-      ).run(request.deviceId,request.nonce,now);
+      ).run(pinned.deviceId,pinned.nonce,now);
 
       const unsigned:SignedOwnerPublicWssEnrollment={
         version:1,operatorId:this.config.operatorId,keyId:this.config.keyId,
-        accountId:authenticated.accountId,deviceId:request.deviceId,
+        accountId:authenticated.accountId,deviceId:pinned.deviceId,
         sessionGeneration:authenticated.sessionGeneration,
         profileRevision:revision.revision,
         issuedAtMs:now,expiresAtMs:now+this.config.validForMs,
