@@ -126,19 +126,30 @@ export class ProgressRuntimePostconditionAdapter {
       throw new Error('RUNTIME_TRUST_BOUNDARY_INVALID');
   }
   private blockUnknown():RuntimeCompletionStatus{
+    this.lastWitnessDigest=null;
     this.blocked='MUTATION_UNKNOWN';
     this.supervisor.invalidateOwnerGrant(this.expected.sessionId);
     this.lastResult=this.blocked;
     return this.blocked;
   }
   private cancel():RuntimeCompletionStatus{
+    this.lastWitnessDigest=null;
     this.blocked='CANCELLED_OR_STALE_CORE';
     this.supervisor.invalidateOwnerGrant(this.expected.sessionId);
     this.lastResult=this.blocked;
     return this.blocked;
   }
-  /** Only invoked after an authenticated Hub response reaches this adapter. */
+  /** A lost ACK after a possible native write cannot be replayed. */
   observeLostAck():RuntimeCompletionStatus{return this.blockUnknown();}
+  /** Invoked by a trusted process observer; never infer recovery from stdout. */
+  observeLostPid():RuntimeCompletionStatus{return this.blockUnknown();}
+  /** A cancel requested during a potentially dispatched native write is UNKNOWN. */
+  observeNativeWriteCancelPending():RuntimeCompletionStatus{return this.blockUnknown();}
+  private sourceProcessUnknown():boolean{
+    const state=this.supervisor.snapshot(this.expected.sessionId);
+    return state.processState==='lost'||state.processState==='orphaned'||
+      state.state==='stalled';
+  }
   snapshot(){
     return {status:this.blocked??this.lastResult,
       pending:this.pending,postconditionSha256:this.lastWitnessDigest,
@@ -146,6 +157,7 @@ export class ProgressRuntimePostconditionAdapter {
   }
   async reconcile(signed:SignedCompletion):Promise<RuntimeCompletionStatus>{
     if(this.blocked)return this.blocked;
+    if(this.sourceProcessUnknown())return this.blockUnknown();
     if(this.pending)return this.blockUnknown();
     this.pending=true;
     try{
@@ -155,10 +167,11 @@ export class ProgressRuntimePostconditionAdapter {
           this.ports.readGrant(),this.ports.readTransfer(),
         ]);
       }catch{return this.blockUnknown();}
+      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       if(!grantMatches(grant,this.expected))return this.cancel();
       if(!transferMatches(transfer,signed)){
-        if(['CANCEL_REQUESTED','CANCELLED'].includes(transfer.state))
-          return this.cancel();
+        if(transfer.state==='CANCEL_REQUESTED')return this.blockUnknown();
+        if(transfer.state==='CANCELLED')return this.cancel();
         // An invalid terminal COMPLETED, FAILED, or a native-write outcome
         // that requires recovery is ambiguous, not safe to re-poll/replay.
         // In particular, a counterfeit COMPLETED receipt must be sticky
@@ -177,12 +190,13 @@ export class ProgressRuntimePostconditionAdapter {
       catch{return this.blockUnknown();}
       if(!postconditionMatches(witness,this.expected,signed,transfer,
         this.keys.postcondition,this.now())){
-        this.lastResult='POSTCONDITION_MISMATCH';
-        return this.lastResult;
+        // Counterfeit signed completion must remain UNKNOWN, not become
+        // eligible for a blind second verification after another RPC reply.
+        return this.blockUnknown();
       }
       const permit=await verifyOffhostCompletion(signed,this.expected,
         this.keys.issuer,this.keys.immutableStorage,this.ports,this.now);
-      if(this.blocked)return this.blocked;
+      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       if(!permit){
         // An in-flight CORE revoke can make the lower-level verifier fail
         // after its second grant check. Reconcile the grant once more so a
@@ -192,8 +206,8 @@ export class ProgressRuntimePostconditionAdapter {
             this.ports.readGrant(),this.ports.readTransfer(),
           ]);
           if(!grantMatches(latest,this.expected))return this.cancel();
-          if(['CANCEL_REQUESTED','CANCELLED'].includes(latestTransfer.state))
-            return this.cancel();
+          if(latestTransfer.state==='CANCEL_REQUESTED')return this.blockUnknown();
+          if(latestTransfer.state==='CANCELLED')return this.cancel();
         }catch {return this.blockUnknown();}
         // Could be corruption, missing readback or lost ACK. No retry.
         return this.blockUnknown();
@@ -203,12 +217,12 @@ export class ProgressRuntimePostconditionAdapter {
       try{[g2,t2]=await Promise.all([
         this.ports.readGrant(),this.ports.readTransfer(),
       ]);}catch{return this.blockUnknown();}
-      if(this.blocked)return this.blocked;
+      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       if(!grantMatches(g2,this.expected))return this.cancel();
       if(!transferMatches(t2,signed))return this.blockUnknown();
       const verified=await this.supervisor.verifySessionFromDisk(
         this.expected.sessionId,this.request,permit);
-      if(this.blocked)return this.blocked;
+      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       if(verified.status!=='verified'){
         this.lastResult='PROOF_UNVERIFIED';return this.lastResult;
       }
@@ -216,7 +230,7 @@ export class ProgressRuntimePostconditionAdapter {
       const [g3,t3]=await Promise.all([
         this.ports.readGrant(),this.ports.readTransfer(),
       ]).catch(()=>[null,null] as const);
-      if(this.blocked)return this.blocked;
+      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       if(!g3||!t3)return this.blockUnknown();
       if(!grantMatches(g3,this.expected))return this.cancel();
       if(!transferMatches(t3,signed))return this.blockUnknown();
@@ -227,7 +241,7 @@ export class ProgressRuntimePostconditionAdapter {
       const {signatureBase64:_signature,...body}=witness;
       this.lastWitnessDigest=createHash('sha256').update(
         canonicalPostconditionWitness(body)).digest('hex');
-      if(this.blocked)return this.blocked;
+      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       this.lastResult='COMPLETED_VERIFIED';
       return this.lastResult;
     }catch{

@@ -583,3 +583,44 @@ writer fencing are deployed and tested, production worker
 `COMPLETED_VERIFIED` remains **NO-GO**. No changes to #08 Artifact
 Store implementation, #03 Job/ProcessManager, live Agent/UAC/VM, or
 GPU/crypto workloads.
+
+
+### 2026-10-21 #11 follow-up: fake COMPLETED after lost ACK/PID, stale CORE and native-write cancellation
+
+The source-only `ProgressRuntimePostconditionAdapter` has additional
+fail-closed event boundaries. A `observeLostPid()` or
+`observeNativeWriteCancelPending()` callback now marks the current
+session permanently `MUTATION_UNKNOWN` (with no auto replay). The
+adapter also *independently observes* the ProgressSupervisor's
+`lost`, `orphaned` or genuinely `stalled` process state before
+verification and at each asynchronous proof boundary. A later
+counterfeit `COMPLETED` RPC, even with syntactically plausible fields,
+cannot restore completion after process identity or native write outcome
+has become unknown.
+
+A malformed postcondition signature/digest is also sticky UNKNOWN, not
+a retryable `POSTCONDITION_MISMATCH`. A transfer in
+`CANCEL_REQUESTED` is ambiguous because a write may already have
+dispatched, so it remains UNKNOWN pending explicit independent
+reconciliation. `CANCELLED` and externally revoked/stale CORE grants
+are fail-closed cancellations, never verified completion. No retry or
+replay is attempted by the adapter; an explicit new authorized
+invocation with a verified independent grant and immutable-result proof
+is required.
+
+Additional deterministic QA covers: counterfeit `COMPLETED` after
+a lost ACK and after loss of the owner PID; stalled worker incorrectly
+reporting completion; asynchronous native-write cancellation after
+dispatch/readback; forged status after that cancellation; CORE grant
+epoch changes and revoke occurring after signed witness retrieval;
+and reattempt prevention even after later superficially successful
+RPCs. Assertions verify `automaticReplayAllowed=false` and no
+`completed_verified` state or independent signed digest promotion.
+
+**Strict scope:** Progress code/tests/documentation only. No edits to
+Artifact Bridge (#08) implementation, native Job/ProcessManager (#03),
+or live Agent/Hub/UAC/VM. Source tests use temporary synthetic
+worker/result fixtures and test-only Ed25519 keys. Independent
+physical owner-epoch authority and real immutable off-host SHA-256
+readback are **NOT installed or verified**; production acceptance
+remains NO-GO.

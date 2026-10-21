@@ -152,14 +152,14 @@ test('independent signed SHA-256 postcondition + fresh CORE epoch => completed_v
 }));
 test('forged COMPLETED RPC cannot substitute absent or mismatched signed postcondition',()=>scenario(async f=>{
   f.mutable.witness={...f.mutable.witness,sha256:'f'.repeat(64)};
-  assert.equal(await f.adapter.reconcile(f.signed),'POSTCONDITION_MISMATCH');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
 test('forged postcondition signature and unrelated postcondition key reject',()=>scenario(async f=>{
   f.mutable.witness={...f.mutable.witness,
     signatureBase64:Buffer.alloc(64).toString('base64')};
-  assert.equal(await f.adapter.reconcile(f.signed),'POSTCONDITION_MISMATCH');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
 }));
 test('CORE epoch rotated before use or CANCEL_REQUESTED must fail closed',async()=>{
@@ -222,12 +222,12 @@ test('RUNNING, PUBLISHING and CANCEL_REQUESTED cannot produce completion',async(
   });
   await scenario(async f=>{
     f.mutable.transferState='CANCEL_REQUESTED';
-    assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   });
 });
 test('worker lost before verification prevents a valid signed receipt from completing',()=>scenario(async f=>{
   f.p.recover([{sessionId,status:'lost',exitCode:null}]);
-  assert.equal(await f.adapter.reconcile(f.signed),'PROOF_UNVERIFIED');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(f.p.snapshot(sessionId).state,'lost');
 }));
 
@@ -243,7 +243,7 @@ test('native-write cancellation pending during signed readback cannot become com
     const item=await original();
     return reads>=2?{...item,state:'CANCEL_REQUESTED'}:item;
   };
-  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(f.p.snapshot(sessionId).completionAttested,false);
   assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
@@ -290,7 +290,7 @@ test('lost PID during postcondition off-host SHA readback invalidates the result
     }
     return value;
   };
-  assert.equal(await f.adapter.reconcile(f.signed),'PROOF_UNVERIFIED');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(f.p.snapshot(sessionId).state,'lost');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
@@ -302,7 +302,7 @@ test('stalled synthetic worker with 100% self-report but no OS exit cannot compl
   assert.equal(snapshot.state,'stalled');
   assert.equal(snapshot.processState,'running');
   assert.notEqual(snapshot.state,'completed_verified');
-  assert.equal(await f.adapter.reconcile(f.signed),'PROOF_UNVERIFIED');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
 }));
 
@@ -320,5 +320,98 @@ test('lost ACK during asynchronous immutable readback stays sticky UNKNOWN',()=>
   assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('counterfeit COMPLETED after lost ACK cannot poll, replay, or recertify a result',()=>scenario(async f=>{
+  // No network or disk calls should be reached after the first lost ACK.
+  const first=f.adapter.observeLostAck();
+  assert.equal(first,'MUTATION_UNKNOWN');
+  f.ports.readTransfer=async()=>{throw Error('REPLAYED_STATUS_POLL');};
+  const counterfeit={...f.signed,signatureBase64:Buffer.alloc(64,0).toString('base64')};
+  assert.equal(await f.adapter.reconcile(counterfeit),'MUTATION_UNKNOWN');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().postconditionSha256,null);
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('forged COMPLETED following lost PID or stalled worker is sticky UNKNOWN',async()=>{
+  await scenario(async f=>{
+    f.p.recover([{sessionId,status:'lost',exitCode:null}]);
+    assert.equal(f.adapter.observeLostPid(),'MUTATION_UNKNOWN');
+    // A stale worker may reconnect and claim a completed result. The prior
+    // unknown process identity cannot be safely converted into completion.
+    f.p.recover([{sessionId,status:'exited',exitCode:0}]);
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+  });
+  await scenario(async f=>{
+    f.p.recover([{sessionId,status:'running',exitCode:null}]);
+    f.setNow(f.now()+1500);
+    assert.equal(f.p.snapshot(sessionId).state,'stalled');
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+  });
+});
+
+test('pending native write cancel injected during readback makes later completed receipt UNKNOWN',()=>scenario(async f=>{
+  let reads=0;
+  const read=f.ports.readOffhost;
+  f.ports.readOffhost=async(offset,size)=>{
+    const response=await read(offset,size);
+    if(++reads===1){
+      assert.equal(f.adapter.observeNativeWriteCancelPending(),'MUTATION_UNKNOWN');
+    }
+    return response;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  f.ports.readOffhost=read;
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('stale CORE owner epoch or revoked grant after signed witness never validates',async()=>{
+  await scenario(async f=>{
+    const read=f.ports.readPostcondition;
+    f.ports.readPostcondition=async()=>{
+      const value=await read();
+      f.mutable.epoch++;
+      return value;
+    };
+    assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+    assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+    assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+  });
+  await scenario(async f=>{
+    const grant=f.ports.readGrant;
+    let reads=0;
+    f.ports.readGrant=async()=>{
+      const value=await grant();
+      return ++reads>=4?{...value,state:'REVOKED'}:value;
+    };
+    assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+    assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  });
+});
+
+test('terminal COMPLETED forged after native cancel pending remains UNKNOWN',()=>scenario(async f=>{
+  const read=f.ports.readTransfer;
+  let reads=0;
+  f.ports.readTransfer=async()=>{
+    const item=await read();
+    reads++;
+    return reads===1?{...item,state:'CANCEL_REQUESTED'}:item;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  // The next read is now a forged COMPLETED receipt. It must never be
+  // observed, nor schedule a replay after the native-write outcome is unknown.
+  f.ports.readTransfer=async()=>{throw Error('SHOULD_NOT_POLL_AFTER_UNKNOWN');};
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
