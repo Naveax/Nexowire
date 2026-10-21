@@ -30,3 +30,20 @@ BEGIN
   UPDATE proposed_owner_wss_profile_revisions
   SET revision=revision+1 WHERE device_id=NEW.device_id;
 END;
+
+-- A pairing row may be REPLACED rather than UPDATED. SQLite fires INSERT
+-- for INSERT OR REPLACE but does not fire the UPDATE trigger. In addition,
+-- a deleted and re-inserted device ID must never inherit a previous signed
+-- enrollment receipt simply because its device ID and public key are equal.
+CREATE TRIGGER proposed_owner_wss_device_pair_insert_revision
+AFTER INSERT ON proposed_owner_quota_devices
+BEGIN
+  UPDATE proposed_owner_wss_profile_revisions
+  SET revision=revision+1 WHERE device_id=NEW.device_id;
+END;
+CREATE TRIGGER proposed_owner_wss_device_pair_delete_revision
+AFTER DELETE ON proposed_owner_quota_devices
+BEGIN
+  UPDATE proposed_owner_wss_profile_revisions
+  SET revision=revision+1 WHERE device_id=OLD.device_id;
+END;
