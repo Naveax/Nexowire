@@ -5,6 +5,7 @@ import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-fil
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
 import { registerCrossDeviceTransferJobTools } from './cross-device-transfer-job-tools.js';
+import type { TrustedTransferAuthority } from '../workspace/artifact-job-trust.js';
 import { TransferJobError } from './cross-device-transfer-jobs.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -68,6 +69,8 @@ export interface McpContext {
   availableCapabilities?: readonly string[];
   audit?: AuditLog;
   workspaces: WorkspaceStore;
+  /** Trusted Hub bootstrap ONLY, never user input. Must be external monotonic CAS. */
+  artifactTransferAuthority?: TrustedTransferAuthority;
   skills: SkillRegistry;
 }
 
@@ -6700,7 +6703,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         create_parents: false,
       });
     },
-  });
+  }, ctx.artifactTransferAuthority);
 
   server.registerTool(
     'audit_recent',

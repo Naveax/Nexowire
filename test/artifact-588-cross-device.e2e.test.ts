@@ -37,8 +37,24 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
   const providers = new ProviderRegistry();
   providers.register(new AgentProvider(broker));
   const workspaces = new WorkspaceStore(path.join(root, 'hub-state'));
+  // Staging-only independent authority emulator: NOT a trusted production
+  // CAS service. Both sessions share exactly one monotonic fixture.
+  const epochs = new Map<string, number>();
+  const artifactTransferAuthority = {
+    acquire: async (job: { id: string }, _mode: 'new' | 'resume') => {
+      const next = (epochs.get(job.id) ?? 0) + 1;
+      epochs.set(job.id, next);
+      return { epoch: next, token: 'staging-only-' + job.id + '-' + next.toString().padStart(10, '0') };
+    },
+    assertCurrent: async (job: { id: string }, proof: { epoch: number; token: string }) => {
+      if (epochs.get(job.id) !== proof.epoch ||
+          proof.token !== 'staging-only-' + job.id + '-' + proof.epoch.toString().padStart(10, '0')) {
+        throw new Error('STALE_EXTERNAL_FENCE');
+      }
+    },
+  };
   const server = createNexowireMcpServer({
-    broker, providers, workspaces,
+    broker, providers, workspaces, artifactTransferAuthority,
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
     toolAuthorization: { kind: 'control-plane', scope: 'mcp',
       accountId: 'synthetic-e2e-account', role: 'admin',
@@ -135,7 +151,7 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
   // must not trigger any remote source read/write.
   async function restricted(accountId: string, grants: string[]) {
     const mcp = createNexowireMcpServer({
-      broker, providers, workspaces, skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
+      broker, providers, workspaces, artifactTransferAuthority, skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
       toolAuthorization: { kind: 'control-plane', scope: 'mcp', accountId,
         role: 'admin', allowedDeviceIds: grants },
     });
