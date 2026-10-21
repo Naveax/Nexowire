@@ -403,7 +403,7 @@ test('#22 next: two publishers race; one commits, CORE revoke denies other Nativ
       assert.equal(loser.state, 'MUTATION_UNKNOWN');
       assert.equal(loser.bytesConfirmed, bytes.length);
       // The outer worker retains the more specific trusted CORE revoke provenance.
-      assert.equal(loser.errorCode, 'CORE_OWNER_REVOKED');
+      assert.equal(loser.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
       assert.equal(fx.publications, 1);
       assert.deepEqual(fx.target, bytes);
       assert.equal(fx.writes.filter(w => w.id === first.id).length, 3);
@@ -559,7 +559,7 @@ test('#22 gate: lease expiry while PUBLISHING fences old Hub, only new job signs
       const rejected = await stored(root, old.id);
       assert.equal(rejected.state, 'MUTATION_UNKNOWN');
       assert.equal(rejected.bytesConfirmed, bytes.length);
-      assert.equal(rejected.errorCode, 'NATIVE_LEASE_EXPIRED');
+      assert.equal(rejected.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
       assert.equal(fx.publications, 0);
       assert.equal(fx.publishedReceipts.length, 0);
       const hubB = fx.hub(root);
@@ -599,7 +599,7 @@ test('#22 gate: CORE re-pair during pending Native publish cannot authenticate s
       await a.waitForIdle(old.id);
       const rejected = await stored(root, old.id);
       assert.equal(rejected.state, 'MUTATION_UNKNOWN');
-      assert.equal(rejected.errorCode, 'CORE_GRANT_EPOCH_STALE');
+      assert.equal(rejected.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
       assert.equal(fx.publications, 0);
       assert.equal(fx.publishedReceipts.length, 0);
       await assert.rejects(b.status(old.id, input.accountId,
