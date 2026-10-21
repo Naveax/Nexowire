@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 10,
+  "ids": [
+    672,
+    673,
+    674,
+    675,
+    676,
+    677,
+    678,
+    679
+  ],
+  "nodes": [
+    {
+      "pr": 672,
+      "head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "head_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "base_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39632489293,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975"
+      }
+    },
+    {
+      "pr": 673,
+      "head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "head_ref": "test/p05-verified-handle-acl-20261021",
+      "base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "base_ref": "fix/parallel-05-scoped-path-usb-grants-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39632538963,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449"
+      }
+    },
+    {
+      "pr": 674,
+      "head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "head_ref": "test/parallel-15-s5-598-seeded-parser-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39632610866,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401"
+      }
+    },
+    {
+      "pr": 675,
+      "head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "head_ref": "test/07-oauth-csrf-state-consume-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39632701546,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5"
+      }
+    },
+    {
+      "pr": 676,
+      "head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "head_ref": "fix/01-bound-grant-monotonic-cas-20261021",
+      "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "base_ref": "fix/01-witness-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39634099233,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07"
+      }
+    },
+    {
+      "pr": 677,
+      "head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209",
+      "head_ref": "test/21-qa640-651-on-667-20261021",
+      "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "base_ref": "fix/08-cancel-native-dispatch-race-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644025130,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209"
+      }
+    },
+    {
+      "pr": 678,
+      "head_sha": "807725eadece998fc4928a0a3898e71afa828da8",
+      "head_ref": "test/20-owner-stage-repair-crash-negative-20261021",
+      "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "base_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644040656,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "807725eadece998fc4928a0a3898e71afa828da8"
+      }
+    },
+    {
+      "pr": 679,
+      "head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350",
+      "head_ref": "test/qa-19-provider-cross-head-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644147390,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350"
+      }
+    }
+  ]
+}
