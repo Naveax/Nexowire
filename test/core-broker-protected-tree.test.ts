@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {promises as fs} from 'node:fs';
+import {promises as fs,realpathSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -12,6 +12,7 @@ type Item={
 type Audit={
  productionReady:false;elevatedCoreDispatchEnabled:false;
  inputsInsideRoot:boolean;rejectedOutOfRootPaths:string[];
+ acceptedInputPaths:string[];inspectedFilesCount:number;
  inspectedEntries:Item[];allInspectedPathsHaveAclEvidence:boolean;
  anyInspectedPathUnsafe:boolean;importListIndependentlyEnumerated:false;
  signedImportManifestVerified:false;updaterReleaseRollbackVerified:false;
@@ -19,14 +20,20 @@ type Audit={
  pidCreationFiletimeVerified:false;processDupHandleBoundaryVerified:false;
 };
 function inspect(root:string,exe:string,updater:string,imports:string[]):Audit {
+ const envelope=Buffer.from(JSON.stringify({
+  version:1,protectedInstallRoot:root,launcherPath:exe,
+  updaterPath:updater,importedModulePaths:imports,
+ }), 'utf8').toString('base64');
  const p=spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-File',
    path.resolve('scripts/audit-core-broker-protected-tree.ps1'),
-   '-ProtectedInstallRoot',root,'-LauncherPath',exe,'-UpdaterPath',updater,
-   '-ImportedModulePaths',...imports],
+   '-EvidenceRequestBase64',envelope],
    {encoding:'utf8',windowsHide:true,timeout:14000,maxBuffer:128*1024});
  assert.equal(p.status,0,'audit script failed '+(p.stderr??'').slice(0,1700));
- return JSON.parse(p.stdout.trim()) as Audit;
+ const result=JSON.parse(p.stdout.trim()) as Audit;
+ assert.ok(Array.isArray(result.inspectedEntries),'inspectedEntries not an array');
+ return result;
 }
+const canonical=(value:string)=>realpathSync.native(value).toLowerCase();
 async function fixture(){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nx-core-protected-tree-'));
  const parent=path.join(root,'protected');
@@ -46,11 +53,13 @@ test('every declared import and updater ancestor is inspected, not merely the Br
  const f=await fixture();
  try{
   const a=inspect(f.parent,f.exe,f.updater,[f.modulePath]);
-  assert.equal(a.inputsInsideRoot,true);
+  assert.equal(a.inputsInsideRoot,true,JSON.stringify(a));
+  assert.equal(a.inspectedFilesCount,3,JSON.stringify(a));
+  assert.equal(a.acceptedInputPaths.length,4,JSON.stringify(a));
   for(const p of [f.exe,f.updater,f.modulePath,f.parent,
    path.dirname(f.modulePath),path.dirname(f.updater)]){
-   assert.ok(a.inspectedEntries.some(e=>e.path.toLowerCase()===p.toLowerCase()),
-    'missing EXE/import/updater ACL or ancestor '+p);
+   assert.ok(a.inspectedEntries.some(e=>e.evidenceAvailable && canonical(e.path)===canonical(p)),
+    'missing actual EXE/import/updater ACL or ancestor '+p+'; report='+JSON.stringify(a));
   }
   assert.equal(a.allInspectedPathsHaveAclEvidence,true);
   assert.equal(a.importListIndependentlyEnumerated,false);
@@ -70,7 +79,7 @@ test('replaced unsigned import, forged manifest and out-of-root updater never be
   await fs.writeFile(external,'malicious replacement fixture never run');
   const a=inspect(f.parent,f.exe,external,[f.modulePath]);
   assert.equal(a.inputsInsideRoot,false);
-  assert.ok(a.rejectedOutOfRootPaths.some(x=>x.toLowerCase()===external.toLowerCase()));
+  assert.ok(a.rejectedOutOfRootPaths.some(x=>canonical(x)===canonical(external)),JSON.stringify(a));
   assert.equal(a.productionReady,false);
   await fs.writeFile(f.modulePath,'REPLACED UNSIGNED MODULE WITH SAME NAME');
   await fs.writeFile(path.join(f.parent,'manifest.sha256'),
@@ -92,8 +101,8 @@ test('low-trust Modify inherited on imported module parent is discovered', {
      {encoding:'utf8',windowsHide:true,timeout:8000});
   assert.equal(change.status,0,'test-only folder ACE: '+change.stderr);
   const a=inspect(f.parent,f.exe,f.updater,[f.modulePath]);
-  const e=a.inspectedEntries.find(x=>x.path.toLowerCase()===folder.toLowerCase());
-  assert.ok(e,'import directory must be inspected');
+  const e=a.inspectedEntries.find(x=>canonical(x.path)===canonical(folder));
+  assert.ok(e,'import directory must be inspected: '+JSON.stringify(a));
   assert.equal(e.broadLowTrustWriteFound,true,JSON.stringify({entry:e,entries:a.inspectedEntries}));
   assert.equal(a.anyInspectedPathUnsafe,true);
   assert.equal(a.productionReady,false);
