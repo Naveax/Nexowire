@@ -156,6 +156,7 @@ test('617 QA02 source-only Hyper-V reservation: journal unknown stays unknown af
       broker:{authenticatedHealth:'unverified',elevatedToken:'unverified',
         versionMatch:'unverified',capabilityAllowed:false},
       localApproval:'not_verified',ownerPolicyApproved:false,
+      ownerGrant:'core',coreEnrollment:'revoked',rootLease:'expired',
       dispatch:'lost_confirmation',
       // External stale records are intentionally not part of the evidence contract.
       ...{vmState:'Running',vmStateObservedAt:'2024-01-01T00:00:00Z',

@@ -29,6 +29,11 @@ function facts(overrides: Partial<Snapshot> = {}): Snapshot {
     },
     localApproval: 'verified',
     ownerPolicyApproved: true,
+    // Reconcile #619 fixtures against #618's now-required CORE/ROOT fields.
+    // Verified source snapshot is NOT a trusted OS grant or Broker proof.
+    ownerGrant: 'root',
+    rootLease: 'verified',
+    coreEnrollment: 'unverified',
     dispatch: 'not_sent',
     ...overrides,
   };
@@ -78,11 +83,15 @@ test('617 QA02 denialSource=policy: scoped owner permission and immutable VMId a
   }
 });
 
-test('617 QA02 denialSource=user: an explicit refusal differs from a pending consent', () => {
+test('617 QA02 denialSource=user: an explicit rejection differs from preapproved grant with unavailable Broker', () => {
   const denied=rejectSuccess(facts({localApproval:'rejected'}),'user','denied');
   assert.equal(denied.execution.code,'HYPERV_LOCAL_APPROVAL_REJECTED');
-  const pending=rejectSuccess(facts({localApproval:'not_verified'}),'undetermined','pending');
-  assert.equal(pending.execution.code,'HYPERV_LOCAL_APPROVAL_UNVERIFIED');
+  // #618 512a176: verified ROOT/CORE does not demand new per-command
+  // UAC. Without independently attested Broker, deny for Windows authority,
+  // NOT an invented pending new consent prompt.
+  const brokerUnavailable=rejectSuccess(facts({localApproval:'not_verified'}),'windows','denied');
+  assert.equal(brokerUnavailable.execution.code,'HYPERV_ELEVATED_TOKEN_UNAVAILABLE');
+  assert.equal(brokerUnavailable.delegation.perOperationUacRequired,false);
 });
 
 test('617 QA02 denialSource=undetermined: lost UAC/RunAs acknowledgement overrides prior denials', () => {
