@@ -32,6 +32,11 @@ export interface HypervElevationSnapshot {
   /** A remote button/CORE lease is not physical approval or Windows UAC. */
   readonly localApproval: 'not_verified' | 'pending' | 'rejected' | 'verified';
   readonly ownerPolicyApproved: boolean;
+  /** Owner-selected Nexowire mode. This is not OS token elevation. */
+  readonly ownerGrant: 'safe' | 'full' | 'root' | 'core';
+  /** Independent authority expected; the snapshot alone does not attest it. */
+  readonly rootLease: 'verified' | 'expired' | 'unverified';
+  readonly coreEnrollment: 'verified' | 'revoked' | 'unverified';
   /** No transport ACK can independently establish a Windows side effect. */
   readonly dispatch: 'not_sent' | 'lost_confirmation' | 'ack_unverified';
 }
@@ -46,6 +51,12 @@ export interface HypervElevationExplanation {
   };
   readonly adminBridge: HypervElevationSnapshot['broker'];
   readonly localApproval: HypervElevationSnapshot['localApproval'];
+  readonly delegation: {
+    readonly requested: HypervElevationSnapshot['ownerGrant'];
+    readonly state: 'not-authorized' | 'root-preapproved' | 'core-preapproved';
+    /** The approved elevated Broker should avoid repeated RunAs prompts. */
+    readonly perOperationUacRequired: boolean;
+  };
   readonly execution: {
     readonly status: HypervDecision;
     readonly denialSource: HypervDenialSource;
@@ -79,6 +90,15 @@ export function explainHypervElevation(
     s.broker.versionMatch === 'verified' &&
     s.broker.capabilityAllowed;
 
+  // ROOT and CORE are intended to supply real preapproved elevated authority.
+  // Do not downgrade an owner-confirmed mode to per-command UAC consent.
+  // This pure snapshot is NOT authorization or token attestation itself.
+  const rootDelegated = s.ownerGrant === 'root' && s.rootLease === 'verified';
+  const coreDelegated = s.ownerGrant === 'core' && s.coreEnrollment === 'verified';
+  const delegated = rootDelegated || coreDelegated;
+  const delegationState = coreDelegated ? 'core-preapproved' :
+    rootDelegated ? 'root-preapproved' : 'not-authorized';
+
   let status: HypervDecision = 'pending';
   let denialSource: HypervDenialSource = 'undetermined';
   let code = 'HYPERV_INDEPENDENT_EXECUTION_AND_READBACK_REQUIRED';
@@ -104,9 +124,14 @@ export function explainHypervElevation(
     status = 'denied';
     denialSource = 'user';
     code = 'HYPERV_LOCAL_APPROVAL_REJECTED';
-  } else if (mutation && s.localApproval !== 'verified') {
-    status = 'pending';
-    code = 'HYPERV_LOCAL_APPROVAL_UNVERIFIED';
+  } else if (mutation && !delegated) {
+    // An owner preference or FULL flag alone is not a real ROOT/CORE grant.
+    // Initial Windows enrolment is a separate privileged installation step.
+    status = 'denied';
+    denialSource = 'policy';
+    code = s.ownerGrant === 'safe' || s.ownerGrant === 'full'
+      ? 'HYPERV_ELEVATED_MODE_REQUIRED'
+      : 'HYPERV_OWNER_DELEGATION_UNVERIFIED';
   } else if (!brokerVerified && s.currentProcessElevated === false) {
     status = 'denied';
     denialSource = 'windows';
@@ -127,6 +152,11 @@ export function explainHypervElevation(
     },
     adminBridge: { ...s.broker },
     localApproval: s.localApproval,
+    delegation: {
+      requested: s.ownerGrant,
+      state: delegationState,
+      perOperationUacRequired: !delegated && mutation,
+    },
     execution: {
       status, denialSource, code,
       effectVerified: false,
