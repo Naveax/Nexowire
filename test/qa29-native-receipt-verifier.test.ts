@@ -68,7 +68,9 @@ class Root{
  }
 }
 class Fixture{
- readonly osKeys=keypair(),observeKeys=keypair(),externalKeys=keypair();
+ readonly osKeys=keypair();
+ readonly observeKeys=keypair();
+ readonly externalKeys=keypair();
  readonly root=new Root(this.externalKeys.privateKey);
  readonly bundle:ReceiptBundle;current:CurrentAuthority;
  dispatches=1;acks=new Set<string>();
