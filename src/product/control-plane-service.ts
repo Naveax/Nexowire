@@ -359,7 +359,7 @@ export class ControlPlaneService {
         const active = Boolean(grant && device.online);
         // The genuine proof reader must be server-provisioned with protected
         // native and separate CAS trust roots. Missing reader => never effective.
-        const effectiveSession = bound ? {
+        const effectiveSession = this.effectiveAuthority && bound ? {
           ownerAccountId:account.id,sessionHash:bound.sessionHash,
           sessionExpiresAt:bound.expiresAt,
           loginIsRevoked:await this.store.isControlPlaneSessionRevoked(

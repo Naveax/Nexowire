@@ -111,6 +111,9 @@ test('dashboard CORE effective cannot be supplied as request preference or Agent
  assert.ok(d);
  await store.putDevice({...d,online:true,privilegeMode:'broker',adminBridgeReady:true});
  await service.setDeviceCorePreference(owner,device.id,true);
+ // Old deployments without 0019 revocation migration must not acquire a
+ // new dependency from the optional Effective Authority integration.
+ store.isControlPlaneSessionRevoked=async()=>{throw Error('MIGRATION_NOT_DEPLOYED')};
  const status=(await service.dashboard(owner)).devices[0]!;
  assert.equal(status.persistentMaintenance.active,false);
  assert.equal(status.persistentMaintenance.actualElevatedTokenVerified,false);
