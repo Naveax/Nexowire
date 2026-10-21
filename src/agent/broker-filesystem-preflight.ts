@@ -1,5 +1,10 @@
 import path from 'node:path';
 import { unsafeWindowsPath } from './scoped-path-grants.js';
+import {
+  assertNativeProtectedFileBoundary,
+  NativeFileBoundaryError,
+  type VerifiedFilesystemBoundary,
+} from './windows-native-file-source-boundary.js';
 
 /**
  * SOURCE-ONLY acceptance model for a potential future CORE elevated file
@@ -23,6 +28,13 @@ export interface BrokerFilesystemIntent {
   readonly scope: 'read' | 'write' | 'delete' | 'move';
 }
 export interface BrokerFilesystemTrust {
+  /**
+   * Witnesses must be independently produced by an OS-native, protected
+   * observer from installed manifest, owner epoch and actual open handles.
+   * Do not pass requested path to the provider to choose the source.
+   * No production adapter currently exists: unavailable => fail closed.
+   */
+  inspectNativeFilesystemBoundary(): Promise<VerifiedFilesystemBoundary | null>;
   /** Read-only verified OS token observation, not a caller-supplied flag. */
   brokerToken(): Promise<BrokerFilesystemIdentity | null>;
   /** Paired caller identity bound to the trusted broker IPC peer. */
@@ -107,6 +119,17 @@ export async function assertCoreBrokerFilesystemPreflight(
   if(!(await trust.authorizeDestination(
     intent.destination,intent.scope,owner.ownerId,owner.deviceId))){
     return deny('BROKER_FILE_DESTINATION_GRANT_DENIED');
+  }
+  const native = await trust.inspectNativeFilesystemBoundary();
+  if(!native)return deny('BROKER_FILE_NATIVE_WITNESS_UNAVAILABLE');
+  try {
+    assertNativeProtectedFileBoundary(intent.source,intent.destination,
+      intent.scope,owner.ownerId,owner.deviceId,native);
+  }catch(error){
+    if(error instanceof NativeFileBoundaryError){
+      return deny(error.code);
+    }
+    throw error;
   }
   return {validated:true,ownerId:owner.ownerId,deviceId:owner.deviceId};
 }
