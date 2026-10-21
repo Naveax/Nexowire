@@ -4,6 +4,8 @@ import { isReadOnlyCapability } from '../protocol/capabilities.js';
 import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-file-transfer.js';
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
+import { registerCrossDeviceTransferJobTools } from './cross-device-transfer-job-tools.js';
+import { TransferJobError } from './cross-device-transfer-jobs.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
@@ -120,7 +122,9 @@ function applyToolRegistrationFilters(
       ? ['file_read','file_stat','file_hash','file_write','file_move','file_delete']
       : name === 'artifact_bridge_ingest_device_file'
         ? ['file_read', 'file_stat', 'file_hash']
-        : [];
+        : name === 'artifact_bridge_transfer_start'
+          ? ['file_read','file_stat','file_hash','file_write','file_move']
+          : [];
     const dependenciesAuthorized = transferDependencies.every((dependency) =>
       isMcpToolAuthorized(input.authorization,dependency));
     const dependenciesAvailable =
@@ -6627,7 +6631,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       return {
         stat: async (file) => {
           const value = await fetchSource('files.stat', { path: file });
-          return { size: Number(value.size), type: String(value.type) };
+          return { size: Number(value.size), type: String(value.type),
+              ...(typeof value.modifiedAt === 'string' ? { modifiedAt: value.modifiedAt } : {}) };
         },
         sha256: async (file, maxBytes) => {
           const value = await fetchSource('files.hash', { path: file, max_bytes: maxBytes });
@@ -6643,6 +6648,59 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       };
     },
   );
+
+  // A single MCP start request schedules durable Hub work. Native chunks
+  // travel only through existing per-device grants and bounded Agent APIs.
+  const transferCall = async (
+    device: string, capability: string, input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> => {
+    const response = await execute(ctx, capability, input, device);
+    const value = response.structuredContent as Record<string, unknown>;
+    if (value?.ok !== true || !value.data ||
+        typeof value.data !== 'object' || Array.isArray(value.data)) {
+      const reason = value?.error as Record<string, unknown> | undefined;
+      const code = String(reason?.code ?? 'UNAVAILABLE');
+      throw new TransferJobError('REMOTE_' + code,
+        'Native capability ' + capability + ' failed: ' + code);
+    }
+    return value.data as Record<string, unknown>;
+  };
+  registerCrossDeviceTransferJobTools(server, ctx.workspaces, ctx.toolAuthorization, {
+    stat: async (device, file) => {
+      const value = await transferCall(device, 'files.stat', { path: file });
+      return { type: String(value.type), size: Number(value.size),
+        ...(typeof value.modifiedAt === 'string' ? { modifiedAt: value.modifiedAt } : {}) };
+    },
+    hash: async (device, file, maxBytes) => {
+      const value = await transferCall(device, 'files.hash', {
+        path: file, max_bytes: maxBytes,
+      });
+      return String(value.sha256);
+    },
+    read: async (device, file, offset, maxBytes) => {
+      const value = await transferCall(device, 'files.read', {
+        path: file, encoding: 'base64', offset_bytes: offset, max_bytes: maxBytes,
+      });
+      return { sourceBytes: Number(value.size), offsetBytes: Number(value.offsetBytes),
+        bytesRead: Number(value.bytesRead), contentBase64: String(value.content) };
+    },
+    write: async (device, file, contentBase64, first, offset) => {
+      const value = await transferCall(device, 'files.write', {
+        path: file, content: contentBase64, encoding: 'base64',
+        mode: first ? 'create' : 'write_at',
+        ...(!first ? { offset_bytes: offset } : {}),
+        create_parents: false,
+      });
+      return Number(value.bytesWritten);
+    },
+    moveNoOverwrite: async (device, stage, destination) => {
+      await transferCall(device, 'files.move', {
+        source: stage, destination,
+        overwrite: false, recursive: false, atomic_no_overwrite: true,
+        create_parents: false,
+      });
+    },
+  });
 
   server.registerTool(
     'audit_recent',
