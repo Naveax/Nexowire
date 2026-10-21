@@ -2,7 +2,7 @@
   "schema": "nexowire.qa.findings.v2",
   "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "date": "2026-10-21",
-  "findingCount": 33,
+  "findingCount": 39,
   "scope": "Review and reproducible tests, not live exploit or release approval",
   "findings": [
     {
@@ -1271,6 +1271,244 @@
       "expectedFix": "Deploy/prove authenticated independent rollback-resistant witness beyond co-restored local WAL and protected encrypted keys, with atomic reserve/revoke/reauthorize against actual Broker dispatch and two-device staged canary.",
       "evidence": [
         "https://github.com/Naveax/Nexowire/actions/runs/39634099233"
+      ],
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-677-682-NATIVE-CANCEL-REAL-RED",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "classification": "P0_QA16_EXACT_HEAD_677_702",
+      "affected": [
+        {
+          "pr": 677,
+          "headSha": "3e58751b103b0f61a13301396dbb7537f8f77209",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 682,
+          "headSha": "0dcd05debfeda91882bccc09834d216223c935ca",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 691,
+          "headSha": "437030d288fdf13441f506ce83a9ff72644822dd",
+          "state": "OPEN_DRAFT_PASS"
+        }
+      ],
+      "source": "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+      "observed": "#677 two true Node22 semantic source failures: extra write after verified chunk, forged wrong requestId ACK masked; #682 Node24 late cancel downgrades UNKNOWN after lost signed publish ACK and two-agent E2E red. #691 predispatch owner CI green but not combined independent unchanged QA replay.",
+      "reproduction": [
+        "Inspect exact #677 CI 39644025130 job 119374740057 for two semantic failures and #682 CI 39644551666 job 119376867491 for late-cancel downgrade plus E2E.",
+        "Preserve unchanged #677/#682 QA tests; replay against #691 combined with #667 and #634 owner work in disposable test checkout, not live Agent/user files."
+      ],
+      "expectedFix": "Native write before dispatch zero-write CANCELLED; after any Native mutation/verified chunk UNKNOWN until independently attested receipt, never later CANCELLED; forged ACK must preserve original error provenance and requestId fence, durable reopened journal no auto replay.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39644025130",
+        "https://github.com/Naveax/Nexowire/actions/runs/39644551666",
+        "https://github.com/Naveax/Nexowire/pull/691"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-699-SUPERSEDED-TS1005-VERIFY",
+      "requirements": [
+        "R04",
+        "R07",
+        "R22"
+      ],
+      "classification": "P0_QA16_EXACT_HEAD_677_702",
+      "affected": [
+        {
+          "pr": 699,
+          "headSha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+          "state": "OPEN_DRAFT_PASS"
+        }
+      ],
+      "source": "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+      "observed": "Historical #699 head 405828e09 both CI 39645530491 and QA29 39645530924 FAILED TS1005 semicolon expected at test/qa29-native-receipt-verifier.test.ts line71 columns27,49. New HEAD c7c868ed dedicated QA29 39658654826 SUCCESS but full CI 39658654687 QUEUED. Old TS error cannot be attributed to new HEAD; new QA green cannot prove whole CI or physical signed FILETIME.",
+      "reproduction": [
+        "Read exact workflow history by both distinct SHA values and prevent overwrite of historical red evidence.",
+        "After new exact SHA CI completes, update only matching HEAD and preserve signed OS FILETIME, postcondition, duplicate ACK, audit rotation and secret redaction source fixtures, no live elevated shell."
+      ],
+      "expectedFix": "Current exact-HEAD full Node22/24 + dedicated QA and all hosted CI PASS before source acceptance, then independent physical native attestation separate.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39645530491",
+        "https://github.com/Naveax/Nexowire/actions/runs/39645530924",
+        "https://github.com/Naveax/Nexowire/actions/runs/39658654826"
+      ],
+      "disposition": {
+        "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-700-WINDOWS-IMPORT-ACL-THREE-RED",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "classification": "P0_QA16_EXACT_HEAD_677_702",
+      "affected": [
+        {
+          "pr": 700,
+          "headSha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "source": "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+      "observed": "#700 exact HEAD 637ff3a CI 39645643225 Windows protected tree tests 17 PASS / 3 FAIL: missing import/updater ancestor ACL traversal, forged/unsigned/out-of-root updater rejection, low-trust inherited Modify on DLL parent missed. An absent signer/ACL witness is not clean approval.",
+      "reproduction": [
+        "Inspect Windows hosted job 119380363262 core-broker-protected-tree.test.ts and all three original red assertions; do not skip or weaken TEMP ACL test.",
+        "Cross-check #670 native provider and #696 importer DAG source against actually witnessed transitive importer publisher/hash, parent-updater ACL, PID FILETIME and owner-signed image in a controlled sandbox; never live installed service."
+      ],
+      "expectedFix": "Reject every untrusted executable/import ancestor and updater path through native open-by-handle signer/hash/DACL, protected non-writable parent; independent native process token+FILETIME attestation required.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39645643225"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-683-WINDOWS-DPAPI-180S",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "classification": "P0_QA16_EXACT_HEAD_677_702",
+      "affected": [
+        {
+          "pr": 683,
+          "headSha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "source": "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+      "observed": "#683 exact CI 39644505625 Windows browser-live two user-scope DPAPI purpose-bound test child timeouts at 180 seconds. Other green source tests do not certify signed Broker owner credential lifecycle, stale re-pair and crash recovery.",
+      "reproduction": [
+        "Inspect hosted Windows job 119376390482 protected-secret-files and windows-dpapi-secret current-user timeouts and leave tests red.",
+        "Investigate native CurrentUser DPAPI child process/login context in TEMP fixture, no live user secrets or privileged Agent startup."
+      ],
+      "expectedFix": "Deterministic bounded native DPAPI CurrentUser purpose-bound secret proofs, independently protected token-owner session/epoch and signed offline recovery; no unbounded blocking.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39644505625"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-695-697-INHERITED-WINDOWS-RED",
+      "requirements": [
+        "R07",
+        "R14",
+        "R22"
+      ],
+      "classification": "P0_QA16_EXACT_HEAD_677_702",
+      "affected": [
+        {
+          "pr": 695,
+          "headSha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 697,
+          "headSha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "source": "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+      "observed": "#695 and #697 exact CI 39645105869 and 39645250913 overall FAIL inherited browser-live Windows Job fast-exit; their reconnect epoch and OAuth cross-session source work cannot be upgraded to global CI green.",
+      "reproduction": [
+        "Inspect exact hosted Windows browser-live job 119378478735 and 119378981196; preserve stdout-before-exited original failure.",
+        "Retest owner-specific new Node22/24 negatives separately and require complete full exact HEAD before any source acceptance claim; no real OAuth token/migration/user VM."
+      ],
+      "expectedFix": "Resolve full CI Windows Job fast-exit without skip/timeout inflation, ensure reconnect side-effect UNKNOWN and OAuth one-time CAS revoke semantics, leave physical production blocked.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39645105869",
+        "https://github.com/Naveax/Nexowire/actions/runs/39645250913"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-702-CAS-CORE-SOURCE-NOT-PHYSICAL",
+      "requirements": [
+        "R02",
+        "R04",
+        "R19",
+        "R20",
+        "R21"
+      ],
+      "classification": "P0_QA16_EXACT_HEAD_677_702",
+      "affected": [
+        {
+          "pr": 679,
+          "headSha": "b0b556b4cb2ee396ce699c356fb0515db529f350",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 681,
+          "headSha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 686,
+          "headSha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 696,
+          "headSha": "0b43332289a478a3285673f43f6bb54da5325459",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 702,
+          "headSha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+          "state": "OPEN_DRAFT_PASS"
+        }
+      ],
+      "source": "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+      "observed": "#702 source external HTTPS CAS owner/epoch draining revoke exact CI SUCCESS; #679/#681 signed native provider QA dual green; #686 CORE UI source green, #696 signed importer DAG source green. None proves installed first-party signed Broker physical high token or non-co-restorable external monotonic service. #271/#551/#587 still P0.",
+      "reproduction": [
+        "Compare all five unique HEAD/CI records and verify source-only explicit negative/no provider means EFFECTIVE false.",
+        "Inspect previously observed actual Naveax inherited Authenticated Users Modify vs signed protected installed Broker PID/token and actual independently controlled external CAS; this QA does NOT access live devices."
+      ],
+      "expectedFix": "After approved one-time real local UAC signed rollback-safe installer and true protected native Broker high Windows token, demonstrate current signed owner device/session epoch external CAS reserve/revoke with physical postcondition and exact VMId Running readback.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39646460335",
+        "https://github.com/Naveax/Nexowire/issues/271",
+        "https://github.com/Naveax/Nexowire/issues/587"
       ],
       "disposition": {
         "source": "BLOCKED",

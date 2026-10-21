@@ -1647,9 +1647,531 @@
       "staging": "BLOCKED",
       "production": "BLOCKED",
       "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 677,
+      "headSha": "3e58751b103b0f61a13301396dbb7537f8f77209",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+      "physicalAcceptanceMissing": "Node22 2 real source QA failures: verified first chunk then extra write (expected zero); forged requestId ACK error mutated into TRANSFER_CANCEL_AFTER_MUTATION, not FORGED_WRITE_RECEIPT. Windows browser-live also red.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39644025130,
+        "reason": "Node22 2 real source QA failures: verified first chunk then extra write (expected zero); forged requestId ACK error mutated into TRANSFER_CANCEL_AFTER_MUTATION, not FORGED_WRITE_RECEIPT. Windows browser-live also red."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 678,
+      "headSha": "807725eadece998fc4928a0a3898e71afa828da8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "sourceReproducer": "test/s3-worker20-owner-stage-repair-crash-negative.test.ts",
+      "physicalAcceptanceMissing": "Signed nested import/DPAPI/re-pair crash source QA success only, actual installed signed Agent 1.0.5 physical unknown.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644040656,
+        "reason": "Signed nested import/DPAPI/re-pair crash source QA success only, actual installed signed Agent 1.0.5 physical unknown."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 679,
+      "headSha": "b0b556b4cb2ee396ce699c356fb0515db529f350",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-19-windows-native-provider-crosshead.test.ts",
+      "physicalAcceptanceMissing": "Full CI SUCCESS plus independent QA19 Windows 39644147679 SUCCESS. Source TEMP native identity, not installed signed Broker or protected imports.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644147390,
+        "reason": "Full CI SUCCESS plus independent QA19 Windows 39644147679 SUCCESS. Source TEMP native identity, not installed signed Broker or protected imports."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 680,
+      "headSha": "901d6d34708b2181a016075e14251656d3b34f36",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-18-bound-grant-crosshub-timestamp.test.ts",
+      "physicalAcceptanceMissing": "Hostile signed time/CAS/revoke simulated source, no physically independent rollback witness.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644719058,
+        "reason": "Hostile signed time/CAS/revoke simulated source, no physically independent rollback witness."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 681,
+      "headSha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-17-native-provider-import-epoch-670.test.ts",
+      "physicalAcceptanceMissing": "Source QA dual green includes QA17 Windows Evidence 39644262329. No installed Broker high token or protected import physical.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644262152,
+        "reason": "Source QA dual green includes QA17 Windows Evidence 39644262329. No installed Broker high token or protected import physical."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 682,
+      "headSha": "0dcd05debfeda91882bccc09834d216223c935ca",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa22-crosshub-cas-fencing.test.ts",
+      "physicalAcceptanceMissing": "Node24 real #22 late cancel downgrades UNKNOWN after lost published ACK. Original two-WebSocket-Agent E2E also FAIL, Node22 cancelled; not a clean CANCELLED post-effect.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39644551666,
+        "reason": "Node24 real #22 late cancel downgrades UNKNOWN after lost published ACK. Original two-WebSocket-Agent E2E also FAIL, Node22 cancelled; not a clean CANCELLED post-effect."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 683,
+      "headSha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-02-670-native-broker-truth-negative.test.ts",
+      "physicalAcceptanceMissing": "Windows DPAPI current-user purpose-bound round-trips twice timeout at 180sec; other source succeeds. No native high-token production proof.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39644505625,
+        "reason": "Windows DPAPI current-user purpose-bound round-trips twice timeout at 180sec; other source succeeds. No native high-token production proof."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 684,
+      "headSha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R09",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa27-windows-native-approval-witness-matrix.test.ts",
+      "physicalAcceptanceMissing": "Owner-absent forged consent/Remote Assistance negative source, not physical local UAC approval.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644577730,
+        "reason": "Owner-absent forged consent/Remote Assistance negative source, not physical local UAC approval."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 685,
+      "headSha": "536fce89c4197335c0eab7fa286bc1c3015b4545",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R19",
+        "R20"
+      ],
+      "sourceReproducer": "test/fixtures/s3-worker28-signed-stage-crash-idempotence.test.ts",
+      "physicalAcceptanceMissing": "Staged signed installer crash and stale DPAPI rollback source only; no live installer or real recovery.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644586410,
+        "reason": "Staged signed installer crash and stale DPAPI rollback source only; no live installer or real recovery."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 686,
+      "headSha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R22"
+      ],
+      "sourceReproducer": "test/core-effective-ui-669-negative.test.ts",
+      "physicalAcceptanceMissing": "CORE EFFECTIVE anti-replay source QA success, not independent running signed Broker HIGH token.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644614653,
+        "reason": "CORE EFFECTIVE anti-replay source QA success, not independent running signed Broker HIGH token."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 687,
+      "headSha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/scale-v2-artifact-fenced-cleanup-admission.test.ts",
+      "physicalAcceptanceMissing": "Quota writer stop and exact release source green, no deployed trusted deletion witness or Cloudflare D1.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644697445,
+        "reason": "Quota writer stop and exact release source green, no deployed trusted deletion witness or Cloudflare D1."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 688,
+      "headSha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R20"
+      ],
+      "sourceReproducer": "test/core-signed-postcondition-root-boundary.adversarial.test.ts",
+      "physicalAcceptanceMissing": "Independent signed synthetic elevated postcondition and ROOT 15m source checks; cannot reverse launched elevated OS effect.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644726990,
+        "reason": "Independent signed synthetic elevated postcondition and ROOT 15m source checks; cannot reverse launched elevated OS effect."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 689,
+      "headSha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15"
+      ],
+      "sourceReproducer": "test/s5-source-cancel-close-budget-20261021.test.ts",
+      "physicalAcceptanceMissing": "Seeded gzip 4x9.5MiB memory/cancel fairness source only; no production 101+ WSS resource proof.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644753494,
+        "reason": "Seeded gzip 4x9.5MiB memory/cancel fairness source only; no production 101+ WSS resource proof."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 690,
+      "headSha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R19"
+      ],
+      "sourceReproducer": "test/p05-native-relative-effective-acl-negative.test.ts",
+      "physicalAcceptanceMissing": "Win32 handle identity/ACL relative path source, not real protected transitive updater DLL or production ACL.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644754728,
+        "reason": "Win32 handle identity/ACL relative path source, not real protected transitive updater DLL or production ACL."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 691,
+      "headSha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-588-postjournal-predispatch.qa.test.ts",
+      "physicalAcceptanceMissing": "Owner fix pending.dispatched intent source CI green but independent old #677/#682 suite not replayed unchanged against merged #667.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644905819,
+        "reason": "Owner fix pending.dispatched intent source CI green but independent old #677/#682 suite not replayed unchanged against merged #667."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 692,
+      "headSha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R18",
+        "R22"
+      ],
+      "sourceReproducer": "test/private-child-forgery-emergency-stop.test.ts",
+      "physicalAcceptanceMissing": "Private child forgery/emergency stop source fixture, no live GUI privileged desktop.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644955345,
+        "reason": "Private child forgery/emergency stop source fixture, no live GUI privileged desktop."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 693,
+      "headSha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15"
+      ],
+      "sourceReproducer": "test/worker30-gzip95-tenant-isolation.test.ts",
+      "physicalAcceptanceMissing": "4x9.5MiB parser tenant admission synthetic source green; no Cloudflare physical load.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39644977870,
+        "reason": "4x9.5MiB parser tenant admission synthetic source green; no Cloudflare physical load."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 694,
+      "headSha": "76a88b22a76d72d1824559dbd4f741c7f2da1b7d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R19"
+      ],
+      "sourceReproducer": "test/p26-native-owner673-adversarial.test.ts",
+      "physicalAcceptanceMissing": "TEMP-only Windows alias/junction/ADS/native handle negatives, independent signed import publisher per DLL still missing.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39645047557,
+        "reason": "TEMP-only Windows alias/junction/ADS/native handle negatives, independent signed import publisher per DLL still missing."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 695,
+      "headSha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R03",
+        "R07",
+        "R15"
+      ],
+      "sourceReproducer": "test/cross-device-worker-journal-link.test.ts",
+      "physicalAcceptanceMissing": "Windows browser-live shared Job fast-exit CI FAIL. Reconnect epoch worker journal source QA not physical cross-device postcondition.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39645105869,
+        "reason": "Windows browser-live shared Job fast-exit CI FAIL. Reconnect epoch worker journal source QA not physical cross-device postcondition."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 696,
+      "headSha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "sourceReproducer": "test/s3-protected-core-installer-stage-owner.test.ts",
+      "physicalAcceptanceMissing": "Installer signed transitive import DAG and revoked re-pair source green, no first-party signed physical install.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39645131289,
+        "reason": "Installer signed transitive import DAG and revoked re-pair source green, no first-party signed physical install."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 697,
+      "headSha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R14",
+        "R22"
+      ],
+      "sourceReproducer": "test/github-oauth-cross-session-hostile-qa.test.ts",
+      "physicalAcceptanceMissing": "Windows browser-live shared Job fast-exit CI FAIL; OAuth browser state unrelated physical Windows admin high token.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39645250913,
+        "reason": "Windows browser-live shared Job fast-exit CI FAIL; OAuth browser state unrelated physical Windows admin high token."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 698,
+      "headSha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-24-safe-merge-review.test.ts",
+      "physicalAcceptanceMissing": "Source DAG PR snapshot 77-count was true only on branch snapshot; open PR count has advanced, cannot label fresh complete merge queue.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39645743195,
+        "reason": "Source DAG PR snapshot 77-count was true only on branch snapshot; open PR count has advanced, cannot label fresh complete merge queue."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 699,
+      "headSha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R04",
+        "R07",
+        "R20",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa29-native-receipt-verifier.test.ts",
+      "physicalAcceptanceMissing": "Current exact HEAD CI 39658654687 SUCCESS and separate QA29 Native Receipt Verifier 39658654826 SUCCESS; prior head 405828e09 TS1005 both red remains historical. Still no physical signed OS postcondition/high token.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39658654687,
+        "independentQaRunId": 39658654826,
+        "independentQaStatus": "PASS",
+        "reason": "Current exact HEAD CI 39658654687 SUCCESS and separate QA29 Native Receipt Verifier 39658654826 SUCCESS; prior head 405828e09 TS1005 both red remains historical. Still no physical signed OS postcondition/high token."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 700,
+      "headSha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/core-broker-protected-tree.test.ts",
+      "physicalAcceptanceMissing": "Windows 3 real red: import/updater ancestor ACL scan missing, forged/out-root updater denial ungrounded, inherited low-trust Modify parent missed; no protected signed production tree.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39645643225,
+        "reason": "Windows 3 real red: import/updater ancestor ACL scan missing, forged/out-root updater denial ungrounded, inherited low-trust Modify parent missed; no protected signed production tree."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 701,
+      "headSha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R20"
+      ],
+      "sourceReproducer": "test/owner-public-wss-cross-device-pairing-rotation.test.ts",
+      "physicalAcceptanceMissing": "WSS pairing owner signer rotation replay source only, no Windows high token or global CAS.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39646018390,
+        "reason": "WSS pairing owner signer rotation replay source only, no Windows high token or global CAS."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 702,
+      "headSha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/broker-external-dispatch-fence.test.ts",
+      "physicalAcceptanceMissing": "HTTPS external CAS Broker dispatch fence and drain revoke source CI green; non-restorable independently administered authority NOT deployed.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39646460335,
+        "reason": "HTTPS external CAS Broker dispatch fence and drain revoke source CI green; non-restorable independently administered authority NOT deployed."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
     }
   ],
   "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
-  "meaning": "85 unique HISTORICAL source PR evidence entries, separate from 77 currently open GitHub PRs. Source HEAD successes are not physical CORE/production. #666 overall FAILURE due cancelled macOS; #652 dedicated green/full red; #667/#668/#674 Windows browser-live fail, never claim green from 6 passing jobs.",
-  "openPrCountAtSnapshot": 77
+  "meaning": "111 longitudinal HEAD PR snapshots, not open count; non-atomic 100+23+0 open pagination has unknown authoritative total. #699 old TS1005 both red; new current c7c868 CI 39658654687 and QA 39658654826 both green. Current PR677-702 exact status 20 SUCCESS / 6 FAIL.",
+  "openPrCountAtSnapshot": null,
+  "observedOpenFirstPage": 100,
+  "observedOpenSecondPage": 23,
+  "authoritativeOpenCount": null
 }

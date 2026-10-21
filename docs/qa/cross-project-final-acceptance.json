@@ -3,7 +3,7 @@
   "capturedAt": "2026-10-21",
   "baselineSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "QA16 exact-head checks for #650/#652/#666-#676, actual 77 open PRs and 85 historically tracked PR source snapshots. Source results cannot grant production acceptance, Windows high token or independent anti-rollback proof.",
+  "meaning": "QA16 exact-head 26 PRs #677-702 current 20 SUCCESS/6 FAIL, prior #699 TS1005 superseded by a new green HEAD. Main still source-only; physically trusted CORE never proved.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "One-call #666 read-only worker/journal negative source 6/7 jobs PASS but macOS job cancelled overall FAIL; #667 UNKNOWN cancellation state source author-reported fixed, exact CI browser-live FAIL; independent side-effect witness missing."
+          "evidence": "#677 2 source semantic FAIL: first verified chunk then unauthorized extra write, wrong ACK requestId masked by cancellation code; #682 UNKNOWN downgraded by late cancel after signed publish ACK lost. #691 predispatch owner source green but no unchanged replay against current integration."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 durable journal+authority rollback remains; #676 externally atomic HTTPS/Postgres grant CAS exact CI SUCCESS SOURCE ONLY; no independent non-restorable real external witness or owner epoch physical test."
+          "evidence": "#587 non-restorable external CAS not deployed; #680/#702 signed source CAS/dispatch/revoke green, no real physical monotonic witness; #677/#682 LOST ACK and forged receipt source red remain."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#666 connection/worker journal source checks isolated pass, but whole CI FAILURE macOS CANCELLED. Signed multi-device 1GiB mutation/postcondition/VM Running physical not validated."
+          "evidence": "#695 connection reconnect source CI red Windows browser-live, unknown writer durability, no independent authenticated exact Native postcondition or VMId Running readback."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#669 signed dual native/CAS EFFECTIVE source CI SUCCESS but shipping provider not configured, effective false. #670 own disposable token native provider source CI SUCCESS cannot attest installed Broker high Windows token, signed imports or owner epoch. CORE broad real admin NO-GO."
+          "evidence": "#686 UI CORE EFFECTIVE source green, #681 native signed provider QA two workflows green, #702 HTTPS broker owner-epoch fence green; no installed signed Broker actual HIGH token, one-time local UAC, immutable protected launcher/import/updater ACL."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#673 trusted source handle identity and ACL witnesses source CI SUCCESS; effective protected parent/module/updater signer provider still not wired, no authorized physical 1GiB or user-file mutation."
+          "evidence": "#690/#694 Windows TEMP handle alias and effective ACL source CI green but user-file protected module import publisher and live ACL/USB not verified."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -145,19 +145,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Main WSS/owner reconnect source PASS; #671 signed receipt replay across reconnect and issuer rotation CI SUCCESS on feature branch. Local SQLite rollback remains unsuitable as global monotonic trust."
+          "evidence": "Main connection/WSS source PASS; #701 signer/owner WSS pairing rotation CI green, cannot substitute independent CAS or CORE HIGH token."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#670 native Windows PowerShell Authenticode and ACL provider source CI SUCCESS (no running installed Broker attestation). #667/#668/#674 browser-live stdout-before-exited iterations 1/1/10 CI FAIL; no stale-green promotion."
+          "evidence": "#683 DPAPI current-user Windows secret roundtrips timed out twice at 180s; #700 protected Broker importer ancestor ACL Win32 three native FAIL; #679 QA19 full and dedicated CI green is a different test/HEAD. No protected running image high-token attestation."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -201,15 +201,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#672 installer stage source CI SUCCESS but local UAC approval actual one-time secure-desktop event and physical protected launcher trust not independently proven; no UAC per-command after signed enrollment target."
+          "evidence": "#684 remote-assisted owner approval negative source CI green; physically absent owner/forged consent.exe never equals approved local Secure Desktop UAC. #692 private child emergency stop source green, no live protected GUI."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -253,15 +253,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -279,15 +279,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#668 fenced writer-stop/delete quota source has 6/7 CI PASS but inherited Windows Job red; #674 seeded localhost parser source red overall, 4×9.5MiB actual parser preflight blocked on low disk; no live Cloudflare proof."
+          "evidence": "#689/#693 compressed/parser cancellation and tenant fairness source CIs green; no 101+ live WSS, real 4×9.5MiB production parser admission or signed worker release postcondition."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -331,15 +331,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -357,15 +357,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#667 owner reports #640 5/5 and #641 7/7 after code fix, not independently rerun at #667 exact SHA; #667 exact CI FAILURE Windows browser-live despite Node22/24 green. #640 earlier real red still provenance. Main public one-call transfer not merged."
+          "evidence": "#677 source 2 real cancel/forged receipt failures, #682 source one late cancel UNKNOWN downgrade plus real Agent E2E failure. #691 owner postjournal predispatch source CI green on a different HEAD, not independent unchanged combined replay."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -409,15 +409,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -435,15 +435,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -461,15 +461,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#672 signed protected staged import graph CI SUCCESS; #670 Windows signature provider source green; #551 first-party signed complete installer/old-Agent recovery unverified, inherited #271 ACL still unsafe, local UAC physical not done."
+          "evidence": "#678/#685/#696 signed installer import/DPAPI rollback source CI green, #700 physical Windows import/updater/parent ACL three failures; #551 signed actual old-Agent rollback and first-party signed bootstrap not physically accepted, #271 inherited Modify."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#676 remote atomic bound CAS, signed revoke/re-pair source CI green, but real independent rollback-resistant authority never deployed. #650 post-reservation queued revoke race source shows need second epoch fence; UNKNOWN no replay remains."
+          "evidence": "#680/#702 external owner revoke/dispatch/CAS source CI green only; #587 externally independent real monotonic service not deployed, #677 forged receipt and #682 mutation UNKNOWN downgrade remain genuine red."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "No actual CORE elevated high-integrity Broker token, signed UAC bootstrap or VM GUID Running readback; #673 temporary Windows handle tests do not authorize installed protected paths."
+          "evidence": "#700 protected native process tree negative source CI red; actual high integrity Broker, local UAC, user VM exact GUID Running readback, owner physical two-device canary not attested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#572 prior HEAD ca67b8a CI 39632915464 FAILURE. #666 CANCELLED macOS => overall FAIL; #667/#668/#674 fast-exit CI failures; #652 dedicated QA PASS/full CI FAIL; #669-673/#675/#676 exact HEAD source green but no real signed CORE acceptance."
+          "evidence": "#677/#682 source semantic red, #683 DPAPI red, #695/#697 Windows browser-live red, #700 three protected ancestor/import ACL failures. #699 OLD head 405828... TS1005 line71 CI+QA both FAILED; current c7c868 exact CI 39658654687 and dedicated QA 39658654826 both SUCCESS (source only); never stale-green or stale-red."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
+          "evidence": "Feature PR source green is not physical. No running signed CORE high-token Broker, real local UAC, immutable protected ACL #271, signed full installer #551, independent rollback-proof witness #587 or verified physical VM/Native postcondition on main 754cc4364822be5fda528f54042fb22a84f19924"
         }
       }
     }
@@ -766,6 +766,6 @@
     "headSha": "754cc4364822be5fda528f54042fb22a84f19924",
     "runId": 39622251466,
     "conclusion": "PASS",
-    "scope": "main source CI, not signed physical CORE"
+    "scope": "exact-main source only, physical signed CORE still NO-GO"
   }
 }
