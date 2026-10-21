@@ -425,6 +425,7 @@ function render(snapshot) {
         ' <div class="bridge-access">',
         '  <div class="bridge-head"><strong>ADMIN BRIDGE</strong><span class="bridge-live-status"></span></div>',
         '  <small class="bridge-copy"></small>',
+        '  <small class="bridge-privilege-truth" role="status">Windows yetkisi doğrulanmadı: FULL/ROOT/CORE, Hyper-V hizmetinin çalışması veya Broker /health 401 yönetici tokeni kanıtı değildir. VM işlemi için tam VM GUID, cihaz/sahip politikası, imzalı yerel onay, görünür UAC izni, doğrulanmış Broker sürümü ve güvenilir ACL gerekir. Bu ekran UAC onayı vermez.</small>',
         '  <div class="bridge-switch-row"><div class="bridge-switch-description"><strong>ON / OFF</strong><small>Tercihi tek tıkla değiştir</small></div><button type="button" class="bridge-toggle" role="switch" aria-checked="false" aria-label="Admin Bridge aç kapa tercihi"><span class="bridge-toggle-track" aria-hidden="true"><span class="bridge-toggle-thumb"></span></span><span class="bridge-toggle-label">OFF</span></button></div>',
         '  <div class="bridge-mode-options" role="group" aria-label="Admin Bridge otomatik tercihi"><button type="button" class="secondary bridge-mode" data-bridge="auto" aria-pressed="false">AUTO MOD</button><small>İstersen AUTO tercihini ayrıca seçebilirsin.</small></div>',
         '  <small class="bridge-mode-feedback" role="status" aria-live="polite"></small>',
