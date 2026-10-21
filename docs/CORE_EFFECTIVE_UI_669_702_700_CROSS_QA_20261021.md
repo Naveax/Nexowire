@@ -33,3 +33,45 @@ This **new UI v2 proof schema is only a proposed source contract**. #669 does no
 Changes are limited to the new #23 QA adapter/tests and this review document. **No** `src/product/access-effective-authority.ts`, ControlPlane, web/app.js, #01 CAS owner files, #03 native provider files, UAC, VM, Broker service, Agent, Cloudflare, D1, user filesystem or production ACL mutations.
 
 **RELEASE: BLOCKED / NO-GO** regardless of successful source CI until native Windows publisher/PID/ACL/HIGH proof is physically accepted and protected external CAS deployed. Do not auto-merge or convert DRAFT to ready.
+
+## #23 follow-up on current owner branches, 2026-10-22
+
+Confirmed #726 exact `8f35bb1a5eeebd690e5b7047d3246983929751a0`
+GitHub workflow `39659786915` **SUCCESS**, all seven jobs. No fabricated
+physical witness.
+
+- **#719 Access** exact `597191102dabc22e22c7f9822a026bbd12d60c52`,
+  hosted `39659394811` **SUCCESS**. `reviewQueuedAccess` checks a fresh
+  authenticated request-scoped CAS readback with `deviceEpoch`,
+  `sessionEpoch`, `ownerEpoch`, `grantGeneration`, request ID, owner,
+  device, revocation and independent high watermark. It returns
+  `REVIEWED_ONLY_NO_DISPATCH`, with `cachedUiTrusted:false`.
+  Its signed `nexowire.access.cas-readback.v1` is **not** an independent
+  native UI-status witness.
+- **#709 protected tree** exact `b083004b9ab8c18125a428cf74f3e97f7adf4e88`,
+  hosted `39658979397` **SUCCESS**: fixes Windows native protected
+  EXE/import/updater/ancestor path binding and ACL fixture failures from
+  #700. This does not install a protected native Broker or change inherited
+  source `assessBrokerRuntimeIdentity` output:
+  `actualHighIntegrityBrokerAccepted:false`,
+  `productionReady:false`, `PRODUCTION_EXECUTOR_NOT_INSTALLED`.
+- **#712 external CAS** exact `62800af17d2a9ce18670dba6a8ac861a5d7f4ba5`,
+  hosted `39659225895` **SUCCESS**: nonce-, owner-epoch-, generation-,
+  device- and session-bound single-use **dispatch** permit. The
+  `broker_dispatch_permit_v1` is not a status readback. Actual
+  monotonic remote service deployment/physical proof remains unverified.
+
+Existing #726 read-only gate already rejects 1ms prior signed device/session
+epoch after reconnect, owner re-pair, stale image SHA and same-PID different
+creation FILETIME, EXE/ancestor/import/updater ACL loss, HIGH token false,
+unauthenticated HTTP401 and stale `consent.exe`. Added narrowly scoped
+independent negatives for **native collector signer rotation or tampered
+signed image**, source-only #709 protected-tree PASS without physically
+accepted HIGH, and **#719 signed queue readback never being upgraded into
+UI EFFECTIVE**, including owner epoch rollback just 1ms after a valid pair.
+
+All positive native/CAS keys and `productionReady:true` in these QA tests
+are intentionally **hypothetical**, never real protected token evidence.
+Do not use cached badges, `401`, `consent.exe`, #719 readback or #712
+permit as native Windows HIGH proof. No #04/#03/#01 owner source changes,
+physical UAC/VM or production deployment. **DRAFT, PRODUCTION NO-GO**.

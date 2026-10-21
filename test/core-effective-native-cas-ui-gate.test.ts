@@ -127,3 +127,33 @@ test('positive synthetic pair can only inform status; NEVER authorizes dispatch 
   assert.equal(out.uacProvenByAppearance,false);
   assert.equal(evaluate().state,'PAUSED_UNVERIFIED', '#700 native real source currently fails closed');
 });
+
+test('#709 current native PID/image-tree source PASS never substitutes physical HIGH token acceptance',()=>{
+  const aclSourceOnly={...current700,reason:'PRODUCTION_EXECUTOR_NOT_INSTALLED'};
+  assert.equal(denied(access,aclSourceOnly).reason,'NATIVE_RUNTIME_NOT_PHYSICALLY_ACCEPTED');
+  assert.equal(denied(access,{...hypothetical,actualHighIntegrityBrokerAccepted:false}).effective,false);
+  // Import/updater/source ACL may pass a read-only fixture while physical token is UNKNOWN.
+  const treeOnly={...current700,reason:'FULL_PROTECTED_IMPORT_UPDATER_TREE_UNVERIFIED'};
+  denied(access,treeOnly);
+});
+test('native key rotation, forged signed image and independently current signer both fail closed',()=>{
+  const receipt=signed();
+  denied(access,hypothetical,receipt,{...pins,nativeKey:foreign.publicKey});
+  denied(access,hypothetical,receipt,{...pins,nativeKey:ckey.publicKey});
+  const tampered={...receipt,native:{...receipt.native,statement:{
+    ...receipt.native.statement,brokerImageSha256:'f'.repeat(64),
+  }}};
+  denied(access,hypothetical,tampered);
+  denied(access,hypothetical,signed(),{...pins,currentVolumeSerialHex:'eeeeffff'});
+});
+test('#719 signed queued CAS readback is not CORE UI witness; 1ms old owner epoch stays denied',()=>{
+  const queueReadback={...cas,schema:'nexowire.access.cas-readback.v1'} as unknown as ExternalUiEpochV2;
+  // A valid CAS signature over a queued review is still not a native UI status proof.
+  assert.equal(denied(access,hypothetical,signed(native,queueReadback)).reason,
+    'SIGNED_NATIVE_OR_CAS_INVALID');
+  const advanced={...pins,currentOwnerEpoch:5,currentGrantGeneration:9,
+    now:new Date(at.getTime()+1)};
+  assert.equal(denied(access,hypothetical,signed(),advanced).reason,
+    'SIGNED_NATIVE_OR_CAS_INVALID');
+  assert.equal(evaluate(access,hypothetical,signed(),pins).canDispatch,false);
+});
