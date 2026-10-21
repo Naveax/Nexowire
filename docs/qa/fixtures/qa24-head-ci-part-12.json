@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 12,
+  "ids": [
+    688,
+    689,
+    690,
+    691,
+    692,
+    693,
+    694,
+    695
+  ],
+  "nodes": [
+    {
+      "pr": 688,
+      "head_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "head_ref": "test/25-signed-postcondition-root-boundary-20261021",
+      "base_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+      "base_ref": "test/25-postlaunch-revoke-ack-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644726990,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e"
+      }
+    },
+    {
+      "pr": 689,
+      "head_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "head_ref": "test/parallel-15-s5-cancel-ack-fairness-20261021",
+      "base_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "base_ref": "test/parallel-15-s5-598-seeded-parser-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644753494,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0"
+      }
+    },
+    {
+      "pr": 690,
+      "head_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "head_ref": "test/p05-native-relative-acl-20261021",
+      "base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "base_ref": "test/p05-verified-handle-acl-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644754728,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646"
+      }
+    },
+    {
+      "pr": 691,
+      "head_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "head_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "base_ref": "fix/08-cancel-native-dispatch-race-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644905819,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "437030d288fdf13441f506ce83a9ff72644822dd"
+      }
+    },
+    {
+      "pr": 692,
+      "head_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "head_ref": "test/09-private-child-receipt-emergency-stop-20261021",
+      "base_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+      "base_ref": "test/09-ai-screen-creationtime-owner-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644955345,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "e8d44653fdb4175565a24facd17381fca18ed514"
+      }
+    },
+    {
+      "pr": 693,
+      "head_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "head_ref": "qa/worker30-gzip95-tenant-memory-20261021",
+      "base_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+      "base_ref": "qa/worker30-next-compressed-fairness-cancel-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644977870,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "8b08ede8db29fd9a95abb762b238601def07082d"
+      }
+    },
+    {
+      "pr": 694,
+      "head_sha": "76a88b22a76d72d1824559dbd4f741c7f2da1b7d",
+      "head_ref": "qa/w26-p673-handle-import-negative-20261021",
+      "base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "base_ref": "test/p05-verified-handle-acl-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645047557,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "76a88b22a76d72d1824559dbd4f741c7f2da1b7d"
+      }
+    },
+    {
+      "pr": 695,
+      "head_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+      "head_ref": "test/06-reconnect-epoch-no-replay-20261021",
+      "base_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "base_ref": "test/06-journal-634-failclosed-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645105869,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "da37dcc034adc10db7149917a6af557d7770d8b5"
+      }
+    }
+  ]
+}
