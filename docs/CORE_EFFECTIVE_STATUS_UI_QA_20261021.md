@@ -49,3 +49,38 @@ trust pins from client-controlled payloads. #271/#551/#587/#617 remain NO-GO.
 Run `node --test --import tsx test/core-effective-ui-status.test.ts` and
 `npm run typecheck` on the exact branch HEAD. No live Agent 1.0.5 change and
 no ReVoltVPN-Ubuntu-Lab operation is permitted.
+
+## Independent negative follow-up (#23 next)
+
+- Broker reinstall or update requires an independently sourced **new expected
+  executable SHA**, even if the version number stays the same. A previously
+  valid signed statement for the old image must be rejected. Merely changing
+  the client's expected SHA cannot constitute a trustworthy installation audit.
+- Owner epoch and grant-generation rollback must fail against a **trusted
+  monotonic high-watermark**. If the source of the high-watermark is itself
+  rolled back or fabricated, this read-only module cannot detect it: #587 is
+  a production blocker, not a unit-test achievement.
+- Every authenticated reconnect must rotate the independently trusted
+  `connectionEpoch`; Broker and external witness **both sign it** and the
+  projection compares it to the current device connection and trusted pin.
+  A cached signed pair from the previous connection must fail even if it is
+  only 1 ms old. `online:true` alone is not evidence of a new epoch.
+  This bumps the prototype signed source format to v2. No Agent protocol or
+  physical Broker consumes these v2 fixture signatures at present.
+- Consent UI process appearance, HTTP 401, reported Broker readiness, and
+  `CORE YÖNETİCİ ETKİN` display badges are never sources of elevation.
+  A hostile getter test makes the pure projection fail if it accesses the badge.
+
+### #04 owner integration / no-merge guard
+
+The #621 #04 child currently calculates `coreEffective` in `web/app.js`
+from snapshot booleans and a string `authoritySource`. These are still
+caller-provided UI snapshot claims: this branch **does not certify or change
+that UI**. #04 must display CORE EFFECTIVE only when a trusted server-side
+projection has already authenticated native token, signer, source ACL,
+version/image, owner session, current connection epoch, and external CAS
+revoke. The UI badge must be derived from that result, never an input to it.
+Do not merge or deploy this QA as an elevation capability.
+
+Local isolated fixture: Node 22, global TypeScript 5.8.3, 18/18 tests PASS;
+GitHub exact-HEAD run must be checked separately. No live Windows proof.

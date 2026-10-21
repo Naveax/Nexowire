@@ -14,22 +14,23 @@ const OTHER = generateKeyPairSync('ed25519');
 const SHA = 'a'.repeat(64);
 const pins: CoreUiTrustPins = {now:N,brokerNativeKey:native.publicKey,
   externalWitnessKey:witnessAuthority.publicKey,expectedBrokerImageSha256:SHA,
-  expectedBrokerVersion:'1.0.5',expectedOwnerEpoch:4,expectedGrantGeneration:8};
+  expectedBrokerVersion:'1.0.5',expectedOwnerEpoch:4,expectedGrantGeneration:8,
+  expectedConnectionEpoch:17};
 const facts: CoreUiFacts = {deviceId:'d1',ownerAccountId:'o1',currentOwnerSessionId:'s1',
-  requestedMode:'CORE',accessMode:'full',online:true,bridgeRequested:'on',
+  requestedMode:'CORE',accessMode:'full',online:true,currentConnectionEpoch:17,bridgeRequested:'on',
   corePreferenceEnabled:true,rootLease:null,reportedCoreActive:true,
   agentReportedBrokerReady:true,consentExeSeen:true,brokerHttpStatus:401};
 const broker: BrokerNativeStatement = {
-  schema:'nexowire.ui.broker-native.v1',deviceId:'d1',ownerAccountId:'o1',
-  ownerSessionId:'s1',ownerEpoch:4,grantGeneration:8,grantMode:'CORE',
+  schema:'nexowire.ui.broker-native.v2',deviceId:'d1',ownerAccountId:'o1',
+  ownerSessionId:'s1',ownerEpoch:4,grantGeneration:8,connectionEpoch:17,grantMode:'CORE',
   rootLeaseIssuedAt:null,rootLeaseExpiresAt:null,
   observedAt:N.toISOString(),brokerImageSha256:SHA,brokerVersion:'1.0.5',
   nativeHighToken:true,administratorsEnabled:true,authenticatedBroker:true,
   pinnedPublisherSignature:true,protectedParentAcl:true,
   protectedImportTreeAcl:true,protectedTaskIdentity:true,locallyAttestedEnrollment:true,
 };
-const witness: ExternalEpochWitness = {schema:'nexowire.ui.external-epoch.v1',
-  deviceId:'d1',ownerAccountId:'o1',ownerEpoch:4,grantGeneration:8,revoked:false,
+const witness: ExternalEpochWitness = {schema:'nexowire.ui.external-epoch.v2',
+  deviceId:'d1',ownerAccountId:'o1',ownerEpoch:4,grantGeneration:8,connectionEpoch:17,revoked:false,
   observedAt:N.toISOString()};
 function signed(b = broker, w = witness): SignedUiEvidence {
   return {broker:{statement:b,signature:sign(null,coreUiBrokerSigningBytes(b),native.privateKey).toString('base64')},
@@ -145,5 +146,79 @@ test('no UI report is an authorization permit or UAC approval',()=>{
   for(const state of [evalUi(),evalUi(facts,pins,null),evalUi({...facts,requestedMode:'FULL'})]){
     assert.equal(state.grantsExecution,false);
     assert.equal(state.uacApprovalProvenByUi,false);
+  }
+});
+
+test('reinstall with same reported Broker version but different executable SHA rejects old signed receipt',()=>{
+  const installedSha='b'.repeat(64);
+  const reinstall={...pins,expectedBrokerImageSha256:installedSha};
+  const stale=signed();
+  assert.equal(evalUi(facts,reinstall,stale).state,'PAUSED_UNVERIFIED');
+  // A forged UI badge cannot rescue the pre-reinstall executable receipt.
+  assert.equal(evalUi({...facts,reportedCoreBadge:'CORE EFFECTIVE',claimedCoreEffective:true},reinstall,stale).effectiveElevatedBroker,false);
+  // Only new source-consistent evidence could pass a new expected image pin.
+  const after=signed({...broker,brokerImageSha256:installedSha});
+  assert.equal(evalUi(facts,reinstall,after).state,'CORE_SIGNED_BROKER');
+  assert.equal(evalUi(facts,{...reinstall,expectedBrokerVersion:'1.0.6'},after).effectiveElevatedBroker,false);
+});
+
+test('owner epoch rollback: old valid signatures cannot defeat independently advanced high-watermark',()=>{
+  const old=signed();
+  const advanced=signed({...broker,ownerEpoch:5,grantGeneration:9},
+    {...witness,ownerEpoch:5,grantGeneration:9});
+  const authoritative={...pins,expectedOwnerEpoch:5,expectedGrantGeneration:9};
+  assert.equal(evalUi(facts,authoritative,advanced).state,'CORE_SIGNED_BROKER');
+  assert.equal(evalUi(facts,authoritative,old).effectiveElevatedBroker,false);
+  assert.equal(evalUi(facts,{...authoritative,expectedOwnerEpoch:4},advanced).effectiveElevatedBroker,false);
+  assert.equal(evalUi(facts,authoritative,signed({...broker,ownerEpoch:5,grantGeneration:9},witness)).effectiveElevatedBroker,false);
+});
+
+test('offline -> reconnect: old signed pair rejected inside freshness window by new connection epoch',()=>{
+  const connected=signed();
+  assert.equal(evalUi(facts,pins,connected).state,'CORE_SIGNED_BROKER');
+  assert.equal(evalUi({...facts,online:false},pins,connected).effectiveElevatedBroker,false);
+  const rebound={...facts,online:true,currentConnectionEpoch:18};
+  const newPins={...pins,expectedConnectionEpoch:18};
+  // Only 1ms elapsed, so old evidence still passes ordinary timestamp freshness.
+  assert.equal(evalUi(rebound,{...newPins,now:new Date(N.getTime()+1)},connected).effectiveElevatedBroker,false);
+  const renewed=signed({...broker,connectionEpoch:18,observedAt:new Date(N.getTime()+1).toISOString()},
+    {...witness,connectionEpoch:18,observedAt:new Date(N.getTime()+1).toISOString()});
+  assert.equal(evalUi(rebound,{...newPins,now:new Date(N.getTime()+1)},renewed).state,'CORE_SIGNED_BROKER');
+  assert.equal(evalUi(facts,pins,renewed).effectiveElevatedBroker,false);
+  assert.equal(evalUi(rebound,pins,renewed).effectiveElevatedBroker,false);
+});
+
+test('external witness and native Broker must independently agree on the authenticated connection incarnation',()=>{
+  assert.equal(evalUi(facts,pins,signed({...broker,connectionEpoch:18})).effectiveElevatedBroker,false);
+  assert.equal(evalUi(facts,pins,signed(broker,{...witness,connectionEpoch:18})).effectiveElevatedBroker,false);
+  assert.equal(evalUi({...facts,currentConnectionEpoch:0}).effectiveElevatedBroker,false);
+  assert.equal(evalUi(facts,{...pins,expectedConnectionEpoch:0}).effectiveElevatedBroker,false);
+});
+
+test('consent.exe plus HTTP401 and all-green badges cannot manufacture effective CORE',()=>{
+  const forged={...facts,reportedCoreActive:true,agentReportedBrokerReady:true,
+    consentExeSeen:true,brokerHttpStatus:401,reportedCoreBadge:'CORE YÖNETİCİ ETKİN',claimedCoreEffective:true};
+  const out=evalUi(forged,pins,null);
+  assert.equal(out.state,'PAUSED_UNVERIFIED');
+  assert.equal(out.evidence,'not-proven');
+  assert.equal(out.effectiveElevatedBroker,false);
+  assert.equal(out.uacApprovalProvenByUi,false);
+  assert.equal(out.grantsExecution,false);
+  const wrongSigned=signed({...broker,nativeHighToken:false});
+  assert.equal(evalUi(forged,pins,wrongSigned).effectiveElevatedBroker,false);
+});
+
+test('cosmetic badge state is not read by the projection, even if its getter is malicious',()=>{
+  const hostile=new Proxy({...facts},{get(target,key,receiver){
+    if(key==='reportedCoreBadge' || key==='claimedCoreEffective' || key==='reportedCoreActive'){
+      throw new Error('BADGE_MUST_NOT_BE_READ');
+    }
+    return Reflect.get(target,key,receiver);
+  }});
+  assert.equal(evalUi(hostile,pins,null).state,'PAUSED_UNVERIFIED');
+  assert.equal(evalUi(hostile,pins,signed()).state,'CORE_SIGNED_BROKER');
+  for(const badge of ['CORE EFFECTIVE','CORE YÖNETİCİ ETKİN','', 'ROOT','FULL']){
+    const fake={...facts,reportedCoreBadge:badge,claimedCoreEffective:badge.length>0};
+    assert.equal(evalUi(fake,pins,null).effectiveElevatedBroker,false);
   }
 });

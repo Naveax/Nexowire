@@ -18,6 +18,8 @@ export interface CoreUiFacts {
   readonly requestedMode: UiAccess;
   readonly accessMode: 'safe' | 'full';
   readonly online: boolean;
+  /** Authenticated current device-connect incarnation; UI JSON is not authority. */
+  readonly currentConnectionEpoch: number;
   readonly bridgeRequested: 'auto' | 'on' | 'off';
   readonly corePreferenceEnabled: boolean;
   readonly rootLease: {
@@ -31,15 +33,20 @@ export interface CoreUiFacts {
   readonly agentReportedBrokerReady?: boolean;
   readonly consentExeSeen?: boolean;
   readonly brokerHttpStatus?: number;
+  /** Cosmetic UI badge/claimed state is deliberately never read for elevation. */
+  readonly reportedCoreBadge?: string;
+  readonly claimedCoreEffective?: boolean;
 }
 
 export interface BrokerNativeStatement {
-  readonly schema: 'nexowire.ui.broker-native.v1';
+  readonly schema: 'nexowire.ui.broker-native.v2';
   readonly deviceId: string;
   readonly ownerAccountId: string;
   readonly ownerSessionId: string;
   readonly ownerEpoch: number;
   readonly grantGeneration: number;
+  /** Rotates on every authenticated device reconnect; bound into both signatures. */
+  readonly connectionEpoch: number;
   readonly grantMode: 'ROOT' | 'CORE';
   readonly rootLeaseIssuedAt: string | null;
   readonly rootLeaseExpiresAt: string | null;
@@ -56,11 +63,12 @@ export interface BrokerNativeStatement {
   readonly locallyAttestedEnrollment: boolean;
 }
 export interface ExternalEpochWitness {
-  readonly schema: 'nexowire.ui.external-epoch.v1';
+  readonly schema: 'nexowire.ui.external-epoch.v2';
   readonly deviceId: string;
   readonly ownerAccountId: string;
   readonly ownerEpoch: number;
   readonly grantGeneration: number;
+  readonly connectionEpoch: number;
   readonly revoked: boolean;
   readonly observedAt: string;
 }
@@ -79,6 +87,8 @@ export interface CoreUiTrustPins {
   /** Read at projection time from independent monotonic authority, never browser JSON. */
   readonly expectedOwnerEpoch: number;
   readonly expectedGrantGeneration: number;
+  /** From trusted authenticated reconnect authority; never UI supplied. */
+  readonly expectedConnectionEpoch: number;
   /** The timestamp is supplied by a trusted clock, not the browser. */
   readonly now: Date;
 }
@@ -104,7 +114,7 @@ const encodedSignature = /^[A-Za-z0-9+/]{86}==$/;
 export function coreUiBrokerSigningBytes(s: BrokerNativeStatement): Buffer {
   return Buffer.from(JSON.stringify([
     s.schema,s.deviceId,s.ownerAccountId,s.ownerSessionId,s.ownerEpoch,
-    s.grantGeneration,s.grantMode,s.rootLeaseIssuedAt,s.rootLeaseExpiresAt,
+    s.grantGeneration,s.connectionEpoch,s.grantMode,s.rootLeaseIssuedAt,s.rootLeaseExpiresAt,
     s.observedAt,s.brokerImageSha256,s.brokerVersion,
     s.nativeHighToken,s.administratorsEnabled,s.authenticatedBroker,
     s.pinnedPublisherSignature,s.protectedParentAcl,s.protectedImportTreeAcl,
@@ -114,7 +124,7 @@ export function coreUiBrokerSigningBytes(s: BrokerNativeStatement): Buffer {
 export function coreUiWitnessSigningBytes(s: ExternalEpochWitness): Buffer {
   return Buffer.from(JSON.stringify([
     s.schema,s.deviceId,s.ownerAccountId,s.ownerEpoch,s.grantGeneration,
-    s.revoked,s.observedAt,
+    s.connectionEpoch,s.revoked,s.observedAt,
   ]),'utf8');
 }
 function fresh(value: string, now: number): boolean {
@@ -145,10 +155,13 @@ function validateEvidence(
     if (pins.brokerNativeKey.export({format:'der',type:'spki'}).equals(
           pins.externalWitnessKey.export({format:'der',type:'spki'}))) return 'invalid';
     if (!Number.isFinite(now) ||
-        b.schema !== 'nexowire.ui.broker-native.v1' ||
-        w.schema !== 'nexowire.ui.external-epoch.v1' ||
+        b.schema !== 'nexowire.ui.broker-native.v2' ||
+        w.schema !== 'nexowire.ui.external-epoch.v2' ||
         !positiveEpoch(b.ownerEpoch) || !positiveEpoch(b.grantGeneration) ||
         !positiveEpoch(w.ownerEpoch) || !positiveEpoch(w.grantGeneration) ||
+        !positiveEpoch(b.connectionEpoch) || !positiveEpoch(w.connectionEpoch) ||
+        !positiveEpoch(pins.expectedConnectionEpoch) ||
+        !positiveEpoch(facts.currentConnectionEpoch) ||
         !fresh(b.observedAt, now) || !fresh(w.observedAt, now) ||
         b.deviceId !== facts.deviceId || w.deviceId !== facts.deviceId ||
         b.ownerAccountId !== facts.ownerAccountId ||
@@ -156,6 +169,9 @@ function validateEvidence(
         b.ownerSessionId !== facts.currentOwnerSessionId ||
         b.ownerEpoch !== w.ownerEpoch ||
         b.grantGeneration !== w.grantGeneration ||
+        b.connectionEpoch !== w.connectionEpoch ||
+        b.connectionEpoch !== facts.currentConnectionEpoch ||
+        b.connectionEpoch !== pins.expectedConnectionEpoch ||
         b.ownerEpoch !== pins.expectedOwnerEpoch ||
         b.grantGeneration !== pins.expectedGrantGeneration ||
         b.grantMode !== facts.requestedMode ||
