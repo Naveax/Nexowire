@@ -66,8 +66,9 @@ test('controlled worker: PID and heartbeat are not verified completion; actual r
       committedAt:new Date(clock.now).toISOString(),exitCode:0,
       exitObservedAt:new Date(clock.now).toISOString(),
     });
-    assert.equal(accepted.status,'verified');
-    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    assert.equal(accepted.status,'unverified');
+    assert.equal(accepted.reason,'TRUSTED_COMPLETION_CORRELATION_MISMATCH');
+    assert.notEqual(supervisor.snapshot(scope.sessionId).state,'completed_verified');
     assert.equal(after.completionEvidence,'result_files_rehashed_scope_bound');
     assert.equal(after.resultArtifactSha256Verified,disk.artifactSha256);
     assert.equal(after.progressVerified,true);
@@ -305,14 +306,17 @@ test('verified completion cache expires instead of hiding subsequent file change
     }});
     const original=await supervisor.verifySessionFromDisk(scope.sessionId,request);
     assert.equal(original.status,'verified');
-    await supervisor.verifySessionFromDisk(scope.sessionId,request,{
+    const forged=await supervisor.verifySessionFromDisk(scope.sessionId,request,{
       authority:'trusted_storage_adapter',requestId:'550e8400-e29b-41d4-a716-446655440001',
       sessionId:scope.sessionId,immutableArtifactSha256:original.artifactSha256!,
       outputProofSha256:createHash('sha256').update(output).digest('hex'),
       committedAt:new Date(clock.now).toISOString(),exitCode:0,
       exitObservedAt:new Date(clock.now).toISOString(),
     });
-    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    assert.equal(forged.status,'unverified');
+    const local=await supervisor.verifySessionFromDisk(scope.sessionId,request);
+    assert.equal(local.status,'verified');
+    assert.equal(supervisor.snapshot(scope.sessionId).state,'reported_complete');
     clock.now+=30_100;
     const expired=supervisor.snapshot(scope.sessionId);
     assert.equal(expired.state,'reported_complete');
@@ -404,8 +408,9 @@ test('completed_verified rejects absent or forged requestId, immutable hash, out
       assert.equal(supervisor.snapshot(scope.sessionId).completionAttested,false);
     }
     const accepted=await supervisor.verifySessionFromDisk(scope.sessionId,request,valid);
-    assert.equal(accepted.status,'verified');
-    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    assert.equal(accepted.status,'unverified');
+    assert.equal(accepted.reason,'TRUSTED_COMPLETION_CORRELATION_MISMATCH');
+    assert.notEqual(supervisor.snapshot(scope.sessionId).state,'completed_verified');
     // A lost child/Job invalidates even a previously accepted local proof.
     supervisor.recover([{sessionId:scope.sessionId,status:'lost',exitCode:null}]);
     assert.equal(supervisor.snapshot(scope.sessionId).state,'lost');
@@ -468,7 +473,8 @@ test('invalid forged stdout after accepted proof invalidates cached acceptance',
       committedAt:new Date(clock.now).toISOString(),
       exitCode:0,exitObservedAt:new Date(clock.now).toISOString(),
     });
-    assert.equal(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    assert.notEqual(supervisor.snapshot(scope.sessionId).state,'completed_verified');
+    assert.equal((await supervisor.verifySessionFromDisk(scope.sessionId,request)).status,'verified');
     supervisor.observeProcessEvent({topic:'process.output',data:{
       sessionId:scope.sessionId,stream:'stdout',
       text:PROGRESS_PREFIX+'{"completed_count":9999,"pending_count":0,"failure_count":-1}\n',

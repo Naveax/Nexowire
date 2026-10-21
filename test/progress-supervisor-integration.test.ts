@@ -193,8 +193,9 @@ for (const mode of ['complete','false_progress'] as const) {
           committedAt:last.session.startedAt,exitCode:0,
           exitObservedAt:last.session.exitedAt!,
         });
-        assert.equal(accepted.status,'verified');
-        assert.equal(progressSupervisor.snapshot(sessionId).state,'completed_verified');
+        assert.equal(accepted.status,'unverified');
+        assert.equal(accepted.reason,'TRUSTED_COMPLETION_CORRELATION_MISMATCH');
+        assert.notEqual(progressSupervisor.snapshot(sessionId).state,'completed_verified');
         assert.equal(proof.verifiedCompletedCount,2);
         assert.equal(proof.verifiedPendingCount,0);
         assert.equal(proof.verifiedFailureCount,0);

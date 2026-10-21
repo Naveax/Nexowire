@@ -413,3 +413,68 @@ No status RPC, readback alone, or synthetic fixture may assert
 production `completed_verified`. The #596 source still awaits its own
 integration, signed release and two-device real acceptance; no live
 crypto bot/GPU workloads were launched.
+
+
+### 2026-10-21 / #11 P0: independently sealed CORE result completion (staged only)
+
+- PR #575 source-only strict verifier `src/agent/trusted-worker-completion.ts`
+  now requires an **Ed25519 signed, canonical, domain-separated result
+  statement**, independently pinned **second** Ed25519 key for the
+  off-host immutable-storage seal (same key is explicitly rejected),
+  and content-addressed complete off-host SHA-256 readback via <=64KiB
+  chunks. The object bytes describe the bound statement *excluding its
+  own digest*, avoiding circular hashing. Readback is limited to 128KiB
+  proof metadata; worker bulk results still use separate Artifact Bridge.
+- The signed statement binds owner account, project, device, run/session,
+  trusted invocation request UUID, CORE grant ID and positive **owner
+  grant epoch**, source/target devices and path (distinct physical/logical
+  identities), transfer UUID, result-set digest, remote object digest,
+  exact worker output SHA-256, completed/pending/failed (pending=0,
+  failed=0), OS exit code 0, commit timestamp and OS-observed exit
+  timestamp. Current authority is reread **before and after** off-host
+  inspection. Grant must be `CORE/ACTIVE`, epoch exact, not revoked or
+  cancel requested. Transfer must remain `COMPLETED` with exact target
+  SHA, bytes and identity at both reads.
+- Separately signed **immutable storage seal** binds owner, project,
+  off-host destination, transfer UUID, owner grant epoch, object SHA-256
+  and seal timestamp. Plain JSON `trusted_storage_adapter` objects
+  and bare #596/#616 RPC receipts are **always untrusted**. Only
+  `verifyOffhostCompletion` can mint a module-private, unforgeable
+  `VerifiedCompletionPermit`, which `ProgressSupervisor` requires
+  for the `completed_verified` state.
+- `invalidateOwnerGrant(sessionId)` invalidates evidence and permanently
+  blocks permit reuse for the same session upon CORE cancel/revoke/
+  re-pair. UNKNOWN mutation effects never trigger automatic retry;
+  signed transfer-state `MUTATION_UNKNOWN`, `CANCEL_REQUESTED`,
+  `CANCELLED` and `RECOVERY_REQUIRED` cannot produce a permit.
+  Verify-generation races, lost PID, reconnect and stalled worker
+  remain covered by existing supervisor/transfer regression tests.
+- **#616 current head** `94b92e01219aca3cd4ca86775fe4b61a72ac53c4`
+  is CI-green staging for a *different* transfer-writer monotonic
+  lease (epoch/token via `TrustedTransferAuthority`). This is NOT
+  interchangeable with owner CORE grant epoch. Both will require
+  separate genuine external authority and revocation/fence wiring
+  before production. The #616 author explicitly reports external
+  monotonic trust emulation as TEST-ONLY and physical NO-GO.
+- **Staging limitations:** This verifier has no production-pinned
+  authentic issuer public keys, owner CORE-grant authority, actual
+  signed immutable off-host storage service, durable revoke event
+  subscription, independently authenticated remote Agent readback,
+  or tested crash-consistent two-device evidence. In particular, a
+  signature from a mock off-host store is not proof that a real storage
+  object is immutable. The caller MUST supply trusted ports; none are
+  wired to the production Hub by this change. The in-memory revoked
+  flag is not a crash-durable authority; after restart a current
+  external grant lookup is still mandatory.
+- **Tests:** Ed25519-positive permit and fail-closed negative cases
+  for forged/missing signatures, reused same signer, forged off-host
+  seal, partial/mismatched payload, wrong owner epoch, revoke/cancel
+  before and during readback, stale signed receipt, UNKNOWN transfer
+  state, transfer changing after readback, raw plain attestation,
+  cached-permit replay after CORE cancellation, and proof corruption.
+  No live crypto trading, GPU benchmark, 1GiB artifact file,
+  production Agent/Hub restart or service mutation is involved.
+- Only #575 progress verifier/adapters/tests/documentation changed.
+  #08 Artifact Store, #03 ProcessManager, physical Agent and broker
+  remain untouched. **Production completion acceptance is NO-GO**
+  pending genuine second-party sealed custody and independent QA.

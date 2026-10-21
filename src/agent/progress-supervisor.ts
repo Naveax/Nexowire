@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import { createHash } from 'node:crypto';
 import { verifyResultFiles, type ProgressProofReport, type ProgressProofRequest } from './progress-proof-verifier.js';
+import { isVerifiedCompletionPermit, type VerifiedCompletionPermit } from './trusted-worker-completion.js';
 
 /**
  * Application-owned telemetry is deliberately not treated as OS process health
@@ -80,14 +81,13 @@ interface SessionProgress {
   reconnectAtMs?: number;
   lastOutputSeq?: number;
   completionAttested: boolean;
+  verifiedOwnerGrantEpoch?: number;
+  ownerGrantRevoked: boolean;
 }
 
-/**
- * Out-of-band evidence supplied only by a trusted scheduler and immutable
- * storage adapter. A worker's own manifest or stdout MUST NOT supply this.
- * An object with these fields does not itself cryptographically establish
- * storage immutability; production must authenticate the supplying provider.
- */
+/** Legacy JSON DTO retained only for compatibility tests. This object is
+ * explicitly UNTRUSTED and can never authorize completed_verified.
+ * The signed off-host verifier must mint VerifiedCompletionPermit instead. */
 export interface TrustedCompletionAttestation {
   authority: 'trusted_storage_adapter';
   requestId: string;
@@ -98,16 +98,6 @@ export interface TrustedCompletionAttestation {
   exitCode: 0;
   exitObservedAt: string;
 }
-const CompletionAttestationSchema = z.object({
-  authority: z.literal('trusted_storage_adapter'),
-  requestId: z.string().uuid(),
-  sessionId: z.string().uuid(),
-  immutableArtifactSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  outputProofSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  committedAt: z.string().datetime(),
-  exitCode: z.literal(0),
-  exitObservedAt: z.string().datetime(),
-}).strict();
 
 export interface SupervisorOptions {
   now?: () => number;
@@ -172,6 +162,7 @@ export class ProgressSupervisor {
       lastOutputMs: startedMs, invalidRecords: 0, stdoutFragment: '',
       droppingOversizedLine: false, seenWarningCodes: new Set(),
       proofGeneration: 0, pendingReconnect: false, completionAttested: false,
+      ownerGrantRevoked: false,
     });
   }
 
@@ -179,7 +170,8 @@ export class ProgressSupervisor {
   bindTrustedRequest(sessionId: string, requestId: string): boolean {
     if (!z.string().uuid().safeParse(requestId).success) return false;
     const tracked = this.sessions.get(sessionId);
-    if (!tracked || tracked.trustedRequestId && tracked.trustedRequestId !== requestId) return false;
+    if (!tracked || tracked.ownerGrantRevoked ||
+        tracked.trustedRequestId && tracked.trustedRequestId !== requestId) return false;
     if (!tracked) return false;
     tracked.trustedRequestId = requestId;
     tracked.proofGeneration++;
@@ -379,7 +371,7 @@ export class ProgressSupervisor {
    */
   async verifySessionFromDisk(
     sessionId: string, request: ProgressProofRequest,
-    attestation?: TrustedCompletionAttestation,
+    attestation?: TrustedCompletionAttestation | VerifiedCompletionPermit,
   ): Promise<ProgressProofReport> {
     const tracked = this.sessions.get(sessionId);
     const unverified = (reason: string): ProgressProofReport => ({
@@ -387,6 +379,7 @@ export class ProgressSupervisor {
       pendingCount: null, failureCount: null, artifactSha256: null,
       sealed: false, verifiedAt: null, lastArtifactModifiedAt: null,
     });
+    if (tracked?.ownerGrantRevoked) return unverified('OWNER_GRANT_REVOKED');
     if (!tracked || !tracked.sample || tracked.status === 'lost' ||
         tracked.status === 'orphaned' ||
         request.scope.sessionId !== sessionId) {
@@ -417,8 +410,11 @@ export class ProgressSupervisor {
     }
     tracked.completionAttested = false;
     if (tracked.evidence.status === 'verified' && attestation) {
-      const parsed = CompletionAttestationSchema.safeParse(attestation);
-      const at = parsed.success ? parsed.data : null;
+      // Plain JSON DTOs and worker-controlled RPC receipts CANNOT certify
+      // immutable result custody. Only the signed off-host + live CORE
+      // grant verifier may mint an opaque permit.
+      const permit = isVerifiedCompletionPermit(attestation) ? attestation : null;
+      const at = permit?.statement ?? null;
       const committedAt = at ? Date.parse(at.committedAt) : NaN;
       const exitObservedAt = tracked.lastProcessExitedAt === undefined ?
         NaN : Date.parse(tracked.lastProcessExitedAt);
@@ -427,7 +423,14 @@ export class ProgressSupervisor {
       if (!at || !tracked.trustedRequestId ||
           at.requestId !== tracked.trustedRequestId ||
           at.sessionId !== sessionId ||
-          at.immutableArtifactSha256 !== tracked.evidence.artifactSha256 ||
+          at.resultSetSha256 !== tracked.evidence.artifactSha256 ||
+          at.ownerAccountId !== request.scope.ownerAccountId ||
+          at.deviceId !== request.scope.deviceId ||
+          at.projectId !== request.scope.projectId ||
+          at.runId !== request.scope.runId ||
+          at.completedCount !== request.expectedCount ||
+          this.now() - (permit?.verifiedAt ?? 0) > 30000 ||
+          tracked.ownerGrantRevoked ||
           at.outputProofSha256 !== tracked.lastProgressOutputSha256 ||
           tracked.status !== 'exited' || tracked.exitCode !== 0 ||
           at.exitObservedAt !== tracked.lastProcessExitedAt ||
@@ -440,9 +443,22 @@ export class ProgressSupervisor {
         tracked.evidence = unverified('TRUSTED_COMPLETION_CORRELATION_MISMATCH');
       } else {
         tracked.completionAttested = true;
+        tracked.verifiedOwnerGrantEpoch = at.ownerGrantEpoch;
       }
     }
     return tracked.evidence;
+  }
+
+  /** Called on owner CORE revoke/cancel/re-pair or grant epoch change;
+   * never replay a previously UNKNOWN transfer mutation. */
+  invalidateOwnerGrant(sessionId: string): void {
+    const tracked = this.sessions.get(sessionId);
+    if (!tracked) return;
+    tracked.proofGeneration++;
+    tracked.evidence = undefined;
+    tracked.completionAttested = false;
+    tracked.verifiedOwnerGrantEpoch = undefined;
+    tracked.ownerGrantRevoked = true;
   }
 
   private invalid(tracked: SessionProgress): void {
@@ -497,6 +513,7 @@ export class ProgressSupervisor {
       lastVerifiedProgressAt: freshProof ? tracked.evidence!.verifiedAt : null,
       progressVerified: freshProof,
       completionAttested: freshProof && tracked.completionAttested,
+      verifiedOwnerGrantEpoch: freshProof && tracked.completionAttested ? tracked.verifiedOwnerGrantEpoch : null,
       requestIdCorrelated: freshProof && tracked.completionAttested ? tracked.trustedRequestId : null,
       outputProofSha256: freshProof && tracked.completionAttested ? tracked.lastProgressOutputSha256 : null,
       verificationReasonForCompletion: freshProof && !tracked.completionAttested ? 'IMMUTABLE_ATTESTATION_REQUIRED' : null,
