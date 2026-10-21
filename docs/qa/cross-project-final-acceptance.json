@@ -1,9 +1,9 @@
 {
   "schema": "nexowire.independent-qa.v1",
   "capturedAt": "2026-10-21",
-  "baselineSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+  "baselineSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "QA MASTER CORE is real persistent, revocable high-integrity broad owner-authorized command delegation after one signed protected Broker/UAC bootstrap; ROOT real <=15 min, FULL standard-user. Current main cannot prove it. PR exact green is source-only; all staging/production/original incident BLOCKED.",
+  "meaning": "QA16 new-main 754cc436, PR #635-649 stacked exact-head source evidence; source failures remain hard release gates. Trusted real Windows high token CORE persists only after once signed Broker local UAC enrollment, with revocable epoch. Physical staging/production/original incident all blocked.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "P0 CORE signed broker elevated shell UNKNOWN/lost ACK has no verified execution chain; #619 old-base negative CI green, no live authenticated requestId+running-result reconciliation; never retry unknown."
+          "evidence": "#640 two real cancel semantics FAIL: pre-Native write wrongly MUTATION_UNKNOWN, later cancel downgrades pending unknown. #648 audit source CI+QA PASS only, no independent effect readback; no re-dispatch on UNKNOWN."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 joint J+A co-rollback admits forgotten IDs; #614 external signed Postgres witness source CI 39598693419 PASS on simulated SQL only, no real storage/restore domain; CORE/ROOT revocation epoch must be anchored externally."
+          "evidence": "#587 SQLite co-rollback active; #637 hosted source CI SUCCESS signed external witness hostility but no physical non-co-restorable monotonic storage; #640 cancel state transition fail, no replay."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Privileged VMId Running readback and elevated command side-effect attestation missing. #613 source connection epoch checkpoint PASS but cannot certify actual Hyper-V/Windows admin postcondition."
+          "evidence": "Current main #605 source reconciliation verified; missing independently authenticated VM GUID Running and unknown Native write/ack postconditions. #641 two-Hub CAS QA exact CI FAIL inherited Node/Windows checks."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "CORE must be persistent real elevated broad shell via signed protected Broker after once approved UAC; ROOT same elevated command <=900s. Current main only CORE preference PAUSED_UNVERIFIED, ROOT status diagnostic; no explicit windows.elevated.shell.exec and no source trustworthy session/epoch/token proof. FULL only standard shell."
+          "evidence": "CORE must be true owner-bound high Windows token through signed immutable Broker after one genuine local UAC; #635/#636/#639/#643/#644 source QA green but physical sign/UAC/ACL/token and revoke/re-pair epoch not verified, #642 CORE UI CI IN_PROGRESS."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#553 scopes and USB handle/TOCTOU physical negative acceptance remain open; no tested signed Agent deployment."
+          "evidence": "#647 native Windows handle proof QA exact CI FAIL inherited fast-exit Windows Job; required verified descriptor identity/reparse/ADS/Junction scope, no real file/ACL modifications."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -149,15 +149,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Latest #618 CI 39605003581 Windows Job fast-exit stdout iteration4 FAIL; latest #576 CI 39598258315 signed surrogate UNAVAILABLE and inherited Modify fixture null FAIL; #608 older combination CI+release green. Elevated Broker real process ownership cannot be attested."
+          "evidence": "#638 isolated 100-cycle Windows Job workflow 39625276215 SUCCESS but same HEAD CI 39625275778 FAIL Authenticode UNAVAILABLE and inherited Modify parent ACL null; #649 Windows stdout-before-exited iteration1 CI FAIL. No source laundering."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -201,15 +201,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "One-time UAC requires real LOCAL Windows-approved signed Broker bootstrap; no physical Secure Desktop input, consent.exe presence not approval; no UAC per CORE command after valid enrollment expected."
+          "evidence": "#645 Remote Assistance UAC coverage CI FAIL shared Windows fast-exit. Actual secure desktop physical approval cannot be simulated or automated, keep local UAC witnessed and signed Broker preflight."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -253,15 +253,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -279,15 +279,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#610 quota receipt, #615 compressed HTTP fairness source exact CI green; no actual Cloudflare 24h tenant quota/real work proof or signed rollout."
+          "evidence": "#649 9.5MiB parser/tenant fairness source QA CI 39628451245 FAIL Windows fast-exit; pending completion/tenant memory release and seeded p95/p99 cannot certify physical 101+ WSS or 1GiB, no paid tenant staging."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -331,15 +331,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -357,15 +357,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Main still lacks public one-call durable transfer_start/status/cancel; #616 source green stacked #596 branch not merged or physically Agent 1.0.5 tested."
+          "evidence": "#640 source 2 true cancellation semantics FAIL, gated pre-write cancel not properly CANCELLED and post-dispatch UNKNOWN can be overwritten; #641 two-Hub stacked test CI red. #616 earlier source green does not fix current #634-based cancellation."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -409,15 +409,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -435,15 +435,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -457,19 +457,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Independent verified immutable progress receipts and real bot completion still unaccepted."
+          "evidence": "Independent external Progress Watchdog runtime postcondition and cancellation/revoked epoch not signed physical; #648 audit provenance source green not real worker completion proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#551 latest head 9fdee368 source CI 39606595530 and Release Readiness 39606595531 SUCCESS, still no Nexowire first-party signed native installer, signed rollback archive, protected actual Broker ACL or physically approved one-time UAC and two device canary."
+          "evidence": "#636/#639/#644 signed bootstrap negative QA source CI green only; #638 Authenticode/parent ACL red; #551 signed deployment still no Nexowire-owned verified first-party native signed installer/full rollback physical canary; #271 legacy inherited writable source."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "P0 external independent monotonic CAS owner/device/CORE/ROOT epoch and re-pair grant revocation not physically provisioned, #587 co-rollback; #614 Postgres SQL simulated PASS only. Never replay lost ACK."
+          "evidence": "#637 hostile CAS QA exact CI SUCCESS but external PostgreSQL real independent CAS not proved; #640 source cancel semantics and replay risks red; owner/CORE epoch revoke and lost ACK UNKNOWN must preserve no replay."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Exact authorized Hyper-V VM GUID/Running or Off independent readback unavailable after denied Get-VM. No real signed VM canary or two-Agent up-to-date deployment."
+          "evidence": "No physical Agent 1.0.5 upgraded, no real high Windows token signed Broker, no UAC approval or Hyper-V GUID Running readback, no physical 1GiB two-device writer proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#618/#620/#576 current HEAD CI red; #619 CI green on old-base; #608 source-compatible green; #614/#616/#609/#610/#612/#613/#615 CI green but NO physical trust or acceptance. Own CORE QA 5 pass/3 intentional fail, earlier Hyper-V 5 pass/2 fail; source gate stays red."
+          "evidence": "#572 exact head f7cb4d9 GitHub CI 39609482502 FAILED (not no workflow). #638 stand-alone 100cycle PASS but full CI FAIL; #640 two semantic failures, #641 inherited CI red, #648 dual green only source, #649 inherited fast-exit red. #642 pending."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "CORE/ROOT real signed elevated Broker, protected ACL, independently owner/epoch anchored delegation, local one-time UAC and real VM/worker postcondition remain unaccepted at 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
         }
       }
     }
@@ -761,11 +761,11 @@
     }
   ],
   "independentReleaseApproval": null,
-  "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+  "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "inspectedMainCi": {
-    "headSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
-    "runId": 39596766086,
+    "headSha": "754cc4364822be5fda528f54042fb22a84f19924",
+    "runId": 39622251466,
     "conclusion": "PASS",
-    "scope": "unchanged exact-main source CI, no elevated Windows/physical signed Broker acceptance"
+    "scope": "exact-HEAD main source CI only; no signed CORE physical production claim"
   }
 }

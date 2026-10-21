@@ -1,8 +1,8 @@
 {
   "schema": "nexowire.qa.findings.v2",
-  "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+  "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "date": "2026-10-21",
-  "findingCount": 22,
+  "findingCount": 27,
   "scope": "Review and reproducible tests, not live exploit or release approval",
   "findings": [
     {
@@ -830,6 +830,226 @@
         "https://github.com/Naveax/Nexowire/issues/587",
         "https://github.com/Naveax/Nexowire/pull/614",
         "https://github.com/Naveax/Nexowire/pull/619"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-640-CANCEL-TRUE-SEMANTIC-BUGS",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "classification": "P0_INDEPENDENT_QA_635_649",
+      "affected": [
+        {
+          "pr": 640,
+          "headSha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 641,
+          "headSha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "observed": "#640 exact HEAD 91f1426 CI 39626203944 test (24) FAIL: cancel before any Native destination write wrongly MUTATION_UNKNOWN; later cancel downgrades an already UNKNOWN dispatched write result, violating no-replay. Separate original two-Agent WS E2E also FAILED. #641 exact CI red with inherited Windows Job fast-exit and source E2E.",
+      "reproduction": [
+        "Read GitHub exact run 39626203944 Node24 job 119312007508 #588 gated source read + later cancel test names and failures; verify two real semantic mismatches never represented as green.",
+        "Distinguish #641 two-Hub test result from full PR CI: inherited E2E/Windows failures remain, do not delete tests or relax assertions.",
+        "Re-run source-only QA proof on a branch containing current #08 owner cross-device transfer worker and independently authenticated journal; DO NOT replay real native writes or test physical user files."
+      ],
+      "expectedFix": "Correct source cancellation state machine atomically: cancel before write dispatch returns CANCELLED; after dispatch but before independent effect/ACK remains MUTATION_UNKNOWN even after a later cancel; keep durable pending journal and never auto-replay, pass all #640 QA cases and original E2E exact head.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/640",
+        "https://github.com/Naveax/Nexowire/actions/runs/39626203944",
+        "https://github.com/Naveax/Nexowire/pull/641"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-638-100CYCLE-SIGNED-ACL-TRUST",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "classification": "P0_INDEPENDENT_QA_635_649",
+      "affected": [
+        {
+          "pr": 638,
+          "headSha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "observed": "#638 same SHA: separate 100cycle hosted Job QA run 39625276215 SUCCESS, but full CI 39625275778 FAIL OS Authenticode Valid expected but UNAVAILABLE and inherited parent Modify ACL expected true returned null. No actual trusted signer or signed Broker process proof.",
+      "reproduction": [
+        "Inspect separate workflow run 39625276215 exactly for synthetic 100cycles, do not treat its green as full CI green.",
+        "Inspect browser-live job 119308735809 in run 39625275778 and preserve two red Authenticode/ACL assertions; no first-party installer or live ACL mutation."
+      ],
+      "expectedFix": "Provide real OS-backed Authenticode provider availability+publisher identity and effective parent/import/updater ACL proof in isolated fixtures, then independent signed Broker and high token rollout; preserve 100cycles passing.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39625276215",
+        "https://github.com/Naveax/Nexowire/actions/runs/39625275778"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-648-AUDIT-DUAL-SOURCE-ONLY",
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "classification": "P0_INDEPENDENT_QA_635_649",
+      "affected": [
+        {
+          "pr": 648,
+          "headSha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+          "state": "OPEN_DRAFT_PASS"
+        }
+      ],
+      "observed": "#648 exact HEAD 9d9d11b GitHub CI 39628249630 and independent QA29 Elevated Command Audit Source 39628250167 both SUCCESS. Tests are audit provenance and unknown-no-replay source only, no independently authenticated Windows high token/effect or persistent CORE owner epoch proof.",
+      "reproduction": [
+        "Verify both exact SHA workflows on #648 and reject a single green as real Windows privileged dispatch, independent postcondition or successful native VM state.",
+        "Independently inspect forged stdout success/ACK, audit log rotation, stale CORE owner/revoke and any withheld token fields as source-only adversarial fixtures."
+      ],
+      "expectedFix": "Keep audit requestId+owner/device/epoch, signed token+image provenance and independent side-effect digest/readback robust across Hub crash/duplicate ACK; production must be proven separately on approved signed Broker canary.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39628249630",
+        "https://github.com/Naveax/Nexowire/actions/runs/39628250167"
+      ],
+      "disposition": {
+        "source": "PASS",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-649-FAIRNESS-WINDOWS-RED",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "classification": "P0_INDEPENDENT_QA_635_649",
+      "affected": [
+        {
+          "pr": 649,
+          "headSha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "observed": "#649 exact HEAD 955cf289 CI 39628451245 browser-live FAIL stdout-before-exited iteration 1; Node22/24 and other six jobs green. Bounded gzip 9.5MiB, four large/many small fairness p95/p99 deterministic source is not physical 100+ WSS or storage release after verified completion.",
+      "reproduction": [
+        "Inspect #649 hosted Windows browser-live job 119320507258; assert timeout/fast-exit stdout-before-exited FAILURE still open, do not skip.",
+        "Verify bounded parser/tenant pending memory resource accounting, compressed response size, cancellations and fixed seed p95/p99 source claims separately; no physical multi-tenant stress."
+      ],
+      "expectedFix": "Correct shared Job stdout/stderr drain and only release tenant resources after verified complete; keep deterministic fairness and no paid production load claims.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/actions/runs/39628451245"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-635-649-STACKED-CORE-RELEASE",
+      "requirements": [
+        "R02",
+        "R04",
+        "R09",
+        "R19",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "classification": "P0_INDEPENDENT_QA_635_649",
+      "affected": [
+        {
+          "pr": 635,
+          "headSha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 636,
+          "headSha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 637,
+          "headSha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 639,
+          "headSha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 642,
+          "headSha": "87644090113d21544f42a738d919d5422ed200c0",
+          "state": "OPEN_DRAFT_NOT_VERIFIED"
+        },
+        {
+          "pr": 643,
+          "headSha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 644,
+          "headSha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 645,
+          "headSha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 646,
+          "headSha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 647,
+          "headSha": "3b3f26d068f169b941383308a1763124e3a3feef",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "observed": "Nested QA feature branches #635/#636/#637/#639/#643/#644 source green but do NOT merge into main. #642 effective CORE UI exact CI still IN_PROGRESS, #645/#646/#647 Windows fast-exit CI FAILED. Real persistent CORE high token and signed one-time UAC + owner epoch/physical VM Running never established.",
+      "reproduction": [
+        "Check per-PR exact SHA, baseSha, CI and branch stacking in QA_20261021_PR635_649_EXACT_EVIDENCE.json; never promote older/child success to latest parent or production acceptance.",
+        "Require independent physical signed Broker ACL and version first-party #551 rollout, post-repair epoch witness #587 and issue #271 remediation before any elevated CORE or Hyper-V VM action."
+      ],
+      "expectedFix": "One-time genuine physical UAC owner enrollment signed immutable Broker, broad true admin CORE/ROOT 15m scope with revocation, protected launcher import parent updater ACL, external monotonic owner epoch and verified Windows high token and exact Hyper-V VMId Running readback.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/636",
+        "https://github.com/Naveax/Nexowire/pull/637",
+        "https://github.com/Naveax/Nexowire/pull/639",
+        "https://github.com/Naveax/Nexowire/pull/642",
+        "https://github.com/Naveax/Nexowire/issues/271"
       ],
       "disposition": {
         "source": "FAIL",
