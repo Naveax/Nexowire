@@ -68,6 +68,9 @@ class Cas {
 }
 class Grants {
   enabled = true;
+  generation = 1;
+  private readonly originalGeneration = new Map<string, number>();
+  rePair() { this.generation++; }
   readonly adapter: TrustedTransferCoreGrants = {
     assertCurrent: async (job) => { this.check(job); },
   };
@@ -77,9 +80,14 @@ class Grants {
         job.sourceDeviceId !== input.sourceDeviceId ||
         job.targetDeviceId !== input.targetDeviceId)
       throw new TransferTrustError('CORE_OWNER_REVOKED', 'Current grant denied.');
+    const old = this.originalGeneration.get(job.id);
+    if (old !== undefined && old !== this.generation)
+      throw new TransferTrustError('CORE_GRANT_EPOCH_STALE', 'Re-pair invalidated this job grant.');
+    if (old === undefined) this.originalGeneration.set(job.id, this.generation);
   }
 }
 type Hooks = {
+  beforeRead?: (device: string, file: string, offset: number) => Promise<void>;
   beforeWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   afterWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
@@ -108,6 +116,7 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
     read: async (device, file, offset, max) => {
       const value = fileContent(device, file);
       if (!value) throw notFound();
+      await hooks.beforeRead?.(device, file, offset);
       const chunk = value.subarray(offset, offset + max);
       return { sourceBytes: value.length, offsetBytes: offset,
         bytesRead: chunk.length, contentBase64: chunk.toString('base64') };
