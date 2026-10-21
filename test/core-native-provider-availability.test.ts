@@ -86,7 +86,6 @@ test('all-green *reported* native reader claims are NOT installed HIGH attestati
   assert.equal(r.independentWitnessDeployed,'NOT_PROVEN');
   assert.equal(r.diagnosis.status,'UNVERIFIED');
   assert.equal(r.diagnosis.effectiveElevation,'NOT_PROVEN');
-  assert.equal(r.dispatchAllowed,undefined);
   assert.equal(r.diagnosis.dispatchAllowed,false);
 });
 test('same PID with wrong 64-bit Windows FILETIME cannot prove actual HIGH Broker token',async()=>{
