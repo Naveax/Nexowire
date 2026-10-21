@@ -21,7 +21,7 @@ test('QA24 38 open PRs are pinned to 40-char HEAD SHA and per-SHA CI run IDs',()
 
 test('QA24 known six stacked bases are independently verifiable',()=>{
   const s=fresh(),by=new Map(s.nodes.map(n=>[n.pr,n]));
-  for(const [child,parent] of [[633,620],[621,574],[632,551],[631,614],[629,622],[634,616]]) {
+  for(const [child,parent] of ([[633,620],[621,574],[632,551],[631,614],[629,622],[634,616]] as const)) {
     assert.equal(by.get(child)?.parent_pr,parent);
     assert.equal(by.get(child)?.base_sha,by.get(parent)?.head_sha);
   }
