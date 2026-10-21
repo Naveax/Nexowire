@@ -164,13 +164,14 @@ test('Windows approval witness matrix: no forged consent.exe, wrong session, abs
 
 test('Secure Desktop inaccessible and consent.exe forged remain separate from independent Windows launch result', async () => {
   let executeCalls = 0;
+  const fakeBroker = {
+    probe:async()=>({reachable:true,elevated:true,version:'1.0.5'}),
+    execute:async()=>{executeCalls++;throw Error('unexpected dispatch');},
+  };
   const visible = await inspectWindowsUacStatus({
     platform:'win32', accessMode:'full',
     consentCount:async()=>4096,
-    broker:{
-      probe:async()=>({reachable:true,elevated:true,version:'1.0.5'}),
-      execute:async()=>{executeCalls++;throw Error('unexpected dispatch');},
-    },
+    broker:fakeBroker,
   });
   assert.equal(visible.observation, 'pending');
   assert.equal(visible.autoClickConsentSupported, false);
