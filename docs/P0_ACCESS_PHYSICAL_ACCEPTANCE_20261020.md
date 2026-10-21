@@ -219,3 +219,24 @@ A separately approved elevated *read-only* observer, approved isolated VM
 migration/rollback, native effective AccessCheck identity, publisher signing,
 post-cutover updater/binary identity and UAC/Guardian gates are outstanding.
 **NO live ACL/UAC/service/Task write, NO policy bypass, NO merge/deploy.**
+
+### Prepared elevated read-only observer (21 October)
+
+Added `scripts/audit-access-elevated-readonly.ps1`: requires an
+already elevated administrator and high-integrity Windows token,
+uses fixed known source paths and read-only `Get-Item` / `Get-Acl` /
+SID-translated Allow ACE inspection. It DOES NOT trigger UAC, change ACLs,
+start/stop services, or claim native AuthzAccessCheck. Refusal with a
+non-elevated Work PC account was tested. An authorized elevated run has
+**NOT** occurred. Any readable but untrusted writer, missing source,
+AccessDenied, unknown parent/updater identity or incomplete import graph
+preserves **P0 NO-GO**. The output always marks
+`sourceCoverageComplete:false`, `nativeAccessCheckPerformed:false`,
+`independentGuardianAttested:false`, `productionApproved:false`.
+
+The separately prepared `acceptance-access-vm-acl-migration.ps1` also
+remains NOT RUN on an authorized isolated VM: the physical test only proved
+refusal without explicit opt-in. Neither betik confers security
+attestation on installed `C:\ProgramData` sources. #551 and #576
+cross-PR comments request actual parent/helper-manifest/installed-updater
+coverage before any integration. No P0 release waiver exists.
