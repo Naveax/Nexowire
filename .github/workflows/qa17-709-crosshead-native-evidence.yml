@@ -1,0 +1,45 @@
+name: QA17 #709 Cross-head Native Evidence
+
+on:
+  push:
+    branches:
+      - test/qa17-709-unchanged-provider-filetime-evidence-20261022
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa17-709-native-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-head-independent-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck exact #709 plus unchanged QA files
+        run: npm run typecheck
+      - name: Re-run unchanged #705 PID FILETIME / CORE / HIGH source and native token cases
+        # #709 changed its tree PowerShell CLI to EvidenceRequestBase64.
+        # Two #705 tests still use the removed flags and MUST NOT be relabeled
+        # as a #709 source defect. Their unchanged source stays in this branch;
+        # the new #709-envelope-integration tests separately test equivalent
+        # provider/ACL/import observations using the REAL new CLI.
+        run: >
+          node --test --import tsx --test-concurrency=1
+          --test-name-pattern="#17 (exact PID|forged HIGH|CORE revoked|revocation inside|native GetProcessTimes)"
+          test/qa-17-700-native-red-preservation.test.ts
+      - name: Re-run all 6 unchanged #681 provider and signed imported DLL tests
+        run: node --test --import tsx --test-concurrency=1 test/qa-17-native-provider-import-epoch-670.test.ts
+      - name: Preserve and execute all 4 original #709 protected ancestor tests
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-protected-tree.test.ts
+      - name: Native #709 new envelope cross-head negative QA
+        run: node --test --import tsx --test-concurrency=1 test/qa-17-709-envelope-integration.test.ts
+      - name: Retain genuine native signer and token provider test coverage
+        run: node --test --import tsx --test-concurrency=1 test/windows-broker-provider-attestation.test.ts
