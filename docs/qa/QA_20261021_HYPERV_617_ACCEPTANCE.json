@@ -1,0 +1,182 @@
+{
+  "schema": "nexowire.qa16.hyperv.617.v1",
+  "date": "2026-10-21",
+  "issue": 617,
+  "reviewedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+  "mainCi": {
+    "runId": 39596766086,
+    "status": "PASS",
+    "scope": "source only"
+  },
+  "pr618": {
+    "sha": "2abdaebeebe91d287530064f40054286c8f84fe2",
+    "state": "OPEN_DRAFT",
+    "ciRun": 39604629612,
+    "ciStatus": "QUEUED_AT_SNAPSHOT",
+    "previousSha": "54e43ff1dd59c98b9d270ea075c684a5354e07f8",
+    "previousCi": 39602589242,
+    "previousConclusion": "CANCELLED",
+    "authorReportedIsolated": "8/8 PASS",
+    "scope": "read-only explanation no Hyper-V executor",
+    "supersededHead": "14d0d6f71ea2284c0f17a14e947f24d999aade37"
+  },
+  "reportedIncident": {
+    "vmName": "ReVoltVPN-Ubuntu-Lab",
+    "vmId": null,
+    "startVm": "ACCESS_DENIED_EXIT_4",
+    "runAs": "MUTATION_STATE_UNKNOWN",
+    "approvedUac": "NOT_ATTESTED",
+    "actualVmState": "UNKNOWN",
+    "noReplay": true,
+    "source": "Issue original report not independent physical reproduction"
+  },
+  "readOnlyEvidence": {
+    "provenance": "GitHub issue #617 comment 6316181876, external operator read-only inspection",
+    "integrity": "MEDIUM_S-1-16-8192",
+    "administrators": "DENY_ONLY",
+    "vmms": "RUNNING",
+    "vmcompute": "RUNNING",
+    "getVm": "VirtualizationException",
+    "brokerUnauthenticatedHttp": 401,
+    "brokerAttested": false,
+    "vmStateVerified": false
+  },
+  "mainSource": {
+    "privilegeRequirementHypervStart": "standard",
+    "brokerCapabilityHypervStart": false,
+    "genericShellPrivileged": false,
+    "ownerPolicyIsElevation": false
+  },
+  "independentSourceNegative": {
+    "file": "test/qa-hyperv-617-source-negative.test.ts",
+    "pass": 5,
+    "fail": 2,
+    "skip": 0,
+    "executedNativeActions": false
+  },
+  "cases": [
+    {
+      "id": "617-TOKEN_VS_POLICY",
+      "requirements": [
+        "R04",
+        "R07"
+      ],
+      "expected": "Separate Windows token and signed Broker attestation; FULL/ROOT/CORE/bridge ready not sufficient",
+      "observed": "Medium integrity and Administrators deny-only in #617 read-only report; main source lacks typed elevated Hyper-V",
+      "sourceStatus": "FAIL",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-LOCAL_UAC",
+      "requirements": [
+        "R04",
+        "R09"
+      ],
+      "expected": "Real local physical approval; never automate secure UAC desktop",
+      "observed": "RunAs lost native ACK: MUTATION_STATE_UNKNOWN, approval unverified",
+      "sourceStatus": "BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-BROKER_SIGNED_ACL_VERSION",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "expected": "Authenticated health+elevated token+signed protected binary+version-matched Broker capability",
+      "observed": "Unauth 401 is not attestation; #271 executable Authenticated Users Modify P0",
+      "sourceStatus": "FAIL",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-EXACT_VM_GUID",
+      "requirements": [
+        "R05",
+        "R21"
+      ],
+      "expected": "Immutable VMId GUID and owner/device/host scope; names display only, no shell fallback",
+      "observed": "Reported VM name only; actual VMId null; #618 source checks GUID but runtime not wired",
+      "sourceStatus": "BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-READBACK_RUNNING",
+      "requirements": [
+        "R03",
+        "R21"
+      ],
+      "expected": "Independent privileged Get-VM by VMId, fresh Running state after start",
+      "observed": "Get-VM VirtualizationException denied; vmms/vmcompute Running not VM state",
+      "sourceStatus": "BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-LOST_ACK_NO_REPLAY",
+      "requirements": [
+        "R01",
+        "R02",
+        "R20"
+      ],
+      "expected": "Dispatch uncertainty must remain UNKNOWN; no automatic Start-VM retry until independent VM readback and trusted replay witness",
+      "observed": "UAC RunAs UNKNOWN; #587 co-rollback still P0",
+      "sourceStatus": "BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-UNAUTH_401",
+      "requirements": [
+        "R01",
+        "R04"
+      ],
+      "expected": "Broker 401 unauth only proves request rejected, not elevated authority/version/approval",
+      "observed": "HTTP 401 reported; authenticated version/token checks unverified",
+      "sourceStatus": "BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-ADMIN_BRIDGE_INTENT",
+      "requirements": [
+        "R04",
+        "R22"
+      ],
+      "expected": "Remote AUTO/ON/OFF preference cannot attest Windows admin or physical UAC; generic shell.exec not routed privileged",
+      "observed": "Main source authorization explain fail closed; shell.exec excluded from Broker",
+      "sourceStatus": "PASS",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "617-SIGNED_VM_CANARY",
+      "requirements": [
+        "R19",
+        "R22"
+      ],
+      "expected": "Signed first-party installer and full rollback, independently authorized isolated VM with GUID Running/Off proof",
+      "observed": "#551 source CI only; live Agents 1.0.5 unchanged",
+      "sourceStatus": "BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    }
+  ],
+  "physicalVmStart": false,
+  "physicalUacInteraction": false,
+  "staging": "BLOCKED",
+  "production": "BLOCKED",
+  "originalIncident": "BLOCKED"
+}

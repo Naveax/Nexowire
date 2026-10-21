@@ -1,864 +1,891 @@
 {
-    "schema":  "nexowire.qa-pr-intake.v1",
-    "date":  "2026-10-21",
-    "entries":  [
-                    {
-                        "pr":  480,
-                        "headSha":  "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R09",
-                                             "R16"
-                                         ],
-                        "sourceReproducer":  "test/private-shell-broker-guard.test.ts",
-                        "physicalAcceptanceMissing":  "Owner Windows multimonitor, COM/UAC focus and wrong-HWND denial",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39134168129
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  537,
-                        "headSha":  "7a79b97267aead35aa00b2be22eb990a4c1767d8",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R06",
-                                             "R12",
-                                             "R14"
-                                         ],
-                        "sourceReproducer":  "test/owner-public-wss-signed-enrollment-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Named tunnel, full issuer, separate ISP, native Broker, 24h quota",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  538,
-                        "headSha":  "38ff93638a956d5f99dec9555aa16b4edba2f530",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R01",
-                                             "R02",
-                                             "R03"
-                                         ],
-                        "sourceReproducer":  "test/agent-operation-journal.test.ts",
-                        "physicalAcceptanceMissing":  "Deployed v2 journal on two Agents and real crash/ACK recovery",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  542,
-                        "headSha":  "1b51a82684918b8f2a148bd48caaa50ee1710274",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R08"
-                                         ],
-                        "sourceReproducer":  "test/agent-provider-task-outcome.test.ts",
-                        "physicalAcceptanceMissing":  "Real CMD/PowerShell/WSL Agent task postconditions",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  543,
-                        "headSha":  "243b55b4d8ac03c13bb350fbee6194c6fdac6b34",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R07"
-                                         ],
-                        "sourceReproducer":  "test/process-manager-tree-cleanup.test.ts",
-                        "physicalAcceptanceMissing":  "Win32 Job Object containment and original orphan incident",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  545,
-                        "headSha":  "4658e8180be31f694a612d7c5e6f2f2a36725652",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R13",
-                                             "R14"
-                                         ],
-                        "sourceReproducer":  "test/mcp-oauth.test.ts",
-                        "physicalAcceptanceMissing":  "Real Codex CLI and ChatGPT PKCE/OIDC independent issuer login",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  546,
-                        "headSha":  "d70b102ed3594fdd8b2a0c6dc9fd6580cd9c3fef",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R06",
-                                             "R12",
-                                             "R14"
-                                         ],
-                        "sourceReproducer":  "test/owner-public-wss-enrollment-lease-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Persistent protected signing keys and real OAuth revocation WSS",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39149991731
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  547,
-                        "headSha":  "4bb72b47132ba53c5f8413915888b471a81a521f",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R03",
-                                             "R06"
-                                         ],
-                        "sourceReproducer":  "test/connection-recovery-faults.test.ts",
-                        "physicalAcceptanceMissing":  "Two physical Agent reconnect/late ACK with no replay",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  548,
-                        "headSha":  "822cb26f8e2531cf5c3f5dca309eb3aff22123c6",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R04"
-                                         ],
-                        "sourceReproducer":  "test/windows-console-grant.test.ts",
-                        "physicalAcceptanceMissing":  "Real owner UAC physical console and Broker state",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  549,
-                        "headSha":  "3818031243413763e453694eaab2665a198db86b",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R01",
-                                             "R13"
-                                         ],
-                        "sourceReproducer":  "test/agent-provider-task-outcome.test.ts",
-                        "physicalAcceptanceMissing":  "Real upstream rejection vs Agent receipt independently attributed",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150296880
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  550,
-                        "headSha":  "9c9e16e3587aea7ce065e15d44d17d105e812fac",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R18"
-                                         ],
-                        "sourceReproducer":  "test/progress-supervisor.test.ts",
-                        "physicalAcceptanceMissing":  "Original crypto bot queue/completed/artifact counts validated",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  551,
-                        "headSha":  "ce4ffdf7f6e57a4070341fe7e1cc2b12855b5a03",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R19"
-                                         ],
-                        "sourceReproducer":  "test/agent-lifecycle-manager.test.ts",
-                        "physicalAcceptanceMissing":  "Actual signed native Nexowire installer, complete rollback archive and VM/real two-device canary absent",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39492494717
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  552,
-                        "headSha":  "1b819e62388ea06c8e8eb241c1346e7aa3301f3e",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R10",
-                                             "R15",
-                                             "R20"
-                                         ],
-                        "sourceReproducer":  "test/artifact-bridge-mcp.test.ts",
-                        "physicalAcceptanceMissing":  "Owner-scope new conversation retrieval across two devices",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150231483
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  553,
-                        "headSha":  "ba3bb52dc9fc7ad7fc8e3a22dd766623218cae63",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R05",
-                                             "R08",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/linux-native-agent-live.test.ts",
-                        "physicalAcceptanceMissing":  "Fix Windows/WSL/Linux/macOS CI, physical USB, TOCTOU",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null,
-                                   "activeRunId":  39282648539
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  554,
-                        "headSha":  "5c4b79e77d391ddc839b6ebbb6ecc52395e0458d",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R12"
-                                         ],
-                        "sourceReproducer":  "test/daily-quota-proposal.test.ts",
-                        "physicalAcceptanceMissing":  "Actual issuer, settled billing, signed webhooks and provider costs",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39135456949
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  555,
-                        "headSha":  "325fc2b5122ac30deec5ab77c49dcc7ec14f435e",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R17",
-                                             "R21"
-                                         ],
-                        "sourceReproducer":  "test/wsl-detection.test.ts",
-                        "physicalAcceptanceMissing":  "Physical gamepad/USB/VM/CUDA drivers with proof",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39135469895
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  556,
-                        "headSha":  "af8d267d6bbe6f69fdb6cf668258b98e3d6f4f10",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R09",
-                                             "R16"
-                                         ],
-                        "sourceReproducer":  "test/private-file-picker-live.test.ts",
-                        "physicalAcceptanceMissing":  "Owner native picker focus and private default desktop isolation",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150585588
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  557,
-                        "headSha":  "073e0246ed8897a472d705dd7784cbd440d30252",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R12",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/s5-soak-acceptance.test.ts",
-                        "physicalAcceptanceMissing":  "100+ real WSS, 600/min, 24h success and cloud costs",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39135626947
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  558,
-                        "headSha":  "32fb3f9fcb4c8bcedc61d3aa98ab89aff0602f12",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R02",
-                                             "R03",
-                                             "R20"
-                                         ],
-                        "sourceReproducer":  "test/agent-operation-reconciliation.test.ts",
-                        "physicalAcceptanceMissing":  "Two-device deployed journal crash/WAL and offline result",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150004726
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  559,
-                        "headSha":  "34c6620055ad634d2e272ff9378e4bf4403fd81c",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R07"
-                                         ],
-                        "sourceReproducer":  "test/windows-job-owner.test.ts",
-                        "physicalAcceptanceMissing":  "Deployed guardian Job objects, crash/orphan and private GUI",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39149677381
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  560,
-                        "headSha":  "7592ec27b1feba99f6d6cce68d05a4043efb5c24",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/qa-final-acceptance-negative.test.ts",
-                        "physicalAcceptanceMissing":  "Independent release proof for all 22 originals absent",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150335922
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  561,
-                        "headSha":  "0cc5cd53585fa37c73a5fe64fca1a4e826bab622",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R12"
-                                         ],
-                        "sourceReproducer":  "test/subscription-entitlement-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Real multi-Worker D1/payment proof and entitlement cutover absent",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150468338
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  562,
-                        "headSha":  "de7864a1d492da86d019203542b292de79c66f41",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/qa-pr-intake-negative.test.ts",
-                        "physicalAcceptanceMissing":  "Integration ledger does not prove original incident closure",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  563,
-                        "headSha":  "dbf5099c5850a6df85b3ac5b8eb42386a8d581ff",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R17",
-                                             "R21"
-                                         ],
-                        "sourceReproducer":  "test/environment-doctor.test.ts",
-                        "physicalAcceptanceMissing":  "Linux test fails; real hardware acceptance absent",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39154336693,
-                                   "historicalFailedRunId":  39150689903,
-                                   "reason":  "New head exact CI SUCCESS; old head failure retained for provenance only"
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  564,
-                        "headSha":  "820ad41992c62fa890b249c7f820e0969b33a467",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R12",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/s5-soak-acceptance.test.ts",
-                        "physicalAcceptanceMissing":  "Real 24-hour verified completions, 600/min, fairness and Cloudflare invoice absent",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39150732602
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  565,
-                        "headSha":  "75abbd7d3cd17ca10e8c16e70081161428cc2078",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R01",
-                                             "R13"
-                                         ],
-                        "sourceReproducer":  "test/error-contract-chain-acceptance.test.ts",
-                        "physicalAcceptanceMissing":  "Actual upstream rejection source and two-host audit correlation",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39412566535
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  566,
-                        "headSha":  "5dde1f2d6861de21f90383a0cb00e03d4ed76031",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R12"
-                                         ],
-                        "sourceReproducer":  "test/v2-quota-multi-process-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Real Cloudflare Workers/D1 entitlement/settled payment proof",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39154537759
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  567,
-                        "headSha":  "911bd7d8c6e79298b6e48e5134e2b42f427cefab",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R02",
-                                             "R20"
-                                         ],
-                        "sourceReproducer":  "test/agent-operation-durability-acceptance.test.ts",
-                        "physicalAcceptanceMissing":  "Independent nonrollback reservation authority and real Agent backup/restore",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39154550610
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  568,
-                        "headSha":  "a33b1457f1b5c52ad517fb7804449c3df1bd5038",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R06",
-                                             "R12",
-                                             "R14"
-                                         ],
-                        "sourceReproducer":  "test/owner-public-wss-device-signer-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Nonexportable signer, Named Cloudflare Tunnel, owner OAuth native Broker",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39154622980
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  569,
-                        "headSha":  "da6b3679cd666a82bfb88d1c181367364706e5f4",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R06"
-                                         ],
-                        "sourceReproducer":  "test/connection-fault-proxy.e2e.test.ts",
-                        "physicalAcceptanceMissing":  "Actual two-device reconnect chaos late ACK and token revoke",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39154685988
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  570,
-                        "headSha":  "416dcd40150ccaa0e52cb30bb0f8a4775b2eba3e",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R09",
-                                             "R16"
-                                         ],
-                        "sourceReproducer":  "test/private-gui-wrapper-escape.test.ts",
-                        "physicalAcceptanceMissing":  "Real COM/indirect launch, native app focus and owner desktop isolation",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39155535858
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  571,
-                        "headSha":  "4d713a979c215739c4b2709c68c2d4ab823190e2",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R12"
-                                         ],
-                        "sourceReproducer":  "test/scale-s5-protected-admission.test.ts",
-                        "physicalAcceptanceMissing":  "Live ingress fairness with 100+ WSS, 24h native completion and billing",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39154994699
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  572,
-                        "headSha":  "3c9dcaf9fc956c51c8c454c587d0f606b16c125b",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R07",
-                                             "R15",
-                                             "R20",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/qa-transfer-onecall-source-negative.test.ts",
-                        "physicalAcceptanceMissing":  "QA red: prior Windows READY failure, independently red current-main snapshot replay and missing public one-call tools",
-                        "ci":  {
-                                   "status":  "FAIL",
-                                   "runId":  39493135449,
-                                   "reason":  "Historical QA HEAD; next QA commit/CI not verified yet."
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  573,
-                        "headSha":  "585ff6e1e2024dd2f35fd4714dca997abea88ee9",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R10",
-                                             "R15",
-                                             "R20"
-                                         ],
-                        "sourceReproducer":  "test/artifact-recovery-acceptance.test.ts",
-                        "physicalAcceptanceMissing":  "Real new-chat authorized artifact retrieval and production Hub failover",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39155264764
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  574,
-                        "headSha":  "b33657cd5a083a5531d0fd23343038569c5e4c7c",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R04",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/isolated-broker-acl-rollback.test.ts",
-                        "physicalAcceptanceMissing":  "Unsafe live Naveax legacy Authenticated Users Modify unchanged, Broker ACL unknown",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39492629758
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  575,
-                        "headSha":  "c6820b431bf88814172437373131527f457ff216",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R18",
-                                             "R07"
-                                         ],
-                        "sourceReproducer":  "test/progress-proof-verifier.test.ts",
-                        "physicalAcceptanceMissing":  "Trusted immutable results and original stuck-bot completion physical proof",
-                        "ci":  {
-                                   "status":  "FAIL",
-                                   "runId":  39155483038
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  576,
-                        "headSha":  "91c69f66de88b755309e3c127f23357adcedfb86",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R07",
-                                             "R19"
-                                         ],
-                        "sourceReproducer":  "test/windows-job-helper-trust.test.ts",
-                        "physicalAcceptanceMissing":  "Independent physical guardian/helper publisher/trusted release and Job teardown absent",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39492594206
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  577,
-                        "headSha":  "a4c52465d1d012df75ee89294d70bfcb64403f2a",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R14"
-                                         ],
-                        "sourceReproducer":  "test/mcp-oauth-client-compat.test.ts",
-                        "physicalAcceptanceMissing":  "Real production issuer/PKCE and owner/device logout",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39156085083
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  578,
-                        "headSha":  "d2f0500f305aeda5c4be48e33f5849737ad4f0bd",
-                        "prState":  "MERGED",
-                        "requirements":  [
-                                             "R14"
-                                         ],
-                        "sourceReproducer":  "test/fixtures/codex-cli-oauth-loopback-smoke.ts",
-                        "physicalAcceptanceMissing":  "Real production OAuth issuer token expiry revocation and owner binding",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39175536451
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  579,
-                        "headSha":  "2fd06326a0722dff69394c3a0a69b5f36e004459",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R09",
-                                             "R16"
-                                         ],
-                        "sourceReproducer":  "test/private-desktop-helper-integrity-live.test.ts",
-                        "physicalAcceptanceMissing":  "Signed helper/process trust and real owner Default desktop isolation",
-                        "ci":  {
-                                   "status":  "NOT_VERIFIED",
-                                   "runId":  null,
-                                   "activeRunId":  39175699760
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  582,
-                        "headSha":  "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R02",
-                                             "R07",
-                                             "R20"
-                                         ],
-                        "sourceReproducer":  "test/windows-job-owner.test.ts",
-                        "physicalAcceptanceMissing":  "Independent monotonic authority and Windows stdout/stderr fast-exit race, physical rollback canary",
-                        "ci":  {
-                                   "status":  "FAIL",
-                                   "runId":  39416566585
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  596,
-                        "headSha":  "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R10",
-                                             "R15"
-                                         ],
-                        "sourceReproducer":  "test/artifact-588-single-call-contract.test.ts",
-                        "physicalAcceptanceMissing":  "One-call 221KiB source loopback yes, real signed Agent \u003e256MiB/1GiB WAN physical end-to-end not accepted",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39557944551,
-                                   "reason":  "#597 red contract merged to parent feature branch and now PASS at parent exact SHA; not merged main."
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  597,
-                        "headSha":  "2ba9e72e30511318eabb8fc0f37b1aceaa5cd401",
-                        "prState":  "MERGED_TO_596_BRANCH",
-                        "requirements":  [
-                                             "R15",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/artifact-588-single-call-contract.test.ts",
-                        "physicalAcceptanceMissing":  "Parent one-call source tools not yet merged main or staged",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39502962661,
-                                   "reason":  "Merged into #596 feature branch; do not label merged main."
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  598,
-                        "headSha":  "cf58e6882e44968698f3f548b353287ba1698747",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R07",
-                                             "R12",
-                                             "R15"
-                                         ],
-                        "sourceReproducer":  "test/mcp-http-json-limit.test.ts",
-                        "physicalAcceptanceMissing":  "Own HEAD Windows fast-exit stdout race FAIL, combined #608 source succeeds; server not deployed",
-                        "ci":  {
-                                   "status":  "FAIL",
-                                   "runId":  39502304557,
-                                   "reason":  "6/7 jobs PASS, browser-live Windows Job stdout-before-exited FAIL iteration 8."
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  601,
-                        "headSha":  "3a3ff5052792eed50c3ffec3931b7f9f1fd761f6",
-                        "prState":  "MERGED_MAIN",
-                        "requirements":  [
-                                             "R10",
-                                             "R12",
-                                             "R20"
-                                         ],
-                        "sourceReproducer":  "test/scale-v2-artifact-cancel-fencing-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Cloudflare D1 actual staging and secure worker-stop delete receipts and production billing BLOCKED",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39492176139,
-                                   "reason":  "Exact source PR run 39492176139 SUCCESS + independent current-main 5/5 cancellation tests PASS"
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  603,
-                        "headSha":  "1bd7fdf7bb09e05f20a4cd8eda2177cd7bca94cc",
-                        "prState":  "MERGED_MAIN",
-                        "requirements":  [
-                                             "R06",
-                                             "R12"
-                                         ],
-                        "sourceReproducer":  "test/owner-public-wss-signed-enrollment-staging.test.ts",
-                        "physicalAcceptanceMissing":  "Production TLS owner issuer and actual device signing hardware not physically validated",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39492384138,
-                                   "reason":  "Exact-head CI SUCCESS; independently new main source enrollment/proof 16/16 PASS."
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    },
-                    {
-                        "pr":  608,
-                        "headSha":  "d34c0d3c85bc508be50c2e5f532aa964d8325106",
-                        "prState":  "OPEN_DRAFT",
-                        "requirements":  [
-                                             "R07",
-                                             "R12",
-                                             "R22"
-                                         ],
-                        "sourceReproducer":  "test/windows-job-owner.test.ts",
-                        "physicalAcceptanceMissing":  "Combined Win32 Job+HTTP CI and Readiness green, but unsigned dev helper, parent #598 red, real signed agent deployment and production not tested",
-                        "ci":  {
-                                   "status":  "PASS",
-                                   "runId":  39503650650,
-                                   "reason":  "Combined cross-PR source CI SUCCESS and Release Readiness 39503650638 SUCCESS."
-                               },
-                        "staging":  "BLOCKED",
-                        "production":  "BLOCKED",
-                        "originalIncident":  "BLOCKED"
-                    }
-                ],
-    "inspectedMainSha":  "37d68d938b9c94b8647b92fb592a2b30c075427c",
-    "meaning":  "GitHub exact-HEAD branch snapshots and CI separate from main and production. PR #597 merged into #596 feature branch, NOT main; #598 still red on isolated head; #608 combined source CI PASS."
+  "schema": "nexowire.qa-pr-intake.v1",
+  "date": "2026-10-21",
+  "entries": [
+    {
+      "pr": 480,
+      "headSha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "sourceReproducer": "test/private-shell-broker-guard.test.ts",
+      "physicalAcceptanceMissing": "Owner Windows multimonitor, COM/UAC focus and wrong-HWND denial",
+      "ci": {
+        "status": "PASS",
+        "runId": 39134168129
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 537,
+      "headSha": "7a79b97267aead35aa00b2be22eb990a4c1767d8",
+      "prState": "MERGED",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14"
+      ],
+      "sourceReproducer": "test/owner-public-wss-signed-enrollment-staging.test.ts",
+      "physicalAcceptanceMissing": "Named tunnel, full issuer, separate ISP, native Broker, 24h quota",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 538,
+      "headSha": "38ff93638a956d5f99dec9555aa16b4edba2f530",
+      "prState": "MERGED",
+      "requirements": [
+        "R01",
+        "R02",
+        "R03"
+      ],
+      "sourceReproducer": "test/agent-operation-journal.test.ts",
+      "physicalAcceptanceMissing": "Deployed v2 journal on two Agents and real crash/ACK recovery",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 542,
+      "headSha": "1b51a82684918b8f2a148bd48caaa50ee1710274",
+      "prState": "MERGED",
+      "requirements": [
+        "R08"
+      ],
+      "sourceReproducer": "test/agent-provider-task-outcome.test.ts",
+      "physicalAcceptanceMissing": "Real CMD/PowerShell/WSL Agent task postconditions",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 543,
+      "headSha": "243b55b4d8ac03c13bb350fbee6194c6fdac6b34",
+      "prState": "MERGED",
+      "requirements": [
+        "R07"
+      ],
+      "sourceReproducer": "test/process-manager-tree-cleanup.test.ts",
+      "physicalAcceptanceMissing": "Win32 Job Object containment and original orphan incident",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 545,
+      "headSha": "4658e8180be31f694a612d7c5e6f2f2a36725652",
+      "prState": "MERGED",
+      "requirements": [
+        "R13",
+        "R14"
+      ],
+      "sourceReproducer": "test/mcp-oauth.test.ts",
+      "physicalAcceptanceMissing": "Real Codex CLI and ChatGPT PKCE/OIDC independent issuer login",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 546,
+      "headSha": "d70b102ed3594fdd8b2a0c6dc9fd6580cd9c3fef",
+      "prState": "MERGED",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14"
+      ],
+      "sourceReproducer": "test/owner-public-wss-enrollment-lease-staging.test.ts",
+      "physicalAcceptanceMissing": "Persistent protected signing keys and real OAuth revocation WSS",
+      "ci": {
+        "status": "PASS",
+        "runId": 39149991731
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 547,
+      "headSha": "4bb72b47132ba53c5f8413915888b471a81a521f",
+      "prState": "MERGED",
+      "requirements": [
+        "R03",
+        "R06"
+      ],
+      "sourceReproducer": "test/connection-recovery-faults.test.ts",
+      "physicalAcceptanceMissing": "Two physical Agent reconnect/late ACK with no replay",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 548,
+      "headSha": "822cb26f8e2531cf5c3f5dca309eb3aff22123c6",
+      "prState": "MERGED",
+      "requirements": [
+        "R04"
+      ],
+      "sourceReproducer": "test/windows-console-grant.test.ts",
+      "physicalAcceptanceMissing": "Real owner UAC physical console and Broker state",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 549,
+      "headSha": "3818031243413763e453694eaab2665a198db86b",
+      "prState": "MERGED",
+      "requirements": [
+        "R01",
+        "R13"
+      ],
+      "sourceReproducer": "test/agent-provider-task-outcome.test.ts",
+      "physicalAcceptanceMissing": "Real upstream rejection vs Agent receipt independently attributed",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150296880
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 550,
+      "headSha": "9c9e16e3587aea7ce065e15d44d17d105e812fac",
+      "prState": "MERGED",
+      "requirements": [
+        "R18"
+      ],
+      "sourceReproducer": "test/progress-supervisor.test.ts",
+      "physicalAcceptanceMissing": "Original crypto bot queue/completed/artifact counts validated",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 551,
+      "headSha": "ce4ffdf7f6e57a4070341fe7e1cc2b12855b5a03",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R19"
+      ],
+      "sourceReproducer": "test/agent-lifecycle-manager.test.ts",
+      "physicalAcceptanceMissing": "Actual signed native Nexowire installer, complete rollback archive and VM/real two-device canary absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39492494717
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 552,
+      "headSha": "1b819e62388ea06c8e8eb241c1346e7aa3301f3e",
+      "prState": "MERGED",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-bridge-mcp.test.ts",
+      "physicalAcceptanceMissing": "Owner-scope new conversation retrieval across two devices",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150231483
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 553,
+      "headSha": "ba3bb52dc9fc7ad7fc8e3a22dd766623218cae63",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R08",
+        "R22"
+      ],
+      "sourceReproducer": "test/linux-native-agent-live.test.ts",
+      "physicalAcceptanceMissing": "Fix Windows/WSL/Linux/macOS CI, physical USB, TOCTOU",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null,
+        "activeRunId": 39282648539
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 554,
+      "headSha": "5c4b79e77d391ddc839b6ebbb6ecc52395e0458d",
+      "prState": "MERGED",
+      "requirements": [
+        "R12"
+      ],
+      "sourceReproducer": "test/daily-quota-proposal.test.ts",
+      "physicalAcceptanceMissing": "Actual issuer, settled billing, signed webhooks and provider costs",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135456949
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 555,
+      "headSha": "325fc2b5122ac30deec5ab77c49dcc7ec14f435e",
+      "prState": "MERGED",
+      "requirements": [
+        "R17",
+        "R21"
+      ],
+      "sourceReproducer": "test/wsl-detection.test.ts",
+      "physicalAcceptanceMissing": "Physical gamepad/USB/VM/CUDA drivers with proof",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135469895
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 556,
+      "headSha": "af8d267d6bbe6f69fdb6cf668258b98e3d6f4f10",
+      "prState": "MERGED",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "sourceReproducer": "test/private-file-picker-live.test.ts",
+      "physicalAcceptanceMissing": "Owner native picker focus and private default desktop isolation",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150585588
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 557,
+      "headSha": "073e0246ed8897a472d705dd7784cbd440d30252",
+      "prState": "MERGED",
+      "requirements": [
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/s5-soak-acceptance.test.ts",
+      "physicalAcceptanceMissing": "100+ real WSS, 600/min, 24h success and cloud costs",
+      "ci": {
+        "status": "PASS",
+        "runId": 39135626947
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 558,
+      "headSha": "32fb3f9fcb4c8bcedc61d3aa98ab89aff0602f12",
+      "prState": "MERGED",
+      "requirements": [
+        "R02",
+        "R03",
+        "R20"
+      ],
+      "sourceReproducer": "test/agent-operation-reconciliation.test.ts",
+      "physicalAcceptanceMissing": "Two-device deployed journal crash/WAL and offline result",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150004726
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 559,
+      "headSha": "34c6620055ad634d2e272ff9378e4bf4403fd81c",
+      "prState": "MERGED",
+      "requirements": [
+        "R07"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "physicalAcceptanceMissing": "Deployed guardian Job objects, crash/orphan and private GUI",
+      "ci": {
+        "status": "PASS",
+        "runId": 39149677381
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 560,
+      "headSha": "7592ec27b1feba99f6d6cce68d05a4043efb5c24",
+      "prState": "MERGED",
+      "requirements": [
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-final-acceptance-negative.test.ts",
+      "physicalAcceptanceMissing": "Independent release proof for all 22 originals absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150335922
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 561,
+      "headSha": "0cc5cd53585fa37c73a5fe64fca1a4e826bab622",
+      "prState": "MERGED",
+      "requirements": [
+        "R12"
+      ],
+      "sourceReproducer": "test/subscription-entitlement-staging.test.ts",
+      "physicalAcceptanceMissing": "Real multi-Worker D1/payment proof and entitlement cutover absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150468338
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 562,
+      "headSha": "de7864a1d492da86d019203542b292de79c66f41",
+      "prState": "MERGED",
+      "requirements": [
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-pr-intake-negative.test.ts",
+      "physicalAcceptanceMissing": "Integration ledger does not prove original incident closure",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 563,
+      "headSha": "dbf5099c5850a6df85b3ac5b8eb42386a8d581ff",
+      "prState": "MERGED",
+      "requirements": [
+        "R17",
+        "R21"
+      ],
+      "sourceReproducer": "test/environment-doctor.test.ts",
+      "physicalAcceptanceMissing": "Linux test fails; real hardware acceptance absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39154336693,
+        "historicalFailedRunId": 39150689903,
+        "reason": "New head exact CI SUCCESS; old head failure retained for provenance only"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 564,
+      "headSha": "820ad41992c62fa890b249c7f820e0969b33a467",
+      "prState": "MERGED",
+      "requirements": [
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/s5-soak-acceptance.test.ts",
+      "physicalAcceptanceMissing": "Real 24-hour verified completions, 600/min, fairness and Cloudflare invoice absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39150732602
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 565,
+      "headSha": "75abbd7d3cd17ca10e8c16e70081161428cc2078",
+      "prState": "MERGED",
+      "requirements": [
+        "R01",
+        "R13"
+      ],
+      "sourceReproducer": "test/error-contract-chain-acceptance.test.ts",
+      "physicalAcceptanceMissing": "Actual upstream rejection source and two-host audit correlation",
+      "ci": {
+        "status": "PASS",
+        "runId": 39412566535
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 566,
+      "headSha": "5dde1f2d6861de21f90383a0cb00e03d4ed76031",
+      "prState": "MERGED",
+      "requirements": [
+        "R12"
+      ],
+      "sourceReproducer": "test/v2-quota-multi-process-staging.test.ts",
+      "physicalAcceptanceMissing": "Real Cloudflare Workers/D1 entitlement/settled payment proof",
+      "ci": {
+        "status": "PASS",
+        "runId": 39154537759
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 567,
+      "headSha": "911bd7d8c6e79298b6e48e5134e2b42f427cefab",
+      "prState": "MERGED",
+      "requirements": [
+        "R02",
+        "R20"
+      ],
+      "sourceReproducer": "test/agent-operation-durability-acceptance.test.ts",
+      "physicalAcceptanceMissing": "Independent nonrollback reservation authority and real Agent backup/restore",
+      "ci": {
+        "status": "PASS",
+        "runId": 39154550610
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 568,
+      "headSha": "a33b1457f1b5c52ad517fb7804449c3df1bd5038",
+      "prState": "MERGED",
+      "requirements": [
+        "R06",
+        "R12",
+        "R14"
+      ],
+      "sourceReproducer": "test/owner-public-wss-device-signer-staging.test.ts",
+      "physicalAcceptanceMissing": "Nonexportable signer, Named Cloudflare Tunnel, owner OAuth native Broker",
+      "ci": {
+        "status": "PASS",
+        "runId": 39154622980
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 569,
+      "headSha": "da6b3679cd666a82bfb88d1c181367364706e5f4",
+      "prState": "MERGED",
+      "requirements": [
+        "R06"
+      ],
+      "sourceReproducer": "test/connection-fault-proxy.e2e.test.ts",
+      "physicalAcceptanceMissing": "Actual two-device reconnect chaos late ACK and token revoke",
+      "ci": {
+        "status": "PASS",
+        "runId": 39154685988
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 570,
+      "headSha": "416dcd40150ccaa0e52cb30bb0f8a4775b2eba3e",
+      "prState": "MERGED",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "sourceReproducer": "test/private-gui-wrapper-escape.test.ts",
+      "physicalAcceptanceMissing": "Real COM/indirect launch, native app focus and owner desktop isolation",
+      "ci": {
+        "status": "PASS",
+        "runId": 39155535858
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 571,
+      "headSha": "4d713a979c215739c4b2709c68c2d4ab823190e2",
+      "prState": "MERGED",
+      "requirements": [
+        "R12"
+      ],
+      "sourceReproducer": "test/scale-s5-protected-admission.test.ts",
+      "physicalAcceptanceMissing": "Live ingress fairness with 100+ WSS, 24h native completion and billing",
+      "ci": {
+        "status": "PASS",
+        "runId": 39154994699
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 572,
+      "headSha": "3c9dcaf9fc956c51c8c454c587d0f606b16c125b",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R15",
+        "R20",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-transfer-onecall-source-negative.test.ts",
+      "physicalAcceptanceMissing": "QA red: prior Windows READY failure, independently red current-main snapshot replay and missing public one-call tools",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39493135449,
+        "reason": "Historical QA HEAD; next QA commit/CI not verified yet."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 573,
+      "headSha": "585ff6e1e2024dd2f35fd4714dca997abea88ee9",
+      "prState": "MERGED",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-recovery-acceptance.test.ts",
+      "physicalAcceptanceMissing": "Real new-chat authorized artifact retrieval and production Hub failover",
+      "ci": {
+        "status": "PASS",
+        "runId": 39155264764
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 574,
+      "headSha": "b33657cd5a083a5531d0fd23343038569c5e4c7c",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R22"
+      ],
+      "sourceReproducer": "test/isolated-broker-acl-rollback.test.ts",
+      "physicalAcceptanceMissing": "Unsafe live Naveax legacy Authenticated Users Modify unchanged, Broker ACL unknown",
+      "ci": {
+        "status": "PASS",
+        "runId": 39492629758
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 575,
+      "headSha": "c6820b431bf88814172437373131527f457ff216",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R18",
+        "R07"
+      ],
+      "sourceReproducer": "test/progress-proof-verifier.test.ts",
+      "physicalAcceptanceMissing": "Trusted immutable results and original stuck-bot completion physical proof",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39155483038
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 576,
+      "headSha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R19"
+      ],
+      "sourceReproducer": "test/windows-job-helper-trust.test.ts",
+      "physicalAcceptanceMissing": "Independent physical guardian/helper publisher/trusted release and Job teardown absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39492594206
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 577,
+      "headSha": "a4c52465d1d012df75ee89294d70bfcb64403f2a",
+      "prState": "MERGED",
+      "requirements": [
+        "R14"
+      ],
+      "sourceReproducer": "test/mcp-oauth-client-compat.test.ts",
+      "physicalAcceptanceMissing": "Real production issuer/PKCE and owner/device logout",
+      "ci": {
+        "status": "PASS",
+        "runId": 39156085083
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 578,
+      "headSha": "d2f0500f305aeda5c4be48e33f5849737ad4f0bd",
+      "prState": "MERGED",
+      "requirements": [
+        "R14"
+      ],
+      "sourceReproducer": "test/fixtures/codex-cli-oauth-loopback-smoke.ts",
+      "physicalAcceptanceMissing": "Real production OAuth issuer token expiry revocation and owner binding",
+      "ci": {
+        "status": "PASS",
+        "runId": 39175536451
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 579,
+      "headSha": "2fd06326a0722dff69394c3a0a69b5f36e004459",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R16"
+      ],
+      "sourceReproducer": "test/private-desktop-helper-integrity-live.test.ts",
+      "physicalAcceptanceMissing": "Signed helper/process trust and real owner Default desktop isolation",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null,
+        "activeRunId": 39175699760
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 582,
+      "headSha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R07",
+        "R20"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "physicalAcceptanceMissing": "Independent monotonic authority and Windows stdout/stderr fast-exit race, physical rollback canary",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39416566585
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 596,
+      "headSha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R10",
+        "R15"
+      ],
+      "sourceReproducer": "test/artifact-588-single-call-contract.test.ts",
+      "physicalAcceptanceMissing": "One-call 221KiB source loopback yes, real signed Agent >256MiB/1GiB WAN physical end-to-end not accepted",
+      "ci": {
+        "status": "PASS",
+        "runId": 39557944551,
+        "reason": "#597 red contract merged to parent feature branch and now PASS at parent exact SHA; not merged main."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 597,
+      "headSha": "2ba9e72e30511318eabb8fc0f37b1aceaa5cd401",
+      "prState": "MERGED_TO_596_BRANCH",
+      "requirements": [
+        "R15",
+        "R22"
+      ],
+      "sourceReproducer": "test/artifact-588-single-call-contract.test.ts",
+      "physicalAcceptanceMissing": "Parent one-call source tools not yet merged main or staged",
+      "ci": {
+        "status": "PASS",
+        "runId": 39502962661,
+        "reason": "Merged into #596 feature branch; do not label merged main."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 598,
+      "headSha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R12",
+        "R15"
+      ],
+      "sourceReproducer": "test/mcp-http-json-limit.test.ts",
+      "physicalAcceptanceMissing": "Own HEAD Windows fast-exit stdout race FAIL, combined #608 source succeeds; server not deployed",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39502304557,
+        "reason": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited FAIL iteration 8."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 601,
+      "headSha": "3a3ff5052792eed50c3ffec3931b7f9f1fd761f6",
+      "prState": "MERGED_MAIN",
+      "requirements": [
+        "R10",
+        "R12",
+        "R20"
+      ],
+      "sourceReproducer": "test/scale-v2-artifact-cancel-fencing-staging.test.ts",
+      "physicalAcceptanceMissing": "Cloudflare D1 actual staging and secure worker-stop delete receipts and production billing BLOCKED",
+      "ci": {
+        "status": "PASS",
+        "runId": 39492176139,
+        "reason": "Exact source PR run 39492176139 SUCCESS + independent current-main 5/5 cancellation tests PASS"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 603,
+      "headSha": "1bd7fdf7bb09e05f20a4cd8eda2177cd7bca94cc",
+      "prState": "MERGED_MAIN",
+      "requirements": [
+        "R06",
+        "R12"
+      ],
+      "sourceReproducer": "test/owner-public-wss-signed-enrollment-staging.test.ts",
+      "physicalAcceptanceMissing": "Production TLS owner issuer and actual device signing hardware not physically validated",
+      "ci": {
+        "status": "PASS",
+        "runId": 39492384138,
+        "reason": "Exact-head CI SUCCESS; independently new main source enrollment/proof 16/16 PASS."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 608,
+      "headSha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "physicalAcceptanceMissing": "Combined Win32 Job+HTTP CI and Readiness green, but unsigned dev helper, parent #598 red, real signed agent deployment and production not tested",
+      "ci": {
+        "status": "PASS",
+        "runId": 39503650650,
+        "reason": "Combined cross-PR source CI SUCCESS and Release Readiness 39503650638 SUCCESS."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 618,
+      "headSha": "2abdaebeebe91d287530064f40054286c8f84fe2",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R03",
+        "R04",
+        "R07",
+        "R09",
+        "R19",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "sourceReproducer": "test/hyperv-elevation-evidence.test.ts",
+      "physicalAcceptanceMissing": "Signed version-matched Broker/ACL/token + real local UAC + exact owner-scoped VM GUID and independent Running/Off readback; no runtime executor deployed",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null,
+        "activeRunId": 39604629612,
+        "reason": "Exact HEAD CI queued, not PASS; previous 54e43ff run cancelled; local 8/8 source negatives author-reported."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    }
+  ],
+  "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+  "meaning": "Exact PR CI provenance separate from main/physical. #618 source-only negative explanation not permission or Hyper-V execution proof."
 }

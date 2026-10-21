@@ -1,9 +1,9 @@
 {
   "schema": "nexowire.independent-qa.v1",
   "capturedAt": "2026-10-21",
-  "baselineSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
+  "baselineSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "Pinned main R01-R22 source states, with separate unmerged PR source successes; staging, production and original incidents remain BLOCKED. Source negative FAIL cannot be overwritten by green child/parent branch CI.",
+  "meaning": "R01-R22 source-only snapshot at #605 main with P0 #617 physical UAC/Hyper-V Broker untrusted; no VM start or independent Running state. Feature #618 diagnostic is not deployed.",
   "requirements": [
     {
       "id": "R01",
@@ -14,20 +14,20 @@
       "physicalGate": "Two-device Agent and Hub fault injection with correlation IDs",
       "levels": {
         "source": {
-          "status": "PASS",
-          "evidence": "#565 Error Contract source merged; #603 canonical Ed25519 owner/device signature negative tests included in current main source. No production provider-origin proof."
+          "status": "BLOCKED",
+          "evidence": "Hyper-V RunAs lost ACK: MUTATION_STATE_UNKNOWN, no independent VMId+Running and typed denial attribution; unauthenticated Broker 401 is NOT verified source. Generic #565 Error Contract otherwise source PASS."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 remains OPEN; merged main local SQLite restored old valid backup still forgets later requestId. #582 separate SQLite authority can be jointly rolled back with journal; no external monotonic trust anchor."
+          "evidence": "#587 J+A joint SQLite backup co-rollback and #617 lost ACK must never re-dispatch Start-VM without independent reservation/readback."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -66,20 +66,20 @@
       "physicalGate": "Hub to Agent recovery with original operation IDs",
       "levels": {
         "source": {
-          "status": "PASS",
-          "evidence": "Source journal and reconciliation normal tests pass; #587 joint rollback is an independent stricter P0 gate and physical result not accepted."
+          "status": "BLOCKED",
+          "evidence": "Hyper-V read-only Get-VM access denied: no trusted immutable VM GUID Running/Off state; generic Connection Core/source reconciliation success does not attest this VM."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "2026-10-21 live read-only Naveax icacls: legacy C:\\ProgramData\\NexowireStack and ...\\dist\\src\\cli.js Authenticated Users:(I)(M); protected Broker ACL unreadable exit 5 on both devices. #271 remains OPEN."
+          "evidence": "Typed hyperv.vm.start classifies as standard on main; Broker allowlist lacks Hyper-V; CORE/FULL and ready are policy, not token. #271 inherited Authenticated Users Modify and #617 UAC not attested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -123,15 +123,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -149,15 +149,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#598 exact head cf58e6882e44968698f3f548b353287ba1698747 CI 39502304557 browser-live FAIL: fast-exit stdout before exited iteration 8. #608 separate combined Windows Job+#598 branch CI 39503650650 PASS and Release Readiness 39503650638 PASS, NOT merged main."
+          "evidence": "Admin Bridge typed scoped Hyper-V Broker dispatch not implemented; owner/ACL/publisher/token/version/local UAC authorization absent; Windows Job fast-exit independent gate remains open."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -197,19 +197,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Shell task result/transport verification source remains PASS. #572 durable process READY timeout remains separate ProcessManager acceptance blocker R07/R22."
+          "evidence": "Generic shell exit code/source receipt interpretation accepted; reported Start-VM access denied exit4 does NOT demonstrate VM state or privileged authority."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Private desktop UIA and COM wrapper boundaries source mitigated; real Windows desktop isolation and publisher provenance BLOCKED."
+          "evidence": "#617 secure UAC local console approval never attested; RunAs UNKNOWN cannot infer consent or click Secure Desktop."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -253,15 +253,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -279,15 +279,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -305,15 +305,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -331,15 +331,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -357,15 +357,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -383,15 +383,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -409,15 +409,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -431,19 +431,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #563 source provenance guard, not physical USB/VM driver acceptance."
+          "evidence": "Environment Doctor source checks PASS, but vmms/vmcompute Running and Medium deny-only token cannot prove Hyper-V VM access/state."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -461,15 +461,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#551 latest verified head ce4ffdf7f6e57a4070341fe7e1cc2b12855b5a03 CI/Readiness SUCCESS but first-party signed installer, complete sealed rollback bundle, VM and two real Agent 1.0.5 canary proof absent."
+          "evidence": "#551 real first-party signed installer/rollback not accepted; #617 signed Broker binary/import ACL/version, admin token and local Hyper-V approval missing."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 co-rollback witness J+A snapshot old epoch can return created:true for later reserved B in #582 isolated source. #601 cancellation byte quota fence is source PASS but cannot replace independent requestId anti-rollback authority."
+          "evidence": "#587 independent monotonic witness missing, #617 mutating Hyper-V Start-VM unknown must never be auto-replayed; exact GUID and trusted state readback required."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Both actual Agents still v1.0.5; signed staging rollout/physical original incidents not performed."
+          "evidence": "#617 exact VMId GUID absent and Get-VM denied; real Running status unverified; no isolated signed VM physical canary or live Start-VM."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#572 prior head 3c9dcaf9fc956c51c8c454c587d0f606b16c125b CI 39493135449 FAIL Windows NW_DURABLE_READY and two intentionally red main negative gates. Main exact CI 39558249914 PASS; #596/#608 source branch green does not close QA or production gates."
+          "evidence": "#618 diagnostics pure, no executor; new exact-head CI pending; #617 main Hyper-V typed privilege/Broker support missing, independent two-source RED gates. No production acceptance."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
+          "evidence": "No authenticated Hyper-V VMId/Running state, real signed Broker+local physical UAC approval or signed Agent rollout at main 4c5c810134c020cd04a5ef2be5c1138ea1954ad0"
         }
       }
     }
@@ -761,11 +761,11 @@
     }
   ],
   "independentReleaseApproval": null,
-  "inspectedMainSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
+  "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
   "inspectedMainCi": {
+    "headSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+    "runId": 39596766086,
     "conclusion": "PASS",
-    "runId": 39558249914,
-    "headSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
-    "scope": "Exact SHA main integration source CI only. Not physical acceptance."
+    "scope": "source integration, not VM state"
   }
 }

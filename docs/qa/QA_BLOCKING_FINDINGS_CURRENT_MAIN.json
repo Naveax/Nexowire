@@ -1,8 +1,8 @@
 {
   "schema": "nexowire.qa.findings.v2",
-  "inspectedMainSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
+  "inspectedMainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
   "date": "2026-10-21",
-  "findingCount": 18,
+  "findingCount": 19,
   "scope": "Review and reproducible tests, not live exploit or release approval",
   "findings": [
     {
@@ -663,6 +663,48 @@
       ],
       "disposition": {
         "source": "PASS",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-617-HYPERV-ADMINBRIDGE",
+      "requirements": [
+        "R01",
+        "R03",
+        "R04",
+        "R07",
+        "R09",
+        "R19",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "classification": "P0_HYPERV_PRIVILEGE_AND_UNKNOWN",
+      "affected": [
+        {
+          "pr": 618,
+          "headSha": "2abdaebeebe91d287530064f40054286c8f84fe2",
+          "state": "OPEN_DRAFT_SOURCE_ONLY"
+        }
+      ],
+      "source": "src/security/privilege.ts; src/security/authorization-explain.ts; test/qa-hyperv-617-source-negative.test.ts",
+      "observed": "Issue #617 original report: Medium integrity administrators deny-only, Start-VM exit4 access denied, UAC RunAs MUTATION_STATE_UNKNOWN. Separate issue author read-only recheck confirmed vmms/vmcompute Running, Get-VM denied, unauth 401. None proves a Running VM, local consent or signed Broker. Current main hyperv.vm.start typed privilege defaults standard and Broker allowlist excludes it. #618 pure snapshot helper 8/8 local author-reported, exact CI still pending; cannot execute VM.",
+      "reproduction": [
+        "At pinned main run node --test --import tsx test/qa-hyperv-617-source-negative.test.ts. Five source deny/provenance checks PASS and two typed capability admission gates FAIL; no native VM/UAC call.",
+        "Compare src/security/privilege.ts and src/security/authorization-explain.ts: FULL/ROOT/CORE/bridge ready cannot attest OS admin token. Hyper-V capabilities are not allowlisted Broker operations, shell.exec must not become elevated.",
+        "Inspect GitHub #617 observed read-only Get-VM VirtualizationException/unauth Broker 401; never infer secure UAC approval or Running VM.",
+        "Verify #618 isolated eight fail-closed source tests and exact HEAD CI separately; source status only. Real isolated VMId+Running/Off canary requires owner-signed release/local UAC/ACL approvals."
+      ],
+      "expectedFix": "Implement separately reviewed typed hyperv.vm.status/start/stop with exact owner/host/device VMId GUID, signed protected version-matched elevated Broker, local physical UAC approval, monotonic requestId replay protection, independent attested Running/Off postcondition. No elevated generic shell, no unknown auto-replay.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/issues/617",
+        "https://github.com/Naveax/Nexowire/pull/618",
+        "docs/qa/QA_20261021_HYPERV_617_ACCEPTANCE.json"
+      ],
+      "disposition": {
+        "source": "FAIL",
         "staging": "BLOCKED",
         "production": "BLOCKED",
         "incident": "BLOCKED"

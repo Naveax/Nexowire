@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -7,7 +7,8 @@ const load=(n:string)=>JSON.parse(readFileSync(path.join(qa,n),'utf8')) as any;
 test('21 Oct exact-main source 21/21 pass does not close physical acceptance',()=>{
  const m=load('cross-project-final-acceptance.json');
  const x=load('QA_20261021_EXACT_HEAD_EVIDENCE.json');
- assert.equal(m.baselineSha,'37d68d938b9c94b8647b92fb592a2b30c075427c');
+ assert.equal(x.reviewedMainSha,'37d68d938b9c94b8647b92fb592a2b30c075427c');
+ assert.equal(m.baselineSha,'4c5c810134c020cd04a5ef2be5c1138ea1954ad0');
  assert.equal(x.mainCi.runId,39558249914);
  assert.equal(x.mainCi.status,'PASS');
  assert.equal(x.localMainRepro.pass,21);
