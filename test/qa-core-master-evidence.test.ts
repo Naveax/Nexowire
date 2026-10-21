@@ -20,7 +20,7 @@ test('CORE master exact-head PR ledger distinguishes red latest, green old-base 
  const s=get('QA_20261021_CORE_MASTER_ACCEPTANCE.json');
  const entries=get('PR_SOURCE_AND_RELEASE_GATES.json').entries as any[];
  const row=(n:number)=>entries.find(v=>v.pr===n);
- assert.equal(entries.length,111);
+ assert.equal(entries.length,138);
  for(const n of [618,620,576])assert.equal(row(n).ci.status,'FAIL','RED #'+n);
  for(const n of [619,608,614,616,609,610,612,613,615,551])assert.equal(row(n).ci.status,'PASS','GREEN #'+n);
  assert.equal(row(618).ci.runId,39605003581);
@@ -45,7 +45,7 @@ test('R01-R22 main matrix source and production cannot be upgraded from PR CI',(
  const a=get('cross-project-final-acceptance.json');
  const f=get('QA_BLOCKING_FINDINGS_CURRENT_MAIN.json');
  assert.equal(a.requirements.length,22);
- assert.equal(f.findingCount,39);
+ assert.equal(f.findingCount,44);
  for(const id of ['QA16-P0-CORE-REAL-ELEVATION','QA16-P0-TRUSTED-BROKER-JOB-CI','QA16-P0-WITNESS-OWNER-EPOCH'])assert.ok(f.findings.some((r:any)=>r.id===id),id);
  for(const k of ['R02','R04','R07','R15','R20','R22']){
   assert.equal(a.requirements.find((x:any)=>x.id===k).levels.source.status,'FAIL');

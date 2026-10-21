@@ -1,0 +1,513 @@
+{
+  "schema": "nexowire.qa16.pr703-729.v1",
+  "checkedDate": "2026-10-22",
+  "main": {
+    "head": "754cc4364822be5fda528f54042fb22a84f19924",
+    "ciRunId": 39622251466,
+    "scope": "source main only"
+  },
+  "prs": [
+    {
+      "number": 703,
+      "headSha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "baseSha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+      "runId": 39658452754,
+      "status": "PASS",
+      "requirements": [
+        "R01",
+        "R03",
+        "R20"
+      ],
+      "description": "Reopen UNKNOWN and quarantine undispatched intent source; external signed effect still absent",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 704,
+      "headSha": "98876d163aac7a7a580725e814b19dda621fbad0",
+      "baseSha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "runId": 39658648859,
+      "status": "FAIL",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "description": "Two REAL Node24 semantic failures: read after first VERIFIED chunk and forged wrong requestId ACK masked; not Windows flake",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 705,
+      "headSha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+      "baseSha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "runId": 39658856961,
+      "status": "FAIL",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "description": "Windows Broker import/updater ACL provider negative still RED; separate QA17 dedicated run 39658856958 SUCCESS",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 706,
+      "headSha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea",
+      "baseSha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "runId": 39658875463,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "description": "Signed staged installer repair/source; no native installed signed full rollback",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 707,
+      "headSha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996",
+      "baseSha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "runId": 39659960377,
+      "status": "PASS",
+      "requirements": [
+        "R05",
+        "R19"
+      ],
+      "description": "Transitive updater DLL signer/hash native-handle source check, no production ACL",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 708,
+      "headSha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac",
+      "baseSha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "runId": 39659365444,
+      "status": "PASS",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "description": "Predispatch CAS and two-Hub stale signed publish negative source green",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 709,
+      "headSha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "baseSha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "runId": 39658979397,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "description": "Native Windows importer ACL/path identity fix source CI green; physical installed signed Broker unknown",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 710,
+      "headSha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0",
+      "baseSha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "runId": 39658983007,
+      "status": "PASS",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "description": "Independent revokeAndDrain signed permit/rollback source success only",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 711,
+      "headSha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "baseSha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "runId": 39659054823,
+      "status": "PASS",
+      "requirements": [
+        "R12",
+        "R15"
+      ],
+      "description": "Compressed parser 4x9.5MiB seeded tests source green, no live 100+ user WSS",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 712,
+      "headSha": "62800af17d2a9ce18670dba6a8ac861a5d7f4ba5",
+      "baseSha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "runId": 39659225895,
+      "status": "PASS",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "description": "Owner epoch signed nonce Broker permit fence source-only, no non-restorable CAS physical",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 713,
+      "headSha": "688732dd7c90c2883c3255d825b0dfa74a124807",
+      "baseSha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "runId": 39659243880,
+      "status": "FAIL",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "description": "Windows browser-live fast-exit CI red; signed import DAG source not deployment",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 714,
+      "headSha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "baseSha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "runId": 39659270493,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "description": "Signed CORE rollback and offline pairing source green, no real first-party installation",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 715,
+      "headSha": "550b10c07df648e1b0991770ec7c78fb2984d026",
+      "baseSha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+      "runId": 39659290064,
+      "status": "FAIL",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "description": "Browser-live physical Windows Job inherited failure; diagnostics source provider separate",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 716,
+      "headSha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "baseSha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "runId": 39659320381,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R07",
+        "R20"
+      ],
+      "description": "Signed postcondition ROOT boundary/crash/duplicate ACK synthetic source",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 717,
+      "headSha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97",
+      "baseSha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "runId": 39659333082,
+      "status": "FAIL",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "description": "Windows Broker protected importer ACL tests red; separate QA19 importer ACL forensics 39659333504 SUCCESS",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 718,
+      "headSha": "bcf42c42b3b31626fe1b72dcc91c91f9763d36b8",
+      "baseSha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "runId": 39659378084,
+      "status": "PASS",
+      "requirements": [
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "description": "Quota cleanup and late UNKNOWN receipt source-only",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 719,
+      "headSha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "baseSha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "runId": 39659394811,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R20",
+        "R22"
+      ],
+      "description": "Queued ROOT/CORE revoke and effective Access/CAS source green, not actual high token",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 720,
+      "headSha": "f79b3cce45b9334598ea7acb39873d1231dc1594",
+      "baseSha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "runId": 39659414593,
+      "status": "FAIL",
+      "requirements": [
+        "R06",
+        "R07",
+        "R22"
+      ],
+      "description": "Browser-live Windows Job failure, WSS pairing source fix separate",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 721,
+      "headSha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "baseSha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "runId": 39676732876,
+      "status": "PENDING",
+      "requirements": [
+        "R04",
+        "R07",
+        "R14",
+        "R20"
+      ],
+      "description": "NEW HEAD full CI queued. Earlier #721 historical HEAD had separate failure, cannot carry failure or green across SHA",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 722,
+      "headSha": "60734cf21f0d3f81b886d46360fa57417d80cb35",
+      "baseSha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "runId": 39659428942,
+      "status": "FAIL",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "description": "Windows browser-live fast-exit fail, physical local UAC owner-absent not attested",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 723,
+      "headSha": "7dc98916538c4f957dad5660ff6d328a2f932d3e",
+      "baseSha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "runId": 39659567874,
+      "status": "PASS",
+      "requirements": [
+        "R05",
+        "R19"
+      ],
+      "description": "Transitive DLL updater signer/hash/handle negative QA source green",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 724,
+      "headSha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "baseSha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "runId": 39659574218,
+      "status": "FAIL",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "description": "Windows browser-live fast-exit fail while compressed admission source QA isolated",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 725,
+      "headSha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "baseSha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "runId": 39659633982,
+      "status": "PASS",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "description": "Source correction forged ACK provenance and UNKNOWN race; must replay unchanged #704 red tests on exact source",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 726,
+      "headSha": "8f35bb1a5eeebd690e5b7047d3246983929751a0",
+      "baseSha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "runId": 39659786915,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R22"
+      ],
+      "description": "Native HIGH/CAS UI source fail-close tests green, not OS high token",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 727,
+      "headSha": "7eeb40ce2e7d46e300e5f13754d2e8cd3615bb7a",
+      "baseSha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "runId": 39659834387,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "description": "Isolated Windows DPAPI QA 39659834620 and full CI both SUCCESS; separate native high-token still missing",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 728,
+      "headSha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "baseSha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "runId": 39659941037,
+      "status": "PASS",
+      "requirements": [
+        "R09",
+        "R18",
+        "R22"
+      ],
+      "description": "AI Screen private child emergency stop source green, no live privileged GUI",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 729,
+      "headSha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "baseSha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+      "runId": 39662119627,
+      "status": "FAIL",
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R07",
+        "R15",
+        "R19",
+        "R20",
+        "R22"
+      ],
+      "description": "QA independent RED source is deliberate P0 gate; OTHER failures Node22 general npm check and Windows durable NW_DURABLE_READY timeout must remain distinct",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "incident": "BLOCKED"
+    }
+  ],
+  "currentFullCi": {
+    "success": 17,
+    "fail": 9,
+    "pending": 1,
+    "oldCount": "Previously reported 17 success and 10 failure belongs to a different #721 head snapshot; latest exact #721 aa16d3 CI 39676732876 queued."
+  },
+  "qa729": {
+    "headSha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+    "ciRunId": 39662119627,
+    "conclusion": "FAILURE",
+    "classifications": {
+      "purposefullyFailingAcceptance": {
+        "jobId": 119437584894,
+        "job": "qa-independent-negative-acceptance",
+        "status": "FAIL",
+        "tests": {
+          "passed": 10,
+          "failed": 7,
+          "skipped": 0
+        },
+        "cases": [
+          "Broad real signed HIGH-integrity elevated CORE shell capability absent",
+          "ROOT signed 15minute lease max not proven",
+          "Hyper-V vm.start remains standard rather than elevated",
+          "Hyper-V typed Broker allowlist missing",
+          "Restored old local journal admits already-completed requestId (#587)",
+          "Durable scoped transfer start/status/cancel missing on main (#588)"
+        ],
+        "rule": "KEEP_RED_NON_OPTIONAL"
+      },
+      "ordinaryCodeOrHostFailures": [
+        {
+          "job": "browser-live",
+          "jobId": 119437584585,
+          "status": "FAIL",
+          "reason": "Windows durable process after restart /NW_DURABLE_READY/ timeout"
+        },
+        {
+          "job": "test (22)",
+          "jobId": 119437584597,
+          "status": "FAIL",
+          "reason": "npm run check has required 7 production gate assertions failing in generic Node test suite; not a separate proof of unexpected product regression"
+        },
+        {
+          "job": "test (24)",
+          "jobId": 119437584672,
+          "status": "CANCELLED",
+          "reason": "npm run check interrupted with same required gate assertions visible; not successful"
+        }
+      ],
+      "successfulOtherJobs": [
+        "wsl2-live",
+        "macos-agent-lifecycle-live",
+        "security-operational-live",
+        "linux-native-live"
+      ]
+    }
+  },
+  "sourceNoGo": {
+    "sourcePolicy": "R01-R22 exact main not physically attested, no automatic replay",
+    "realCoreHighToken": false,
+    "protectedAcl271": false,
+    "firstPartySignedBootstrap551": false,
+    "externalNonRestorableWitness587": false,
+    "signedHypervGuidRunning": false,
+    "physicalUacGranted": false
+  }
+}

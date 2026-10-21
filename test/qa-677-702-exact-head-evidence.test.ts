@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -7,8 +7,8 @@ test('26 independent literal GitHub PR #677-#702 HEADs, branch-vs-main and 20 gr
  const s=rd('QA_20261021_PR677_702_EXACT_CI.json'),l=rd('PR_SOURCE_AND_RELEASE_GATES.json');
  assert.equal(s.prs.length,26);
  assert.deepEqual(s.prs.map((p:any)=>p.number),Array.from({length:26},(_,i)=>i+677));
- assert.equal(l.entries.length,111);
- assert.equal(new Set(l.entries.map((p:any)=>p.pr)).size,111);
+ assert.equal(l.entries.length,138);
+ assert.equal(new Set(l.entries.map((p:any)=>p.pr)).size,138);
  assert.equal(s.main.sha,'754cc4364822be5fda528f54042fb22a84f19924');
  assert.deepEqual(s.sourceCiCounts.success,20);
  assert.deepEqual(s.sourceCiCounts.failed,6);
@@ -32,7 +32,7 @@ test('100 open first page is NOT total, non-atomic pagination and no authoritati
  assert.equal(s.openPrPagination.atomicSnapshot,false);
  assert.equal(s.openPrPagination.authoritativeCount,null);
  assert.equal(l.authoritativeOpenCount,null);
- assert.equal(l.entries.length,111);
+ assert.equal(l.entries.length,138);
 });
 test('#677 source 2 real semantic red: extra Native write and forged ACK masking',()=>{
  const s=rd('QA_20261021_PR677_702_EXACT_CI.json');
@@ -88,7 +88,7 @@ test('physical high-token CORE, #271 ACL, #551 rollback, #587 external witness a
  const m=rd('cross-project-final-acceptance.json'),f=rd('QA_BLOCKING_FINDINGS_CURRENT_MAIN.json'),s=rd('QA_20261021_PR677_702_EXACT_CI.json');
  assert.equal(m.requirements.length,22);
  assert.equal(m.baselineSha,s.main.sha);
- assert.equal(f.findingCount,39);
+ assert.equal(f.findingCount,44);
  for(const id of ['QA16-677-682-NATIVE-CANCEL-REAL-RED','QA16-699-SUPERSEDED-TS1005-VERIFY','QA16-700-WINDOWS-IMPORT-ACL-THREE-RED','QA16-683-WINDOWS-DPAPI-180S','QA16-695-697-INHERITED-WINDOWS-RED','QA16-702-CAS-CORE-SOURCE-NOT-PHYSICAL'])
  assert.ok(f.findings.some((v:any)=>v.id===id),id);
  assert.ok(m.requirements.every((r:any)=>['staging','production','incident'].every(k=>r.levels[k].status==='BLOCKED')));

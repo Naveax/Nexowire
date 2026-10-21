@@ -46,12 +46,12 @@ test('#617 P0 Hyper-V source contract blocks release regardless of green source-
  assert.equal(m.baselineSha,'754cc4364822be5fda528f54042fb22a84f19924');
  assert.equal(m.inspectedMainCi.runId,39622251466);
  assert.equal(m.requirements.length,22);
- assert.equal(l.entries.length,111);
+ assert.equal(l.entries.length,138);
  const pr618=l.entries.find((x:any)=>x.pr===618);
  assert.ok(pr618);
  assert.equal(pr618.prState,'OPEN_DRAFT');
  assert.equal(pr618.production,'BLOCKED');
- assert.equal(f.findingCount,39);
+ assert.equal(f.findingCount,44);
  assert.ok(f.findings.some((x:any)=>x.id==='QA16-617-HYPERV-ADMINBRIDGE'));
  for(const k of ['R01','R03','R04','R07','R09','R19','R20','R21','R22']){
   const r=m.requirements.find((x:any)=>x.id===k);

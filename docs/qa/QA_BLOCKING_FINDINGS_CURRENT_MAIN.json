@@ -1,8 +1,8 @@
 {
   "schema": "nexowire.qa.findings.v2",
   "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
-  "date": "2026-10-21",
-  "findingCount": 39,
+  "date": "2026-10-22",
+  "findingCount": 44,
   "scope": "Review and reproducible tests, not live exploit or release approval",
   "findings": [
     {
@@ -1512,6 +1512,189 @@
       ],
       "disposition": {
         "source": "BLOCKED",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-729-PURPOSEFUL-P0-RED",
+      "requirements": [
+        "R02",
+        "R04",
+        "R15",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "classification": "QA16_INDEPENDENT_703_729",
+      "affected": [
+        {
+          "pr": 729,
+          "headSha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "source": "docs/qa/QA_20261022_PR703_729_EXACT_HEAD.json",
+      "observed": "Dedicated independent negative job 119437584894 FAIL deliberately on 7 real missing source contracts: HIGH signed CORE executor, ROOT 15m, typed Hyper-V elevated allowlist, restored journal requestId anti-rollback and onecall durable transfer API. Test removal/skip/continue-on-error is forbidden.",
+      "reproduction": [
+        "Review 39662119627 QA independent job logs; manually group 3 CORE, 2 Hyper-V, 1 rollback, 1 transfer regressions.",
+        "Check existing current-main test source without elevated execution; keep tests red until actual authorized owner-source implementation."
+      ],
+      "expectedFix": "Add real typed signed high Broker broad CORE (not SAFE) with genuine local consent, ROOT issuedAt bounded 900 sec, Hyper-V GUID-scoped Broker, independent CAS and durable onecall authenticated status/cancel; source/physical evidence separate.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/729"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-729-INDEPENDENT-DURABLE-CI",
+      "requirements": [
+        "R03",
+        "R07",
+        "R22"
+      ],
+      "classification": "QA16_INDEPENDENT_703_729",
+      "affected": [
+        {
+          "pr": 729,
+          "headSha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "source": "docs/qa/QA_20261022_PR703_729_EXACT_HEAD.json",
+      "observed": "Besides intentional 7 missing feature regressions, hosted Windows browser-live durable process reattach timed out waiting for NW_DURABLE_READY. Node22 npm run check has required 7 negative gate assertions and Node24 cancelled; not all CI failures are purposeful.",
+      "reproduction": [
+        "GitHub 39662119627 browser-live job 119437584585 test/durable-process.test.ts times out at 28540ms.",
+        "Separate 119437584894 intentionally red required QA job from generic job 119437584597; do not hide Windows process contract failure."
+      ],
+      "expectedFix": "Repair Windows durable ProcessManager/transport reattach without swallowing timeout, keep original tests and no live Agent/VM.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/729"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-704-CANCEL-PROVENANCE-RED",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "classification": "QA16_INDEPENDENT_703_729",
+      "affected": [
+        {
+          "pr": 704,
+          "headSha": "98876d163aac7a7a580725e814b19dda621fbad0",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 725,
+          "headSha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+          "state": "OPEN_DRAFT_PASS"
+        }
+      ],
+      "source": "docs/qa/QA_20261022_PR703_729_EXACT_HEAD.json",
+      "observed": "#704 exact CI 39658648859 FAIL two real source semantics: extra write after first verified chunk and wrong requestId ACK cancellation error loses FORGED_WRITE_RECEIPT provenance. #725 exact CI source SUCCESS, but UNMODIFIED #704 tests on #725 current implementation must be independently replayed.",
+      "reproduction": [
+        "Inspect #704 Node24 job 119425542130 without skipping errors.",
+        "Run original QA negative fixtures unchanged on disposable #725 updated source with read-only tools, never real Native user file."
+      ],
+      "expectedFix": "Correct source early-cancel no further read/write after VERIFIED and preserve forged ACK original requestId-specific error/UNKNOWN with no replay.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/704",
+        "https://github.com/Naveax/Nexowire/pull/725"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-705-717-IMPORT-ACL-RED",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "classification": "QA16_INDEPENDENT_703_729",
+      "affected": [
+        {
+          "pr": 705,
+          "headSha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+          "state": "OPEN_DRAFT_FAIL"
+        },
+        {
+          "pr": 709,
+          "headSha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+          "state": "OPEN_DRAFT_PASS"
+        },
+        {
+          "pr": 717,
+          "headSha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97",
+          "state": "OPEN_DRAFT_FAIL"
+        }
+      ],
+      "source": "docs/qa/QA_20261022_PR703_729_EXACT_HEAD.json",
+      "observed": "#705 CI 39658856961 and #717 CI 39659333082 FAIL inherited three Windows Broker native protected import/ACL assertions; their independent QA jobs green while #709 separate source fixed. Do not equate dedicated green to full current parent PASS or physical signed tree.",
+      "reproduction": [
+        "Inspect jobs 119426262779 and 119427914305 and separate dedicated QA runs.",
+        "Native full image/import/updater effective ACL and signed handle identity must be replayed with tests unchanged on compatible parent in isolated fixture."
+      ],
+      "expectedFix": "Independent native protected transitive import/updater root/path and inherited Modify ACL attestation with owner PID+FILETIME; actual installed #271 ACL still unsafe.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/705",
+        "https://github.com/Naveax/Nexowire/pull/709",
+        "https://github.com/Naveax/Nexowire/pull/717"
+      ],
+      "disposition": {
+        "source": "FAIL",
+        "staging": "BLOCKED",
+        "production": "BLOCKED",
+        "incident": "BLOCKED"
+      }
+    },
+    {
+      "id": "QA16-721-HEAD-MOVED-CI-UNKNOWN",
+      "requirements": [
+        "R04",
+        "R07",
+        "R14",
+        "R22"
+      ],
+      "classification": "QA16_INDEPENDENT_703_729",
+      "affected": [
+        {
+          "pr": 721,
+          "headSha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+          "state": "OPEN_DRAFT_PENDING"
+        }
+      ],
+      "source": "docs/qa/QA_20261022_PR703_729_EXACT_HEAD.json",
+      "observed": "Current #721 head aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d has queued CI 39676732876. Old HEAD red/green cannot be inherited; rolling initial 17SUCCESS/10FAIL is historical, currently 17SUCCESS/9FAIL/1PENDING.",
+      "reproduction": [
+        "GET PR #721 head SHA then Actions runs filtered by exact head; current run queued.",
+        "If changed, update only its entry and count, never infer success from owner comments."
+      ],
+      "expectedFix": "Await exact-head full CI provenance and preserve OAuth distinct from CORE native Windows privilege.",
+      "evidence": [
+        "https://github.com/Naveax/Nexowire/pull/721"
+      ],
+      "disposition": {
+        "source": "FAIL",
         "staging": "BLOCKED",
         "production": "BLOCKED",
         "incident": "BLOCKED"
