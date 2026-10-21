@@ -1,0 +1,29 @@
+name: QA17 P0 Broker Negative Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'test/qa-17-700-native-red-preservation.test.ts'
+      - '.github/workflows/qa17-700-broker-negative.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa17-700-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  independent-qa17:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: QA17 negative only; DO NOT suppress inherited protected-tree red tests
+        run: node --test --import tsx test/qa-17-700-native-red-preservation.test.ts
