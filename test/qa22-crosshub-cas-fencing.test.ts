@@ -878,6 +878,9 @@ test('#22/#725: post-first-verified-chunk cancel plus CORE revoke preserves forg
         'first 64KiB independently verified, second remains unconfirmed');
       assert.equal(before.pending?.offset, 65_536);
       assert.equal(before.pending?.dispatched, true);
+      assert.equal(before.pending?.length, 65_536);
+      assert.equal(before.pending?.sha256, digest(bytes.subarray(65_536, 2 * 65_536)),
+        'forensic intent must bind the actual second chunk digest');
       assert.equal(typeof before.pending?.requestId, 'string');
       const originalRequestId = before.pending!.requestId;
       assert.deepEqual(fx.writes.map(w => w.offset), [0, 65_536]);
