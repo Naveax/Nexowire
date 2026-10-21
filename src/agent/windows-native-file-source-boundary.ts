@@ -1,6 +1,10 @@
 import path from 'node:path';
 import {unsafeWindowsPath} from './scoped-path-grants.js';
 import {
+  assertProtectedImportClosure,
+  type ProtectedImportGraph,
+} from './windows-native-protected-import-closure.js';
+import {
   assertEffectiveNativeAcl,
   authorizeNativeRelativeChain,
   RelativeAccessDenied,
@@ -86,6 +90,8 @@ export interface VerifiedFilesystemBoundary {
   destinationRelativeChain:NativeRelativeChain;
   destinationParent:NativeHandleEvidence;
   protectedComponents:Readonly<Record<ProtectedRole,ProtectedAclEvidence>>;
+  /** Mandatory independently pinned transitive DLL/PE imports closure. */
+  protectedImportGraph:ProtectedImportGraph;
   grant:NativeGrantEvidence;
 }
 export class NativeFileBoundaryError extends Error {
@@ -169,6 +175,10 @@ export function assertNativeProtectedFileBoundary(
   for(const role of ['parent','updater','module'] as const){
     assertProtected(evidence.protectedComponents?.[role],role);
   }
+  // Role-wide signed/ACL flags do not prove each imported updater DLL.
+  // Require independently inventoried and signed *transitive* import closure.
+  assertProtectedImportClosure(evidence.protectedImportGraph,
+    evidence.pinnedSource,evidence.source,evidence.protectedComponents);
   const grant=evidence.grant;
   if(!grant)deny('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED');
   // Every segment is derived from the independently pinned grant root handle.
