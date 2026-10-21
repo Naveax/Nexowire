@@ -40,15 +40,16 @@ static void diagnostic(const wchar_t *stage) {
 int main(void){
   int argc=0;
   wchar_t **argv=CommandLineToArgvW(GetCommandLineW(),&argc);
-  if(!argv || argc<9 || wcscmp(argv[1],L"--status") ||
+  if(!argv || argc<11 || wcscmp(argv[1],L"--status") ||
      wcscmp(argv[3],L"--cwd") || wcscmp(argv[5],L"--parent") ||
-     wcscmp(argv[7],L"--")){
+     wcscmp(argv[7],L"--release") || wcscmp(argv[9],L"--")){
     fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR invalid_arguments\n");
     return 64;
   }
   const wchar_t *statusPath=argv[2];
   const wchar_t *cwd=wcscmp(argv[4],L"-")==0?NULL:argv[4];
-  if(!statusPath[0]||!argv[8][0])return 64;
+  const wchar_t *releasePath=argv[8];
+  if(!statusPath[0]||!releasePath[0]||!argv[10][0])return 64;
   wchar_t *parentEnd=NULL;
   unsigned long parentPid=wcstoul(argv[6],&parentEnd,10);
   if(!argv[6][0]||*parentEnd)return 64;
@@ -59,17 +60,19 @@ int main(void){
     FALSE,parentPid):NULL;
   if(parentPid&&!parent){diagnostic(L"parent_open");return 70;}
   size_t total=1;
-  for(int i=8;i<argc;i++)total+=wcslen(argv[i])*2+4;
+  for(int i=10;i<argc;i++)total+=wcslen(argv[i])*2+4;
   if(total>32760){fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR command_too_long\n");return 64;}
   wchar_t *cmd=(wchar_t*)calloc(total,sizeof(wchar_t));
   if(!cmd)return 70;
   wchar_t *out=cmd; const wchar_t *end=cmd+total-1;
-  for(int i=8;i<argc;i++){
-    if(i>8){if(out>=end){free(cmd);return 64;}*out++=L' ';}
+  for(int i=10;i<argc;i++){
+    if(i>10){if(out>=end){free(cmd);return 64;}*out++=L' ';}
     if(!quote_arg(argv[i],&out,end)){free(cmd);return 64;}
   }
   *out=0;
 
+  // Unnamed Job: no OpenJobObject(name) surface for same-user processes to
+  // retain an extra query handle across forced guardian termination.
   HANDLE job=CreateJobObjectW(NULL,NULL);
   if(!job){diagnostic(L"create_job");free(cmd);return 70;}
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit={0};
@@ -111,7 +114,8 @@ int main(void){
   }
   unsigned long long ticks=((unsigned long long)c.dwHighDateTime<<32)|c.dwLowDateTime;
   wchar_t message[128]={0};
-  int length=swprintf(message,128,L"NWJOB3 %lu %llu\n",pi.dwProcessId,ticks);
+  int length=swprintf(message,128,L"NWJOB5 %lu %llu %llu\n",pi.dwProcessId,ticks,
+    (unsigned long long)(uintptr_t)job);
   HANDLE marker=CreateFileW(statusPath,GENERIC_WRITE,0,NULL,CREATE_NEW,
     FILE_ATTRIBUTE_NORMAL,NULL);
   if(marker==INVALID_HANDLE_VALUE){
@@ -132,6 +136,25 @@ int main(void){
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     return 75;
   }
+  // The suspended root MUST remain suspended until the Agent independently
+  // duplicates this exact unnamed Job handle from the guardian and verifies
+  // the kernel membership, creation identity and Job limits.
+  // A plaintext marker never authorizes process execution on its own.
+  BOOL released=FALSE;
+  for(int i=0;i<400;i++){
+    HANDLE gate=CreateFileW(releasePath,GENERIC_READ,FILE_SHARE_READ,NULL,
+      OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(gate!=INVALID_HANDLE_VALUE){CloseHandle(gate);released=TRUE;break;}
+    if(parent && WaitForSingleObject(parent,0)==WAIT_OBJECT_0)break;
+    Sleep(25);
+  }
+  if(!released){
+    fwprintf(stderr,L"NEXOWIRE_WINJOB_ERROR verification_gate_timeout\\n");
+    TerminateJobObject(job,76);
+    CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+    if(parent)CloseHandle(parent);
+    return 76;
+  }
   if(ResumeThread(pi.hThread)==(DWORD)-1){
     diagnostic(L"resume");
     TerminateJobObject(job,76);
@@ -143,14 +166,20 @@ int main(void){
   // accounting instead, and also watch the owning Agent for volatile tasks.
   for(;;){
     if(parent && WaitForSingleObject(parent,0)==WAIT_OBJECT_0){
-      // Parent crashed/disconnected permanently: close the sole Job handle.
-      // Only the already assigned process set is terminated.
+      // Do not assume the guardian owns the only Job handle: the named Job
+      // may temporarily be opened by an independent verifier. Explicitly
+      // terminate members even when another query handle remains open.
+      TerminateJobObject(job,78);
       CloseHandle(job);CloseHandle(pi.hProcess);CloseHandle(parent);return 78;
     }
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting={0};
     if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,
            &accounting,sizeof(accounting),NULL)){
-      diagnostic(L"job_accounting");CloseHandle(job);return 77;
+      diagnostic(L"job_accounting");
+      TerminateJobObject(job,77);
+      CloseHandle(job);CloseHandle(pi.hProcess);
+      if(parent)CloseHandle(parent);
+      return 77;
     }
     if(accounting.ActiveProcesses==0)break;
     Sleep(25);
