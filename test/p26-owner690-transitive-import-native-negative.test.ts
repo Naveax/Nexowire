@@ -65,8 +65,7 @@ function native(commands: string[]): Record<string,string[]> {
   return JSON.parse(execFileSync(pwsh,
     ['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
       Buffer.from(script,'utf16le').toString('base64')],
-    {encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:128*1024}).trim())
-    as Record<string,string[]>;
+    {encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:128*1024}).trim()) as Record<string,string[]>;
 }
 
 type DllProof = {
@@ -220,6 +219,13 @@ test('W26/#690 real Windows TEMP DLL hardlink/ADS share same native ID but canno
   assert.ok(Number(r.main?.[3])>=2);
   assert.notEqual(r.main?.[1],r.ads?.[1]);
   const g=testGraph();
+  g.root=root;
+  for(const [name,item] of Object.entries(g.manifest)) {
+    const realPath=path.join(root,name);
+    item.path=realPath;item.finalPath=realPath;
+    g.observed[name]!.path=realPath;
+    g.observed[name]!.finalPath=realPath;
+  }
   const expected=g.manifest['nested.dll']!;
   expected.fileId=r.main![0]!;
   expected.volume=r.main![1]!.split('}\\')[0]+'}\\';
