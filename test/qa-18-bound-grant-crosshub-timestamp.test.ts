@@ -76,7 +76,8 @@ test('#18 #676: signed owner re-pair fences two stale Hubs even after PostgreSQL
  // Recover BOTH local grant + tombstone from a stale disk snapshot;
  // the synthetic external authority alone retains authoritative new epoch.
  f.pg.state=copy(backup);
- await denied(a.reserve(f.request()),'BOUND_CAS_EXTERNAL_RESERVATION_UNKNOWN');
+ await denied(a.reserve({...f.request(),epoch:oldEpoch}),
+  'BOUND_CAS_EXTERNAL_RESERVATION_UNKNOWN');
  await denied(b.reserve(historical),'BOUND_CAS_EXTERNAL_RESERVATION_UNKNOWN');
  assert.equal(f.external.reserved.size,1);
  assert.equal(f.pg.state.reservations.size,1);
