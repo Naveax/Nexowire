@@ -1,0 +1,29 @@
+name: QA17 Windows Broker Evidence
+
+on:
+  pull_request:
+    paths:
+      - 'test/qa-17-native-provider-import-epoch-670.test.ts'
+      - '.github/workflows/qa17-windows-broker-evidence.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa17-windows-broker-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  independent-native-evidence:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Source and read-only Windows-native QA #17
+        run: node --test --import tsx test/qa-17-native-provider-import-epoch-670.test.ts
