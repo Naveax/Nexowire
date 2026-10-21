@@ -10,6 +10,7 @@ import {
 } from '../scripts/s3-core-broker-install-gate.js';
 import type {CapturedAclNode} from '../scripts/s3-windows-acl-preflight.js';
 import {assessCoreLinkedStageAndDelegation,assessCoreOfflineRePairBootstrap,
+  assessCoreAtomicRollbackSwitchSource,type CoreAtomicSwitchEvidence,
   type CoreBootstrapEvidence,type CoreOfflineRePairWitness,
 } from '../scripts/s3-core-bootstrap-delegation-audit.js';
 
@@ -462,4 +463,128 @@ test('old DPAPI blob or old UAC consent transaction cannot silently re-enroll CO
  next.physicalConsent.transactionId='old-txn';
  await assert.rejects(repair(f,next,dagFixture(f),nw),
    /LOCAL_OS_CONSENT_NOT_ATTESTED/);
+});
+
+
+function atomicFixture(f:ReturnType<typeof setup>,b:CoreBootstrapEvidence):CoreAtomicSwitchEvidence{
+ const role=(r:string)=>{
+  const x=f.manifest.files.find(z=>z.role===r);
+  assert.ok(x);return x;
+ };
+ const broker=role('broker'),rollback=role('rollback'),updater=role('updater');
+ const stageId=(v:typeof broker)=>({
+  sha256:v.sha256,volumeIdentity:v.volumeIdentity,fileIdentity:v.fileIdentity,
+ });
+ return{
+  provider:'synthetic-fixture',phase:'post-cutover-readback',
+  transactionId:b.record.transactionId,ownerAccountId:b.record.ownerAccountId,
+  deviceId:b.record.deviceId,ownerEpoch:b.record.ownerEpoch,
+  externalSequence:52,minimumIndependentSequence:51,
+  writeAheadJournalDurable:true,journalAuthenticatedByExternalAuthority:true,
+  noPendingUnknownNativeMutation:true,postconditionWitnessVerified:true,
+  beforeInstalled:{
+   sha256:rollback.sha256,volumeIdentity:broker.volumeIdentity,
+   fileIdentity:'PREVIOUS_INSTALLED_ID_0001',
+  },
+  stagedTarget:stageId(broker),
+  installedAfterCutover:stageId(broker),
+  previousRollbackBefore:stageId(rollback),
+  previousRollbackAfter:stageId(rollback),
+  postUpdater:stageId(updater),
+  nativePostImportGraphVerified:true,nativePostProtectedAclVerified:true,
+  nativePostSignerVerified:true,nativeTaskImageHandleVerified:true,
+  nativeTaskCreationIdentity:b.task.processCreationIdentity,
+  localWindowsConsentTransactionId:b.physicalConsent.transactionId,
+ };
+}
+async function atomicCheck(
+ f:ReturnType<typeof setup>,
+ b:CoreBootstrapEvidence,
+ d:DagFixture,
+ a:CoreAtomicSwitchEvidence,
+){
+ return assessCoreAtomicRollbackSwitchSource(
+  b,f.manifest,f.signature,f.pins,f.readback,d.dag,d.signature(),
+  d.pins,d.native,oldWitness(f,b),a,f.inspect);
+}
+test('even fully signed DAG plus synthetic atomic identity postreadback never deploys or authorizes CORE',async()=>{
+ const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+ assert.deepEqual(await atomicCheck(f,b,d,a),{
+  status:'atomic_switch_source_readback_only',
+  physicalSwitchAccepted:false,realWindowsUacEnrolled:false,
+  canResume:false,canRollbackAutomatically:false,
+  canDispatchCore:false,productionApproved:false,
+ });
+});
+test('crash before or after native write dispatch remains UNKNOWN even if ACK claims success',async()=>{
+ for(const phase of [
+  'preflight','reserved','write-dispatched-unknown',
+  'rollback-dispatched-unknown','rollback-readback',
+ ] as const){
+  const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+  a.phase=phase;
+  await assert.rejects(atomicCheck(f,b,d,a),
+   /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
+ }
+ const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+ a.noPendingUnknownNativeMutation=false;
+ await assert.rejects(atomicCheck(f,b,d,a),
+  /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
+});
+test('atomic switch must preserve signed prior rollback and exact volume/file identity, not digest alone',async()=>{
+ const cases=[
+  (a:CoreAtomicSwitchEvidence)=>{a.installedAfterCutover.fileIdentity='CHANGED_SAME_DIGEST_ID'},
+  (a:CoreAtomicSwitchEvidence)=>{a.installedAfterCutover.volumeIdentity='DIFFERENT_VOLUME_ID'},
+  (a:CoreAtomicSwitchEvidence)=>{a.previousRollbackAfter.fileIdentity='REPLACED_OLD_ROLLBACK_ID'},
+  (a:CoreAtomicSwitchEvidence)=>{a.previousRollbackAfter.sha256=H('foreign-rollback')},
+  (a:CoreAtomicSwitchEvidence)=>{a.stagedTarget.fileIdentity='RENAMED_HANDLE_ID'},
+  (a:CoreAtomicSwitchEvidence)=>{a.postUpdater.fileIdentity='MODIFIED_IMPORT_ID'},
+  (a:CoreAtomicSwitchEvidence)=>{a.beforeInstalled.sha256=H('unknown-original')},
+  (a:CoreAtomicSwitchEvidence)=>{a.beforeInstalled.fileIdentity=a.installedAfterCutover.fileIdentity},
+ ];
+ for(const mutate of cases){
+  const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+  mutate(a);
+  await assert.rejects(atomicCheck(f,b,d,a),
+   /ATOMIC_SWITCH_ROLLBACK_OR_POSTIMAGE_IDENTITY_CHANGED/);
+ }
+});
+test('protected parent and native signed import DAG readback must survive after cutover',async()=>{
+ for(const property of [
+  'nativePostImportGraphVerified','nativePostProtectedAclVerified',
+  'nativePostSignerVerified','nativeTaskImageHandleVerified',
+  'writeAheadJournalDurable','journalAuthenticatedByExternalAuthority',
+  'postconditionWitnessVerified',
+ ] as const){
+  const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+  a[property]=false;
+  await assert.rejects(atomicCheck(f,b,d,a),
+   /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
+ }
+ const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+ d.native.modules[0]!.imports.push('C:\\Outside\\unsigned.dll');
+ await assert.rejects(atomicCheck(f,b,d,a),/S3_CORE_INSTALL_/);
+});
+test('owner UAC consent is one transaction, not reused when owner re-pairs offline',async()=>{
+ const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+ a.localWindowsConsentTransactionId='previous-local-UAC-transaction';
+ await assert.rejects(atomicCheck(f,b,d,a),
+  /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
+ const c=atomicFixture(f,b);c.ownerEpoch=11;
+ await assert.rejects(atomicCheck(f,b,d,c),
+  /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
+});
+test('missing independent sequence, forged provenance and stale task create time block rollback receipts',async()=>{
+ for(const mutate of [
+  (a:CoreAtomicSwitchEvidence)=>{a.externalSequence=12},
+  (a:CoreAtomicSwitchEvidence)=>{a.minimumIndependentSequence=0},
+  (a:CoreAtomicSwitchEvidence)=>{a.nativeTaskCreationIdentity='stale-job-pid'},
+  (a:CoreAtomicSwitchEvidence)=>{a.transactionId='unrelated-owner-install'},
+  (a:CoreAtomicSwitchEvidence)=>{a.deviceId='other-device'},
+ ]){
+  const f=setup(),b=bootstrap(f),d=dagFixture(f),a=atomicFixture(f,b);
+  mutate(a);
+  await assert.rejects(atomicCheck(f,b,d,a),
+   /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
+ }
 });
