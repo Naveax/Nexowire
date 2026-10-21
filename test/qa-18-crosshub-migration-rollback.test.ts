@@ -175,6 +175,33 @@ test('#18 migrate: unavailable simulated SQL fails closed, real PG NOT TESTED',a
   assert.deepEqual(f.pool.state,before);
 });
 
+test('#18 migrate NEGATIVE: restoring the witness itself resurrects old CORE and UUID',async()=>{
+  const f=fixture();await f.enroll();
+  const g=f.delegation();
+  await g.change(f.change('bind_session',0));
+  assert.equal((await g.change(f.change('grant_core',1))).mode,'CORE');
+  // The attacker captures the authoritative witness snapshot BEFORE revoke,
+  // signed re-pair and a later reservation. This models the UNSOLVED P0.
+  const oldWitnessSnapshot=copy(f.pool.state);
+  const lateId=randomUUID();
+  assert.equal((await f.hub().reserve(f.request(lateId))).created,true);
+  assert.equal((await g.change(f.change('revoke',2))).mode,'NONE');
+  const owner=randomUUID(),epoch=randomUUID(),session=randomUUID();
+  assert.equal((await g.change(f.change('re_pair',3,{
+    newOwnerId:owner,newDeviceEpoch:epoch,newSessionEpoch:session,
+  }))).mode,'NONE');
+  f.sessions.add(session);
+  assert.equal((await g.evaluate(f.identity(owner,f.deviceId,epoch,session))).mode,
+    'NONE');
+  // This restore is INDEPENDENTLY ROLLED-BACK WITNESS STORAGE, unlike an
+  // Agent/Hub/cache snapshot. The unsafe resurrection must be visible.
+  f.pool.state=copy(oldWitnessSnapshot);
+  assert.equal((await f.delegation().evaluate(f.identity())).mode,'CORE');
+  assert.equal((await f.hub().reserve(f.request(lateId))).created,true);
+  // Passing this NEGATIVE test documents why physical production is blocked.
+  assert.equal(f.pool.state.reservations.has(lateId),true);
+});
+
 const fp='a'.repeat(64);
 async function disposableCrashWal(t:import('node:test').TestContext,id:string){
   const dir=await mkdtemp(path.join(os.tmpdir(),'nexowire-qa18-wal-'));
