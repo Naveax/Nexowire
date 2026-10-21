@@ -514,3 +514,170 @@ export async function assessCoreAtomicRollbackSwitchSource(
     canDispatchCore:false,productionApproved:false,
   };
 }
+
+
+/**
+ * #709 native ACL v2 + #712 signed dispatch-permit fence interoperability.
+ * These are injected READ-ONLY SOURCE records. Their shape is not proof that
+ * a protected Windows Broker or real external CAS authority was deployed.
+ */
+export interface CoreNativeAclV2Entry {
+  path:string;
+  evidenceAvailable:boolean;
+  broadLowTrustWriteFound:boolean;
+  reparsePointDetected:boolean;
+}
+export interface CoreNativeAclV2Evidence {
+  kind:'windows_core_broker_protected_tree_readonly_v2';
+  requestEnvelopeVersion:1;
+  protectedRoot:string;
+  acceptedInputPaths:string[];
+  inspectedFilesCount:number;
+  inspectedEntries:CoreNativeAclV2Entry[];
+  inputsInsideRoot:boolean;
+  rejectedOutOfRootPaths:string[];
+  allInspectedPathsHaveAclEvidence:boolean;
+  anyInspectedPathUnsafe:boolean;
+  importListIndependentlyEnumerated:false;
+  signedImportManifestVerified:false;
+  protectedCompleteImageTreeAttested:false;
+  productionReady:false;
+  elevatedCoreDispatchEnabled:false;
+}
+/** Mirrors #712 scope attributes, without claiming the actual CAS is deployed. */
+export interface CoreInstallerDispatchPermit {
+  schemaVersion:1;
+  kind:'core_installer_dispatch_permit_source_v1';
+  ownerAccountId:string;
+  deviceId:string;
+  transactionId:string;
+  ownerEpoch:number;
+  grantGeneration:number;
+  challengeNonce:string;
+  brokerSha256:string;
+  processCreationIdentity:string;
+  externalSequence:number;
+}
+export interface CoreInstallerDispatchPins {
+  /** Independently pinned authority key + expected nonce supplied per invocation. */
+  authorityPublicKeyPem:string;
+  ownerAccountId:string;
+  deviceId:string;
+  ownerEpoch:number;
+  grantGeneration:number;
+  expectedChallengeNonce:string;
+  minimumExternalSequence:number;
+}
+export interface CoreInstallerPermitWitness {
+  signedPermit:CoreInstallerDispatchPermit;
+  signatureBase64:string;
+  independentlyAuthenticated:true;
+  singleUseReserved:true;
+  revoked:false;
+  unknownMutation:false;
+}
+const permitFields=['schemaVersion','kind','ownerAccountId','deviceId',
+  'transactionId','ownerEpoch','grantGeneration','challengeNonce',
+  'brokerSha256','processCreationIdentity','externalSequence'] as const;
+const aclKey=(s:string)=>path.win32.normalize(s).toLowerCase();
+export function assessCoreNativeAclAndDispatchSource(
+  stage:CoreStageManifest,
+  bootstrap:CoreBootstrapEvidence,
+  atomic:CoreAtomicSwitchEvidence,
+  acl:CoreNativeAclV2Evidence,
+  pins:CoreInstallerDispatchPins,
+  witness:CoreInstallerPermitWitness,
+):{
+  status:'native_acl_and_permit_source_only';
+  nativeHighTokenAttested:false;
+  ownerOsConsentPhysicallyConfirmed:false;
+  executionApproved:false;productionApproved:false;
+}{
+  if(!stage?.files||!bootstrap?.ownerKey||!atomic){
+    refuse('NATIVE_ACL_V2_INCOMPLETE_OR_UNSAFE');
+  }
+  if(!acl||acl.kind!=='windows_core_broker_protected_tree_readonly_v2'||
+    acl.requestEnvelopeVersion!==1||
+    acl.inputsInsideRoot!==true||acl.rejectedOutOfRootPaths?.length!==0||
+    acl.allInspectedPathsHaveAclEvidence!==true||
+    acl.anyInspectedPathUnsafe!==false||
+    acl.importListIndependentlyEnumerated!==false||
+    acl.signedImportManifestVerified!==false||
+    acl.protectedCompleteImageTreeAttested!==false||
+    acl.productionReady!==false||acl.elevatedCoreDispatchEnabled!==false||
+    !Array.isArray(acl.inspectedEntries)||
+    !Array.isArray(acl.acceptedInputPaths)||
+    !Number.isSafeInteger(acl.inspectedFilesCount)||
+    acl.inspectedFilesCount<stage.files.length||
+    !stage.files.every(f=>acl.acceptedInputPaths.some(p=>
+      aclKey(p)===aclKey(f.path)))){
+    refuse('NATIVE_ACL_V2_INCOMPLETE_OR_UNSAFE');
+  }
+  // Bind the exact signed imported files and *every* Windows ancestor to
+  // the native provider's inspected evidence. A path-name-only v1 report
+  // or a non-existent 8.3 alias cannot silently inherit a protected ACL.
+  const required=new Set<string>();
+  for(const f of [...stage.files,{path:bootstrap.ownerKey.blobPath}]){
+    let current=aclKey(f.path);
+    while(true){
+      required.add(current);
+      const parent=aclKey(path.win32.dirname(current));
+      if(parent===current)break;
+      current=parent;
+    }
+  }
+  const listed=new Set<string>();
+  for(const entry of acl.inspectedEntries){
+    if(!entry||typeof entry.path!=='string'||
+      entry.evidenceAvailable!==true||
+      entry.broadLowTrustWriteFound!==false||
+      entry.reparsePointDetected!==false){
+      refuse('NATIVE_ACL_V2_INCOMPLETE_OR_UNSAFE');
+    }
+    const key=aclKey(entry.path);
+    if(listed.has(key))refuse('NATIVE_ACL_V2_DUPLICATE_PATH');
+    listed.add(key);
+  }
+  if([...required].some(p=>!listed.has(p))||
+    !listed.has(aclKey(acl.protectedRoot))||
+    !acl.acceptedInputPaths.some(p=>aclKey(p)===aclKey(bootstrap.ownerKey.blobPath))){
+    refuse('NATIVE_ACL_V2_MISSING_SIGNED_IMPORT_OR_PARENT');
+  }
+  const p=witness?.signedPermit;
+  if(!p||!pins||!witness||
+    witness.independentlyAuthenticated!==true||
+    witness.singleUseReserved!==true||
+    witness.revoked!==false||witness.unknownMutation!==false||
+    p.schemaVersion!==1||p.kind!=='core_installer_dispatch_permit_source_v1'||
+    !ID.test(p.ownerAccountId)||!ID.test(p.deviceId)||
+    p.ownerAccountId!==pins.ownerAccountId||
+    p.deviceId!==pins.deviceId||
+    p.ownerAccountId!==bootstrap.record.ownerAccountId||
+    p.deviceId!==bootstrap.record.deviceId||
+    p.transactionId!==bootstrap.record.transactionId||
+    p.ownerEpoch!==bootstrap.record.ownerEpoch||
+    p.ownerEpoch!==pins.ownerEpoch||
+    !Number.isSafeInteger(p.grantGeneration)||p.grantGeneration<1||
+    p.grantGeneration!==pins.grantGeneration||
+    !/^[a-f0-9]{64}$/.test(p.challengeNonce)||
+    p.challengeNonce!==pins.expectedChallengeNonce||
+    !Number.isSafeInteger(p.externalSequence)||
+    p.externalSequence<pins.minimumExternalSequence||
+    p.externalSequence!==atomic.externalSequence||
+    p.brokerSha256!==atomic.installedAfterCutover.sha256||
+    p.processCreationIdentity!==atomic.nativeTaskCreationIdentity||
+    atomic.ownerEpoch!==p.ownerEpoch||
+    atomic.transactionId!==p.transactionId){
+    refuse('DISPATCH_PERMIT_OWNER_NONCE_EPOCH_STALE');
+  }
+  // An out-of-band Ed25519 authority signature prevents plain JSON
+  // ownerEpoch/nonce replacement. Only the real off-host non-restorable
+  // CAS could establish uniqueness and revoke ordering at runtime.
+  detached(canon(p,permitFields),witness.signatureBase64,pins.authorityPublicKeyPem);
+  return{
+    status:'native_acl_and_permit_source_only',
+    nativeHighTokenAttested:false,
+    ownerOsConsentPhysicallyConfirmed:false,
+    executionApproved:false,productionApproved:false,
+  };
+}
