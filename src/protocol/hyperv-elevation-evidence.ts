@@ -69,7 +69,7 @@ export function explainHypervElevation(
   }
   if (typeof s.deviceId !== 'string' || !/^[a-zA-Z0-9_.:@-]{1,128}$/.test(s.deviceId) ||
       typeof s.vmName !== 'string' || s.vmName.length < 1 || s.vmName.length > 128 ||
-      /[\u0000-\u001f*?]/.test(s.vmName)) {
+      !/^[\p{L}\p{N}_. ()-]+$/u.test(s.vmName)) {
     throw new Error('HYPERV_TARGET_INVALID');
   }
   const mutation = s.capability !== 'hyperv.vm.status';
