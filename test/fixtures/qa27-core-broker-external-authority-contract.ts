@@ -54,6 +54,8 @@ export interface CurrentOwnerAuthority {
   readonly brokerVersionMatch: boolean;
   readonly requestId: string;
   readonly expectedFingerprint: string;
+  /** New per-begin 32-byte challenge, distinct from a historically signed claim. */
+  readonly dispatchChallengeNonce: string;
   readonly dispatchAlreadyObserved: boolean;
 }
 export interface RemoteDispatchEvidence {
@@ -66,6 +68,7 @@ export interface RemoteDispatchEvidence {
   readonly claimOwnerEpoch: number;
   readonly claimRequestId: string;
   readonly claimFingerprint: string;
+  readonly claimChallengeNonce: string;
   readonly claimedCapabilityPreapproved: boolean;
   readonly claimExpired: boolean;
   readonly remoteRevokeGenerationCurrent: boolean;
@@ -160,6 +163,10 @@ export function classifySourceOnlyCrossBranchCase(c: CrossBranchCase): CrossBran
     r.claimOwnerEpoch!==a.ownerEpoch ||
     r.claimRequestId!==a.requestId ||
     r.claimFingerprint!==a.expectedFingerprint ||
+    // #712: a correctly signed but WAL-restored permit must not match the
+    // fresh challenge of a new dispatch, even with the same owner/request.
+    !/^[a-f0-9]{64}$/.test(a.dispatchChallengeNonce) ||
+    r.claimChallengeNonce!==a.dispatchChallengeNonce ||
     !r.claimedCapabilityPreapproved || r.claimExpired ||
     !r.remoteRevokeGenerationCurrent)
     return outcome('BLOCKED','EXTERNAL_CLAIM_SCOPE_OR_SIGNATURE_INVALID');
@@ -191,13 +198,14 @@ export const syntheticCrossBranchCase: CrossBranchCase={
     ownerPhysicallyPresentNow:false,ownerEpoch:7,installedOwnerEpoch:7,
     revoked:false,revokeAndDrainPending:false,capabilityPreapproved:true,
     brokerVersionMatch:true,requestId:'req27',expectedFingerprint:'c'.repeat(64),
-    dispatchAlreadyObserved:false,
+    dispatchChallengeNonce:'a'.repeat(64),dispatchAlreadyObserved:false,
   },
   remote:{
     onlineExternalCas:true,issuerSignatureVerified:true,claimSingleUse:true,
     claimOwnerId:'owner27',claimDeviceId:'device27',
     claimSessionId:'session-after-enrollment27',claimOwnerEpoch:7,
     claimRequestId:'req27',claimFingerprint:'c'.repeat(64),
+    claimChallengeNonce:'a'.repeat(64),
     claimedCapabilityPreapproved:true,claimExpired:false,
     remoteRevokeGenerationCurrent:true,claimLostAck:false,
     possibleNativeWriteStarted:false,
