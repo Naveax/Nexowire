@@ -279,6 +279,7 @@ async function openDefaultBrowser(url: string): Promise<void> {
 
 export async function startConnectLoopbackReceiver(input: {
   state: string;
+  expectedOrigin: string;
   timeoutMs?: number;
 }): Promise<{
   callbackUrl: string;
@@ -305,67 +306,71 @@ export async function startConnectLoopbackReceiver(input: {
   let timer: NodeJS.Timeout | undefined;
 
   const server = createServer((request, response) => {
-    try {
-      const url = new URL(
-        request.url ?? '/',
-        'http://127.0.0.1',
-      );
-      if (url.pathname !== CONNECT_CALLBACK_PATH) {
-        response.writeHead(404, {
-          'content-type': 'text/plain; charset=utf-8',
-        });
-        response.end('Not found');
-        return;
-      }
-
-      const state = url.searchParams.get('state') ?? '';
-      const pairingId =
-        url.searchParams.get('pairing_id') ?? '';
-      const token = url.searchParams.get('token') ?? '';
-
-      if (
-        state !== input.state ||
-        !pairingId ||
-        !token
-      ) {
+    void (async () => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const address = server.address();
+      const expectedHost = address && typeof address !== 'string'
+        ? '127.0.0.1:' + address.port : '';
+      const origin = request.headers.origin;
+      const contentType = request.headers['content-type']?.split(';')[0]?.trim().toLowerCase();
+      // Cross-origin form navigation is intentional; the one-time state and
+      // exact hosted origin protect this loopback-only receiver from CSRF.
+      if (request.method !== 'POST' ||
+          url.pathname !== CONNECT_CALLBACK_PATH || url.search ||
+          request.headers.host !== expectedHost ||
+          origin !== input.expectedOrigin ||
+          contentType !== 'application/x-www-form-urlencoded') {
         response.writeHead(400, {
           'content-type': 'text/plain; charset=utf-8',
           'cache-control': 'no-store',
         });
-        response.end(
-          'Nexowire connection callback was rejected.',
-        );
+        response.end('Nexowire connection callback was rejected.');
         return;
       }
-
+      let body = '';
+      for await (const part of request) {
+        body += Buffer.from(part).toString('utf8');
+        if (Buffer.byteLength(body, 'utf8') > 4096) {
+          throw new Error('CONNECT_CALLBACK_TOO_LARGE');
+        }
+      }
+      const fields = new URLSearchParams(body);
+      const keys = [...fields.keys()].sort().join(',');
+      if (keys !== 'pairing_id,state,token' ||
+          fields.get('state') !== input.state ||
+          !fields.get('pairing_id') ||
+          !fields.get('token')) {
+        response.writeHead(400, {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'no-store',
+        });
+        response.end('Nexowire connection callback was rejected.');
+        return;
+      }
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'",
       });
-      response.end(
-        '<!doctype html><meta charset="utf-8"><title>Nexowire</title><body style="font-family:system-ui;background:#090b10;color:#fff;padding:48px"><h1>Bağlandı ✓</h1><p>Nexowire hazır. Bu sekmeyi kapatabilirsin.</p><script>setTimeout(()=>window.close(),900)</script></body>',
-      );
-
+      response.end('<!doctype html><meta charset="utf-8"><title>Nexowire</title><body style="font-family:system-ui;background:#090b10;color:#fff;padding:48px"><h1>Bağlantı alındı</h1><p>İşlem doğrulanıyor. Bu sekmeyi kapatabilirsin.</p></body>');
       if (!settled) {
         settled = true;
         if (timer) clearTimeout(timer);
-        resolveResult?.({ pairingId, token });
+        resolveResult?.({
+          pairingId: fields.get('pairing_id')!,
+          token: fields.get('token')!,
+        });
       }
-    } catch (error) {
-      response.writeHead(400, {
+    })().catch(() => {
+      if (!response.headersSent) response.writeHead(400, {
         'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
       });
       response.end('Invalid callback');
-      if (!settled) {
-        settled = true;
-        if (timer) clearTimeout(timer);
-        rejectResult?.(
-          error instanceof Error
-            ? error
-            : new Error(String(error)),
-        );
-      }
-    }
+      // Invalid requests must not prematurely cancel the valid approval.
+    });
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -547,6 +552,7 @@ export async function connectNexowire(
   const state = randomBytes(32).toString('base64url');
   const receiver = await startConnectLoopbackReceiver({
     state,
+    expectedOrigin: new URL(controlPlaneUrl).origin,
     timeoutMs: options.timeoutMs,
   });
 

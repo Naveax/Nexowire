@@ -58,6 +58,9 @@ test('install view preserves protected local callback pairing and allows leaving
   assert.match(connectJs, /navigator\.clipboard\.writeText/);
   assert.match(connectJs, /Nexowire-Setup\.cmd/);
   assert.match(connectJs, /SHA256SUMS-Windows/);
-  assert.match(connectJs, /window\.location\.replace\(callback\.toString\(\)\)/);
+  assert.match(connectJs, /form\.method = 'POST'/);
+  assert.match(connectJs, /form\.action = callback\.toString\(\)/);
+  assert.match(connectJs, /form\.submit\(\)/);
+  assert.doesNotMatch(connectJs, /callback\.searchParams\.set\('token'/);
   assert.doesNotMatch(connectJs, /eval\(|new Function\(/);
 });
