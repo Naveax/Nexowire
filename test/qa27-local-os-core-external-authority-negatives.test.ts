@@ -171,6 +171,57 @@ test('#700 native publisher/ACL + #702 external claim contract cross-negative ma
     });
   }
 });
+test('QA27 missing #712 nonce barrier: preapproved owner-absent CORE stays eligible, forged consent cannot revive revoked or replayed authority',async()=>{
+  // This is a *pure fixture* of an earlier locally OS-approved Broker. A real
+  // Windows token, Authenticode signature and monotonic external CAS are NOT
+  // obtained here. A valid preapproval must not produce per-command UAC.
+  const healthy=caseWith({
+    authority:{ownerPhysicallyPresentNow:false,dispatchChallengeNonce:'b'.repeat(64)},
+    remote:{claimChallengeNonce:'b'.repeat(64)},
+  });
+  const eligible=classifySourceOnlyCrossBranchCase(healthy);
+  assert.equal(eligible.result,'CONTRACT_CANDIDATE');
+  noPhysicalClaim(eligible);
+
+  let privilegedDispatches=0;
+  const forgedBroker={
+    probe:async()=>({reachable:true,elevated:true,version:'1.0.5'}),
+    execute:async()=>{privilegedDispatches++;throw Error('Unexpected privileged dispatch');},
+  };
+  const forgedPrompt=await inspectWindowsUacStatus({
+    platform:'win32',accessMode:'full',consentCount:async()=>1,
+    broker:forgedBroker,
+  });
+  assert.equal(forgedPrompt.observation,'pending');
+  assert.equal(forgedPrompt.autoClickConsentSupported,false);
+  assert.equal(privilegedDispatches,0);
+
+  // Historical Ed25519 permit can be *correctly signed*, yet carried forward
+  // from a rolled-back journal/another dispatch. New challenge MUST fail even
+  // with unchanged owner, session, capability, request and grant generation.
+  const replay=classifySourceOnlyCrossBranchCase(caseWith({
+    authority:{ownerPhysicallyPresentNow:false,dispatchChallengeNonce:'b'.repeat(64)},
+    remote:{claimChallengeNonce:'a'.repeat(64),issuerSignatureVerified:true,claimSingleUse:true},
+  }));
+  assert.equal(replay.result,'BLOCKED');
+  assert.equal(replay.reason,'EXTERNAL_CLAIM_SCOPE_OR_SIGNATURE_INVALID');
+  noPhysicalClaim(replay);
+
+  // Even a fresh matching challenge cannot reauthorize a revoked CORE lease.
+  // Nor can the forged consent.exe process, elevated Broker probe or absent
+  // physical owner request a new UAC prompt as a fallback.
+  const revoked=classifySourceOnlyCrossBranchCase(caseWith({
+    authority:{
+      ownerPhysicallyPresentNow:false,revoked:true,
+      dispatchChallengeNonce:'b'.repeat(64),
+    },
+    remote:{claimChallengeNonce:'b'.repeat(64),issuerSignatureVerified:true},
+  }));
+  assert.equal(revoked.result,'BLOCKED');
+  assert.equal(revoked.reason,'OWNER_SESSION_OR_EPOCH_REVOKED');
+  noPhysicalClaim(revoked);
+  assert.equal(productionExplain().windows.uacApproval,'unverified');
+});
 test('no UAC auto-click, secure-desktop bypass or arbitrary Broker dispatch capability appeared',()=>{
   const win=capabilitiesForPlatform('win32');
   assert.equal(isReadOnlyCapability('windows.uac.status'),true);
