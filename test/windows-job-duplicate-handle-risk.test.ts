@@ -29,6 +29,21 @@ async function ready(proc:ChildProcessWithoutNullStreams):Promise<void> {
 test('synthetic same-user PROCESS_DUP_HANDLE can retain unnamed Job across guardian crash', {
   skip:process.platform!=='win32',timeout:50000,
 },async()=>{
+  // Independently report the *actual* token tier. A CI runner might run as
+  // administrator; never claim its same-user test proves low-privilege access.
+  const groups=execFileSync('whoami.exe',['/groups'],
+    {encoding:'utf8',windowsHide:true,timeout:8000});
+  const isMedium=/S-1-16-8192\b/.test(groups);
+  const isHigh=/S-1-16-12288\b/.test(groups);
+  const elevated=execFileSync('powershell.exe',['-NoProfile','-NonInteractive',
+    '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
+    {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
+  const lowprivVerified=isMedium && !isHigh && !elevated;
+  // The fixture's independent holder inherits exactly this caller token.
+  // It exercises PROCESS_DUP_HANDLE on a uniquely marked synthetic guardian.
+  console.log('NX_JOB_CALLER_TOKEN lowprivVerified='+lowprivVerified+
+    ' integrity='+ (isMedium?'medium':isHigh?'high':'unknown')+
+    ' elevated='+elevated);
   const marker='NX_HANDLE_P0_'+randomBytes(12).toString('hex');
   const manager=new ProcessManager();
   const started=await manager.start({shell:'powershell',

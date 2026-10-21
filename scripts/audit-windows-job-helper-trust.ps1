@@ -45,11 +45,14 @@ $manifestDigest = if (Test-Path -LiteralPath $manifest -PathType Leaf) {
   (Get-Content -LiteralPath $manifest -Raw).Trim().ToLowerInvariant()
 } else { '' }
 $hashMatches = $manifestDigest -match '^[0-9a-f]{64}$' -and $hash -eq $manifestDigest
+# Explicit built-in module-qualified cmdlets: functions exported by a calling
+# session must not forge Valid Authenticode or protected ACL evidence.
+# Missing module/provider still yields UNAVAILABLE and production NO-GO.
 # Unavailable signature or ACL providers mean missing evidence, never trust.
 $auth = $null
 $authError = ''
 try {
-  $auth = Get-AuthenticodeSignature -LiteralPath $HelperPath -ErrorAction Stop
+  $auth = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $HelperPath -ErrorAction Stop
 } catch {
   $authError = $_.Exception.GetType().Name
 }
@@ -62,8 +65,8 @@ $acl = $null
 $parentAcl = $null
 $aclError = ''
 try {
-  $acl = Get-Acl -LiteralPath $HelperPath -ErrorAction Stop
-  $parentAcl = Get-Acl -LiteralPath $parent.FullName -ErrorAction Stop
+  $acl = Microsoft.PowerShell.Security\Get-Acl -LiteralPath $HelperPath -ErrorAction Stop
+  $parentAcl = Microsoft.PowerShell.Security\Get-Acl -LiteralPath $parent.FullName -ErrorAction Stop
 } catch {
   $aclError = $_.Exception.GetType().Name
   $acl = $null
@@ -82,6 +85,20 @@ foreach($entry in $(if ($aclAvailable) { $acl.Access } else { @() })) {
   $writeMask=0x2 -bor 0x4 -bor 0x10 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
   if ($identity -in $untrustedSids -and (($bits -band $writeMask) -ne 0)) {
     $unsafe+= $identity
+  }
+}
+# Directory replacement is possible even when the EXE DACL is restricted:
+# inherited/create/delete grants on the *parent* are independently dangerous.
+# This is read-only detection, not Windows effective-permissions attestation.
+$unsafeParent=@()
+foreach($entry in $(if ($aclAvailable) { $parentAcl.Access } else { @() })) {
+  if ($entry.AccessControlType -ne 'Allow') { continue }
+  $identity=try { $entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
+    catch { $entry.IdentityReference.Value }
+  $rights=[int64]$entry.FileSystemRights
+  $replaceMask=0x2 -bor 0x4 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
+  if ($identity -in $untrustedSids -and (($rights -band $replaceMask) -ne 0)) {
+    $unsafeParent+= $identity
   }
 }
 $expectedShaOK = $ExpectedReleaseSha256 -match '^[0-9a-fA-F]{64}$' -and
@@ -105,12 +122,15 @@ $evidence=[ordered]@{
   fileAclProtected=[bool]($aclAvailable -and $acl.AreAccessRulesProtected)
   parentAclProtected=[bool]($aclAvailable -and $parentAcl.AreAccessRulesProtected)
   broadWriteGrantFound=$(if ($aclAvailable) { $unsafe.Count -gt 0 } else { $null })
+  parentBroadWriteGrantFound=$(if ($aclAvailable) { $unsafeParent.Count -gt 0 } else { $null })
+  signedReleaseManifestVerified=$false
+  runningImageFileIdentityVerified=$false
   productionReady=$false
 }
 $ready= $hashMatches -and (-not $linked) -and $validSigner -and
   $expectedPublisherOK -and $expectedShaOK -and
   $aclAvailable -and $acl.AreAccessRulesProtected -and $parentAcl.AreAccessRulesProtected -and
-  ($unsafe.Count -eq 0)
+  ($unsafe.Count -eq 0) -and ($unsafeParent.Count -eq 0)
 # Deliberately do NOT declare productionReady based solely on file-level
 # evidence: the caller's signer trust anchor, installation identity, rollback
 # proof, runtime image race and PROCESS_DUP_HANDLE boundary must still be reviewed.

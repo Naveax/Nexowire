@@ -214,3 +214,52 @@ Local Work PC (isolated fixture PIDs only):
   out-of-Job broker descendants, and installed Agent restart/soak.
 - Hosted exact-HEAD CI must be verified after this patch; local PASS never
   upgrades production acceptance.
+
+## 2026-10-21 #608 parity and physical signature/ACL/handle QA
+
+- #608 exact head `d34c0d3c85bc508be50c2e5f532aa964d8325106`:
+  independent CI 7/7 SUCCESS and Release Readiness SUCCESS. Its Win32 Job
+  source/trust/negative-test paths are byte-for-byte identical to the #576
+  `91c69f66de88b755309e3c127f23357adcedfb86` baseline;
+  #608 adds #598 MCP transport integration, not a new Job trust guarantee.
+- Physical read-only Windows Authenticode provider check confirmed the
+  Microsoft-signed `System32/WindowsPowerShell/v1.0/powershell.exe` is
+  `Valid`. A test-only copy of that genuine signed Windows executable
+  preserved signature verification. Replacing the companion SHA digest
+  was rejected, and changing one signed byte while updating its companion
+  SHA also invalidated Authenticode. This is a **system-signed surrogate**,
+  **not** a signed Nexowire Job helper or approved release manifest.
+- `scripts/audit-windows-job-helper-trust.ps1` now calls module-qualified
+  genuine `Microsoft.PowerShell.Security` cmdlets instead of unqualified
+  `Get-AuthenticodeSignature` and `Get-Acl` function names. A caller
+  supplying fake `Valid` / protected-ACL PowerShell functions cannot
+  substitute evidence; an intentionally absent security provider returns
+  `UNAVAILABLE` and stays NO-GO.
+- The audit checks broad writable principals on the **parent directory**,
+  including inherited create/delete/modify rights, not just the EXE DACL.
+  The negative used `icacls` ONLY on a disposable test-owned directory
+  with a synthetic Authenticated Users Modify ACE and proved
+  `parentBroadWriteGrantFound=true`. It also reports
+  `signedReleaseManifestVerified=false` and
+  `runningImageFileIdentityVerified=false` rather than inventing receipts.
+- Actual Work PC shell token was **medium integrity, non-administrator**.
+  An independently spawned same-token synthetic PowerShell was able to
+  `PROCESS_DUP_HANDLE` on its verified fixture guardian and retain a
+  read-only Job handle across guardian force-exit. This confirms a concrete
+  **P0 low-privilege same-user boundary failure**, not a security PASS.
+  Hosted runners must report their own elevation tier rather than claiming
+  medium-integrity proof if they are high-integrity.
+- PID-only `taskkill /PID ... /F` in this reproduction is restricted to the
+  exact test-created guardian, after checking its PID, creation-time and
+  unique command marker. An externally held Job handle leaves the exact
+  root running, and ProcessManager reports `orphaned / unconfirmed` and
+  refuses a second unverified PID termination. Job coverage still means
+  **kernel members only**, with out-of-Job descendants UNKNOWN.
+
+**NO-GO unchanged:** #271 live inherited writable ProgramData ACL;
+#551 real Nexowire-signed installer / protected pinned signing policy and
+rollback trust unaccepted; no independently provisioned production
+Authenticode signing identity or signed/rollback-bound helper manifest;
+no immutable CreateProcess image binding, no hardened guardian handle DACL,
+no live Agent restart or physical installed-production canary. The test
+`productionReady=false` is intentional and must remain so.
