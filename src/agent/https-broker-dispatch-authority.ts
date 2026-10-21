@@ -13,6 +13,7 @@ const op=z.object({
   capability:z.string().min(1).max(128),
   scope:z.object({
     ownerId:id,deviceId:id,deviceEpoch:id,sessionEpoch:id,
+    ownerEpoch:z.number().int().positive().safe(),
     expectedGeneration:z.number().int().positive().safe(),
     requiredPrivilege:z.enum(['CORE','ROOT']),
   }).strict(),
@@ -82,14 +83,19 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
     return parsed.data;
   }
   async beginIfCurrent(request:BrokerDispatchRequest,
-    broker:ProtectedBrokerEvidence):Promise<DispatchClaim>{
+    broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>{
     const input=op.parse(request);
+    if(!/^[0-9a-f]{64}$/.test(challengeNonce))
+      deny('BROKER_DISPATCH_CHALLENGE_INVALID');
     if(broker.verified!==true||!id.safeParse(broker.brokerId).success||
        broker.highIntegrityToken!==true||
+       broker.ownerEpoch!==input.scope.ownerEpoch||
+       broker.grantGeneration!==input.scope.expectedGeneration||
        broker.signedProtectedImage!==true||
        broker.protectedParentAndImports!==true)
       deny('BROKER_DISPATCH_ELEVATION_UNVERIFIED');
-    const result=await this.send('begin',{request:input,broker},true);
+    const result=await this.send('begin',{
+      request:input,broker,challengeNonce},true);
     if(!result)return deny('BROKER_DISPATCH_RECEIPT_MISSING');
     return result;
   }

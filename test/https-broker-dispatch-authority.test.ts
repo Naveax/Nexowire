@@ -43,16 +43,18 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
    }
    if(req.url==='/v1/broker-dispatch/begin'){
     const op=payload.request,scope=op.scope;
-    if(revoked||scope.expectedGeneration!==generation){
+    if(revoked||scope.expectedGeneration!==generation||scope.ownerEpoch!==4){
       respond({error:'grant revoked'},409);return;
     }
     const now=Date.now();
     respond(signed({kind:'broker_dispatch_permit_v1',
       authorityId,brokerId,dispatchId:randomUUID(),
+      challengeNonce:payload.challengeNonce,
       requestId:op.requestId,fingerprint:op.fingerprint,
       capability:op.capability,ownerId:scope.ownerId,
       deviceId:scope.deviceId,deviceEpoch:scope.deviceEpoch,
-      sessionEpoch:scope.sessionEpoch,generation:scope.expectedGeneration,
+      sessionEpoch:scope.sessionEpoch,ownerEpoch:scope.ownerEpoch,
+      generation:scope.expectedGeneration,
       privilege:scope.requiredPrivilege,issuedAtMs:now,
       expiresAtMs:now+1500},forged?impostor.privateKey:signer.privateKey));
     return;
@@ -95,13 +97,14 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
   publicKeyPem:signer.publicKey.export({type:'spki',format:'pem'}).toString(),
   verifyIdentity:async()=>true,
   verifyEffectiveBroker:async()=>({verified:true,brokerId,
+    ownerEpoch:4,grantGeneration:5,
     highIntegrityToken:true,signedProtectedImage:true,
     protectedParentAndImports:true}),
   verifyOwnerRevocation:async()=>true,
  });
  const request=()=>({requestId:randomUUID(),fingerprint:'b'.repeat(64),
   capability:'shell.exec',scope:{ownerId,deviceId:ca.deviceId,
-    deviceEpoch,sessionEpoch,expectedGeneration:5,
+    deviceEpoch,sessionEpoch,ownerEpoch:4,expectedGeneration:5,
     requiredPrivilege:'CORE' as const}});
  assert.equal(await fence.execute(request(),async()=>42),42);
  assert.equal(released,1);
@@ -116,6 +119,7 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
   publicKeyPem:signer.publicKey.export({type:'spki',format:'pem'}).toString(),
   verifyIdentity:async()=>true,
   verifyEffectiveBroker:async()=>({verified:true,brokerId,
+    ownerEpoch:4,grantGeneration:5,
     highIntegrityToken:true,signedProtectedImage:true,
     protectedParentAndImports:true}),
   verifyOwnerRevocation:async()=>true,

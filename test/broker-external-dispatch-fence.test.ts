@@ -34,16 +34,19 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   readonly active=new Set<string>();
   readonly released=new Set<string>();
   generation=7;
+  ownerEpoch=4;
   owner:string;
   device:string;
   deviceEpoch:string;
   session:string;
   revoked=false;revoking=false;unknown=false;forged=false;
   staleSignature=false;claimReplay=false;releaseLost=false;
-  private lastClaim:DispatchClaim|undefined;
+  wrongSignedOwnerEpoch=false;
+  lastClaim:DispatchClaim|undefined;
   private readonly drainWaiters:Array<()=>void>=[];
   readonly holdRevoke=deferred();
-  stallRevoke=false;
+  readonly holdBeginResponse=deferred();
+  stallRevoke=false;stallBeginResponse=false;
   number=0;
   constructor(readonly authorityId:string,
     readonly brokerId:string,
@@ -52,28 +55,32 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
     this.deviceEpoch=identity.epoch;this.session=identity.session;
   }
   async beginIfCurrent(op:BrokerDispatchRequest,
-    broker:ProtectedBrokerEvidence):Promise<DispatchClaim>{
+    broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>{
     if(this.unknown)throw Error('EXTERNAL_TIMEOUT');
+    if(this.claimReplay&&this.lastClaim)return this.lastClaim;
     const x=op.scope;
     if(this.revoked||this.revoking||x.ownerId!==this.owner||
        x.deviceId!==this.device||x.deviceEpoch!==this.deviceEpoch||
-       x.sessionEpoch!==this.session||x.expectedGeneration!==this.generation)
+       x.sessionEpoch!==this.session||x.expectedGeneration!==this.generation||
+       x.ownerEpoch!==this.ownerEpoch)
       throw Error('EXTERNAL_FENCE_DENIED');
     if(this.dispatched.has(op.requestId))throw Error('DISPATCH_REPLAY');
     const dispatchId=randomUUID();
     this.dispatched.set(op.requestId,dispatchId);this.active.add(dispatchId);
+    if(this.stallBeginResponse)await this.holdBeginResponse.promise;
     const now=Date.now();
     const permit=signClaim({kind:'broker_dispatch_permit_v1',
       authorityId:this.authorityId,
-      brokerId:broker.brokerId,dispatchId,
+      brokerId:broker.brokerId,dispatchId,challengeNonce,
       requestId:op.requestId,fingerprint:op.fingerprint,
       capability:op.capability,
       ownerId:x.ownerId,deviceId:x.deviceId,deviceEpoch:x.deviceEpoch,
-      sessionEpoch:x.sessionEpoch,generation:x.expectedGeneration,
+      sessionEpoch:x.sessionEpoch,
+      ownerEpoch:this.wrongSignedOwnerEpoch?x.ownerEpoch+1:x.ownerEpoch,
+      generation:x.expectedGeneration,
       privilege:x.requiredPrivilege,issuedAtMs:now,
       expiresAtMs:now+2500},this.forged
       ?generateKeyPairSync('ed25519').privateKey:authorityKeys.privateKey);
-    if(this.claimReplay&&this.lastClaim)return this.lastClaim;
     this.lastClaim=permit;
     return permit;
   }
@@ -113,7 +120,7 @@ function fixture(){
  const request=(id:string=randomUUID()):BrokerDispatchRequest=>({
   requestId:id,fingerprint,capability:'shell.exec',
   scope:{ownerId,deviceId,deviceEpoch,sessionEpoch,
-    expectedGeneration:7,requiredPrivilege:'CORE'},
+    ownerEpoch:4,expectedGeneration:7,requiredPrivilege:'CORE'},
  });
  const verifyApproval=signedOperatorGrantVerifier(
   ownerKeys.publicKey.export({type:'spki',format:'pem'}).toString());
@@ -122,6 +129,7 @@ function fixture(){
   verifyIdentity:async()=>identity,
   verifyEffectiveBroker:async()=>({
     verified:true,brokerId,highIntegrityToken:high as true,
+    ownerEpoch:4,grantGeneration:7,
     signedProtectedImage:true,protectedParentAndImports:true,
   }),
   verifyOwnerRevocation:async r=>approval&&verifyApproval({
@@ -240,6 +248,72 @@ test('forged Ed25519 owner revoke approval is rejected before remote CAS',async(
  assert.equal(f.remote.revoked,false);
  await code(gate.execute(f.request(),async()=>true),'DISPATCH_REVOKE_PENDING');
 });
+
+test('reserved claim awaiting delivery drains safely during stalled revoke',async()=>{
+ const f=fixture(),gate=f.broker();f.remote.stallBeginResponse=true;
+ let effects=0;
+ const pending=gate.execute(f.request(),async()=>{effects++;return 1});
+ for(let i=0;i<300&&f.remote.active.size!==1;i++)await Promise.resolve();
+ assert.equal(f.remote.active.size,1,'externally reserved claim exists');
+ f.remote.stallRevoke=true;
+ const revoking=gate.revoke(f.revoke());
+ await code(gate.execute(f.request(),async()=>{effects++}),
+  'DISPATCH_REVOKE_PENDING');
+ assert.equal(f.remote.revoked,false);
+ f.remote.holdRevoke.resolve();
+ f.remote.holdBeginResponse.resolve();
+ await code(pending,'DISPATCH_REVOKE_PENDING');
+ const receipt=await revoking;
+ assert.equal(receipt.drained,true);
+ assert.equal(f.remote.active.size,0,'claim was released before remote drain');
+ assert.equal(effects,0,'no side effect started after pending revoke');
+});
+test('wrong current owner epoch and validly signed stale owner epoch refuse dispatch',async()=>{
+ const f=fixture(),gate=f.broker();
+ let executions=0;
+ const wrong=f.request();wrong.scope.ownerEpoch=3;
+ await code(gate.execute(wrong,async()=>++executions),
+  'DISPATCH_OWNER_EPOCH_MISMATCH');
+ f.remote.ownerEpoch=5;
+ await code(gate.execute(f.request(),async()=>++executions),
+  'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(executions,0);
+ const other=fixture(),otherGate=other.broker();
+ other.remote.wrongSignedOwnerEpoch=true;
+ await code(otherGate.execute(other.request(),async()=>++executions),
+  'DISPATCH_PROOF_SCOPE_MISMATCH');
+ assert.equal(executions,0);
+});
+test('signed claim copied through real SQLite WAL restore cannot replay after restart',async t=>{
+ const dir=await mkdtemp(path.join(process.cwd(),'test','nx-587-claim-replay-'));
+ t.after(()=>rm(dir,{recursive:true,force:true}));
+ const file=path.join(dir,'signed.sqlite'),snapshot=path.join(dir,'old.sqlite');
+ const db=new DatabaseSync(file);
+ db.exec('PRAGMA journal_mode=WAL; CREATE TABLE claims(proof TEXT, grant_epoch INTEGER)');
+ const f=fixture(),request=f.request();
+ let executed=0;
+ assert.equal(await f.broker().execute(request,async()=>++executed),1);
+ const firstClaim=f.remote.lastClaim;
+ assert.ok(firstClaim);
+ db.prepare('INSERT INTO claims VALUES (?,?)').run(JSON.stringify(firstClaim),4);
+ await backup(db,snapshot);
+ db.exec('UPDATE claims SET grant_epoch=0; PRAGMA wal_checkpoint(TRUNCATE)');
+ db.close();
+ await copyFile(snapshot,file);
+ const restored=new DatabaseSync(file,{readOnly:true});
+ const row=restored.prepare('SELECT proof,grant_epoch FROM claims').get() as
+   {proof:string;grant_epoch:number};
+ assert.equal(row.grant_epoch,4);
+ assert.deepEqual(JSON.parse(row.proof),firstClaim);
+ restored.close();
+ // Adversarial remote/proxy violates its required single-use CAS guarantee:
+ // it replays exactly the old VALID Ed25519 signature from restored WAL.
+ f.remote.claimReplay=true;
+ await code(f.broker().execute(request,async()=>++executed),
+  'DISPATCH_PROOF_SCOPE_MISMATCH');
+ assert.equal(executed,1,'new Broker instance did not execute old claim');
+});
+
 test('restored isolated SQLite/WAL cannot authorize dispatch after external revoke',async t=>{
  const dir=await mkdtemp(path.join(process.cwd(),'test','nx-587-dispatch-wal-'));
  t.after(()=>rm(dir,{force:true,recursive:true}));
