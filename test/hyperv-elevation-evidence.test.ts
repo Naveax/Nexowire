@@ -131,7 +131,8 @@ test('#617 status is diagnostic, never mutating or an execution permit', () => {
     localApproval: 'not_verified',
     vmId: null,
   }));
-  assert.equal(r.windows.elevationRequired, false);
+  assert.equal(r.windows.elevationRequired, 'unverified');
+  // Get-VM can require Hyper-V Administrators membership even for read-only access.
   assert.notEqual(r.execution.status, 'succeeded');
   assert.equal(r.execution.effectVerified, false);
 });
