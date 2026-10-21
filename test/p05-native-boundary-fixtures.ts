@@ -76,7 +76,8 @@ export function syntheticImportGraph(
       return {
         key:item.key,handle,
         parentRelativeChain:{
-          grantRoot:anchor,steps,destinationLeaf:path.win32.basename(item.path),
+          grantRoot:{...anchor,observedAfter:{...anchor.observedAfter}},
+          steps,destinationLeaf:path.win32.basename(item.path),
         },
         open:{
           provider:'native-retained-handle' as const,

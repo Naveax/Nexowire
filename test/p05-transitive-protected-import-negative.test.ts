@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertNativeProtectedFileBoundary,
+  NativeFileBoundaryError,
   type VerifiedFilesystemBoundary,
 } from '../src/agent/windows-native-file-source-boundary.js';
+import {RelativeAccessDenied} from '../src/agent/windows-native-relative-access.js';
 import {
   assertProtectedImportClosure,ProtectedImportError,
   type ProtectedImportGraph,
@@ -13,7 +15,9 @@ import {
 } from './p05-native-boundary-fixtures.js';
 
 const err=(code:string)=>(error:unknown)=>
-  error instanceof ProtectedImportError&&error.code===code;
+  (error instanceof ProtectedImportError ||
+    error instanceof RelativeAccessDenied ||
+    error instanceof NativeFileBoundaryError) && error.code===code;
 function check(fixture:VerifiedFilesystemBoundary):void {
   assertNativeProtectedFileBoundary(
     syntheticSource,syntheticDestination,'write',
