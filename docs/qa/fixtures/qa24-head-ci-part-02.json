@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 2,
+  "ids": [
+    596,
+    598,
+    599,
+    602,
+    607,
+    608,
+    609,
+    610
+  ],
+  "nodes": [
+    {
+      "pr": 596,
+      "head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "head_ref": "feat/parallel-08-large-artifact-588-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39557944551,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb"
+      }
+    },
+    {
+      "pr": 598,
+      "head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_ref": "fix/mcp-http-body-cap-588-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39502304557,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "cf58e6882e44968698f3f548b353287ba1698747"
+      }
+    },
+    {
+      "pr": 599,
+      "head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+      "head_ref": "test/02-error-ordering-negative-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39492086789,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386"
+      }
+    },
+    {
+      "pr": 602,
+      "head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "head_ref": "fix/09-ai-screen-additional-gui-broker-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39492809099,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e"
+      }
+    },
+    {
+      "pr": 607,
+      "head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "head_ref": "fix/01-monotonic-remote-trust-20261020",
+      "base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "base_ref": "fix/p0-agent-journal-antirollback-20261019",
+      "draft": true,
+      "ci": {
+        "run_id": 39493908690,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093"
+      }
+    },
+    {
+      "pr": 608,
+      "head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+      "head_ref": "test/integration-576-job-598-mcp-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39503650650,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106"
+      }
+    },
+    {
+      "pr": 609,
+      "head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+      "head_ref": "test/02-error-576-integrated-proof-20261021",
+      "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "base_ref": "fix/windows-job-helper-trust-qa-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39596941696,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058"
+      }
+    },
+    {
+      "pr": 610,
+      "head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "head_ref": "test/parallel-14-quota-receipt-provenance-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39597505104,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009"
+      }
+    }
+  ]
+}
