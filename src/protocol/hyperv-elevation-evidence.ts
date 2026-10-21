@@ -41,7 +41,7 @@ export interface HypervElevationExplanation {
   readonly target: { readonly deviceId: string; readonly vmName: string; readonly vmId: string | null };
   readonly windows: {
     readonly currentProcessElevated: boolean | null;
-    readonly elevationRequired: boolean;
+    readonly elevationRequired: boolean | 'unverified';
     readonly processIntegrity: HypervElevationSnapshot['processIntegrity'];
   };
   readonly adminBridge: HypervElevationSnapshot['broker'];
@@ -122,7 +122,7 @@ export function explainHypervElevation(
     target: { deviceId: s.deviceId, vmName: s.vmName, vmId: s.vmId },
     windows: {
       currentProcessElevated: s.currentProcessElevated,
-      elevationRequired: mutation,
+      elevationRequired: mutation ? true : 'unverified',
       processIntegrity: s.processIntegrity,
     },
     adminBridge: { ...s.broker },
