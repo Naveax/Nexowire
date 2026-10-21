@@ -5,6 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
 import {withPrivateDesktopProcessLock} from './windows-private-desktop-lock.js';
+import {
+  recordPrivateDesktopEmergencyStop,
+  assertNoPrivateDesktopEmergencyStop,
+  requireProtectedPrivateDesktopOwner,
+} from './private-desktop-runtime-owner-gate.js';
 import {assertNoObviousPrivateShellBrokerInvocation,assertNoObviousPrivateShellScriptBrokerInvocation,isPrivateGuiBrokerExecutable} from './windows-private-shell-broker-guard.js';
 
 const PRIVATE_DESKTOP_SYSTEM32='C:\\Windows\\System32';
@@ -1260,8 +1265,47 @@ async function start(input:unknown):Promise<{data:unknown}>{
 }
 
 async function killTree(pid:number):Promise<void>{if(!alive(pid))return;await new Promise<void>(resolve=>{const c=spawn('taskkill.exe',['/PID',String(pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});c.once('error',()=>resolve());c.once('exit',()=>resolve());});await waitExit(pid);}
-async function stop():Promise<{data:unknown}>{assertWindows();const p=paths();const s=await readState();if(!s)return{data:{running:false,stopped:false,desktopName:DESKTOP_NAME}};for(const pid of [...s.launchedPids].reverse())await killTree(pid);await killTree(s.shellPid);if(alive(s.hostPid)){try{process.kill(s.hostPid);}catch{}if(!(await waitExit(s.hostPid)))throw new PrivateDesktopError('HOST_STOP_NOT_VERIFIED','Private desktop host did not exit.',{pid:s.hostPid});}await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);return{data:{running:false,stopped:true,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=> '')}};}
-async function launchApp(input:unknown):Promise<{data:unknown}>{assertWindows();const p=LaunchSchema.parse(input);const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))throw new PrivateDesktopError('NOT_RUNNING','Start the private desktop first.');const pid=await launch(p.executable,p.args,p.cwd);await writeState({...s,launchedPids:[...new Set([...s.launchedPids,pid])].slice(-1024)});return{data:{pid,desktopName:DESKTOP_NAME,visibleDesktopChanged:false}};}
+async function stop():Promise<{data:unknown}>{
+  assertWindows();
+  const p=paths();
+  // Persist cancellation even when the runtime state is malformed or missing.
+  // A corrupt state cannot justify any new GUI input or owner PID kill.
+  await recordPrivateDesktopEmergencyStop(p.root);
+  const s=await readState();
+  // This never claims a PID has exited or revokes protected #03 Job authority.
+  if(!s)return{data:{running:false,stopped:false,desktopName:DESKTOP_NAME}};
+  // The persisted host/shell/child PIDs have no signed parent creationTime
+  // or protected kernel Job witness. Never send taskkill against an unproven
+  // owner, even when a PID happens to be currently alive. The native #03
+  // collector must be integrated before OS termination is enabled.
+  await requireProtectedPrivateDesktopOwner('stop');
+  for(const pid of [...s.launchedPids].reverse())await killTree(pid);
+  await killTree(s.shellPid);
+  if(alive(s.hostPid)){
+    try{process.kill(s.hostPid);}catch{}
+    if(!(await waitExit(s.hostPid)))throw new PrivateDesktopError(
+      'HOST_STOP_NOT_VERIFIED','Private desktop host did not exit.',{pid:s.hostPid});
+  }
+  await Promise.all([fs.rm(p.state,{force:true}),fs.rm(p.shellPid,{force:true}),fs.rm(p.ready,{force:true})]);
+  return{data:{running:false,stopped:true,desktopName:DESKTOP_NAME,
+    inputDesktop:await inputDesktop().catch(()=> '')}};
+}
+async function launchApp(input:unknown):Promise<{data:unknown}>{
+  assertWindows();
+  const p=LaunchSchema.parse(input);
+  await assertNoPrivateDesktopEmergencyStop(paths().root);
+  const s=await readState();
+  if(!s)throw new PrivateDesktopError('NOT_RUNNING',
+    'Start the private desktop first.');
+  // Parent PID and shell PID in state.json are not authoritative. Require
+  // protected, creationTime-bound Job evidence BEFORE creating a child.
+  await requireProtectedPrivateDesktopOwner('launch');
+  if(!alive(s.hostPid)||!alive(s.shellPid))throw new PrivateDesktopError(
+    'NOT_RUNNING','Start the private desktop first.');
+  const pid=await launch(p.executable,p.args,p.cwd);
+  await writeState({...s,launchedPids:[...new Set([...s.launchedPids,pid])].slice(-1024)});
+  return{data:{pid,desktopName:DESKTOP_NAME,visibleDesktopChanged:false}};
+}
 async function status():Promise<{data:unknown}>{assertWindows();const s=await readState();if(!s||!alive(s.hostPid)||!alive(s.shellPid))return{data:{running:false,desktopName:DESKTOP_NAME,inputDesktop:await inputDesktop().catch(()=>''),visibleDesktopChanged:false}};let v:Awaited<ReturnType<typeof view>>|undefined;try{v=await view();}catch(error){if(error instanceof PrivateDesktopError&&error.code==='PRIVATE_DESKTOP_INTERNAL_HELPER_INTEGRITY')throw error;}return{data:{running:true,desktopName:DESKTOP_NAME,hostPid:s.hostPid,shellPid:s.shellPid,launchedPids:s.launchedPids.filter(alive),startedAt:s.startedAt,inputDesktop:v?.inputDesktop??(await inputDesktop().catch(()=>'')),windowCount:v?.windows.length??null,visibleDesktopChanged:false}};}
 async function accessibility(input:unknown):Promise<{data:unknown}>{
   assertWindows();
@@ -1850,6 +1894,13 @@ export async function executeWindowsPrivateDesktopCapability(
   capability: string,
   input: unknown,
 ): Promise<unknown> {
+  // Source-level emergency fence applies to every subsequent desktop
+  // mutation, including input/GUI/child launch. Status remains observable
+  // and STOP must remain callable to report or retry protected cleanup.
+  if(capability!=='windows.private_desktop.status'&&
+     capability!=='windows.private_desktop.stop'){
+    await assertNoPrivateDesktopEmergencyStop(paths().root);
+  }
   switch (capability) {
     case 'windows.private_desktop.status':
       return await status();
