@@ -5,7 +5,7 @@
  */
 export type BrokerProbeName =
   | "runningImage" | "windowsToken" | "parentImports"
-  | "ownerCoreGrant" | "externalWitness" | "untrustedSignals";
+  | "ownerCoreGrant" | "externalWitness" | "untrustedSignals" | "statusRequest";
 export type BrokerProbeState = "reported" | "unavailable" | "unknown" | "error";
 export type BrokerEvidenceState = "reported_consistent" | "blocked" | "unknown" | "unavailable";
 export type WindowsIntegrity = "low" | "medium" | "high" | "system" | "unknown";
@@ -20,6 +20,8 @@ export interface RunningBrokerImage {
   readonly running: boolean;
   readonly authenticodeValid: boolean;
   readonly publisherPinned: boolean;
+  /** Claimed signer certificate fingerprint, compare with caller policy pin. */
+  readonly publisherThumbprint: string;
   readonly imageBoundToRunningPid: boolean;
   readonly imageSha256: string;
   readonly version: string;
@@ -35,6 +37,10 @@ export interface ParentImportEvidence {
   readonly importTreeProtected: boolean;
   readonly noUntrustedWrite: boolean;
   readonly boundToRunningImage: boolean;
+  readonly updaterPathProtected: boolean;
+  readonly updaterImportsProtected: boolean;
+  readonly updaterNoUntrustedWrite: boolean;
+  readonly updaterBoundToRunningImage: boolean;
 }
 export interface OwnerCoreGrantEvidence {
   readonly ownerId: string;
@@ -57,6 +63,15 @@ export interface UntrustedSignals {
   readonly consentExeVisible?: boolean;
   readonly uiCoreBadge?: boolean;
 }
+/** Transport status is distinct from verified running Broker/token identity. */
+export interface BrokerStatusRequest {
+  readonly requestId: string;
+  readonly responseRequestId: string | null;
+  readonly transportStatus: "completed" | "failed" | "not_sent";
+  readonly httpStatus: number | null;
+  readonly responseFromCache: boolean;
+  readonly claimedAuthenticated: boolean;
+}
 export interface BrokerReadonlyProvider {
   readonly readRunningImage: () => Promise<ProbeEnvelope<RunningBrokerImage>>;
   readonly readWindowsToken: () => Promise<ProbeEnvelope<BrokerTokenEvidence>>;
@@ -64,25 +79,33 @@ export interface BrokerReadonlyProvider {
   readonly readOwnerCoreGrant: () => Promise<ProbeEnvelope<OwnerCoreGrantEvidence>>;
   readonly readExternalWitness: () => Promise<ProbeEnvelope<ExternalWitnessEvidence>>;
   readonly readUntrustedSignals?: () => Promise<ProbeEnvelope<UntrustedSignals>>;
+  readonly readStatusRequest?: () => Promise<ProbeEnvelope<BrokerStatusRequest>>;
 }
 export interface BrokerPreflightExpectations {
   readonly ownerId: string;
   readonly deviceId: string;
   readonly minimumGrantEpoch: number;
+  /** Pinned signer cert fingerprint from policy, not provider telemetry. */
+  readonly pinnedPublisherThumbprint: string;
   /** Only validates timestamps; no caller-provided clock is trusted attestation. */
   readonly observedNow: Date;
   readonly maxObservationAgeMs?: number;
+  /** Fresh per-status-request ID; replay-cached responses cannot attest to anything. */
+  readonly statusRequestId?: string;
 }
 export type BrokerPreflightCode =
   | "PROVIDER_UNAVAILABLE" | "PROBE_UNKNOWN" | "PROBE_MALFORMED"
   | "EVIDENCE_STALE_OR_FUTURE"
-  | "RUNNING_SIGNED_IMAGE_UNVERIFIED" | "BROKER_TOKEN_NOT_HIGH"
+  | "RUNNING_SIGNED_IMAGE_UNVERIFIED" | "BROKER_PUBLISHER_PIN_MISMATCH" | "BROKER_TOKEN_NOT_HIGH"
   | "BROKER_TOKEN_PID_MISMATCH" | "PARENT_OR_IMPORT_UNTRUSTED"
+  | "UPDATER_ACL_UNTRUSTED"
   | "CORE_OWNER_GRANT_NOT_CURRENT" | "CORE_OWNER_EPOCH_STALE"
   | "CORE_OWNER_REVOKED" | "EXTERNAL_WITNESS_UNAVAILABLE"
   | "EXTERNAL_WITNESS_NOT_VERIFIED" | "EXTERNAL_WITNESS_EPOCH_MISMATCH"
   | "UNAUTHENTICATED_401_NOT_ELEVATION" | "CONSENT_EXE_NOT_APPROVAL"
-  | "UI_CORE_BADGE_NOT_ELEVATION" | "PROVIDER_CLAIMS_NOT_ATTESTATION";
+  | "UI_CORE_BADGE_NOT_ELEVATION" | "PROVIDER_CLAIMS_NOT_ATTESTATION"
+  | "STATUS_REQUEST_NOT_ELEVATION" | "STATUS_REQUEST_REPLAY_OR_CACHE"
+  | "STATUS_REQUEST_UNCORRELATED" | "STATUS_REQUEST_NOT_COMPLETED";
 
 export interface BrokerEvidenceItem {
   readonly probe: BrokerProbeName;
@@ -161,7 +184,9 @@ export async function inspectCoreBrokerPreflight(
   expected: BrokerPreflightExpectations,
 ): Promise<BrokerPreflightResult> {
   if (!textId(expected.ownerId) || !textId(expected.deviceId) ||
+      (expected.statusRequestId !== undefined && !textId(expected.statusRequestId)) ||
       !safeEpoch(expected.minimumGrantEpoch) ||
+      !/^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/.test(expected.pinnedPublisherThumbprint) ||
       !(expected.observedNow instanceof Date) ||
       !Number.isFinite(expected.observedNow.getTime())) {
     throw new TypeError("Invalid scoped CORE preflight expectations");
@@ -170,13 +195,14 @@ export async function inspectCoreBrokerPreflight(
   if (!Number.isSafeInteger(maxAge) || maxAge < 1 || maxAge > 300000) {
     throw new TypeError("Invalid CORE observation freshness window");
   }
-  const [image, token, acl, grant, witness, signals] = await Promise.all([
+  const [image, token, acl, grant, witness, signals, status] = await Promise.all([
     sample(provider.readRunningImage),
     sample(provider.readWindowsToken),
     sample(provider.readParentImports),
     sample(provider.readOwnerCoreGrant),
     sample(provider.readExternalWitness),
     sample(provider.readUntrustedSignals),
+    sample(provider.readStatusRequest),
   ]);
   const clock = expected.observedNow.getTime();
   const issues = (p: AnyEnvelope): BrokerPreflightCode[] =>
@@ -185,7 +211,8 @@ export async function inspectCoreBrokerPreflight(
     stale(p, clock, maxAge) ? ["EVIDENCE_STALE_OR_FUTURE"] : [];
 
   const i = issues(image), t = issues(token), a = issues(acl),
-    g = issues(grant), w = issues(witness), s = issues(signals);
+    g = issues(grant), w = issues(witness), s = issues(signals),
+    q = issues(status);
   const iv = image.value, tv = token.value, av = acl.value,
     gv = grant.value, wv = witness.value, sv = signals.value;
 
@@ -194,6 +221,11 @@ export async function inspectCoreBrokerPreflight(
         iv.authenticodeValid === true && iv.publisherPinned === true &&
         iv.imageBoundToRunningPid === true && goodSha(iv.imageSha256) &&
         textId(iv.version))) i.push("RUNNING_SIGNED_IMAGE_UNVERIFIED");
+  if (image.state === "reported" && isObj(iv) &&
+      (typeof iv.publisherThumbprint !== "string" ||
+       iv.publisherThumbprint.toLowerCase() !== expected.pinnedPublisherThumbprint.toLowerCase())) {
+    i.push("BROKER_PUBLISHER_PIN_MISMATCH");
+  }
   if (token.state === "reported" && isObj(tv)) {
     if (!(tv.integrity === "high" || tv.integrity === "system") ||
         tv.adminEnabled !== true || tv.tokenBoundToProcess !== true) {
@@ -203,10 +235,15 @@ export async function inspectCoreBrokerPreflight(
       t.push("BROKER_TOKEN_PID_MISMATCH");
     }
   }
-  if (acl.state === "reported" && isObj(av) &&
-      !(av.parentChainProtected === true && av.importTreeProtected === true &&
-        av.noUntrustedWrite === true && av.boundToRunningImage === true)) {
-    a.push("PARENT_OR_IMPORT_UNTRUSTED");
+  if (acl.state === "reported" && isObj(av)) {
+    if (!(av.parentChainProtected === true && av.importTreeProtected === true &&
+          av.noUntrustedWrite === true && av.boundToRunningImage === true)) {
+      a.push("PARENT_OR_IMPORT_UNTRUSTED");
+    }
+    if (!(av.updaterPathProtected === true && av.updaterImportsProtected === true &&
+          av.updaterNoUntrustedWrite === true && av.updaterBoundToRunningImage === true)) {
+      a.push("UPDATER_ACL_UNTRUSTED");
+    }
   }
   if (grant.state === "reported" && isObj(gv)) {
     if (gv.ownerId !== expected.ownerId || gv.deviceId !== expected.deviceId ||
@@ -237,6 +274,16 @@ export async function inspectCoreBrokerPreflight(
     if (sv.consentExeVisible === true) s.push("CONSENT_EXE_NOT_APPROVAL");
     if (sv.uiCoreBadge === true) s.push("UI_CORE_BADGE_NOT_ELEVATION");
   }
+  if (provider.readStatusRequest !== undefined && status.state === "reported" && isObj(status.value)) {
+    const v = status.value;
+    q.push("STATUS_REQUEST_NOT_ELEVATION");
+    if (v.responseFromCache === true || (v.httpStatus === 401 && v.claimedAuthenticated === true)) {
+      q.push("STATUS_REQUEST_REPLAY_OR_CACHE");
+    }
+    if (!textId(expected.statusRequestId) || v.requestId !== expected.statusRequestId ||
+        v.responseRequestId !== expected.statusRequestId) q.push("STATUS_REQUEST_UNCORRELATED");
+    if (v.transportStatus !== "completed") q.push("STATUS_REQUEST_NOT_COMPLETED");
+  }
   const result = [
     item("runningImage", image, i),
     item("windowsToken", token, t),
@@ -244,6 +291,7 @@ export async function inspectCoreBrokerPreflight(
     item("ownerCoreGrant", grant, g),
     item("externalWitness", witness, w),
     item("untrustedSignals", signals, s),
+    ...(provider.readStatusRequest !== undefined ? [item("statusRequest", status, q)] : []),
   ];
   const reasons = [...new Set([
     ...result.flatMap(entry => entry.codes),
