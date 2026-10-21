@@ -6,8 +6,8 @@ const read=(x:string)=>JSON.parse(readFileSync(path.resolve('docs/qa',x),'utf8')
 const matrix=read('cross-project-final-acceptance.json');
 const prs=read('PR_SOURCE_AND_RELEASE_GATES.json');
 const audit=read('QA_BLOCKING_FINDINGS_CURRENT_MAIN.json');
-test('44 exact-head PRs include merged 567 anti-rollback and prior 572 CI failure without false final acceptance',()=>{
- assert.equal(prs.entries.length,44);
+test('47 exact-head PRs include merged 567 anti-rollback and prior 572 CI failure without false final acceptance',()=>{
+ assert.equal(prs.entries.length,47);
  assert.equal(prs.entries.find((x:any)=>x.pr===559).prState,'MERGED');
  assert.equal(prs.entries.find((x:any)=>x.pr===563).ci.status,'PASS');
  assert.equal(prs.entries.find((x:any)=>x.pr===553).ci.status,'NOT_VERIFIED');
@@ -16,7 +16,7 @@ test('44 exact-head PRs include merged 567 anti-rollback and prior 572 CI failur
  assert.ok(prs.entries.every((x:any)=>x.production==='BLOCKED'&&x.originalIncident==='BLOCKED'));
 });
 test('all 22 requirements are evaluated against current pinned main and no production pass exists',()=>{
- assert.equal(matrix.baselineSha,'fda2a2da164ea7c6a2fe2271fc669f1fd623cede');
+ assert.equal(matrix.baselineSha,'37d68d938b9c94b8647b92fb592a2b30c075427c');
  assert.equal(matrix.inspectedMainSha,matrix.baselineSha);
  assert.equal(matrix.requirements.length,22);
  const levels=['source','staging','production','incident'];
@@ -27,13 +27,13 @@ test('all 22 requirements are evaluated against current pinned main and no produ
  assert.equal(prs.entries.find((x:any)=>x.pr===572).ci.status,'FAIL');
  assert.equal(prs.entries.find((x:any)=>x.pr===582).ci.status,'FAIL');
  assert.equal(prs.entries.find((x:any)=>x.pr===596).ci.status,'PASS');
- assert.equal(prs.entries.find((x:any)=>x.pr===597).ci.status,'FAIL');
- assert.equal(prs.entries.find((x:any)=>x.pr===598).ci.status,'PASS');
+ assert.equal(prs.entries.find((x:any)=>x.pr===597).ci.status,'PASS');
+ assert.equal(prs.entries.find((x:any)=>x.pr===598).ci.status,'FAIL');
  assert.ok(matrix.requirements.every((x:any)=>levels.slice(1).every(k=>x.levels[k].status==='BLOCKED')));
 });
-test('sixteen priority findings have exact SHA reproduction and correction without false physical proof',()=>{
- assert.equal(audit.findingCount,16);
- assert.equal(audit.findings.length,16);
+test('eighteen priority findings have exact SHA reproduction and correction without false physical proof',()=>{
+ assert.equal(audit.findingCount,18);
+ assert.equal(audit.findings.length,18);
  const ids=new Set();
  for(const f of audit.findings){
   assert.ok(!ids.has(f.id));ids.add(f.id);

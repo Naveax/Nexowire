@@ -1,9 +1,9 @@
 {
   "schema": "nexowire.independent-qa.v1",
-  "capturedAt": "2026-10-20",
-  "baselineSha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+  "capturedAt": "2026-10-21",
+  "baselineSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "Exact main-source evidence is independent of staging, production, original incident. Confirmed P0 negative source FAIL is preserved; a green test of a vulnerability does not prove security acceptance.",
+  "meaning": "Pinned main R01-R22 source states, with separate unmerged PR source successes; staging, production and original incidents remain BLOCKED. Source negative FAIL cannot be overwritten by green child/parent branch CI.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #565 Error Contract exact HEAD 75abbd7d3cd17ca10e8c16e70081161428cc2078 CI 39412566535 SUCCESS, simulated attribution only."
+          "evidence": "#565 Error Contract source merged; #603 canonical Ed25519 owner/device signature negative tests included in current main source. No production provider-origin proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "QA restored old valid SQLite snapshot re-admits completed requestId created:true. #587 co-rollback J+A on #582 remains P0; actual user mutation not executed."
+          "evidence": "#587 remains OPEN; merged main local SQLite restored old valid backup still forgets later requestId. #582 separate SQLite authority can be jointly rolled back with journal; no external monotonic trust anchor."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #558 and #569 local idempotent reconciliation/connection fault negative CI; live upgraded Agent not available."
+          "evidence": "Source journal and reconciliation normal tests pass; #587 joint rollback is an independent stricter P0 gate and physical result not accepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "20-Oct Naveax icacls actual C:\\ProgramData\\NexowireStack + dist/src/cli.js NT AUTHORITY\\Authenticated Users:(I)(M). Broker ACL read ACCESS DENIED both devices; #271 OPEN. #574 CI PASS is not ACL remediation."
+          "evidence": "2026-10-21 live read-only Naveax icacls: legacy C:\\ProgramData\\NexowireStack and ...\\dist\\src\\cli.js Authenticated Users:(I)(M); protected Broker ACL unreadable exit 5 on both devices. #271 remains OPEN."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#553 USB scoped grants and Windows handle TOCTOU physical acceptance missing. Do not infer path safety from CI."
+          "evidence": "#553 scopes and USB handle/TOCTOU physical negative acceptance remain open; no tested signed Agent deployment."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -145,19 +145,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Source reconnect epoch and synthetic WSS fault proxy merged; signed owner online canary missing."
+          "evidence": "New main #603 canonical Ed25519 device owner WSS signatures rejected with 2 new tests, local source subset 16/16 PASS; #569 synthetic reconnect fault tests. Physical WSS owner device production not verified."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "PR #582 browser-live 39416566585 and #597 browser-live 39468688109 independently fail fast-exit stdout/stderr ordering. Child Job ownership cannot claim accepted source postcondition."
+          "evidence": "#598 exact head cf58e6882e44968698f3f548b353287ba1698747 CI 39502304557 browser-live FAIL: fast-exit stdout before exited iteration 8. #608 separate combined Windows Job+#598 branch CI 39503650650 PASS and Release Readiness 39503650638 PASS, NOT merged main."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -197,19 +197,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Shell task-status/transport separation and zero-exit verification source negatives. #572 durable READY timeout is R07/R22 blocker, not blanket shell exit misclassification."
+          "evidence": "Shell task result/transport verification source remains PASS. #572 durable process READY timeout remains separate ProcessManager acceptance blocker R07/R22."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Private GUI indirect COM/WSL and signed helper isolate focus not physical accepted."
+          "evidence": "Private desktop UIA and COM wrapper boundaries source mitigated; real Windows desktop isolation and publisher provenance BLOCKED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -249,19 +249,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged artifact bridge and hash/provenance code source CI success; production artifact creation/retrieval blocked."
+          "evidence": "Merged artifact store digest and #601 staging CANCEL_PENDING tombstone source tests; no live stage/commit across signed two-device release."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -275,19 +275,19 @@
       "levels": {
         "source": {
           "status": "NOT_TESTED",
-          "evidence": "Reliability Doctor UI original cross-project operator diagnostic drill not run."
+          "evidence": "Consolidated Reliability Doctor real operator UI and original physical incident acceptance not independently run."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Quota and 9.5MiB HTTP body budget source CI pass; real 24h throughput/fairness, single logical 1GiB transfer and provider transport limits unaccepted."
+          "evidence": "#601 merge fenced byte quota cancellation source 5/5 PASS, but Cloudflare actual staging and 24h real authenticated WSS work/cost not accepted. #598 9.5MiB four-parser source gate passes only as #608 combined branch."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -327,19 +327,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #565 error contract safe upstream refusal classification source tests only; unknown upstream policy cause remains unknown."
+          "evidence": "Merged #565 classified upstream error without inventing hidden cause; provider production refusal provenance not tested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -353,19 +353,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Real Codex CLI against isolated synthetic issuer source tests merged #577/#578. Production issuer not verified."
+          "evidence": "Merged #577/#578 real Codex CLI against isolated synthetic OAuth issuer; genuine production issuer not accepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "PR #597 head ab6d04d45a47f27344903a1ada08019d6ed0ead3 red ABI test and own QA in-memory MCP tool list: transfer_start/status/cancel absent. #596 isolated 1GiB store PASS does not satisfy one-call API."
+          "evidence": "Main SHA 37d68d938b9c94b8647b92fb592a2b30c075427c lacks public artifact_bridge_transfer_start/status/cancel. #597 child HEAD 2ba9e72e30511318eabb8fc0f37b1aceaa5cd401 CI 39502962661 SUCCESS merged into #596 branch ONLY; #596 HEAD 335046569a38f3a1a3fc82bf851f9b7df7640fdb CI 39557944551 SUCCESS including one-call source contract, not main or physical >256MiB. Keep independent main RED contract."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -405,19 +405,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Private file picker native UIA helper and owner focus physical negative acceptance missing."
+          "evidence": "Private file picker native UIA and owner focus physical negative acceptance not done."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -431,19 +431,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #563 corrected Linux synthetic provenance and host arch tests; physical USB/VM readiness still blocked."
+          "evidence": "Merged #563 source provenance guard, not physical USB/VM driver acceptance."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -457,19 +457,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Progress v1 evidence cannot be promoted to trusted immutable physical task completion; #575 missing trusted Agent seal."
+          "evidence": "Independent verified immutable progress receipts and real bot completion still unaccepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#551 head 5099cd1b43ef0e77e39e8b6c6e130749bb9d9456 CI+readiness success but Nexowire Authenticode signed installer, full 1.0.5 rollback bundle and isolated Windows VM acceptance absent."
+          "evidence": "#551 latest verified head ce4ffdf7f6e57a4070341fe7e1cc2b12855b5a03 CI/Readiness SUCCESS but first-party signed installer, complete sealed rollback bundle, VM and two real Agent 1.0.5 canary proof absent."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 joint SQLite journal+authority co-rollback to old consistent snapshot admits historical requestId B created:true in PR #582 source fixture. Need remote or otherwise non-co-restorable monotonic trust root."
+          "evidence": "#587 co-rollback witness J+A snapshot old epoch can return created:true for later reserved B in #582 isolated source. #601 cancellation byte quota fence is source PASS but cannot replace independent requestId anti-rollback authority."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Naveax and Work PC Agent 1.0.5; no approved live USB/phone/Debian/VM original incident re-run."
+          "evidence": "Both actual Agents still v1.0.5; signed staging rollout/physical original incidents not performed."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "PR #572 exact head 6b3d7eddcab9951dd35c9bd190cc7b61a1d078c8 CI 39284185988 Windows browser-live NW_DURABLE_READY timeout; new independent source negative tests #587 and #588 fail by contract."
+          "evidence": "#572 prior head 3c9dcaf9fc956c51c8c454c587d0f606b16c125b CI 39493135449 FAIL Windows NW_DURABLE_READY and two intentionally red main negative gates. Main exact CI 39558249914 PASS; #596/#608 source branch green does not close QA or production gates."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "No independently verified staging accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "No independently verified production accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "No independently verified incident accepted proof for current main fda2a2da164ea7c6a2fe2271fc669f1fd623cede; unsigned Agent 1.0.5 production not upgraded"
+          "evidence": "No signed up-to-date two-device stage/production/original acceptance for pinned main 37d68d938b9c94b8647b92fb592a2b30c075427c; branch source tests and CI do not confer this status."
         }
       }
     }
@@ -761,10 +761,11 @@
     }
   ],
   "independentReleaseApproval": null,
-  "inspectedMainSha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+  "inspectedMainSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
   "inspectedMainCi": {
-    "conclusion": "NOT_VERIFIED",
-    "runId": null,
-    "reason": "QA review uses source main SHA; do not silently inherit CI from prior merge or PR"
+    "conclusion": "PASS",
+    "runId": 39558249914,
+    "headSha": "37d68d938b9c94b8647b92fb592a2b30c075427c",
+    "scope": "Exact SHA main integration source CI only. Not physical acceptance."
   }
 }

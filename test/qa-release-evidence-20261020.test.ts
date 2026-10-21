@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -30,8 +30,11 @@ test('unresolved source negative tests never elevate staged or production accept
   assert.equal(item.levels.source.status,'FAIL',key);
  }
  assert.equal(prs.entries.find((x:any)=>x.pr===582).ci.status,'FAIL');
- assert.equal(prs.entries.find((x:any)=>x.pr===597).ci.status,'FAIL');
- assert.equal(prs.entries.find((x:any)=>x.pr===598).ci.status,'PASS');
+ assert.equal(prs.entries.find((x:any)=>x.pr===597).ci.status,'PASS');
+ assert.equal(prs.entries.find((x:any)=>x.pr===598).ci.status,'FAIL');
+ const old=read('QA_20261020_EXACT_HEAD_EVIDENCE.json');
+ assert.equal(old.historicalSourceHeads.find((x:any)=>x.pr===597).status,'FAIL');
+ assert.equal(old.historicalSourceHeads.find((x:any)=>x.pr===598).status,'PASS');
  assert.equal(prs.entries.find((x:any)=>x.pr===598).production,'BLOCKED');
  assert.ok(m.requirements.every((x:any)=>['staging','production','incident'].every(k=>x.levels[k].status==='BLOCKED')));
 });
