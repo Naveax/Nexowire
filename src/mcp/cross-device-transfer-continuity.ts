@@ -16,8 +16,12 @@ export type TransferStatus =
 export interface TransferBinding {
   jobId: string;
   ownerId: string;
+  projectId: string;
   sourceDeviceId: string;
   destinationDeviceId: string;
+  sourcePath: string;
+  targetPath: string;
+  stagePath: string;
   sourceSha256: string;
   totalBytes: number;
 }
@@ -53,10 +57,19 @@ export interface TransferCheckpointStore {
 export interface AuthenticatedTransferRoute {
   /** These fields MUST come from the authenticated routing context. */
   ownerId: string;
+  projectId: string;
   sourceDeviceId: string;
   destinationDeviceId: string;
   epoch: number;
 }
+
+/** Inject the *current* authoritative owner/device/project grant lookup.
+ * Called before every checkpoint transition, not cached at job creation.
+ * A revoked or unreachable authority fails closed. */
+export type TransferAuthorization = (
+  route: Readonly<AuthenticatedTransferRoute>,
+  binding: Readonly<TransferBinding>,
+) => Promise<boolean>;
 
 export type DestinationReadback = (
   binding: Readonly<TransferBinding>,
@@ -99,7 +112,9 @@ const requireRow = (row: TransferCheckpoint | undefined): TransferCheckpoint => 
 };
 function validateBinding(binding: TransferBinding): void {
   if (!uuid.test(binding.jobId) ||
-      !binding.ownerId || !binding.sourceDeviceId || !binding.destinationDeviceId ||
+      !binding.ownerId || !binding.projectId ||
+      !binding.sourceDeviceId || !binding.destinationDeviceId ||
+      !binding.sourcePath || !binding.targetPath || !binding.stagePath ||
       binding.sourceDeviceId === binding.destinationDeviceId ||
       !sha.test(binding.sourceSha256) ||
       !safeBytes(binding.totalBytes)) {
@@ -112,6 +127,7 @@ function assertScope(
 ): void {
   const b = row.binding;
   if (!route.ownerId || route.ownerId !== b.ownerId ||
+      !route.projectId || route.projectId !== b.projectId ||
       route.sourceDeviceId !== b.sourceDeviceId ||
       route.destinationDeviceId !== b.destinationDeviceId) {
     deny('TRANSFER_ROUTE_DENIED', 'Authenticated owner or device scope mismatch.');
@@ -127,7 +143,22 @@ export class DurableTransferContinuity {
     private readonly store: TransferCheckpointStore,
     private readonly readback: DestinationReadback,
     private readonly publishedReadback?: PublishedArtifactReadback,
+    private readonly authorize?: TransferAuthorization,
   ) {}
+
+  private async assertCurrentlyAuthorized(
+    row: TransferCheckpoint, route: AuthenticatedTransferRoute,
+  ): Promise<void> {
+    if (!this.authorize) {
+      return deny('TRANSFER_AUTHORITY_UNAVAILABLE', 'Live owner/device grant authority is unavailable.');
+    }
+    let approved = false;
+    try { approved = await this.authorize(route, row.binding); }
+    catch { /* revoked, offline or failed authorization must fail closed */ }
+    if (approved !== true) {
+      return deny('TRANSFER_ACCESS_REVOKED', 'Transfer access is revoked or cannot be verified.');
+    }
+  }
 
   async create(binding: TransferBinding, route: AuthenticatedTransferRoute): Promise<TransferCheckpoint> {
     validateBinding(binding);
@@ -136,6 +167,7 @@ export class DurableTransferContinuity {
       offset: 0, status: 'ready',
     };
     assertScope(row, route);
+    await this.assertCurrentlyAuthorized(row, route);
     if (!await this.store.insert(row)) {
       return deny('TRANSFER_JOB_EXISTS', 'A durable transfer with this UUID already exists.');
     }
@@ -145,10 +177,13 @@ export class DurableTransferContinuity {
   async inspect(jobId: string, route: AuthenticatedTransferRoute): Promise<TransferCheckpoint> {
     const row = requireRow(await this.store.read(jobId));
     assertScope(row, route);
+    await this.assertCurrentlyAuthorized(row, route);
     return row;
   }
 
-  private async save(old: TransferCheckpoint, next: TransferCheckpoint): Promise<TransferCheckpoint> {
+  private async save(old: TransferCheckpoint, next: TransferCheckpoint,
+    route: AuthenticatedTransferRoute): Promise<TransferCheckpoint> {
+    await this.assertCurrentlyAuthorized(old, route);
     const updated = { ...next, revision: old.revision + 1 };
     if (!await this.store.compareAndSwap(old.binding.jobId, old.revision, updated)) {
       return deny('TRANSFER_CAS_CONFLICT', 'Durable transfer checkpoint revision changed.');
@@ -186,7 +221,7 @@ export class DurableTransferContinuity {
         requestId, epoch: old.epoch, offset: input.offset,
         length: input.length, sha256: input.sha256, ackObserved: false,
       },
-    });
+    }, input.route);
   }
 
   /**
@@ -205,7 +240,7 @@ export class DurableTransferContinuity {
       return false;
     }
     if (pending.ackObserved) return true;
-    await this.save(old, { ...old, pending: { ...pending, ackObserved: true } });
+    await this.save(old, { ...old, pending: { ...pending, ackObserved: true } }, input.route);
     return true;
   }
 
@@ -221,7 +256,7 @@ export class DurableTransferContinuity {
       ...old,
       epoch: input.nextEpoch,
       status: old.status === 'awaiting_ack' ? 'unknown' : old.status,
-    });
+    }, input.oldRoute);
   }
 
   /** Never automatically retries an UNKNOWN mutation. A readback mismatch
@@ -244,14 +279,14 @@ export class DurableTransferContinuity {
         observed.sha256 !== pending.sha256) {
       // Make the result explicitly UNKNOWN, never re-dispatch automatically.
       if (old.status === 'unknown') return old;
-      return this.save(old, { ...old, status: 'unknown' });
+      return this.save(old, { ...old, status: 'unknown' }, route);
     }
     const offset = pending.offset + pending.length;
     return this.save(old, {
       ...old, offset,
       status: offset === old.binding.totalBytes ? 'verified' : 'ready',
       pending: undefined,
-    });
+    }, route);
   }
 
   /** Cancellation with an uncertain write retains an operator-visible
@@ -262,7 +297,7 @@ export class DurableTransferContinuity {
         old.status === 'cancel_pending') return old;
     return this.save(old, {
       ...old, status: old.pending ? 'cancel_pending' : 'cancelled',
-    });
+    }, route);
   }
 
   /** Publication belongs to #08; caller text can never certify completion.
@@ -280,6 +315,6 @@ export class DurableTransferContinuity {
         attested.sha256 !== old.binding.sourceSha256) {
       return deny('TRANSFER_PUBLISH_UNVERIFIED', 'Trusted publication readback did not match.');
     }
-    return this.save(old, { ...old, status: 'complete' });
+    return this.save(old, { ...old, status: 'complete' }, route);
   }
 }
