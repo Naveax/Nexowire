@@ -41,9 +41,19 @@ import {promises as fs} from 'node:fs';
 import {executeWindowsPrivateDesktopCapability as desktop} from '../src/agent/windows-private-desktop.js';
 import {executeWindowsWindowCapability} from '../src/agent/windows-window-control.js';
 
-test('real isolated Windows desktop rejects new brokers with no process or Default-focus change',{
-  skip:process.platform!=='win32',timeout:90_000,
+test('GUI broker refusals are enforced in CI; physical private desktop is explicit opt-in',{
+  timeout:90_000,
 },async t=>{
+  // Source-only CI must not try to CreateDesktop on an unattended Windows
+  // runner. The security rejection is exercised unconditionally; the
+  // separate physical WinSta0 fixture runs only with explicit authorization.
+  for(const executable of ['regsvr32.exe','runas.exe','schtasks.exe','forfiles.exe']){
+    assert.throws(()=>assertNoPrivateDesktopBrokeredExecutable(executable),
+      (error:unknown)=>error instanceof Error&&'code'in error&&
+        error.code==='PRIVATE_DESKTOP_SHELL_BROKER_UNISOLATED');
+  }
+  if(process.platform!=='win32'||
+     process.env.NEXOWIRE_PRIVATE_DESKTOP_PHYSICAL_ACCEPTANCE!=='1')return;
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nx-private-additional-brokers-'));
   const prior=process.env.NEXOWIRE_PRIVATE_DESKTOP_DIR;
   const priorShortcut=process.env.NEXOWIRE_PRIVATE_DESKTOP_SKIP_SHORTCUT;
