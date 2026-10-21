@@ -1,0 +1,31 @@
+name: QA19 Windows #709 unchanged acceptance
+
+on:
+  pull_request:
+    branches:
+      - fix/03-protected-tree-hosted-path-binding-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  qa19-hosted:
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Compile source-built synthetic Windows Job helper
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Run unchanged 100-cycle stdout/stderr-before-exit and PID+FILETIME spoof tests
+        run: node --test --test-concurrency=1 --import tsx test/qa-19-windows-job-hosted-fast-exit.test.ts
+      - name: Independent native file identity and fail-closed provider negatives
+        run: node --test --test-concurrency=1 --import tsx test/qa-19-709-independent-file-identity.test.ts
+      - name: UNMODIFIED original protected-tree, process witness, signing and ACL security tests
+        run: node --test --test-concurrency=1 --import tsx test/core-broker-protected-tree.test.ts test/core-broker-process-witness.test.ts test/windows-job-helper-acl-publisher.test.ts test/windows-broker-provider-attestation.test.ts
