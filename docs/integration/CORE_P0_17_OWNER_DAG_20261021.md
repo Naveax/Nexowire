@@ -31,7 +31,7 @@ Snapshot: 2026-10-21, verified `main` `4c5c810134c020cd04a5ef2be5c1138ea1954ad0`
 | PR | Exact HEAD | GitHub workflow evidence | Gate |
 |---|---|---|---|
 | #618 | `512a1764d65efbfb448577687225d71e3a845a8d` | `39605003581` FAIL (browser-live fast-exit stdout, 6/7 jobs pass) | DRAFT/NO-MERGE |
-| #619 | `6f6c2b3812afadadaa0f123f5d40105eead6d054` | `39604390404` SUCCESS on child base #618 | child only; parent failure remains |
+| #619 | `bc5c6d84bdb35534ed6223e2b4a36e8f4190ae22` | `39608505640` IN_PROGRESS on child base #618; prior SHA `6f6c2b38...` had CI SUCCESS | child only; parent failure remains |
 | #620 | `4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4` | `39604898508` FAIL (Windows Authenticode fixture exit 1, lowtrust ACL fixture `null` rather than true) | DRAFT/NO-MERGE |
 | #574 | `2adf0e29fd41914a842cafd7fdadef25d24da103` | `39604153782` FAIL | DRAFT/NO-MERGE |
 | #576 | `a3946c1f25b8ba151baf945b5acacc7aafbd66c3` | `39598258315` FAIL Windows signature and ACL fixture; `39598258314` SUCCESS other workflow | DRAFT/NO-MERGE |
@@ -39,6 +39,8 @@ Snapshot: 2026-10-21, verified `main` `4c5c810134c020cd04a5ef2be5c1138ea1954ad0`
 | #614 | `ef1e3b23b01300e5f3bfe3769701b5b1446db5bd` | `39598693419` SUCCESS | child #607; PostgreSQL contract simulation is NOT external authority acceptance |
 | #616 | `94b92e01219aca3cd4ca86775fe4b61a72ac53c4` | `39598755514` SUCCESS | child #596; no installed 1GiB physical transfer claim |
 | #551 | `9fdee36897ded643594795ba354fc25e894b65c3` | `39606595531`, `39606595530` IN PROGRESS at snapshot | DRAFT; no signing/rollback/production approval |
+
+Additional 2026-10-21 isolated **UNMERGED** source proof: main + #618 (`512a1764...`) + newer #619 (`bc5c6d84...`) + #620 (`4ba879f5...`) three-way merged cleanly in a private worktree, preview `62de891b2749160814c7dc3a43bb473271e988bd`, typecheck/build PASS, **43/43** non-elevated negative unit tests PASS. This does NOT override exact-head Windows CI failures for #618/#620 or the in-progress new #619 CI. No UAC/Hyper-V call, elevated shell, installer or real ACL mutation occurred.
 
 Existing independent #00 main-source test on `4c5c810...`: `test/core-elevation-effective-truth-matrix.test.ts` plus existing authorization/ROOT/CORE tests 21/21 PASS, typecheck/build PASS. No native elevated operation was executed.
 
