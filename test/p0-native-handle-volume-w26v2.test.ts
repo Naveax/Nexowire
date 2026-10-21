@@ -103,8 +103,12 @@ function matchingGuid(handleGuidPath: string, mountedVolume: string) {
 test('W26v2 Windows: GetFinalPathNameByHandle GUID volume survives rename, not new path',
   { skip: windowsOnly, timeout: 60000 }, async t => {
     const dir = await temporary(t);
-    const previous = path.join(dir, 'renamed-source.bin');
-    const moved = path.join(dir, 'renamed-target.bin');
+    const ownerApproved = path.join(dir, 'owner-approved');
+    const outsideGrant = path.join(dir, 'different-owner-scope');
+    await fs.mkdir(ownerApproved);
+    await fs.mkdir(outsideGrant);
+    const previous = path.join(ownerApproved, 'renamed-source.bin');
+    const moved = path.join(outsideGrant, 'renamed-target.bin');
     await fs.writeFile(previous, Buffer.from('original-valid-data'));
     const data = native({
       before: '[NxW26V2]::Inspect(' + q(previous) + ')',
@@ -126,6 +130,17 @@ test('W26v2 Windows: GetFinalPathNameByHandle GUID volume survives rename, not n
     assert.equal(replacement[3]!.toLowerCase(), newName[3]!.toLowerCase());
     assert.notEqual(held[1]!.toLowerCase(), held[3]!.toLowerCase(),
       'final handle GUID path changes on rename');
+    // A pinned OS file identity does NOT carry an old user's path permission
+    // into a different delegated root after rename.
+    const scope: ScopedGrant = {
+      owner: 'owner-verified', device: 'device-A', epoch: 39n,
+      allowedPath: previous, fileId: before[0]!, volumeGuid: before[3]!,
+      stream: null,
+    };
+    assert.equal(accept(scope, { ...scope }), true);
+    assert.equal(accept(scope, { ...scope, allowedPath: moved }), false);
+    assert.equal(accept(scope, { ...scope, owner: 'different-owner' }), false);
+    assert.equal(accept(scope, { ...scope, epoch: 38n }), false);
     assert.equal(await fs.readFile(previous, 'utf8'), 'BAD');
     assert.equal(await fs.readFile(moved, 'utf8'), 'original-valid-data');
   });
