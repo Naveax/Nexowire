@@ -8,6 +8,25 @@ While this source-only review was in progress, **#606 was merged** at `d21b01ab6
 
 The new pull request must use the independent rebased HEAD's own CI; the original #606 run 7/7 is valid **only** for its original SHA. No production deployment, cloud account access or physical native file operation was added.
 
+## Fresh isolated-current-main benchmark (21 October)
+
+The newly isolated review branch is based on **main `4c5c810134c020cd04a5ef2be5c1138ea1954ad0`**, after #606 MERGED. A bounded opt-in test actually ran **against source commit `dbc5e679839ede86bae74f93d646d99534f70916`**, generating immutable [s5-http-4mib-main4c-20261021.json](reports/s5-http-4mib-main4c-20261021.json). Its separate source SHA is intentional: subsequent documentation-only commits must not be presented as the exact measured executable.
+
+| Fresh current-main local result | Observed |
+| --- | ---: |
+| Four simultaneous HTTP payloads | 4 × 1,048,576 bytes, SHA-256 matched at local receiver |
+| Small identity POSTs served while four requests active | 20 / 20 |
+| Small p50 / p95 / p99 | 34.462 / **35.688** / **36.871** ms |
+| Large p50 / p95 / p99 | 108.569 / **111.841** / **111.841** ms |
+| Fifth large / gzip compressed small admission | HTTP 503 × 1 / HTTP 503 × 1 |
+| Too-large Content-Length declaration | HTTP 413 × 1 |
+| Socket backpressure writes | 64 |
+| Peak process RSS growth | 13,099,008 bytes (12.49 MiB) |
+| Actual production Hub parser tested / 101+ public WSS / real native completions | **No / 0 / 0** |
+| Authenticated Cloudflare bill metrics / 24h soak | **Not measured / Not run** |
+
+The exact source code uses client-side `performance.now()` from HTTP request creation to completed response; quantiles use nearest-rank `ceil(pN)-1`, with N=20 small and N=4 large. This is a **single-run localhost synthetic MCP fixture** only. Actual #598 Express/gzip parser, network TLS, live tools and paid provider counters were not invoked. Comparing these p95/p99 values to the older source SHA `e71b89d...` is not a performance regression claim, because Work PC load varied and no confidence intervals were measured.
+
 ## Git and CI provenance
 
 - Reviewed remote `main` SHA: `37d68d938b9c94b8647b92fb592a2b30c075427c`. This S5-only branch was rebased onto that exact commit. Main also includes #601's cancellation byte-budget fencing and #603's noncanonical signature rejection; no code in their ownership areas was changed.
