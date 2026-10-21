@@ -89,7 +89,14 @@ export class ProposedOwnerWssEnrollmentIssuer {
     Promise<SignedOwnerPublicWssEnrollment>{
     const bytes=serializeOwnerWssDeviceProof(request);
     if(!SIGNATURE.test(request.deviceSignature)){
-      throw new Error('Malformed Ed25519 device possession signature');
+      throw new Error('Malformed Ed25519 device possession signature encoding');
+    }
+    const signatureBytes=Buffer.from(request.deviceSignature,'base64url');
+    // Reject alternate spellings of the same Ed25519 signature BEFORE
+    // owner lookup and before consuming an irreversible nonce.
+    if(signatureBytes.length!==64||
+      signatureBytes.toString('base64url')!==request.deviceSignature){
+      throw new Error('Malformed Ed25519 device possession signature encoding');
     }
     const authenticated=await this.authenticate(request.bearerToken);
     if(!authenticated||!ID.test(authenticated.accountId)||
@@ -140,7 +147,7 @@ export class ProposedOwnerWssEnrollmentIssuer {
       const pub=createPublicKey(k.public_key_pem);
       if(pub.asymmetricKeyType!=='ed25519'||
         !verifySignature(null,bytes,pub,
-          Buffer.from(request.deviceSignature,'base64url'))){
+          signatureBytes)){
         throw new Error('Device possession proof invalid');
       }
       // Atomic replay exclusion. A failed signing operation rolls back nonce use.

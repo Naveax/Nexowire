@@ -246,3 +246,21 @@ test('external Ed25519 signing handle produces a proof the real staging issuer a
     await assert.rejects(issuer.issue(signedProof));
   }finally{db.close()}
 });
+test('device PoP rejects alternate base64url spelling before nonce is consumed',async()=>{
+  const {db,issuer}=setup();
+  try{
+    const good=claim();
+    const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const end=alphabet.indexOf(good.deviceSignature.at(-1)!);
+    const altered=good.deviceSignature.slice(0,-1)+alphabet[end^1];
+    assert.notEqual(altered,good.deviceSignature);
+    assert.deepEqual(Buffer.from(altered,'base64url'),
+      Buffer.from(good.deviceSignature,'base64url'));
+    await assert.rejects(issuer.issue({...good,deviceSignature:altered}),
+      /signature encoding/);
+    const nonceCount=(db.prepare(
+      'SELECT COUNT(*) AS n FROM proposed_owner_wss_enrollment_nonces'
+    ).get() as {n:number}).n;
+    assert.equal(nonceCount,0);
+  }finally{db.close()}
+});

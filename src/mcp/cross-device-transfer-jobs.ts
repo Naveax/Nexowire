@@ -4,6 +4,8 @@ import { hostname } from 'node:os';
 import path from 'node:path';
 
 import * as z from 'zod';
+import { requireTrustedAuthority, requireMonotonicLease,
+  type TrustedTransferAuthority, TransferTrustError } from '../workspace/artifact-job-trust.js';
 
 // Source/destination interaction must go through existing authorized native
 // capabilities. Never expose binary bodies through this public MCP surface.
@@ -38,6 +40,7 @@ const jobSchema = z.object({
   bytesTotal: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   bytesConfirmed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   sha256: hex, sourceModifiedAt: z.string().optional(),
+  fencing: z.object({ epoch: z.number().int().positive(), token: z.string().min(32).max(256) }).strict().optional(),
   state: stateSchema, errorCode: z.string().optional(),
   createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
 }).strict();
@@ -57,7 +60,34 @@ const isNotFound = (error: unknown) => error instanceof Error &&
 export class CrossDeviceTransferJobs {
   private readonly workers = new Map<string, Promise<void>>();
   private readonly modifications = new Map<string, Promise<void>>();
-  constructor(private readonly root: string, private readonly remote: TransferRemote) {}
+  constructor(
+    private readonly root: string, private readonly remote: TransferRemote,
+    private readonly trust?: {
+      authority?: TrustedTransferAuthority;
+      /** Hosted production must set true; disabling is only for isolated legacy fixtures. */
+      requireExternalAuthority: true;
+    },
+  ) {}
+  private async assertFence(job: TransferJob, stage: 'WRITE' | 'PUBLISH',
+    offset: number): Promise<void> {
+    if (!this.trust) return; // pre-existing isolated legacy test path only
+    const authority = this.trust.authority;
+    requireTrustedAuthority(authority);
+    requireMonotonicLease(job.fencing);
+    await authority.assertCurrent(job, job.fencing, stage, offset);
+  }
+  private async acquireFence(job: TransferJob, mode: 'new' | 'resume'): Promise<void> {
+    if (!this.trust) return;
+    const authority = this.trust.authority;
+    requireTrustedAuthority(authority);
+    const candidate = await authority.acquire(job, mode);
+    requireMonotonicLease(candidate);
+    if (job.fencing && candidate.epoch <= job.fencing.epoch) {
+      throw new TransferTrustError('MONOTONIC_EPOCH_REQUIRED',
+        'Recovery must advance beyond a previous trusted epoch.');
+    }
+    job.fencing = candidate;
+  }
   private file(id: string): string {
     const uuid = z.string().uuid().parse(id);
     return path.join(this.root, uuid + '.json');
@@ -254,6 +284,7 @@ export class CrossDeviceTransferJobs {
       await this.assertWorkerLeaseAvailable(job);
       // Reconcile remote stage and source BEFORE allowing any new write.
       await this.reconcile(job);
+      await this.acquireFence(job, 'resume');
       await this.recoverDeadWorkerLease(job.id);
       job.state = 'QUEUED';
       delete job.errorCode;
@@ -298,6 +329,7 @@ export class CrossDeviceTransferJobs {
       ...(stat.modifiedAt ? { sourceModifiedAt: stat.modifiedAt } : {}),
       state: 'QUEUED', createdAt: now, updatedAt: now,
     });
+    await this.acquireFence(job, 'new');
     const fd = await fs.open(this.file(id), 'wx', 0o600);
     try { await fd.writeFile(JSON.stringify(job) + '\n'); await fd.sync(); }
     finally { await fd.close(); }
@@ -314,8 +346,8 @@ export class CrossDeviceTransferJobs {
         if (job.state === 'CANCEL_REQUESTED') job.state = 'CANCELLED';
         else {
           job.state = job.state === 'MUTATION_UNKNOWN' ? 'MUTATION_UNKNOWN' : 'FAILED';
-          job.errorCode = error instanceof TransferJobError ? error.code :
-            'TRANSFER_REMOTE_ERROR';
+          job.errorCode = error instanceof TransferJobError || error instanceof TransferTrustError
+            ? error.code : 'TRANSFER_REMOTE_ERROR';
         }
       });
     }).finally(() => { this.workers.delete(id); });
@@ -393,6 +425,9 @@ export class CrossDeviceTransferJobs {
         await this.update(id, current => { current.state = 'CANCELLED'; });
         return;
       }
+      // Mandatory external CAS before every potential mutation. A local PID
+      // lease or a co-rollbackable JSON record is not trusted fencing.
+      await this.assertFence(job, 'WRITE', offset);
       const size = Math.min(CHUNK, job.bytesTotal - offset);
       let content = '';
       if (size > 0) {
@@ -445,6 +480,7 @@ export class CrossDeviceTransferJobs {
       current.state = current.state === 'CANCEL_REQUESTED' ? 'CANCELLED' : 'PUBLISHING';
     });
     if (before.state === 'CANCELLED') return;
+    await this.assertFence(before, 'PUBLISH', before.bytesTotal);
     try { await this.remote.moveNoOverwrite(job.targetDeviceId, job.stagePath, job.targetPath); }
     catch (error) {
       await this.update(id, current => {

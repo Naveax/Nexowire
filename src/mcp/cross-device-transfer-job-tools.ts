@@ -4,6 +4,7 @@ import { ArtifactBridgeError } from '../workspace/artifact-bridge.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 import type { BearerAuthorization } from '../security/auth.js';
 import { artifactPrincipal } from './artifact-bridge-tools.js';
+import { TransferTrustError, type TrustedTransferAuthority } from '../workspace/artifact-job-trust.js';
 import { CrossDeviceTransferJobs, TransferJobError,
   type TransferRemote } from './cross-device-transfer-jobs.js';
 
@@ -20,7 +21,7 @@ function result(data: unknown, error = false) {
 async function wrap<T>(fn: () => Promise<T>) {
   try { return result({ ok: true, data: await fn() }); }
   catch (e) {
-    const code = e instanceof TransferJobError || e instanceof ArtifactBridgeError
+    const code = e instanceof TransferJobError || e instanceof ArtifactBridgeError || e instanceof TransferTrustError
       ? e.code : 'TRANSFER_UNAVAILABLE';
     return result({ ok: false, error: { code,
       message: e instanceof Error ? e.message : 'Transfer operation failed.' } }, true);
@@ -30,8 +31,12 @@ export function registerCrossDeviceTransferJobTools(
   server: McpServer, workspaces: WorkspaceStore,
   auth: BearerAuthorization | undefined,
   remote: TransferRemote,
+  authority?: TrustedTransferAuthority,
 ): void {
-  const jobs = new CrossDeviceTransferJobs(workspaces.transferJobsDirectory(), remote);
+  // No external trust root = no hosted file mutation. It is deliberately
+  // impossible for client JSON to supply the authority.
+  const jobs = new CrossDeviceTransferJobs(workspaces.transferJobsDirectory(), remote,
+    { requireExternalAuthority: true, authority });
   const principal = (source: string, target: string) => {
     const src = artifactPrincipal(auth, source);
     const dst = artifactPrincipal(auth, target);
