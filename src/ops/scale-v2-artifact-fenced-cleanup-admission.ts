@@ -24,12 +24,34 @@ export interface IndependentFencedDeletionWitness {
   readonly deletionEpoch:number;readonly fencingEpoch:number;
   readonly receiptId:string;
 }
+/** Readback is from a rollback-independent external CAS + protected disk
+ * authority, not a claimed receipt in client JSON or a local SQLite mirror.
+ * Values MUST be read under the same exclusive writer-fence lease.
+ */
+export interface CurrentFencedDeletionReadback {
+  readonly ownerId:string;readonly deviceId:string;
+  readonly projectId:string;readonly sessionId:string;
+  readonly rootInvocationId:string;
+  readonly ownerEpoch:number;readonly deviceEpoch:number;
+  /** Persistently revoked all old writer generations across every Hub. */
+  readonly writerRevokeEpoch:number;
+  readonly writerStoppedThroughEpoch:number;
+  readonly deletionEpoch:number;readonly fencingEpoch:number;
+  readonly receiptId:string;
+  readonly inFlightNativeWriters:number;
+  readonly deletionState:'VERIFIED_ABSENT';
+}
 /** Must hold the CURRENT external writer fence throughout the callback. */
 export interface TrustedFencedDeletionAuthority {
   withVerifiedFencedDeletion<T>(
     scope:Readonly<ServerBoundArtifactCleanup>,
     apply:(witness:Readonly<IndependentFencedDeletionWitness>)=>Promise<T>,
   ):Promise<T>;
+  /** Read-through authority under the same held lease, never cached ACK. */
+  readbackCurrent(
+    scope:Readonly<ServerBoundArtifactCleanup>,
+    witness:Readonly<IndependentFencedDeletionWitness>,
+  ):Promise<Readonly<CurrentFencedDeletionReadback>>;
 }
 const validId=(x:string)=>typeof x==='string'&&
   /^[A-Za-z0-9_.:@-]{8,128}$/.test(x);
@@ -63,14 +85,11 @@ function validWitness(
     proof.fencingEpoch>=proof.deletionEpoch&&
     validId(proof.receiptId);
 }
-/**
- * RELEASED may mean new release or already released. Never infer a second
- * refund from that return. Disk quota is freed ONCE by persistent ledger
- * tombstone. Minute byte admissions never refund on cancellation/epoch.
- */
+/** A first disk release is distinct from a replay. Neither refunds
+ * already-admitted minute traffic. Not an actual billing refund. */
 export class StagingArtifactFencedCleanupAdmission {
   constructor(
-    private readonly budget:Pick<StagingArtifactByteBudget,'acknowledgeDeletion'>,
+    private readonly budget:Pick<StagingArtifactByteBudget,'acknowledgeDeletionOnce'>,
     private readonly core:TrustedCoreArtifactAuthority|undefined,
     private readonly durable:TrustedFencedDeletionAuthority|undefined,
   ){}
@@ -90,6 +109,31 @@ export class StagingArtifactFencedCleanupAdmission {
       if(!validWitness(witness,scope)){
         throw Error('CLEANUP_INDEPENDENT_WITNESS_INVALID');
       }
+      // Re-read the persisted cross-Hub CAS under the same exclusive fence.
+      // A cached, signed-looking deletion witness is insufficient on revoke.
+      if(typeof this.durable?.readbackCurrent!=='function')
+        throw Error('CLEANUP_MONOTONIC_READBACK_REQUIRED');
+      const current=await this.durable.readbackCurrent(scope,witness);
+      if(!current||current.ownerId!==scope.ownerId||
+        current.deviceId!==scope.deviceId||
+        current.projectId!==scope.projectId||
+        current.sessionId!==scope.sessionId||
+        current.rootInvocationId!==scope.rootInvocationId||
+        current.ownerEpoch!==scope.ownerEpoch||
+        current.deviceEpoch!==scope.deviceEpoch||
+        !epoch(current.writerRevokeEpoch)||
+        current.writerRevokeEpoch<=scope.dispatchedWriterEpoch||
+        current.writerStoppedThroughEpoch<scope.dispatchedWriterEpoch||
+        current.writerStoppedThroughEpoch!==witness.writerStoppedThroughEpoch||
+        current.deletionEpoch!==witness.deletionEpoch||
+        current.fencingEpoch!==witness.fencingEpoch||
+        current.receiptId!==witness.receiptId||
+        current.fencingEpoch<current.writerRevokeEpoch||
+        current.deletionEpoch<current.writerRevokeEpoch||
+        current.inFlightNativeWriters!==0||
+        current.deletionState!=='VERIFIED_ABSENT'){
+        throw Error('CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED');
+      }
       return this.core!.withVerifiedCoreLease(scope,lease=>{
         if(!validCore(lease,scope)){
           throw Error('CLEANUP_CORE_GRANT_INVALID');
@@ -97,12 +141,12 @@ export class StagingArtifactFencedCleanupAdmission {
         // Internal flags are synthesized ONLY after both protected external
         // authorities verified cleanup. Existing #610 ledger independently
         // checks its injected durable proof verifier yet again.
-        const result=this.budget.acknowledgeDeletion({
+        const result=this.budget.acknowledgeDeletionOnce({
           ownerId:scope.ownerId,deviceId:scope.deviceId,
           projectId:scope.projectId,sessionId:scope.sessionId,
           durableDeletionVerified:true,writersStoppedVerified:true,
         });
-        if(result!=='RELEASED'){
+        if(result!=='RELEASED_FIRST'&&result!=='RELEASED_ALREADY'){
           throw Error('CLEANUP_LEDGER_FAIL_CLOSED_'+result);
         }
         return result;

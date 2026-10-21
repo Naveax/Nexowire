@@ -30,6 +30,7 @@ export type BudgetDecision=
   | 'RESERVED'|'ALREADY_RESERVED'|'CHUNK_PENDING'|'CHUNK_COMMITTED'
   | 'CHUNK_ALREADY_COMMITTED'|'COMPLETE'|'ALREADY_COMPLETE'|'RELEASED'
   | 'CANCEL_PENDING'|'ALREADY_CANCEL_PENDING'
+  | 'RELEASED_FIRST'|'RELEASED_ALREADY'
   | 'DENIED_OWNER'|'DENIED_CAPACITY'|'DENIED_RATE'
   | 'DENIED_CONCURRENCY'|'DENIED_REPLAY'|'DENIED_OFFSET'
   | 'DENIED_PENDING'|'DENIED_STATE';
@@ -336,7 +337,11 @@ export class StagingArtifactByteBudget {
       return 'CANCEL_PENDING';
     });
   }
-  acknowledgeDeletion(x:TrustedRemovedReceipt):BudgetDecision {
+  /** Distinguishes a first, atomic disk reservation release from any replay.
+   * Never treat RELEASED_ALREADY as fresh refund or return minute bytes.
+   * Legacy acknowledgeDeletion preserves RELEASED for both conditions.
+   */
+  acknowledgeDeletionOnce(x:TrustedRemovedReceipt):BudgetDecision {
     id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
     id(x.sessionId,'SESSION');
     if(x.durableDeletionVerified!==true ||
@@ -345,7 +350,7 @@ export class StagingArtifactByteBudget {
     return this.transaction(()=>{
       const s=this.session(x.sessionId);
       if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
-      if(s.state==='RELEASED')return 'RELEASED';
+      if(s.state==='RELEASED')return 'RELEASED_ALREADY';
       if(s.state!=='COMPLETE'&&s.state!=='CANCEL_PENDING')return 'DENIED_STATE';
       // Cancelled writes may have an unknown in-flight write/ACK.
       if(s.state==='CANCEL_PENDING'&&
@@ -354,7 +359,12 @@ export class StagingArtifactByteBudget {
         throw Error('TRUSTED_WRITER_FENCE_REQUIRED');
       this.db.prepare('UPDATE budget_artifact_sessions SET state=? WHERE session_id=?')
         .run('RELEASED',x.sessionId);
-      return 'RELEASED';
+      return 'RELEASED_FIRST';
     });
+  }
+  acknowledgeDeletion(x:TrustedRemovedReceipt):BudgetDecision {
+    const result=this.acknowledgeDeletionOnce(x);
+    return result==='RELEASED_FIRST'||result==='RELEASED_ALREADY'
+      ?'RELEASED':result;
   }
 }
