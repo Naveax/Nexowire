@@ -218,7 +218,7 @@ export function fixture(overrides:{
  const coordinator=new WitnessRevokeCoordinator({
   pool:pg,external,authorityId:ids.authorityId,
   verifyPrincipal:identity,verifySession:async v=>v.sessionEpoch===ids.session,
-  verifyOperatorApproval:async()=>true, // TEST ONLY
+  verifyOperatorApproval:overrides.verifyOperatorApproval??(async()=>true), // TEST ONLY default
  });
  const request=(id=randomUUID()):CasRequest=>({
   deviceId:ids.deviceId,epoch:ids.epoch,requestId:id,
