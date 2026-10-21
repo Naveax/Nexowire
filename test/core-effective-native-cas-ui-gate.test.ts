@@ -1,0 +1,129 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {generateKeyPairSync,sign} from 'node:crypto';
+import {
+  projectVerifiedCoreUi,nativeUiSigningBytes,externalUiSigningBytes,
+  type AccessStatusLike,type NativeRuntimeAssessmentLike,
+  type NativeUiReceiptV2,type ExternalUiEpochV2,type UiTrustedPinsV2,
+  type UiEvidenceV2,
+} from '../src/diagnostics/core-effective-native-cas-ui-gate.js';
+
+const at=new Date('2026-10-21T19:00:00.000Z');
+const nkey=generateKeyPairSync('ed25519');
+const ckey=generateKeyPairSync('ed25519');
+const foreign=generateKeyPairSync('ed25519');
+const hash='a'.repeat(64),cred='b'.repeat(64),session='c'.repeat(64);
+const owner='owner',device='device',deviceEpoch='de-17',sessionEpoch='se-8';
+const access:AccessStatusLike={requestedMode:'CORE',state:'EFFECTIVE',effective:true,
+  verifiedNativeHighToken:true,actualElevatedTokenVerified:true,
+  brokerSourceAclVerified:true,authoritySource:'independent-protected-windows-broker',
+  canDispatch:false};
+// This reproduces #700's current output flags even for synthetic all-positive source facts.
+const current700:NativeRuntimeAssessmentLike={actualHighIntegrityBrokerAccepted:false,
+  productionReady:false,reason:'PRODUCTION_EXECUTOR_NOT_INSTALLED'};
+// Hypothetical physically accepted runtime is synthetic only; never observed on #700.
+const hypothetical:NativeRuntimeAssessmentLike={actualHighIntegrityBrokerAccepted:true,
+  productionReady:true,reason:'EXTERNALLY_VERIFIED'};
+const native:NativeUiReceiptV2={schema:'nexowire.qa.ui.native-effective-v2',
+  ownerId:owner,deviceId:device,credentialHash:cred,sessionHash:session,
+  deviceEpoch,sessionEpoch,ownerEpoch:4,grantGeneration:8,
+  brokerImageSha256:hash,brokerVersion:'1.0.5',brokerPid:412,
+  creationFiletime:'134041932000000000',volumeSerialHex:'a1b2c3d4',
+  fileIdHex:'1111111122222222',observedAt:at.toISOString(),
+  highTokenWithEnabledAdministrators:true,protectedPublisherAndRelease:true,
+  protectedExeAndAncestorAcl:true,protectedImportAndUpdaterTree:true,
+  protectedProcessHandleBoundary:true,authenticatedNativeBroker:true,
+  localBootstrapApproved:true};
+const cas:ExternalUiEpochV2={schema:'nexowire.qa.ui.external-epoch-v2',
+  ownerId:owner,deviceId:device,deviceEpoch,sessionEpoch,
+  ownerEpoch:4,grantGeneration:8,revoked:false,observedAt:at.toISOString()};
+const pins:UiTrustedPinsV2={nativeKey:nkey.publicKey,externalCasKey:ckey.publicKey,
+  ownerId:owner,deviceId:device,credentialHash:cred,sessionHash:session,
+  currentDeviceEpoch:deviceEpoch,currentSessionEpoch:sessionEpoch,
+  currentOwnerEpoch:4,currentGrantGeneration:8,installedImageSha256:hash,
+  installedVersion:'1.0.5',currentBrokerPid:412,
+  currentBrokerCreationFiletime:'134041932000000000',
+  currentVolumeSerialHex:'a1b2c3d4',currentFileIdHex:'1111111122222222',now:at};
+function signed(b=native,c=cas):UiEvidenceV2{return {
+  native:{statement:b,signature:sign(null,nativeUiSigningBytes(b),nkey.privateKey).toString('base64url')},
+  external:{statement:c,signature:sign(null,externalUiSigningBytes(c),ckey.privateKey).toString('base64url')},
+}}
+const evaluate=(a=access,r:NativeRuntimeAssessmentLike|null=current700,
+  e:UiEvidenceV2|null=signed(),p=pins)=>projectVerifiedCoreUi(a,r,e,p);
+function denied(a=access,r:NativeRuntimeAssessmentLike|null=hypothetical,
+  e:UiEvidenceV2|null=signed(),p=pins){
+  const result=evaluate(a,r,e,p);
+  assert.equal(result.effective,false);
+  assert.equal(result.state,'PAUSED_UNVERIFIED');
+  assert.equal(result.canDispatch,false);
+  assert.equal(result.uacProvenByAppearance,false);
+  return result;
+}
+test('#700 RED/native SOURCE never establishes EFFECTIVE, even with #669 and #702 synthetic claims',()=>{
+  assert.equal(denied(access,current700).reason,'NATIVE_RUNTIME_NOT_PHYSICALLY_ACCEPTED');
+  assert.equal(denied(access,{...current700,reason:'FULL_PROTECTED_IMPORT_UPDATER_TREE_UNVERIFIED'}).effective,false);
+  assert.equal(denied(access,{...hypothetical,productionReady:false}).effective,false);
+  assert.equal(denied(access,{...hypothetical,pendingEffectUnknown:true}).effective,false);
+});
+test('CORE requested alone, Agent brokerReady, badge, HTTP 401, consent.exe are not authority',()=>{
+  const untrusted={...access,state:'PAUSED_UNVERIFIED' as const,effective:false};
+  assert.equal(denied(untrusted).reason,'ACCESS_NOT_EFFECTIVE');
+  const getter=new Proxy({...untrusted},{get(t,k,r){
+    if(['coreBadge','coreEffective','consentExeSeen','brokerHttpStatus','agentBrokerReady'].includes(String(k)))
+      throw Error('UNTRUSTED_UI_STATE_READ');
+    return Reflect.get(t,k,r);
+  }});
+  denied(getter);
+  denied({...access,actualElevatedTokenVerified:false});
+  denied({...access,brokerSourceAclVerified:false});
+});
+test('reconnect requires signed native+CAS epochs; old signed proof is denied while still fresh',()=>{
+  const after={...pins,currentDeviceEpoch:'de-18',currentSessionEpoch:'se-9',now:new Date(at.getTime()+1)};
+  assert.equal(denied(access,hypothetical,signed(),after).reason,'SIGNED_NATIVE_OR_CAS_INVALID');
+  const b={...native,deviceEpoch:'de-18',sessionEpoch:'se-9',observedAt:after.now.toISOString()};
+  const c={...cas,deviceEpoch:'de-18',sessionEpoch:'se-9',observedAt:after.now.toISOString()};
+  assert.equal(evaluate(access,hypothetical,signed(b,c),after).state,'EFFECTIVE');
+  denied(access,hypothetical,signed(b,cas),after);
+  denied(access,hypothetical,signed(native,c),after);
+});
+test('re-pair old credential, owner session or owner changes invalidate native and CAS evidence',()=>{
+  denied(access,hypothetical,signed(),{...pins,credentialHash:'e'.repeat(64)});
+  denied(access,hypothetical,signed(),{...pins,sessionHash:'f'.repeat(64)});
+  denied(access,hypothetical,signed(),{...pins,ownerId:'other-owner'});
+  denied(access,hypothetical,signed(),{...pins,currentOwnerEpoch:5,currentGrantGeneration:9});
+});
+test('reinstalled or replaced Broker: same version, stale signed SHA/PID/FileTime/fileId fail',()=>{
+  denied(access,hypothetical,signed(),{...pins,installedImageSha256:'d'.repeat(64)});
+  denied(access,hypothetical,signed(),{...pins,currentBrokerPid:413});
+  denied(access,hypothetical,signed(),{...pins,currentBrokerCreationFiletime:'134041933000000000'});
+  denied(access,hypothetical,signed(),{...pins,currentFileIdHex:'3333333344444444'});
+  denied(access,hypothetical,signed(),{...pins,installedVersion:'1.0.6'});
+});
+test('independent high token, ancestor+import+updater ACL, publisher, process handle and UAC proof all required',()=>{
+  for(const bad of [
+    {highTokenWithEnabledAdministrators:false},{protectedPublisherAndRelease:false},
+    {protectedExeAndAncestorAcl:false},{protectedImportAndUpdaterTree:false},
+    {protectedProcessHandleBoundary:false},{authenticatedNativeBroker:false},
+    {localBootstrapApproved:false},
+  ])denied(access,hypothetical,signed({...native,...bad}));
+});
+test('external CAS rollback/revoke/unknown plus foreign signer remain fail-closed',()=>{
+  denied(access,hypothetical,signed(native,{...cas,revoked:true}));
+  denied(access,hypothetical,signed(native,{...cas,ownerEpoch:3}));
+  denied(access,hypothetical,signed(),{...pins,currentGrantGeneration:9});
+  denied(access,hypothetical,null);
+  denied(access,hypothetical,signed(),{...pins,externalCasKey:foreign.publicKey});
+  denied(access,hypothetical,signed(),{...pins,externalCasKey:nkey.publicKey});
+});
+test('#702 broker_dispatch_permit_v1 is never an external UI-status witness',()=>{
+  const foreignSchema={...cas,schema:'broker_dispatch_permit_v1'} as unknown as ExternalUiEpochV2;
+  // Even if signed with the CAS key, a one-use effect permit is not UI elevation evidence.
+  denied(access,hypothetical,signed(native,foreignSchema));
+});
+test('positive synthetic pair can only inform status; NEVER authorizes dispatch or appearance-based UAC',()=>{
+  const out=evaluate(access,hypothetical);
+  assert.equal(out.state,'EFFECTIVE');
+  assert.equal(out.canDispatch,false);
+  assert.equal(out.uacProvenByAppearance,false);
+  assert.equal(evaluate().state,'PAUSED_UNVERIFIED', '#700 native real source currently fails closed');
+});
