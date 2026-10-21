@@ -23,7 +23,9 @@
       "ci": {
         "run_id": 39134168129,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -35,7 +37,9 @@
       "ci": {
         "run_id": 39606595530,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -47,7 +51,9 @@
       "ci": {
         "run_id": 39608315991,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -59,7 +65,9 @@
       "ci": {
         "run_id": 39632915464,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "ca67b8adc717256906f8396d8057104df66be946",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -71,7 +79,9 @@
       "ci": {
         "run_id": 39604153782,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -83,7 +93,9 @@
       "ci": {
         "run_id": 39631920568,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "0ba4f176ee2b5b5b8c22dbaac9edd318247432b0",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -95,7 +107,9 @@
       "ci": {
         "run_id": 39598258315,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -107,7 +121,9 @@
       "ci": {
         "run_id": 39416566585,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -119,7 +135,9 @@
       "ci": {
         "run_id": 39557944551,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -131,7 +149,9 @@
       "ci": {
         "run_id": 39502304557,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -143,7 +163,9 @@
       "ci": {
         "run_id": 39492086789,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -155,7 +177,9 @@
       "ci": {
         "run_id": 39492809099,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -167,7 +191,9 @@
       "ci": {
         "run_id": 39493908690,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -179,7 +205,9 @@
       "ci": {
         "run_id": 39503650650,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -191,7 +219,9 @@
       "ci": {
         "run_id": 39596941696,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -203,7 +233,9 @@
       "ci": {
         "run_id": 39597505104,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -215,7 +247,9 @@
       "ci": {
         "run_id": 39597542588,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -227,7 +261,9 @@
       "ci": {
         "run_id": 39597637188,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -239,7 +275,9 @@
       "ci": {
         "run_id": 39608452356,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -251,7 +289,9 @@
       "ci": {
         "run_id": 39598693419,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -263,7 +303,9 @@
       "ci": {
         "run_id": 39598738701,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -275,7 +317,9 @@
       "ci": {
         "run_id": 39598755514,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -287,7 +331,9 @@
       "ci": {
         "run_id": 39610514919,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -299,7 +345,9 @@
       "ci": {
         "run_id": 39604898508,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -311,7 +359,9 @@
       "ci": {
         "run_id": 39608785843,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -323,7 +373,9 @@
       "ci": {
         "run_id": 39608093602,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -335,7 +387,9 @@
       "ci": {
         "run_id": 39608661483,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -347,7 +401,9 @@
       "ci": {
         "run_id": 39608704634,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -359,7 +415,9 @@
       "ci": {
         "run_id": 39608830918,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -371,7 +429,9 @@
       "ci": {
         "run_id": 39608864172,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -383,7 +443,9 @@
       "ci": {
         "run_id": 39608916753,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -395,7 +457,9 @@
       "ci": {
         "run_id": 39609259161,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -407,7 +471,9 @@
       "ci": {
         "run_id": 39609346798,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -419,7 +485,9 @@
       "ci": {
         "run_id": 39610643900,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -431,7 +499,9 @@
       "ci": {
         "run_id": 39610829832,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -443,7 +513,9 @@
       "ci": {
         "run_id": 39624326925,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -455,7 +527,9 @@
       "ci": {
         "run_id": 39625147216,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -467,7 +541,9 @@
       "ci": {
         "run_id": 39625291153,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
     },
@@ -479,7 +555,9 @@
       "ci": {
         "run_id": 39625275778,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         ".github/workflows/qa-19-windows-job-hosted.yml",
@@ -496,7 +574,9 @@
       "ci": {
         "run_id": 39625620173,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "test/s3-worker20-signed-broker-installer-negative-qa.test.ts"
@@ -512,7 +592,9 @@
       "ci": {
         "run_id": 39626203944,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "test/artifact-588-cancel-read-race.qa.test.ts"
@@ -528,7 +610,9 @@
       "ci": {
         "run_id": 39626185867,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "test/qa22-crosshub-cas-fencing.test.ts"
@@ -544,7 +628,9 @@
       "ci": {
         "run_id": 39630395647,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "87644090113d21544f42a738d919d5422ed200c0",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/CORE_EFFECTIVE_STATUS_UI_QA_20261021.md",
@@ -562,7 +648,9 @@
       "ci": {
         "run_id": 39626754232,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/CORE_OWNER_REVOKE_MID_EXECUTION_QA_20261021.md",
@@ -579,7 +667,9 @@
       "ci": {
         "run_id": 39627727657,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/s3-worker28-crash-rollback-independent-qa-20261021.md",
@@ -597,7 +687,9 @@
       "ci": {
         "run_id": 39626967547,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/QA_UAC_REMOTE_APPROVAL_MATRIX_20261021.md",
@@ -615,7 +707,9 @@
       "ci": {
         "run_id": 39627296601,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/qa/INTEGRATION_DAG_CORE_CRITICAL_PATH_20261021.md",
@@ -634,7 +728,9 @@
       "ci": {
         "run_id": 39627227248,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "3b3f26d068f169b941383308a1763124e3a3feef",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/security/p0-native-handle-provenance-w26.md",
@@ -651,7 +747,9 @@
       "ci": {
         "run_id": 39628249630,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         ".github/workflows/qa29-elevated-audit-source.yml",
@@ -669,7 +767,9 @@
       "ci": {
         "run_id": 39628451245,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/SCALE_P1_WORKER30_BOUNDED_FAIRNESS_QA_20261021.md",
@@ -687,7 +787,9 @@
       "ci": {
         "run_id": 39629695531,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "5a76c826de58d906c430153488d96912e0d1827e",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/QA_17_WINDOWS_BROKER_UNAVAILABLE_AND_REVOKE_617.md",
@@ -704,7 +806,9 @@
       "ci": {
         "run_id": 39629942445,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "test/artifact-588-cancel-postchunk-status.qa.test.ts"
@@ -720,7 +824,9 @@
       "ci": {
         "run_id": 39629996191,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         ".github/workflows/qa-19-windows-provider-truth.yml",
@@ -738,7 +844,9 @@
       "ci": {
         "run_id": 39630423148,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "test/qa22-crosshub-cas-fencing.test.ts"
@@ -754,7 +862,9 @@
       "ci": {
         "run_id": 39630142422,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/CORE_POSTLAUNCH_REVOKE_UNKNOWN_QA_20261021.md",
@@ -771,7 +881,9 @@
       "ci": {
         "run_id": 39630947296,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/s3-worker20-install-manifest-chain-acceptance-20261021.md",
@@ -789,7 +901,9 @@
       "ci": {
         "run_id": 39630515426,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/QA27_REMOTE_ADMIN_APPROVAL_PROVENANCE_20261021.md",
@@ -807,7 +921,9 @@
       "ci": {
         "run_id": 39630539339,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "561af65b6cc1659f413bf11918b4ff356738c960",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/security/p0-native-handle-volume-w26v2.md",
@@ -824,7 +940,9 @@
       "ci": {
         "run_id": 39630933999,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/s3-worker28-recovery-narrow-20261021.md",
@@ -841,7 +959,9 @@
       "ci": {
         "run_id": 39631464079,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/QA_18_CROSSHUB_MIGRATION_WAL_20261021.md",
@@ -859,7 +979,9 @@
       "ci": {
         "run_id": 39630981024,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/SCALE_WORKER30_NEXT_COMPRESSED_FAIRNESS_CANCEL_20261021.md",
@@ -877,7 +999,9 @@
       "ci": {
         "run_id": 39631109283,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/QA_02_CORE_633_ELEVATED_ERROR_PROVENANCE_20261021.md",
@@ -894,7 +1018,9 @@
       "ci": {
         "run_id": 39631780531,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         ".github/workflows/qa29-crosshub-audit-negative.yml",
@@ -912,7 +1038,9 @@
       "ci": {
         "run_id": 39631336087,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         ".github/workflows/ci.yml",
@@ -931,7 +1059,9 @@
       "ci": {
         "run_id": 39632679723,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/qa/LIVE_DAG_DRIFT_GATES_CORE_20261021.md",
@@ -950,7 +1080,9 @@
       "ci": {
         "run_id": 39631516050,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "83fb4bbf770b1bb493179dc05e2f9825b4d70637",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/CORE_BROKER_SOURCE_PREFLIGHT_20261021.md",
@@ -968,7 +1100,9 @@
       "ci": {
         "run_id": 39631675531,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/CONNECTION_06_WORKER_JOURNAL_634_REVIEW_20261021.md",
@@ -986,7 +1120,9 @@
       "ci": {
         "run_id": 39631999739,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/ARTIFACT_CANCEL_NATIVE_RACE_20261021.md",
@@ -1004,7 +1140,9 @@
       "ci": {
         "run_id": 39632010226,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/SCALE_V2_QUOTA_TRUSTED_FENCED_DELETION_20261021.md",
@@ -1022,7 +1160,9 @@
       "ci": {
         "run_id": 39632774193,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/NEXOWIRE_CORE_EFFECTIVE_ACCESS_INTEGRATION_20261021.md",
@@ -1043,7 +1183,9 @@
       "ci": {
         "run_id": 39633083937,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         ".github/workflows/ci.yml",
@@ -1064,7 +1206,9 @@
       "ci": {
         "run_id": 39632434610,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/SCALE_V2_S2_WSS_RECEIPT_REPLAY_ROTATION_20261021.md",
@@ -1084,7 +1228,9 @@
       "ci": {
         "run_id": 39632489293,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/s3-signed-bootstrap-owner-inventory-20261021.md",
@@ -1103,7 +1249,9 @@
       "ci": {
         "run_id": 39632538963,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/security/p0-filesystem-source-handle-acl-20261021.md",
@@ -1124,7 +1272,9 @@
       "ci": {
         "run_id": 39632610866,
         "status": "completed",
-        "conclusion": "failure"
+        "conclusion": "failure",
+        "queried_head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/SCALE_S5_598_FIXED_SEED_SOURCE_20261021.md",
@@ -1144,7 +1294,9 @@
       "ci": {
         "run_id": 39632701546,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/MCP_GITHUB_OAUTH_STATE_CAS_20261021.md",
@@ -1164,7 +1316,9 @@
       "ci": {
         "run_id": 39634099233,
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "success",
+        "queried_head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "evidence": "GitHub fetch_commit_workflow_runs queried with this exact PR head; do not carry over to later commits"
       },
       "files": [
         "docs/AGENT_P0_EXTERNAL_GRANT_ATOMIC_RECONCILIATION_20261021.md",
@@ -1273,12 +1427,6 @@
       "pr": 641,
       "compare_base_sha": "9266f9b65a1f193360469223360552a50892949a",
       "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
-      "status": "ahead"
-    },
-    {
-      "pr": 642,
-      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
-      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
       "status": "ahead"
     },
     {
@@ -1408,12 +1556,6 @@
       "status": "ahead"
     },
     {
-      "pr": 664,
-      "compare_base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
-      "merge_base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
-      "status": "ahead"
-    },
-    {
       "pr": 665,
       "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
       "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
@@ -1486,7 +1628,7 @@
       "status": "ahead"
     }
   ],
-  "comparison_coverage": "51 of 77 exact comparisons pinned, 26 not freshly compared: treat UNKNOWN, not green",
+  "comparison_coverage": "49/77 exact comparison entries; 28 unknown. Entries copied from earlier observations require new REST re-verification before merge.",
   "files_coverage": "New 10 and moved #572/#575 full changed file lists; historical claims otherwise sampled; exhaustive collision proof requires live authenticated all-pages scan",
   "file_claims": [
     {
@@ -2009,7 +2151,8 @@
     "#643 CI in_progress, do not replay or force rerun.",
     "This 67-PR snapshot is an observed frozen GitHub connector evidence set and becomes stale if #664 or any other HEAD changes; never infer green on next SHA.",
     "#643 CI changed from in_progress to success at same exact head/run; old cached lifecycle stale.",
-    "#664 is intentionally self-referential: adding this file moves its own HEAD and MUST invalidate recorded #664 SHA. Use read-only live scanner for current state."
+    "#664 is intentionally self-referential: adding this file moves its own HEAD and MUST invalidate recorded #664 SHA. Use read-only live scanner for current state.",
+    "All 77 exact-head primary CI states were refreshed after 77 get_pr_info calls. Only 10 newly added PRs have fresh merge-base; historical comparisons are not independently revalidated this turn."
   ],
   "snapshot_replaces": "docs/qa/p0-integration-dag-open50-20261021.json",
   "ci_specific_warning": "#664 run 39632679723 FAILURE, Windows Job fast-exit output drain test iteration 10; all six other jobs PASS. Unrelated owner code not modified.",
@@ -2037,6 +2180,10 @@
       609,
       622
     ],
-    "self_invalidating": "snapshot is frozen and does not prove its own authoring PR current HEAD"
+    "self_invalidating": "snapshot is frozen and does not prove its own authoring PR current HEAD",
+    "invalidated_merge_base_evidence": [
+      642,
+      664
+    ]
   }
 }
