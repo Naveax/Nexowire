@@ -74,8 +74,13 @@ function mkRelease(
 }
 function fixture():SourceChainInput{
  const target=mkRelease('target-broker','1.0.6',targetRoot,[
+  ['install\\installer.exe','pe',['install\\installer-helper.dll','bin\\broker.exe',
+   'updater\\updater.exe']],
+  ['install\\installer-helper.dll','pe',['config\\rules.json']],
   ['bin\\broker.exe','pe',['bin\\support.dll','lib\\bootstrap.js']],
   ['bin\\support.dll','pe',['config\\rules.json']],
+  ['updater\\updater.exe','pe',['updater\\update-native.dll','config\\rules.json']],
+  ['updater\\update-native.dll','pe',['config\\rules.json']],
   ['lib\\bootstrap.js','script',['config\\rules.json']],
   ['config\\rules.json','data',[]],
  ],targetKey);
@@ -167,7 +172,7 @@ test('w20 chain: signer substitutions and signed manifest corruption fail closed
 });
 test('w20 chain: every declared PE in transitive import closure requires exact signer and SHA',()=>{
  for(const side of ['target'] as const){
-  for(const index of [0,1]){
+  for(const index of [0,1,2,3,4,5]){
    denied(e=>{e[side].before.files[index]!.signature!.certificateSha256=sha('other-cert')},
     /W20_CHAIN_PE_PUBLISHER_OR_CERT_UNTRUSTED/);
    denied(e=>{e[side].after.files[index]!.signature!.subject='CN=Other Publisher'},
