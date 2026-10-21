@@ -67,6 +67,7 @@ function grantMatches(g:OwnerGrantView,e:CompletionExpected):boolean {
 function transferMatches(t:TransferView,s:SignedCompletion):boolean{
   const x=s.statement;
   return t.id===x.jobId&&t.state==='COMPLETED'&&
+    t.errorCode===undefined&&
     t.sourceDeviceId===x.sourceDeviceId&&t.targetDeviceId===x.targetDeviceId&&
     t.targetPath===x.targetPath&&t.sha256===x.immutableObjectSha256&&
     Number.isSafeInteger(t.bytesTotal)&&t.bytesTotal>0&&t.bytesTotal<=131072&&
@@ -170,6 +171,10 @@ export class ProgressRuntimePostconditionAdapter {
       if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
       if(!grantMatches(grant,this.expected))return this.cancel();
       if(!transferMatches(transfer,signed)){
+        // #725: a forensic Native error survives cancel/reconnect. Never
+        // downgrade FORGED_WRITE_RECEIPT or revoked owner to CANCELLED or
+        // accept a counterfeit COMPLETED snapshot carrying an old error.
+        if(transfer.errorCode!==undefined)return this.blockUnknown();
         if(transfer.state==='CANCEL_REQUESTED')return this.blockUnknown();
         if(transfer.state==='CANCELLED')return this.cancel();
         // An invalid terminal COMPLETED, FAILED, or a native-write outcome
@@ -206,6 +211,7 @@ export class ProgressRuntimePostconditionAdapter {
             this.ports.readGrant(),this.ports.readTransfer(),
           ]);
           if(!grantMatches(latest,this.expected))return this.cancel();
+          if(latestTransfer.errorCode!==undefined)return this.blockUnknown();
           if(latestTransfer.state==='CANCEL_REQUESTED')return this.blockUnknown();
           if(latestTransfer.state==='CANCELLED')return this.cancel();
         }catch {return this.blockUnknown();}

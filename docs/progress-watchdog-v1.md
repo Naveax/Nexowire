@@ -624,3 +624,49 @@ worker/result fixtures and test-only Ed25519 keys. Independent
 physical owner-epoch authority and real immutable off-host SHA-256
 readback are **NOT installed or verified**; production acceptance
 remains NO-GO.
+
+
+### 2026-10-22 #11 cross-review of #725 Native forensics and #712 CORE revoke
+
+Exact reviewed heads: Artifact #725 `09c3dcaf23103b429780c2862c846956058bdcb8`
+(hosted CI `39659633982` SUCCESS) and Broker dispatch #712
+`62800af17d2a9ce18670dba6a8ac861a5d7f4ba5`
+(hosted CI `39659225895` SUCCESS). Both are source-level,
+not physical installed Agent/immutable witness acceptance.
+
+**New Progress-owner fail-closed binding:** #725's authenticated
+transfer status exposes an optional typed `errorCode` separate from
+the state, even when concurrent cancellation changes a superficial
+`COMPLETED` or `CANCELLED` report. The independent
+`ProgressRuntimePostconditionAdapter` AND its underlying
+`verifyOffhostCompletion` now reject *any* `COMPLETED` with an
+errorCode before promoting an immutable result; a forensic errorCode
+on an otherwise `CANCELLED` receipt is sticky `MUTATION_UNKNOWN`,
+not a silent clean cancel or a retry permit. Test examples are
+`FORGED_WRITE_RECEIPT`, `CORE_OWNER_REVOKED`,
+`CORE_GRANT_EPOCH_STALE`, `NATIVE_LEASE_EXPIRED` and
+`TRANSFER_WRITE_OUTCOME_UNKNOWN`. No extra remote readback or
+automatic replay follows such a receipt.
+
+**New negative tests:** error-bearing counterfeit terminal receipts
+(6 adversarial combinations); previously accepted owner CORE grant
+revocation and epoch rotation followed by a stale `ACTIVE` response;
+and stale output after Agent reconnect against a formerly accepted
+proof. A lost ACK, lost PID, stalled worker or pending native-write
+cancel already has source tests with sticky UNKNOWN and no replay.
+
+#712 distinguishes external Broker `ownerEpoch` and
+`grantGeneration` from the Progress completion
+`ownerGrantEpoch`. These are separate authorities and are **not**
+asserted equivalent. Source-only Progress validation requires the
+trusted CORE grant readback to remain ACTIVE at the pinned epoch;
+#712's actual external nonce-bound CAS, physical Broker protected
+high-integrity state and durable revokeAndDrain are still separate
+production release gates. Without authenticated live owner grant and
+independently signed immutable off-host SHA-256 custody, production
+`COMPLETED_VERIFIED` is **NO-GO** regardless of these tests.
+
+No #725 Artifact Store/native writer files, #712 Broker dispatch
+files, #03 ProcessManager/Job owner files or live Agent/VM/UAC were
+modified. This patch is restricted to #575's Progress-owned
+source/QA/documentation on its existing DRAFT PR.

@@ -415,3 +415,59 @@ test('terminal COMPLETED forged after native cancel pending remains UNKNOWN',()=
   assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
+
+test('#725 forensic native ACK provenance on forged COMPLETED/CANCELLED is sticky UNKNOWN',async()=>{
+  for(const [state,errorCode] of [
+    ['COMPLETED','FORGED_WRITE_RECEIPT'],
+    ['CANCELLED','FORGED_WRITE_RECEIPT'],
+    ['COMPLETED','CORE_GRANT_EPOCH_STALE'],
+    ['CANCELLED','CORE_OWNER_REVOKED'],
+    ['COMPLETED','NATIVE_LEASE_EXPIRED'],
+    ['MUTATION_UNKNOWN','TRANSFER_WRITE_OUTCOME_UNKNOWN'],
+  ] as const){
+    await scenario(async f=>{
+      const normal=f.ports.readTransfer;
+      let reads=0;
+      f.ports.readTransfer=async()=>{
+        reads++;
+        return {...await normal(),state,errorCode};
+      };
+      f.ports.readOffhost=async()=>{throw Error('FORGED_RECEIPT_MUST_NOT_READ_OFFHOST');};
+      assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN',
+        state+'/'+errorCode);
+      assert.equal(reads,1,'forensic outcome must not be retried or polled');
+      f.ports.readTransfer=normal;
+      assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+      assert.equal(reads,1);
+      assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+      assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+    });
+  }
+});
+
+test('#712 previously accepted owner CORE grant cannot authorize after revoke and epoch rotation',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  f.mutable.epoch=10;
+  f.mutable.grantState='REVOKED';
+  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  f.mutable.epoch=9;
+  f.mutable.grantState='ACTIVE';
+  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE',
+    'local terminal grant revocation cannot resurrect even with stale remote ACTIVE');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('stale Progress receipt after reconnect cannot restore off-host completion',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  f.p.invalidateOnReconnect();
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  f.p.observeProcessEvent({topic:'process.output',data:{
+    sessionId,stream:'stdout',seq:1,at:new Date(f.now()-2000).toISOString(),
+    text:'NEXOWIRE_PROGRESS:{"completed_count":2,"pending_count":0,"failure_count":0}\n',
+  }});
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.notEqual(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));

@@ -34,6 +34,8 @@ export interface OwnerGrantView {
 export interface TransferView {
   id:string;state:string;sourceDeviceId:string;targetDeviceId:string;
   targetPath:string;bytesTotal:number;bytesConfirmed:number;sha256:string;
+  /** #725 preserves typed native mutation provenance; never hide this. */
+  errorCode?:string;
 }
 export interface OffhostRead {
   offset:number;totalBytes:number;contentBase64:string;
@@ -98,6 +100,7 @@ function matchesGrant(v:OwnerGrantView,s:CompletionStatement):boolean {
 }
 function matchesTransfer(v:TransferView,s:CompletionStatement):boolean {
   return v.id===s.jobId&&v.state==='COMPLETED'&&
+    v.errorCode===undefined&&
     v.sourceDeviceId===s.sourceDeviceId&&v.targetDeviceId===s.targetDeviceId&&
     v.targetPath===s.targetPath&&v.sha256===s.immutableObjectSha256&&
     Number.isSafeInteger(v.bytesTotal)&&v.bytesTotal>=1&&v.bytesTotal<=131072&&
