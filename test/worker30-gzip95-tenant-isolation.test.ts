@@ -149,8 +149,8 @@ test('QA30 full-boundary four concurrent gzip parsers protect tiny quiet-tenant 
       // A known seeded input order, eight bounded clients; timing itself
       // deliberately remains observational and OS-runner-dependent.
       const jobs=shuffle([
-        ...Array.from({length:60},(_,i)=>({tenant:A,id:'qa30-noisy-'+String(i).padStart(3,'0')})),
-        ...Array.from({length:30},(_,i)=>({tenant:B,id:'qa30-quiet-'+String(i).padStart(3,'0')})),
+        ...Array.from({length:60},(_,i)=>({tenant:A as typeof A,id:'qa30-noisy-'+String(i).padStart(3,'0')})),
+        ...Array.from({length:30},(_,i)=>({tenant:B as typeof B,id:'qa30-quiet-'+String(i).padStart(3,'0')})),
       ],SEED);
       const samples:Sample[]=[];
       let cursor=0;
