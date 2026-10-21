@@ -32,8 +32,11 @@ been provisioned or confirmed. No real PG integration PASS is claimed.**
    and is bound to SHA-256 fingerprint and capability. If an existing row
    matches the exact active identity and contents, return `created:false`;
    mismatches fail closed.
-4. Otherwise atomically `INSERT ... ON CONFLICT (request_id) DO NOTHING
-   RETURNING sequence`, then `COMMIT` before returning `created:true`.
+4. Lock/update the single `witness_clock` row inside the transaction,
+   yielding a **strict commit-ordered global counter** (unlike PostgreSQL
+   IDENTITY sequences, which can commit out of allocation order). Then
+   atomically `INSERT ... ON CONFLICT (request_id) DO NOTHING
+   RETURNING sequence`, and `COMMIT` before returning `created:true`.
    No source command, token, arguments, stdout/stderr or payload is stored.
 5. If the commit acknowledgment is missing, result is UNKNOWN. The gateway
    must not dispatch. Re-querying the original UUID for diagnosis can reveal

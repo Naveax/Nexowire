@@ -55,13 +55,17 @@ class DeterministicPgPool implements WitnessPgPool {
     const row=state.reservations.get(v[0]!);
     return {rows:row?[{...row,sequence:String(row.sequence)}]:[]};
    }
+   if(sql.startsWith('UPDATE witness_clock SET last_sequence=')){
+    state.sequence++;
+    return {rows:[{last_sequence:String(state.sequence)}]};
+   }
    if(sql.startsWith('INSERT INTO witness_reservations')){
-    const [requestId,device,owner,epoch,fingerprint,capability]=v;
-    if(state.reservations.has(requestId!))return {rows:[]};
-    const sequence=++state.sequence;
-    state.reservations.set(requestId!,{
-      device_id:device!,owner_id:owner!,epoch:epoch!,
-      fingerprint:fingerprint!,capability:capability!,sequence,
+    const [sequence,requestId,device,owner,epoch,fingerprint,capability]=values;
+    if(state.reservations.has(String(requestId)))return {rows:[]};
+    state.reservations.set(String(requestId),{
+      device_id:String(device),owner_id:String(owner),epoch:String(epoch),
+      fingerprint:String(fingerprint),capability:String(capability),
+      sequence:Number(sequence),
     });
     return {rows:[{sequence:String(sequence)}]};
    }

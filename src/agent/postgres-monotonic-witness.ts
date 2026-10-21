@@ -161,19 +161,29 @@ export class PostgresMonotonicWitness implements MonotonicTrustRoot {
           requestId:input.requestId,sequence:count(previous.sequence),
           created:false};
       }
+      // A PostgreSQL IDENTITY sequence is not ordered by transaction COMMIT.
+      // The single counter row is locked until COMMIT, producing strict
+      // global commit-ordered reservation sequence across all devices.
+      const clock=(await connection.query(
+        'UPDATE witness_clock SET last_sequence=last_sequence+1 '+
+        'WHERE id=1 RETURNING last_sequence')).rows[0] as
+        {last_sequence:unknown}|undefined;
+      if(!clock)denied('WITNESS_CLOCK_MISSING');
+      const sequence=count(clock.last_sequence);
       const inserted=(await connection.query(
         'INSERT INTO witness_reservations '+
-        '(request_id,device_id,owner_id,epoch,fingerprint,capability) '+
-        'VALUES($1,$2,$3,$4,$5,$6) '+
+        '(sequence,request_id,device_id,owner_id,epoch,fingerprint,capability) '+
+        'VALUES($1,$2,$3,$4,$5,$6,$7) '+
         'ON CONFLICT (request_id) DO NOTHING RETURNING sequence',
-        [input.requestId,input.deviceId,principal.ownerId,input.epoch,
-          input.fingerprint,input.capability])).rows[0] as
+        [sequence,input.requestId,input.deviceId,principal.ownerId,
+          input.epoch,input.fingerprint,input.capability])).rows[0] as
         {sequence:unknown}|undefined;
-      // Cross-device/owner UUID collision: do not silently accept.
-      if(!inserted)denied('WITNESS_REQUEST_ID_CONFLICT');
+      // Cross-device/owner UUID collision must roll back the clock too.
+      if(!inserted||count(inserted.sequence)!==sequence)
+        denied('WITNESS_REQUEST_ID_CONFLICT');
       return {authorityId:this.config.authorityId,deviceId:input.deviceId,
         epoch:input.epoch,requestId:input.requestId,
-        sequence:count(inserted.sequence),created:true};
+        sequence,created:true};
     });
   }
 

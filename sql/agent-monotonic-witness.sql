@@ -7,8 +7,16 @@ CREATE TABLE IF NOT EXISTS witness_devices (
  generation BIGINT NOT NULL CHECK (generation>=1),
  state TEXT NOT NULL CHECK (state IN ('active','frozen'))
 );
+CREATE TABLE IF NOT EXISTS witness_clock (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ last_sequence BIGINT NOT NULL CHECK(last_sequence>=0)
+);
+-- Fresh authority deployment ONLY. Never initialize this counter over old
+-- historical reservations: operator migration must preserve trusted history.
+INSERT INTO witness_clock(id,last_sequence) VALUES(1,0)
+ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS witness_reservations (
- sequence BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ sequence BIGINT PRIMARY KEY,
  request_id UUID NOT NULL UNIQUE,
  device_id UUID NOT NULL REFERENCES witness_devices(device_id),
  owner_id UUID NOT NULL, epoch UUID NOT NULL,
