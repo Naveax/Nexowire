@@ -136,12 +136,16 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
     ).get(digest(token)) as {
       account_id:string;session_epoch:number;revoked_at:string|null
     };
-    assert.deepEqual(refreshRow(a.refresh),{
-      account_id:ownerA,session_epoch:0,revoked_at:at.toISOString(),
-    });
-    assert.deepEqual(refreshRow(b.refresh),{
-      account_id:ownerB,session_epoch:0,revoked_at:null,
-    });
+    // Node 22 node:sqlite returns a null-prototype row. Compare security
+    // fields directly rather than requiring an Object.prototype identity.
+    const revokedOwner=refreshRow(a.refresh);
+    assert.equal(revokedOwner.account_id,ownerA);
+    assert.equal(revokedOwner.session_epoch,0);
+    assert.equal(revokedOwner.revoked_at,at.toISOString());
+    const unrelatedOwner=refreshRow(b.refresh);
+    assert.equal(unrelatedOwner.account_id,ownerB);
+    assert.equal(unrelatedOwner.session_epoch,0);
+    assert.equal(unrelatedOwner.revoked_at,null);
     assert.equal(await oauth.authenticateAccessToken(a.access),null);
     const beforeOwnerA=(sqlite.prepare(
       'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
