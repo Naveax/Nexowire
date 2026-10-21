@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 7,
+  "ids": [
+    648,
+    649,
+    650,
+    651,
+    652,
+    653,
+    654,
+    655
+  ],
+  "nodes": [
+    {
+      "pr": 648,
+      "head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "head_ref": "test/29-elevated-audit-provenance-617",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39628249630,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb"
+      }
+    },
+    {
+      "pr": 649,
+      "head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+      "head_ref": "qa/worker30-bounded-parser-fairness-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39628451245,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135"
+      }
+    },
+    {
+      "pr": 650,
+      "head_sha": "5a76c826de58d906c430153488d96912e0d1827e",
+      "head_ref": "test/qa17-provider-unavailable-queued-revoke-617-20261021",
+      "base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "base_ref": "test/qa17-core-broker-adversarial-617-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39629695531,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5a76c826de58d906c430153488d96912e0d1827e"
+      }
+    },
+    {
+      "pr": 651,
+      "head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9",
+      "head_ref": "test/21-artifact-cancel-postchunk-ack-status-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39629942445,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9"
+      }
+    },
+    {
+      "pr": 652,
+      "head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+      "head_ref": "test/qa-19-provider-truth-20261021",
+      "base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "base_ref": "test/qa-19-winjob-hosted-repro-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39629996191,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd"
+      }
+    },
+    {
+      "pr": 653,
+      "head_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+      "head_ref": "test/22-crosshub-repair-publish-20261021",
+      "base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "base_ref": "test/22-crosshub-fencing-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630423148,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "1eabf9040120acfe173cef4121541c67d66fc499"
+      }
+    },
+    {
+      "pr": 654,
+      "head_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+      "head_ref": "test/25-postlaunch-revoke-ack-20261021",
+      "base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "base_ref": "test/25-owner-revoke-mid-exec-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630142422,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "f369683a0c164d9cb3ef679956062298b021feb1"
+      }
+    },
+    {
+      "pr": 655,
+      "head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07",
+      "head_ref": "test/20-install-manifest-chain-source-qa-20261021",
+      "base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "base_ref": "test/20-signed-broker-installer-negative-qa-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630947296,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07"
+      }
+    }
+  ]
+}
