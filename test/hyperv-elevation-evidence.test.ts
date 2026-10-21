@@ -23,6 +23,9 @@ function facts(patch: Partial<HypervElevationSnapshot> = {}): HypervElevationSna
       capabilityAllowed: false,
     },
     ownerPolicyApproved: true,
+    ownerGrant: 'root',
+    rootLease: 'verified',
+    coreEnrollment: 'unverified',
     localApproval: 'verified',
     dispatch: 'not_sent',
     ...patch,
@@ -69,8 +72,10 @@ test('#617 successful transport ACK is not proven Hyper-V Running state', () => 
   assert.equal(r.execution.effectVerified, false);
 });
 
-test('#617 CORE/FULL policy alone cannot imply OS elevation or skip local approval', () => {
+test('#617 ROOT needs a proven delegation and never infers local UAC from a preference', () => {
   const r = explainHypervElevation(facts({
+    ownerGrant: 'root',
+    rootLease: 'unverified',
     localApproval: 'pending',
     broker: {
       authenticatedHealth: 'verified',
@@ -79,8 +84,8 @@ test('#617 CORE/FULL policy alone cannot imply OS elevation or skip local approv
       capabilityAllowed: true,
     },
   }));
-  assert.equal(r.execution.status, 'pending');
-  assert.equal(r.execution.code, 'HYPERV_LOCAL_APPROVAL_UNVERIFIED');
+  assert.equal(r.execution.status, 'denied');
+  assert.equal(r.execution.code, 'HYPERV_OWNER_DELEGATION_UNVERIFIED');
   assert.equal(r.execution.effectVerified, false);
 });
 
@@ -123,6 +128,58 @@ test('#617 Broker must have authenticated health, version and token attestation 
   assert.equal(r.execution.status, 'denied');
   assert.equal(r.execution.denialSource, 'nexowire');
   assert.equal(r.execution.code, 'HYPERV_BROKER_NOT_ATTESTED');
+});
+
+test('#617 CORE with trusted prior owner delegation needs no per-operation UAC prompt', () => {
+  const r = explainHypervElevation(facts({
+    ownerGrant: 'core',
+    rootLease: 'expired',
+    coreEnrollment: 'verified',
+    localApproval: 'not_verified',
+    currentProcessElevated: false,
+    broker: {
+      authenticatedHealth: 'verified',
+      elevatedToken: 'verified',
+      versionMatch: 'verified',
+      capabilityAllowed: true,
+    },
+  }));
+  assert.equal(r.delegation.state, 'core-preapproved');
+  assert.equal(r.delegation.perOperationUacRequired, false);
+  assert.equal(r.execution.status, 'pending');
+  assert.equal(r.execution.code, 'HYPERV_INDEPENDENT_EXECUTION_AND_READBACK_REQUIRED');
+  assert.equal(r.execution.effectVerified, false);
+});
+
+test('#617 FULL with Broker available still has no elevated delegation', () => {
+  const r = explainHypervElevation(facts({
+    ownerGrant: 'full',
+    rootLease: 'expired',
+    localApproval: 'verified',
+    broker: {
+      authenticatedHealth: 'verified',
+      elevatedToken: 'verified',
+      versionMatch: 'verified',
+      capabilityAllowed: true,
+    },
+  }));
+  assert.equal(r.execution.code, 'HYPERV_ELEVATED_MODE_REQUIRED');
+  assert.equal(r.delegation.state, 'not-authorized');
+});
+
+test('#617 revoked CORE is blocked even if Broker is already elevated', () => {
+  const r = explainHypervElevation(facts({
+    ownerGrant: 'core',
+    coreEnrollment: 'revoked',
+    broker: {
+      authenticatedHealth: 'verified',
+      elevatedToken: 'verified',
+      versionMatch: 'verified',
+      capabilityAllowed: true,
+    },
+  }));
+  assert.equal(r.execution.status, 'denied');
+  assert.equal(r.execution.code, 'HYPERV_OWNER_DELEGATION_UNVERIFIED');
 });
 
 test('#617 status is diagnostic, never mutating or an execution permit', () => {
