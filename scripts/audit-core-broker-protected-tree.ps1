@@ -2,13 +2,46 @@
 # A list supplied by a caller is NOT independent evidence of complete imports.
 [CmdletBinding()]
 param(
- [Parameter(Mandatory=$true)][string]$ProtectedInstallRoot,
- [Parameter(Mandatory=$true)][string]$LauncherPath,
- [Parameter(Mandatory=$true)][string]$UpdaterPath,
- [string[]]$ImportedModulePaths=@()
+ [Parameter(Mandatory=$true)][string]$EvidenceRequestBase64
 )
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT'){throw 'WINDOWS_ONLY'}
+# A single exact UTF-8 JSON envelope avoids pwsh -File's argument-array
+# binding differences on hosted Windows, including DOS 8.3 temp paths.
+# Unrecognized fields, missing imports or incomplete absolute paths fail.
+if($EvidenceRequestBase64.Length -lt 8 -or $EvidenceRequestBase64.Length -gt 90000){
+ throw 'BROKER_TREE_REQUEST_ENVELOPE_INVALID_LENGTH'
+}
+try{
+ $json=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($EvidenceRequestBase64))
+ $request=ConvertFrom-Json -InputObject $json -AsHashtable -ErrorAction Stop
+}catch{throw 'BROKER_TREE_REQUEST_ENVELOPE_INVALID_ENCODING_OR_JSON'}
+$expectedFields=@('version','protectedInstallRoot','launcherPath','updaterPath','importedModulePaths')
+if($request -isnot [System.Collections.IDictionary] -or
+   $request.Count -ne $expectedFields.Count -or
+   @($request.Keys | Where-Object {$_ -notin $expectedFields}).Count -gt 0 -or
+   @($expectedFields | Where-Object {-not $request.ContainsKey($_)}).Count -gt 0 -or
+   $request.version -cne 1 -or
+   $request.protectedInstallRoot -isnot [string] -or
+   $request.launcherPath -isnot [string] -or
+   $request.updaterPath -isnot [string] -or
+   $request.importedModulePaths -isnot [array] -or
+   $request.importedModulePaths.Count -gt 128 -or
+   $request.importedModulePaths.Count -lt 1){
+ throw 'BROKER_TREE_REQUEST_SCHEMA_INVALID'
+}
+$ProtectedInstallRoot=[string]$request.protectedInstallRoot
+$LauncherPath=[string]$request.launcherPath
+$UpdaterPath=[string]$request.updaterPath
+$ImportedModulePaths=[string[]]$request.importedModulePaths
+foreach($rawPath in @($ProtectedInstallRoot,$LauncherPath,$UpdaterPath)+$ImportedModulePaths){
+ if($rawPath -isnot [string] -or [string]::IsNullOrWhiteSpace($rawPath) -or
+    -not [IO.Path]::IsPathFullyQualified($rawPath) -or
+    $rawPath.Contains('*') -or $rawPath.Contains('?')){
+   throw 'BROKER_TREE_REQUEST_PATH_INVALID'
+ }
+}
+
 $root=[IO.Path]::GetFullPath($ProtectedInstallRoot).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
 $rootPrefix=$root+[IO.Path]::DirectorySeparatorChar
 $lowTrustSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
@@ -85,7 +118,9 @@ $anyUnsafe=@($evidence | Where-Object {
  $_.broadLowTrustWriteFound -eq $true -or $_.reparsePointDetected -eq $true
 }).Count -gt 0
 [ordered]@{
- kind='windows_core_broker_protected_tree_readonly_v1'
+ kind='windows_core_broker_protected_tree_readonly_v2'
+ requestEnvelopeVersion=1
+ acceptedInputPaths=@($ProtectedInstallRoot,$LauncherPath,$UpdaterPath)+@($ImportedModulePaths)
  protectedRoot=$root
  inputsInsideRoot=($badPaths.Count -eq 0)
  rejectedOutOfRootPaths=@($badPaths)
