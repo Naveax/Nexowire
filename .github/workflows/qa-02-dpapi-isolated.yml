@@ -1,0 +1,36 @@
+name: QA02 Windows DPAPI isolated provenance
+
+on:
+  pull_request:
+    branches:
+      - test/02-broker-native-truth-negative-20261021
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dpapi-current-user-isolated:
+    name: qa02-windows-dpapi-serial
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript source contract
+        run: npm run typecheck
+      # These are the EXACT ORIGINAL Windows DPAPI test files. Both are
+      # intentionally preserved: no skip, no timeout increase, no fake DPAPI.
+      # Run serially to separate per-file concurrency/runner contention from
+      # real native CurrentUser DPAPI failure in the original browser-live CI.
+      - name: Existing CurrentUser and LocalMachine DPAPI contract
+        run: node --test --import tsx --test-concurrency=1 test/windows-dpapi-secret.test.ts
+      - name: Existing purpose-bound and protected-secret DPAPI contract
+        run: node --test --import tsx --test-concurrency=1 test/protected-secret-files.test.ts
+      - name: Source-only DPAPI timeout and CORE no-replay negatives
+        run: node --test --import tsx --test-concurrency=1 test/qa-02-683-dpapi-timeout-negative.test.ts test/qa-02-670-native-broker-truth-negative.test.ts test/qa-02-core-633-elevated-outcome-negative.test.ts
