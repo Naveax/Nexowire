@@ -69,15 +69,15 @@ class SyntheticAudit {
     return {seq, digest: head, mac: sign('anchor', JSON.stringify([seq, head]))};
   }
   append(kind: Kind, data: Record<string, unknown>, context = this.context): Entry {
+    if (!data || typeof data !== 'object' || Array.isArray(data) ||
+        Object.keys(data).some(k => !fields[kind].includes(k))) {
+      throw new Error('AUDIT_UNSAFE_OR_UNKNOWN_FIELD');
+    }
     // Synthetic reservation fence: never dispatch again after a possible launch,
     // lost ACK or revoke. Production requires an *external* linearizable CAS.
     if (kind === 'launch' && this.entries.some(e =>
       e.kind === 'launch' || e.kind === 'unknown' || e.kind === 'revoke')) {
       throw new Error('AUDIT_REPLAY_FENCED');
-    }
-    if (!data || typeof data !== 'object' || Array.isArray(data) ||
-        Object.keys(data).some(k => !fields[kind].includes(k))) {
-      throw new Error('AUDIT_UNSAFE_OR_UNKNOWN_FIELD');
     }
     const entry: Entry = {
       seq: this.entries.length + 1, previous: this.current.digest, context,
