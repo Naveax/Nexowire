@@ -392,3 +392,125 @@ export async function assessCoreOfflineRePairBootstrap(
     canInstall:false,canExecuteElevated:false,productionAccepted:false,
   };
 }
+
+
+/** Read-only, source-level post-cutover reconciliation, NOT an installer. */
+export interface CoreAtomicIdentity {
+  sha256:string;
+  volumeIdentity:string;
+  fileIdentity:string;
+}
+export interface CoreAtomicSwitchEvidence {
+  provider:'trusted-native-win32-read-only'|'synthetic-fixture';
+  phase:'preflight'|'reserved'|'write-dispatched-unknown'|'post-cutover-readback'|
+    'rollback-dispatched-unknown'|'rollback-readback';
+  transactionId:string;
+  ownerAccountId:string;deviceId:string;ownerEpoch:number;
+  externalSequence:number;minimumIndependentSequence:number;
+  writeAheadJournalDurable:boolean;
+  journalAuthenticatedByExternalAuthority:boolean;
+  noPendingUnknownNativeMutation:boolean;
+  postconditionWitnessVerified:boolean;
+  beforeInstalled:CoreAtomicIdentity;
+  stagedTarget:CoreAtomicIdentity;
+  installedAfterCutover:CoreAtomicIdentity;
+  previousRollbackBefore:CoreAtomicIdentity;
+  previousRollbackAfter:CoreAtomicIdentity;
+  postUpdater:CoreAtomicIdentity;
+  nativePostImportGraphVerified:boolean;
+  nativePostProtectedAclVerified:boolean;
+  nativePostSignerVerified:boolean;
+  nativeTaskImageHandleVerified:boolean;
+  nativeTaskCreationIdentity:string;
+  localWindowsConsentTransactionId:string;
+}
+const isCoreIdentity=(i:CoreAtomicIdentity):boolean=>
+  !!i&&/^[a-f0-9]{64}$/.test(i.sha256)&&
+  /^[A-Za-z0-9:._-]{8,128}$/.test(i.fileIdentity)&&
+  /^[A-Za-z0-9:._-]{8,128}$/.test(i.volumeIdentity);
+/**
+ * Offline re-pair MUST clear stale DPAPI and task grants before atomic
+ * image reconciliation. Even a complete synthetic success is NOT evidence
+ * that a Windows task was installed or a high token acquired.
+ */
+export async function assessCoreAtomicRollbackSwitchSource(
+  bootstrap:CoreBootstrapEvidence,
+  stage:CoreStageManifest,stageSignature:string,
+  stagePins:CoreStagePins,stageReadback:CoreStageReadback,
+  dag:CoreSignedImportDag,dagSignature:string,
+  dagPins:CoreImportDagPins,nativeDag:CoreNativeImportDagReadback,
+  previous:CoreOfflineRePairWitness,
+  evidence:CoreAtomicSwitchEvidence,
+  inspect:CoreStageSignatureInspector,
+):Promise<{
+  status:'atomic_switch_source_readback_only';
+  physicalSwitchAccepted:false;
+  realWindowsUacEnrolled:false;
+  canResume:false;canRollbackAutomatically:false;
+  canDispatchCore:false;productionApproved:false;
+}>{
+  await assessCoreOfflineRePairBootstrap(
+    bootstrap,stage,stageSignature,stagePins,stageReadback,
+    dag,dagSignature,dagPins,nativeDag,previous,inspect);
+  const broker=stage.files.find(f=>f.role==='broker');
+  const rollback=stage.files.find(f=>f.role==='rollback');
+  const updater=stage.files.find(f=>f.role==='updater');
+  const b=bootstrap;
+  const e=evidence;
+  if(!broker||!rollback||!updater||!e||
+    !['synthetic-fixture','trusted-native-win32-read-only'].includes(e.provider)||
+    e.phase!=='post-cutover-readback'||
+    e.transactionId!==b.record.transactionId||
+    e.ownerAccountId!==b.record.ownerAccountId||
+    e.deviceId!==b.record.deviceId||
+    e.ownerEpoch!==b.record.ownerEpoch||
+    !Number.isSafeInteger(e.externalSequence)||
+    !Number.isSafeInteger(e.minimumIndependentSequence)||
+    e.minimumIndependentSequence<1||
+    e.externalSequence<e.minimumIndependentSequence||
+    e.writeAheadJournalDurable!==true||
+    e.journalAuthenticatedByExternalAuthority!==true||
+    e.noPendingUnknownNativeMutation!==true||
+    e.postconditionWitnessVerified!==true||
+    e.nativePostImportGraphVerified!==true||
+    e.nativePostProtectedAclVerified!==true||
+    e.nativePostSignerVerified!==true||
+    e.nativeTaskImageHandleVerified!==true||
+    e.nativeTaskCreationIdentity!==b.task.processCreationIdentity||
+    e.localWindowsConsentTransactionId!==b.physicalConsent.transactionId){
+    refuse('ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED');
+  }
+  if(![
+    e.beforeInstalled,e.stagedTarget,e.installedAfterCutover,
+    e.previousRollbackBefore,e.previousRollbackAfter,e.postUpdater,
+  ].every(isCoreIdentity))refuse('ATOMIC_SWITCH_IDENTITY_INVALID');
+  if(e.beforeInstalled.sha256!==rollback.sha256||
+    e.beforeInstalled.fileIdentity===e.installedAfterCutover.fileIdentity||
+    e.beforeInstalled.volumeIdentity!==e.installedAfterCutover.volumeIdentity||
+    e.stagedTarget.sha256!==broker.sha256||
+    e.stagedTarget.fileIdentity!==broker.fileIdentity||
+    e.stagedTarget.volumeIdentity!==broker.volumeIdentity||
+    e.installedAfterCutover.sha256!==broker.sha256||
+    e.installedAfterCutover.volumeIdentity!==broker.volumeIdentity||
+    e.installedAfterCutover.fileIdentity!==broker.fileIdentity||
+    e.previousRollbackBefore.sha256!==rollback.sha256||
+    e.previousRollbackBefore.volumeIdentity!==rollback.volumeIdentity||
+    e.previousRollbackBefore.fileIdentity!==rollback.fileIdentity||
+    e.previousRollbackAfter.sha256!==rollback.sha256||
+    e.previousRollbackAfter.volumeIdentity!==rollback.volumeIdentity||
+    e.previousRollbackAfter.fileIdentity!==rollback.fileIdentity||
+    e.postUpdater.sha256!==updater.sha256||
+    e.postUpdater.volumeIdentity!==updater.volumeIdentity||
+    e.postUpdater.fileIdentity!==updater.fileIdentity){
+    refuse('ATOMIC_SWITCH_ROLLBACK_OR_POSTIMAGE_IDENTITY_CHANGED');
+  }
+  // Local/remote readbacks are possible to forge in a source fixture.
+  // No actual Windows UAC owner consent, elevation, or atomic filesystem
+  // transaction occurred here; side-effect replay remains disallowed.
+  return{
+    status:'atomic_switch_source_readback_only',
+    physicalSwitchAccepted:false,realWindowsUacEnrolled:false,
+    canResume:false,canRollbackAutomatically:false,
+    canDispatchCore:false,productionApproved:false,
+  };
+}
