@@ -11,6 +11,10 @@ import {
   type BrokerEvidenceInput, type BrokerSignatureInspector,
 } from '../scripts/s3-hyperv-broker-trust.js';
 import {
+  assessCoreBrokerOneTimeInstall,
+  type CoreBrokerInstallGate, type CoreInstallerInspector,
+} from '../scripts/s3-core-broker-install-gate.js';
+import {
   assessCoreInstalledBrokerSource, assessCoreStopRevokeSource,
   type CoreBootstrapEvidence, type CoreStopRevokeEvidence,
 } from '../scripts/s3-core-bootstrap-delegation-audit.js';
@@ -212,6 +216,97 @@ function mustDenyBootstrap(mutate:(b:CoreBootstrapEvidence)=>void,reason:RegExp)
   const b=bootstrapFixture();mutate(b);
   assert.throws(()=>assessCoreInstalledBrokerSource(b),reason);
 }
+
+function installerFixture():CoreBrokerInstallGate{
+  const scopedBroker=brokerFixture();
+  const root='C:\\ProtectedFixture\\Nexowire';
+  const installer={
+    path:root+'\\installer\\installer.exe',
+    bytes:Buffer.from('SIGNED-INSTALLER-FIXTURE'),
+    expectedSha256:hash('SIGNED-INSTALLER-FIXTURE'),version:'1.0.5',
+  };
+  const rollback={
+    path:root+'\\rollback\\rollback.exe',
+    bytes:Buffer.from('SIGNED-OLD-ROLLBACK-FIXTURE'),
+    expectedSha256:hash('SIGNED-OLD-ROLLBACK-FIXTURE'),version:'1.0.4',
+  };
+  const importedFiles=[
+    root+'\\runtime\\native-ffi.dll',
+    root+'\\updater\\trusted-update.dll',
+  ];
+  return {
+    scopedBroker,installer,rollback,
+    previousAgentVersion:'1.0.5',previousBrokerVersion:'1.0.4',
+    installedBrokerVersion:'1.0.5',
+    importedFiles,pathsAclSnapshot:protectedAcl(
+      ...Object.values(scopedBroker.paths),installer.path,rollback.path,...importedFiles,
+    ),
+    token:{
+      provider:'trusted-native-win32',tokenElevationType:'full',
+      tokenIsElevated:true,integrityRid:0x3000,
+      adminSid:'S-1-5-32-544',adminSidEnabled:true,
+      adminSidDenyOnly:false,deviceId:'device-28',
+      processCreationIdentity:'trusted-creation-identity-28',
+      imageSha256:scopedBroker.manifest.brokerSha256,nativeImageHandleVerified:true,
+    },
+    localConsent:{
+      source:'windows-local-interactive-owner',sessionType:'physical-console',
+      installerSha256:installer.expectedSha256,
+      ownerAccountId:'owner-28',deviceId:'device-28',sessionId:'session-28',
+      transactionId:'install-28',decision:'approved',trustedReceiptVerified:true,
+    },
+    revoke:{independentlyRead:true,currentOwnerEpoch:14,minimumValidOwnerEpoch:14,revoked:false},
+    expectedTransactionId:'install-28',interruptedInstallation:false,
+  };
+}
+const inspectInstaller:CoreInstallerInspector=async(_kind,_path,sha)=>({
+  fileSha256:sha,publisherSubject:publisher,certificateSha256:cert,signatureValid:true,
+});
+test('installer+rollback require exact separately verified publisher/cert/digest and never enable physical installation',async()=>{
+  const baseline=await assessCoreBrokerOneTimeInstall(
+    installerFixture(),inspectBroker,inspectInstaller);
+  assert.equal(baseline.mayInstall,false);
+  assert.equal(baseline.mayExecuteCoreAdmin,false);
+  assert.equal(baseline.productionApproved,false);
+  for(const role of ['installer','rollback'] as const){
+    for(const flaw of ['unsigned','foreign-publisher','foreign-cert','swapped-hash'] as const){
+      const inspect:CoreInstallerInspector=async(kind,p,sha)=>{
+        const original=await inspectInstaller(kind,p,sha);
+        if(kind!==role)return original;
+        if(flaw==='unsigned')return {...original,signatureValid:false};
+        if(flaw==='foreign-publisher')return {...original,publisherSubject:'CN=Untrusted'};
+        if(flaw==='foreign-cert')return {...original,certificateSha256:hash('untrusted-cert')};
+        return {...original,fileSha256:hash('different-on-disk-image')};
+      };
+      await assert.rejects(
+        assessCoreBrokerOneTimeInstall(installerFixture(),inspectBroker,inspect),
+        /S3_CORE_INSTALL_INSTALLER_OR_ROLLBACK_SIGNER_UNTRUSTED/,
+      );
+    }
+  }
+  const swapped=installerFixture();
+  swapped.rollback.bytes=Buffer.from('TAMPERED-ROLLBACK-AFTER-STAGE');
+  await assert.rejects(
+    assessCoreBrokerOneTimeInstall(swapped,inspectBroker,inspectInstaller),
+    /S3_CORE_INSTALL_INSTALLER_OR_ROLLBACK_HASH_MISMATCH/,
+  );
+});
+test('installer interrupted enrollment, stale owner epoch and process identity fail closed',async()=>{
+  for(const mutation of [
+    (g:CoreBrokerInstallGate)=>{g.interruptedInstallation=true;},
+    (g:CoreBrokerInstallGate)=>{g.revoke.revoked=true;},
+    (g:CoreBrokerInstallGate)=>{g.revoke.currentOwnerEpoch=15;},
+    (g:CoreBrokerInstallGate)=>{g.localConsent.decision='unknown';},
+    (g:CoreBrokerInstallGate)=>{g.token.nativeImageHandleVerified=false as true;},
+  ]){
+    const g=installerFixture();mutation(g);
+    await assert.rejects(
+      assessCoreBrokerOneTimeInstall(g,inspectBroker,inspectInstaller),
+      /S3_CORE_INSTALL_/,
+    );
+  }
+});
+
 test('even cryptographically consistent synthetic evidence never claims installed or elevated success',async()=>{
   const brokerVerdict=await assessScopedBrokerTrust(brokerFixture(),inspectBroker);
   assert.equal(brokerVerdict.executionApproved,false);
