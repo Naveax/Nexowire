@@ -1,0 +1,30 @@
+{
+  "requestedMode": "CORE",
+  "claimedOrigin": "synthetic_fixture",
+  "agent": {
+    "version": "1.0.5",
+    "integrity": "medium",
+    "adminRoleInProcess": false,
+    "administratorsDenyOnly": true
+  },
+  "ownerDelegation": {
+    "deviceOwnerBound": "unverified",
+    "rootLeaseUnexpired": null,
+    "rootSessionBound": "unverified",
+    "coreEnrollmentActive": "unverified",
+    "revocationChecked": "unverified"
+  },
+  "broker": {
+    "port43112ListenerSeen": true,
+    "authenticatedHealth": "unverified",
+    "signedBinary": "unverified",
+    "versionMatch": "unverified",
+    "elevatedToken": "unverified",
+    "protectedParentAndImports": "unverified",
+    "broadWriteAceObserved": true
+  },
+  "vm": {
+    "observedState": "unknown",
+    "independentlyAuthenticatedReadback": "unverified"
+  }
+}
