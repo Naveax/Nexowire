@@ -42,9 +42,39 @@ type OwnerScope={
 };
 type State='RESERVED_NO_DISPATCH'|'CANCELLED_NO_EFFECT'|
   'MUTATION_UNKNOWN'|'EFFECT_VERIFIED';
+type SignedPermit={
+  kind:'qa25.dispatch-permit.v1';scopeHash:string;issuedAtMs:number;
+  expiresAtMs:number;nonce:string;signature:string;
+};
+function permitBytes(p:Omit<SignedPermit,'signature'>):Buffer{
+  return Buffer.from(JSON.stringify([
+    'QA25-CAS-PERMIT',p.kind,p.scopeHash,p.issuedAtMs,
+    p.expiresAtMs,p.nonce,
+  ]));
+}
+function mintPermit(s:OwnerScope,now:number):SignedPermit{
+  const v={
+    kind:'qa25.dispatch-permit.v1' as const,scopeHash:hash(s),
+    issuedAtMs:now,expiresAtMs:now+5_000,
+    nonce:hash([s.requestId,s.ownerEpoch,s.grantGeneration,now]),
+  };
+  return {...v,signature:sign(null,permitBytes(v),
+    cryptoWitness.privateKey).toString('base64url')};
+}
+function checkPermit(p:SignedPermit,s:OwnerScope,atMs:number):boolean{
+  if(p.kind!=='qa25.dispatch-permit.v1'||p.scopeHash!==hash(s)||
+     p.issuedAtMs>atMs||p.expiresAtMs<=atMs||
+     p.expiresAtMs-p.issuedAtMs>5_000)return false;
+  if(!/^[A-Za-z0-9_-]{86}$/.test(p.signature))return false;
+  const bytes=Buffer.from(p.signature,'base64url');
+  if(bytes.length!==64||bytes.toString('base64url')!==p.signature)return false;
+  const {signature:_unused,...unsigned}=p;
+  return verify(null,permitBytes(unsigned),cryptoWitness.publicKey,bytes);
+}
 type Entry={
   scope:OwnerScope;launched:boolean;state:State;
   launchId:string;launchAt:number;expectedDigest:string;
+  permit:SignedPermit;
 };
 function hash(x:unknown){return createHash('sha256').update(JSON.stringify(x)).digest('hex')}
 function scope(id=requestId,mode:Mode='CORE',ownerId=ownerA,
@@ -162,6 +192,7 @@ class ExternalMonotonicOracle{
       scope:s,launched:false,state:'RESERVED_NO_DISPATCH',
       launchId:'launch:'+s.requestId,launchAt:0,
       expectedDigest:hash(['effect',s.requestId]),
+      permit:mintPermit(s,now),
     });
     return true;
   }
@@ -169,7 +200,8 @@ class ExternalMonotonicOracle{
     const e=this.ledger.get(s.requestId);
     if(!this.available||!e||e.launched||e.state!=='RESERVED_NO_DISPATCH'||
       !sameScope(e.scope,s)||!this.current(s)||
-      signedPermitTime>now||now-signedPermitTime>5_000||
+      signedPermitTime!==e.permit.issuedAtMs||
+      !checkPermit(e.permit,s,now)||
       s.mode==='ROOT'&&now>=rootEnd||
       this.review(s,now)!=='REVIEWED_ONLY_NO_DISPATCH')return false;
     e.launched=true;e.state='MUTATION_UNKNOWN';e.launchAt=now;
@@ -213,14 +245,18 @@ class ExternalMonotonicOracle{
   state(s:OwnerScope):State|null{
     return this.ledger.get(s.requestId)?.state??null;
   }
+  signedPermit(s:OwnerScope):SignedPermit|null{
+    return this.ledger.get(s.requestId)?.permit??null;
+  }
 }
 class Hub{
   readonly cachedEffective=true;
   constructor(readonly name:string,readonly cas:ExternalMonotonicOracle){}
   review(s:OwnerScope,now:number){return this.cas.review(s,now)}
   reserve(s:OwnerScope,now:number){return this.cas.reserve(s,now)}
-  dispatch(s:OwnerScope,now:number,permitAt=now){
-    return this.cas.dispatch(s,now,permitAt);
+  dispatch(s:OwnerScope,now:number,permitAt:number|undefined=undefined){
+    return this.cas.dispatch(s,now,
+      permitAt??this.cas.signedPermit(s)?.issuedAtMs??now);
   }
 }
 function fixture(){
@@ -277,6 +313,20 @@ test('two-Hub effect committed, revokeAndDrain ACK lost and readback offline => 
   assert.equal(hubB.reserve(s,now),false);
   assert.equal(hubA.dispatch(s,now),false);
   assert.deepEqual(cas.syntheticLaunches,['launch:'+requestId]);
+});
+
+test('a cryptographically valid old-Hub permit is not new-owner authority',()=>{
+  const {cas,hubA}=fixture(),old=scope(),now=rootEnd-2;
+  assert.equal(hubA.reserve(old,now),true);
+  const signed=cas.signedPermit(old);
+  assert.ok(signed);
+  assert.equal(checkPermit(signed,old,now),true);
+  const stranger=scope(requestId,'CORE',ownerB,26,9,sessionB,C);
+  assert.equal(checkPermit(signed,stranger,now),false);
+  assert.equal(checkPermit({...signed,nonce:'tampered'},old,now),false);
+  assert.equal(checkPermit({...signed,signature:'invalid'},old,now),false);
+  assert.equal(hubA.dispatch(old,now),true);
+  assert.equal(cas.syntheticLaunches.length,1);
 });
 
 test('foreign owner re-pair cannot reuse old requestId, even with fresh signed grant',()=>{
