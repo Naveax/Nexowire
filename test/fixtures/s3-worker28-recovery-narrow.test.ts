@@ -220,7 +220,7 @@ test('protected updater import and ancestor ACL deny writable, missing and repar
   const normal=assessCoreInstalledBrokerSource(core());
   assert.equal(normal.elevatedCommandMayExecute,false);
   assert.equal(normal.productionAccepted,false);
-  const base=core(),updater=base.protectedImportPaths[1],dll=base.protectedImportPaths[2];
+  const base=core(),updater=base.protectedImportPaths[1]!,dll=base.protectedImportPaths[2]!;
   for(const target of [updater,dll,path.win32.dirname(updater)]){
     const x=core();
     x.aclNodes=x.aclNodes.map(n=>n.path===target?{...n,entries:[...n.entries,{
