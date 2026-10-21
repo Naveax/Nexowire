@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 8,
+  "ids": [
+    656,
+    657,
+    658,
+    659,
+    660,
+    661,
+    662,
+    663
+  ],
+  "nodes": [
+    {
+      "pr": 656,
+      "head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+      "head_ref": "test/qa27-remote-admin-provenance-followup-20261021",
+      "base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "base_ref": "test/qa27-uac-remote-approval-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630515426,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f"
+      }
+    },
+    {
+      "pr": 657,
+      "head_sha": "561af65b6cc1659f413bf11918b4ff356738c960",
+      "head_ref": "qa/w26-native-handle-volume-v2-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39630539339,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "561af65b6cc1659f413bf11918b4ff356738c960"
+      }
+    },
+    {
+      "pr": 658,
+      "head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3",
+      "head_ref": "test/28-recovery-narrow-20261021",
+      "base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "base_ref": "test/28-broker-crash-rollback-independent-qa-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630933999,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3"
+      }
+    },
+    {
+      "pr": 659,
+      "head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949",
+      "head_ref": "qa/18-migration-rollback-crosshub-20261021",
+      "base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "base_ref": "qa/18-antirollback-cas-hostile-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631464079,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949"
+      }
+    },
+    {
+      "pr": 660,
+      "head_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+      "head_ref": "qa/worker30-next-compressed-fairness-cancel-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39630981024,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "554528df1dd2be0c265571ac8a1233fade78da13"
+      }
+    },
+    {
+      "pr": 661,
+      "head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a",
+      "head_ref": "test/02-core-633-elevated-error-qa-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39631109283,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a"
+      }
+    },
+    {
+      "pr": 662,
+      "head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+      "head_ref": "test/29-audit-rotation-crosshub-617",
+      "base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "base_ref": "test/29-elevated-audit-provenance-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39631780531,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6"
+      }
+    },
+    {
+      "pr": 663,
+      "head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+      "head_ref": "test/09-ai-screen-creationtime-owner-fence-20261021",
+      "base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "base_ref": "test/09-core-broker-no-gui-escape-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631336087,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87"
+      }
+    }
+  ]
+}
