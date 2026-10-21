@@ -243,7 +243,7 @@ function boundedSparseMetadata(size:bigint,position:bigint,length:bigint) {
   return {position:Number(position),byteCount:Number(length)};
 }
 test('W26/#673 simulated sparse 4GiB+ metadata does not wrap 32-bit or allocate a file',()=>{
-  const boundary=1n<<32n,logicalSize=boundary+KB64+99n;
+  const boundary=1n<<32n,logicalSize=boundary+BigInt(KB64)+99n;
   const r=boundedSparseMetadata(logicalSize,boundary+2n,BigInt(KB64));
   assert.deepEqual(r,{position:4_294_967_298,byteCount:KB64});
   assert.notEqual(r.position,r.position>>>0);
@@ -257,6 +257,6 @@ test('W26/#673 simulated sparse 4GiB+ metadata does not wrap 32-bit or allocate 
     [logicalSize,0n,0n],
     [BigInt(Number.MAX_SAFE_INTEGER)+1n,0n,1n],
     [logicalSize,BigInt(Number.MAX_SAFE_INTEGER)+2n,1n],
-  ] as const) assert.throws(()=>boundedSparseMetadata(...args),RangeError);
+  ] as const) assert.throws(()=>boundedSparseMetadata(args[0],args[1],args[2]),RangeError);
   // No truncate(), sparse OS file, 1GiB allocation, data disk writes or VM.
 });
