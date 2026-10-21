@@ -1,21 +1,38 @@
 # P0 SOURCE-ONLY read-only import/updater/ancestor inspection.
 # A list supplied by a caller is NOT independent evidence of complete imports.
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName='Envelope')]
 param(
- [Parameter(Mandatory=$true)][string]$EvidenceRequestBase64
+ [Parameter(Mandatory=$true,ParameterSetName='Envelope')][string]$EvidenceRequestBase64,
+ [Parameter(Mandatory=$true,ParameterSetName='Legacy')][string]$ProtectedInstallRoot,
+ [Parameter(Mandatory=$true,ParameterSetName='Legacy')][string]$LauncherPath,
+ [Parameter(Mandatory=$true,ParameterSetName='Legacy')][string]$UpdaterPath,
+ [Parameter(Mandatory=$true,ParameterSetName='Legacy')][string[]]$ImportedModulePaths
 )
 $ErrorActionPreference='Stop'
 if($env:OS -ne 'Windows_NT'){throw 'WINDOWS_ONLY'}
 # A single exact UTF-8 JSON envelope avoids pwsh -File's argument-array
 # binding differences on hosted Windows, including DOS 8.3 temp paths.
 # Unrecognized fields, missing imports or incomplete absolute paths fail.
-if($EvidenceRequestBase64.Length -lt 8 -or $EvidenceRequestBase64.Length -gt 90000){
- throw 'BROKER_TREE_REQUEST_ENVELOPE_INVALID_LENGTH'
+# The original #700 QA clients use -File legacy named parameters.
+# Retain a READ-ONLY compatibility surface, never a second trust policy:
+# both invocation types feed the exact same strict, versioned validation.
+if($PSCmdlet.ParameterSetName -eq 'Legacy'){
+ $request=@{
+  version=1
+  protectedInstallRoot=$ProtectedInstallRoot
+  launcherPath=$LauncherPath
+  updaterPath=$UpdaterPath
+  importedModulePaths=@($ImportedModulePaths)
+ }
+}else{
+ if($EvidenceRequestBase64.Length -lt 8 -or $EvidenceRequestBase64.Length -gt 90000){
+  throw 'BROKER_TREE_REQUEST_ENVELOPE_INVALID_LENGTH'
+ }
+ try{
+  $json=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($EvidenceRequestBase64))
+  $request=ConvertFrom-Json -InputObject $json -AsHashtable -ErrorAction Stop
+ }catch{throw 'BROKER_TREE_REQUEST_ENVELOPE_INVALID_ENCODING_OR_JSON'}
 }
-try{
- $json=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($EvidenceRequestBase64))
- $request=ConvertFrom-Json -InputObject $json -AsHashtable -ErrorAction Stop
-}catch{throw 'BROKER_TREE_REQUEST_ENVELOPE_INVALID_ENCODING_OR_JSON'}
 $expectedFields=@('version','protectedInstallRoot','launcherPath','updaterPath','importedModulePaths')
 if($request -isnot [System.Collections.IDictionary] -or
    $request.Count -ne $expectedFields.Count -or
@@ -120,6 +137,7 @@ $anyUnsafe=@($evidence | Where-Object {
 [ordered]@{
  kind='windows_core_broker_protected_tree_readonly_v2'
  requestEnvelopeVersion=1
+ requestInputKind=$(if($PSCmdlet.ParameterSetName -eq 'Legacy'){'legacy-named-readonly'}else{'envelope-v1-readonly'})
  acceptedInputPaths=@($ProtectedInstallRoot,$LauncherPath,$UpdaterPath)+@($ImportedModulePaths)
  protectedRoot=$root
  inputsInsideRoot=($badPaths.Count -eq 0)
@@ -135,6 +153,11 @@ $anyUnsafe=@($evidence | Where-Object {
  publisherOfEveryImportVerified=$false
  pidCreationFiletimeVerified=$false
  processDupHandleBoundaryVerified=$false
+ # DACL listing is not effective access-check against an installed token.
+ # Complete transitive loaded-import discovery requires signed manifest /
+ # independent OS loader inventory, not a caller-provided subset.
+ nativeEffectiveLowPrivilegeAccessCheckCompleted=$false
+ transitiveImportsIndependentlyEnumerated=$false
  protectedCompleteImageTreeAttested=$false
  elevatedCoreDispatchEnabled=$false
  productionReady=$false
