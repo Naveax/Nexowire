@@ -11,7 +11,7 @@ import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
 import {performance} from 'node:perf_hooks';
 import {gzipSync} from 'node:zlib';
-import {createHash} from 'node:crypto';
+import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {createNexowireMcpExpressApp} from '../src/mcp/http-app.js';
@@ -155,7 +155,7 @@ test('S5 staging ledger keeps pending byte reservations through unknown cancella
       storedSizeBytes:size,storedSha256:SHA_A,durableStorageVerified:true}),'COMPLETE');
     assert.equal(charged(),2*size,'even a completed stored file remains charged');
     assert.throws(()=>ledger.acknowledgeDeletion({...A,sessionId:openA.sessionId,
-      durableDeletionVerified:false as true}),/DELETION_RECEIPT_REQUIRED/);
+      durableDeletionVerified:false as unknown as true}),/DELETION_RECEIPT_REQUIRED/);
     assert.equal(charged(),2*size);
     assert.equal(ledger.acknowledgeDeletion({...A,sessionId:openA.sessionId,
       durableDeletionVerified:true}),'RELEASED');
@@ -210,4 +210,40 @@ test('S5 fixed seed tenant budget transcript is reproducible without native gran
   assert.deepEqual({noisy:one.noisy,quiet:one.quiet,denied:one.denied},
     {noisy:30,quiet:30,denied:25});
   assert.match(one.transcriptSha256,/^[a-f0-9]{64}$/);
+});
+
+
+test('S5 synthetic 64KiB buffer lease retains referenced bytes until scoped witness receipt',()=>{
+  // A specification fixture, NOT the deployed parser heap/GC or real Agent.
+  const owner='s5-owner-noisy',job='s5-cancel-buffer-01',epoch=7;
+  const key=Buffer.from('S5_TEST_ONLY_NOT_AN_EXTERNAL_ATTESTATION');
+  let held:Buffer|null=Buffer.alloc(ARTIFACT_CHUNK_BYTES,0xa5);
+  let pending=false;
+  const bytesHeld=()=>held?.byteLength??0;
+  const sign=(o:string,j:string,e:number)=>createHmac('sha256',key)
+    .update(o+':'+j+':'+e+':writer-stopped').digest('hex');
+  const ack=(r:{owner:string;job:string;epoch:number;writerStopped:boolean;mac:string})=>{
+    if(!pending||!r.writerStopped||r.owner!==owner||r.job!==job||r.epoch!==epoch)
+      return 'RETAINED';
+    if(!/^[0-9a-f]{64}$/.test(r.mac))return 'RETAINED';
+    if(!timingSafeEqual(Buffer.from(r.mac,'hex'),Buffer.from(sign(owner,job,epoch),'hex')))
+      return 'RETAINED';
+    held=null;
+    return 'SOURCE_FIXTURE_RELEASED';
+  };
+  pending=true; // cancellation intent, not a verified native effect.
+  assert.equal(bytesHeld(),ARTIFACT_CHUNK_BYTES);
+  assert.equal(ack({owner,job,epoch,writerStopped:false,mac:sign(owner,job,epoch)}),
+    'RETAINED');
+  assert.equal(ack({owner:'s5-owner-quiet',job,epoch,writerStopped:true,
+    mac:sign(owner,job,epoch)}),'RETAINED');
+  assert.equal(ack({owner,job,epoch:epoch-1,writerStopped:true,
+    mac:sign(owner,job,epoch-1)}),'RETAINED');
+  assert.equal(ack({owner,job,epoch,writerStopped:true,
+    mac:'a'.repeat(64)}),'RETAINED');
+  assert.equal(bytesHeld(),ARTIFACT_CHUNK_BYTES,'source buffer remains strongly referenced');
+  assert.equal(ack({owner,job,epoch,writerStopped:true,mac:sign(owner,job,epoch)}),
+    'SOURCE_FIXTURE_RELEASED');
+  assert.equal(bytesHeld(),0,'source reference released only after matched test witness');
+  // Not proof of actual physical memory reclamation or off-host attestation.
 });
