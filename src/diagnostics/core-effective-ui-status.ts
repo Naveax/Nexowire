@@ -40,6 +40,9 @@ export interface BrokerNativeStatement {
   readonly ownerSessionId: string;
   readonly ownerEpoch: number;
   readonly grantGeneration: number;
+  readonly grantMode: 'ROOT' | 'CORE';
+  readonly rootLeaseIssuedAt: string | null;
+  readonly rootLeaseExpiresAt: string | null;
   readonly observedAt: string;
   readonly brokerImageSha256: string;
   readonly brokerVersion: string;
@@ -101,7 +104,8 @@ const encodedSignature = /^[A-Za-z0-9+/]{86}==$/;
 export function coreUiBrokerSigningBytes(s: BrokerNativeStatement): Buffer {
   return Buffer.from(JSON.stringify([
     s.schema,s.deviceId,s.ownerAccountId,s.ownerSessionId,s.ownerEpoch,
-    s.grantGeneration,s.observedAt,s.brokerImageSha256,s.brokerVersion,
+    s.grantGeneration,s.grantMode,s.rootLeaseIssuedAt,s.rootLeaseExpiresAt,
+    s.observedAt,s.brokerImageSha256,s.brokerVersion,
     s.nativeHighToken,s.administratorsEnabled,s.authenticatedBroker,
     s.pinnedPublisherSignature,s.protectedParentAcl,s.protectedImportTreeAcl,
     s.protectedTaskIdentity,s.locallyAttestedEnrollment,
@@ -154,6 +158,11 @@ function validateEvidence(
         b.grantGeneration !== w.grantGeneration ||
         b.ownerEpoch !== pins.expectedOwnerEpoch ||
         b.grantGeneration !== pins.expectedGrantGeneration ||
+        b.grantMode !== facts.requestedMode ||
+        (b.grantMode === 'CORE' && (b.rootLeaseIssuedAt !== null || b.rootLeaseExpiresAt !== null)) ||
+        (b.grantMode === 'ROOT' && (!facts.rootLease ||
+           b.rootLeaseIssuedAt !== facts.rootLease.issuedAt ||
+           b.rootLeaseExpiresAt !== facts.rootLease.expiresAt)) ||
         !hex64.test(b.brokerImageSha256) ||
         b.brokerImageSha256 !== pins.expectedBrokerImageSha256 ||
         b.brokerVersion !== pins.expectedBrokerVersion ||
