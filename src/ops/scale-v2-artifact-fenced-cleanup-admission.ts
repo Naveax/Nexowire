@@ -14,6 +14,8 @@ export interface ServerBoundArtifactCleanup extends ServerBoundQuotaJob {
   readonly rootInvocationId:string;
   /** Highest dispatched writer generation, including writes with lost ACK. */
   readonly dispatchedWriterEpoch:number;
+  /** Authenticated durable predispatch journal, never caller JSON. */
+  readonly pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
 }
 export interface IndependentFencedDeletionWitness {
   readonly ownerId:string;readonly deviceId:string;
@@ -36,6 +38,10 @@ export interface CurrentFencedDeletionReadback {
   /** Persistently revoked all old writer generations across every Hub. */
   readonly writerRevokeEpoch:number;
   readonly writerStoppedThroughEpoch:number;
+  /** Trusted readback of highest Native dispatch, NOT confirmed ACK count. */
+  readonly nativeDispatchHighWaterEpoch:number;
+  /** Trusted persisted dispatch intent, distinguishes #691 from #682. */
+  readonly pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
   readonly deletionEpoch:number;readonly fencingEpoch:number;
   readonly receiptId:string;
   readonly inFlightNativeWriters:number;
@@ -78,7 +84,8 @@ function validWitness(
     proof.rootInvocationId===scope.rootInvocationId&&
     proof.ownerEpoch===scope.ownerEpoch&&
     proof.deviceEpoch===scope.deviceEpoch&&
-    epoch(proof.writerStoppedThroughEpoch)&&
+    Number.isSafeInteger(proof.writerStoppedThroughEpoch)&&
+    proof.writerStoppedThroughEpoch>=0&&
     epoch(proof.deletionEpoch)&&epoch(proof.fencingEpoch)&&
     proof.writerStoppedThroughEpoch>=scope.dispatchedWriterEpoch&&
     proof.deletionEpoch>=proof.writerStoppedThroughEpoch&&
@@ -100,7 +107,13 @@ export class StagingArtifactFencedCleanupAdmission {
     if(!scope||!validId(scope.ownerId)||!validId(scope.deviceId)||
       !validId(scope.projectId)||!validId(scope.sessionId)||
       !validId(scope.rootInvocationId)||!epoch(scope.ownerEpoch)||
-      !epoch(scope.deviceEpoch)||!epoch(scope.dispatchedWriterEpoch)){
+      !epoch(scope.deviceEpoch)||
+      !Number.isSafeInteger(scope.dispatchedWriterEpoch)||
+      scope.dispatchedWriterEpoch<0||
+      (scope.dispatchedWriterEpoch===0&&
+       scope.pendingDispatchState!=='NEVER_DISPATCHED')||
+      (scope.dispatchedWriterEpoch>0&&
+       scope.pendingDispatchState!=='DISPATCHED_OR_UNKNOWN')){
       throw Error('CLEANUP_SERVER_BINDING_INVALID');
     }
     // Outer external CAS authority MUST hold a fencing lock while the inner
@@ -123,6 +136,14 @@ export class StagingArtifactFencedCleanupAdmission {
         current.deviceEpoch!==scope.deviceEpoch||
         !epoch(current.writerRevokeEpoch)||
         current.writerRevokeEpoch<=scope.dispatchedWriterEpoch||
+        !Number.isSafeInteger(current.nativeDispatchHighWaterEpoch)||
+        current.nativeDispatchHighWaterEpoch!==scope.dispatchedWriterEpoch||
+        current.pendingDispatchState!==scope.pendingDispatchState||
+        (scope.dispatchedWriterEpoch===0&&
+          (current.nativeDispatchHighWaterEpoch!==0||
+           current.pendingDispatchState!=='NEVER_DISPATCHED'))||
+        (scope.dispatchedWriterEpoch>0&&
+          current.pendingDispatchState!=='DISPATCHED_OR_UNKNOWN')||
         current.writerStoppedThroughEpoch<scope.dispatchedWriterEpoch||
         current.writerStoppedThroughEpoch!==witness.writerStoppedThroughEpoch||
         current.deletionEpoch!==witness.deletionEpoch||

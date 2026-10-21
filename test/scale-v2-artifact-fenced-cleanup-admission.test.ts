@@ -29,6 +29,7 @@ const scope:ServerBoundArtifactCleanup={
   projectId:'project-alpha',sessionId:'session-alpha-01',
   rootInvocationId:'root-alpha-01',ownerEpoch:31,deviceEpoch:19,
   dispatchedWriterEpoch:71,
+  pendingDispatchState:'DISPATCHED_OR_UNKNOWN',
 };
 const started=new Date('2026-10-21T15:59:59.900Z');
 const advanced=new Date('2026-10-21T16:00:00.100Z');
@@ -53,6 +54,9 @@ function fixture(){
     protectedImage:true,source:'NOT_DISPATCHED' as
       'NOT_DISPATCHED'|'WRITE_UNKNOWN'|'WRITERS_QUIESCENT'|'DELETED',
     stoppedThrough:0,deletedAt:0,fencingEpoch:0,revokeEpoch:0,
+    nativeDispatchHighWaterEpoch:scope.dispatchedWriterEpoch,
+    nativeDispatchState:'DISPATCHED_OR_UNKNOWN' as
+      'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN',
     activeWriters:0,staleReadback:false,readbackUnavailable:false,
     actualDeletion:false,writerStopped:false,
     corruptProof:false,
@@ -87,7 +91,7 @@ function fixture(){
       r.ownerId===scope.ownerId&&r.deviceId===scope.deviceId&&
       r.projectId===scope.projectId&&r.sessionId===scope.sessionId,
     verifyWriterFence:r=>evidence.writerStopped&&
-      evidence.stoppedThrough>=scope.dispatchedWriterEpoch&&
+      evidence.stoppedThrough>=evidence.nativeDispatchHighWaterEpoch&&
       r.ownerId===scope.ownerId&&r.deviceId===scope.deviceId&&
       r.sessionId===scope.sessionId,
   };
@@ -100,6 +104,8 @@ function fixture(){
         rootInvocationId:binding.rootInvocationId,
         ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
         writerRevokeEpoch:evidence.revokeEpoch,
+        nativeDispatchHighWaterEpoch:evidence.nativeDispatchHighWaterEpoch,
+        pendingDispatchState:evidence.nativeDispatchState,
         writerStoppedThroughEpoch:evidence.stoppedThrough,
         deletionEpoch:evidence.deletedAt,
         fencingEpoch:evidence.staleReadback
@@ -357,6 +363,112 @@ test('persisted revoke epoch newer than physical deletion: deny old receipt',asy
  const f=fixture();try{
    reserve(f);pending(f);await cancel(f);f.verifiedDelete();
    f.evidence.revokeEpoch=f.evidence.fencingEpoch+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+/**
+ * #691 / #682 compatibility fixtures. These are independently persisted
+ * quota-CAS readback state models, NOT real #08 worker integration.
+ */
+test('#691 reserved native intent with dispatched=false can clean zero-byte reservation ONLY after verified absence',async()=>{
+ const f=fixture();try{
+   reserve(f);
+   const pre={...scope,dispatchedWriterEpoch:0,
+     pendingDispatchState:'NEVER_DISPATCHED' as const};
+   // No native write or quota byte admission occurred.
+   assert.equal(f.stats().admittedBytes,0);
+   assert.equal(await f.cancel.cancel(pre,0),'CANCEL_PENDING');
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(pre),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.verifiedDelete();
+   // External independent CAS attests no write was ever dispatched.
+   f.evidence.nativeDispatchHighWaterEpoch=0;
+   f.evidence.nativeDispatchState='NEVER_DISPATCHED';
+   f.evidence.stoppedThrough=0;
+   f.evidence.revokeEpoch=1;
+   f.evidence.deletedAt=2;
+   f.evidence.fencingEpoch=3;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(pre),
+     'RELEASED_FIRST');
+   assert.deepEqual(f.stats(),{admittedBytes:0,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(pre),
+     'RELEASED_ALREADY');
+ }finally{f.close()}
+});
+
+test('#691 false dispatched=false claim cannot hide actual persisted dispatch high-water',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   const forgedPre={...scope,dispatchedWriterEpoch:0,
+     pendingDispatchState:'NEVER_DISPATCHED' as const};
+   // External CAS *independently* remembers Native may already have written.
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forgedPre),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+      totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#682 UNKNOWN has zero ACKed bytes but nonzero DISPATCHED high-water: deny early refund or replay',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);
+   // Native dispatched first chunk, ACK lost. Hub has zero confirmed bytes.
+   const unconfirmed=baseChunk();
+   assert.equal(await f.cancel.cancel(scope,0),'CANCEL_PENDING');
+   f.evidence.source='WRITE_UNKNOWN';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   assert.equal(f.second.stageChunk({...unconfirmed,now:advanced}),'DENIED_STATE');
+   // Forged worker status changes without authoritative writer quiescence.
+   f.evidence.nativeDispatchState='NEVER_DISPATCHED';
+   f.verifiedDelete();
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   f.evidence.nativeDispatchState='DISPATCHED_OR_UNKNOWN';
+   f.evidence.activeWriters=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   f.evidence.activeWriters=0;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+ }finally{f.close()}
+});
+
+test('#682 late UNKNOWN receipt under stale/revoked CORE owner or old CAS cannot get first release',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.ownerEpoch=scope.ownerEpoch+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.ownerEpoch=scope.ownerEpoch;f.evidence.revoked=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /AUTHORITY_STALE_REVOKED_UNKNOWN/);
+   f.evidence.revoked=false;f.evidence.staleReadback=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('journal absent dispatched flag is UNKNOWN, not the no-dispatch fast path',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   const missingMark={...scope,pendingDispatchState:undefined as unknown as
+     'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN'};
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(missingMark),
+     /CLEANUP_SERVER_BINDING_INVALID/);
+   // Legacy pending with no proof is never assumed not-dispatched.
+   f.evidence.nativeDispatchHighWaterEpoch=0;
+   f.evidence.nativeDispatchState='NEVER_DISPATCHED';
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
      /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
    assert.equal(f.stats().occupiedBytes,SIZE);
