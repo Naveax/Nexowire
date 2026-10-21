@@ -1,5 +1,12 @@
 import path from 'node:path';
 import {unsafeWindowsPath} from './scoped-path-grants.js';
+import {
+  assertEffectiveNativeAcl,
+  authorizeNativeRelativeChain,
+  RelativeAccessDenied,
+  type NativeEffectiveAcl,
+  type NativeRelativeChain,
+} from './windows-native-relative-access.js';
 
 /**
  * #05 SOURCE CONTRACT ONLY. Inputs must be produced by a trusted, protected
@@ -45,6 +52,8 @@ export interface ProtectedAclEvidence {
   provider:'native-verified'|'unavailable';
   /** For module import tree and updater binaries; signed provenance is independent of ACL. */
   pinnedPublisherAndDigest:boolean;
+  /** OS handle security descriptor ACEs checked independently of booleans. */
+  effectiveAcl:NativeEffectiveAcl;
 }
 export interface NativeGrantEvidence {
   ownerId:string;
@@ -72,6 +81,9 @@ export interface VerifiedFilesystemBoundary {
   sourceDaclProtected:boolean;
   sourceUntrustedWriteOrDeleteOrOwnerRights:boolean;
   sourcePublisherAndDigestVerified:boolean;
+  sourceEffectiveAcl:NativeEffectiveAcl;
+  /** Verified native directory-handle relative traversal, never from request input. */
+  destinationRelativeChain:NativeRelativeChain;
   destinationParent:NativeHandleEvidence;
   protectedComponents:Readonly<Record<ProtectedRole,ProtectedAclEvidence>>;
   grant:NativeGrantEvidence;
@@ -128,6 +140,7 @@ function assertProtected(acl:ProtectedAclEvidence,role:ProtectedRole):void{
     deny('FILE_NATIVE_PROTECTED_ACL_UNVERIFIED');
   }
   assertNativeHandleIdentity(acl.handle,expected,'directory');
+  assertEffectiveNativeAcl(acl.effectiveAcl,acl.handle);
 }
 export function assertNativeProtectedFileBoundary(
   requestedSource:string,requestedDestination:string,
@@ -152,13 +165,36 @@ export function assertNativeProtectedFileBoundary(
      !evidence.sourcePublisherAndDigestVerified){
     deny('FILE_NATIVE_SOURCE_ACL_OR_SIGNER_UNVERIFIED');
   }
+  assertEffectiveNativeAcl(evidence.sourceEffectiveAcl,evidence.source);
   for(const role of ['parent','updater','module'] as const){
     assertProtected(evidence.protectedComponents?.[role],role);
   }
-  const parentPath=path.win32.dirname(canonical(requestedDestination));
-  assertNativeHandleIdentity(evidence.destinationParent,parentPath,'directory');
   const grant=evidence.grant;
-  if(!grant||!grant.ownerApprovalVerified ||
+  if(!grant)deny('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED');
+  // Every segment is derived from the independently pinned grant root handle.
+  // The caller path can only MATCH the derived destination; it never selects it.
+  let verified:ReturnType<typeof authorizeNativeRelativeChain>;
+  try {
+    verified=authorizeNativeRelativeChain(
+      evidence.destinationRelativeChain,grant.root,requestedDestination);
+  }catch(error){
+    if(error instanceof RelativeAccessDenied){
+      deny(error.code==='NATIVE_RELATIVE_REQUEST_PATH_MISMATCH' ||
+        error.code==='NATIVE_RELATIVE_UNSAFE_PATH' ||
+        error.code==='NATIVE_RELATIVE_UNSAFE_LEAF'
+        ? 'FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED'
+        : 'FILE_NATIVE_HANDLE_IDENTITY_UNVERIFIED');
+    }
+    throw error;
+  }
+  const parentPath=path.win32.dirname(canonical(verified.derivedDestination));
+  assertNativeHandleIdentity(evidence.destinationParent,parentPath,'directory');
+  if(verified.parent.fileId!==evidence.destinationParent.fileId ||
+     verified.parent.volumeGuid!==evidence.destinationParent.volumeGuid ||
+     verified.parent.diskId!==evidence.destinationParent.diskId){
+    deny('FILE_NATIVE_PARENT_HANDLE_NOT_PINNED');
+  }
+  if(!grant.ownerApprovalVerified ||
      grant.ownerId!==ownerId||grant.deviceId!==deviceId||
      !grant.scopes.includes(scope) ||
      !Number.isFinite(grant.expiresAtMonotonic) ||
