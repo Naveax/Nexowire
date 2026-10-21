@@ -23,7 +23,13 @@ export function reviewFrozenDag(snapshot:FrozenSnapshot) {
   const nodes=new Map(snapshot.nodes.map(n=>[n.pr,n]));
   const claims=new Map(snapshot.file_claims.map(c=>[c.pr,c]));
   const comps=new Map(snapshot.comparisons.map(c=>[c.pr,c]));
-  const allEvidenceComplete=snapshot.nodes.every(n=>claims.get(n.pr)?.scope==='all_changed_files');
+  const snapshotShapeValid=sha.test(snapshot.main_head)&&
+    snapshot.open_pr_count===snapshot.nodes.length&&
+    nodes.size===snapshot.nodes.length&&
+    claims.size===snapshot.file_claims.length&&
+    comps.size===snapshot.comparisons.length;
+  const allEvidenceComplete=snapshotShapeValid&&
+    snapshot.nodes.every(n=>claims.get(n.pr)?.scope==='all_changed_files');
   const getParents=(id:number)=>{const chain:number[]=[];const seen=new Set([id]);
     let p=nodes.get(id)?.parent_pr;
     while(p!==null&&p!==undefined&&!seen.has(p)){
@@ -46,6 +52,7 @@ export function reviewFrozenDag(snapshot:FrozenSnapshot) {
   for(const n of items) {
     const problems:string[]=[];
     const add=(c:string)=>{if(!problems.includes(c))problems.push(c);};
+    if(!snapshotShapeValid)add('INCOMPLETE_OR_DUPLICATED_SNAPSHOT');
     if(!sha.test(n.head_sha)||!sha.test(n.base_sha))add('BAD_SHA');
     if(!Number.isSafeInteger(n.ci.run_id)||n.ci.run_id<=0||
       n.ci.queried_head_sha!==n.head_sha)add('CI_HEAD_UNVERIFIED');
