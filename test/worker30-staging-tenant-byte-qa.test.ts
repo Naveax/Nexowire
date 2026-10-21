@@ -126,7 +126,8 @@ test('worker30 unknown/cancelled-in-flight chunk must keep charge until authorit
     const row=db.prepare(
       'SELECT offset_bytes,state FROM budget_artifact_sessions WHERE session_id=?'
     ).get(c.sessionId) as {offset_bytes:number;state:string};
-    assert.deepEqual(row,{offset_bytes:0,state:'OPEN'});
+    assert.equal(row.offset_bytes,0);
+    assert.equal(row.state,'OPEN');
     const count=(db.prepare(
       'SELECT SUM(byte_count) AS n FROM budget_artifact_chunks'
     ).get() as {n:number}).n;
