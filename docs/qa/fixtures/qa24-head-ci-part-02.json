@@ -24,6 +24,31 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb"
+      },
+      "files": [
+        "docs/ARTIFACT_LARGE_STREAM_588_20261020.md",
+        "docs/ARTIFACT_ONE_CALL_TRANSFER_588.md",
+        "scripts/artifact-588-index-proof.ts",
+        "scripts/artifact-588-large-lab.ts",
+        "src/mcp/artifact-bridge-device-ingest.ts",
+        "src/mcp/artifact-bridge-tools.ts",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/workspace/artifact-bridge.ts",
+        "src/workspace/store.ts",
+        "test/artifact-588-cross-device-worker.test.ts",
+        "test/artifact-588-cross-device.e2e.test.ts",
+        "test/artifact-588-single-call-contract.test.ts",
+        "test/artifact-bridge-device-ingest.test.ts",
+        "test/artifact-large-stream.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "merge_base_sha": "97977a9f81f2e21102bdf910d2cbe45c9b4c484b",
+        "status": "diverged"
       }
     },
     {
@@ -38,6 +63,21 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "cf58e6882e44968698f3f548b353287ba1698747"
+      },
+      "files": [
+        "docs/MCP_OAUTH_HTTP_PARSER_ACCEPTANCE_20261020.md",
+        "src/hub/control-plane-mcp-auth.ts",
+        "src/mcp/http-app.ts",
+        "src/mcp/http.ts",
+        "test/mcp-http-json-limit.test.ts",
+        "test/mcp-oauth-http-parser-isolation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "merge_base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "status": "ahead"
       }
     },
     {
@@ -52,6 +92,20 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/QA_02_ERROR_CONTRACT_OUTPUT_ORDERING_20261020.md",
+        "src/mcp/create-server.ts",
+        "test/qa-02-error-contract-no-replay.test.ts",
+        "test/qa-02-windows-output-ordering.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+        "merge_base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "status": "ahead"
       }
     },
     {
@@ -66,6 +120,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_ADDITIONAL_GUI_BROKER_ACCEPTANCE_20261020.md",
+        "src/agent/windows-private-shell-broker-guard.ts",
+        "test/private-desktop-additional-brokers.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "merge_base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "status": "ahead"
       }
     },
     {
@@ -80,6 +147,19 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_EXTERNAL_CAS_20261020.md",
+        "src/agent/remote-mutation-cas.ts",
+        "test/agent-remote-cas.test.ts",
+        "test/fixtures/agent-remote-cas-fixture.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+        "head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "merge_base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+        "status": "ahead"
       }
     },
     {
@@ -94,6 +174,39 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
       }
     },
     {
@@ -108,6 +221,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/QA_02_576_JOB_SOURCE_PROOF_20261021.md",
+        "docs/QA_02_ERROR_CONTRACT_OUTPUT_ORDERING_20261020.md",
+        "src/mcp/create-server.ts",
+        "test/qa-02-error-contract-no-replay.test.ts",
+        "test/qa-02-windows-output-ordering.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+        "head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+        "merge_base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+        "status": "ahead"
       }
     },
     {
@@ -122,6 +250,20 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_RECEIPT_PROVENANCE_ACCEPTANCE.md",
+        "src/ops/scale-v2-artifact-byte-budget-staging.ts",
+        "test/scale-v2-artifact-byte-budget-staging.test.ts",
+        "test/scale-v2-artifact-cancel-fencing-staging.test.ts",
+        "test/scale-v2-artifact-receipt-provenance-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     }
   ]
