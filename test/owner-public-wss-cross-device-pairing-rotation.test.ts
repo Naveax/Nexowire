@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomBytes,sign} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
-import {readFileSync} from 'node:fs';
+import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   ProposedOwnerWssEnrollmentIssuer,serializeOwnerWssDeviceProof,
@@ -34,8 +35,8 @@ const profile={
   expectedHostname:'edge.example.com',caMode:'system' as const,
   trustedSpkiSha256:['a'.repeat(64)],
 };
-function setup(){
-  const db=new DatabaseSync(':memory:');
+function setup(databasePath=':memory:'){
+  const db=new DatabaseSync(databasePath);
   for(const f of [
     'scale-v2-owner-shared-quota-dev.sql',
     'scale-v2-owner-quota-rpc-dev.sql',
@@ -276,4 +277,91 @@ test('legitimate foreign-owner signed receipt is rejected by the former owner bu
       'SELECT COUNT(*) AS n FROM proposed_owner_wss_consumed_receipts'
     ).get() as {n:number}).n,1);
   }finally{db.close()}
+});
+
+test('SQLite INSERT OR REPLACE of existing device pairing cannot resurrect a stale same-owner receipt',async()=>{
+  const db=setup();
+  try{
+    const old=await issuer(db).issue(proof(a,keysA.privateKey,nonce()));
+    const revBefore=(db.prepare('SELECT revision FROM proposed_owner_wss_profile_revisions WHERE device_id=?')
+      .get(a) as {revision:number}).revision;
+    // A pairing migration may REPLACE instead of UPDATE. SQLite does NOT
+    // execute the existing AFTER UPDATE device owner trigger for this path.
+    db.prepare('INSERT OR REPLACE INTO proposed_owner_quota_devices VALUES(?,?,?,?)')
+      .run(a,foreign,1,'full');
+    db.prepare('INSERT OR REPLACE INTO proposed_owner_quota_devices VALUES(?,?,?,?)')
+      .run(a,account,1,'full');
+    const revAfter=(db.prepare('SELECT revision FROM proposed_owner_wss_profile_revisions WHERE device_id=?')
+      .get(a) as {revision:number}).revision;
+    assert.ok(revAfter>revBefore,'every device re-pair must advance trusted WSS revision');
+    await assert.rejects(
+      ProposedOwnerPublicWssEnrollmentLease.establishOnce(
+        old,stateReader(db,a,keysA.publicKey),
+        new ProposedOwnerWssSqliteReceiptJournal(db)),
+      /revision|mismatch|revoked/);
+    assert.equal((db.prepare(
+      'SELECT COUNT(*) AS n FROM proposed_owner_wss_consumed_receipts'
+    ).get() as {n:number}).n,0);
+  }finally{db.close()}
+});
+
+test('device row DELETE then INSERT with same ID must not restore a stale signed receipt',async()=>{
+  const db=setup();
+  try{
+    const old=await issuer(db).issue(proof(a,keysA.privateKey,nonce()));
+    const revBefore=(db.prepare('SELECT revision FROM proposed_owner_wss_profile_revisions WHERE device_id=?')
+      .get(a) as {revision:number}).revision;
+    db.prepare('DELETE FROM proposed_owner_quota_devices WHERE device_id=?').run(a);
+    db.prepare('INSERT INTO proposed_owner_quota_devices VALUES(?,?,?,?)')
+      .run(a,account,1,'full');
+    const revAfter=(db.prepare('SELECT revision FROM proposed_owner_wss_profile_revisions WHERE device_id=?')
+      .get(a) as {revision:number}).revision;
+    assert.ok(revAfter>revBefore,'deletion and recreated pairing must advance WSS revision');
+    await assert.rejects(
+      ProposedOwnerPublicWssEnrollmentLease.establishOnce(
+        old,stateReader(db,a,keysA.publicKey),
+        new ProposedOwnerWssSqliteReceiptJournal(db)),
+      /revision|mismatch|revoked/);
+  }finally{db.close()}
+});
+
+test('repaired device signing key epoch survives SQLite close/reopen and fences old receipt reconnect',async()=>{
+  const folder=mkdtempSync(path.join(tmpdir(),'nexowire-13-pairing-replace-'));
+  const dbPath=path.join(folder,'owner-staging.sqlite');
+  let first:DatabaseSync|undefined;
+  let second:DatabaseSync|undefined;
+  try{
+    first=setup(dbPath);
+    const before=await issuer(first).issue(proof(a,keysA.privateKey,nonce()));
+    const changed=generateKeyPairSync('ed25519');
+    first.prepare('INSERT OR REPLACE INTO proposed_owner_rpc_device_keys VALUES(?,?,?)')
+      .run(a,pem(changed.publicKey),1);
+    const bumped=(first.prepare(
+      'SELECT revision FROM proposed_owner_wss_profile_revisions WHERE device_id=?'
+    ).get(a) as {revision:number}).revision;
+    assert.ok(bumped>before.profileRevision);
+    first.close();first=undefined;
+    second=new DatabaseSync(dbPath);
+    const persisted=(second.prepare(
+      'SELECT revision FROM proposed_owner_wss_profile_revisions WHERE device_id=?'
+    ).get(a) as {revision:number}).revision;
+    assert.equal(persisted,bumped);
+    await assert.rejects(
+      ProposedOwnerPublicWssEnrollmentLease.establishOnce(
+        before,stateReader(second,a,changed.publicKey),
+        new ProposedOwnerWssSqliteReceiptJournal(second),
+      ),/revision|mismatch/);
+    assert.equal((second.prepare(
+      'SELECT COUNT(*) AS n FROM proposed_owner_wss_consumed_receipts'
+    ).get() as {n:number}).n,0);
+    const fresh=await issuer(second).issue(proof(a,changed.privateKey,nonce()));
+    await ProposedOwnerPublicWssEnrollmentLease.establishOnce(
+      fresh,stateReader(second,a,changed.publicKey),
+      new ProposedOwnerWssSqliteReceiptJournal(second),
+    );
+  }finally{
+    if(first)first.close();
+    if(second)second.close();
+    rmSync(folder,{recursive:true,force:true});
+  }
 });
