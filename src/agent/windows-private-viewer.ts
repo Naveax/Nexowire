@@ -6,7 +6,10 @@ import * as z from 'zod';
 import {
   captureWindowsPrivateScreen,
 } from './windows-private-screen.js';
-import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
+import {
+  executeWindowsPrivateDesktopCapability,
+  requestPrivateDesktopEmergencyStopFence,
+} from './windows-private-desktop.js';
 
 const ViewerStartSchema = z.object({
   refresh_ms: z
@@ -1113,6 +1116,10 @@ async function handleLocalEmergencyStop():Promise<boolean>{
     return false;
   }
   try{
+    // The LOCAL emergency click revokes NEW actions first. Status may fail
+    // (including a UAC/Winlogon input-desktop transition), but that must
+    // not leave GUI, child-launch, keyboard, or picker operations enabled.
+    await requestPrivateDesktopEmergencyStopFence();
     const snapshot=await executeWindowsPrivateDesktopCapability(
       'windows.private_desktop.status',{},
     ) as {data:{inputDesktop:string}};

@@ -919,6 +919,10 @@ type PrivateInputAction =
 
 async function request(action:PrivateDesktopHelperAction, payload:Record<string,unknown>):Promise<unknown>{
   const p=paths();
+  if(action==='launch'){
+    await assertNoPrivateDesktopEmergencyStop(p.root);
+    await requireProtectedPrivateDesktopOwner('launch');
+  }
   await assertGeneratedPrivateHelperIntegrity(p.helper,helperScript);const f=path.join(p.root,'req-'+process.pid+'-'+Date.now()+'-'+Math.random().toString(16).slice(2)+'.json');await fs.writeFile(f,JSON.stringify(payload),'utf8');
   try{return await psJson(['-File',p.helper,'-Action',action,'-Request',f]);}finally{await fs.rm(f,{force:true});}
 }
@@ -929,6 +933,9 @@ async function privateInputRequest(
   timeoutMs = 15_000,
 ): Promise<unknown> {
   const p = paths();
+  // UIA/picker/private-pointer workers are independently spawned helpers.
+  // They cannot borrow an earlier dispatcher check once STOP is requested.
+  await assertNoPrivateDesktopEmergencyStop(p.root);
   const nonce =
     process.pid +
     '-' +
@@ -952,6 +959,12 @@ async function privateInputRequest(
   let pid: number | undefined;
   try {
     await assertGeneratedPrivateHelperIntegrity(p.inputHelper,inputHelperScript);
+    // Recheck after the filesystem/hash await; a local emergency click
+    // may have arrived while the helper was being inspected.
+    await assertNoPrivateDesktopEmergencyStop(p.root);
+    // Private UIA workers also create OS processes, and their old cleanup
+    // used PID-only taskkill. Refuse to start any helper without OS owner.
+    await requireProtectedPrivateDesktopOwner('launch');
     pid = await launch(
       PRIVATE_DESKTOP_POWERSHELL,
       [
@@ -1250,7 +1263,11 @@ async function shortcut():Promise<string|null>{
 }
 
 async function start(input:unknown):Promise<{data:unknown}>{
-  assertWindows();const parsed=StartSchema.parse(input);await ensureScripts();const p=paths();const old=await readState();if(old&&alive(old.hostPid)&&alive(old.shellPid))return{data:{running:true,reused:true,desktopName:DESKTOP_NAME,hostPid:old.hostPid,shellPid:old.shellPid,inputDesktop:await inputDesktop(),visibleDesktopChanged:false}};
+  assertWindows();
+  // The host and private shell are processes too. Do not spawn a host
+  // before the protected #03 owner/Job collector is available.
+  await requireProtectedPrivateDesktopOwner('launch');
+  const parsed=StartSchema.parse(input);await ensureScripts();const p=paths();const old=await readState();if(old&&alive(old.hostPid)&&alive(old.shellPid))return{data:{running:true,reused:true,desktopName:DESKTOP_NAME,hostPid:old.hostPid,shellPid:old.shellPid,inputDesktop:await inputDesktop(),visibleDesktopChanged:false}};
   // If any persisted PID remains alive, replacing the state would orphan
   // its GUI process and discard the sole cleanup/stop bookkeeping.
   if(old&&[old.hostPid,old.shellPid,...old.launchedPids].some(alive)){
@@ -1875,6 +1892,17 @@ async function showPrivateDesktop(): Promise<{ data: unknown }> {
       manualReturnHotkey: 'Ctrl+Alt+D',
     },
   };
+}
+
+/**
+ * Locally requested emergency cancellation. The viewer calls this before
+ * reading private desktop status or inspecting the UAC input desktop so a
+ * failed/unknown status can never silently leave new AI UI actions enabled.
+ * This does NOT report stopped=true or perform process termination.
+ */
+export async function requestPrivateDesktopEmergencyStopFence():Promise<void>{
+  assertWindows();
+  await recordPrivateDesktopEmergencyStop(paths().root);
 }
 
 // These operations use a shared state.json/.tmp and persistent desktop

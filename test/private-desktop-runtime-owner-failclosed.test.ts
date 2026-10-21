@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {executeWindowsPrivateDesktopCapability as desktop}
-  from '../src/agent/windows-private-desktop.js';
+import {
+  executeWindowsPrivateDesktopCapability as desktop,
+  requestPrivateDesktopEmergencyStopFence,
+} from '../src/agent/windows-private-desktop.js';
 import {
   assertNoPrivateDesktopEmergencyStop,
   requireProtectedPrivateDesktopOwner,
@@ -36,6 +38,47 @@ async function fixture(t:test.TestContext):Promise<string>{
   await fs.writeFile(path.join(tmp,'state.json'),JSON.stringify(stored));
   return tmp;
 }
+test('local emergency request fences operations before corrupt status or Winlogon checks',{
+  skip:process.platform!=='win32',
+},async t=>{
+  const root=await fixture(t);
+  await fs.writeFile(path.join(root,'state.json'),'{bad-json');
+  // This is the viewer's new first operation on a LOCAL STOP click.
+  await requestPrivateDesktopEmergencyStopFence();
+  assert.match(await fs.readFile(path.join(root,'emergency-stop.pending'),'utf8'),
+    /STOP_REQUESTED/);
+  await assert.rejects(desktop('windows.private_desktop.status',{}),
+    e=>e instanceof Error&&'code'in e&&e.code==='PRIVATE_DESKTOP_STATE_INVALID');
+  await assert.rejects(desktop('windows.private_pointer.click',{
+    hwnd:'0x1',x:2,y:2,
+  }),check(PRIVATE_DESKTOP_EMERGENCY_STOP_PENDING));
+});
+test('without native protected owner, start refuses BEFORE any new host or helper files',{
+  skip:process.platform!=='win32',
+},async t=>{
+  const root=await fixture(t);
+  await fs.rm(path.join(root,'state.json'));
+  await assert.rejects(desktop('windows.private_desktop.start',{
+    create_shortcut:false,
+  }),check(PRIVATE_DESKTOP_OWNER_WITNESS_UNAVAILABLE));
+  assert.deepEqual(await fs.readdir(root),[]);
+});
+test('viewer and native input worker check emergency before unsafe async dispatch',async()=>{
+  const viewer=await fs.readFile(new URL('../src/agent/windows-private-viewer.ts',
+    import.meta.url),'utf8');
+  const handler=viewer.match(/async function handleLocalEmergencyStop\(\)[\s\S]*?(?=function startRefreshLoop)/)?.[0];
+  assert.ok(handler);
+  const fence=handler.indexOf('await requestPrivateDesktopEmergencyStopFence()');
+  const status=handler.indexOf("'windows.private_desktop.status'");
+  assert.ok(fence>=0&&status>fence,'viewer must persist STOP before status/UAC reads');
+  const runtime=await fs.readFile(new URL('../src/agent/windows-private-desktop.ts',
+    import.meta.url),'utf8');
+  const worker=runtime.match(/async function privateInputRequest\([\s\S]*?(?=async function resolveExecutable)/)?.[0];
+  assert.ok(worker);
+  assert.ok(worker.indexOf('await requireProtectedPrivateDesktopOwner(\'launch\')')>=0);
+  assert.ok(worker.split('await assertNoPrivateDesktopEmergencyStop(p.root)').length>=3,
+    'helper must check cancellation before and after integrity I/O');
+});
 test('real desktop STOP persists cancellation but never taskkills forged state PIDs',{
   skip:process.platform!=='win32',
 },async t=>{
