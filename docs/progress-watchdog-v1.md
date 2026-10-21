@@ -287,7 +287,7 @@ SKIP, GitHub exact-head CI and production release gates.
   No live crypto bot or GPU benchmark launched.
 
 
-### #575 follow-up: #588/#596 one-call transfer receipts (2026-10-20)
+### Historical #575 transfer receipt prototype (2026-10-20; superseded 2026-10-21)
 
 `src/agent/one-call-transfer-watchdog.ts` is a standalone, read-only
 observer of the current **#596** `artifact_bridge_ingest_device_file`
@@ -346,3 +346,70 @@ execution, durable owner-bound status/cancel receipts, trusted immutable
 artifact handoff, full provenance and end-to-end two-device acceptance.
 No live crypto/GPU workload, production deploy, automatic replay, or
 unsigned Job helper installation was attempted.
+
+
+### 2026-10-21: exact #596 head 33504656 after #597 QA merge
+
+**Current one-call ABI (source-only, #596 remains DRAFT):**
+`artifact_bridge_transfer_start` accepts source/target device/path, optional
+project/expected hash and explicit `resume_transfer_id`; it returns a
+`CrossDeviceTransferJobs.public()` receipt immediately. Authenticated
+`artifact_bridge_transfer_status` and `artifact_bridge_transfer_cancel`
+now exist. Their output fields are: `id` (UUID), `state` (`QUEUED`,
+`RUNNING`, `RECOVERY_REQUIRED`, `FAILED`, `MUTATION_UNKNOWN`,
+`CANCEL_REQUESTED`, `CANCELLED`, `PUBLISHING`, `COMPLETED`),
+`bytesTotal`, `bytesConfirmed`, `sha256`, source/target device/path,
+`updatedAt`, optional `errorCode`. The earlier PARTIAL/COMPLETE DTO
+belongs to the older bounded-ingest API; the previous section documents
+that historical prototype, NOT the current one-call adapter.
+
+**Reworked independent `src/agent/one-call-transfer-watchdog.ts`:**
+- Pins externally authenticated caller `requestId`, source/target device,
+  path and optionally source SHA-256, then binds the returned transfer UUID.
+  Validates monotonic time/offset, safe integer size, chunk boundaries and
+  identical transfer identity/hash on every start/status/cancel receipt.
+  No full binary body is included in RPC responses.
+- `COMPLETED` with all bytes acknowledged is only
+  `publicationReported=true`. Even `PUBLISHING` with all bytes cannot
+  become storage proof. To obtain `readbackVerified=true`, the caller
+  supplies a separate **authenticated target-side** `stat`, complete
+  `hash`, last <=64KiB `read` and a second complete `hash/stat` through
+  Native read-only APIs. All hashes and byte counts must agree. Proof
+  expires after 30 seconds. Native v1.0.5 >256MiB hash/offset acceptance
+  remains BLOCKED.
+- `atomicNoOverwriteVerified=false` stays explicit. Final readback
+  can establish *observed destination content consistency*, not historic
+  no-overwrite/atomic-move provenance or immutable custody.
+  `workerCompletedVerified=false` is invariant; transfer status is
+  **never** an immutable worker result or `completed_verified`.
+- `MUTATION_UNKNOWN` and `RECOVERY_REQUIRED` prevent implicit replay;
+  a renewed receipt is accepted only by an explicitly owner-approved
+  resume call after the #596 job manager reconciles source and staging.
+  `CANCEL_REQUESTED`/`CANCELLED` are not completion. Persisted zero
+  byte growth or lost child status raises warnings, even if worker
+  counters claim 100%. `FAILED`, `PUBLISHING` rollback, canceled
+  publication and changed owner/target/hash are rejected.
+- **Permanent #575 suite:** 11 exact-DTO adapter tests including fake
+  completion, independent correct/mismatching target, mutation between
+  first and final hash, stale proof, stalled fake progress, lost PID,
+  UNKNOWN/resume, cancel, rollback/forgery and 1GiB+ accounting without
+  allocating the payload. The existing Progress/Proof fixtures remain.
+- **Independent cross-branch local acceptance:** using an **ephemeral
+  uncommitted source copy** from real #596 HEAD
+  `335046569a38f3a1a3fc82bf851f9b7df7640fdb`,
+  4/4 tests exercised actual `CrossDeviceTransferJobs`: 221KiB+
+  single logical start, observed `COMPLETED` followed by target-side
+  SHA/readback; lost-write-ACK `MUTATION_UNKNOWN` followed by explicit
+  reconciled resume without duplicate write; cancel prevented
+  publication; pre-existing destination was never overwritten. All
+  isolated fixture copies were removed before PR commit. The source
+  owned by #08 and all live Agents remained unchanged.
+
+**Acceptance limitation:** This DRAFT #575 verifies observed transfer
+integrity only. A privileged, authenticated, immutable Agent-owned
+artifact/result handoff with durable `requestId`, output SHA-256,
+exitCode/timestamps and signed/independent acceptance remains absent.
+No status RPC, readback alone, or synthetic fixture may assert
+production `completed_verified`. The #596 source still awaits its own
+integration, signed release and two-device real acceptance; no live
+crypto bot/GPU workloads were launched.

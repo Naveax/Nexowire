@@ -1,224 +1,243 @@
 /**
- * Adapter for #588 / proposed #596 one-call MCP transfer receipts.
- *
- * A Hub response is not equivalent to a durable object. The independently
- * authenticated ArtifactBridgeStore.get/readChunk calls are required to mark
- * storage verification; even then this is NEVER worker completed_verified.
- * No storage mutations or automatic retries occur here.
+ * Independent read-only progress observer for the source-only #596
+ * artifact_bridge_transfer_start/status/cancel response contract.
+ * Does not mutate #08 store, #03 ProcessManager or start/replay jobs.
  */
 import { createHash } from 'node:crypto';
-import type { ArtifactBridgeStore, ArtifactScope } from '../workspace/artifact-bridge.js';
 
-const HASH = /^[a-f0-9]{64}$/;
-const CHUNK_BYTES = 65536;
-const MAX_SIZE = Number.MAX_SAFE_INTEGER;
-type Stage='pending'|'partial'|'reported_complete'|'storage_verified'|'canceled'|'mutation_unknown';
-type IngestReceipt = {
-  state:'PARTIAL'|'COMPLETE'|'ALREADY_PRESENT';
-  sha256:string; size:number; offset:number; transferredBytes:number; artifactPath:string;
-};
-export interface OneCallTransferIdentity {
-  scope:ArtifactScope;artifactPath:string;sha256:string;size:number;
-  /** Chosen by the authenticated caller, not by arbitrary transfer stdout. */
-  requestId:string;
+const SHA = /^[a-f0-9]{64}$/;
+const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const CHUNK = 65536;
+const NATIVE_HASH_LIMIT = 268435456;
+const PROOF_FRESH_MS = 30000;
+
+export type TransferJobState =
+  'QUEUED'|'RUNNING'|'RECOVERY_REQUIRED'|'FAILED'|'MUTATION_UNKNOWN'|
+  'CANCEL_REQUESTED'|'CANCELLED'|'PUBLISHING'|'COMPLETED';
+/** Exact public CrossDeviceTransferJobs.public() DTO at #596 HEAD 33504656. */
+export interface TransferJobReceipt {
+  id: string;
+  state: TransferJobState;
+  bytesTotal: number;
+  bytesConfirmed: number;
+  sha256: string;
+  sourceDeviceId: string;
+  targetDeviceId: string;
+  sourcePath: string;
+  targetPath: string;
+  updatedAt: string;
+  errorCode?: string;
 }
+export interface TransferWatchIdentity {
+  /** Pinned by an authenticated caller, never derived from transfer metadata. */
+  requestId: string;
+  accountId: string;
+  projectId: string;
+  sourceDeviceId: string;
+  targetDeviceId: string;
+  sourcePath: string;
+  targetPath: string;
+  /** Optional SHA pinned before transfer_start; otherwise fixed at start. */
+  expectedSourceSha256?: string;
+}
+export interface TransferReadback {
+  stat(device: string, file: string): Promise<{type:string;size:number;modifiedAt?:string}>;
+  hash(device: string, file: string, maxBytes: number): Promise<string>;
+  read(device: string, file: string, offset: number, size: number): Promise<{
+    sourceBytes:number;offsetBytes:number;bytesRead:number;contentBase64:string;
+  }>;
+}
+type Phase = 'UNBOUND'|TransferJobState;
+const terminal = new Set<Phase>(['COMPLETED','FAILED','CANCELLED']);
 export class OneCallTransferWatchdog {
-  private stage:Stage='pending';
-  private offset=0;
-  private resumeOffset=0;
-  private acknowledgedThisAttempt=0;
-  private lastStorageChunkSha256:string|null=null;
-  private lastStorageCheckedAt:string|null=null;
-  private lastConfirmedProgressAt:number;
-  private workerState:'unknown'|'running'|'exited'|'lost'='unknown';
-  private workerExitCode:number|null=null;
+  private phase: Phase='UNBOUND';
+  private transferId: string|null=null;
+  private total: number|null=null;
+  private sha256: string|null=null;
+  private confirmed=0;
+  private resumedFrom=0;
+  private lastStatusTime=0;
+  private progressAt: number;
+  private readbackAt: number|null=null;
+  private readbackChunkSha256: string|null=null;
+  private publicationReported=false;
+  private readonly owner: TransferWatchIdentity;
+  private lostWorker=false;
   private reportedWorkerCompleted:number|null=null;
-  private readonly identity:OneCallTransferIdentity;
-  constructor(identity:OneCallTransferIdentity,private readonly now:()=>number=Date.now) {
-    if (!identity || !HASH.test(identity.sha256) ||
-        !Number.isSafeInteger(identity.size) || identity.size<0 || identity.size>MAX_SIZE ||
-        typeof identity.requestId!=='string' ||
-        !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(identity.requestId) ||
-        !identity.artifactPath || !identity.scope?.accountId ||
-        !identity.scope?.deviceId || !identity.scope?.projectId) {
-      throw new Error('INVALID_ONE_CALL_TRANSFER_IDENTITY');
+  constructor(identity:TransferWatchIdentity,private readonly now:()=>number=Date.now) {
+    if(!UUID.test(identity?.requestId??'') || !identity.accountId?.length ||
+       !identity.projectId?.length || !identity.sourceDeviceId?.length ||
+       !identity.targetDeviceId?.length || identity.sourceDeviceId===identity.targetDeviceId ||
+       !identity.sourcePath?.length || !identity.targetPath?.length ||
+       (identity.expectedSourceSha256!==undefined && !SHA.test(identity.expectedSourceSha256))) {
+      throw new Error('INVALID_TRANSFER_IDENTITY');
     }
-    this.identity=structuredClone(identity);
-    this.lastConfirmedProgressAt=this.now();
+    this.owner=structuredClone(identity);
+    this.progressAt=this.now();
   }
-  private reject(code:string):never {this.stage='mutation_unknown';throw new Error(code);}
-  private validOffset(value:number):boolean {
-    return Number.isSafeInteger(value) && value>=0 && value<=this.identity.size &&
-      (value%CHUNK_BYTES===0 || value===this.identity.size);
+  private fail(code:string):never {
+    this.phase='MUTATION_UNKNOWN';this.readbackAt=null;
+    throw new Error(code);
   }
-  /** A receipt without requestId must be correlated by the trusted caller. */
-  observeIngestReceipt(receipt:IngestReceipt):void {
-    if (this.stage==='canceled'||this.stage==='mutation_unknown'||this.stage==='storage_verified') {
-      this.reject('TRANSFER_RECONCILIATION_REQUIRED');
-    }
-    if (!receipt || receipt.sha256!==this.identity.sha256 ||
-        receipt.size!==this.identity.size || receipt.artifactPath!==this.identity.artifactPath ||
-        !this.validOffset(receipt.offset) ||
-        !Number.isSafeInteger(receipt.transferredBytes) || receipt.transferredBytes<0 ||
-        receipt.transferredBytes>this.identity.size) this.reject('INGEST_RECEIPT_MISMATCH');
-    const previous=this.offset;
-    if (receipt.state==='ALREADY_PRESENT') {
-      if (receipt.offset!==receipt.size||receipt.transferredBytes!==0)
-        this.reject('INGEST_ALREADY_PRESENT_MISMATCH');
-      this.offset=receipt.offset;this.stage='reported_complete';
-      return;
-    }
-    if (receipt.offset<previous ||
-        receipt.offset-previous!==receipt.transferredBytes ||
-        (receipt.state==='PARTIAL' && receipt.offset===receipt.size) ||
-        (receipt.state==='COMPLETE' && receipt.offset!==receipt.size)) {
-      this.reject('INGEST_OFFSET_OR_PROGRESS_MISMATCH');
-    }
-    this.offset=receipt.offset;
-    if(receipt.transferredBytes>0)this.lastConfirmedProgressAt=this.now();
-    this.acknowledgedThisAttempt+=receipt.transferredBytes;
-    this.stage=receipt.state==='COMPLETE'?'reported_complete':'partial';
+  private validate(receipt:TransferJobReceipt):number {
+    if(!receipt || !UUID.test(receipt.id) ||
+       !Object.hasOwn(receipt,'state') ||
+       !['QUEUED','RUNNING','RECOVERY_REQUIRED','FAILED','MUTATION_UNKNOWN',
+          'CANCEL_REQUESTED','CANCELLED','PUBLISHING','COMPLETED'].includes(receipt.state) ||
+       !SHA.test(receipt.sha256) ||
+       !Number.isSafeInteger(receipt.bytesTotal) || receipt.bytesTotal<0 ||
+       !Number.isSafeInteger(receipt.bytesConfirmed) ||
+       receipt.bytesConfirmed<0 || receipt.bytesConfirmed>receipt.bytesTotal ||
+       (receipt.bytesConfirmed%CHUNK!==0 && receipt.bytesConfirmed!==receipt.bytesTotal) ||
+       receipt.sourceDeviceId!==this.owner.sourceDeviceId ||
+       receipt.targetDeviceId!==this.owner.targetDeviceId ||
+       receipt.sourcePath!==this.owner.sourcePath ||
+       receipt.targetPath!==this.owner.targetPath ||
+       (this.owner.expectedSourceSha256!==undefined &&
+         receipt.sha256!==this.owner.expectedSourceSha256)) this.fail('TRANSFER_RECEIPT_SCOPE_OR_DIGEST_MISMATCH');
+    const at=Date.parse(receipt.updatedAt);
+    if(!Number.isFinite(at) || new Date(at).toISOString()!==receipt.updatedAt ||
+       at>this.now()+2000) this.fail('TRANSFER_RECEIPT_TIMESTAMP_INVALID');
+    return at;
   }
-  /** Resume cannot trust a reported offset; only an independent store receipt. */
-  observeTrustedResumeOffset(offset:number):void {
-    if (this.stage!=='pending') this.reject('RESUME_REQUIRES_NEW_EPOCH');
-    if (!this.validOffset(offset)) this.reject('INVALID_STORAGE_RESUME_OFFSET');
-    this.offset=offset;this.resumeOffset=offset;
-    this.lastConfirmedProgressAt=this.now();
+  private apply(receipt:TransferJobReceipt, source:'start'|'status'|'cancel'|'resume') {
+    const at=this.validate(receipt);
+    if(source==='start' && this.phase!=='UNBOUND')this.fail('TRANSFER_ALREADY_BOUND');
+    if(source!=='start' && !this.transferId)this.fail('TRANSFER_NOT_BOUND');
+    if(this.transferId && this.transferId!==receipt.id)this.fail('TRANSFER_ID_CHANGED');
+    if(this.total!==null && (this.total!==receipt.bytesTotal || this.sha256!==receipt.sha256))
+      this.fail('TRANSFER_BYTES_OR_HASH_CHANGED');
+    if(at<this.lastStatusTime)this.fail('TRANSFER_STATUS_ROLLBACK');
+    if(receipt.bytesConfirmed<this.confirmed)this.fail('TRANSFER_OFFSET_ROLLBACK');
+    if(receipt.state==='COMPLETED' && receipt.bytesConfirmed!==receipt.bytesTotal)
+      this.fail('COMPLETED_WITH_UNPUBLISHED_BYTES');
+    if(receipt.state==='PUBLISHING' && receipt.bytesConfirmed!==receipt.bytesTotal)
+      this.fail('PUBLISHING_WITH_INCOMPLETE_BYTES');
+    if(terminal.has(this.phase) && receipt.state!==this.phase &&
+       !(source==='resume'&&this.phase==='FAILED'))
+      this.fail('TRANSFER_TERMINAL_ROLLBACK');
+    if(this.phase==='PUBLISHING' && !['PUBLISHING','COMPLETED','MUTATION_UNKNOWN','FAILED'].includes(receipt.state))
+      this.fail('PUBLISHING_STATE_ROLLBACK');
+    if(this.phase==='CANCELLED' && receipt.state==='COMPLETED')
+      this.fail('TRANSFER_PUBLISHED_AFTER_CANCEL');
+    if(this.phase==='CANCEL_REQUESTED' && receipt.state==='COMPLETED')
+      this.fail('TRANSFER_PUBLISHED_AFTER_CANCEL_REQUEST');
+    if(this.phase==='MUTATION_UNKNOWN' && source!=='resume' &&
+       receipt.state!=='MUTATION_UNKNOWN' && receipt.state!=='RECOVERY_REQUIRED')
+      this.fail('UNKNOWN_MUTATION_REQUIRES_EXPLICIT_RESUME');
+    if(receipt.state==='CANCEL_REQUESTED' && source!=='cancel' && this.phase!=='CANCEL_REQUESTED')
+      this.fail('UNSOLICITED_CANCEL_REQUEST');
+    this.transferId=receipt.id;
+    this.total=receipt.bytesTotal;
+    this.sha256=receipt.sha256;
+    if(receipt.bytesConfirmed>this.confirmed)this.progressAt=this.now();
+    this.confirmed=receipt.bytesConfirmed;
+    this.lastStatusTime=at;
+    this.phase=receipt.state;
+    this.publicationReported=receipt.state==='COMPLETED';
+    this.readbackAt=null;this.readbackChunkSha256=null;
   }
-  /** Proposed status/cancel API is not yet implemented by #596/#597. */
-  observeStatusReceipt(receipt:{
-    requestId:string;state:'pending'|'partial'|'complete'|'canceled'|'unknown';
-    offset:number;size:number;sha256:string;
-  }):void {
-    if (!receipt || receipt.requestId!==this.identity.requestId ||
-        receipt.sha256!==this.identity.sha256 || receipt.size!==this.identity.size ||
-        !this.validOffset(receipt.offset) || receipt.offset<this.offset) {
-      this.reject('TRANSFER_STATUS_SCOPE_OR_OFFSET_MISMATCH');
-    }
-    if (this.stage==='canceled'||this.stage==='storage_verified') this.reject('TRANSFER_TERMINAL');
-    if (this.stage==='mutation_unknown' && receipt.state!=='unknown') {
-      // Explicitly reconciled remote status is still not immutable proof.
-      this.offset=receipt.offset;
-      this.stage=receipt.state==='canceled'?'canceled':
-        receipt.state==='complete'&&receipt.offset===receipt.size?'reported_complete':'partial';
-      return;
-    }
-    if(receipt.state==='unknown'){this.stage='mutation_unknown';return;}
-    if(receipt.state==='canceled'){this.offset=receipt.offset;this.stage='canceled';return;}
-    if(receipt.state==='complete') {
-      if(receipt.offset!==receipt.size)this.reject('TRANSFER_COMPLETION_OFFSET_MISMATCH');
-      this.offset=receipt.offset;this.stage='reported_complete';return;
-    }
-    if(receipt.offset>this.offset)this.lastConfirmedProgressAt=this.now();
-    this.offset=receipt.offset;
-    this.stage=receipt.state==='pending'?'pending':'partial';
+  /** Returns a durable job ID quickly; never assumes that bytes have arrived. */
+  observeStart(receipt:TransferJobReceipt):void {this.apply(receipt,'start');}
+  observeStatus(receipt:TransferJobReceipt):void {this.apply(receipt,'status');}
+  observeCancel(receipt:TransferJobReceipt):void {
+    if(!['CANCEL_REQUESTED','CANCELLED'].includes(receipt.state))
+      this.fail('CANCEL_RECEIPT_NOT_CANCELED');
+    this.apply(receipt,'cancel');
   }
-  observeCancelReceipt(receipt:{requestId:string;canceled:boolean;offset:number}):void {
-    if (!receipt || receipt.requestId!==this.identity.requestId ||
-        receipt.canceled!==true || !this.validOffset(receipt.offset) ||
-        receipt.offset<this.offset || this.stage==='storage_verified') {
-      this.reject('UNTRUSTED_CANCEL_RECEIPT');
-    }
-    this.offset=receipt.offset;this.stage='canceled';
+  /** This action itself never executes a replay. It observes caller-approved
+   * explicit resume after #596 independently reconciled stage/source. */
+  observeExplicitResume(receipt:TransferJobReceipt, approvedByOwner: true):void {
+    if(approvedByOwner!==true || !this.transferId ||
+       !['MUTATION_UNKNOWN','RECOVERY_REQUIRED','FAILED','QUEUED'].includes(this.phase))
+      this.fail('RESUME_NOT_EXPLICITLY_AUTHORIZED');
+    if(!['QUEUED','RUNNING','COMPLETED'].includes(receipt.state))
+      this.fail('RESUME_NOT_RECONCILED');
+    const before=this.confirmed;
+    this.apply(receipt,'resume');
+    this.resumedFrom=receipt.bytesConfirmed;
+    if(this.confirmed>before)this.progressAt=this.now();
   }
-  markMutationUnknown():void {if(this.stage!=='storage_verified')this.stage='mutation_unknown';}
-  /** Worker PID/counters cannot provide storage or task-completion proof. */
-  observeWorkerSignal(signal:{state:'running'|'exited'|'lost';exitCode?:number|null;reportedCompleted?:number}):void {
-    if(!signal || (signal.exitCode!==undefined && signal.exitCode!==null &&
-        !Number.isSafeInteger(signal.exitCode)) ||
-        (signal.reportedCompleted!==undefined &&
-         (!Number.isSafeInteger(signal.reportedCompleted) || signal.reportedCompleted<0))) {
-      this.reject('INVALID_WORKER_SIGNAL');
-    }
-    if(this.workerState==='lost' && signal.state!=='lost')return;
-    if(signal.state==='lost') {
-      this.workerState='lost';this.workerExitCode=null;
-      if(this.stage!=='storage_verified')this.stage='mutation_unknown';
-    }else{
-      this.workerState=signal.state;
-      this.workerExitCode=signal.state==='exited'?(signal.exitCode??null):null;
-    }
+  markUnknown():void {if(this.phase!=='COMPLETED'&&this.phase!=='CANCELLED')
+    {this.phase='MUTATION_UNKNOWN';this.readbackAt=null;}}
+  observeWorkerSignal(signal:{state:'running'|'lost';reportedCompleted?:number}):void {
+    if(!signal || (signal.reportedCompleted!==undefined &&
+       (!Number.isSafeInteger(signal.reportedCompleted)||signal.reportedCompleted<0)))
+      this.fail('INVALID_WORKER_SIGNAL');
+    if(signal.state==='lost'){this.lostWorker=true;this.readbackAt=null;}
     if(signal.reportedCompleted!==undefined)this.reportedWorkerCompleted=signal.reportedCompleted;
   }
-  watchdogWarning(stallAfterMs=30000):'NO_STORAGE_PROGRESS'|'WORKER_PID_LOST'|'MUTATION_UNKNOWN'|null {
-    if(this.workerState==='lost')return 'WORKER_PID_LOST';
-    if(this.stage==='mutation_unknown')return 'MUTATION_UNKNOWN';
-    if ((this.stage==='partial'||this.stage==='pending') &&
-        this.now()-this.lastConfirmedProgressAt>=stallAfterMs)return 'NO_STORAGE_PROGRESS';
+  warning(stallMs=30000):'WORKER_PID_LOST'|'MUTATION_UNKNOWN'|'NO_STORAGE_PROGRESS'|null {
+    if(this.lostWorker)return 'WORKER_PID_LOST';
+    if(['MUTATION_UNKNOWN','RECOVERY_REQUIRED'].includes(this.phase))return 'MUTATION_UNKNOWN';
+    if(['QUEUED','RUNNING'].includes(this.phase) &&
+       this.now()-this.progressAt>=stallMs)return 'NO_STORAGE_PROGRESS';
     return null;
   }
-
   /**
-   * Recheck actual content with store.get AND pinned-handle readChunk.
-   * Store itself recomputes the full object digest; a syntactically valid
-   * manifest alone is insufficient. This does not attest application work.
+   * Independent target readback. Only executed after a status claims final
+   * publication. Native Agent 1.0.5 supports <=256MiB hash offsets.
+   * A real remote provider must authenticate targetDeviceId and targetPath.
+   * This is storage consistency, NOT cryptographic immutability or task proof.
    */
-  async verifyStorage(store:Pick<ArtifactBridgeStore,'get'|'readChunk'>):Promise<boolean> {
-    if (this.stage!=='reported_complete' && this.stage!=='storage_verified')return false;
-    try {
-      const manifest=await store.get(this.identity.scope,this.identity.artifactPath);
-      if (!manifest || manifest.size!==this.identity.size ||
-          manifest.sha256!==this.identity.sha256 ||
-          manifest.artifactPath!==this.identity.artifactPath ||
-          manifest.scope.accountId!==this.identity.scope.accountId ||
-          manifest.scope.projectId!==this.identity.scope.projectId ||
-          manifest.scope.deviceId!==this.identity.scope.deviceId) {
-        return this.failStorageVerification();
+  async verifyPublishedTarget(remote:TransferReadback):Promise<boolean> {
+    if(this.phase!=='COMPLETED' || this.lostWorker ||
+       !this.transferId || this.total===null || !this.sha256 ||
+       this.total>NATIVE_HASH_LIMIT)return false;
+    const expectedId=this.transferId,expectedStatus=this.lastStatusTime;
+    try{
+      const before=await remote.stat(this.owner.targetDeviceId,this.owner.targetPath);
+      if(before.type!=='file'||before.size!==this.total)return this.invalidateReadback();
+      const actual=(await remote.hash(this.owner.targetDeviceId,
+        this.owner.targetPath,NATIVE_HASH_LIMIT)).toLowerCase();
+      if(actual!==this.sha256)return this.invalidateReadback();
+      if(this.total>0){
+        const at=Math.floor((this.total-1)/CHUNK)*CHUNK;
+        const size=this.total-at;
+        const r=await remote.read(this.owner.targetDeviceId,this.owner.targetPath,at,size);
+        if(r.sourceBytes!==this.total || r.offsetBytes!==at ||
+           r.bytesRead!==size || typeof r.contentBase64!=='string' ||
+           r.contentBase64.length>87384 ||
+           !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(r.contentBase64))return this.invalidateReadback();
+        const bytes=Buffer.from(r.contentBase64,'base64');
+        if(bytes.length!==size||bytes.toString('base64')!==r.contentBase64)
+          return this.invalidateReadback();
+        this.readbackChunkSha256=createHash('sha256').update(bytes).digest('hex');
       }
-      if (this.identity.size>0){
-        const offset=Math.floor((this.identity.size-1)/CHUNK_BYTES)*CHUNK_BYTES;
-        const read=await store.readChunk(this.identity.scope,this.identity.artifactPath,offset,CHUNK_BYTES);
-        if(read.offset!==offset || read.totalSize!==this.identity.size ||
-           read.sha256!==this.identity.sha256 ||
-           read.size!==Math.min(CHUNK_BYTES,this.identity.size-offset) ||
-           !HASH.test(read.chunkSha256) ||
-           !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(read.contentBase64)){
-          return this.failStorageVerification();
-        }
-        const bytes=Buffer.from(read.contentBase64,'base64');
-        if(bytes.length!==read.size ||
-           bytes.toString('base64')!==read.contentBase64 ||
-           createHash('sha256').update(bytes).digest('hex')!==read.chunkSha256){
-          return this.failStorageVerification();
-        }
-        this.lastStorageChunkSha256=read.chunkSha256;
-      }
-      this.lastStorageCheckedAt=new Date(this.now()).toISOString();
-      this.stage='storage_verified';
+      const after=await remote.stat(this.owner.targetDeviceId,this.owner.targetPath);
+      const finalDigest=(await remote.hash(this.owner.targetDeviceId,
+        this.owner.targetPath,NATIVE_HASH_LIMIT)).toLowerCase();
+      if(finalDigest!==this.sha256 || after.type!=='file'||after.size!==before.size ||
+         (before.modifiedAt!==undefined && before.modifiedAt!==after.modifiedAt) ||
+         expectedId!==this.transferId || expectedStatus!==this.lastStatusTime ||
+         this.phase!=='COMPLETED'||this.lostWorker)return this.invalidateReadback();
+      this.readbackAt=this.now();
       return true;
-    }catch{return this.failStorageVerification();}
+    }catch{return this.invalidateReadback();}
   }
-  private failStorageVerification():false {
-    this.stage='mutation_unknown';
-    this.lastStorageChunkSha256=null;
-    this.lastStorageCheckedAt=null;
-    return false;
-  }
+  private invalidateReadback():false {this.readbackAt=null;this.readbackChunkSha256=null;return false;}
   snapshot(){
-    const age=this.lastStorageCheckedAt===null?Number.POSITIVE_INFINITY:
-      this.now()-Date.parse(this.lastStorageCheckedAt);
-    const fresh=this.stage==='storage_verified' && age>=0 && age<=30000;
+    const age=this.readbackAt===null?Number.POSITIVE_INFINITY:this.now()-this.readbackAt;
+    const fresh=this.phase==='COMPLETED'&&!this.lostWorker && age>=0&&age<=PROOF_FRESH_MS;
     return {
-      requestId:this.identity.requestId,
-      stage:this.stage==='storage_verified'&&!fresh?'storage_stale':this.stage,
-      transferSize:this.identity.size,sha256:this.identity.sha256,
-      receiptBytes:this.offset,confirmedStorageBytes:fresh?this.offset:null,
-      byteProgressUnverified:!fresh,
-      chunkBytes:CHUNK_BYTES,receiptChunkCount:Math.ceil(this.offset/CHUNK_BYTES),
-      expectedChunks:Math.ceil(this.identity.size/CHUNK_BYTES),
-      newlyAcknowledgedBytes:this.acknowledgedThisAttempt,resumeOffset:this.resumeOffset,
-      lastVerifiedChunkSha256:this.lastStorageChunkSha256,
-      lastStorageCheckedAt:this.lastStorageCheckedAt,
-      storageVerified:fresh,
+      requestId:this.owner.requestId,transferId:this.transferId,phase:this.phase,
+      bytesTotal:this.total,bytesConfirmedReceipt:this.confirmed,
+      receiptChunkCount:Math.ceil(this.confirmed/CHUNK),
+      expectedChunks:this.total===null?null:Math.ceil(this.total/CHUNK),
+      lastConfirmedProgressAt:new Date(this.progressAt).toISOString(),
+      lastReceiptAt:this.lastStatusTime?new Date(this.lastStatusTime).toISOString():null,
+      resumeOffset:this.resumedFrom,sha256:this.sha256,
+      publicationReported:this.publicationReported,
+      readbackVerified:fresh,
+      readbackSha256:fresh?this.sha256:null,
+      lastReadbackChunkSha256:fresh?this.readbackChunkSha256:null,
+      storageBytesVerified:fresh?this.confirmed:null,
+      atomicNoOverwriteVerified:false,
       workerCompletedVerified:false,
-      workerState:this.workerState,workerExitCode:this.workerExitCode,
-      reportedWorkerCompletedUnverified:this.reportedWorkerCompleted,
-      lastConfirmedProgressAt:new Date(this.lastConfirmedProgressAt).toISOString(),
-      watchdogWarning:this.watchdogWarning(),
-      outputEvidence:'NOT_PROVIDED_BY_TRANSFER_RECEIPT',
-      mutationUnknown:this.stage==='mutation_unknown',
+      workerReportedCompleted:this.reportedWorkerCompleted,
+      mutationUnknown:['MUTATION_UNKNOWN','RECOVERY_REQUIRED'].includes(this.phase),
       automaticReplayAllowed:false,
+      warning:this.warning(),
     } as const;
   }
 }

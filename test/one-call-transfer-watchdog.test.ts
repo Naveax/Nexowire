@@ -1,206 +1,251 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { ArtifactBridgeStore } from '../src/workspace/artifact-bridge.js';
-import { OneCallTransferWatchdog } from '../src/agent/one-call-transfer-watchdog.js';
+import { OneCallTransferWatchdog, type TransferJobReceipt,
+  type TransferWatchIdentity, type TransferReadback } from '../src/agent/one-call-transfer-watchdog.js';
 
-const sha=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
-const scope={accountId:'account-fixture',projectId:'project-fixture',deviceId:'device-fixture'};
-const requestId='550e8400-e29b-41d4-a716-446655440001';
-const id=(size:number,sha256:string)=>({
-  scope,artifactPath:'transfers/fixture.bin',sha256,size,requestId,
+const digest=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
+const transferId='550e8400-e29b-41d4-a716-446655440010';
+const pinned:TransferWatchIdentity={
+  requestId:'550e8400-e29b-41d4-a716-446655440001',
+  accountId:'account:fixture',projectId:'project-fixture',
+  sourceDeviceId:'source-device',targetDeviceId:'target-device',
+  sourcePath:'/source/file.bin',targetPath:'/destination/file.bin',
+};
+function receipt(
+  state:TransferJobReceipt['state'],total:number,confirmed:number,sha256:string,
+  other:Partial<TransferJobReceipt>={},
+):TransferJobReceipt {
+  return {id:transferId,state,bytesTotal:total,bytesConfirmed:confirmed,
+    sha256,sourceDeviceId:pinned.sourceDeviceId,targetDeviceId:pinned.targetDeviceId,
+    sourcePath:pinned.sourcePath,targetPath:pinned.targetPath,
+    updatedAt:new Date().toISOString(),...other};
+}
+function memoryTarget(initial?:Buffer){
+  const files=new Map<string,Buffer>();
+  const target=pinned.targetDeviceId+':'+pinned.targetPath;
+  if(initial)files.set(target,Buffer.from(initial));
+  const calls={stat:0,hash:0,read:0};
+  const remote:TransferReadback={
+    stat:async (device,file)=>{
+      assert.equal(device,pinned.targetDeviceId);
+      assert.equal(file,pinned.targetPath);
+      calls.stat++;
+      const data=files.get(device+':'+file);
+      if(!data)throw Error('ENOENT');
+      return {type:'file',size:data.length,modifiedAt:'fixture-invariant'};
+    },
+    hash:async (device,file,maxBytes)=>{
+      assert.equal(device,pinned.targetDeviceId);
+      assert.equal(file,pinned.targetPath);
+      const data=files.get(device+':'+file);
+      if(!data||data.length>maxBytes)throw Error('ENOENT');
+      calls.hash++;
+      return digest(data);
+    },
+    read:async (device,file,offset,size)=>{
+      assert.equal(device,pinned.targetDeviceId);
+      assert.equal(file,pinned.targetPath);
+      const data=files.get(device+':'+file);
+      if(!data)throw Error('ENOENT');
+      const piece=data.subarray(offset,offset+size);
+      calls.read++;
+      return {sourceBytes:data.length,offsetBytes:offset,bytesRead:piece.length,
+        contentBase64:piece.toString('base64')};
+    },
+  };
+  return {remote,files,target,calls};
+}
+
+test('#596 actual response schema: 64KiB receipt progress is not immutable/worker completion',async()=>{
+  let now=Date.now();
+  const bytes=Buffer.alloc(2*65536+113,0x41),hash=digest(bytes);
+  const obs=new OneCallTransferWatchdog({...pinned,expectedSourceSha256:hash},()=>now);
+  const dst=memoryTarget();
+  obs.observeStart(receipt('QUEUED',bytes.length,0,hash));
+  assert.equal(obs.snapshot().receiptChunkCount,0);
+  obs.observeStatus(receipt('RUNNING',bytes.length,65536,hash));
+  assert.equal(obs.snapshot().receiptChunkCount,1);
+  assert.equal(obs.snapshot().bytesConfirmedReceipt,65536);
+  obs.observeWorkerSignal({state:'running',reportedCompleted:100});
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+  assert.equal(obs.snapshot().readbackVerified,false);
+  obs.observeStatus(receipt('PUBLISHING',bytes.length,bytes.length,hash));
+  assert.equal(await obs.verifyPublishedTarget(dst.remote),false);
+  assert.equal(dst.calls.hash,0,'PUBLISHING must not count as published');
+  obs.observeStatus(receipt('COMPLETED',bytes.length,bytes.length,hash));
+  assert.equal(obs.snapshot().publicationReported,true);
+  assert.equal(await obs.verifyPublishedTarget(dst.remote),false,'missing published target fails');
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
 });
 
-test('actual Artifact Bridge store receipts: one-call PARTIAL then COMPLETE is not worker completion',async()=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-one-call-receipts-'));
-  try{
-    const store=new ArtifactBridgeStore(root);
-    const content=Buffer.alloc(65536*2+143,0x31);
-    const pinned=id(content.length,sha(content));
-    const {requestId:_requestId,...storedIdentity}=pinned;
-    const meta={...storedIdentity,repository:'Naveax/Nexowire',commitSha:'a'.repeat(40),
-      producerOperationId:'fixture-transfer',testStatus:'unverified' as const,
-      acceptanceStatus:'pending' as const};
-    const begin=await store.begin(meta);
-    const w=new OneCallTransferWatchdog(pinned);
-    assert.equal(w.snapshot().receiptBytes,0);
-    let offset=0;
-    for(let n=0;n<2;n++){
-      const piece=content.subarray(offset,offset+65536);
-      const stored=await store.putChunk(scope,begin.sessionId!,offset,piece.toString('base64'));
-      const advanced=stored.offset-offset;
-      offset=stored.offset;
-      w.observeIngestReceipt({state:'PARTIAL',size:content.length,sha256:pinned.sha256,
-        artifactPath:pinned.artifactPath,offset,transferredBytes:advanced});
-    }
-    assert.equal(w.snapshot().receiptChunkCount,2);
-    assert.equal(w.snapshot().storageVerified,false);
-    assert.equal(w.snapshot().confirmedStorageBytes,null);
-    assert.equal(w.snapshot().workerCompletedVerified,false);
-    const piece=content.subarray(offset);
-    const stored=await store.putChunk(scope,begin.sessionId!,offset,piece.toString('base64'));
-    await store.commit(scope,begin.sessionId!);
-    w.observeIngestReceipt({state:'COMPLETE',size:content.length,sha256:pinned.sha256,
-      artifactPath:pinned.artifactPath,offset:stored.offset,transferredBytes:piece.length});
-    assert.equal(w.snapshot().stage,'reported_complete');
-    assert.equal(w.snapshot().storageVerified,false);
-    assert.equal(await w.verifyStorage(store),true);
-    assert.equal(w.snapshot().stage,'storage_verified');
-    assert.equal(w.snapshot().confirmedStorageBytes,content.length);
-    assert.equal(w.snapshot().expectedChunks,3);
-    assert.equal(w.snapshot().lastVerifiedChunkSha256,sha(piece));
-    assert.equal(w.snapshot().workerCompletedVerified,false);
-    assert.equal(w.snapshot().automaticReplayAllowed,false);
-  }finally{await fs.rm(root,{recursive:true,force:true});}
+test('atomic publication reported COMPLETED requires independent destination SHA/readback',async()=>{
+  const bytes=Buffer.alloc(221*1024+17,0x55),hash=digest(bytes);
+  let now=Date.now();
+  const obs=new OneCallTransferWatchdog(pinned,()=>now);
+  const dst=memoryTarget();
+  obs.observeStart(receipt('RUNNING',bytes.length,0,hash));
+  obs.observeStatus(receipt('PUBLISHING',bytes.length,bytes.length,hash));
+  assert.equal(await obs.verifyPublishedTarget(dst.remote),false);
+  dst.files.set(dst.target,Buffer.from(bytes));
+  obs.observeStatus(receipt('COMPLETED',bytes.length,bytes.length,hash));
+  assert.equal(await obs.verifyPublishedTarget(dst.remote),true);
+  assert.equal(obs.snapshot().readbackVerified,true);
+  assert.equal(obs.snapshot().storageBytesVerified,bytes.length);
+  assert.equal(obs.snapshot().readbackSha256,hash);
+  assert.equal(obs.snapshot().lastReadbackChunkSha256,digest(bytes.subarray(3*65536)));
+  assert.equal(obs.snapshot().atomicNoOverwriteVerified,false,
+    'a reply plus readback cannot prove no-overwrite publication history');
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+  assert.ok(dst.calls.hash>0&&dst.calls.read>0);
+  now+=30001;
+  assert.equal(obs.snapshot().readbackVerified,false,'proof expires');
+  assert.equal(obs.snapshot().storageBytesVerified,null);
+  assert.equal(await obs.verifyPublishedTarget(dst.remote),true,'fresh readback renews proof');
 });
 
-test('one-call PARTIAL or COMPLETE cannot be trusted when disk lacks committed artifact',async()=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-one-call-fake-'));
-  try{
-    const w=new OneCallTransferWatchdog(id(65536,'a'.repeat(64)));
-    w.observeIngestReceipt({state:'COMPLETE',sha256:'a'.repeat(64),
-      size:65536,offset:65536,transferredBytes:65536,artifactPath:'transfers/fixture.bin'});
-    assert.equal(w.snapshot().stage,'reported_complete');
-    assert.equal(await w.verifyStorage(new ArtifactBridgeStore(root)),false);
-    assert.equal(w.snapshot().stage,'mutation_unknown');
-    assert.equal(w.snapshot().storageVerified,false);
-    assert.equal(w.snapshot().workerCompletedVerified,false);
-    assert.equal(w.watchdogWarning(),'MUTATION_UNKNOWN');
-  }finally{await fs.rm(root,{recursive:true,force:true});}
+test('hash mismatch, wrong device and disk tampering fail-closed',async()=>{
+  const expected=Buffer.alloc(65536,0x31), actual=Buffer.alloc(65536,0x32);
+  const obs=new OneCallTransferWatchdog({...pinned,expectedSourceSha256:digest(expected)});
+  obs.observeStart(receipt('COMPLETED',65536,65536,digest(expected)));
+  const dst=memoryTarget(actual);
+  assert.equal(await obs.verifyPublishedTarget(dst.remote),false);
+  assert.equal(obs.snapshot().readbackVerified,false);
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+  const wrongDevice=new OneCallTransferWatchdog(pinned);
+  assert.throws(()=>wrongDevice.observeStart(receipt('QUEUED',65536,0,digest(expected),
+    {targetDeviceId:'impostor'})),/TRANSFER_RECEIPT_SCOPE_OR_DIGEST_MISMATCH/);
+  assert.equal(wrongDevice.snapshot().mutationUnknown,true);
 });
 
-test('stalled fake worker with zero stored bytes cannot claim 100%',()=>{
-  let now=100000;
-  const w=new OneCallTransferWatchdog(id(65536,'b'.repeat(64)),()=>now);
-  w.observeWorkerSignal({state:'running',reportedCompleted:100});
+test('zero progress, fake worker percentage, lost PID and stalls never verify',()=>{
+  let now=Date.now();
+  const obs=new OneCallTransferWatchdog(pinned,()=>now);
+  const hash='f'.repeat(64);
+  obs.observeStart(receipt('QUEUED',65536*2,0,hash));
+  obs.observeStatus(receipt('RUNNING',65536*2,0,hash));
+  obs.observeWorkerSignal({state:'running',reportedCompleted:999});
   now+=31000;
-  assert.equal(w.watchdogWarning(),'NO_STORAGE_PROGRESS');
-  assert.equal(w.snapshot().reportedWorkerCompletedUnverified,100);
-  assert.equal(w.snapshot().receiptBytes,0);
-  assert.equal(w.snapshot().workerCompletedVerified,false);
-  assert.equal(w.snapshot().storageVerified,false);
-  w.observeWorkerSignal({state:'lost',reportedCompleted:100});
-  assert.equal(w.watchdogWarning(),'WORKER_PID_LOST');
-  assert.equal(w.snapshot().workerState,'lost');
-  assert.equal(w.snapshot().automaticReplayAllowed,false);
+  assert.equal(obs.warning(),'NO_STORAGE_PROGRESS');
+  assert.equal(obs.snapshot().bytesConfirmedReceipt,0);
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+  obs.observeWorkerSignal({state:'lost',reportedCompleted:1000});
+  assert.equal(obs.warning(),'WORKER_PID_LOST');
+  assert.equal(obs.snapshot().readbackVerified,false);
+  assert.equal(obs.snapshot().automaticReplayAllowed,false);
 });
 
-test('partial unknown, explicit resume status and cancel never trigger replay or completion',()=>{
-  const w=new OneCallTransferWatchdog(id(65536*2,'c'.repeat(64)));
-  w.observeIngestReceipt({state:'PARTIAL',size:131072,offset:65536,
-    transferredBytes:65536,sha256:'c'.repeat(64),artifactPath:'transfers/fixture.bin'});
-  w.markMutationUnknown();
-  assert.equal(w.snapshot().mutationUnknown,true);
-  assert.equal(w.snapshot().automaticReplayAllowed,false);
-  assert.throws(()=>w.observeIngestReceipt({state:'PARTIAL',size:131072,offset:131072,
-    transferredBytes:65536,sha256:'c'.repeat(64),artifactPath:'transfers/fixture.bin'}),
-    /TRANSFER_RECONCILIATION_REQUIRED/);
-  w.observeStatusReceipt({requestId,state:'partial',offset:65536,
-    size:131072,sha256:'c'.repeat(64)});
-  assert.equal(w.snapshot().stage,'partial');
-  assert.equal(w.snapshot().storageVerified,false);
-  w.observeCancelReceipt({requestId,canceled:true,offset:65536});
-  assert.equal(w.snapshot().stage,'canceled');
-  assert.equal(w.snapshot().workerCompletedVerified,false);
-  assert.equal(w.snapshot().automaticReplayAllowed,false);
-  assert.throws(()=>w.observeIngestReceipt({state:'COMPLETE',size:131072,offset:131072,
-    transferredBytes:65536,sha256:'c'.repeat(64),artifactPath:'transfers/fixture.bin'}),
-    /TRANSFER_RECONCILIATION_REQUIRED/);
+test('MUTATION_UNKNOWN, RECOVERY_REQUIRED and resumed offset cannot auto-replay',()=>{
+  const hash='a'.repeat(64),size=3*65536;
+  const obs=new OneCallTransferWatchdog(pinned);
+  obs.observeStart(receipt('QUEUED',size,0,hash));
+  obs.observeStatus(receipt('RUNNING',size,65536,hash));
+  obs.observeStatus(receipt('MUTATION_UNKNOWN',size,65536,hash));
+  assert.equal(obs.warning(),'MUTATION_UNKNOWN');
+  assert.equal(obs.snapshot().automaticReplayAllowed,false);
+  assert.throws(()=>obs.observeStatus(receipt('RUNNING',size,2*65536,hash)),
+    /UNKNOWN_MUTATION_REQUIRES_EXPLICIT_RESUME/);
+  assert.equal(obs.snapshot().mutationUnknown,true);
+  const restarted=new OneCallTransferWatchdog(pinned);
+  restarted.observeStart(receipt('QUEUED',size,0,hash));
+  restarted.observeStatus(receipt('RECOVERY_REQUIRED',size,65536,hash));
+  assert.equal(restarted.warning(),'MUTATION_UNKNOWN');
+  restarted.observeExplicitResume(receipt('QUEUED',size,65536,hash),true);
+  assert.equal(restarted.snapshot().resumeOffset,65536);
+  assert.equal(restarted.snapshot().readbackVerified,false);
+  assert.equal(restarted.snapshot().automaticReplayAllowed,false);
 });
 
-test('forged offset, hash, requestId, cancel and status transition fail closed',()=>{
-  const w=new OneCallTransferWatchdog(id(65536,'d'.repeat(64)));
-  assert.throws(()=>w.observeStatusReceipt({requestId:'550e8400-e29b-41d4-a716-446655440002',
-    state:'complete',offset:65536,size:65536,sha256:'d'.repeat(64)}),
-  /TRANSFER_STATUS_SCOPE_OR_OFFSET_MISMATCH/);
-  assert.equal(w.snapshot().mutationUnknown,true);
-  const altered=new OneCallTransferWatchdog(id(65536,'e'.repeat(64)));
-  assert.throws(()=>altered.observeIngestReceipt({
-    state:'COMPLETE',size:65536,offset:65535,transferredBytes:65535,
-    sha256:'e'.repeat(64),artifactPath:'transfers/fixture.bin'}),
-    /INGEST_RECEIPT_MISMATCH/);
-  assert.equal(altered.snapshot().storageVerified,false);
-  const canceled=new OneCallTransferWatchdog(id(65536,'f'.repeat(64)));
-  assert.throws(()=>canceled.observeCancelReceipt({requestId,canceled:false,offset:0}),
-    /UNTRUSTED_CANCEL_RECEIPT/);
+test('cancel request, final canceled and false publication cannot be completed',()=>{
+  const hash='b'.repeat(64),size=65536;
+  const obs=new OneCallTransferWatchdog(pinned);
+  obs.observeStart(receipt('RUNNING',size,0,hash));
+  obs.observeCancel(receipt('CANCEL_REQUESTED',size,0,hash));
+  obs.observeStatus(receipt('CANCELLED',size,0,hash));
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+  assert.throws(()=>obs.observeStatus(receipt('COMPLETED',size,size,hash)),
+    /TRANSFER_TERMINAL_ROLLBACK|TRANSFER_PUBLISHED_AFTER_CANCEL/);
+  assert.equal(obs.snapshot().mutationUnknown,true);
 });
 
-test('large transfer receipt uses bounded integer counters without allocating a 1 GiB file',()=>{
-  const size=1024*1024*1024+23;
-  const w=new OneCallTransferWatchdog(id(size,'a'.repeat(64)));
-  w.observeTrustedResumeOffset(65536*200);
-  assert.equal(w.snapshot().receiptChunkCount,200);
-  assert.equal(w.snapshot().resumeOffset,65536*200);
-  w.observeIngestReceipt({state:'PARTIAL',size,sha256:'a'.repeat(64),
-    artifactPath:'transfers/fixture.bin',offset:65536*202,transferredBytes:65536*2});
-  assert.equal(w.snapshot().receiptChunkCount,202);
-  assert.equal(w.snapshot().storageVerified,false);
-  assert.equal(w.snapshot().workerCompletedVerified,false);
+test('stale status, changed id/hash, bogus updatedAt and non-monotonic offsets reject',()=>{
+  const h='c'.repeat(64);
+  const changedId=new OneCallTransferWatchdog(pinned);
+  changedId.observeStart(receipt('QUEUED',65536,0,h));
+  assert.throws(()=>changedId.observeStatus(receipt('RUNNING',65536,0,h,{
+    id:'550e8400-e29b-41d4-a716-446655440099',
+  })),/TRANSFER_ID_CHANGED/);
+  const regressing=new OneCallTransferWatchdog(pinned);
+  regressing.observeStart(receipt('RUNNING',131072,65536,h));
+  assert.throws(()=>regressing.observeStatus(receipt('RUNNING',131072,0,h)),
+    /TRANSFER_OFFSET_ROLLBACK/);
+  const forged=new OneCallTransferWatchdog(pinned);
+  assert.throws(()=>forged.observeStart(receipt('COMPLETED',65536,0,h)),
+    /COMPLETED_WITH_UNPUBLISHED_BYTES/);
+  const future=new OneCallTransferWatchdog(pinned);
+  assert.throws(()=>future.observeStart(receipt('QUEUED',65536,0,h,{
+    updatedAt:new Date(Date.now()+3600000).toISOString(),
+  })),/TRANSFER_RECEIPT_TIMESTAMP_INVALID/);
 });
 
-test('disk tampering invalidates reported COMPLETE despite matching MCP receipt SHA',async()=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-one-call-corrupt-'));
-  try{
-    const store=new ArtifactBridgeStore(root);
-    const data=Buffer.alloc(1024,0x51);
-    const pinned=id(data.length,sha(data));
-    const {requestId:_requestId,...storedIdentity}=pinned;
-    const begin=await store.begin({...storedIdentity,
-      producerOperationId:'tamper-op',repository:'Naveax/Nexowire',
-      commitSha:'a'.repeat(40),testStatus:'unverified',acceptanceStatus:'pending'});
-    await store.putChunk(scope,begin.sessionId!,0,data.toString('base64'));
-    await store.commit(scope,begin.sessionId!);
-    // Alter the exact content-addressed object on the isolated test disk.
-    // This is explicitly NOT a production/user artifact.
-    async function corruptObject(dir:string):Promise<boolean>{
-      for(const entry of await fs.readdir(dir,{withFileTypes:true})){
-        const file=path.join(dir,entry.name);
-        if(entry.isDirectory()){if(await corruptObject(file))return true;}
-        else if(entry.isFile()&&entry.name===pinned.sha256){
-          await fs.writeFile(file,Buffer.alloc(1024,0x52));return true;
-        }
-      }
-      return false;
-    }
-    assert.equal(await corruptObject(root),true);
-    const w=new OneCallTransferWatchdog(pinned);
-    w.observeIngestReceipt({state:'COMPLETE',sha256:pinned.sha256,
-      size:pinned.size,offset:pinned.size,transferredBytes:pinned.size,
-      artifactPath:pinned.artifactPath});
-    assert.equal(await w.verifyStorage(store),false);
-    assert.equal(w.snapshot().storageVerified,false);
-    assert.equal(w.snapshot().workerCompletedVerified,false);
-  }finally{await fs.rm(root,{recursive:true,force:true});}
+test('1GiB safe integer counters never allocate huge payload or claim readback',async()=>{
+  const size=1024*1024*1024+17,h='e'.repeat(64);
+  const obs=new OneCallTransferWatchdog(pinned);
+  obs.observeStart(receipt('QUEUED',size,0,h));
+  obs.observeStatus(receipt('RUNNING',size,3*65536,h));
+  assert.equal(obs.snapshot().receiptChunkCount,3);
+  assert.equal(obs.snapshot().expectedChunks,16385);
+  obs.observeStatus(receipt('COMPLETED',size,size,h));
+  assert.equal(await obs.verifyPublishedTarget(memoryTarget().remote),false,
+    'Native 1.0.5 hash ceiling remains a hard block');
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
 });
 
-test('storage check expires after 30 seconds and needs fresh disk verification',async()=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-one-call-expiry-'));
-  try{
-    let now=Date.now();
-    const store=new ArtifactBridgeStore(root);
-    const content=Buffer.alloc(77,0x41);
-    const pinned=id(content.length,sha(content));
-    const {requestId:_requestId,...storedIdentity}=pinned;
-    const begin=await store.begin({...storedIdentity,producerOperationId:'expiry-op',
-      repository:'Naveax/Nexowire',commitSha:'a'.repeat(40),
-      testStatus:'unverified',acceptanceStatus:'pending'});
-    await store.putChunk(scope,begin.sessionId!,0,content.toString('base64'));
-    await store.commit(scope,begin.sessionId!);
-    const w=new OneCallTransferWatchdog(pinned,()=>now);
-    w.observeIngestReceipt({state:'COMPLETE',sha256:pinned.sha256,
-      size:pinned.size,offset:pinned.size,transferredBytes:pinned.size,
-      artifactPath:pinned.artifactPath});
-    assert.equal(await w.verifyStorage(store),true);
-    assert.equal(w.snapshot().storageVerified,true);
-    now+=30001;
-    assert.equal(w.snapshot().stage,'storage_stale');
-    assert.equal(w.snapshot().storageVerified,false);
-    assert.equal(w.snapshot().confirmedStorageBytes,null);
-    assert.equal(w.snapshot().workerCompletedVerified,false);
-    assert.equal(await w.verifyStorage(store),true);
-    assert.equal(w.snapshot().storageVerified,true);
-  }finally{await fs.rm(root,{recursive:true,force:true});}
+test('target mutation between first and final hash aborts trusted readback',async()=>{
+  const payload=Buffer.alloc(65536+7,0x20),original=digest(payload);
+  const obs=new OneCallTransferWatchdog(pinned);
+  obs.observeStart(receipt('COMPLETED',payload.length,payload.length,original));
+  const backing=memoryTarget(payload);
+  const remote:TransferReadback={
+    ...backing.remote,
+    read:async(device,file,offset,size)=>{
+      const result=await backing.remote.read(device,file,offset,size);
+      backing.files.set(backing.target,Buffer.alloc(payload.length,0x21));
+      return result;
+    },
+  };
+  assert.equal(await obs.verifyPublishedTarget(remote),false);
+  assert.equal(obs.snapshot().readbackVerified,false);
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+});
+
+test('state rollback from PUBLISHING, missing digest and failed offset refuse false publication',()=>{
+  const h='1'.repeat(64),size=65536;
+  const obs=new OneCallTransferWatchdog(pinned);
+  obs.observeStart(receipt('RUNNING',size,65536,h));
+  obs.observeStatus(receipt('PUBLISHING',size,size,h));
+  assert.throws(()=>obs.observeStatus(receipt('RUNNING',size,size,h)),
+    /PUBLISHING_STATE_ROLLBACK/);
+  assert.equal(obs.snapshot().mutationUnknown,true);
+  assert.equal(obs.snapshot().workerCompletedVerified,false);
+  const forged=new OneCallTransferWatchdog(pinned);
+  assert.throws(()=>forged.observeStart(receipt('QUEUED',size,0,'not-sha256')),
+    /TRANSFER_RECEIPT_SCOPE_OR_DIGEST_MISMATCH/);
+  const rejected=new OneCallTransferWatchdog(pinned);
+  assert.throws(()=>rejected.observeStart(receipt('PUBLISHING',size,size-1,h)),
+    /TRANSFER_RECEIPT_SCOPE_OR_DIGEST_MISMATCH/);
+});
+
+test('FAILED requires explicit owner resume; a status poll cannot resurrect it',()=>{
+  const h='2'.repeat(64),size=65536;
+  const obs=new OneCallTransferWatchdog(pinned);
+  obs.observeStart(receipt('FAILED',size,0,h));
+  assert.throws(()=>obs.observeStatus(receipt('RUNNING',size,0,h)),
+    /TRANSFER_TERMINAL_ROLLBACK/);
+  const recovered=new OneCallTransferWatchdog(pinned);
+  recovered.observeStart(receipt('FAILED',size,0,h));
+  recovered.observeExplicitResume(receipt('QUEUED',size,0,h),true);
+  assert.equal(recovered.snapshot().phase,'QUEUED');
+  assert.equal(recovered.snapshot().workerCompletedVerified,false);
+  assert.equal(recovered.snapshot().automaticReplayAllowed,false);
 });
