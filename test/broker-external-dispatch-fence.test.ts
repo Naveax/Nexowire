@@ -41,6 +41,7 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   session:string;
   revoked=false;revoking=false;unknown=false;forged=false;
   staleSignature=false;claimReplay=false;releaseLost=false;
+  loseRevokeAckAfterCommit=false;
   wrongSignedOwnerEpoch=false;
   lastClaim:DispatchClaim|undefined;
   private readonly drainWaiters:Array<()=>void>=[];
@@ -102,6 +103,10 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
     if(this.active.size>0)await new Promise<void>(resolve=>
       this.drainWaiters.push(resolve));
     this.revoked=true;this.generation++;
+    if(this.loseRevokeAckAfterCommit){
+      this.loseRevokeAckAfterCommit=false;
+      throw Error('ACK_LOST_AFTER_DURABLE_REVOKE');
+    }
     return signClaim({kind:'broker_dispatch_revocation_v1',
       authorityId:this.authorityId,deviceId:this.device,
       ownerId:this.owner,deviceEpoch:this.deviceEpoch,sessionEpoch:this.session,
@@ -195,6 +200,68 @@ test('concurrent duplicate reservation: only one dispatch, no replay',async()=>{
  assert.equal(attempts.filter(x=>x.status==='fulfilled').length,1);
  assert.equal(executed,1);
 });
+test('two independent Hubs share remote CAS: duplicate UUID permits one effect',async()=>{
+ const f=fixture(),hubA=f.broker(),hubB=f.broker();
+ const same=f.request();let effects=0;
+ const [a,b]=await Promise.allSettled([
+   hubA.execute(same,async()=>{effects++;return 'A'}),
+   hubB.execute(same,async()=>{effects++;return 'B'}),
+ ]);
+ assert.equal([a,b].filter(x=>x.status==='fulfilled').length,1);
+ assert.equal([a,b].filter(x=>x.status==='rejected').length,1);
+ assert.equal(effects,1);
+ assert.equal(f.remote.dispatched.size,1);
+ assert.equal(f.remote.active.size,0);
+});
+test('Hub B cannot reuse Hub A signed permit even if remote replays it',async()=>{
+ const f=fixture(),hubA=f.broker(),hubB=f.broker();
+ let effects=0;
+ assert.equal(await hubA.execute(f.request(),async()=>++effects),1);
+ f.remote.claimReplay=true; // malicious cache supplies valid old signature
+ await code(hubB.execute(f.request(),async()=>++effects),
+   'DISPATCH_PROOF_SCOPE_MISMATCH');
+ assert.equal(effects,1);
+});
+test('Hub B revoke loses ACK after durable commit; both Hubs deny further dispatch',async()=>{
+ const f=fixture(),hubA=f.broker(),hubB=f.broker(),effect=deferred();
+ let effects=0;
+ const admitted=hubA.execute(f.request(),async()=>{effects++;await effect.promise});
+ for(let i=0;i<400&&effects!==1;i++)await Promise.resolve();
+ assert.equal(effects,1);
+ f.remote.loseRevokeAckAfterCommit=true;
+ const revoking=hubB.revoke(f.revoke());
+ await code(hubB.execute(f.request(),async()=>{effects++}),
+   'DISPATCH_REVOKE_PENDING');
+ effect.resolve();
+ await admitted;
+ await code(revoking,'DISPATCH_REVOKE_OUTCOME_UNKNOWN');
+ assert.equal(f.remote.revoked,true);
+ assert.equal(f.remote.generation,8);
+ await code(hubA.execute(f.request(),async()=>{effects++}),
+   'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ await code(hubB.execute(f.request(),async()=>{effects++}),
+   'DISPATCH_REVOKE_PENDING');
+ assert.equal(effects,1);
+});
+test('Hub A release ACK lost while Hub B drains revoke; no duplicate effect',async()=>{
+ const f=fixture(),hubA=f.broker(),hubB=f.broker(),effect=deferred();
+ f.remote.releaseLost=true;
+ let effects=0;
+ const admitted=hubA.execute(f.request(),async()=>{effects++;await effect.promise});
+ for(let i=0;i<400&&effects!==1;i++)await Promise.resolve();
+ assert.equal(effects,1);
+ const revoking=hubB.revoke(f.revoke());
+ effect.resolve();
+ await admitted; // underlying release removed remote active claim but ACK was lost
+ assert.equal((await revoking).drained,true);
+ assert.equal(f.remote.active.size,0);
+ await code(hubA.execute(f.request(),async()=>{effects++}),
+   'DISPATCH_REVOKE_PENDING');
+ await code(hubB.execute(f.request(),async()=>{effects++}),
+   'DISPATCH_REVOKE_PENDING');
+ assert.equal(effects,1);
+});
+
 test('revoke drains admitted effect and blocks concurrent new dispatch',async()=>{
  const f=fixture(),gate=f.broker(),effect=deferred();
  let executed=0;
