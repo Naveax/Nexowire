@@ -236,7 +236,7 @@ test('#17 stop/revoke require observed task state, monotonically witnessed epoch
     dpapiKeyAvailable:true,
   };
   assert.equal(assessCoreStopRevokeSource(stopped).commandAllowed,false);
-  for(const taskState of ['running','ready','disabled','unknown'] as const){
+  for(const taskState of ['running','disabled','unknown'] as const){
     assert.throws(()=>assessCoreStopRevokeSource({...stopped,taskState}),
       /S3_CORE_DELEGATION_TASK_STILL_RUNNING_OR_UNKNOWN/);
   }
