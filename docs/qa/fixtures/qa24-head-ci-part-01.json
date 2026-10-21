@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 1,
+  "ids": [
+    480,
+    551,
+    553,
+    572,
+    574,
+    575,
+    576,
+    582
+  ],
+  "nodes": [
+    {
+      "pr": 480,
+      "head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+      "head_ref": "fix/ai-screen-direct-bridge-broker-guard-20261014",
+      "base_sha": "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39134168129,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2"
+      }
+    },
+    {
+      "pr": 551,
+      "head_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "head_ref": "feat/parallel-12-agent-lifecycle-onboarding-20261018",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39606595530,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9fdee36897ded643594795ba354fc25e894b65c3"
+      }
+    },
+    {
+      "pr": 553,
+      "head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "head_ref": "fix/parallel-05-scoped-path-usb-grants-20261018",
+      "base_sha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39608315991,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e"
+      }
+    },
+    {
+      "pr": 572,
+      "head_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+      "head_ref": "test/qa16-final-acceptance-refresh-20261018",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39645070120,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb"
+      }
+    },
+    {
+      "pr": 574,
+      "head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "head_ref": "fix/parallel-04-access-core-adminbridge-20261018",
+      "base_sha": "fd28d017ea291e8a935b05fda89d7ed2765d35d0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39604153782,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103"
+      }
+    },
+    {
+      "pr": 575,
+      "head_sha": "637156732bd596b1eae5a12ddb76bb35d0867bf8",
+      "head_ref": "fix/parallel-11-progress-proof-acceptance-20261018",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39659176369,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "637156732bd596b1eae5a12ddb76bb35d0867bf8"
+      }
+    },
+    {
+      "pr": 576,
+      "head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "head_ref": "fix/windows-job-helper-trust-qa-20261018",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39598258315,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3"
+      }
+    },
+    {
+      "pr": 582,
+      "head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "head_ref": "fix/p0-agent-journal-antirollback-20261019",
+      "base_sha": "cb819d17ee581093d39626f13e985976def17f30",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39416566585,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc"
+      }
+    }
+  ]
+}
