@@ -64,7 +64,8 @@ const check = (
   override:Partial<Parameters<typeof inspectOneCallWorkerConnectionJournal>[0]>={},
 )=> inspectOneCallWorkerConnectionJournal({
   worker,checkpoint,route:route(),authorize:authorized,
-  workerLease:lease,stageReadback:rightReadback,...override,
+  workerLease:lease,sessionWitness:{currentEpoch:async r=>r.epoch},
+  stageReadback:rightReadback,...override,
 });
 
 test('lost ACK + independently verified destination chunk remains readback-only, never auto replays',async()=>{
@@ -197,6 +198,7 @@ test('missing lease/grant authority never creates trusted prefix evidence',async
   const {worker,checkpoint}=rows();
   const cases=[
     {workerLease:undefined},
+    {sessionWitness:undefined},
     {authorize:undefined},
     {worker:{...worker,fencing:undefined}},
     {workerLease:{check:async()=>{throw Error('CAS_UNAVAILABLE')}}},
@@ -245,4 +247,135 @@ test('disposable SQLite WAL/FULL worker+Connection journal reopening never credi
       'mutation_unknown');
     assert.equal(restoredCP.offset,0);
   } finally { await fs.rm(dir,{recursive:true,force:true}); }
+});
+
+
+test('deterministic reconnect during delayed readback fences stale socket even with matching ACK UUID and SHA',async()=>{
+  const {worker,checkpoint}=rows();
+  let releaseReadback!:()=>void;
+  let signalEntered!:()=>void;
+  const entered=new Promise<void>(r=>{signalEntered=r;});
+  const released=new Promise<void>(r=>{releaseReadback=r;});
+  let liveEpoch=5;
+  let readCount=0;
+  const input={
+    sessionWitness:{currentEpoch:async()=>liveEpoch},
+    stageReadback:{inspect:async (w:FencedWorkerJournalSnapshot,p:{offset:number;length:number;sha256:string})=>{
+      readCount++;
+      signalEntered();
+      await released;
+      return {kind:'verified' as const,deviceId:w.targetDeviceId,
+        offset:p.offset,length:p.length,sha256:p.sha256};
+    }},
+  };
+  const snapshot=JSON.stringify({worker,checkpoint});
+  const pending=check(worker,checkpoint,input);
+  await entered; // deterministic barrier, not arbitrary 120ms sleeps
+  liveEpoch=6; // new authenticated Broker socket epoch
+  releaseReadback();
+  const result=await pending;
+  assert.equal(result.state,'epoch_stale');
+  assert.equal(result.automaticallyReplayable,false);
+  assert.equal(result.checkpointAdvanced,false);
+  assert.equal(readCount,1);
+  assert.equal(JSON.stringify({worker,checkpoint}),snapshot);
+  // Old epoch cannot be used to observe or commit the same ACK, even
+  // though the stored requestId and SHA are unchanged.
+  assert.equal((await check(worker,checkpoint,{sessionWitness:input.sessionWitness})).state,'epoch_stale');
+});
+
+test('fresh Broker re-pair epoch with durable pending preserves UNKNOWN; no implicit write dispatch',async()=>{
+  const {worker,checkpoint}=rows();
+  const oldUuid=worker.pending!.requestId;
+  const copy=JSON.stringify({worker,checkpoint});
+  // Source-only approximation of an authenticated next-epoch CAS. The
+  // actual CAS must be performed by the trusted Connection owner.
+  checkpoint.epoch=6;
+  assert.equal((await check(worker,checkpoint,{
+    route:route(5),sessionWitness:{currentEpoch:async()=>6},
+  })).state,'epoch_stale');
+  const valid=await check(worker,checkpoint,{
+    route:route(6),sessionWitness:{currentEpoch:async()=>6},
+  });
+  assert.equal(valid.state,'readback_verified_not_committed');
+  assert.equal(valid.requestId,oldUuid);
+  assert.equal(valid.automaticallyReplayable,false);
+  assert.equal(valid.checkpointAdvanced,false);
+  assert.equal(checkpoint.offset,0);
+  assert.equal(worker.bytesConfirmed,0);
+  assert.equal(worker.pending?.requestId,oldUuid);
+  assert.notEqual(JSON.stringify({worker,checkpoint}),copy);
+});
+
+test('CORE or ROOT revoke during awaited verified readback takes precedence over reconnect approval',async()=>{
+  for(const cause of ['core','root'] as const){
+    const {worker,checkpoint}=rows();
+    let currentGrant=true, signal!:()=>void, release!:()=>void;
+    const readEntered=new Promise<void>(r=>{signal=r;});
+    const hold=new Promise<void>(r=>{release=r;});
+    let grantEpoch=71, rootEpoch=13;
+    const access=async()=>{
+      if(cause==='core')return currentGrant && grantEpoch===71;
+      return currentGrant && rootEpoch===13;
+    };
+    const pending=check(worker,checkpoint,{
+      authorize:access,
+      sessionWitness:{currentEpoch:async()=>5},
+      stageReadback:{inspect:async(w,p)=>{
+        signal();await hold;
+        return {kind:'verified' as const,deviceId:w.targetDeviceId,
+          offset:p.offset,length:p.length,sha256:p.sha256};
+      }},
+    });
+    await readEntered;
+    currentGrant=false;
+    if(cause==='core')grantEpoch=72;else rootEpoch=14;
+    release();
+    const result=await pending;
+    assert.equal(result.state,'authority_blocked');
+    assert.equal(result.automaticallyReplayable,false);
+    assert.equal(checkpoint.offset,0);
+    assert.equal(worker.bytesConfirmed,0);
+  }
+});
+
+test('#667 cancel after native lost ACK cannot turn durable pending into success or replay',async()=>{
+  const {worker,checkpoint}=rows();
+  const original=worker.pending!.requestId;
+  // #667 must preserve pending after a potentially dispatched Native write.
+  for(const state of ['MUTATION_UNKNOWN','CANCEL_REQUESTED','CANCELLED'] as const){
+    worker.state=state;
+    const actual=await check(worker,checkpoint,{
+      sessionWitness:{currentEpoch:async()=>5},
+    });
+    assert.equal(actual.state,state==='MUTATION_UNKNOWN' ?
+      'readback_verified_not_committed':'cancel_pending');
+    assert.equal(actual.automaticallyReplayable,false);
+    assert.equal(actual.checkpointAdvanced,false);
+    assert.equal(worker.pending?.requestId,original);
+    assert.equal(checkpoint.offset,0);
+  }
+  const noRead=await check(worker,checkpoint,{
+    stageReadback:undefined,sessionWitness:{currentEpoch:async()=>5},
+  });
+  assert.equal(noRead.state,'cancel_pending');
+});
+
+test('Broker epoch witness unavailable, contradictory or foreign route never authenticates a pending chunk',async()=>{
+  const {worker,checkpoint}=rows();
+  for(const src of [
+    {currentEpoch:async()=>undefined},
+    {currentEpoch:async()=>4},
+    {currentEpoch:async()=>6},
+    {currentEpoch:async()=>{throw Error('BROKER_UNREACHABLE')}},
+  ]){
+    const result=await check(worker,checkpoint,{sessionWitness:src});
+    assert.ok(result.state==='authority_blocked'||result.state==='epoch_stale');
+    assert.equal(result.automaticallyReplayable,false);
+  }
+  const foreign=await check(worker,checkpoint,{
+    route:{...route(5),destinationDeviceId:'unrelated-agent'},
+    sessionWitness:{currentEpoch:async()=>5},
+  });
+  assert.equal(foreign.state,'journal_mismatch');
 });

@@ -36,6 +36,12 @@ export interface FencedWorkerJournalSnapshot {
   };
 }
 
+/** Authenticated Broker-only view of the ACTIVE socket epoch. Never read an
+ * epoch from the worker, Agent ACK, or control-plane badge. */
+export interface ConnectionSessionWitness {
+  currentEpoch(route: Readonly<AuthenticatedTransferRoute>): Promise<number | undefined>;
+}
+
 export interface WorkerLeaseWitness {
   /** Never fulfilled by a local PID, owner UI toggle, or Agent response. */
   check(
@@ -114,6 +120,8 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
   authorize?: TransferAuthorization;
   /** #616/#634 rollback-independent *worker* CAS lease check. */
   workerLease?: WorkerLeaseWitness;
+  /** Required fresh Broker witness; read again after any awaited readback. */
+  sessionWitness?: ConnectionSessionWitness;
   /** Optional independent non-mutating destination readback. */
   stageReadback?: TrustedStageReadback;
 }): Promise<WorkerReconciliationProof> {
@@ -139,18 +147,23 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
       checkpoint.epoch !== route.epoch) {
     return denied('epoch_stale', offset, id);
   }
-  if (!input.authorize || !input.workerLease || !worker.fencing ||
+  if (!input.authorize || !input.workerLease || !input.sessionWitness || !worker.fencing ||
       !Number.isSafeInteger(worker.fencing.epoch) ||
       worker.fencing.epoch < 1 || worker.fencing.token.length < 32) {
     return denied('authority_blocked', offset, id);
   }
   let current = false, leased = false;
+  let liveSocketEpoch: number | undefined;
   try {
     current = await input.authorize(route, checkpoint.binding);
     if (current) leased = await input.workerLease.check(worker, route);
+    if (leased) liveSocketEpoch = await input.sessionWitness.currentEpoch(route);
   } catch { /* unreachable authority must fail closed */ }
-  if (!current || !leased) {
+  if (!current || !leased || !Number.isSafeInteger(liveSocketEpoch)) {
     return denied('authority_blocked', offset, id);
+  }
+  if (liveSocketEpoch !== route.epoch) {
+    return denied('epoch_stale', offset, id);
   }
 
   // Any unresolved chunk (even after worker reports CANCELLED) is never
@@ -184,6 +197,16 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
       if (!(await input.authorize(route, checkpoint.binding)) ||
           !(await input.workerLease.check(worker, route))) {
         return denied('authority_blocked', offset, id);
+      }
+      // Reconnect can happen during the independent destination read. A
+      // readback from the old socket is NOT authenticated proof for the
+      // current exact device even when chunk hash and UUID match.
+      const freshEpoch = await input.sessionWitness.currentEpoch(route);
+      if (!Number.isSafeInteger(freshEpoch)) {
+        return denied('authority_blocked', offset, id);
+      }
+      if (freshEpoch !== route.epoch) {
+        return denied('epoch_stale', offset, id);
       }
     } catch { return denied('authority_blocked', offset, id); }
     if (observation.kind !== 'verified' ||
