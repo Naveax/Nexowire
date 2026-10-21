@@ -43,7 +43,10 @@ other people's accounts or OpenAI/third-party safety limits.
    explicitly **not a production OS privilege token**.
 4. D1 migration `0020_core_admin_delegations.sql` adds device-scoped
    enrollment generation + revocation timestamp and separate append-only
-   consumed enrollment IDs. `D1CoreDelegationLedger` uses atomic SQLite/D1
+   consumed enrollment IDs. SQLite/D1 triggers permanently revoke a grant
+   on CORE preference OFF/deletion, SAFE mode, re-pair, owner change or
+   Broker mode removal; simply switching a preference back ON cannot revive
+   old signed enrollment. `D1CoreDelegationLedger` uses atomic SQLite/D1
    transaction with CAS generation and replay blocking. Owner/device pairing,
    broker image/version, SAFE, revoke and credential change deny candidate
    lookup; reconnect itself does not destroy an enrollment.

@@ -149,6 +149,8 @@ export class D1CoreDelegationLedger {
        FROM devices d
        WHERE d.id=? AND d.owner_account_id=? AND d.credential_hash=?
          AND d.access_mode='full' AND d.platform='win32' AND d.privilege_mode='broker'
+         AND EXISTS (SELECT 1 FROM device_maintenance_preferences p
+           WHERE p.device_id=d.id AND p.owner_account_id=d.owner_account_id AND p.enabled=1)
          AND NOT EXISTS (SELECT 1 FROM core_admin_consumed_enrollments e
            WHERE e.enrollment_id=?)
        ON CONFLICT(device_id) DO UPDATE SET
@@ -206,7 +208,9 @@ export class D1CoreDelegationLedger {
          AND d.owner_account_id=c.owner_account_id
          AND d.credential_hash=c.credential_hash
          AND d.access_mode='full' AND d.platform='win32'
-         AND d.privilege_mode='broker'`,
+         AND d.privilege_mode='broker'
+         AND EXISTS (SELECT 1 FROM device_maintenance_preferences p
+           WHERE p.device_id=d.id AND p.owner_account_id=d.owner_account_id AND p.enabled=1)`,
     ).bind(input.deviceId,input.ownerAccountId,input.credentialHash,
       input.brokerImageSha256,input.brokerVersion).first<{
         enrollment_id:string;generation:number;signing_key_sha256:string;

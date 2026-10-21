@@ -62,7 +62,11 @@ function fixture(migrated=true) {
  id TEXT PRIMARY KEY,owner_account_id TEXT NOT NULL,
  credential_hash TEXT NOT NULL,access_mode TEXT NOT NULL,
  platform TEXT NOT NULL,privilege_mode TEXT NOT NULL);
- INSERT INTO devices VALUES('naveax','owner','${hash}','full','win32','broker');`);
+ INSERT INTO devices VALUES('naveax','owner','${hash}','full','win32','broker');
+ CREATE TABLE device_maintenance_preferences (
+ device_id TEXT PRIMARY KEY NOT NULL, owner_account_id TEXT NOT NULL,
+ enabled INTEGER NOT NULL, updated_at TEXT NOT NULL);
+ INSERT INTO device_maintenance_preferences VALUES('naveax','owner',1,'2026-10-21T12:59:00.000Z');`);
  if(migrated){
   const sql=readFileSync(path.join(process.cwd(),'cloudflare','migrations','0020_core_admin_delegations.sql'),'utf8');
   native.exec(sql);
@@ -158,6 +162,19 @@ test('revoke is durable and old signed transcript cannot resurrect even after ne
  }finally{f.native.close()}
 });
 
+test('CORE OFF permanently revokes signed enrollment, re-enabling preference does not revive it',async()=>{
+ const f=fixture();
+ try{
+  const a=verifyCoreBootstrapCandidate(transcript(),context());
+  assert.equal(await f.ledger.enroll(a,0),true);
+  f.native.exec("UPDATE device_maintenance_preferences SET enabled=0,updated_at='2026-10-21T13:01:00.000Z' WHERE device_id='naveax'");
+  assert.equal(await f.ledger.currentCandidate(lookup),null);
+  f.native.exec("UPDATE device_maintenance_preferences SET enabled=1,updated_at='2026-10-21T13:01:10.000Z' WHERE device_id='naveax'");
+  assert.equal(await f.ledger.currentCandidate(lookup),null);
+  assert.equal(await f.ledger.enroll(a,1),false);
+ }finally{f.native.close()}
+});
+
 test('re-pair, owner transfer, Broker replacement, downgrade or SAFE force fail-closed',async()=>{
  const f=fixture();
  try{
@@ -178,6 +195,8 @@ test('re-pair, owner transfer, Broker replacement, downgrade or SAFE force fail-
    f.native.exec(sql);
    assert.equal(await f.ledger.currentCandidate(lookup),null);
    f.native.exec(`UPDATE devices SET credential_hash='${hash}',owner_account_id='owner',access_mode='full',privilege_mode='broker' WHERE id='naveax'`);
+   // Restoring old telemetry or reconnect must NEVER resurrect a revoked grant.
+   assert.equal(await f.ledger.currentCandidate(lookup),null);
   }
  }finally{f.native.close()}
 });
