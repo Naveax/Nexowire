@@ -74,7 +74,7 @@ function nativeWitness(image: string): NativeWitness {
   const cmd = [
     "$ErrorActionPreference='Stop'",
     'Import-Module Microsoft.PowerShell.Security -ErrorAction Stop',
-    '$auth=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath ' + quote(image) + ' -ErrorAction Stop',
+    '$auth=Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath ' + quote(image) + ' -ErrorAction Stop',
     '$file=[IO.FileSystemAclExtensions]::GetAccessControl([IO.FileInfo]::new(' + quote(image) + '))',
     '$dir=[IO.FileSystemAclExtensions]::GetAccessControl([IO.DirectoryInfo]::new(' + quote(parent) + '))',
     "$unsafe=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')",
