@@ -433,7 +433,9 @@ test('ROOT DANGER lease needs FULL online device, works without Broker, expires 
   let clock = new Date('2026-10-02T12:00:00.000Z');
   const store = new MemoryControlPlaneStore();
   const service = new ControlPlaneService(store, { now: () => clock });
-  const owner = { accountId: 'root-owner', role: 'user' } as const;
+  const owner = { accountId: 'root-owner', role: 'user',
+    sessionId:'b174cd04-6260-495c-9e81-77833c64e193',
+    sessionExpiresAt:'2026-10-03T12:00:00.000Z' } as const;
   const other = { accountId: 'other-user', role: 'user' } as const;
   await service.ensureAccount({ id: owner.accountId });
   await service.ensureAccount({ id: other.accountId });
@@ -453,9 +455,9 @@ test('ROOT DANGER lease needs FULL online device, works without Broker, expires 
   });
   await assert.rejects(service.setDeviceRootMode(other, id, true), /DEVICE_NOT_FOUND/);
   const granted = await service.setDeviceRootMode(owner, id, true);
-  assert.equal(granted.rootMode.active, false); // unsessioned lease cannot become effective ROOT
+  assert.equal(granted.rootMode.active, true); // session-bound owner policy only
   assert.equal(granted.rootMode.expiresAt, '2026-10-02T12:15:00.000Z');
-  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, false);
+  assert.equal((await service.dashboard(owner)).devices[0]?.rootMode.active, true);
   assert.equal((await service.dashboard(owner)).devices[0]?.adminBridgeReady, false);
   const withBroker = await store.getDevice(id);
   assert.ok(withBroker);

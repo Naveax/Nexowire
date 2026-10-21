@@ -29,7 +29,8 @@ test('PC Settings stays below the badges and is left aligned on desktop and mobi
 test('FULL and ROOT are shown independently beside Agent/Bridge and Core is not represented as real privilege',()=>{
   assert.match(app, /Full Access açık/);
   assert.match(app, /ROOT kapalı/);
-  assert.match(app, /ROOT izni açık/);
+  assert.match(app, /ROOT bakım politikası aktif \(Windows yetkisi ayrı\)/);
+  assert.doesNotMatch(app, /rootStateChip\.textContent\s*=\s*[^;]*'ROOT izni açık'/);
   assert.match(app, /core-shortcut/);
   assert.match(app, /setDeviceCorePreference/);
   assert.match(app, /CORE UNLIMITED/);

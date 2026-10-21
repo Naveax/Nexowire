@@ -59,6 +59,10 @@ test('expired lease, restart/snapshot reuse and CORE without expiry never revive
   assert.equal(expired.operation.elevatedExecutionProven, false);
   const reboot = explainDeviceAuthorization(facts({online:false}));
   assert.equal(reboot.root.policyActive, false);
+  // An offline device still has an unexpired recorded owner lease;
+  // this is NOT a live authenticated ROOT grant or Windows privilege.
+  assert.equal(reboot.root.leaseUnexpired, true);
+  assert.equal(reboot.root.sessionBound, false);
   assert.equal(reboot.core.state, 'PAUSED_UNVERIFIED');
   assert.equal(reboot.operation.decision, 'denied');
   assert.ok(reboot.operation.reasons.includes('DEVICE_OFFLINE'));
@@ -70,6 +74,7 @@ test('owner transfer, mismatched CORE/ROOT owners and service impersonation fail
   }));
   assert.equal(switched.core.enabled, false);
   assert.equal(switched.root.policyActive, false);
+  assert.equal(switched.root.leaseUnexpired, false);
   assert.equal(switched.core.updatedAt, null);
   const outsider = explainDeviceAuthorization(facts({requesterAccountId:'attacker'}));
   assert.equal(outsider.operation.decision, 'denied');
@@ -90,7 +95,8 @@ test('SAFE, broker OFF and forged ready telemetry never claim applied work', () 
   assert.equal(off.operation.decision,'denied');
   assert.equal(off.adminBridge.preferenceApplied,false);
   const telemetryLost = explainDeviceAuthorization(facts({adminBridgeReady:false}));
-  assert.equal(telemetryLost.operation.decision,'not-proven');
+  assert.equal(telemetryLost.operation.decision,'denied');
+  assert.equal(telemetryLost.adminBridge.errorCode,'BRIDGE_REPORTED_MODE_MISMATCH');
   assert.ok(telemetryLost.operation.reasons.includes('BROKER_AGENT_TELEMETRY_NOT_READY'));
   assert.equal(telemetryLost.operation.elevatedExecutionProven,false);
 });

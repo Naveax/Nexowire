@@ -572,6 +572,73 @@ export class D1ControlPlaneStore implements ControlPlaneStore {
     ).bind(record.deviceId, record.ownerAccountId, record.expiresAt, record.updatedAt).run();
   }
 
+  async grantRootSession(input: {
+    deviceId:string;ownerAccountId:string;sessionHash:string;
+    issuedAt:string;expiresAt:string;
+  }): Promise<boolean> {
+    const result = await this.db.prepare(
+      `INSERT INTO device_root_session_grants
+        (device_id,owner_account_id,session_hash,issued_at,expires_at)
+        SELECT ?,?,?,?,?
+        WHERE EXISTS (SELECT 1 FROM devices d WHERE d.id=? AND d.owner_account_id=?
+          AND d.access_mode='full' AND d.online=1)
+          AND NOT EXISTS (SELECT 1 FROM control_plane_revoked_sessions r
+            WHERE r.session_hash=? AND r.owner_account_id=? AND r.expires_at>?)
+        ON CONFLICT(device_id) DO UPDATE SET
+          owner_account_id=excluded.owner_account_id,
+          session_hash=excluded.session_hash,
+          issued_at=excluded.issued_at,expires_at=excluded.expires_at
+        WHERE NOT EXISTS (SELECT 1 FROM control_plane_revoked_sessions r
+            WHERE r.session_hash=excluded.session_hash
+              AND r.owner_account_id=excluded.owner_account_id AND r.expires_at>?)`,
+    ).bind(input.deviceId,input.ownerAccountId,input.sessionHash,input.issuedAt,input.expiresAt,
+      input.deviceId,input.ownerAccountId,input.sessionHash,input.ownerAccountId,input.issuedAt,
+      input.issuedAt).run();
+    return result.success !== false && result.meta?.changes === 1;
+  }
+
+  async getRootSessionGrant(input: {
+    deviceId:string;ownerAccountId:string;sessionHash:string;at:string;
+  }): Promise<{issuedAt:string;expiresAt:string}|null> {
+    const row = await this.db.prepare(
+      `SELECT g.issued_at,g.expires_at FROM device_root_session_grants g
+        JOIN devices d ON d.id=g.device_id AND d.owner_account_id=g.owner_account_id
+        JOIN device_root_mode_leases l ON l.device_id=g.device_id
+          AND l.owner_account_id=g.owner_account_id AND l.expires_at=g.expires_at
+          AND l.updated_at=g.issued_at
+        WHERE g.device_id=? AND g.owner_account_id=? AND g.session_hash=?
+          AND g.expires_at>? AND g.issued_at<=? AND d.online=1 AND d.access_mode='full'
+          AND NOT EXISTS (SELECT 1 FROM control_plane_revoked_sessions r
+            WHERE r.session_hash=g.session_hash AND r.owner_account_id=g.owner_account_id
+              AND r.expires_at>?)`,
+    ).bind(input.deviceId,input.ownerAccountId,input.sessionHash,input.at,input.at,input.at)
+      .first<{issued_at:string;expires_at:string}>();
+    return row ? {issuedAt:row.issued_at,expiresAt:row.expires_at} : null;
+  }
+
+  async revokeControlPlaneSession(input: {
+    ownerAccountId:string;sessionHash:string;revokedAt:string;expiresAt:string;
+  }): Promise<void> {
+    const results = await this.db.batch([
+      this.db.prepare(
+        'INSERT INTO control_plane_revoked_sessions (session_hash,owner_account_id,expires_at,revoked_at) VALUES (?,?,?,?) ON CONFLICT(session_hash) DO NOTHING',
+      ).bind(input.sessionHash,input.ownerAccountId,input.expiresAt,input.revokedAt),
+      this.db.prepare(
+        'DELETE FROM device_root_session_grants WHERE session_hash=? AND owner_account_id=?',
+      ).bind(input.sessionHash,input.ownerAccountId),
+    ]);
+    if (results.length !== 2 || results.some(r => r.success === false)) {
+      throw new Error('ROOT_SESSION_REVOKE_UNCONFIRMED');
+    }
+  }
+
+  async isControlPlaneSessionRevoked(sessionHash:string,at:string): Promise<boolean> {
+    const row = await this.db.prepare(
+      'SELECT 1 AS revoked FROM control_plane_revoked_sessions WHERE session_hash=? AND expires_at>?',
+    ).bind(sessionHash,at).first<{revoked:number}>();
+    return row !== null;
+  }
+
   async getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null> {
     const row = await this.db.prepare(
       'SELECT device_id, owner_account_id, enabled, updated_at FROM device_maintenance_preferences WHERE device_id = ?',
