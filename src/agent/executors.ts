@@ -313,6 +313,12 @@ function assertSameOpenFile(
   before: import('node:fs').Stats,
   opened: import('node:fs').Stats,
 ): void {
+  // An in-root NTFS hardlink could expose or mutate an out-of-root name.
+  // Reject multi-link files until the OS handle/ACL identity policy can prove
+  // all aliases are within the explicitly approved scope.
+  if (before.nlink !== 1 || opened.nlink !== 1) {
+    throw new PathDeniedError(target, 'HARDLINK_ALIAS_DENIED', 'read');
+  }
   // File identifiers from an actual open handle must match the file authorized
   // by pathname checks; a junction/file swap cannot silently switch the read.
   if (!before.isFile() || !opened.isFile() ||
@@ -643,19 +649,14 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
         results.push({ path: target, ok: false, error: 'TOTAL_LIMIT_REACHED', size: stat.size });
         continue;
       }
-      const content = await fs.readFile(target);
-      totalBytes += content.byteLength;
-      results.push({
-        path: target,
-        ok: true,
-        size: stat.size,
-        encoding: parsed.encoding,
-        ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
-        content:
-          parsed.encoding === 'base64'
-            ? content.toString('base64')
-            : content.toString('utf8'),
-      });
+      // Delegate through the same validated open handle as single-file reads;
+      // batch reads must not bypass hardlink/identity safety policy.
+      const read = await readFile({
+        path: target, encoding: parsed.encoding, max_bytes: parsed.max_bytes_each,
+        include_sha256: parsed.include_sha256,
+      }, policy) as { data: { path:string; size:number; encoding:string; content:string; sha256?:string } };
+      totalBytes += read.data.size;
+      results.push({ok:true,...read.data});
     } catch (error) {
       results.push({
         path: requested,
@@ -666,6 +667,20 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
   }
 
   return { data: { results, totalBytes, truncated } };
+}
+
+async function assertNoHardlinkWriteAlias(target:string,scope:'write'|'delete'):Promise<void> {
+  try {
+    const st=await fs.lstat(target);
+    if(st.isSymbolicLink() || (st.isFile() && st.nlink!==1)) {
+      throw new PathDeniedError(target,
+        st.isSymbolicLink() ? 'REPARSE_TARGET_DENIED' : 'HARDLINK_ALIAS_DENIED',scope);
+    }
+  }catch(error){
+    if(typeof error==='object' && error!==null && 'code'in error &&
+       error.code==='ENOENT')return;
+    throw error;
+  }
 }
 
 async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
@@ -707,6 +722,9 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       throw new Error('Chunk offset plus length exceeds safe integer precision.');
     }
     const info=await fs.lstat(target);
+    if (info.nlink !== 1) {
+      throw new PathDeniedError(target, 'HARDLINK_ALIAS_DENIED', 'write');
+    }
     if(!info.isFile()||info.isSymbolicLink()||
        !Number.isSafeInteger(info.size)||parsed.offset_bytes>info.size){
       throw new Error('write_at target is not a regular file or offset creates a gap.');
@@ -716,6 +734,9 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       // Pin the open file identity. A concurrent swap must not let us edit
       // another file after the initial path check.
       const openedInfo=await handle.stat();
+      if (openedInfo.nlink !== 1) {
+        throw new PathDeniedError(target, 'HARDLINK_ALIAS_DENIED', 'write');
+      }
       if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
          openedInfo.ino!==info.ino||!Number.isSafeInteger(openedInfo.size)||
          parsed.offset_bytes>openedInfo.size){
@@ -762,6 +783,7 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   }else{
     if(parsed.offset_bytes!==undefined)
       throw new Error('offset_bytes may only be used with write_at.');
+    if(parsed.mode!=='create')await assertNoHardlinkWriteAlias(target,'write');
     if(parsed.mode==='append')await fs.appendFile(target,content);
     else if(parsed.mode==='create')await fs.writeFile(target,content,{flag:'wx'});
     else await fs.writeFile(target,content);
@@ -823,12 +845,20 @@ async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileTransferInputSchema.parse(input);
   const source = await policy.authorizeExisting(parsed.source, 'read');
   const destination = await policy.authorizeForCreate(parsed.destination, 'write');
+  const sourceInfo=await fs.lstat(source);
+  if(sourceInfo.isSymbolicLink() || (sourceInfo.isFile() && sourceInfo.nlink!==1)){
+    throw new PathDeniedError(source,
+      sourceInfo.isSymbolicLink() ? 'REPARSE_TARGET_DENIED':'HARDLINK_ALIAS_DENIED','read');
+  }
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
   if (parsed.overwrite) {
     try {
       const replaced = await fs.lstat(destination);
       if (replaced.isSymbolicLink()) {
         throw new PathDeniedError(destination, 'COPY_TARGET_REPARSE_DENIED', 'delete');
+      }
+      if(replaced.isFile() && replaced.nlink!==1) {
+        throw new PathDeniedError(destination, 'HARDLINK_ALIAS_DENIED', 'delete');
       }
       await policy.authorizeExisting(destination,
         replaced.isDirectory() ? 'recursive_delete' : 'delete');
@@ -857,6 +887,9 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
       throw new Error('atomic_no_overwrite requires overwrite=false and recursive=false.');
     }
     const sourceInfo = await fs.lstat(source);
+    if (sourceInfo.nlink !== 1) {
+      throw new PathDeniedError(source, 'HARDLINK_ALIAS_DENIED', 'move');
+    }
     if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink() ||
         !Number.isSafeInteger(sourceInfo.size)) {
       throw new Error('atomic_no_overwrite requires a regular, non-symlink file.');
@@ -951,7 +984,11 @@ function countOccurrences(text: string, needle: string): number {
 async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FilePatchInputSchema.parse(input);
   const target = await policy.authorizeExisting(parsed.path, 'write');
-  const stat = await fs.stat(target);
+  const stat = await fs.lstat(target);
+  if (stat.isSymbolicLink() || (stat.isFile() && stat.nlink!==1)) {
+    throw new PathDeniedError(target,
+      stat.isSymbolicLink() ? 'REPARSE_TARGET_DENIED':'HARDLINK_ALIAS_DENIED','write');
+  }
   if (!stat.isFile()) throw new Error('Patch target is not a file.');
   if (stat.size > parsed.max_bytes) {
     throw new Error(`Patch target exceeds max_bytes ${parsed.max_bytes}.`);

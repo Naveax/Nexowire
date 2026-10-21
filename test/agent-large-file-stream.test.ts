@@ -223,6 +223,139 @@ test('streaming hash rejects concurrent on-handle mutation rather than returning
   assert.equal(mutated,true);
 });
 
+test('short positioned writes are retried to full chunk and then verified',async t=>{
+  const {dir,policy}=await temporary(t);
+  const stage=path.join(dir,'short-write.stage');
+  await fs.writeFile(stage,'');
+  const chunk=Buffer.alloc(CHUNK,0x5c);
+  const nativeOpen=fs.open;
+  let shortResponses=0;
+  (fs as unknown as {open:typeof fs.open}).open=async (...args:Parameters<typeof fs.open>)=>{
+    const handle=await nativeOpen(...args);
+    if(String(args[0])!==stage || args[1]!=='r+')return handle;
+    return new Proxy(handle,{
+      get(target,property){
+        if(property==='write')return async (
+          bytes:Buffer,bufferOffset:number,length:number,position:number,
+        )=>{
+          if(shortResponses<3){
+            shortResponses++;
+            return target.write(bytes,bufferOffset,Math.min(length,73),position);
+          }
+          return target.write(bytes,bufferOffset,length,position);
+        };
+        const result=Reflect.get(target,property,target);
+        return typeof result==='function'?result.bind(target):result;
+      },
+    });
+  };
+  try{
+    const data=await cmd('files.write',{path:stage,mode:'write_at',
+      offset_bytes:0,content:chunk.toString('base64'),encoding:'base64',
+      expected_chunk_sha256:sha(chunk)},policy);
+    assert.equal(data.bytesWritten,CHUNK);
+  } finally {(fs as unknown as {open:typeof fs.open}).open=nativeOpen;}
+  assert.equal(shortResponses,3);
+  assert.deepEqual(await fs.readFile(stage),chunk);
+  const full=await cmd('files.hash',{path:stage,max_bytes:CHUNK},policy);
+  assert.equal(full.sha256,sha(chunk));
+});
+
+test('cancelled positioned write reports abort, retains stage only and resumes without unverified publish',async t=>{
+  const {dir,policy}=await temporary(t);
+  const stage=path.join(dir,'cancel.stage');
+  const final=path.join(dir,'final.bin');
+  await fs.writeFile(stage,'');
+  const chunk=Buffer.alloc(CHUNK,0x3a);
+  const nativeOpen=fs.open;
+  let aborted=false;
+  (fs as unknown as {open:typeof fs.open}).open=async (...args:Parameters<typeof fs.open>)=>{
+    const handle=await nativeOpen(...args);
+    if(String(args[0])!==stage || args[1]!=='r+' || aborted)return handle;
+    return new Proxy(handle,{
+      get(target,property){
+        if(property==='write')return async (
+          bytes:Buffer,bufferOffset:number,_length:number,position:number,
+        )=>{
+          aborted=true;
+          await target.write(bytes,bufferOffset,4096,position);
+          throw Object.assign(new Error('synthetic operator cancel'),{
+            name:'AbortError',code:'ABORT_ERR',
+          });
+        };
+        const result=Reflect.get(target,property,target);
+        return typeof result==='function'?result.bind(target):result;
+      },
+    });
+  };
+  const request={path:stage,mode:'write_at',offset_bytes:0,
+    content:chunk.toString('base64'),encoding:'base64',
+    expected_chunk_sha256:sha(chunk)};
+  try{
+    await assert.rejects(()=>cmd('files.write',request,policy),
+      (error:unknown)=>normalizeAgentError(error).code==='ABORT_ERR');
+  } finally {(fs as unknown as {open:typeof fs.open}).open=nativeOpen;}
+  assert.equal(aborted,true);
+  assert.equal((await fs.stat(stage)).size,4096);
+  await assert.rejects(()=>fs.stat(final));
+  await assert.rejects(()=>cmd('files.move',{
+    source:stage,destination:final,atomic_no_overwrite:true,
+    expected_sha256:sha(chunk),expected_size_bytes:CHUNK,
+  },policy),(error:unknown)=>normalizeAgentError(error).code==='FILE_CONFLICT');
+  const done=await cmd('files.write',request,policy);
+  assert.equal(done.resumedBytes,4096);
+  await cmd('files.move',{source:stage,destination:final,atomic_no_overwrite:true,
+    expected_sha256:sha(chunk),expected_size_bytes:CHUNK},policy);
+  assert.deepEqual(await fs.readFile(final),chunk);
+});
+
+test('NTFS-like hardlink cannot alias an out-of-scope file through read/hash/write_at/publish',async t=>{
+  const {dir,policy}=await temporary(t);
+  const original=path.join(dir,'original.bin');
+  const alias=path.join(dir,'alias.bin');
+  const final=path.join(dir,'published.bin');
+  await fs.writeFile(original,Buffer.from('SENSITIVE-HARDLINK-CONTENT'));
+  await fs.link(original,alias);
+  assert.equal((await fs.stat(alias)).nlink,2);
+  const deniesHardlink=(error:unknown)=>normalizeAgentError(error).code==='PATH_DENIED';
+  await assert.rejects(()=>cmd('files.read',{
+    path:alias,encoding:'base64',offset_bytes:0,max_bytes:64,
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.read',{
+    path:alias,encoding:'base64',max_bytes:64,
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.hash',{
+    path:alias,max_bytes:1024,
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.write',{
+    path:alias,mode:'write_at',offset_bytes:0,content:'S',
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.move',{
+    source:alias,destination:final,atomic_no_overwrite:true,
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.write',{
+    path:alias,mode:'overwrite',content:'PWN',
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.write',{
+    path:alias,mode:'append',content:'PWN',
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.patch',{
+    path:alias,max_bytes:1024,
+    operations:[{old_text:'SENSITIVE',new_text:'PWN',expected_count:1}],
+  },policy),deniesHardlink);
+  await assert.rejects(()=>cmd('files.copy',{
+    source:alias,destination:final,overwrite:false,
+  },policy),deniesHardlink);
+  const batch=await cmd('files.read_many',{
+    paths:[alias],max_bytes_each:1024,max_total_bytes:4096,
+  },policy);
+  const first=(batch.results as Array<{ok:boolean;error?:string}>)[0];
+  assert.equal(first?.ok,false);
+  assert.match(String(first?.error),/HARDLINK_ALIAS_DENIED/);
+  assert.equal(await fs.readFile(original,'utf8'),'SENSITIVE-HARDLINK-CONTENT');
+  await assert.rejects(()=>fs.stat(final));
+});
+
 test('write-only permission cannot use resumable chunks to read existing secret bytes',async t=>{
   const {dir}=await temporary(t);
   const file=path.join(dir,'secret.stage');
@@ -269,10 +402,28 @@ test('>256 MiB offset and streaming SHA on a logically sparse temporary file', {
   for(let i=0;i<320;i++)expected.update(zeros);
   const hashed=await cmd('files.hash',{path:file,max_bytes:size},policy);
   assert.equal(hashed.sha256,expected.digest('hex'));
+  const marker=Buffer.from('verified-high-offset-tail');
+  const append=await cmd('files.write',{
+    path:file,mode:'write_at',offset_bytes:size,encoding:'base64',
+    content:marker.toString('base64'),expected_chunk_sha256:sha(marker),
+  },policy);
+  assert.equal(append.bytesWritten,marker.length);
+  const tail=await cmd('files.read',{
+    path:file,offset_bytes:size,encoding:'base64',max_bytes:CHUNK,
+  },policy);
+  assert.deepEqual(Buffer.from(tail.content as string,'base64'),marker);
+  const expectedAfter=createHash('sha256');
+  for(let i=0;i<320;i++)expectedAfter.update(zeros);
+  expectedAfter.update(marker);
+  const finalHash=await cmd('files.hash',{
+    path:file,max_bytes:size+marker.length,
+  },policy);
+  assert.equal(finalHash.sha256,expectedAfter.digest('hex'));
 });
 
 test('1 GiB non-sparse temporary file supports ranged reads, high-offset write, SHA256 streaming and atomic publish',
-  {timeout:240000},async t=>{
+  {timeout:240000, skip: process.env.NEXOWIRE_RUN_LARGE_DISK_FIXTURE === '1'
+    ? false : 'physical 1 GiB disk fixture requires explicit opt-in'},async t=>{
     const {dir,policy}=await temporary(t);
     const source=path.join(dir,'non-sparse-1GiB.stage');
     const final=path.join(dir,'non-sparse-1GiB.final');
