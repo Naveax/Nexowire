@@ -8,6 +8,7 @@ import {
   type BrokerFilesystemTrust,
 } from '../src/agent/broker-filesystem-preflight.js';
 import { isPrivilegedBrokerCapability, privilegeRequirement } from '../src/security/privilege.js';
+import {syntheticProtectedBoundary} from './p05-native-boundary-fixtures.js';
 
 const proof = (overrides: Partial<BrokerFilesystemIdentity> = {}): BrokerFilesystemIdentity => ({
   sid: 'S-1-5-21-100-200-300-500',
@@ -23,6 +24,7 @@ const intent: BrokerFilesystemIntent = {
   scope:'write',
 };
 const trust = (overrides:Partial<BrokerFilesystemTrust>={}):BrokerFilesystemTrust=>({
+  inspectNativeFilesystemBoundary:async()=>syntheticProtectedBoundary(),
   brokerToken:async()=>proof(),
   callerToken:async()=>proof(),
   destinationOwner:async()=>({ownerId:'trusted-owner',deviceId:'trusted-device'}),
