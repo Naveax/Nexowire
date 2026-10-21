@@ -13,6 +13,7 @@
     "src/agent/process-manager.ts#spawnSync": 1,
     "src/agent/process-worker.ts#spawn": 2,
     "src/agent/process-worker.ts#spawnSync": 1,
+    "src/agent/scoped-path-grant-approval.ts#spawn": 1,
     "src/agent/windows-accessibility.ts#spawn": 1,
     "src/agent/windows-console-grant.ts#spawn": 1,
     "src/agent/windows-control.ts#spawn": 1,

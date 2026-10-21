@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { createReadStream, promises as fs } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -70,13 +70,35 @@ const WslExecInputSchema = z.object({
   max_output_bytes: z.number().int().min(1024).max(16_777_216).default(2_097_152),
 });
 
+// At most 64 KiB of binary per ranged MCP response: encoded Base64 plus
+// duplicated MCP text/structured payload stays below typical relay budgets.
+// The *total* file size is never limited by this per-request bound.
+const FILE_STREAM_CHUNK_BYTES = 64 * 1024;
+const SAFE_FILE_OFFSET = Number.MAX_SAFE_INTEGER;
+// Serialize this Agent's overlapping chunk writes per canonical target. This
+// is NOT an OS interprocess lock or a replacement for native handle checks.
+const fileChunkLocks = new Map<string, Promise<void>>();
+async function withFileChunkLock<T>(target: string, action: () => Promise<T>): Promise<T> {
+  const before = fileChunkLocks.get(target) ?? Promise.resolve();
+  let release!: () => void;
+  const signal = new Promise<void>(resolve => { release = resolve; });
+  const current = before.then(() => signal);
+  fileChunkLocks.set(target, current);
+  await before;
+  try { return await action(); }
+  finally {
+    release();
+    if (fileChunkLocks.get(target) === current) fileChunkLocks.delete(target);
+  }
+}
 const FileReadInputSchema = z.object({
   path: z.string().min(1).max(4096),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
-  max_bytes: z.number().int().min(1).max(16_777_216).default(2_097_152),
+  // Defaults depend on mode: 2 MiB for legacy full read, 64 KiB for range.
+  max_bytes: z.number().int().min(1).max(16_777_216).optional(),
   include_sha256: z.boolean().default(false),
-  // Optional fixed byte offset for low-payload, bounded cross-device reads.
-  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+  // Fixed-size binary chunks; offsets may address arbitrarily large files.
+  offset_bytes: z.number().int().min(0).max(SAFE_FILE_OFFSET).optional(),
 });
 
 const FileReadManyInputSchema = z.object({
@@ -106,7 +128,8 @@ const FileWriteInputSchema = z.object({
   content: z.string().max(22_369_624),
   encoding: z.enum(['utf8', 'base64']).default('utf8'),
   mode: z.enum(['overwrite', 'append', 'create', 'write_at']).default('overwrite'),
-  offset_bytes: z.number().int().min(0).max(268_435_456).optional(),
+  offset_bytes: z.number().int().min(0).max(SAFE_FILE_OFFSET).optional(),
+  expected_chunk_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
   create_parents: z.boolean().default(false),
 });
 
@@ -116,7 +139,9 @@ const FileStatInputSchema = z.object({
 
 const FileHashInputSchema = z.object({
   path: z.string().min(1).max(4096),
-  max_bytes: z.number().int().min(1).max(268_435_456).default(67_108_864),
+  // Per-request budget, not a hard overall file-size ceiling. Explicitly
+  // chosen limits up to the safe JS integer bound support multi-GiB hashes.
+  max_bytes: z.number().int().min(1).max(SAFE_FILE_OFFSET).default(67_108_864),
 });
 
 const FileMkdirInputSchema = z.object({
@@ -132,6 +157,8 @@ const FileTransferInputSchema = z.object({
   create_parents: z.boolean().default(false),
   // Same-directory staging commits must never race-overwrite another file.
   atomic_no_overwrite: z.boolean().default(false),
+  expected_sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+  expected_size_bytes: z.number().int().min(0).max(SAFE_FILE_OFFSET).optional(),
 });
 
 const FileDeleteInputSchema = z.object({
@@ -282,22 +309,59 @@ function sha256Buffer(content: Uint8Array): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
+function assertSameOpenFile(
+  target: string,
+  before: import('node:fs').Stats,
+  opened: import('node:fs').Stats,
+): void {
+  // An in-root NTFS hardlink could expose or mutate an out-of-root name.
+  // Reject multi-link files until the OS handle/ACL identity policy can prove
+  // all aliases are within the explicitly approved scope.
+  if (before.nlink !== 1 || opened.nlink !== 1) {
+    throw new PathDeniedError(target, 'HARDLINK_ALIAS_DENIED', 'read');
+  }
+  // File identifiers from an actual open handle must match the file authorized
+  // by pathname checks; a junction/file swap cannot silently switch the read.
+  if (!before.isFile() || !opened.isFile() ||
+      !Number.isSafeInteger(before.size) || !Number.isSafeInteger(opened.size) ||
+      before.dev !== opened.dev || before.ino !== opened.ino ||
+      before.size !== opened.size) {
+    throw new FileConflictError('Target file changed before handle validation.', {
+      path: target, reason: 'FILE_IDENTITY_MISMATCH',
+    });
+  }
+}
+
 async function sha256File(target: string, maxBytes?: number): Promise<string> {
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error('Hash target is not a file.');
+  const stat = await fs.lstat(target);
+  if (!stat.isFile() || stat.isSymbolicLink() ||
+      !Number.isSafeInteger(stat.size)) {
+    throw new Error('Hash target is not a regular file.');
+  }
   if (maxBytes !== undefined && stat.size > maxBytes) {
     throw new Error(`File size ${stat.size} exceeds hash max_bytes ${maxBytes}.`);
   }
-
-  return await new Promise<string>((resolve, reject) => {
+  const handle = await fs.open(target, 'r');
+  try {
+    const opened = await handle.stat();
+    assertSameOpenFile(target, stat, opened);
     const hash = createHash('sha256');
-    const stream = createReadStream(target);
-    stream.on('data', (chunk: string | Buffer) => {
-      hash.update(chunk);
-    });
-    stream.once('error', reject);
-    stream.once('end', () => resolve(hash.digest('hex')));
-  });
+    // Stream from the verified descriptor, not from a second pathname open.
+    for await (const block of handle.createReadStream({
+      autoClose: false, highWaterMark: 256 * 1024,
+    })) hash.update(block);
+    const ending = await handle.stat();
+    if (ending.dev !== opened.dev || ending.ino !== opened.ino ||
+        ending.size !== opened.size || ending.mtimeMs !== opened.mtimeMs ||
+        ending.ctimeMs !== opened.ctimeMs) {
+      throw new FileConflictError('File changed during streaming SHA-256.', {
+        path: target, reason: 'FILE_CHANGED_DURING_HASH',
+      });
+    }
+    return hash.digest('hex');
+  } finally {
+    await handle.close();
+  }
 }
 
 interface ProcessResult {
@@ -436,6 +500,7 @@ function shellCommand(
 async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = ShellExecInputSchema.parse(input);
   const uiTarget=resolveAiWorkspaceTarget(parsed.ui_target);
+  policy.assertUnrestrictedExecution();
   const cwd = parsed.cwd ? await policy.resolveExisting(parsed.cwd) : undefined;
   const command = shellCommand(parsed.shell, parsed.command);
   const result = uiTarget === 'private_desktop'
@@ -463,12 +528,13 @@ async function executeShell(input: unknown, policy: PathPolicy): Promise<unknown
   };
 }
 
-async function executeWsl(input: unknown): Promise<unknown> {
+async function executeWsl(input: unknown, policy: PathPolicy): Promise<unknown> {
   if (process.platform !== 'win32') {
     throw new Error('wsl.exec is only available from a Windows native agent.');
   }
 
   const parsed = WslExecInputSchema.parse(input);
+  policy.assertUnrestrictedExecution();
   const uiTarget=requireWslHeadlessRouting(parsed.ui_target);
   const args: string[] = [];
   if (parsed.distro) args.push('--distribution', parsed.distro);
@@ -491,17 +557,32 @@ async function executeWsl(input: unknown): Promise<unknown> {
 
 async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileReadInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
-  const stat = await fs.stat(target);
-  if (!stat.isFile()) throw new Error('Requested path is not a file.');
+  const maxBytes = parsed.max_bytes ??
+    (parsed.offset_bytes === undefined ? 2_097_152 : FILE_STREAM_CHUNK_BYTES);
+  const target = await policy.authorizeExisting(parsed.path, 'read');
+  const stat = await fs.lstat(target);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Requested path is not a regular file.');
   // Legacy full-file reads keep their original strict size limit.
   if (parsed.offset_bytes === undefined) {
-    if (stat.size > parsed.max_bytes) {
+    if (stat.size > maxBytes) {
       throw new Error(
-        `File size ${stat.size} exceeds max_bytes ${parsed.max_bytes}.`,
+        `File size ${stat.size} exceeds max_bytes ${maxBytes}.`,
       );
     }
-    const content = await fs.readFile(target);
+    const handle = await fs.open(target, 'r');
+    let content: Buffer;
+    try {
+      const opened = await handle.stat();
+      assertSameOpenFile(target, stat, opened);
+      content = await handle.readFile();
+      const after = await handle.stat();
+      if (after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+          after.ctimeMs !== opened.ctimeMs || content.length !== opened.size) {
+        throw new FileConflictError('Read target changed during content capture.', {
+          path: target, reason: 'FILE_CHANGED_DURING_READ',
+        });
+      }
+    } finally { await handle.close(); }
     return {
       data: {
         path: target,
@@ -513,19 +594,31 @@ async function readFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       },
     };
   }
-  if (parsed.offset_bytes > stat.size) {
-    throw new Error('Read offset exceeds file size.');
+  if (!Number.isSafeInteger(stat.size) || parsed.offset_bytes > stat.size) {
+    throw new Error('Read offset exceeds file size or file size is not representable safely.');
   }
-  const maxRead = Math.min(parsed.max_bytes, stat.size - parsed.offset_bytes);
+  if (maxBytes > FILE_STREAM_CHUNK_BYTES) {
+    throw new Error('Ranged file reads must not exceed 65536 bytes per request.');
+  }
+  const maxRead = Math.min(maxBytes, stat.size - parsed.offset_bytes);
   const buffer=Buffer.alloc(maxRead);
   const handle=await fs.open(target,'r');
   let bytesRead=0;
   try {
+    const opened = await handle.stat();
+    assertSameOpenFile(target, stat, opened);
     while(bytesRead<maxRead){
       const r=await handle.read(buffer,bytesRead,maxRead-bytesRead,
         parsed.offset_bytes+bytesRead);
       if(r.bytesRead===0)break;
       bytesRead+=r.bytesRead;
+    }
+    const after = await handle.stat();
+    if (after.size !== opened.size || after.mtimeMs !== opened.mtimeMs ||
+        after.ctimeMs !== opened.ctimeMs) {
+      throw new FileConflictError('Ranged read target changed during transfer.', {
+        path: target, reason: 'FILE_CHANGED_DURING_READ',
+      });
     }
   }finally{await handle.close()}
   const content=buffer.subarray(0,bytesRead);
@@ -546,7 +639,7 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
 
   for (const requested of parsed.paths) {
     try {
-      const target = await policy.resolveExisting(requested);
+      const target = await policy.authorizeExisting(requested, 'read');
       const stat = await fs.stat(target);
       if (!stat.isFile()) throw new Error('Requested path is not a file.');
       if (stat.size > parsed.max_bytes_each) {
@@ -557,19 +650,14 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
         results.push({ path: target, ok: false, error: 'TOTAL_LIMIT_REACHED', size: stat.size });
         continue;
       }
-      const content = await fs.readFile(target);
-      totalBytes += content.byteLength;
-      results.push({
-        path: target,
-        ok: true,
-        size: stat.size,
-        encoding: parsed.encoding,
-        ...(parsed.include_sha256 ? { sha256: sha256Buffer(content) } : {}),
-        content:
-          parsed.encoding === 'base64'
-            ? content.toString('base64')
-            : content.toString('utf8'),
-      });
+      // Delegate through the same validated open handle as single-file reads;
+      // batch reads must not bypass hardlink/identity safety policy.
+      const read = await readFile({
+        path: target, encoding: parsed.encoding, max_bytes: parsed.max_bytes_each,
+        include_sha256: parsed.include_sha256,
+      }, policy) as { data: { path:string; size:number; encoding:string; content:string; sha256?:string } };
+      totalBytes += read.data.size;
+      results.push({ok:true,...read.data});
     } catch (error) {
       results.push({
         path: requested,
@@ -582,9 +670,23 @@ async function readManyFiles(input: unknown, policy: PathPolicy): Promise<unknow
   return { data: { results, totalBytes, truncated } };
 }
 
+async function assertNoHardlinkWriteAlias(target:string,scope:'write'|'delete'):Promise<void> {
+  try {
+    const st=await fs.lstat(target);
+    if(st.isSymbolicLink() || (st.isFile() && st.nlink!==1)) {
+      throw new PathDeniedError(target,
+        st.isSymbolicLink() ? 'REPARSE_TARGET_DENIED' : 'HARDLINK_ALIAS_DENIED',scope);
+    }
+  }catch(error){
+    if(typeof error==='object' && error!==null && 'code'in error &&
+       error.code==='ENOENT')return;
+    throw error;
+  }
+}
+
 async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileWriteInputSchema.parse(input);
-  const target = await policy.resolveForCreate(parsed.path);
+  const target = await policy.authorizeForCreate(parsed.path, 'write');
   if (parsed.create_parents) {
     await fs.mkdir(path.dirname(target), { recursive: true });
   }
@@ -593,46 +695,109 @@ async function writeFile(input: unknown, policy: PathPolicy): Promise<unknown> {
     parsed.encoding === 'base64'
       ? Buffer.from(parsed.content, 'base64')
       : Buffer.from(parsed.content, 'utf8');
+  if (parsed.mode === 'write_at' && content.length > FILE_STREAM_CHUNK_BYTES) {
+    throw new Error('Positioned file chunks must not exceed 65536 bytes per request.');
+  }
+  if (parsed.mode === 'write_at' && parsed.encoding === 'base64' &&
+      content.toString('base64') !== parsed.content) {
+    throw new FileConflictError('Positioned chunk is not canonical Base64.', {
+      reason:'INVALID_CHUNK_ENCODING',
+    });
+  }
+  if (parsed.expected_chunk_sha256 &&
+      sha256Buffer(content) !== parsed.expected_chunk_sha256.toLowerCase()) {
+    throw new FileConflictError('Chunk SHA-256 does not match expected_chunk_sha256.', {
+      expectedSha256: parsed.expected_chunk_sha256.toLowerCase(),
+      actualSha256: sha256Buffer(content),
+    });
+  }
 
+  let replayed = false;
+  let resumedBytes = 0;
   if(parsed.mode==='write_at'){
+    await withFileChunkLock(target, async () => {
     if(parsed.offset_bytes===undefined){
       throw new Error('write_at requires an explicit offset_bytes.');
     }
+    if(!Number.isSafeInteger(parsed.offset_bytes + content.length)){
+      throw new Error('Chunk offset plus length exceeds safe integer precision.');
+    }
     const info=await fs.lstat(target);
-    if(!info.isFile()||info.isSymbolicLink()||parsed.offset_bytes>info.size){
+    if (info.nlink !== 1) {
+      throw new PathDeniedError(target, 'HARDLINK_ALIAS_DENIED', 'write');
+    }
+    if(!info.isFile()||info.isSymbolicLink()||
+       !Number.isSafeInteger(info.size)||parsed.offset_bytes>info.size){
       throw new Error('write_at target is not a regular file or offset creates a gap.');
     }
     const handle=await fs.open(target,'r+');
     try{
-      // Revalidate the opened file, not just the pathname. A path may be
-      // swapped for another file or symlink between lstat and open.
+      // Pin the open file identity. A concurrent swap must not let us edit
+      // another file after the initial path check.
       const openedInfo=await handle.stat();
-      if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
-         openedInfo.ino!==info.ino||parsed.offset_bytes>openedInfo.size){
-        throw new Error('write_at target changed between validation and open.');
+      if (openedInfo.nlink !== 1) {
+        throw new PathDeniedError(target, 'HARDLINK_ALIAS_DENIED', 'write');
       }
-      let written=0;
+      if(!openedInfo.isFile()||openedInfo.dev!==info.dev||
+         openedInfo.ino!==info.ino||!Number.isSafeInteger(openedInfo.size)||
+         parsed.offset_bytes>openedInfo.size){
+        throw new FileConflictError('write_at target changed between validation and open.', {
+          path:target,offsetBytes:parsed.offset_bytes,
+        });
+      }
+      // Retry after lost acknowledgement / ENOSPC must be idempotent:
+      // compare previously written prefix, never overwrite existing data.
+      const overlap=Math.min(content.length,openedInfo.size-parsed.offset_bytes);
+      if(overlap){
+        // Comparing existing bytes is itself a READ. A write-only permission
+        // must not become a byte-by-byte content oracle via replay conflicts.
+        await policy.authorizeExisting(target, 'read');
+        const previous=Buffer.alloc(overlap);
+        let compared=0;
+        while(compared<overlap){
+          const result=await handle.read(previous,compared,overlap-compared,
+            parsed.offset_bytes+compared);
+          if(result.bytesRead<=0)break;
+          compared+=result.bytesRead;
+        }
+        if(compared!==overlap||
+           !previous.equals(content.subarray(0,overlap))){
+          throw new FileConflictError('Resumed chunk conflicts with existing stage bytes.', {
+            path:target,offsetBytes:parsed.offset_bytes,overlapBytes:overlap,
+          });
+        }
+        resumedBytes=overlap;
+      }
+      replayed=overlap===content.length;
+      let written=overlap;
       while(written<content.length){
         const result=await handle.write(content,written,content.length-written,
           parsed.offset_bytes+written);
         if(result.bytesWritten<=0)throw new Error('Incomplete positioned file write.');
         written+=result.bytesWritten;
       }
+      // Report success only if bytes are persisted; a failed sync retains
+      // the partially written staged file for safe offset-based recovery.
+      await handle.sync();
     }finally{await handle.close()}
+    });
   }else{
     if(parsed.offset_bytes!==undefined)
       throw new Error('offset_bytes may only be used with write_at.');
+    if(parsed.mode!=='create')await assertNoHardlinkWriteAlias(target,'write');
     if(parsed.mode==='append')await fs.appendFile(target,content);
     else if(parsed.mode==='create')await fs.writeFile(target,content,{flag:'wx'});
     else await fs.writeFile(target,content);
   }
 
-  return { data: { path: target, bytesWritten: content.byteLength } };
+  return { data: { path: target, bytesWritten: content.byteLength,
+    ...(parsed.mode==='write_at'?{replayed,resumedBytes}:{}),
+  } };
 }
 
 async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileStatInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, 'read');
   const stat = await fs.lstat(target);
   return {
     data: {
@@ -654,7 +819,7 @@ async function statPath(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function hashFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileHashInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, 'read');
   const stat = await fs.stat(target);
   if (!stat.isFile()) throw new Error('Hash target is not a file.');
   if (stat.size > parsed.max_bytes) {
@@ -672,16 +837,37 @@ async function hashFile(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function makeDirectory(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileMkdirInputSchema.parse(input);
-  const target = await policy.resolveForCreate(parsed.path);
+  const target = await policy.authorizeForCreate(parsed.path, 'write');
   await fs.mkdir(target, { recursive: parsed.recursive });
   return { data: { path: target, created: true } };
 }
 
 async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileTransferInputSchema.parse(input);
-  const source = await policy.resolveExisting(parsed.source);
-  const destination = await policy.resolveForCreate(parsed.destination);
+  const source = await policy.authorizeExisting(parsed.source, 'read');
+  const destination = await policy.authorizeForCreate(parsed.destination, 'write');
+  const sourceInfo=await fs.lstat(source);
+  if(sourceInfo.isSymbolicLink() || (sourceInfo.isFile() && sourceInfo.nlink!==1)){
+    throw new PathDeniedError(source,
+      sourceInfo.isSymbolicLink() ? 'REPARSE_TARGET_DENIED':'HARDLINK_ALIAS_DENIED','read');
+  }
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
+  if (parsed.overwrite) {
+    try {
+      const replaced = await fs.lstat(destination);
+      if (replaced.isSymbolicLink()) {
+        throw new PathDeniedError(destination, 'COPY_TARGET_REPARSE_DENIED', 'delete');
+      }
+      if(replaced.isFile() && replaced.nlink!==1) {
+        throw new PathDeniedError(destination, 'HARDLINK_ALIAS_DENIED', 'delete');
+      }
+      await policy.authorizeExisting(destination,
+        replaced.isDirectory() ? 'recursive_delete' : 'delete');
+    } catch (error) {
+      if (!(typeof error === 'object' && error !== null &&
+        'code' in error && error.code === 'ENOENT')) throw error;
+    }
+  }
   await fs.cp(source, destination, {
     recursive: parsed.recursive,
     force: parsed.overwrite,
@@ -693,8 +879,8 @@ async function copyPath(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileTransferInputSchema.parse(input);
-  const source = await policy.resolveExisting(parsed.source);
-  const destination = await policy.resolveForCreate(parsed.destination);
+  const source = await policy.authorizeExisting(parsed.source, 'move');
+  const destination = await policy.authorizeForCreate(parsed.destination, 'move');
   if (parsed.create_parents) await fs.mkdir(path.dirname(destination), { recursive: true });
 
   if (parsed.atomic_no_overwrite) {
@@ -702,8 +888,32 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
       throw new Error('atomic_no_overwrite requires overwrite=false and recursive=false.');
     }
     const sourceInfo = await fs.lstat(source);
-    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) {
+    if (sourceInfo.nlink !== 1) {
+      throw new PathDeniedError(source, 'HARDLINK_ALIAS_DENIED', 'move');
+    }
+    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink() ||
+        !Number.isSafeInteger(sourceInfo.size)) {
       throw new Error('atomic_no_overwrite requires a regular, non-symlink file.');
+    }
+    if (parsed.expected_size_bytes !== undefined &&
+        sourceInfo.size !== parsed.expected_size_bytes) {
+      throw new FileConflictError('Stage size does not match expected_size_bytes.', {
+        actualSize:sourceInfo.size,expectedSize:parsed.expected_size_bytes,
+      });
+    }
+    if (parsed.expected_sha256) {
+      const actual = await sha256File(source);
+      if (actual !== parsed.expected_sha256.toLowerCase()) {
+        throw new FileConflictError('Stage SHA-256 does not match expected_sha256.', {
+          actualSha256:actual,expectedSha256:parsed.expected_sha256.toLowerCase(),
+        });
+      }
+      const afterHash = await fs.lstat(source);
+      if (afterHash.dev !== sourceInfo.dev || afterHash.ino !== sourceInfo.ino ||
+          afterHash.size !== sourceInfo.size ||
+          afterHash.mtimeMs !== sourceInfo.mtimeMs) {
+        throw new FileConflictError('Stage changed while verifying SHA-256.', {path:source});
+      }
     }
     // fs.link is an atomic no-replace publish on the same filesystem.
     // Unlike a check-then-rename, another process cannot win the race
@@ -727,7 +937,15 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
       if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')) throw error;
     }
   } else {
-    await fs.rm(destination, { recursive: true, force: true });
+    try {
+      const replaced = await fs.lstat(destination);
+      await policy.authorizeExisting(destination,
+        replaced.isDirectory() ? 'recursive_delete' : 'delete');
+      await fs.rm(destination, { recursive: replaced.isDirectory(), force: true });
+    } catch (error) {
+      if (!(typeof error === 'object' && error !== null &&
+        'code' in error && error.code === 'ENOENT')) throw error;
+    }
   }
 
   try {
@@ -743,7 +961,7 @@ async function movePath(input: unknown, policy: PathPolicy): Promise<unknown> {
 
 async function deletePath(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FileDeleteInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
+  const target = await policy.authorizeExisting(parsed.path, parsed.recursive ? 'recursive_delete' : 'delete');
   const stat = await fs.lstat(target);
   if (stat.isDirectory() && !parsed.recursive) {
     await fs.rmdir(target);
@@ -766,8 +984,12 @@ function countOccurrences(text: string, needle: string): number {
 
 async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = FilePatchInputSchema.parse(input);
-  const target = await policy.resolveExisting(parsed.path);
-  const stat = await fs.stat(target);
+  const target = await policy.authorizeExisting(parsed.path, 'write');
+  const stat = await fs.lstat(target);
+  if (stat.isSymbolicLink() || (stat.isFile() && stat.nlink!==1)) {
+    throw new PathDeniedError(target,
+      stat.isSymbolicLink() ? 'REPARSE_TARGET_DENIED':'HARDLINK_ALIAS_DENIED','write');
+  }
   if (!stat.isFile()) throw new Error('Patch target is not a file.');
   if (stat.size > parsed.max_bytes) {
     throw new Error(`Patch target exceeds max_bytes ${parsed.max_bytes}.`);
@@ -812,9 +1034,9 @@ async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
 
   const finalBuffer = Buffer.from(content, 'utf8');
   const finalSha256 = sha256Buffer(finalBuffer);
-  const temp = `${target}.nexowire-${process.pid}-${Date.now()}.tmp`;
+  const temp = `${target}.nexowire-${process.pid}-${randomUUID()}.tmp`;
   try {
-    await fs.writeFile(temp, finalBuffer);
+    await fs.writeFile(temp, finalBuffer, { flag: 'wx' });
     await fs.chmod(temp, stat.mode);
 
     const beforeCommitSha256 = await sha256File(target, parsed.max_bytes);
@@ -829,6 +1051,11 @@ async function patchFile(input: unknown, policy: PathPolicy): Promise<unknown> {
       );
     }
 
+    // Recheck symlinks/reparse transitions immediately before publishing.
+    if (await policy.authorizeExisting(target, 'write') !== target ||
+        (await fs.lstat(target)).isSymbolicLink()) {
+      throw new PathDeniedError(target, 'TARGET_CHANGED_BEFORE_PATCH');
+    }
     if (process.platform === 'win32') {
       await fs.copyFile(temp, target);
       await fs.rm(temp, { force: true });
@@ -861,7 +1088,7 @@ async function listDirectory(
   policy: PathPolicy,
 ): Promise<unknown> {
   const parsed = FileListInputSchema.parse(input);
-  const root = await policy.resolveExisting(parsed.path);
+  const root = await policy.authorizeExisting(parsed.path, 'read');
   const entries: ListedEntry[] = [];
 
   const walk = async (dir: string, remainingDepth: number): Promise<void> => {
@@ -908,7 +1135,7 @@ interface SearchMatch {
 
 async function searchText(input: unknown, policy: PathPolicy): Promise<unknown> {
   const parsed = SearchTextInputSchema.parse(input);
-  const root = await policy.resolveExisting(parsed.path);
+  const root = await policy.authorizeExisting(parsed.path, 'read');
   const rootStat = await fs.stat(root);
   if (!rootStat.isDirectory()) throw new Error('Search path is not a directory.');
 
@@ -2116,6 +2343,7 @@ async function workspaceSnapshot(
 }
 
 export interface AgentExecutionContext {
+  scopedGrantAuthority?: import('./scoped-path-grant-approval.js').ScopedPathGrantAuthority;
   processes?: ProcessManager;
   progressSupervisor?: ProgressSupervisor;
   operationJournal?: AgentOperationJournal;
@@ -2296,6 +2524,7 @@ export async function executeCapability(
     case 'shell.exec':
       return await executeShell(input, policy);
     case 'process.start': {
+      policy.assertUnrestrictedExecution();
       const session = await requireProcesses(context).start(input, policy);
       return { data: { ...session, progress: context.progressSupervisor?.snapshot(session.sessionId) ?? {
         state: 'progress_unknown', completionEvidence: 'none', progressVerified: false,
@@ -2309,6 +2538,7 @@ export async function executeCapability(
       } } };
     }
     case 'process.write':
+      policy.assertUnrestrictedExecution();
       return { data: await requireProcesses(context).write(input) };
     case 'process.stop':
       return { data: await requireProcesses(context).stop(input) };
@@ -2325,7 +2555,16 @@ export async function executeCapability(
     case 'process.prune':
       return { data: await requireProcesses(context).prune(input) };
     case 'wsl.exec':
-      return await executeWsl(input);
+      return await executeWsl(input, policy);
+    case 'files.grant.status':
+      if (!context.scopedGrantAuthority) throw new Error('Scoped grant authority unavailable.');
+      return { data: context.scopedGrantAuthority.status() };
+    case 'files.grant.request':
+      if (!context.scopedGrantAuthority) throw new Error('Scoped grant authority unavailable.');
+      return { data: await context.scopedGrantAuthority.request(input) };
+    case 'files.grant.revoke':
+      if (!context.scopedGrantAuthority) throw new Error('Scoped grant authority unavailable.');
+      return { data: context.scopedGrantAuthority.revoke(input) };
     case 'files.read':
       return await readFile(input, policy);
     case 'files.read_many':
@@ -2377,8 +2616,10 @@ export async function executeCapability(
     case 'workspace.detect':
       return await workspaceDetect(input, policy);
     case 'workspace.checks':
+      policy.assertUnrestrictedExecution();
       return await workspaceChecks(input, policy);
     case 'task.graph.run':
+      policy.assertUnrestrictedExecution();
       return await runTaskGraph(input, policy, context.taskGraphs);
     case 'task.graph.list':
       return { data: requireTaskGraphs(context).list() };
@@ -2432,6 +2673,7 @@ export async function executeCapability(
       };
     }
     case 'runbook.run':
+      policy.assertUnrestrictedExecution();
       return await executeDurableRunbook(
         input,
         requireRunbooks(context),
@@ -2660,7 +2902,25 @@ export function normalizeAgentError(error: unknown): {
     return {
       code: 'PATH_DENIED',
       message: error.message,
-      details: { path: error.requestedPath },
+      details: { path: error.requestedPath, ...error.details },
+    };
+  }
+  // OS ACL/NTFS denial is not a Nexowire path-policy decision. Preserve the
+  // actual OS code, but explicitly attribute this to the filesystem layer.
+  if (error && typeof error === 'object' && 'code' in error &&
+      (error.code === 'EACCES' || error.code === 'EPERM')) {
+    const osError = error as NodeJS.ErrnoException;
+    return {
+      code: osError.code!,
+      message: osError.message || 'Operating system denied filesystem access.',
+      details: {
+        reason: 'OS_FILESYSTEM_PERMISSION_DENIED',
+        source: 'windows_or_host_filesystem',
+        osCode: osError.code,
+        ...(typeof osError.path === 'string' ? { path: osError.path } : {}),
+        ...(typeof osError.syscall === 'string' ? { syscall: osError.syscall } : {}),
+        nextStep: 'Check Windows ACL, ownership, locked files and the actual Agent user token. A Nexowire scoped grant cannot override NTFS permissions.',
+      },
     };
   }
   if (
