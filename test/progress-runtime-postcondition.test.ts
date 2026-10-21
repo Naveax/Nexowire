@@ -32,7 +32,7 @@ type Fixtures=Awaited<ReturnType<typeof setup>>;
 async function setup() {
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'progress-postcondition-'));
   let now=Date.now();
-  const p=new ProgressSupervisor({now:()=>now});
+  const p=new ProgressSupervisor({now:()=>now,stallAfterMs:1000});
   p.register(sessionId);
   assert.equal(p.bindTrustedRequest(sessionId,requestId),true);
   const fixture=path.resolve('test/fixtures/progress-result-worker-fixture.cjs');
@@ -229,4 +229,96 @@ test('worker lost before verification prevents a valid signed receipt from compl
   f.p.recover([{sessionId,status:'lost',exitCode:null}]);
   assert.equal(await f.adapter.reconcile(f.signed),'PROOF_UNVERIFIED');
   assert.equal(f.p.snapshot(sessionId).state,'lost');
+}));
+
+test('native-write cancellation pending during signed readback cannot become completed_verified',()=>scenario(async f=>{
+  f.mutable.transferChangeAt=2;
+  f.mutable.transferState='CANCEL_REQUESTED';
+  // Transfer was initially COMPLETED; a native-write cancellation witness
+  // becomes visible at the next authenticated transfer read.
+  const original=f.ports.readTransfer;
+  let reads=0;
+  f.ports.readTransfer=async()=>{
+    reads++;
+    const item=await original();
+    return reads>=2?{...item,state:'CANCEL_REQUESTED'}:item;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('native-write CORE cancel arriving after disk proof revokes cached completion',()=>scenario(async f=>{
+  // readGrant calls: runtime initial (1), immutable verifier start/end (2-3),
+  // runtime pre-local disk (4), then after local disk (5).
+  f.mutable.cancelAfterGrantReads=5;
+  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+}));
+
+test('counterfeit COMPLETED with wrong digest or short confirmed bytes is sticky UNKNOWN',async()=>{
+  for(const variant of ['digest','short','failed','recovery'] as const){
+    await scenario(async f=>{
+      const original=f.ports.readTransfer;
+      f.ports.readTransfer=async()=>{
+        const current=await original();
+        if(variant==='digest')return {...current,sha256:'0'.repeat(64)};
+        if(variant==='short')return {...current,bytesConfirmed:current.bytesTotal-1};
+        if(variant==='failed')return {...current,state:'FAILED'};
+        return {...current,state:'RECOVERY_REQUIRED'};
+      };
+      assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+      f.ports.readTransfer=original;
+      assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+      assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+      assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+    });
+  }
+});
+
+test('lost PID during postcondition off-host SHA readback invalidates the result',()=>scenario(async f=>{
+  const original=f.ports.readOffhost;
+  let lost=false;
+  f.ports.readOffhost=async(offset,size)=>{
+    const value=await original(offset,size);
+    if(!lost){
+      lost=true;
+      f.p.recover([{sessionId,status:'lost',exitCode:null}]);
+    }
+    return value;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'PROOF_UNVERIFIED');
+  assert.equal(f.p.snapshot(sessionId).state,'lost');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('stalled synthetic worker with 100% self-report but no OS exit cannot complete',()=>scenario(async f=>{
+  f.p.recover([{sessionId,status:'running',exitCode:null}]);
+  f.setNow(f.now()+1500);
+  const snapshot=f.p.snapshot(sessionId);
+  assert.equal(snapshot.state,'stalled');
+  assert.equal(snapshot.processState,'running');
+  assert.notEqual(snapshot.state,'completed_verified');
+  assert.equal(await f.adapter.reconcile(f.signed),'PROOF_UNVERIFIED');
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+}));
+
+test('lost ACK during asynchronous immutable readback stays sticky UNKNOWN',()=>scenario(async f=>{
+  const original=f.ports.readOffhost;
+  let ackLost=false;
+  f.ports.readOffhost=async(offset,maxBytes)=>{
+    const value=await original(offset,maxBytes);
+    if(!ackLost){
+      ackLost=true;
+      assert.equal(f.adapter.observeLostAck(),'MUTATION_UNKNOWN');
+    }
+    return value;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));

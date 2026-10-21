@@ -157,12 +157,20 @@ export class ProgressRuntimePostconditionAdapter {
       }catch{return this.blockUnknown();}
       if(!grantMatches(grant,this.expected))return this.cancel();
       if(!transferMatches(transfer,signed)){
-        if(['MUTATION_UNKNOWN','RECOVERY_REQUIRED'].includes(transfer.state))
-          return this.blockUnknown();
         if(['CANCEL_REQUESTED','CANCELLED'].includes(transfer.state))
           return this.cancel();
-        // RUNNING, PUBLISHING or a forged COMPLETED counter is NOT proof.
-        this.lastResult='REPORTED_ONLY';return this.lastResult;
+        // An invalid terminal COMPLETED, FAILED, or a native-write outcome
+        // that requires recovery is ambiguous, not safe to re-poll/replay.
+        // In particular, a counterfeit COMPLETED receipt must be sticky
+        // UNKNOWN even if a later status happens to look plausible.
+        if(['MUTATION_UNKNOWN','RECOVERY_REQUIRED','FAILED','COMPLETED'].includes(
+          transfer.state))return this.blockUnknown();
+        // QUEUED/RUNNING/PUBLISHING are merely non-terminal observations;
+        // none can authorize completed_verified.
+        if(['QUEUED','RUNNING','PUBLISHING'].includes(transfer.state)){
+          this.lastResult='REPORTED_ONLY';return this.lastResult;
+        }
+        return this.blockUnknown();
       }
       let witness:PostconditionWitness;
       try{witness=await this.ports.readPostcondition();}
@@ -174,13 +182,18 @@ export class ProgressRuntimePostconditionAdapter {
       }
       const permit=await verifyOffhostCompletion(signed,this.expected,
         this.keys.issuer,this.keys.immutableStorage,this.ports,this.now);
+      if(this.blocked)return this.blocked;
       if(!permit){
         // An in-flight CORE revoke can make the lower-level verifier fail
         // after its second grant check. Reconcile the grant once more so a
         // real cancellation is classified as revoked, never as success.
         try {
-          const latest=await this.ports.readGrant();
+          const [latest,latestTransfer]=await Promise.all([
+            this.ports.readGrant(),this.ports.readTransfer(),
+          ]);
           if(!grantMatches(latest,this.expected))return this.cancel();
+          if(['CANCEL_REQUESTED','CANCELLED'].includes(latestTransfer.state))
+            return this.cancel();
         }catch {return this.blockUnknown();}
         // Could be corruption, missing readback or lost ACK. No retry.
         return this.blockUnknown();
@@ -190,10 +203,12 @@ export class ProgressRuntimePostconditionAdapter {
       try{[g2,t2]=await Promise.all([
         this.ports.readGrant(),this.ports.readTransfer(),
       ]);}catch{return this.blockUnknown();}
+      if(this.blocked)return this.blocked;
       if(!grantMatches(g2,this.expected))return this.cancel();
       if(!transferMatches(t2,signed))return this.blockUnknown();
       const verified=await this.supervisor.verifySessionFromDisk(
         this.expected.sessionId,this.request,permit);
+      if(this.blocked)return this.blocked;
       if(verified.status!=='verified'){
         this.lastResult='PROOF_UNVERIFIED';return this.lastResult;
       }
@@ -201,6 +216,7 @@ export class ProgressRuntimePostconditionAdapter {
       const [g3,t3]=await Promise.all([
         this.ports.readGrant(),this.ports.readTransfer(),
       ]).catch(()=>[null,null] as const);
+      if(this.blocked)return this.blocked;
       if(!g3||!t3)return this.blockUnknown();
       if(!grantMatches(g3,this.expected))return this.cancel();
       if(!transferMatches(t3,signed))return this.blockUnknown();
@@ -211,6 +227,7 @@ export class ProgressRuntimePostconditionAdapter {
       const {signatureBase64:_signature,...body}=witness;
       this.lastWitnessDigest=createHash('sha256').update(
         canonicalPostconditionWitness(body)).digest('hex');
+      if(this.blocked)return this.blocked;
       this.lastResult='COMPLETED_VERIFIED';
       return this.lastResult;
     }catch{

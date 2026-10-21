@@ -541,3 +541,45 @@ artifact seal and separate postcondition witness, #616 genuine CAS/
 writer fence and crash recovery, and two-device physical acceptance.
 No #08 store source, #03 Job owner source, live Agent/UAC/VM, crypto
 bot, or GPU workload was modified or started.
+
+
+### 2026-10-21 #11 narrow native-write cancellation / lost-ACK fail-closed QA
+
+The `ProgressRuntimePostconditionAdapter` now treats an inconsistent
+terminal `COMPLETED` (wrong SHA256, incomplete byte count, changed
+owner-bound operation), `FAILED`, `RECOVERY_REQUIRED` and
+`MUTATION_UNKNOWN` as **sticky MUTATION_UNKNOWN**, not a benign
+`REPORTED_ONLY` poll. No automatic transfer replay or retry follows.
+A `QUEUED` / `RUNNING` / `PUBLISHING` status still cannot satisfy
+the independently signed postcondition, live CORE grant epoch, immutable
+off-host result seal and real disk/output proof.
+
+The adapter also checks its sticky unknown/cancel state after
+asynchronous off-host verification, before and after local result
+validation, and immediately before returning
+`COMPLETED_VERIFIED`. A lost ACK arriving *during* off-host readback
+therefore cannot be hidden by a concurrently finishing proof. If the
+lower-level verifier rejects a proof, the adapter re-reads both the
+trusted owner grant and transfer status to distinguish genuine
+`CANCEL_REQUESTED` from an ambiguous native-write outcome.
+Unknown still blocks any retry even if a later fabricated
+`COMPLETED` appears.
+
+New adversarial fixture coverage includes: canceled native write
+observed during independent readback; CORE cancel arriving after
+the local result file check; forged `COMPLETED` with incorrect
+digest or short `bytesConfirmed`; remote writer `FAILED` and
+`RECOVERY_REQUIRED`; PID loss *during* readback; a stalled synthetic
+worker reporting 100% without an observed OS exit; and a lost
+ACK injected mid-flight. All remain incomplete or permanently UNKNOWN
+until a genuinely separate authorized reconciliation.
+
+This is **source-only safety hardening**, not live native-write
+attestation. The fixture's Ed25519 keys, remote transport, and
+immutable custody are synthetic. Until real separately authenticated
+result/postcondition witness and off-host storage, physical SHA256
+readback, durable CORE revoke/epoch authority and #616 real external
+writer fencing are deployed and tested, production worker
+`COMPLETED_VERIFIED` remains **NO-GO**. No changes to #08 Artifact
+Store implementation, #03 Job/ProcessManager, live Agent/UAC/VM, or
+GPU/crypto workloads.
