@@ -34,6 +34,19 @@ export type BudgetDecision=
   | 'DENIED_CONCURRENCY'|'DENIED_REPLAY'|'DENIED_OFFSET'
   | 'DENIED_PENDING'|'DENIED_STATE';
 
+/**
+ * Staging server-only integration boundary. Implementations MUST obtain
+ * evidence from the durable #08 store/writer-fence authority independently.
+ * Do not construct these callbacks from client-supplied booleans, headers,
+ * JSON, a mutable session row or an untrusted ACK alone.
+ */
+export interface ArtifactDurableProofVerifier {
+  verifyChunk(receipt:TrustedDurableChunkReceipt):boolean;
+  verifyFinal(receipt:TrustedDurableFinalReceipt):boolean;
+  verifyDeletion(receipt:TrustedRemovedReceipt):boolean;
+  verifyWriterFence(receipt:TrustedRemovedReceipt):boolean;
+}
+
 export interface TrustedArtifactIdentity {
   ownerId:string; deviceId:string; projectId:string;
 }
@@ -128,7 +141,8 @@ export function initArtifactBudgetFixture(db:DatabaseSync):void {
 
 export class StagingArtifactByteBudget {
   constructor(private readonly db:DatabaseSync,
-              private readonly policy:ArtifactBudgetPolicy=STAGING_ARTIFACT_BUDGET){
+              private readonly policy:ArtifactBudgetPolicy=STAGING_ARTIFACT_BUDGET,
+              private readonly trustedProofs?:ArtifactDurableProofVerifier){
     policyValid(policy);
   }
   private transaction<T>(work:()=>T):T {
@@ -254,7 +268,9 @@ export class StagingArtifactByteBudget {
     id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
     id(x.sessionId,'SESSION');id(x.requestId,'REQUEST');
     sha(x.storedSha256);count(x.offsetBytes,'OFFSET');count(x.byteCount,'BYTES');
-    if(x.durableStorageVerified!==true)throw Error('DURABLE_RECEIPT_REQUIRED');
+    if(x.durableStorageVerified!==true ||
+       this.trustedProofs?.verifyChunk(x)!==true)
+      throw Error('TRUSTED_CHUNK_EVIDENCE_REQUIRED');
     return this.transaction(()=>{
       const chunk=this.chunk(x.requestId);
       if(!chunk||!subjectMatch(chunk,x)||chunk.session_id!==x.sessionId)
@@ -278,7 +294,9 @@ export class StagingArtifactByteBudget {
   finalize(x:TrustedDurableFinalReceipt):BudgetDecision {
     id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
     id(x.sessionId,'SESSION');sha(x.storedSha256);count(x.storedSizeBytes,'SIZE');
-    if(x.durableStorageVerified!==true)throw Error('DURABLE_RECEIPT_REQUIRED');
+    if(x.durableStorageVerified!==true ||
+       this.trustedProofs?.verifyFinal(x)!==true)
+      throw Error('TRUSTED_FINAL_EVIDENCE_REQUIRED');
     return this.transaction(()=>{
       const s=this.session(x.sessionId);
       if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
@@ -321,15 +339,19 @@ export class StagingArtifactByteBudget {
   acknowledgeDeletion(x:TrustedRemovedReceipt):BudgetDecision {
     id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
     id(x.sessionId,'SESSION');
-    if(x.durableDeletionVerified!==true)throw Error('DELETION_RECEIPT_REQUIRED');
+    if(x.durableDeletionVerified!==true ||
+       this.trustedProofs?.verifyDeletion(x)!==true)
+      throw Error('TRUSTED_DELETION_EVIDENCE_REQUIRED');
     return this.transaction(()=>{
       const s=this.session(x.sessionId);
       if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
       if(s.state==='RELEASED')return 'RELEASED';
       if(s.state!=='COMPLETE'&&s.state!=='CANCEL_PENDING')return 'DENIED_STATE';
       // Cancelled writes may have an unknown in-flight write/ACK.
-      if(s.state==='CANCEL_PENDING'&&x.writersStoppedVerified!==true)
-        throw Error('WRITER_FENCE_REQUIRED');
+      if(s.state==='CANCEL_PENDING'&&
+         (x.writersStoppedVerified!==true ||
+          this.trustedProofs?.verifyWriterFence(x)!==true))
+        throw Error('TRUSTED_WRITER_FENCE_REQUIRED');
       this.db.prepare('UPDATE budget_artifact_sessions SET state=? WHERE session_id=?')
         .run('RELEASED',x.sessionId);
       return 'RELEASED';

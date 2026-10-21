@@ -14,6 +14,12 @@ import {
  */
 const a={ownerId:'owner-alpha',deviceId:'device-alpha',projectId:'project-alpha'};
 const b={ownerId:'owner-bravo',deviceId:'device-bravo',projectId:'project-bravo'};
+/* Existing fake durable-store fixture. New provenance negative tests below
+ * use an independent evidence provider; NEVER use this in runtime code. */
+const legacyFixtureProofs={
+  verifyChunk:()=>true,verifyFinal:()=>true,
+  verifyDeletion:()=>true,verifyWriterFence:()=>true,
+};
 const at=new Date('2026-10-20T23:59:59.900Z');
 const digest='a'.repeat(64);
 const chunkHash='b'.repeat(64);
@@ -29,8 +35,8 @@ function fixture(){
  const sum=(sql:string,...params:(number|string)[])=>Number(
     (x.prepare(sql).get(...params) as {n:number}|undefined)?.n??0);
  return {
-   p:new StagingArtifactByteBudget(x),
-   q:new StagingArtifactByteBudget(y),
+   p:new StagingArtifactByteBudget(x,undefined,legacyFixtureProofs),
+   q:new StagingArtifactByteBudget(y,undefined,legacyFixtureProofs),
    sum,
    close(){y.close();x.close();rmSync(folder,{recursive:true,force:true})},
  };
@@ -69,7 +75,7 @@ test('cancel without verified writer barrier tombstones session but cannot relea
    assert.equal(f.p.begin(open()),'DENIED_STATE');
    assert.equal(f.q.stageChunk(chunk()),'DENIED_STATE');
    assert.throws(()=>f.p.acknowledgeDeletion(deleted(a,false)),
-     /WRITER_FENCE_REQUIRED/);
+     /TRUSTED_WRITER_FENCE_REQUIRED/);
    assert.equal(activeStorage(f),fileBytes);
  }finally{f.close()}
 });

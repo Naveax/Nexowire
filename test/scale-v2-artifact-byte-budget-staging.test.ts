@@ -10,6 +10,12 @@ import {
   type ArtifactBudgetPolicy,
 } from '../src/ops/scale-v2-artifact-byte-budget-staging.js';
 
+/* Existing fake durable-store fixture. New provenance negative tests below
+ * use an independent evidence provider; NEVER use this in runtime code. */
+const legacyFixtureProofs={
+  verifyChunk:()=>true,verifyFinal:()=>true,
+  verifyDeletion:()=>true,verifyWriterFence:()=>true,
+};
 const t=new Date('2026-10-20T23:59:59.900Z');
 const later=new Date('2026-10-21T00:01:00.001Z');
 const a={ownerId:'owner-alpha',deviceId:'device-alpha',projectId:'project-alpha'};
@@ -27,8 +33,8 @@ function fixture(policy?:ArtifactBudgetPolicy){
   initArtifactBudgetFixture(db);
   const db2=new DatabaseSync(file);
   db2.exec('PRAGMA busy_timeout=10000');
-  const first=new StagingArtifactByteBudget(db,policy);
-  const second=new StagingArtifactByteBudget(db2,policy);
+  const first=new StagingArtifactByteBudget(db,policy,legacyFixtureProofs);
+  const second=new StagingArtifactByteBudget(db2,policy,legacyFixtureProofs);
   const n=(sql:string,...params:(number|string)[])=>Number(
     (db.prepare(sql).get(...params) as {n:number}|undefined)?.n??0
   );
