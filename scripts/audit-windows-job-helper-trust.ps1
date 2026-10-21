@@ -45,14 +45,22 @@ $manifestDigest = if (Test-Path -LiteralPath $manifest -PathType Leaf) {
   (Get-Content -LiteralPath $manifest -Raw).Trim().ToLowerInvariant()
 } else { '' }
 $hashMatches = $manifestDigest -match '^[0-9a-f]{64}$' -and $hash -eq $manifestDigest
-# Unavailable signature or ACL providers mean missing evidence, never trust.
+# Require genuine Windows PowerShell Security module and module-qualified
+# cmdlets. A caller-local function named Get-AuthenticodeSignature/Get-Acl
+# must not furnish signed/ACL evidence. No module -> explicit NO-GO.
+$securityModuleLoaded=$false
+$securityModuleError=''
+try {
+  Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+  $securityModuleLoaded=$true
+} catch {$securityModuleError=$_.Exception.GetType().Name}
 $auth = $null
 $authError = ''
-try {
-  $auth = Get-AuthenticodeSignature -LiteralPath $HelperPath -ErrorAction Stop
-} catch {
-  $authError = $_.Exception.GetType().Name
-}
+if ($securityModuleLoaded) {
+  try {
+    $auth = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $HelperPath -ErrorAction Stop
+  } catch {$authError=$_.Exception.GetType().Name}
+} else {$authError='SECURITY_MODULE_UNAVAILABLE'}
 $authAvailable = $null -ne $auth
 $validSigner = $authAvailable -and $auth.Status -eq 'Valid' -and $null -ne $auth.SignerCertificate
 $thumbprint = if ($authAvailable -and $auth.SignerCertificate) {
@@ -62,12 +70,19 @@ $acl = $null
 $parentAcl = $null
 $aclError = ''
 try {
-  $acl = Get-Acl -LiteralPath $HelperPath -ErrorAction Stop
-  $parentAcl = Get-Acl -LiteralPath $parent.FullName -ErrorAction Stop
+  $acl=[IO.FileSystemAclExtensions]::GetAccessControl([IO.FileInfo]$helper)
+  $parentAcl=[IO.FileSystemAclExtensions]::GetAccessControl([IO.DirectoryInfo]$parent)
 } catch {
-  $aclError = $_.Exception.GetType().Name
-  $acl = $null
-  $parentAcl = $null
+  $aclError=$_.Exception.GetType().Name
+  # Legacy Windows PowerShell fallback ONLY through the native module name.
+  if ($securityModuleLoaded) {
+    try {
+      $acl=Microsoft.PowerShell.Security\Get-Acl -LiteralPath $HelperPath -ErrorAction Stop
+      $parentAcl=Microsoft.PowerShell.Security\Get-Acl -LiteralPath $parent.FullName -ErrorAction Stop
+      $aclError=''
+    } catch {$aclError=$_.Exception.GetType().Name}
+  }
+  if ($aclError) {$acl=$null;$parentAcl=$null}
 }
 $aclAvailable = $null -ne $acl -and $null -ne $parentAcl
 # Deny broad low-trust groups WRITE_DAC/WRITE_OWNER/DELETE and data writes.
@@ -84,6 +99,18 @@ foreach($entry in $(if ($aclAvailable) { $acl.Access } else { @() })) {
     $unsafe+= $identity
   }
 }
+# Parent create/delete/rename permissions can replace a protected EXE.
+$unsafeParent=@()
+foreach($entry in $(if ($aclAvailable) { $parentAcl.Access } else { @() })) {
+  if ($entry.AccessControlType -ne 'Allow') { continue }
+  $identity=try {$entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}
+    catch {$entry.IdentityReference.Value}
+  $rights=[int64]$entry.FileSystemRights
+  $parentWriteMask=0x2 -bor 0x4 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
+  if ($identity -in $untrustedSids -and (($rights -band $parentWriteMask) -ne 0)) {
+    $unsafeParent += $identity
+  }
+}
 $expectedShaOK = $ExpectedReleaseSha256 -match '^[0-9a-fA-F]{64}$' -and
   $hash -eq $ExpectedReleaseSha256.ToLowerInvariant()
 $expectedPublisherOK = $ExpectedPublisherThumbprint -match '^[0-9a-fA-F]{40}$' -and
@@ -97,20 +124,28 @@ $evidence=[ordered]@{
   authenticodeStatus=$(if ($authAvailable) { [string]$auth.Status } else { 'UNAVAILABLE' })
   authenticodeEvidenceAvailable=[bool]$authAvailable
   authenticodeEvidenceError=$authError
+  securityModuleAvailable=[bool]$securityModuleLoaded
+  securityModuleError=$securityModuleError
+  authenticodeProvider='Microsoft.PowerShell.Security/Get-AuthenticodeSignature'
   publisherValid=[bool]$validSigner
   externallyPinnedPublisherMatches=[bool]$expectedPublisherOK
   externallyPinnedReleaseSha256Matches=[bool]$expectedShaOK
   aclEvidenceAvailable=[bool]$aclAvailable
   aclEvidenceError=$aclError
+  aclProvider='native FileSystemAclExtensions or Microsoft.PowerShell.Security/Get-Acl'
   fileAclProtected=[bool]($aclAvailable -and $acl.AreAccessRulesProtected)
   parentAclProtected=[bool]($aclAvailable -and $parentAcl.AreAccessRulesProtected)
   broadWriteGrantFound=$(if ($aclAvailable) { $unsafe.Count -gt 0 } else { $null })
+  parentBroadWriteGrantFound=$(if ($aclAvailable) { $unsafeParent.Count -gt 0 } else { $null })
+  signedReleaseManifestVerified=$false
+  processHighTokenVerified=$false
+  installedRunningImageIdentityVerified=$false
   productionReady=$false
 }
 $ready= $hashMatches -and (-not $linked) -and $validSigner -and
   $expectedPublisherOK -and $expectedShaOK -and
   $aclAvailable -and $acl.AreAccessRulesProtected -and $parentAcl.AreAccessRulesProtected -and
-  ($unsafe.Count -eq 0)
+  ($unsafe.Count -eq 0) -and ($unsafeParent.Count -eq 0)
 # Deliberately do NOT declare productionReady based solely on file-level
 # evidence: the caller's signer trust anchor, installation identity, rollback
 # proof, runtime image race and PROCESS_DUP_HANDLE boundary must still be reviewed.

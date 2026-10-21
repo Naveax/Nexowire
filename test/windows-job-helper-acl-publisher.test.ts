@@ -78,7 +78,7 @@ test('trust audit computes SHA-256 when Get-FileHash cmdlet is unavailable', {
     'a source-built helper must never become production-trusted');
 });
 
-test('trust audit fails closed when signature and ACL providers are unavailable', {
+test('forged caller PowerShell signature/ACL functions are ignored; only native provider evidence counts', {
   skip:process.platform!=='win32',timeout:15000,
 },()=>{
   // CI and locked-down service accounts may lack PowerShell.Security.
@@ -86,8 +86,8 @@ test('trust audit fails closed when signature and ACL providers are unavailable'
   const auditScript=path.resolve('scripts/audit-windows-job-helper-trust.ps1');
   const escaped=auditScript.replace(/'/g,"''");
   const injected=[
-    "function Get-AuthenticodeSignature { throw 'TEST_SIGNATURE_PROVIDER_UNAVAILABLE' }",
-    "function Get-Acl { throw 'TEST_ACL_PROVIDER_UNAVAILABLE' }",
+    "function Get-AuthenticodeSignature { [pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Thumbprint='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'}} }",
+    "function Get-Acl { [pscustomobject]@{AreAccessRulesProtected=$true;Access=@()} }",
     "& '"+escaped+"'",
   ].join('; ');
   const result=spawnSync('powershell.exe',[
@@ -102,14 +102,17 @@ test('trust audit fails closed when signature and ACL providers are unavailable'
     aclEvidenceAvailable:boolean;fileAclProtected:boolean;
     parentAclProtected:boolean;broadWriteGrantFound:null|boolean;
   };
-  assert.equal(data.authenticodeStatus,'UNAVAILABLE');
-  assert.equal(data.authenticodeEvidenceAvailable,false);
+  assert.notEqual(data.authenticodeStatus,'Valid',
+    'caller-local forged valid Authenticode must not shadow OS provider');
   assert.equal(data.publisherValid,false);
-  assert.equal(data.aclEvidenceAvailable,false);
-  assert.equal(data.fileAclProtected,false);
-  assert.equal(data.parentAclProtected,false);
-  assert.equal(data.broadWriteGrantFound,null,
-    'unknown ACL is not evidence that no broad write grant exists');
+  // Real Windows native provider may be present or genuinely UNAVAILABLE.
+  // In either case no shadowed function may turn this into approval.
+  if (!data.aclEvidenceAvailable) {
+    assert.equal(data.fileAclProtected,false);
+    assert.equal(data.parentAclProtected,false);
+    assert.equal(data.broadWriteGrantFound,null,
+      'unknown ACL is not proof that broad write is absent');
+  }
   assert.equal(data.provisionalFileTrustChecksPassed,false);
   assert.equal(data.productionReady,false);
 });
