@@ -1,0 +1,402 @@
+{
+  "schema": "nexowire.qa16.pr635-649.evidence.v1",
+  "capturedAt": "2026-10-21",
+  "reviewedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
+  "mainSourceCi": {
+    "id": 39622251466,
+    "conclusion": "SUCCESS",
+    "scope": "merged main source only"
+  },
+  "historicalQaHead": {
+    "sha": "f7cb4d96a22d32b10679f844c8c0c878d9d05bc4",
+    "ciRunId": 39609482502,
+    "conclusion": "FAIL",
+    "failures": [
+      "Windows durable NW_DURABLE_READY timeout",
+      "QA intentional 7 source failures"
+    ],
+    "notMissing": true
+  },
+  "prs": [
+    {
+      "pr": 635,
+      "headSha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "baseSha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "ci": {
+        "status": "PASS",
+        "runId": 39624326925,
+        "detail": "QA17 independent adverse CORE/ROOT source tests only, parent stack not main"
+      },
+      "requirements": [
+        "R04",
+        "R07",
+        "R22"
+      ],
+      "title": "CORE ROOT adversarial QA17",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 636,
+      "headSha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+      "baseSha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "ci": {
+        "status": "PASS",
+        "runId": 39625147216,
+        "detail": "QA17 protected signed CORE enrollment/revoke source only, not live signed Broker"
+      },
+      "requirements": [
+        "R04",
+        "R19",
+        "R20",
+        "R22"
+      ],
+      "title": "Signed CORE bootstrap revoke QA17",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 637,
+      "headSha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "baseSha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "ci": {
+        "status": "PASS",
+        "runId": 39625291153,
+        "detail": "QA18 hostile external CAS simulation, not a physical rollback-independent PostgreSQL witness"
+      },
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "title": "Hostile external CAS QA18",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 638,
+      "headSha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "baseSha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39625275778,
+        "detail": "Separate exact-head 100cycle test workflow #39625276215 PASS; standard CI #39625275778 Windows actual Authenticode UNAVAILABLE and parent ACL null FAIL"
+      },
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "title": "Windows Job 100-cycle QA19",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 639,
+      "headSha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "baseSha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "ci": {
+        "status": "PASS",
+        "runId": 39625620173,
+        "detail": "QA20 signed Broker installer/CORE source adversarial tests, no physical signed rollout"
+      },
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "title": "Signed installer adversarial QA20",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 640,
+      "headSha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+      "baseSha": "9266f9b65a1f193360469223360552a50892949a",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39626203944,
+        "detail": "Two semantic source test FAILs: cancel before Native write wrongly MUTATION_UNKNOWN rather than CANCELLED; later cancel overwrites settled pending Native mutation UNKNOWN, plus 2-agent E2E failure; no test skipped"
+      },
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20",
+        "R22"
+      ],
+      "title": "Artifact cancellation race QA21",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 641,
+      "headSha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "baseSha": "9266f9b65a1f193360469223360552a50892949a",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39626185867,
+        "detail": "Two-Hub CAS/fence QA on #634 branch; inherited Node E2E red and Windows fast-exit red; individual new suite PASS in author's report only"
+      },
+      "requirements": [
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "title": "Cross-Hub CAS fence QA22",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 642,
+      "headSha": "87644090113d21544f42a738d919d5422ed200c0",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "ci": {
+        "status": "PASS",
+        "runId": 39630395647,
+        "detail": "CORE effective UI signed-evidence QA current exact-head CI 39630395647 SUCCESS source only, no running signed high-token Broker or real CORE effective state."
+      },
+      "requirements": [
+        "R04",
+        "R07",
+        "R22"
+      ],
+      "title": "CORE effective status UI QA23",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 643,
+      "headSha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "baseSha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "ci": {
+        "status": "PASS",
+        "runId": 39626754232,
+        "detail": "Owner revoke/re-pair while elevated execution source negatives; no real high token"
+      },
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "title": "Elevated revoke re-pair QA25",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 644,
+      "headSha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "baseSha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "ci": {
+        "status": "PASS",
+        "runId": 39627727657,
+        "detail": "Broker crash/rollback/stale DPAPI/offline revoke source negatives; no real signed installer"
+      },
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "title": "Broker crash rollback QA28",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 645,
+      "headSha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39626967547,
+        "detail": "UAC Remote Assistance source coverage, hosted Windows Job fast-exit FAIL; consent is never remote approval"
+      },
+      "requirements": [
+        "R04",
+        "R09",
+        "R19"
+      ],
+      "title": "Remote assistance UAC QA27",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 646,
+      "headSha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39627296601,
+        "detail": "QA24 exact SHA integration DAG/collision source, hosted Windows Job fast-exit FAIL"
+      },
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "title": "Integration DAG exact head QA24",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 647,
+      "headSha": "3b3f26d068f169b941383308a1763124e3a3feef",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39627227248,
+        "detail": "W26 native handle provenance negative QA source, inherited Windows Job fast-exit FAIL; no live file handles/ACL tested"
+      },
+      "requirements": [
+        "R05",
+        "R19",
+        "R22"
+      ],
+      "title": "Windows handle QA26",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 648,
+      "headSha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "ci": {
+        "status": "PASS",
+        "runId": 39628249630,
+        "detail": "QA29 elevated audit provenance source CI 39628249630 and independent QA29 workflow 39628250167 both SUCCESS, no live elevated execution"
+      },
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R20",
+        "R22"
+      ],
+      "title": "Elevated audit QA29",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 649,
+      "headSha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+      "baseSha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39628451245,
+        "detail": "QA30 bounded parser/gzip/per-tenant p95/p99 source; CI Windows fast-exit stdout-first iteration 1 FAIL, remaining jobs green"
+      },
+      "requirements": [
+        "R07",
+        "R12",
+        "R15",
+        "R22"
+      ],
+      "title": "Bounded load and fairness QA30",
+      "production": "BLOCKED",
+      "staging": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    }
+  ],
+  "independentConfirmed": {
+    "cancelBeforeWrite": {
+      "pr": 640,
+      "expected": "CANCELLED",
+      "observed": "MUTATION_UNKNOWN",
+      "nativeWritesDispatched": 0,
+      "status": "FAIL",
+      "evidenceRun": 39626203944
+    },
+    "cancelAfterWrite": {
+      "pr": 640,
+      "expected": "MUTATION_UNKNOWN retained after later cancel",
+      "observed": "UNKNOWN downgraded by later cancellation",
+      "status": "FAIL",
+      "evidenceRun": 39626203944
+    },
+    "standaloneHundredCycles": {
+      "pr": 638,
+      "ciRunId": 39625276215,
+      "conclusion": "SUCCESS",
+      "scope": "Windows Job synthetic 100cycle, not signed publisher or complete CI"
+    },
+    "publisherAclRegression": {
+      "pr": 638,
+      "ciRunId": 39625275778,
+      "conclusion": "FAIL",
+      "checks": [
+        "OS Authenticode surrogate UNAVAILABLE rather than Valid",
+        "inherited parent Modify detection null rather than true"
+      ]
+    },
+    "auditDualGreen": {
+      "pr": 648,
+      "runs": [
+        39628249630,
+        39628250167
+      ],
+      "conclusions": [
+        "SUCCESS",
+        "SUCCESS"
+      ],
+      "scope": "source-only tamper/audit fixtures; not real elevated postcondition or CORE revocation"
+    },
+    "fairnessWindowsRed": {
+      "pr": 649,
+      "runId": 39628451245,
+      "conclusion": "FAIL",
+      "failure": "Windows Job stdout not drained before exited, iteration 1"
+    },
+    "raceCaveat": {
+      "pr": 641,
+      "runId": 39626185867,
+      "conclusion": "FAIL",
+      "failure": "inherited Node source E2E and hosted Windows Job; do not confuse new test source PASS with full acceptance"
+    },
+    "unspecifiedCurrent": {
+      "pr": 642,
+      "ciRunId": 39630395647,
+      "initialStatus": "IN_PROGRESS",
+      "latestCheckedStatus": "SUCCESS",
+      "headSha": "87644090113d21544f42a738d919d5422ed200c0",
+      "sourceOnly": true
+    }
+  },
+  "mandatoryNoGo": [
+    {
+      "issue": 271,
+      "reason": "actual low trust Authenticated Users Modify inherited on elevated legacy executable tree"
+    },
+    {
+      "issue": 551,
+      "reason": "signed installer source CI green but first-party release and complete old Agent rollback not physically accepted"
+    },
+    {
+      "issue": 587,
+      "reason": "simultaneous SQLite journal and authority snapshot rollback re-admits reserved mutation; no physically independent CAS"
+    },
+    {
+      "issue": 617,
+      "reason": "CORE broad true high token via signed Broker local one-time UAC, revocation, real postconditions not physically verified"
+    }
+  ],
+  "acceptance": {
+    "source": "MIXED",
+    "staging": "BLOCKED",
+    "production": "BLOCKED",
+    "originalIncident": "BLOCKED",
+    "noFalseGreen": true
+  }
+}

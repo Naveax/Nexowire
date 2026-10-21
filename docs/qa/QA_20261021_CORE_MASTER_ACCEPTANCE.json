@@ -1,0 +1,453 @@
+{
+  "schema": "nexowire.qa16-core-master.v1",
+  "capturedAt": "2026-10-21",
+  "mainSha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+  "mainSourceCi": 39596766086,
+  "coreGoal": "One genuine local owner UAC for signed Broker bootstrap; then persistent revocable owner/device/epoch CORE with broad high-integrity shell/process. ROOT same broad elevation bounded 900s. FULL broad standard user. Owner session and Broker must be authenticated before each privileged dispatch, not repeated UAC per command.",
+  "scope": "Independent source QA, no live privilege/service/VM/ACL writes",
+  "pulls": [
+    {
+      "number": 618,
+      "headSha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "runId": 39605003581,
+      "status": "FAIL",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R21",
+        "R22"
+      ],
+      "sourceReproducer": "test/hyperv-elevation-evidence.test.ts",
+      "limitation": "browser-live Windows Job fast-exit iteration 4",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 619,
+      "headSha": "6f6c2b3812afadadaa0f123f5d40105eead6d054",
+      "runId": 39604390404,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT_OLD_PARENT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-02-hyperv-denial-provenance.test.ts",
+      "limitation": "Old #618 base 14d0d6; source success does not apply to latest #618",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 620,
+      "headSha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "runId": 39604898508,
+      "status": "FAIL",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R21",
+        "R22"
+      ],
+      "sourceReproducer": "test/hyperv-launcher-trust.test.ts",
+      "limitation": "Windows Authenticode surrogate and disposable parent Modify ACL tests fail, typed dispatch OFF",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 576,
+      "headSha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "runId": 39598258315,
+      "status": "FAIL",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/windows-job-helper-acl-publisher.test.ts",
+      "limitation": "Real Authenticode surrogate UNAVAILABLE and inherited Modify ACL detector null; historical green cannot override current red",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 608,
+      "headSha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+      "runId": 39503650650,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT_COMBINED",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "limitation": "Combined old #576 Job+#598 HTTP, Release 39503650638 green, unsigned production",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 614,
+      "headSha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "runId": 39598693419,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT_STACKED",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/postgres-monotonic-witness.test.ts",
+      "limitation": "Synthetic PostgreSQL contract+signed provenance, no real external independent storage",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 616,
+      "headSha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "runId": 39598755514,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT_STACKED",
+      "requirements": [
+        "R10",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-588-cross-device-worker.test.ts",
+      "limitation": "CrossHub source adapter 1GiB physical signed two device unverified",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 609,
+      "headSha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+      "runId": 39596941696,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT_STACKED",
+      "requirements": [
+        "R01",
+        "R07",
+        "R22"
+      ],
+      "sourceReproducer": "test/windows-job-owner.test.ts",
+      "limitation": "#599 errors combined with old #576 Job source; not latest parent",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 610,
+      "headSha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "runId": 39597505104,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/scale-v2-artifact-cancel-fencing-staging.test.ts",
+      "limitation": "Synthetic cancellation receipt, no real Cloudflare staging",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 612,
+      "headSha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+      "runId": 39597637188,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/owner-public-wss-signed-enrollment-staging.test.ts",
+      "limitation": "Async signed device enrollment source race fixed, no production",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 613,
+      "headSha": "d019e99efd46fcb76262528ffe122ad1c0a4087d",
+      "runId": 39598086598,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/connection-core.test.ts",
+      "limitation": "Owner epoch checkpoint source verified, no live Agent disconnect",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 615,
+      "headSha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "runId": 39598738701,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/mcp-http-json-limit.test.ts",
+      "limitation": "S5 9.5MiB gzip and local fairness source only",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    },
+    {
+      "number": 551,
+      "headSha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "runId": 39606595530,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/agent-lifecycle-manager.test.ts",
+      "limitation": "Latest exact-head CI 39606595530 and Release Readiness 39606595531 SUCCESS only for source, signed first-party installer, actual high token, signed rollback and VM/two-agent physical acceptance still BLOCKED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "releaseReadiness": 39606595531
+    },
+    {
+      "number": 572,
+      "headSha": "99df8e60a2a7189429e9a8e8e6c45107328e71a4",
+      "runId": 39604979439,
+      "status": "FAIL",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R07",
+        "R15",
+        "R20",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-hyperv-617-source-negative.test.ts",
+      "limitation": "Historical QA CI browser-live durable READY and intentional red source assertions",
+      "staging": "BLOCKED",
+      "production": "BLOCKED"
+    }
+  ],
+  "cases": [
+    {
+      "id": "ROOT_15MIN",
+      "requirements": [
+        "R04",
+        "R22"
+      ],
+      "expected": "ROOT is real elevated owner delegation <=900s from authenticated lease issuance; revoked, expired, old pairing and clock rollback denied",
+      "sourceStatus": "MAIN_FAIL",
+      "observed": "Source diagnostic permits leaseUnexpired on a reported expiry 901s ahead without a signed issuedAt; diagnostic policyActive remains false, no elevation occurred",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "CORE_PERSISTENT",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "expected": "CORE grants persistent until revoked owner/device bound real high-integrity broad admin capability through trusted signed broker; no per-command UAC after authorized bootstrap",
+      "sourceStatus": "MAIN_FAIL",
+      "observed": "Main has no explicit elevated Broker shell endpoint; CORE preference returns PAUSED_UNVERIFIED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "FULL_STANDARD",
+      "requirements": [
+        "R04",
+        "R07"
+      ],
+      "expected": "FULL broad standard-user actions but may not turn a generic shell.exec into high integrity",
+      "sourceStatus": "SOURCE_PASS",
+      "observed": "Current generic shell exec standard, excluded from privileged Broker",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "ONE_TIME_UAC_BOOTSTRAP",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "expected": "Signed protected version-matched Broker installed after one genuine local interactive UAC approval; no secure-desktop automation; privilege only after independent high token proof",
+      "sourceStatus": "BLOCKED",
+      "observed": "Installer trust source-only; never saw signed first-party installer or physical UAC/VM canary",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "SIGNED_ACL_IDENTITY",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "expected": "Verify running process image, publisher/cert SHA, binary+ancestor/import/updater protected DACL, token high and compatible version",
+      "sourceStatus": "PHYSICAL_FAIL",
+      "observed": "#271 actual Naveax legacy executable inherited Authenticated Users:(I)(M), Broker protected ACL inaccessible",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "OWNER_REVOKE_REPAIR",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "expected": "Revoke CORE enrollment and re-pair rotate signed owner/agent/session epoch; deny stale owner, credential, replay and stale grant",
+      "sourceStatus": "BLOCKED",
+      "observed": "#614 external witness SQL synthetic, no physically trusted independent post-restore and signer migration",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "LOST_ACK_NO_REPLAY",
+      "requirements": [
+        "R01",
+        "R02",
+        "R20"
+      ],
+      "expected": "UNKNOWN after potential elevated shell/Start-VM dispatch cannot blindly auto-retry; must reconcile authenticated requestId with external monotonic epoch and side-effect readback",
+      "sourceStatus": "BLOCKED",
+      "observed": "#587 simultaneous J+A rollback re-admits historical requestId; #619 old parent pure source negative CI green only",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "SIGNED_BROKER_WIDE_SHELL",
+      "requirements": [
+        "R04",
+        "R07",
+        "R22"
+      ],
+      "expected": "New explicit authenticated elevation entrypoint authorizes real broad elevated shell/process under CORE persistent or ROOT <=15m, FULL standard remains unchanged",
+      "sourceStatus": "MAIN_FAIL",
+      "observed": "No registered explicit elevated shell capability on current main; no execution permitted or claimed",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "TYPED_HYPERV_VM_ID",
+      "requirements": [
+        "R05",
+        "R21"
+      ],
+      "expected": "Hyper-V typed per-host/device/owner exact immutable VM GUID for start/stop/status; never shell string injection or unknown VM",
+      "sourceStatus": "BLOCKED",
+      "observed": "#620 typed admission source OFF, exact CI red and no physical approved VMId",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "VM_RUNNING_READBACK",
+      "requirements": [
+        "R03",
+        "R21"
+      ],
+      "expected": "After trusted Hyper-V start require independent exact GUID+Running fresh readback; after stop Off; no ACK/consent.exe substitute",
+      "sourceStatus": "BLOCKED",
+      "observed": "#617 Get-VM denied; vmms and vmcompute running are services, not VM state",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "WINDOWS_JOB_PIPE",
+      "requirements": [
+        "R07",
+        "R22"
+      ],
+      "expected": "Native Job stdout/stderr fully drained before exited, helper trusted, no breakaway, signed process+ACL provenance",
+      "sourceStatus": "SOURCE_FAIL",
+      "observed": "#618 iteration4 fast-exit; #576 OS signature UNAVAILABLE/ACL null; #608 only old combined green",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "SIGNED_ROLLBACK",
+      "requirements": [
+        "R19",
+        "R21",
+        "R22"
+      ],
+      "expected": "First-party Nexowire-signed Agent/Broker installer and complete signed rollback tested in controlled VM then two devices",
+      "sourceStatus": "BLOCKED",
+      "observed": "#551 current release CI pending and old source green; physical two-device canary absent",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "ARTIFACT_QUOTA",
+      "requirements": [
+        "R10",
+        "R12",
+        "R15"
+      ],
+      "expected": "CrossHub worker and quota/cancel owner fence with signed checkpoint and idempotent receipt",
+      "sourceStatus": "SOURCE_ONLY_PASS",
+      "observed": "#616/#610 source CI green, 1GiB physical worker and Cloudflare D1 staging not verified",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "id": "OWNER_WSS_SCOPE",
+      "requirements": [
+        "R06",
+        "R12",
+        "R20"
+      ],
+      "expected": "Signer epoch and tenant/device replay/revoke within source and external WSS with physical approved trust",
+      "sourceStatus": "SOURCE_ONLY_PASS",
+      "observed": "#612/#613 CI green; WAN physical production not verified",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    }
+  ],
+  "independentTests": {
+    "newFile": "test/qa-core-broker-p0-negative.test.ts",
+    "pass": 5,
+    "fail": 3,
+    "skip": 0,
+    "oldHypervRedFile": "test/qa-hyperv-617-source-negative.test.ts",
+    "oldRollbackRedFile": "test/qa-rollback-source-negative.test.ts",
+    "oldTransferRedFile": "test/qa-transfer-onecall-source-negative.test.ts"
+  },
+  "noGo": [
+    "#271 legacy elevated runtime actual inherited untrusted Modify ACE",
+    "#551 first-party signed installer and complete rollback artifact no physical canary",
+    "#587 independent external monotonic CAS witness physical deployment unverified",
+    "#576 latest exact Windows native helper signer/ACL red",
+    "#618 Windows Job pipe fast-exit red",
+    "#620 signed trust fixture and typed HyperV source CI red",
+    "#617 local physical UAC approval and exact VMId Running readback unknown"
+  ],
+  "production": "BLOCKED",
+  "originalIncident": "BLOCKED"
+}

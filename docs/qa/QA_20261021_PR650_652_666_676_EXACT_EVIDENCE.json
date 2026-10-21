@@ -1,0 +1,293 @@
+﻿{
+  "schema": "nexowire.qa16.pr650-652-666-676.v1",
+  "capturedAt": "2026-10-21T20:23:00+03:00",
+  "mainSha": "754cc4364822be5fda528f54042fb22a84f19924",
+  "mainCi": {
+    "runId": 39622251466,
+    "result": "SUCCESS",
+    "scope": "source CI only"
+  },
+  "repo": {
+    "openPrCount": 77,
+    "from": "GitHub /pulls?state=open&per_page=100",
+    "evidence": "not all 85 tracked PR snapshots are currently open"
+  },
+  "priorQa": {
+    "pr": 572,
+    "headSha": "ca67b8adc717256906f8396d8057104df66be946",
+    "runId": 39632915464,
+    "result": "FAIL",
+    "failing": [
+      "qa-independent-negative-acceptance 7 red source checks",
+      "browser-live Windows durable NW_DURABLE_READY",
+      "Node24 npm run check"
+    ]
+  },
+  "prs": [
+    {
+      "pr": 650,
+      "headSha": "5a76c826de58d906c430153488d96912e0d1827e",
+      "baseSha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "runId": 39629695531,
+      "result": "PASS",
+      "reproducer": "test/qa-17-provider-unavailable-queued-revoke.test.ts",
+      "requirements": [
+        "R02",
+        "R04",
+        "R07",
+        "R19",
+        "R20"
+      ],
+      "limitation": "Provider UNAVAILABLE, queued CORE revoke after reservation source tests, note post-reservation pre-effect epoch fence remains unimplemented."
+    },
+    {
+      "pr": 652,
+      "headSha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+      "baseSha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "runId": 39629996191,
+      "result": "FAIL",
+      "reproducer": "test/qa-19-windows-provider-truth.test.ts",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "limitation": "Dedicated QA provider-truth 39629996167 SUCCESS; full CI browser-live Authenticode/ACL FAIL (not stdout fast-exit)."
+    },
+    {
+      "pr": 666,
+      "headSha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "baseSha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "runId": 39631675531,
+      "result": "FAIL",
+      "reproducer": "test/cross-device-worker-journal-link.test.ts",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "limitation": "Six jobs SUCCESS, macos-agent-lifecycle-live CANCELLED; overall CI FAILURE. Worker/journal linkage source-only, no side effect."
+    },
+    {
+      "pr": 667,
+      "headSha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "baseSha": "9266f9b65a1f193360469223360552a50892949a",
+      "runId": 39631999739,
+      "result": "FAIL",
+      "reproducer": "test/artifact-588-cross-device.e2e.test.ts",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "limitation": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 1 FAIL; PR author reports #640 5/5 and #641 7/7 locally PASS after semantic fix; independently merge-tested physical 1GiB NOT verified."
+    },
+    {
+      "pr": 668,
+      "headSha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "baseSha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "runId": 39632010226,
+      "result": "FAIL",
+      "reproducer": "test/scale-v2-artifact-fenced-cleanup-admission.test.ts",
+      "requirements": [
+        "R02",
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "limitation": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 1 FAIL; writer stop/deletion receipt provider source-only, Cloudflare D1 and disk release physical blocked."
+    },
+    {
+      "pr": 669,
+      "headSha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "baseSha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "runId": 39632774193,
+      "result": "PASS",
+      "reproducer": "test/access-effective-authority.test.ts",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R20",
+        "R22"
+      ],
+      "limitation": "Access CORE/ROOT EFFECTIVE source signed dual evidence and dashboard source PASS; no server configured native/CAS provider, effective false by default."
+    },
+    {
+      "pr": 670,
+      "headSha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "baseSha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "runId": 39633083937,
+      "result": "PASS",
+      "reproducer": "test/windows-broker-provider-attestation.test.ts",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "limitation": "Native real Windows Authenticode module and parent ACL source proof + disposable own token tests PASS; not actual installed Broker running image, imported DLL/protected updaters/elevated token/owner epoch."
+    },
+    {
+      "pr": 671,
+      "headSha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "runId": 39632434610,
+      "result": "PASS",
+      "reproducer": "test/owner-public-wss-receipt-replay-rotation.test.ts",
+      "requirements": [
+        "R06",
+        "R12",
+        "R20"
+      ],
+      "limitation": "SQLite signed receipt one-time/reconnect/revoke/issuer rotation source tests; restored DB and multi-tenant WSS outside source not independently anchored."
+    },
+    {
+      "pr": 672,
+      "headSha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "baseSha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "runId": 39632489293,
+      "result": "PASS",
+      "reproducer": "test/s3-protected-core-installer-stage-owner.test.ts",
+      "requirements": [
+        "R04",
+        "R19",
+        "R21"
+      ],
+      "limitation": "Signed installer, protected recursive imports/updater and same owner Bootstrap stage source tests only; no genuine Nexowire first-party signed release or UAC/VM canary."
+    },
+    {
+      "pr": 673,
+      "headSha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "baseSha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "runId": 39632538963,
+      "result": "PASS",
+      "reproducer": "test/p05-native-source-handle-acl-negative.test.ts",
+      "requirements": [
+        "R05",
+        "R19",
+        "R22"
+      ],
+      "limitation": "Temporary native handle/rename/ADS/junction negatives + source ACL proof tests, provider not implemented/wired, no protected real file ACL verified."
+    },
+    {
+      "pr": 674,
+      "headSha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "baseSha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "runId": 39632610866,
+      "result": "FAIL",
+      "reproducer": "test/s5-real-598-seeded-parser.test.ts",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "limitation": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 10 FAIL; seeded source timing non-repeatable, 4x9.5MiB real parser run physically BLOCKED low disk."
+    },
+    {
+      "pr": 675,
+      "headSha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "runId": 39632701546,
+      "result": "PASS",
+      "reproducer": "test/github-oauth-browser-state-negative.test.ts",
+      "requirements": [
+        "R04",
+        "R06",
+        "R14",
+        "R20"
+      ],
+      "limitation": "Browser-bound one-time OAuth nonce/cookie and CAS source tests green; D1 storage migration/wiring not deployed, login could fail closed if merged without wiring; OAuth is not Windows elevation."
+    },
+    {
+      "pr": 676,
+      "headSha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "baseSha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "runId": 39634099233,
+      "result": "PASS",
+      "reproducer": "test/https-external-grant-cas.integration.test.ts",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "limitation": "Source PostgreSQL and HTTPS external atomic owner grant CAS, signed revoke/re-pair and lost ACK tests green, no non-restorable real remote witness deployed."
+    }
+  ],
+  "special": {
+    "macCancelled": {
+      "pr": 666,
+      "ci": 39631675531,
+      "job": "macos-agent-lifecycle-live",
+      "jobState": "CANCELLED",
+      "sixOtherJobs": "SUCCESS",
+      "overall": "FAILURE"
+    },
+    "qaDedicated": {
+      "pr": 652,
+      "runId": 39629996167,
+      "result": "SUCCESS",
+      "fullRun": 39629996191,
+      "fullResult": "FAILURE",
+      "trueFailures": [
+        "Authenticode OS surrogate expected Valid got UNAVAILABLE",
+        "inherited parent Modify ACL witness expected true got null"
+      ]
+    },
+    "windowsRed": [
+      {
+        "pr": 667,
+        "runId": 39631999739,
+        "iteration": 1
+      },
+      {
+        "pr": 668,
+        "runId": 39632010226,
+        "iteration": 1
+      },
+      {
+        "pr": 674,
+        "runId": 39632610866,
+        "iteration": 10
+      }
+    ],
+    "sourceSemantic": {
+      "pr": 667,
+      "authorReportedOriginalQa640": "5/5 PASS",
+      "authorReportedOriginalQa641": "7/7 PASS",
+      "verification": "author reported in PR body, not rerun independently on exact 667 head; #640 historical red stays recorded",
+      "physical": "not tested"
+    },
+    "success": [
+      669,
+      670,
+      671,
+      672,
+      673,
+      675,
+      676,
+      650
+    ]
+  },
+  "securityNoGo": {
+    "actualCoreHighToken": false,
+    "firstPartySignedBrokerInstalled": false,
+    "physicalOwnerUac": false,
+    "immutableProtectedImageAndImportsVerified": false,
+    "realExternalRollbackIndependentCas": false,
+    "vmGuidRunningReadback": false,
+    "legacyAclIssue": 271,
+    "bootstrapIssue": 551,
+    "rollbackIssue": 587,
+    "coreIssue": 617
+  },
+  "levels": {
+    "source": "MIXED",
+    "staging": "BLOCKED",
+    "production": "BLOCKED",
+    "originalIncident": "BLOCKED"
+  }
+}

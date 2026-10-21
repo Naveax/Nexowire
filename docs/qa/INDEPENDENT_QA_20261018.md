@@ -1,64 +1,74 @@
-# Cross-project independent QA acceptance | 18 October 2026
+# Independent Nexowire R01-R22 Final Acceptance | 2026-10-19
 
-Independent read-only audit baseline: `f43580cce2a786880fcb6a8036cfc01a7a1a2621` (after clean QA-only rebase). Worktree: `test/parallel-16-independent-qa-20261018`.
-This is a **gate and fault-injection ledger**, not a product-fix declaration.
+**Exact main snapshot:** `cb819d17ee581093d39626f13e985976def17f30`. **QA PR:** [#572](https://github.com/Naveax/Nexowire/pull/572). **Final Acceptance: BLOCKED.**
 
-## PASS semantics
+## Windows browser-live CI 39155406551: actual failure and bounded QA fix
 
-Each R01–R22 has four independent statuses in `cross-project-final-acceptance.json`: source, staging, production and original incident. `PASS` requires level-specific evidence and the exact tested SHA. Source-only green CI never closes a physical original incident. `NOT_TESTED` is distinct from `FAIL` and `BLOCKED`. GitHub PR merges do not automatically modify this ledger. Tests deliberately reject a synthetic final PASS with missing lower stages.
+Job 117757746526 failed the first durable process stdin/stdout reattach test with PROCESS_NOT_RUNNING at src/agent/process-manager.ts:369. The sidecar received the control request but reported that its shell was not accepting input. The second durable process recovery test and six other CI jobs passed. This was NOT a browser DOM, EBUSY cleanup or WINJOB_STDOUT failure. Root cause of the worker exit/pipe state is not independently established.
 
-## Source / CI audit at baseline
+The QA test now requires a unique READY record emitted by the real child shell before the first stdin write. An early exit explicitly fails with worker status, exitCode and bounded output. There is no retry after UNKNOWN, no skipped test, swallowed failure, disabled security gate or blind increase to test timeout. The GitHub exact-head Windows CI must verify the new test. The isolated local native helper compilation prerequisite failed, so local Windows durable-process acceptance is NOT_TESTED.
 
-- `main` moved from `8bf7ce1` to `a54cbbd` during the audit as #543 merged. Worktree aligned to `a54cbbd` before changing files.
-- CI workflow includes Ubuntu Node 22+24, Windows, Linux native, real WSL2 Ubuntu and macOS native. At inspection, main run `39133662035` still had Windows `browser-live` in progress. **Do not count the overall run as PASS until completed.**
-- Historic source CI `39116300377` completed successfully for `8bf7ce1`; it does not prove a live Agent upgrade. #538 and #542 cover Agent journal and shell-result reporting only.
-- The Windows Process Manager #543 is merged. `taskkill /T /F` returning success is a request acknowledgment, not independent descendant attestation. The issue remains OPEN until Job Object containment and real orphan cleanup are proven.
-- No source CI gives independent production OAuth/24-hour quota/cloud-cost/physical gamepad/GUI focus evidence.
+## Independent source/staging/production/original acceptance
 
-## Critical original negative reproductions
+Source statuses: 7 PASS, 2 FAIL, 12 BLOCKED, 1 NOT_TESTED. All 22 staging, all 22 production, and all 22 original-incident statuses are BLOCKED.
 
-| Fault | Required assertion | Existing/QA source test | Physical release gate |
-|---|---|---|---|
-| MUTATION_STATE_UNKNOWN | No blind mutation retry; offline result stays UNKNOWN | `test/qa-agent-journal-negative.test.ts` | Restart real Agent during lost-ACK and reconcile |
-| Shell transport OK but exitCode=7 | `taskSuccess:false`; no user-facing PASS | `test/qa-shell-outcome-negative.test.ts` | Real CMD/PowerShell/WSL negative exit |
-| Windows killed parent, live child | `unconfirmed`; no tree-clean PASS | `test/process-manager-tree-cleanup.test.ts` | Windows Job Objects for race-free ownership |
-| PATH_DENIED / USB | No shell/WSL privilege bypass | `test/path-policy.test.ts` | Physical USB volume identity and ACL |
-| Permission / ROOT / CORE | Missing grant denies, explain no action | `test/windows-console-grant.test.ts` | Owner physical console and UAC |
-| Connection loss | Reconnect no mutation auto-replay | `test/native-session-continuity.test.ts` | Two real hosts/off-network |
-| Bot stuck RUNNING | Unknown/stuck, no fabricated completed percentage | `test/task-artifacts.test.ts` | Actual model completed count and artifact SHA |
-| Corrupt artifact | No succeeded task if artifact missing | `test/task-artifacts.test.ts` | Transfer and compare across chats/devices |
-| OAuth AuthRequiredError | Independent Codex vs ChatGPT issuer/scope proof | `test/mcp-oauth.test.ts` | Live Codex CLI / issuer discovery |
-| GUI focus drift | Deny HWND owner mismatch | `test/private-uia-mixed-owner-isolation.test.ts` | Physical Windows native dialog and focus change |
-| 24h Scale v2 | Benchmarks not production evidence | `test/owner-quota-local-capacity-benchmark.test.ts` | 100+ sockets, 600/min, 850k/day and cloud cost |
-| CI green only | Four-gate release remains BLOCKED | `test/qa-final-acceptance-negative.test.ts` | Independent original incident re-run |
+| Requirement | Source | Staging | Production | Original incident |
+|---|---|---|---|---|
+| R01 Error attribution and correlation | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R02 Durable Agent operation journal | FAIL | BLOCKED | BLOCKED | BLOCKED |
+| R03 Hub and Agent reconciliation | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R04 FULL ROOT CORE and Broker authorization explain | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R05 Constrained filesystem and USB grants | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R06 Connection epoch and safe reconnect | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R07 Windows process child-tree ownership | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R08 Shell and WSL task exit status | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R09 Private GUI Broker and foreground focus | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R10 Git device and artifact SHA checkpoint | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R11 Reliability Doctor UI | NOT_TESTED | BLOCKED | BLOCKED | BLOCKED |
+| R12 Scale sockets quotas and capacity | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R13 Upstream provider safety failure attribution | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R14 Codex OAuth and OIDC | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R15 Cross-chat artifact continuity | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R16 Native Windows file picker UIA | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R17 Environment diagnostics | PASS | BLOCKED | BLOCKED | BLOCKED |
+| R18 Progress supervisor watchdog | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R19 Agent lifecycle and safe rollback | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R20 CAS and idempotent append | FAIL | BLOCKED | BLOCKED | BLOCKED |
+| R21 Physical hardware acceptance harness | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| R22 Independent release and regression gates | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
 
-## PR correspondence
+**P0 anti-rollback R02 and R20 are FAIL.** Merged [#567](https://github.com/Naveax/Nexowire/pull/567) proves that restoring a legitimate earlier SQLite backup can forget a later requestId. A metadata-only Journal.begin can then return created:true. This is a confirmed source replay reservation defect, not a claim of an actual reexecuted user mutation. Require independent durable monotonic authority or equivalently fail-closed backup/restore before release.
 
-| PR | Original issue | Reproducer | What still blocks original incident closure |
-|---|---|---|---|
-| [#538](https://github.com/Naveax/Nexowire/pull/538) | Lost ACK / journal | Agent journal restart + MCP mutation failure | Real upgrade/reconciliation on both devices |
-| [#542](https://github.com/Naveax/Nexowire/pull/542) | False shell PASS | Provider returns `ok:true,exitCode:7` | Live Windows/WSL consumers must check `taskSuccess` and postconditions |
-| [#543](https://github.com/Naveax/Nexowire/pull/543) | Orphan child process | Lost parent and surviving uniquely marked node child | Windows Job Object lifetime + crash-proof ownership |
-| [#480](https://github.com/Naveax/Nexowire/pull/480) | GUI isolation | `bash` broker direct-launch path | Foreground HWND, multi-display, COM/UAC physical acceptance |
-| [#537](https://github.com/Naveax/Nexowire/pull/537) | Public signed WSS | Signed nonce replay rejected by isolated fixture | Named tunnel, real OAuth, broker, 24-hour quota and independent ISP |
+## Verified merged source updates
 
-**Blocking release findings**: R07 child ownership not proven; R12 sustained real quota/throughput not demonstrated; R15 original cross-chat artifact retrieval not demonstrated; R18 original stuck-bot recovery not demonstrated; R22 physical release gates incomplete. These findings block **overall acceptance**, not necessarily the narrow isolated changes in each draft PR.
+- #566: multiprocess SQLite quota race fixtures; not production D1.
+- #567: independent stale-backup anti-rollback negative; release blocker remains.
+- #568: device signer TOCTOU and DPAPI staging; not nonexportable hardware key or named Cloudflare Tunnel acceptance.
+- #569: synthetic WSS connection fault proxy; not real two-PC reconnect chaos.
+- #570: indirect WSL/Terminal GUI wrapper guard; not end-to-end COM/Desktop isolation.
+- #571: local protected tenant shares, synthetic fairness and reconnect throughput; no real 24-hour completed tool soak.
+- #573: exact two-device hashes on fresh fixture files, NOT live new-chat production Hub retrieval.
+- #577/#578: real Codex CLI against synthetic loopback OAuth issuer; real production issuer and owner binding missing.
+- #575, #576, #579, #574, #565, #553 and #551 remain DRAFT at the recorded commit snapshots, with distinct source and physical security blockers.
 
-All 12 historic project classes are mapped to individual requirements in the machine-readable JSON. Re-test the exact incidents after source/staging deployment. Third-party policies, UAC and firmware issues cannot be bypassed by Nexowire.
+## Independent blocking findings
 
-## New independently checked PR intake | 20 entries
+Machine-readable source: [QA_BLOCKING_FINDINGS_CURRENT_MAIN.json](QA_BLOCKING_FINDINGS_CURRENT_MAIN.json). 11 entries each record affected PR exact SHA, observed evidence, isolated reproduction steps, required fix, source/staging/production/incident disposition.
 
-The machine-readable `PR_SOURCE_AND_RELEASE_GATES.json` now records 20 known PRs (#480, #537, #538, #542, #543 and #545-#559); #537, #554 and #557 were merged while independent QA was running and remain production/incident BLOCKED. Each is tied to an exact source SHA, repro test and missing *physical* acceptance. This is a dated snapshot, not an ongoing live poll.
+- **QA-P0-559-HELPER** ([#559](https://github.com/Naveax/Nexowire/pull/559), [#576](https://github.com/Naveax/Nexowire/pull/576)): #576 adds unnamed Job/NWJOB5 and helper hash/file-ID checks, CI SUCCESS; signed publisher/manifest integrity, PROCESS_DUP_HANDLE and production original orphan acceptance remain open. Required: Pin publisher-signed immutable helper manifest, protected Guardian ACL, prevent PROCESS_DUP_HANDLE-based retained Job handles and independently verify kernel membership after physical rollout.
+- **QA-P0-553-PATH** ([#553](https://github.com/Naveax/Nexowire/pull/553)): #553 source owner-console grant request/revoke is now implemented in source. Latest exact-head CI 39282648539 queued. Real Agent 1.0.5 still not updated and Node realpath + fs I/O has non-atomic NTFS junction/volume TOCTOU risk. Required: Provide native handle-pinned file-ID/volume checks at point of use, install and test owner-console grant, physically test USB hotplug/reletter and junction races.
+- **QA-P1-563-DOCTOR** ([#563](https://github.com/Naveax/Nexowire/pull/563), [#563](https://github.com/Naveax/Nexowire/pull/563)): Old SHA 7a7628c CI failed on Linux. New SHA dbf5099c fixed wrong-platform expectation, live architecture/time override and injected-runner provenance. New exact-head CI #39154336693 completed 7/7 SUCCESS. No real USB/WSL/device physical acceptance. Required: No further source CI blocker at this exact HEAD. Complete real USB/WSL/VM and hardware provenance acceptance before staging/production/original incident PASS.
+- **QA-P0-480-556-GUI** ([#480](https://github.com/Naveax/Nexowire/pull/480), [#556](https://github.com/Naveax/Nexowire/pull/556), [#570](https://github.com/Naveax/Nexowire/pull/570), [#579](https://github.com/Naveax/Nexowire/pull/579)): #570 fixes literal WSL wrapper preflight. #579 source reproduces and blocks edited generated UIA helper hash, but signed helper trust, reparse parent race and live owner Default desktop isolation absent. CI 39175699760 was queued at inspection. Required: Require signed/ACL-protected native helper trust with kernel/session provenance, atomic launch and real Common Dialog/focus/GUI isolation acceptance.
+- **QA-P1-551-INSTALL** ([#551](https://github.com/Naveax/Nexowire/pull/551)): Source CI/readiness successful but installer still injection-only; no real signer certificate, owner-approved install, two-device rollback. Required: Trusted signed first-party publisher chain and controlled isolated VM/canary rollouts, verified rollback hashes and health.
+- **QA-P1-564-FAIRNESS** ([#564](https://github.com/Naveax/Nexowire/pull/564), [#566](https://github.com/Naveax/Nexowire/pull/566), [#571](https://github.com/Naveax/Nexowire/pull/571)): #566 isolated SQLite 600/min race passes, #571 adds protected offline 300/300 and 570/30 share and reconnect fixtures. Actual Cloudflare WSS tenant fairness, 24h verified native completion and billed costs absent. Required: Demonstrate external two-account fair ingress at 600/min, 100+ real WSS, authenticated owner/device, 24h native completion receipts and Cloudflare actual counters.
+- **QA-P0-567-ANTIROLLBACK** ([#567](https://github.com/Naveax/Nexowire/pull/567)): Confirmed source FAIL: restoring an old valid SQLite backup forgets a later requestId and AgentOperationJournal.begin() returns created:true; test only reserved metadata, did not replay real mutation. Required: Protected independent monotonic reservation ledger outside the restored DB, fail-closed WAL/backup/Hub/Agent reconciliation and no blind replay.
+- **QA-P0-574-GUARDIAN-ACL** ([#574](https://github.com/Naveax/Nexowire/pull/574)): Previously observed Authenticated Users Modify on privileged Broker source; actual live ACL now access denied and Guardian task not observed. Source DACL-only rollback fixture is not live security fix. Latest CI 39282427109 queued. Required: Protect Broker exe/config ACL from Authenticated Users Modify, signed Guardian identity, trusted session/ACL proof and fail-closed owner revocation.
+- **QA-P0-575-PROGRESS** ([#575](https://github.com/Naveax/Nexowire/pull/575)): Worker-writable result manifests are not trusted completion evidence without protected Agent seal. Source CI #39155483038 FAILED Windows browser-live WINJOB_STDOUT marker; release readiness separate PASS. Required: Trusted Agent-controlled immutable proof handoff, scoped session generation, reliable Job stdout exit sequencing and actual bot acceptance.
+- **QA-P0-565-ERROR** ([#565](https://github.com/Naveax/Nexowire/pull/565)): Merged Error Contract classifier exists, newer E2E follow-up open. Historical #39154519028 failed WINJOB_STDOUT due early ProcessManager exit before stream drain; new source fix in DRAFT, CI #39281948778 queued. Required: Validate stdout drain ordering in exact-head CI, additive operation/correlation IDs and external provider-versus-Agent cause without manufacturing hidden refusals.
+- **QA-P0-572-DURABLE** ([#572](https://github.com/Naveax/Nexowire/pull/572)): Exact #572 CI 39155406551 Windows browser-live failed durable process reattach PROCESS_NOT_RUNNING; one other durable test passed. No EBUSY and no WINJOB_STDOUT. No proven source root cause yet. Required: Prove durable worker stdin readiness and guardian process lifecycle; preserve negative failure and run new exact-head CI before any source PASS.
 
-**Blocking exact-head CI regressions:**
+## Physical and trust boundaries
 
-- [#551 workflow 39135168316](https://github.com/Naveax/Nexowire/actions/runs/39135168316): Ubuntu Node24 job 117698096540 failed existing `console-ui-polish.test.ts` callback redirect regex. Regression may reflect changed POST trust contract rather than insecure behavior. Correct the legacy acceptance and re-run CI.
-- [#553 workflow 39135602721](https://github.com/Naveax/Nexowire/actions/runs/39135602721): Ubuntu Node24 job 117699532080 has multiple task-graph/artifact/execution failures; WSL2 job 117699532117 failed `PATH_DENIED`; native Linux job 117699532174 and macOS job 117699531828 failed `UNSANDBOXED_EXECUTION_DENIED`. Security behavior is intended fail-closed but the current full build regresses supported native cases. **No wildcard authorization bypass is acceptable as a fix.**
-- [#559 workflow 39137327997](https://github.com/Naveax/Nexowire/actions/runs/39137327997): exact-head CI passed. It does not verify *deployed* Win32 Job Object guardian ownership or original incident. #559 remains DRAFT.
-- [#558 workflow 39135829286](https://github.com/Naveax/Nexowire/actions/runs/39135829286): exact-head CI passed. It does not verify crash/reconnect in an upgraded Agent/Hub.
+All active physical Agents still report v1.0.5. Neither trusted publisher-signed first-party installer nor Guardian source ACL remediation is physically accepted. Prior Naveax Broker Authenticated Users: Modify observation cannot be treated as resolved because newer ACL readback returned ACCESS DENIED. Never bypass UAC, user desktop ownership, token revocation, filesystem grants or provider refusal policy.
 
-**Independent Windows source regression:** existing eight scoped suites `process-manager-tree-cleanup`, `agent-operation-journal`, `agent-provider-task-outcome`, `mcp-post-mutation-journal-failure`, `path-policy`, `private-uia-mixed-owner-isolation`, `mcp-oauth`, `task-artifacts` passed **44/44** against `a54cbbd` before the latest integration merge. Newly authored QA negative files passed **15/15** plus later approval-only gate 8/8 on the isolated Windows worktree, with typecheck/build/continuation PASS. CI after rebasing must validate again.
-
-**Integrity limitation:** this draft gate validates status/evidence structure; an `independentReleaseApproval` object alone is **not** a cryptographically verified signature or production attestation. Source test assertions cannot autonomously establish trusted reviewer identity, external ISP, physical hardware or historical incident closure. Such evidence must be verified out-of-band before release.
-
-Latest QA source baseline: 43580cce2a786880fcb6a8036cfc01a7a1a2621. The independent 20-test suite must be rerun on this rebased tree; source tests executed previously at 54cbbd remain evidence tied to that older SHA only.
+The matrix is pinned to the specified main SHA; PR #572 head after this review is a different SHA from the prior failed CI. Do not mark new exact-head CI successful before observing its actual conclusion. No main merge, live Agent restart/update, disk/USB mutation or billing change was performed.

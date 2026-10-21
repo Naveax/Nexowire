@@ -1,0 +1,143 @@
+{
+    "schema":  "nexowire.qa16-evidence.20261021.v1",
+    "date":  "2026-10-21",
+    "reviewedMainSha":  "37d68d938b9c94b8647b92fb592a2b30c075427c",
+    "mainCi":  {
+                   "runId":  39558249914,
+                   "status":  "PASS",
+                   "scope":  "source exact-main CI only"
+               },
+    "currentQaHistorical":  {
+                                "pr":  572,
+                                "head":  "3c9dcaf9fc956c51c8c454c587d0f606b16c125b",
+                                "runId":  39493135449,
+                                "status":  "FAIL",
+                                "details":  [
+                                                "Windows durable NW_DURABLE_READY timeout",
+                                                "stale journal requestId RED on main",
+                                                "public one-call transfer_start RED on main"
+                                            ]
+                            },
+    "branchSnapshots":  [
+                            {
+                                "pr":  597,
+                                "sha":  "2ba9e72e30511318eabb8fc0f37b1aceaa5cd401",
+                                "state":  "MERGED_TO_596_BRANCH_ONLY",
+                                "ci":  39502962661,
+                                "conclusion":  "PASS"
+                            },
+                            {
+                                "pr":  596,
+                                "sha":  "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+                                "state":  "OPEN_DRAFT_NOT_MAIN",
+                                "ci":  39557944551,
+                                "conclusion":  "PASS",
+                                "source":  "one-call transfer_start/status/cancel, bounded 64KiB worker, signed 1GiB physical NOT verified"
+                            },
+                            {
+                                "pr":  598,
+                                "sha":  "cf58e6882e44968698f3f548b353287ba1698747",
+                                "state":  "OPEN_DRAFT_NOT_MAIN",
+                                "ci":  39502304557,
+                                "conclusion":  "FAIL",
+                                "source":  "browser-live Windows Job stdout/stderr fast-exit iteration 8"
+                            },
+                            {
+                                "pr":  608,
+                                "sha":  "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+                                "state":  "OPEN_DRAFT_NOT_MAIN",
+                                "ci":  39503650650,
+                                "releaseReadinessCi":  39503650638,
+                                "conclusion":  "PASS",
+                                "source":  "combined Windows Job + 9.5MiB HTTP, no signed production release"
+                            },
+                            {
+                                "pr":  603,
+                                "sha":  "1bd7fdf7bb09e05f20a4cd8eda2177cd7bca94cc",
+                                "state":  "MERGED_MAIN",
+                                "ci":  39492384138,
+                                "conclusion":  "PASS"
+                            },
+                            {
+                                "pr":  601,
+                                "sha":  "3a3ff5052792eed50c3ffec3931b7f9f1fd761f6",
+                                "state":  "MERGED_MAIN",
+                                "ci":  39492176139,
+                                "conclusion":  "PASS",
+                                "source":  "independent source tests PASS on exact main"
+                            }
+                        ],
+    "localMainRepro":  {
+                           "runner":  "Naveax isolated QA worktree rebase to main",
+                           "tests":  [
+                                         "test/owner-public-wss-device-issuer-staging.test.ts",
+                                         "test/owner-public-wss-signed-enrollment-staging.test.ts",
+                                         "test/scale-v2-artifact-cancel-fencing-staging.test.ts"
+                                     ],
+                           "pass":  21,
+                           "fail":  0,
+                           "skip":  0,
+                           "sourceNegativeBaseline":  [
+                                                          "test/qa-rollback-source-negative.test.ts",
+                                                          "test/qa-transfer-onecall-source-negative.test.ts"
+                                                      ],
+                           "sourceNegativeExpected":  "FAIL until current main is fixed; do not skip, rename, or treat branch green as main."
+                       },
+    "physicalAclEvidence":  {
+                                "date":  "2026-10-21",
+                                "device":  "Naveax",
+                                "agentVersion":  "1.0.5",
+                                "paths":  [
+                                              {
+                                                  "path":  "C:\\ProgramData\\NexowireStack",
+                                                  "icaclsExit":  0,
+                                                  "acl":  "NT AUTHORITY\\Authenticated Users:(I)(M)",
+                                                  "assessment":  "UNSAFE"
+                                              },
+                                              {
+                                                  "path":  "C:\\ProgramData\\NexowireStack\\nexowire\\node_modules\\nexowire\\dist\\src\\cli.js",
+                                                  "icaclsExit":  0,
+                                                  "acl":  "NT AUTHORITY\\Authenticated Users:(I)(M)",
+                                                  "assessment":  "UNSAFE"
+                                              },
+                                              {
+                                                  "path":  "C:\\ProgramData\\Nexowire\\privileged-broker",
+                                                  "icaclsExit":  5,
+                                                  "assessment":  "UNKNOWN_DENIED"
+                                              }
+                                          ],
+                                "workPc":  {
+                                               "agentVersion":  "1.0.5",
+                                               "legacyStack":  "NOT_PRESENT",
+                                               "privilegedBroker":  {
+                                                                        "icaclsExit":  5,
+                                                                        "assessment":  "UNKNOWN_DENIED"
+                                                                    }
+                                           },
+                                "mutation":  "NONE"
+                            },
+    "blockingIssues":  [
+                           {
+                               "id":  271,
+                               "state":  "OPEN",
+                               "reason":  "actual inherited write on legacy privileged executable"
+                           },
+                           {
+                               "id":  587,
+                               "state":  "OPEN",
+                               "reason":  "joint SQLite journal and authority old snapshot replay witness"
+                           }
+                       ],
+    "signedInstaller":  {
+                            "pr":  551,
+                            "sha":  "ce4ffdf7f6e57a4070341fe7e1cc2b12855b5a03",
+                            "sourceCI":  39492494717,
+                            "source":  "PASS",
+                            "production":  "BLOCKED",
+                            "missing":  "first-party signed native installer, complete signed old Agent rollback archive, VM and two real-device canary"
+                        },
+    "source":  "MIXED_PASS_AND_FAIL",
+    "staging":  "BLOCKED",
+    "production":  "BLOCKED",
+    "originalIncident":  "BLOCKED"
+}
