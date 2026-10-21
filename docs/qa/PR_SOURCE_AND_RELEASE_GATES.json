@@ -1,6 +1,6 @@
 {
   "schema": "nexowire.qa-pr-intake.v1",
-  "date": "2026-10-21",
+  "date": "2026-10-22",
   "entries": [
     {
       "pr": 480,
@@ -2166,12 +2166,557 @@
       "staging": "BLOCKED",
       "production": "BLOCKED",
       "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 703,
+      "headSha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R03",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Reopen UNKNOWN and quarantine undispatched intent source; external signed effect still absent",
+      "ci": {
+        "status": "PASS",
+        "runId": 39658452754,
+        "reason": "Reopen UNKNOWN and quarantine undispatched intent source; external signed effect still absent"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 704,
+      "headSha": "98876d163aac7a7a580725e814b19dda621fbad0",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Two REAL Node24 semantic failures: read after first VERIFIED chunk and forged wrong requestId ACK masked; not Windows flake",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39658648859,
+        "reason": "Two REAL Node24 semantic failures: read after first VERIFIED chunk and forged wrong requestId ACK masked; not Windows flake"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 705,
+      "headSha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Windows Broker import/updater ACL provider negative still RED; separate QA17 dedicated run 39658856958 SUCCESS",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39658856961,
+        "reason": "Windows Broker import/updater ACL provider negative still RED; separate QA17 dedicated run 39658856958 SUCCESS"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 706,
+      "headSha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Signed staged installer repair/source; no native installed signed full rollback",
+      "ci": {
+        "status": "PASS",
+        "runId": 39658875463,
+        "reason": "Signed staged installer repair/source; no native installed signed full rollback"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 707,
+      "headSha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Transitive updater DLL signer/hash native-handle source check, no production ACL",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659960377,
+        "reason": "Transitive updater DLL signer/hash native-handle source check, no production ACL"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 708,
+      "headSha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Predispatch CAS and two-Hub stale signed publish negative source green",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659365444,
+        "reason": "Predispatch CAS and two-Hub stale signed publish negative source green"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 709,
+      "headSha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Native Windows importer ACL/path identity fix source CI green; physical installed signed Broker unknown",
+      "ci": {
+        "status": "PASS",
+        "runId": 39658979397,
+        "reason": "Native Windows importer ACL/path identity fix source CI green; physical installed signed Broker unknown"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 710,
+      "headSha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Independent revokeAndDrain signed permit/rollback source success only",
+      "ci": {
+        "status": "PASS",
+        "runId": 39658983007,
+        "reason": "Independent revokeAndDrain signed permit/rollback source success only"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 711,
+      "headSha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Compressed parser 4x9.5MiB seeded tests source green, no live 100+ user WSS",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659054823,
+        "reason": "Compressed parser 4x9.5MiB seeded tests source green, no live 100+ user WSS"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 712,
+      "headSha": "62800af17d2a9ce18670dba6a8ac861a5d7f4ba5",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Owner epoch signed nonce Broker permit fence source-only, no non-restorable CAS physical",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659225895,
+        "reason": "Owner epoch signed nonce Broker permit fence source-only, no non-restorable CAS physical"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 713,
+      "headSha": "688732dd7c90c2883c3255d825b0dfa74a124807",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Windows browser-live fast-exit CI red; signed import DAG source not deployment",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39659243880,
+        "reason": "Windows browser-live fast-exit CI red; signed import DAG source not deployment"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 714,
+      "headSha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Signed CORE rollback and offline pairing source green, no real first-party installation",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659270493,
+        "reason": "Signed CORE rollback and offline pairing source green, no real first-party installation"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 715,
+      "headSha": "550b10c07df648e1b0991770ec7c78fb2984d026",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Browser-live physical Windows Job inherited failure; diagnostics source provider separate",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39659290064,
+        "reason": "Browser-live physical Windows Job inherited failure; diagnostics source provider separate"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 716,
+      "headSha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Signed postcondition ROOT boundary/crash/duplicate ACK synthetic source",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659320381,
+        "reason": "Signed postcondition ROOT boundary/crash/duplicate ACK synthetic source"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 717,
+      "headSha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Windows Broker protected importer ACL tests red; separate QA19 importer ACL forensics 39659333504 SUCCESS",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39659333082,
+        "reason": "Windows Broker protected importer ACL tests red; separate QA19 importer ACL forensics 39659333504 SUCCESS"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 718,
+      "headSha": "bcf42c42b3b31626fe1b72dcc91c91f9763d36b8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Quota cleanup and late UNKNOWN receipt source-only",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659378084,
+        "reason": "Quota cleanup and late UNKNOWN receipt source-only"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 719,
+      "headSha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R20",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Queued ROOT/CORE revoke and effective Access/CAS source green, not actual high token",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659394811,
+        "reason": "Queued ROOT/CORE revoke and effective Access/CAS source green, not actual high token"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 720,
+      "headSha": "f79b3cce45b9334598ea7acb39873d1231dc1594",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R07",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Browser-live Windows Job failure, WSS pairing source fix separate",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39659414593,
+        "reason": "Browser-live Windows Job failure, WSS pairing source fix separate"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 721,
+      "headSha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R14",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "NEW HEAD full CI queued. Earlier #721 historical HEAD had separate failure, cannot carry failure or green across SHA",
+      "ci": {
+        "status": "NOT_VERIFIED",
+        "runId": null,
+        "activeRunId": 39676732876
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 722,
+      "headSha": "60734cf21f0d3f81b886d46360fa57417d80cb35",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Windows browser-live fast-exit fail, physical local UAC owner-absent not attested",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39659428942,
+        "reason": "Windows browser-live fast-exit fail, physical local UAC owner-absent not attested"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 723,
+      "headSha": "7dc98916538c4f957dad5660ff6d328a2f932d3e",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R19"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Transitive DLL updater signer/hash/handle negative QA source green",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659567874,
+        "reason": "Transitive DLL updater signer/hash/handle negative QA source green"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 724,
+      "headSha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Windows browser-live fast-exit fail while compressed admission source QA isolated",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39659574218,
+        "reason": "Windows browser-live fast-exit fail while compressed admission source QA isolated"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 725,
+      "headSha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Source correction forged ACK provenance and UNKNOWN race; must replay unchanged #704 red tests on exact source",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659633982,
+        "reason": "Source correction forged ACK provenance and UNKNOWN race; must replay unchanged #704 red tests on exact source"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 726,
+      "headSha": "8f35bb1a5eeebd690e5b7047d3246983929751a0",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Native HIGH/CAS UI source fail-close tests green, not OS high token",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659786915,
+        "reason": "Native HIGH/CAS UI source fail-close tests green, not OS high token"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 727,
+      "headSha": "7eeb40ce2e7d46e300e5f13754d2e8cd3615bb7a",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "Isolated Windows DPAPI QA 39659834620 and full CI both SUCCESS; separate native high-token still missing",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659834387,
+        "reason": "Isolated Windows DPAPI QA 39659834620 and full CI both SUCCESS; separate native high-token still missing"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 728,
+      "headSha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R18",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "AI Screen private child emergency stop source green, no live privileged GUI",
+      "ci": {
+        "status": "PASS",
+        "runId": 39659941037,
+        "reason": "AI Screen private child emergency stop source green, no live privileged GUI"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 729,
+      "headSha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R04",
+        "R07",
+        "R15",
+        "R19",
+        "R20",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-703-729-exact-head-evidence.test.ts",
+      "physicalAcceptanceMissing": "QA independent RED source is deliberate P0 gate; OTHER failures Node22 general npm check and Windows durable NW_DURABLE_READY timeout must remain distinct",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39662119627,
+        "reason": "QA independent RED source is deliberate P0 gate; OTHER failures Node22 general npm check and Windows durable NW_DURABLE_READY timeout must remain distinct"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
     }
   ],
   "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
-  "meaning": "111 longitudinal HEAD PR snapshots, not open count; non-atomic 100+23+0 open pagination has unknown authoritative total. #699 old TS1005 both red; new current c7c868 CI 39658654687 and QA 39658654826 both green. Current PR677-702 exact status 20 SUCCESS / 6 FAIL.",
+  "meaning": "138 historical SHA-pinned PR snapshots, not open PR count. #703-729 observed exact current 17 SUCCESS 9 FAIL 1 QUEUED because #721 updated HEAD. #729 exact job separates purposeful seven RED production gates from Windows durable timeout and Node npm check fail. Never delete or skip negative.",
   "openPrCountAtSnapshot": null,
   "observedOpenFirstPage": 100,
   "observedOpenSecondPage": 23,
-  "authoritativeOpenCount": null
+  "authoritativeOpenCount": null,
+  "currentOpenedPrTotal": null,
+  "openPrSnapshotAtomic": false
 }
