@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {
   auditLiveSnapshot,collectLiveSnapshot,parseExactCi,githubRestRead,
   type LiveSnapshot,type LiveNode,type OldSnapshot,type GithubRead,
@@ -28,6 +29,28 @@ const old=():OldSnapshot=>({main_head:A,nodes:[{
   ci:{run_id:100,status:'completed',conclusion:'success'}}]});
 const codes=(s:LiveSnapshot,o:OldSnapshot|LiveSnapshot=old())=>
   auditLiveSnapshot(o,s).findings.map(f=>f.code);
+
+
+test('QA24 pinned repository evidence proves 38->50->67 open-set drift without network',()=>{
+  const parsed=(rel:string)=>JSON.parse(readFileSync(new URL(rel,import.meta.url),'utf8')) as {
+    nodes:Array<{pr:number;head_sha:string;parent_pr:number|null;ci:{run_id:number;conclusion:string|null}}>;
+    open_pr_count?:number;
+  };
+  const older=parsed('../docs/qa/p0-integration-dag-20261021.json');
+  const intermediate=parsed('../docs/qa/p0-integration-dag-open50-20261021.json');
+  const latest=parsed('../docs/qa/p0-integration-dag-open67-20261021.json');
+  assert.equal(older.nodes.length,38);
+  assert.equal(intermediate.nodes.length,50);
+  assert.equal(latest.nodes.length,67);
+  assert.equal(latest.nodes.filter(n=>n.parent_pr!==null).length,41);
+  assert.equal(latest.nodes.some(n=>n.pr===630),false);
+  assert.ok(latest.nodes.some(n=>n.pr===664&&n.ci.conclusion===null));
+  const baseline=new Set(older.nodes.map(n=>n.pr));
+  assert.equal(latest.nodes.filter(n=>!baseline.has(n.pr)).length,29);
+  assert.notEqual(latest.nodes.find(n=>n.pr===643)?.ci.conclusion,
+    intermediate.nodes.find(n=>n.pr===643)?.ci.conclusion);
+  assert.equal(latest.nodes.find(n=>n.pr===646)?.ci.conclusion,'failure');
+});
 
 test('QA24 stale 38->50 pattern: any newly opened PR blocks old snapshot',()=>{
   const s=sample(),report=auditLiveSnapshot(old(),s);
