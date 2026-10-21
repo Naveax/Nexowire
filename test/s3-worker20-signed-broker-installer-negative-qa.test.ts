@@ -238,7 +238,7 @@ test('w20: reparse/import graph omissions and alternate drive paths cannot inher
  await deniedInstall(e=>{e.pathsAclSnapshot=e.pathsAclSnapshot.map(n=>
   n.path===dir+'\\runtime\\native.dll'?{...n,isReparsePoint:true}:n)},
   /S3_CORE_INSTALL_PROTECTED_INSTALL_IMPORT_ACL_UNTRUSTED/);
- deniedBootstrap(e=>{e.protectedImportPaths.push('D:\\Unknown\\payload.dll')},
+ deniedBootstrap(e=>{e.protectedImportPaths=[...e.protectedImportPaths,'D:\\Unknown\\payload.dll']},
   /S3_CORE_DELEGATION_ACL_MISSING_PARENT_OR_IMPORT/);
  deniedBootstrap(e=>{e.aclNodes=e.aclNodes.filter(n=>n.path!==dir)},
   /S3_CORE_DELEGATION_ACL_MISSING_PARENT_OR_IMPORT/);
