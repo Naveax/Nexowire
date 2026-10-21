@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 13,
+  "ids": [
+    696,
+    697,
+    698,
+    699,
+    700,
+    701,
+    702,
+    703
+  ],
+  "nodes": [
+    {
+      "pr": 696,
+      "head_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "head_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "base_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645131289,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0b43332289a478a3285673f43f6bb54da5325459"
+      }
+    },
+    {
+      "pr": 697,
+      "head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "head_ref": "test/07-oauth-hostile-state-rotation-20261021",
+      "base_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "base_ref": "test/07-oauth-csrf-state-consume-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645250913,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934"
+      }
+    },
+    {
+      "pr": 698,
+      "head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+      "head_ref": "test/24-live-dag-77-merge-evidence-20261021",
+      "base_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+      "base_ref": "test/24-live-dag-drift-gates-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645743195,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c"
+      }
+    },
+    {
+      "pr": 699,
+      "head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+      "head_ref": "test/29-native-receipt-verifier-617",
+      "base_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+      "base_ref": "test/29-audit-rotation-crosshub-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39658654687,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8"
+      }
+    },
+    {
+      "pr": 700,
+      "head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "head_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645643225,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f"
+      }
+    },
+    {
+      "pr": 701,
+      "head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "head_ref": "test/13-wss-keyrotate-owner-revoke-20261021",
+      "base_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "base_ref": "fix/13-owner-wss-receipt-replay-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39646018390,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa"
+      }
+    },
+    {
+      "pr": 702,
+      "head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "head_ref": "fix/01-broker-dispatch-external-fence-20261021",
+      "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "base_ref": "fix/01-bound-grant-monotonic-cas-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39646460335,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190"
+      }
+    },
+    {
+      "pr": 703,
+      "head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "head_ref": "test/06-691-predispatch-reopen-20261021",
+      "base_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+      "base_ref": "test/06-reconnect-epoch-no-replay-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658452754,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d"
+      }
+    }
+  ]
+}
