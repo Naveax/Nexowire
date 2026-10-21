@@ -422,3 +422,160 @@ export async function assessProtectedCoreInstallerStage(
     productionApproved:false,
   };
 }
+
+
+/**
+ * #12 signed Windows PE/import graph continuation.
+ * The signed DAG is a SECOND independently pinned signature, not a
+ * caller-provided list of modules inferred from a display process name.
+ * Only source preflight is possible until a trustworthy Windows native
+ * image-handle/import resolver is physically integrated.
+ */
+export interface CoreDagModule {
+  path:string;
+  imports:string[];
+}
+export interface CoreSignedImportDag {
+  schemaVersion:1;
+  stageManifestSha256:string;
+  modules:CoreDagModule[];
+}
+export interface CoreImportDagPins {
+  independentGraphKeyPem:string;
+  independentGraphSha256:string;
+}
+export interface CoreNativeImportDagReadback {
+  provider:'trusted-native-win32-read-only'|'synthetic-fixture';
+  modules:CoreDagModule[];
+  importResolutionComplete:boolean;
+  nativeImageHandlesVerified:boolean;
+  sawUnknownWindowsSystemDependency:boolean;
+}
+function canonicalDag(d:CoreSignedImportDag):Buffer{
+  if(!d||d.schemaVersion!==1||!HEX.test(d.stageManifestSha256)||
+      !Array.isArray(d.modules)||d.modules.length===0||d.modules.length>4096||
+      Object.keys(d).sort().join(',')!==
+        ['schemaVersion','stageManifestSha256','modules'].sort().join(',')){
+    reject('IMPORT_DAG_SCHEMA_INVALID');
+  }
+  for(const module of d.modules){
+    if(!module||Object.keys(module).sort().join(',')!==
+        ['path','imports'].sort().join(',')||
+        typeof module.path!=='string'||!Array.isArray(module.imports)||
+        module.imports.length>4096||
+        !module.imports.every(p=>typeof p==='string')){
+      reject('IMPORT_DAG_SCHEMA_INVALID');
+    }
+  }
+  return Buffer.from(JSON.stringify({
+    schemaVersion:d.schemaVersion,
+    stageManifestSha256:d.stageManifestSha256,
+    modules:d.modules.map(m=>({path:m.path,imports:m.imports})),
+  }),'utf8');
+}
+function verifyImportGraph(
+  graph:CoreSignedImportDag,
+  manifest:CoreStageManifest,
+  root:string,
+):string{
+  const entries=manifest.files;
+  const known=new Map(entries.map(e=>[stagePath(e.path,root),e]));
+  const moduleNames=graph.modules.map(m=>stagePath(m.path,root));
+  if(!unique(moduleNames))reject('IMPORT_DAG_DUPLICATE_NODE');
+  const executable=new Set(entries.filter(e=>ExecutableRoles.has(e.role))
+    .map(e=>stagePath(e.path,root)));
+  if(moduleNames.length!==executable.size||
+     moduleNames.some(n=>!executable.has(n))){
+    reject('IMPORT_DAG_EXECUTABLE_GRAPH_INCOMPLETE');
+  }
+  const edges=new Map<string,string[]>();
+  for(const m of graph.modules){
+    const src=stagePath(m.path,root);
+    const dest=m.imports.map(p=>stagePath(p,root));
+    if(!unique(dest)||dest.includes(src)){
+      reject('IMPORT_DAG_DUPLICATE_OR_SELF_EDGE');
+    }
+    for(const target of dest){
+      if(!known.has(target))reject('IMPORT_DAG_UNKNOWN_DEPENDENCY');
+    }
+    edges.set(src,dest);
+  }
+  // The isolated stage may contain multiple executable entrypoints
+  // (installer, Broker, helper, updater, signed old rollback); every
+  // staged import must be reachable from at least one of those roots.
+  const queue=entries.filter(e=>['installer','broker','helper','updater','rollback']
+    .includes(e.role)).map(e=>stagePath(e.path,root));
+  const seen=new Set<string>();
+  while(queue.length){
+    const next=queue.shift()!;
+    if(seen.has(next))continue;
+    seen.add(next);
+    queue.push(...(edges.get(next)??[]));
+  }
+  for(const entry of entries){
+    if(!seen.has(stagePath(entry.path,root))){
+      reject('IMPORT_DAG_UNREACHABLE_DECLARED_FILE');
+    }
+  }
+  return JSON.stringify([...edges.entries()].sort(([a],[b])=>a.localeCompare(b))
+    .map(([from,to])=>[from,[...to].sort()]));
+}
+export async function assessCoreSignedWindowsImportDag(
+  stage:CoreStageManifest,
+  stageSignature:string,
+  stagePins:CoreStagePins,
+  stageReadback:CoreStageReadback,
+  dag:CoreSignedImportDag,
+  dagSignature:string,
+  dagPins:CoreImportDagPins,
+  nativeDag:CoreNativeImportDagReadback,
+  inspect:CoreStageSignatureInspector=inspectCoreStageWindowsAuthenticode,
+):Promise<{
+  status:'signed_import_dag_source_only';
+  genuineNativeLoaderEvidence:false;
+  actuallyInstalled:false;productionApproved:false;
+}>{
+  await assessProtectedCoreInstallerStage(
+    stage,stageSignature,stagePins,stageReadback,inspect);
+  const bytes=canonicalDag(dag);
+  if(dag.stageManifestSha256!==stagePins.manifestSha256||
+     !dagPins||!HEX.test(dagPins.independentGraphSha256)||
+     digest(bytes)!==dagPins.independentGraphSha256){
+    reject('IMPORT_DAG_INDEPENDENT_PIN_MISMATCH');
+  }
+  let key:ReturnType<typeof createPublicKey>|null=null;
+  try{key=createPublicKey(dagPins.independentGraphKeyPem)}
+  catch{reject('IMPORT_DAG_SIGNING_KEY_UNAVAILABLE')}
+  if(!key||key.asymmetricKeyType!=='ed25519'||
+     typeof dagSignature!=='string'||!/^[A-Za-z0-9+/]+={0,2}$/.test(dagSignature)){
+    reject('IMPORT_DAG_SIGNATURE_INVALID');
+  }
+  const signature=Buffer.from(dagSignature,'base64');
+  if(signature.length!==64||signature.toString('base64')!==dagSignature||
+     !verify(null,bytes,key!,signature)){
+    reject('IMPORT_DAG_SIGNATURE_INVALID');
+  }
+  const root=path.win32.normalize(stagePins.trustedProtectedRoot);
+  const signedEdges=verifyImportGraph(dag,stage,root);
+  if(!nativeDag||!['synthetic-fixture','trusted-native-win32-read-only'].includes(nativeDag.provider)||
+     nativeDag.importResolutionComplete!==true||
+     nativeDag.nativeImageHandlesVerified!==true||
+     nativeDag.sawUnknownWindowsSystemDependency!==false||
+     !Array.isArray(nativeDag.modules)){
+    reject('IMPORT_DAG_NATIVE_READBACK_UNAVAILABLE');
+  }
+  // A fabricated positive nativeDag fixture cannot create OS consent or
+  // install authorization. Still reject independently-observed extra edges.
+  const nativeEdges=verifyImportGraph({
+    schemaVersion:1,stageManifestSha256:dag.stageManifestSha256,
+    modules:nativeDag.modules,
+  },stage,root);
+  if(signedEdges!==nativeEdges){
+    reject('IMPORT_DAG_NATIVE_DEPENDENCY_MISMATCH');
+  }
+  return{
+    status:'signed_import_dag_source_only',
+    genuineNativeLoaderEvidence:false,
+    actuallyInstalled:false,productionApproved:false,
+  };
+}
