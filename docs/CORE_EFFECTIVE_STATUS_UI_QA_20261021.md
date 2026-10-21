@@ -11,6 +11,8 @@ This projection is **not yet wired to the production dashboard**.
   actions and cannot imply an elevated Windows token.
 - ROOT is an owner+login-session bound lease valid for at most 900,000 ms; its
   exact expiry boundary disables the UI candidate without background polling.
+  The native signed Broker receipt binds grant mode and both lease timestamps;
+  a signed CORE receipt cannot be relabeled as ROOT, and forged lease dates fail.
 - CORE is a persistent requested owner preference, not proof of elevation.
   It does not expire at 15 minutes but is paused when offline or without fresh
   authenticated native Broker and independently signed non-revoked external
