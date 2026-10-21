@@ -4,8 +4,12 @@ export interface ProductDeviceSummary {
   online: boolean;
   platform: string;
   accessMode: 'safe' | 'full';
-  rootMode: { active: boolean; expiresAt: string | null };
-  persistentMaintenance: { enabled: boolean; active: boolean; updatedAt: string | null };
+  rootMode: { active: boolean; effective?: boolean; expiresAt: string | null };
+  persistentMaintenance: { enabled: boolean; active: boolean; effective?: boolean;
+    authoritySource?: 'independent-protected-windows-broker'|'none';
+    localEnrollmentVerified?: boolean;actualElevatedTokenVerified?: boolean;
+    brokerSourceAclVerified?: boolean;brokerVersionVerified?: boolean;
+    updatedAt: string | null };
   bridgePreference: { desiredMode: 'auto' | 'on' | 'off'; applied: false; updatedAt: string | null };
   agentVersion: string | null;
   privilegeMode: 'direct' | 'broker' | null;

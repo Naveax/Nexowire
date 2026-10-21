@@ -1,4 +1,5 @@
 import { explainDeviceAuthorization, type AuthorizationExplain } from '../security/authorization-explain.js';
+import type { AccessEffectiveAuthority } from './access-effective-authority.js';
 import {
   createHash,
   type KeyObject,
@@ -72,6 +73,8 @@ export interface AuthenticatedDeviceIdentity {
 
 export interface ControlPlaneServiceOptions {
   now?: () => Date;
+  /** Server-only independently pinned attestor. Never supplied by client JSON. */
+  effectiveAuthority?: AccessEffectiveAuthority;
   infrastructure?: () => InfrastructureSnapshot;
   /** Keep all users on the free plan and reject paid configuration. */
   freeOnly?: boolean;
@@ -163,12 +166,14 @@ export class ControlPlaneService {
   private readonly infrastructure: () => InfrastructureSnapshot;
   private readonly freeOnly: boolean;
   private readonly ownerGithubId: string | null;
+  private readonly effectiveAuthority: AccessEffectiveAuthority | null;
 
   constructor(
     private readonly store: ControlPlaneStore,
     options: ControlPlaneServiceOptions = {},
   ) {
     this.freeOnly = options.freeOnly ?? false;
+    this.effectiveAuthority = options.effectiveAuthority ?? null;
     const ownerId = options.ownerGithubId?.trim() ?? '';
     // An absent or malformed configuration never grants an exemption.
     this.ownerGithubId = /^[1-9][0-9]{0,19}$/.test(ownerId)
@@ -352,6 +357,25 @@ export class ControlPlaneService {
         // A live policy lease never proves an elevated Windows token.
         // Here active means only session-bound ROOT owner policy.
         const active = Boolean(grant && device.online);
+        // The genuine proof reader must be server-provisioned with protected
+        // native and separate CAS trust roots. Missing reader => never effective.
+        const effectiveSession = this.effectiveAuthority && bound ? {
+          ownerAccountId:account.id,sessionHash:bound.sessionHash,
+          sessionExpiresAt:bound.expiresAt,
+          loginIsRevoked:await this.store.isControlPlaneSessionRevoked(
+            bound.sessionHash,this.now().toISOString()),
+        } : null;
+        const coreRequested = Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id);
+        const coreAuthority = this.effectiveAuthority && coreRequested
+          ? await this.effectiveAuthority.project({device,mode:'CORE',
+            session:effectiveSession,corePreferenceEnabled:coreRequested,
+            bridgeDesiredMode:bridgePreference?.ownerAccountId===account.id
+              ?bridgePreference.desiredMode:'auto'}) : null;
+        const rootAuthority = this.effectiveAuthority && grant
+          ? await this.effectiveAuthority.project({device,mode:'ROOT',
+            session:effectiveSession,corePreferenceEnabled:coreRequested,
+            bridgeDesiredMode:bridgePreference?.ownerAccountId===account.id
+              ?bridgePreference.desiredMode:'auto'}) : null;
         return {
         id: device.id,
         name: device.name,
@@ -361,6 +385,7 @@ export class ControlPlaneService {
         rootMode: {
           active: Boolean(active),
           expiresAt: grant?.expiresAt ?? (unexpiredLease && lease ? lease.expiresAt : null),
+          effective:rootAuthority?.effective===true,
         },
         persistentMaintenance: {
           enabled: Boolean(maintenance?.enabled && maintenance.ownerAccountId === account.id && device.accessMode === 'full'),
@@ -368,7 +393,13 @@ export class ControlPlaneService {
           // attestation. Until the separate protected Guardian acceptance
           // is wired into this read, CORE must remain PAUSED rather than
           // advertising effective elevated access from stale telemetry.
-          active: false,
+          active: coreAuthority?.effective === true,
+          effective:coreAuthority?.effective === true,
+          authoritySource:coreAuthority?.authoritySource ?? 'none',
+          localEnrollmentVerified:coreAuthority?.localEnrollmentVerified === true,
+          actualElevatedTokenVerified:coreAuthority?.actualElevatedTokenVerified === true,
+          brokerSourceAclVerified:coreAuthority?.brokerSourceAclVerified === true,
+          brokerVersionVerified:coreAuthority?.brokerVersionVerified === true,
           updatedAt: maintenance?.ownerAccountId === account.id ? maintenance.updatedAt : null,
         },
         bridgePreference: {
