@@ -1010,7 +1010,7 @@
         {
           "pr": 642,
           "headSha": "87644090113d21544f42a738d919d5422ed200c0",
-          "state": "OPEN_DRAFT_NOT_VERIFIED"
+          "state": "OPEN_DRAFT_PASS"
         },
         {
           "pr": 643,
@@ -1038,7 +1038,7 @@
           "state": "OPEN_DRAFT_FAIL"
         }
       ],
-      "observed": "Nested QA feature branches #635/#636/#637/#639/#643/#644 source green but do NOT merge into main. #642 effective CORE UI exact CI still IN_PROGRESS, #645/#646/#647 Windows fast-exit CI FAILED. Real persistent CORE high token and signed one-time UAC + owner epoch/physical VM Running never established.",
+      "observed": "Nested QA feature branches #635/#636/#637/#639/#643/#644 source green but do NOT merge into main. #642 effective CORE UI exact CI 39630395647 SUCCESS source only, #645/#646/#647 Windows fast-exit CI FAILED. Real persistent CORE high token and signed one-time UAC + owner epoch/physical VM Running never established.",
       "reproduction": [
         "Check per-PR exact SHA, baseSha, CI and branch stacking in QA_20261021_PR635_649_EXACT_EVIDENCE.json; never promote older/child success to latest parent or production acceptance.",
         "Require independent physical signed Broker ACL and version first-party #551 rollout, post-repair epoch witness #587 and issue #271 remediation before any elevated CORE or Hyper-V VM action."

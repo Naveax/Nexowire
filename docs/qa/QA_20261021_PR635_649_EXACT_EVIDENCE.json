@@ -1,4 +1,4 @@
-﻿{
+{
   "schema": "nexowire.qa16.pr635-649.evidence.v1",
   "capturedAt": "2026-10-21",
   "reviewedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
@@ -159,9 +159,9 @@
       "headSha": "87644090113d21544f42a738d919d5422ed200c0",
       "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
       "ci": {
-        "status": "NOT_VERIFIED",
+        "status": "PASS",
         "runId": 39630395647,
-        "detail": "CORE effective UI status/signed evidence QA, CI IN_PROGRESS at snapshot, cannot infer PASS"
+        "detail": "CORE effective UI signed-evidence QA current exact-head CI 39630395647 SUCCESS source only, no running signed high-token Broker or real CORE effective state."
       },
       "requirements": [
         "R04",
@@ -368,7 +368,10 @@
     "unspecifiedCurrent": {
       "pr": 642,
       "ciRunId": 39630395647,
-      "conclusion": "IN_PROGRESS_AT_SNAPSHOT"
+      "initialStatus": "IN_PROGRESS",
+      "latestCheckedStatus": "SUCCESS",
+      "headSha": "87644090113d21544f42a738d919d5422ed200c0",
+      "sourceOnly": true
     }
   },
   "mandatoryNoGo": [

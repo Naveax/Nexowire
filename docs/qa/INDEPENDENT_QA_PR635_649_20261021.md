@@ -17,7 +17,7 @@ Prior QA head f7cb4d96a22d32b10679f844c8c0c878d9d05bc4 has CI 39609482502 **FAIL
 | #639 | 35acaf6cc977 | ea4229b9ed34 | 39625620173 | PASS | QA20 signed Broker installer/CORE source adversarial tests, no physical signed rollout |
 | #640 | 91f1426f5378 | 9266f9b65a1f | 39626203944 | FAIL | Two semantic source test FAILs: cancel before Native write wrongly MUTATION_UNKNOWN rather than CANCELLED; later cancel overwrites settled pending Native mutation UNKNOWN, plus 2-agent E2E failure; no test skipped |
 | #641 | a6906b4f45c3 | 9266f9b65a1f | 39626185867 | FAIL | Two-Hub CAS/fence QA on #634 branch; inherited Node E2E red and Windows fast-exit red; individual new suite PASS in author's report only |
-| #642 | 87644090113d | 754cc4364822 | 39630395647 | NOT_VERIFIED | CORE effective UI status/signed evidence QA, CI IN_PROGRESS at snapshot, cannot infer PASS |
+| #642 | 87644090113d | 754cc4364822 | 39630395647 | PASS | CORE UI source CI exact HEAD SUCCESS; real high token/physical Broker status unverified |
 | #643 | 3e5117abbc44 | c429ed9c7eb6 | 39626754232 | PASS | Owner revoke/re-pair while elevated execution source negatives; no real high token |
 | #644 | 669e0779562e | ea4229b9ed34 | 39627727657 | PASS | Broker crash/rollback/stale DPAPI/offline revoke source negatives; no real signed installer |
 | #645 | f7c36309bf54 | 754cc4364822 | 39626967547 | FAIL | UAC Remote Assistance source coverage, hosted Windows Job fast-exit FAIL; consent is never remote approval |
@@ -37,7 +37,7 @@ Prior QA head f7cb4d96a22d32b10679f844c8c0c878d9d05bc4 has CI 39609482502 **FAIL
 - #638 separate Windows Job hosted 100-cycle workflow 39625276215 SUCCESS. Full CI 39625275778 still FAILED real OS Authenticode surrogate UNAVAILABLE, inherited parent Modify ACL null; both must be fixed. No signed process attestations.
 - #648 dual exact-HEAD workflows SUCCESS, CI 39628249630 and independent QA29 audit 39628250167, only synthetic/evidence command audit with no live high-integrity CORE shell or independent physical postcondition.
 - #649 CI 39628451245 FAIL hosted Windows Job fast-exit stdout-before-exited iteration 1. Node22/24 and other jobs green; fairness source not physical 100+ WSS/1GiB.
-- #642 latest checked CI 39630395647 IN_PROGRESS, status NOT_VERIFIED. Do not invent a PASS.
+- #642 later checked exact-head CI 39630395647 SUCCESS (initially IN_PROGRESS at the first snapshot); source UI checks only, not a physical elevated CORE token.
 
 ## R01-R22 four-level acceptance
 

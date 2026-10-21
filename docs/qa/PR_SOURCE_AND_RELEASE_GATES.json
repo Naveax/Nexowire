@@ -1223,11 +1223,11 @@
         "R22"
       ],
       "sourceReproducer": "test/core-effective-ui-status.test.ts",
-      "physicalAcceptanceMissing": "CORE effective UI status/signed evidence QA, CI IN_PROGRESS at snapshot, cannot infer PASS",
+      "physicalAcceptanceMissing": "CORE effective UI signed-evidence QA current exact-head CI 39630395647 SUCCESS source only, no running signed high-token Broker or real CORE effective state.",
       "ci": {
-        "status": "NOT_VERIFIED",
-        "runId": null,
-        "activeRunId": 39630395647
+        "status": "PASS",
+        "runId": 39630395647,
+        "reason": "CORE effective UI signed-evidence QA current exact-head CI 39630395647 SUCCESS source only, no running signed high-token Broker or real CORE effective state."
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",

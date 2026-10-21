@@ -34,7 +34,8 @@ test('all #635 through #649 have exact 40-char HEAD and PR-CI independently trac
  for(const n of [638,640,641,645,646,647,649]){
   assert.equal(x.prs.find((p:any)=>p.pr===n).ci.status,'FAIL');
  }
- assert.equal(x.prs.find((p:any)=>p.pr===642).ci.status,'NOT_VERIFIED');
+ assert.equal(x.prs.find((p:any)=>p.pr===642).ci.status,'PASS');
+ assert.equal(x.independentConfirmed.unspecifiedCurrent.latestCheckedStatus,'SUCCESS');
 });
 test('#640 two real broken cancellation transitions remain FAIL and no replay/fake CANCELLED is accepted',()=>{
  const x=rd('QA_20261021_PR635_649_EXACT_EVIDENCE.json');
