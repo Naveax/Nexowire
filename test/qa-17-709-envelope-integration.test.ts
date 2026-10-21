@@ -132,7 +132,12 @@ test('#17 cross-head #709 provider UNAVAILABLE on absent DLL has null ACL, not f
   try{
     const missing=path.join(f.imports,'does-not-exist.dll');
     const r=inspect(f.protectedRoot,f.exe,f.updater,[missing]);
-    const hit=r.inspectedEntries.find(x=>x.path.toLowerCase()===missing.toLowerCase());
+    // Windows runner temp is named RUNNER~1 by Node but GetFullPath reports
+    // runneradmin. Canonicalize the existing parent, NOT the missing file.
+    const missingCanonical=path.join(
+      realpathSync.native(path.dirname(missing)),path.basename(missing)
+    ).toLowerCase();
+    const hit=r.inspectedEntries.find(x=>x.path.toLowerCase()===missingCanonical);
     assert.ok(hit,'missing file must produce an explicit observation '+JSON.stringify(r));
     assert.equal(hit.evidenceAvailable,false);
     assert.equal(hit.broadLowTrustWriteFound,null);
