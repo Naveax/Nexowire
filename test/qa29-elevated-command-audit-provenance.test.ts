@@ -170,7 +170,7 @@ test('postcondition mismatch beats exit code zero and transport ACK', () => {
   q.entries.pop(); // intentionally rebuild from independent synthetic signer, not production tampering
   const other = new SyntheticAudit(ctx);
   for (const e of q.entries) other.append(e.kind, e.data);
-  other.append('postcondition', {...other.entries.at(-1)!.data, pid: 2719,
+  other.append('postcondition', {pid: 2719,
     startFiletime: '133800000000000001', independent: true, verified: true,
     observedDigest: sha('different'), expectedDigest: sha('independent observed state')});
   other.append('ack', {received: true});
