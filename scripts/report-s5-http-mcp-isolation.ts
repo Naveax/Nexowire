@@ -21,7 +21,7 @@ async function main(){
   const startedUtc=new Date().toISOString();
   const result=await runS5LocalHttpIsolation({
     largeRequests:4,largeRequestBytes:fullBoundary?S5_HTTP_MAX_BYTES:1024*1024,smallRequests:20,
-    probeFifthRequest:true,probeOverLimit:true,perChunkPauseMs:1,
+    probeFifthRequest:true,probeOverLimit:true,probeGzipUnderLoad:true,perChunkPauseMs:1,
     runLimitMs:45000,rssGrowthBudgetBytes:128*1024*1024,
   });
   const evidence={
@@ -40,8 +40,8 @@ async function main(){
     productionAcceptance:'NO_GO',
   };
   const f=path.resolve(fullBoundary?
-    'docs/reports/s5-http-9-5mib-loopback-20261020.json':
-    'docs/reports/s5-http-4mib-loopback-20261020.json');
+    'docs/reports/s5-http-9-5mib-loopback-20261021.json':
+    'docs/reports/s5-http-4mib-loopback-20261021.json');
   if(existsSync(f))throw new Error('Evidence file already exists, do not overwrite');
   mkdirSync(path.dirname(f),{recursive:true});
   writeFileSync(f,JSON.stringify(evidence,null,2)+'\n',{flag:'wx'});
