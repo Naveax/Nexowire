@@ -6,16 +6,21 @@ import {
   githubOAuthCallback,
   githubOAuthStart,
 } from '../src/product/github-oauth.js';
+import {
+  MemoryGitHubOAuthStateConsumeStore,
+} from '../src/product/github-oauth-browser-state.js';
 
 const secret = '0123456789abcdef0123456789abcdef';
 
-test('github oauth start emits authorize redirect with signed state', () => {
-  const response = githubOAuthStart(
+test('github oauth start emits authorize redirect with signed state', async () => {
+  const store = new MemoryGitHubOAuthStateConsumeStore();
+  const response = await githubOAuthStart(
     new Request('https://nexowire.example/auth/github/start?next=/dashboard'),
     {
       clientId: 'client-id',
       clientSecret: 'secret',
       sessionSecret: secret,
+      stateConsumeStore: store,
     },
   );
 
@@ -28,23 +33,26 @@ test('github oauth start emits authorize redirect with signed state', () => {
 });
 
 test('github oauth callback validates identity and issues session cookie', async () => {
+  const nonceStore = new MemoryGitHubOAuthStateConsumeStore();
   const store = new MemoryControlPlaneStore();
   const service = new ControlPlaneService(store, {
     now: () => new Date('2026-10-02T12:00:00.000Z'),
   });
 
-  const start = githubOAuthStart(
+  const start = await githubOAuthStart(
     new Request('https://nexowire.example/auth/github/start?next=/dashboard'),
     {
       clientId: 'client-id',
       clientSecret: 'client-secret',
       sessionSecret: secret,
+      stateConsumeStore: nonceStore,
     },
   );
   const state = new URL(
     start.headers.get('location')!,
   ).searchParams.get('state')!;
 
+  const browserCookie = start.headers.get('set-cookie')!.split(';')[0]!;
   let calls = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     calls++;
@@ -71,12 +79,14 @@ test('github oauth callback validates identity and issues session cookie', async
     new Request(
       'https://nexowire.example/auth/github/callback?code=abc&state=' +
         encodeURIComponent(state),
+      { headers: { cookie: browserCookie } },
     ),
     service,
     {
       clientId: 'client-id',
       clientSecret: 'client-secret',
       sessionSecret: secret,
+      stateConsumeStore: nonceStore,
       adminGitHubId: '79841922',
       fetchImpl,
     },
