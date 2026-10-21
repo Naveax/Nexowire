@@ -1,0 +1,2042 @@
+{
+  "schema_version": "qa24-connector-snapshot-v3",
+  "repository": "Naveax/Nexowire",
+  "observed_date": "2026-10-21",
+  "main_head": "754cc4364822be5fda528f54042fb22a84f19924",
+  "main_head_verified": "GitHub fetch_commit(main)",
+  "previous_count": 67,
+  "open_pr_count": 77,
+  "open_set_verified": "GitHub search_prs 77 open + 77 get_pr_info exact ref/head/base; 77 exact-head primary CI fetched; 10 new SHA compare; previous 67 comparisons sampled",
+  "merged_evidence": [
+    {
+      "pr": 630,
+      "merged": true,
+      "head_sha": "911744c13825b82c92c4bdbc7d8718b8c1825dec"
+    }
+  ],
+  "nodes": [
+    {
+      "pr": 480,
+      "parent_pr": null,
+      "base_sha": "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
+      "head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+      "ci": {
+        "run_id": 39134168129,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 551,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "ci": {
+        "run_id": 39606595530,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 553,
+      "parent_pr": null,
+      "base_sha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+      "head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "ci": {
+        "run_id": 39608315991,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 572,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "ca67b8adc717256906f8396d8057104df66be946",
+      "ci": {
+        "run_id": 39632915464,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 574,
+      "parent_pr": null,
+      "base_sha": "fd28d017ea291e8a935b05fda89d7ed2765d35d0",
+      "head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "ci": {
+        "run_id": 39604153782,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 575,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "0ba4f176ee2b5b5b8c22dbaac9edd318247432b0",
+      "ci": {
+        "run_id": 39631920568,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 576,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "ci": {
+        "run_id": 39598258315,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 582,
+      "parent_pr": null,
+      "base_sha": "cb819d17ee581093d39626f13e985976def17f30",
+      "head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "ci": {
+        "run_id": 39416566585,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 596,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "ci": {
+        "run_id": 39557944551,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 598,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "ci": {
+        "run_id": 39502304557,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 599,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+      "ci": {
+        "run_id": 39492086789,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 602,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "ci": {
+        "run_id": 39492809099,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 607,
+      "parent_pr": 582,
+      "base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "ci": {
+        "run_id": 39493908690,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 608,
+      "parent_pr": 598,
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+      "ci": {
+        "run_id": 39503650650,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 609,
+      "parent_pr": 576,
+      "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+      "ci": {
+        "run_id": 39596941696,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 610,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "ci": {
+        "run_id": 39597505104,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 611,
+      "parent_pr": 602,
+      "base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "ci": {
+        "run_id": 39597542588,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 612,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+      "ci": {
+        "run_id": 39597637188,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 613,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "ci": {
+        "run_id": 39608452356,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 614,
+      "parent_pr": 607,
+      "base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "ci": {
+        "run_id": 39598693419,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 615,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "ci": {
+        "run_id": 39598738701,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 616,
+      "parent_pr": 596,
+      "base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "ci": {
+        "run_id": 39598755514,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 618,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+      "ci": {
+        "run_id": 39610514919,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 620,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "ci": {
+        "run_id": 39604898508,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 621,
+      "parent_pr": 574,
+      "base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "ci": {
+        "run_id": 39608785843,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 622,
+      "parent_pr": 618,
+      "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "ci": {
+        "run_id": 39608093602,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 624,
+      "parent_pr": 611,
+      "base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "ci": {
+        "run_id": 39608661483,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 625,
+      "parent_pr": 610,
+      "base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "ci": {
+        "run_id": 39608704634,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 627,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+      "ci": {
+        "run_id": 39608830918,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 628,
+      "parent_pr": 615,
+      "base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+      "ci": {
+        "run_id": 39608864172,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 629,
+      "parent_pr": 622,
+      "base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+      "ci": {
+        "run_id": 39608916753,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 631,
+      "parent_pr": 614,
+      "base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "ci": {
+        "run_id": 39609259161,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 632,
+      "parent_pr": 551,
+      "base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "ci": {
+        "run_id": 39609346798,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 633,
+      "parent_pr": 620,
+      "base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "ci": {
+        "run_id": 39610643900,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 634,
+      "parent_pr": 616,
+      "base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "head_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "ci": {
+        "run_id": 39610829832,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 635,
+      "parent_pr": 633,
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "ci": {
+        "run_id": 39624326925,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 636,
+      "parent_pr": 632,
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+      "ci": {
+        "run_id": 39625147216,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 637,
+      "parent_pr": 631,
+      "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "ci": {
+        "run_id": 39625291153,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 638,
+      "parent_pr": 576,
+      "base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "ci": {
+        "run_id": 39625275778,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-job-hosted.yml",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 639,
+      "parent_pr": 632,
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "ci": {
+        "run_id": 39625620173,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "test/s3-worker20-signed-broker-installer-negative-qa.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 640,
+      "parent_pr": 634,
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+      "ci": {
+        "run_id": 39626203944,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "test/artifact-588-cancel-read-race.qa.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 641,
+      "parent_pr": 634,
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "ci": {
+        "run_id": 39626185867,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 642,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "87644090113d21544f42a738d919d5422ed200c0",
+      "ci": {
+        "run_id": 39630395647,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_STATUS_UI_QA_20261021.md",
+        "src/diagnostics/core-effective-ui-status.ts",
+        "test/core-effective-ui-status.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 643,
+      "parent_pr": 633,
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "ci": {
+        "run_id": 39626754232,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/CORE_OWNER_REVOKE_MID_EXECUTION_QA_20261021.md",
+        "test/core-owner-revoke-mid-execution.adversarial.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 644,
+      "parent_pr": 632,
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "ci": {
+        "run_id": 39627727657,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/s3-worker28-crash-rollback-independent-qa-20261021.md",
+        "test/fixtures/s3-worker28-runner.test.ts",
+        "test/s3-broker-crash-rollback-independent-qa.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 645,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "ci": {
+        "run_id": 39626967547,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/QA_UAC_REMOTE_APPROVAL_MATRIX_20261021.md",
+        "test/fixtures/uac-remote-approval-matrix.ts",
+        "test/qa-uac-remote-approval-capability.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 646,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "ci": {
+        "run_id": 39627296601,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/qa/INTEGRATION_DAG_CORE_CRITICAL_PATH_20261021.md",
+        "docs/qa/p0-integration-dag-20261021.json",
+        "scripts/qa24-integration-dag.ts",
+        "test/qa-24-integration-dag.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 647,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "3b3f26d068f169b941383308a1763124e3a3feef",
+      "ci": {
+        "run_id": 39627227248,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/security/p0-native-handle-provenance-w26.md",
+        "test/p0-native-handle-provenance-w26.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 648,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "ci": {
+        "run_id": 39628249630,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        ".github/workflows/qa29-elevated-audit-source.yml",
+        "docs/QA29_ELEVATED_COMMAND_AUDIT_PROVENANCE_617.md",
+        "test/qa29-elevated-command-audit-provenance.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 649,
+      "parent_pr": 598,
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+      "ci": {
+        "run_id": 39628451245,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/SCALE_P1_WORKER30_BOUNDED_FAIRNESS_QA_20261021.md",
+        "test/worker30-mcp-parser-admission.test.ts",
+        "test/worker30-staging-tenant-byte-qa.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 650,
+      "parent_pr": 635,
+      "base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "head_sha": "5a76c826de58d906c430153488d96912e0d1827e",
+      "ci": {
+        "run_id": 39629695531,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/QA_17_WINDOWS_BROKER_UNAVAILABLE_AND_REVOKE_617.md",
+        "test/qa-17-provider-unavailable-queued-revoke.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 651,
+      "parent_pr": 634,
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9",
+      "ci": {
+        "run_id": 39629942445,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 652,
+      "parent_pr": 638,
+      "base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+      "ci": {
+        "run_id": 39629996191,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-provider-truth.yml",
+        "docs/qa/QA19_WINDOWS_PROVIDER_TRUTH_20261021.md",
+        "test/qa-19-windows-provider-truth.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 653,
+      "parent_pr": 641,
+      "base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "head_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+      "ci": {
+        "run_id": 39630423148,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 654,
+      "parent_pr": 643,
+      "base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "head_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+      "ci": {
+        "run_id": 39630142422,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/CORE_POSTLAUNCH_REVOKE_UNKNOWN_QA_20261021.md",
+        "test/core-owner-postlaunch-unknown.adversarial.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 655,
+      "parent_pr": 639,
+      "base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07",
+      "ci": {
+        "run_id": 39630947296,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/s3-worker20-install-manifest-chain-acceptance-20261021.md",
+        "scripts/s3-worker20-install-manifest-chain-qa.ts",
+        "test/s3-worker20-install-manifest-chain-qa.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 656,
+      "parent_pr": 645,
+      "base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+      "ci": {
+        "run_id": 39630515426,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/QA27_REMOTE_ADMIN_APPROVAL_PROVENANCE_20261021.md",
+        "test/fixtures/qa27-remote-admin-provenance-oracle.ts",
+        "test/qa27-remote-admin-approval-provenance-negative.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 657,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "561af65b6cc1659f413bf11918b4ff356738c960",
+      "ci": {
+        "run_id": 39630539339,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/security/p0-native-handle-volume-w26v2.md",
+        "test/p0-native-handle-volume-w26v2.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 658,
+      "parent_pr": 644,
+      "base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3",
+      "ci": {
+        "run_id": 39630933999,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/s3-worker28-recovery-narrow-20261021.md",
+        "test/fixtures/s3-worker28-recovery-narrow.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 659,
+      "parent_pr": 637,
+      "base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949",
+      "ci": {
+        "run_id": 39631464079,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/QA_18_CROSSHUB_MIGRATION_WAL_20261021.md",
+        "test/fixtures/qa-18-migration-fixture.ts",
+        "test/qa-18-crosshub-migration-rollback.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 660,
+      "parent_pr": 598,
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+      "ci": {
+        "run_id": 39630981024,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/SCALE_WORKER30_NEXT_COMPRESSED_FAIRNESS_CANCEL_20261021.md",
+        "test/worker30-next-compressed-fairness-source.test.ts",
+        "test/worker30-next-memory-cancel-reference.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 661,
+      "parent_pr": 633,
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a",
+      "ci": {
+        "run_id": 39631109283,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/QA_02_CORE_633_ELEVATED_ERROR_PROVENANCE_20261021.md",
+        "test/qa-02-core-633-elevated-outcome-negative.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 662,
+      "parent_pr": 648,
+      "base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+      "ci": {
+        "run_id": 39631780531,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        ".github/workflows/qa29-crosshub-audit-negative.yml",
+        "docs/QA29_CROSSHUB_ROTATED_AUDIT_NO_GO_617.md",
+        "test/qa29-rotated-audit-crosshub-negative.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 663,
+      "parent_pr": 624,
+      "base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+      "ci": {
+        "run_id": 39631336087,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_PRIVATE_OWNER_FENCE_20261021.md",
+        "src/agent/private-desktop-owner-fence.ts",
+        "test/private-desktop-owner-fence.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 664,
+      "parent_pr": 646,
+      "base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+      "ci": {
+        "run_id": 39632679723,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/qa/LIVE_DAG_DRIFT_GATES_CORE_20261021.md",
+        "docs/qa/p0-integration-dag-open50-20261021.json",
+        "scripts/qa24-live-dag.ts",
+        "test/qa-24-live-dag.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 665,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "83fb4bbf770b1bb493179dc05e2f9825b4d70637",
+      "ci": {
+        "run_id": 39631516050,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/CORE_BROKER_SOURCE_PREFLIGHT_20261021.md",
+        "src/diagnostics/core-broker-readonly-preflight.ts",
+        "test/core-broker-readonly-preflight.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 666,
+      "parent_pr": 613,
+      "base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "ci": {
+        "run_id": 39631675531,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/CONNECTION_06_WORKER_JOURNAL_634_REVIEW_20261021.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs CI (2026-10-21)"
+    },
+    {
+      "pr": 667,
+      "parent_pr": 634,
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "ci": {
+        "run_id": 39631999739,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/ARTIFACT_CANCEL_NATIVE_RACE_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 668,
+      "parent_pr": 625,
+      "base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "head_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "ci": {
+        "run_id": 39632010226,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_TRUSTED_FENCED_DELETION_20261021.md",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 669,
+      "parent_pr": 621,
+      "base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "ci": {
+        "run_id": 39632774193,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/NEXOWIRE_CORE_EFFECTIVE_ACCESS_INTEGRATION_20261021.md",
+        "src/product/access-effective-authority.ts",
+        "src/product/control-plane-contract.ts",
+        "src/product/control-plane-service.ts",
+        "test/access-effective-authority.test.ts",
+        "test/access-effective-dashboard.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 670,
+      "parent_pr": 633,
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "ci": {
+        "run_id": 39633083937,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/P0_WINDOWS_BROKER_PROVIDER_ATTESTATION_20261021.md",
+        "scripts/audit-windows-broker-token-provider.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "test/windows-broker-provider-attestation.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 671,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "ci": {
+        "run_id": 39632434610,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_WSS_RECEIPT_REPLAY_ROTATION_20261021.md",
+        "src/product/owner-public-wss-enrollment-lease-proposal.ts",
+        "test/fixtures/scale-v2-owner-wss-device-enrollment-dev.sql",
+        "test/owner-public-wss-enrollment-lease-staging.test.ts",
+        "test/owner-public-wss-receipt-replay-rotation.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 672,
+      "parent_pr": 632,
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "ci": {
+        "run_id": 39632489293,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/s3-signed-bootstrap-owner-inventory-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "scripts/s3-core-broker-install-gate.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 673,
+      "parent_pr": 553,
+      "base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "ci": {
+        "run_id": 39632538963,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/security/p0-filesystem-source-handle-acl-20261021.md",
+        "src/agent/broker-filesystem-preflight.ts",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "test/broker-filesystem-preflight-negative.test.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-native-source-handle-acl-negative.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 674,
+      "parent_pr": 598,
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "ci": {
+        "run_id": 39632610866,
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      "files": [
+        "docs/SCALE_S5_598_FIXED_SEED_SOURCE_20261021.md",
+        "docs/reports/s5-598-real-parser-seeded-256kib-20261021.json",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "scripts/report-s5-real-598-seeded.ts",
+        "test/s5-real-598-seeded-parser.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 675,
+      "parent_pr": null,
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "ci": {
+        "run_id": 39632701546,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/MCP_GITHUB_OAUTH_STATE_CAS_20261021.md",
+        "src/product/github-oauth-browser-state.ts",
+        "src/product/github-oauth.ts",
+        "test/github-oauth-browser-state-negative.test.ts",
+        "test/github-oauth.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    },
+    {
+      "pr": 676,
+      "parent_pr": 631,
+      "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "ci": {
+        "run_id": 39634099233,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      "files": [
+        "docs/AGENT_P0_EXTERNAL_GRANT_ATOMIC_RECONCILIATION_20261021.md",
+        "src/agent/https-external-grant-cas.ts",
+        "src/agent/postgres-bound-grant-cas.ts",
+        "src/agent/witness-revoke-coordinator.ts",
+        "test/https-external-grant-cas.integration.test.ts",
+        "test/postgres-bound-grant-cas.integration.test.ts"
+      ],
+      "files_complete": true,
+      "verification": "GitHub get_pr_info exact HEAD + fetch_commit_workflow_runs + list_pr_changed_filenames + compare_commits base..head"
+    }
+  ],
+  "comparisons": [
+    {
+      "pr": 633,
+      "compare_base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "merge_base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "status": "ahead"
+    },
+    {
+      "pr": 620,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "status": "diverged"
+    },
+    {
+      "pr": 621,
+      "compare_base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "merge_base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "status": "ahead"
+    },
+    {
+      "pr": 574,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "822cb26f8e2531cf5c3f5dca309eb3aff22123c6",
+      "status": "diverged"
+    },
+    {
+      "pr": 632,
+      "compare_base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "merge_base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "status": "ahead"
+    },
+    {
+      "pr": 551,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "status": "diverged"
+    },
+    {
+      "pr": 631,
+      "compare_base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "merge_base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "status": "ahead"
+    },
+    {
+      "pr": 614,
+      "compare_base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "merge_base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "status": "ahead"
+    },
+    {
+      "pr": 629,
+      "compare_base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "merge_base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "status": "ahead"
+    },
+    {
+      "pr": 622,
+      "compare_base_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+      "merge_base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "status": "diverged"
+    },
+    {
+      "pr": 634,
+      "compare_base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "merge_base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "status": "ahead"
+    },
+    {
+      "pr": 616,
+      "compare_base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "merge_base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "status": "ahead"
+    },
+    {
+      "pr": 638,
+      "compare_base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "merge_base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "status": "ahead"
+    },
+    {
+      "pr": 639,
+      "compare_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "status": "ahead"
+    },
+    {
+      "pr": 640,
+      "compare_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "status": "ahead"
+    },
+    {
+      "pr": 641,
+      "compare_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "status": "ahead"
+    },
+    {
+      "pr": 642,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 643,
+      "compare_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "status": "ahead"
+    },
+    {
+      "pr": 644,
+      "compare_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "status": "ahead"
+    },
+    {
+      "pr": 645,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 646,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 647,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 648,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 649,
+      "compare_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "status": "ahead"
+    },
+    {
+      "pr": 650,
+      "compare_base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "merge_base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "status": "ahead"
+    },
+    {
+      "pr": 651,
+      "compare_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "status": "ahead"
+    },
+    {
+      "pr": 652,
+      "compare_base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "merge_base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "status": "ahead"
+    },
+    {
+      "pr": 653,
+      "compare_base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "merge_base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "status": "ahead"
+    },
+    {
+      "pr": 654,
+      "compare_base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "merge_base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "status": "ahead"
+    },
+    {
+      "pr": 655,
+      "compare_base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "merge_base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "status": "ahead"
+    },
+    {
+      "pr": 656,
+      "compare_base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "merge_base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "status": "ahead"
+    },
+    {
+      "pr": 657,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 658,
+      "compare_base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "merge_base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "status": "ahead"
+    },
+    {
+      "pr": 659,
+      "compare_base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "merge_base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "status": "ahead"
+    },
+    {
+      "pr": 660,
+      "compare_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "status": "ahead"
+    },
+    {
+      "pr": 661,
+      "compare_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "status": "ahead"
+    },
+    {
+      "pr": 662,
+      "compare_base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "merge_base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "status": "ahead"
+    },
+    {
+      "pr": 663,
+      "compare_base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "merge_base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "status": "ahead"
+    },
+    {
+      "pr": 664,
+      "compare_base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "merge_base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "status": "ahead"
+    },
+    {
+      "pr": 665,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 666,
+      "compare_base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "merge_base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "status": "ahead"
+    },
+    {
+      "pr": 667,
+      "compare_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "status": "ahead"
+    },
+    {
+      "pr": 668,
+      "compare_base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "merge_base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "status": "ahead"
+    },
+    {
+      "pr": 669,
+      "compare_base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "merge_base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "status": "ahead"
+    },
+    {
+      "pr": 670,
+      "compare_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "status": "ahead"
+    },
+    {
+      "pr": 671,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 672,
+      "compare_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "status": "ahead"
+    },
+    {
+      "pr": 673,
+      "compare_base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "merge_base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "status": "ahead"
+    },
+    {
+      "pr": 674,
+      "compare_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "status": "ahead"
+    },
+    {
+      "pr": 675,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "status": "ahead"
+    },
+    {
+      "pr": 676,
+      "compare_base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "merge_base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "status": "ahead"
+    }
+  ],
+  "comparison_coverage": "51 of 77 exact comparisons pinned, 26 not freshly compared: treat UNKNOWN, not green",
+  "files_coverage": "New 10 and moved #572/#575 full changed file lists; historical claims otherwise sampled; exhaustive collision proof requires live authenticated all-pages scan",
+  "file_claims": [
+    {
+      "pr": 576,
+      "files": [
+        ".github/workflows/ci.yml",
+        "native/windows-job-owner.c",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-owner.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 629,
+      "files": [
+        ".github/workflows/ci.yml",
+        "native/windows-job-owner.c",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-owner.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 633,
+      "files": [
+        ".github/workflows/ci.yml",
+        "native/windows-job-owner.c",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-owner.ts",
+        "src/security/privilege.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 620,
+      "files": [
+        ".github/workflows/ci.yml",
+        "src/security/privilege.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 574,
+      "files": [
+        "web/app.js",
+        "src/security/authorization-explain.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 621,
+      "files": [
+        "web/app.js"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 614,
+      "files": [
+        "src/agent/postgres-monotonic-witness.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 631,
+      "files": [
+        "src/agent/postgres-monotonic-witness.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 616,
+      "files": [
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/mcp/create-server.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 634,
+      "files": [
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/mcp/create-server.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 596,
+      "files": [
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/mcp/create-server.ts"
+      ],
+      "scope": "subset"
+    },
+    {
+      "pr": 638,
+      "files": [
+        ".github/workflows/qa-19-windows-job-hosted.yml",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 639,
+      "files": [
+        "test/s3-worker20-signed-broker-installer-negative-qa.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 640,
+      "files": [
+        "test/artifact-588-cancel-read-race.qa.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 641,
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 642,
+      "files": [
+        "docs/CORE_EFFECTIVE_STATUS_UI_QA_20261021.md",
+        "src/diagnostics/core-effective-ui-status.ts",
+        "test/core-effective-ui-status.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 643,
+      "files": [
+        "docs/CORE_OWNER_REVOKE_MID_EXECUTION_QA_20261021.md",
+        "test/core-owner-revoke-mid-execution.adversarial.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 644,
+      "files": [
+        "docs/s3-worker28-crash-rollback-independent-qa-20261021.md",
+        "test/fixtures/s3-worker28-runner.test.ts",
+        "test/s3-broker-crash-rollback-independent-qa.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 645,
+      "files": [
+        "docs/QA_UAC_REMOTE_APPROVAL_MATRIX_20261021.md",
+        "test/fixtures/uac-remote-approval-matrix.ts",
+        "test/qa-uac-remote-approval-capability.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 646,
+      "files": [
+        "docs/qa/INTEGRATION_DAG_CORE_CRITICAL_PATH_20261021.md",
+        "docs/qa/p0-integration-dag-20261021.json",
+        "scripts/qa24-integration-dag.ts",
+        "test/qa-24-integration-dag.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 647,
+      "files": [
+        "docs/security/p0-native-handle-provenance-w26.md",
+        "test/p0-native-handle-provenance-w26.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 648,
+      "files": [
+        ".github/workflows/qa29-elevated-audit-source.yml",
+        "docs/QA29_ELEVATED_COMMAND_AUDIT_PROVENANCE_617.md",
+        "test/qa29-elevated-command-audit-provenance.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 649,
+      "files": [
+        "docs/SCALE_P1_WORKER30_BOUNDED_FAIRNESS_QA_20261021.md",
+        "test/worker30-mcp-parser-admission.test.ts",
+        "test/worker30-staging-tenant-byte-qa.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 650,
+      "files": [
+        "docs/QA_17_WINDOWS_BROKER_UNAVAILABLE_AND_REVOKE_617.md",
+        "test/qa-17-provider-unavailable-queued-revoke.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 651,
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 652,
+      "files": [
+        ".github/workflows/qa-19-windows-provider-truth.yml",
+        "docs/qa/QA19_WINDOWS_PROVIDER_TRUTH_20261021.md",
+        "test/qa-19-windows-provider-truth.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 653,
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 654,
+      "files": [
+        "docs/CORE_POSTLAUNCH_REVOKE_UNKNOWN_QA_20261021.md",
+        "test/core-owner-postlaunch-unknown.adversarial.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 655,
+      "files": [
+        "docs/s3-worker20-install-manifest-chain-acceptance-20261021.md",
+        "scripts/s3-worker20-install-manifest-chain-qa.ts",
+        "test/s3-worker20-install-manifest-chain-qa.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 656,
+      "files": [
+        "docs/QA27_REMOTE_ADMIN_APPROVAL_PROVENANCE_20261021.md",
+        "test/fixtures/qa27-remote-admin-provenance-oracle.ts",
+        "test/qa27-remote-admin-approval-provenance-negative.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 657,
+      "files": [
+        "docs/security/p0-native-handle-volume-w26v2.md",
+        "test/p0-native-handle-volume-w26v2.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 658,
+      "files": [
+        "docs/s3-worker28-recovery-narrow-20261021.md",
+        "test/fixtures/s3-worker28-recovery-narrow.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 659,
+      "files": [
+        "docs/QA_18_CROSSHUB_MIGRATION_WAL_20261021.md",
+        "test/fixtures/qa-18-migration-fixture.ts",
+        "test/qa-18-crosshub-migration-rollback.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 660,
+      "files": [
+        "docs/SCALE_WORKER30_NEXT_COMPRESSED_FAIRNESS_CANCEL_20261021.md",
+        "test/worker30-next-compressed-fairness-source.test.ts",
+        "test/worker30-next-memory-cancel-reference.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 661,
+      "files": [
+        "docs/QA_02_CORE_633_ELEVATED_ERROR_PROVENANCE_20261021.md",
+        "test/qa-02-core-633-elevated-outcome-negative.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 662,
+      "files": [
+        ".github/workflows/qa29-crosshub-audit-negative.yml",
+        "docs/QA29_CROSSHUB_ROTATED_AUDIT_NO_GO_617.md",
+        "test/qa29-rotated-audit-crosshub-negative.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 663,
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_PRIVATE_OWNER_FENCE_20261021.md",
+        "src/agent/private-desktop-owner-fence.ts",
+        "test/private-desktop-owner-fence.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 664,
+      "files": [
+        "docs/qa/LIVE_DAG_DRIFT_GATES_CORE_20261021.md",
+        "docs/qa/p0-integration-dag-open50-20261021.json",
+        "scripts/qa24-live-dag.ts",
+        "test/qa-24-live-dag.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 665,
+      "files": [
+        "docs/CORE_BROKER_SOURCE_PREFLIGHT_20261021.md",
+        "src/diagnostics/core-broker-readonly-preflight.ts",
+        "test/core-broker-readonly-preflight.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 666,
+      "files": [
+        "docs/CONNECTION_06_WORKER_JOURNAL_634_REVIEW_20261021.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 667,
+      "files": [
+        "docs/ARTIFACT_CANCEL_NATIVE_RACE_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 668,
+      "files": [
+        "docs/SCALE_V2_QUOTA_TRUSTED_FENCED_DELETION_20261021.md",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 669,
+      "files": [
+        "docs/NEXOWIRE_CORE_EFFECTIVE_ACCESS_INTEGRATION_20261021.md",
+        "src/product/access-effective-authority.ts",
+        "src/product/control-plane-contract.ts",
+        "src/product/control-plane-service.ts",
+        "test/access-effective-authority.test.ts",
+        "test/access-effective-dashboard.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 670,
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/P0_WINDOWS_BROKER_PROVIDER_ATTESTATION_20261021.md",
+        "scripts/audit-windows-broker-token-provider.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "test/windows-broker-provider-attestation.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 671,
+      "files": [
+        "docs/SCALE_V2_S2_WSS_RECEIPT_REPLAY_ROTATION_20261021.md",
+        "src/product/owner-public-wss-enrollment-lease-proposal.ts",
+        "test/fixtures/scale-v2-owner-wss-device-enrollment-dev.sql",
+        "test/owner-public-wss-enrollment-lease-staging.test.ts",
+        "test/owner-public-wss-receipt-replay-rotation.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 672,
+      "files": [
+        "docs/s3-signed-bootstrap-owner-inventory-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "scripts/s3-core-broker-install-gate.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 673,
+      "files": [
+        "docs/security/p0-filesystem-source-handle-acl-20261021.md",
+        "src/agent/broker-filesystem-preflight.ts",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "test/broker-filesystem-preflight-negative.test.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-native-source-handle-acl-negative.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 674,
+      "files": [
+        "docs/SCALE_S5_598_FIXED_SEED_SOURCE_20261021.md",
+        "docs/reports/s5-598-real-parser-seeded-256kib-20261021.json",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "scripts/report-s5-real-598-seeded.ts",
+        "test/s5-real-598-seeded-parser.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 675,
+      "files": [
+        "docs/MCP_GITHUB_OAUTH_STATE_CAS_20261021.md",
+        "src/product/github-oauth-browser-state.ts",
+        "src/product/github-oauth.ts",
+        "test/github-oauth-browser-state-negative.test.ts",
+        "test/github-oauth.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 676,
+      "files": [
+        "docs/AGENT_P0_EXTERNAL_GRANT_ATOMIC_RECONCILIATION_20261021.md",
+        "src/agent/https-external-grant-cas.ts",
+        "src/agent/postgres-bound-grant-cas.ts",
+        "src/agent/witness-revoke-coordinator.ts",
+        "test/https-external-grant-cas.integration.test.ts",
+        "test/postgres-bound-grant-cas.integration.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 572,
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_20261018.md",
+        "docs/qa/INDEPENDENT_QA_20261020.md",
+        "docs/qa/INDEPENDENT_QA_20261021.md",
+        "docs/qa/INDEPENDENT_QA_617_HYPERV_20261021.md",
+        "docs/qa/INDEPENDENT_QA_CORE_MASTER_20261021.md",
+        "docs/qa/INDEPENDENT_QA_PR635_649_20261021.md",
+        "docs/qa/PR_SOURCE_AND_RELEASE_GATES.json",
+        "docs/qa/QA_20261020_EXACT_HEAD_EVIDENCE.json",
+        "docs/qa/QA_20261021_CORE_MASTER_ACCEPTANCE.json",
+        "docs/qa/QA_20261021_EXACT_HEAD_EVIDENCE.json",
+        "docs/qa/QA_20261021_HYPERV_617_ACCEPTANCE.json",
+        "docs/qa/QA_20261021_PR635_649_EXACT_EVIDENCE.json",
+        "docs/qa/QA_BLOCKING_FINDINGS_CURRENT_MAIN.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/durable-process.test.ts",
+        "test/qa-635-649-exact-head-evidence.test.ts",
+        "test/qa-core-broker-p0-negative.test.ts",
+        "test/qa-core-master-evidence.test.ts",
+        "test/qa-current-release-blockers.test.ts",
+        "test/qa-hyperv-617-source-negative.test.ts",
+        "test/qa-pr-intake-negative.test.ts",
+        "test/qa-release-evidence-20261020.test.ts",
+        "test/qa-release-evidence-20261021.test.ts",
+        "test/qa-release-evidence-617.test.ts",
+        "test/qa-rollback-source-negative.test.ts",
+        "test/qa-transfer-onecall-source-negative.test.ts"
+      ],
+      "scope": "all_changed_files"
+    },
+    {
+      "pr": 575,
+      "files": [
+        "docs/progress-watchdog-v1.md",
+        "package.json",
+        "scripts/verify-progress-proof.ts",
+        "src/agent/artifact-transfer-progress-adapter.ts",
+        "src/agent/native-agent.ts",
+        "src/agent/one-call-transfer-watchdog.ts",
+        "src/agent/progress-proof-verifier.ts",
+        "src/agent/progress-runtime-postcondition.ts",
+        "src/agent/progress-supervisor.ts",
+        "src/agent/trusted-worker-completion.ts",
+        "test/artifact-transfer-progress-adapter.test.ts",
+        "test/fixtures/progress-managed-proof-worker.cjs",
+        "test/fixtures/progress-result-worker-fixture.cjs",
+        "test/one-call-transfer-watchdog.test.ts",
+        "test/progress-proof-verifier.test.ts",
+        "test/progress-runtime-postcondition.test.ts",
+        "test/progress-supervisor-integration.test.ts",
+        "test/trusted-worker-completion.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "scope": "all_changed_files"
+    }
+  ],
+  "requirements": {
+    "ci_green_must_be_exact_head": true,
+    "parent_ci_must_be_green": true,
+    "unknown_is_blocked": true,
+    "snapshot_not_live_after_capture": true,
+    "source_only_no_production_acceptance": true
+  },
+  "notes": [
+    "#646 is red overall: macOS job cancelled while Node22/24/browser Linux/Wsl/security succeeded; no false overall PASS.",
+    "#638 has QA19 success but CI failure; no substitution.",
+    "#648 has distinct QA29 and CI success at queried SHA.",
+    "#643 CI in_progress, do not replay or force rerun.",
+    "This 67-PR snapshot is an observed frozen GitHub connector evidence set and becomes stale if #664 or any other HEAD changes; never infer green on next SHA.",
+    "#643 CI changed from in_progress to success at same exact head/run; old cached lifecycle stale.",
+    "#664 is intentionally self-referential: adding this file moves its own HEAD and MUST invalidate recorded #664 SHA. Use read-only live scanner for current state."
+  ],
+  "snapshot_replaces": "docs/qa/p0-integration-dag-open50-20261021.json",
+  "ci_specific_warning": "#664 run 39632679723 FAILURE, Windows Job fast-exit output drain test iteration 10; all six other jobs PASS. Unrelated owner code not modified.",
+  "drift_evidence": {
+    "open_set": "38 -> 50 -> 67 -> 77",
+    "moved_heads": [
+      572,
+      575,
+      642,
+      664
+    ],
+    "open_new": [
+      667,
+      668,
+      669,
+      670,
+      671,
+      672,
+      673,
+      674,
+      675,
+      676
+    ],
+    "known_parent_mismatch": [
+      609,
+      622
+    ],
+    "self_invalidating": "snapshot is frozen and does not prove its own authoring PR current HEAD"
+  }
+}
