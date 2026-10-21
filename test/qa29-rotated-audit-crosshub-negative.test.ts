@@ -236,8 +236,11 @@ test('nonzero exit remains FAILED even with true independent readback',()=>{
 test('Hub restart and duplicate ACK do not replay dispatch or clear UNKNOWN',()=>{
  const o=new OwnerAuthority();o.initialize(B);const external=new ReservationAuthority(o);
  const a=new Hub(external);assert.equal(a.reserve(B),true);assert.equal(a.dispatch(B),true);
- external.lostAck(B);const b=new Hub(external),ack=hash('transport-ack');
- assert.equal(b.ack(B,ack),'recorded');assert.equal(b.ack(B,ack),'duplicate');
+ const ack=hash('transport-ack');
+ assert.equal(a.ack(B,ack),'recorded'); // recorded in external authority before Hub A crash
+ external.lostAck(B); // outcome commit lost; ACK does not independently establish postcondition
+ const b=new Hub(external); // Hub A replaced; no Hub-local dedupe memory retained
+ assert.equal(b.ack(B,ack),'duplicate');assert.equal(b.ack(B,ack),'duplicate');
  assert.equal(b.status(B),'unknown');assert.equal(b.dispatch(B),false);
  assert.equal(b.reserve(B),false);assert.equal(external.dispatchCount(B),1);
 });
