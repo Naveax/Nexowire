@@ -101,7 +101,7 @@ type Hooks = {
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
 };
 type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage' |
-  'lost-publish-ack';
+  'lost-publish-ack' | 'forged-second-request-id';
 
 /** Synthetic key-bound receipt. NOT a deployed Agent signer or a production proof. */
 type SyntheticPublishedReceipt = {
@@ -173,7 +173,10 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
       if (mode === 'lost-ack' && !lost) {
         lost = true; throw Error('DISPATCHED_ACK_LOST');
       }
-      return { requestId: env.requestId, epoch: env.epoch, offset: env.offset,
+      return { requestId: mode === 'forged-second-request-id' && env.offset === 65_536
+          ? env.requestId.replace(/^./, env.requestId[0] === 'a' ? 'b' : 'a')
+          : env.requestId,
+        epoch: env.epoch, offset: env.offset,
         length: env.length, sha256: mode === 'forged-receipt' && env.offset === 0
           ? '0'.repeat(64) : env.sha256 };
     },
@@ -836,5 +839,75 @@ test('#22/#691: stale publisher under lease expiry and CORE re-pair emits zero n
       assert.equal(fx.verifyReceipt(receipts[0]!), true);
     } finally {
       release.open(); await a.waitForIdle(old.id);
+    }
+  }));
+
+/**
+ * Independent #22 vs #725 adversarial gate: at the second Native write,
+ * the in-memory stage already changed, but its forged ACK has NOT returned.
+ * A different Hub requests cancellation, then CORE is revoked. The
+ * immediately observed forged requestId must NOT be overwritten by a
+ * generic cancel error, credited as verified, replayed, or published.
+ *
+ * #712's single-use Broker dispatch permission is a DIFFERENT authority
+ * domain; no Broker->transfer end-to-end proof is asserted here.
+ */
+test('#22/#725: post-first-verified-chunk cancel plus CORE revoke preserves forged requestId provenance', async () =>
+  temp(async root => {
+    const wroteSecond = gate(), releaseAck = gate();
+    let forbiddenThirdRead = 0;
+    const fx = mock('forged-second-request-id', {
+      beforeRead: async (device, _path, offset) => {
+        if (device === input.sourceDeviceId && offset === 2 * 65_536)
+          forbiddenThirdRead++;
+      },
+      afterWrite: async (_job, envelope) => {
+        if (envelope.offset === 65_536) {
+          wroteSecond.open();
+          await releaseAck.promise;
+        }
+      },
+    });
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const started = await hubA.start(input);
+    try {
+      await expectGate(wroteSecond.promise, 'second Native side effect before forged ACK');
+      const before = await stored(root, started.id);
+      assert.equal(before.state, 'RUNNING');
+      assert.equal(before.bytesConfirmed, 65_536,
+        'first 64KiB independently verified, second remains unconfirmed');
+      assert.equal(before.pending?.offset, 65_536);
+      assert.equal(before.pending?.dispatched, true);
+      assert.equal(typeof before.pending?.requestId, 'string');
+      const originalRequestId = before.pending!.requestId;
+      assert.deepEqual(fx.writes.map(w => w.offset), [0, 65_536]);
+      assert.equal(fx.publications, 0);
+      const cancelled = await hubB.cancel(started.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId);
+      assert.equal(cancelled.state, 'CANCEL_REQUESTED');
+      fx.grants.enabled = false;
+      releaseAck.open();
+      await hubA.waitForIdle(started.id);
+      const after = await stored(root, started.id);
+      assert.equal(after.state, 'MUTATION_UNKNOWN',
+        'a real-possible Native side effect cannot become CANCELLED');
+      assert.equal(after.errorCode, 'FORGED_WRITE_RECEIPT',
+        'preserve exact forged requestId provenance despite concurrent revoke');
+      assert.equal(after.bytesConfirmed, 65_536,
+        'forged ACK must not credit second Native side effect');
+      assert.equal(after.pending?.requestId, originalRequestId,
+        'durable request identity must not be rewritten by forged ACK');
+      assert.equal(after.pending?.offset, 65_536);
+      assert.equal(after.pending?.dispatched, true);
+      assert.deepEqual(fx.writes.map(w => w.offset), [0, 65_536]);
+      assert.equal(forbiddenThirdRead, 0);
+      assert.equal(fx.publications, 0);
+      assert.equal(fx.publishedReceipts.length, 0);
+      await assert.rejects(hubB.status(started.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+    } finally {
+      releaseAck.open();
+      await hubA.waitForIdle(started.id);
     }
   }));
