@@ -99,7 +99,7 @@ $aclAvailable = $null -ne $acl -and $null -ne $parentAcl
 # These SIDs are stable across localized Windows installations.
 $untrustedSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
 $unsafe=@()
-foreach($entry in $(if ($aclAvailable) { $acl.Access } else { @() })) {
+foreach($entry in $(if ($aclAvailable) { $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]) } else { @() })) {
   if ($entry.AccessControlType -ne 'Allow') { continue }
   $identity=try { $entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
     catch { $entry.IdentityReference.Value }
@@ -111,7 +111,7 @@ foreach($entry in $(if ($aclAvailable) { $acl.Access } else { @() })) {
 }
 # Parent create/delete/rename permissions can replace a protected EXE.
 $unsafeParent=@()
-foreach($entry in $(if ($aclAvailable) { $parentAcl.Access } else { @() })) {
+foreach($entry in $(if ($aclAvailable) { $parentAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]) } else { @() })) {
   if ($entry.AccessControlType -ne 'Allow') { continue }
   $identity=try {$entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}
     catch {$entry.IdentityReference.Value}
@@ -143,7 +143,7 @@ $evidence=[ordered]@{
   externallyPinnedReleaseSha256Matches=[bool]$expectedShaOK
   aclEvidenceAvailable=[bool]$aclAvailable
   aclEvidenceError=$aclError
-  aclProvider='native FileSystemAclExtensions or Microsoft.PowerShell.Security/Get-Acl'
+  aclProvider='native FileSystemAclExtensions or Microsoft.PowerShell.Security/Get-Acl; GetAccessRules(inherited+explicit)'
   fileAclProtected=[bool]($aclAvailable -and $acl.AreAccessRulesProtected)
   parentAclProtected=[bool]($aclAvailable -and $parentAcl.AreAccessRulesProtected)
   broadWriteGrantFound=$(if ($aclAvailable) { $unsafe.Count -gt 0 } else { $null })

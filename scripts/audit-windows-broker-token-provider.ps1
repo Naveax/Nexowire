@@ -18,6 +18,9 @@ using System;
 using System.Runtime.InteropServices;
 public static class NxTestOnlyTokenQuery {
  [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+ [DllImport("kernel32.dll",SetLastError=true)]
+ [return:MarshalAs(UnmanagedType.Bool)]
+ public static extern bool GetProcessTimes(IntPtr process,out long created,out long exited,out long kernel,out long user);
  [DllImport("advapi32.dll",SetLastError=true)]
  [return:MarshalAs(UnmanagedType.Bool)]
  public static extern bool OpenProcessToken(IntPtr process,uint rights,out IntPtr token);
@@ -61,6 +64,19 @@ try{
  }finally{[Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)}
 }finally{[void][NxTestOnlyTokenQuery]::CloseHandle($token)}
 }catch{$tokenError=$_.Exception.GetType().Name+':'+$_.Exception.Message}
+# Independent Win32 creation FILETIME is recorded for THIS test-process ONLY.
+# This is NOT an attestation of any installed Broker PID, imports or token.
+$selfPid=$PID
+$selfCreationFiletime=$null
+$selfCreationError=''
+try{
+ $created=[int64]0;$exited=[int64]0;$kernel=[int64]0;$user=[int64]0
+ if(-not [NxTestOnlyTokenQuery]::GetProcessTimes(
+    [NxTestOnlyTokenQuery]::GetCurrentProcess(),
+    [ref]$created,[ref]$exited,[ref]$kernel,[ref]$user
+ )){throw ('OWN_PROCESS_CREATION_QUERY_FAILED_'+[Runtime.InteropServices.Marshal]::GetLastWin32Error())}
+ $selfCreationFiletime=[string]$created
+}catch{$selfCreationError=$_.Exception.GetType().Name+':'+$_.Exception.Message}
 $principal=[Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())
 $adminEnabled=$false
 try{$adminEnabled=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)}catch{}
@@ -78,7 +94,16 @@ $tokenAvailable=($null -ne $integrityRid) -and ($null -ne $elevated)
    administratorsEnabled=[bool]$adminEnabled
    highIntegrity=$(if($tokenAvailable){$integrityRid -ge 12288}else{$null})
  }
+ ownInspectingProcessIdentity=[ordered]@{
+   pid=$selfPid
+   creationFiletime=$selfCreationFiletime
+   creationEvidenceAvailable=($null -ne $selfCreationFiletime)
+   creationEvidenceError=$selfCreationError
+   provider='native GetProcessTimes(current-process pseudo-handle)'
+ }
  brokerProcessPidAttested=$false
+ brokerProcessCreationFiletimeAttested=$false
+ lowPrivilegeDupHandleDeniedByBrokerAcl=$false
  brokerProcessImageIdentityAttested=$false
  brokerOwnerDeviceEpochAttested=$false
  protectedBrokerImportTreeAttested=$false

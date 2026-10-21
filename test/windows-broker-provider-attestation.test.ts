@@ -9,6 +9,8 @@ import os from 'node:os';
 type Provider={
   kind:string;productionReady:boolean;elevatedCoreDispatchEnabled:boolean;
   brokerProcessPidAttested:boolean;brokerProcessImageIdentityAttested:boolean;
+  brokerProcessCreationFiletimeAttested:boolean;lowPrivilegeDupHandleDeniedByBrokerAcl:boolean;
+  ownInspectingProcessIdentity:{pid:number;creationFiletime:string|null;creationEvidenceAvailable:boolean};
   trustedSignedReleaseManifestAttested:boolean;highTokenBrokerIdentityAttested:boolean;
   protectedBrokerImportTreeAttested:boolean;
   ownInspectingProcessToken:{
@@ -56,6 +58,11 @@ test('signed Windows test surrogate native attestation is NOT production Broker 
   assert.ok(Number.isInteger(good.ownInspectingProcessToken.integrityRid));
   assert.equal(good.productionReady,false);
   assert.equal(good.elevatedCoreDispatchEnabled,false);
+  assert.equal(good.ownInspectingProcessIdentity.creationEvidenceAvailable,true);
+  assert.match(good.ownInspectingProcessIdentity.creationFiletime??'',/^[1-9][0-9]{10,19}$/);
+  assert.ok(good.ownInspectingProcessIdentity.pid>0);
+  assert.equal(good.brokerProcessCreationFiletimeAttested,false);
+  assert.equal(good.lowPrivilegeDupHandleDeniedByBrokerAcl,false);
   assert.equal(good.brokerProcessPidAttested,false);
   assert.equal(good.brokerProcessImageIdentityAttested,false);
   assert.equal(good.trustedSignedReleaseManifestAttested,false);
