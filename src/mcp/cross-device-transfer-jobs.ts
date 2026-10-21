@@ -602,6 +602,10 @@ export class CrossDeviceTransferJobs {
       // lease or a co-rollbackable JSON record is not trusted fencing.
       await this.assertCurrentCore(job, 'WRITE');
       await this.assertFence(job, 'WRITE', offset);
+      // The external fence can await a remote witness while another Hub
+      // requests cancellation. Do not issue a fresh source read after that
+      // cancellation was durably observed, even for the next chunk.
+      if (await this.settleCancelIfRequested(id)) return;
       const size = Math.min(CHUNK, job.bytesTotal - offset);
       let content = '';
       if (size > 0) {
@@ -622,16 +626,33 @@ export class CrossDeviceTransferJobs {
         try { await this.strictlyWrite(job, offset, content, size); }
         catch (error) {
           const settled = await this.update(id, current => {
+            const observedCode = error instanceof TransferTrustError ? error.code :
+              'TRANSFER_WRITE_OUTCOME_UNKNOWN';
             if (current.state === 'CANCEL_REQUESTED') {
+              const possiblyWritten = current.bytesConfirmed > 0 ||
+                (current.pending !== undefined && current.pending.dispatched !== false);
               this.settleCancellation(current);
+              if (possiblyWritten && observedCode !== 'TRANSFER_WRITE_OUTCOME_UNKNOWN') {
+                // The actual Native response is more precise than the
+                // cancellation marker. Do not erase a forged receipt's code,
+                // pending requestId or the potentially written destination.
+                current.errorCode = observedCode;
+              }
+            } else if (current.state === 'MUTATION_UNKNOWN') {
+              // Another Hub may already have settled a cancel while a Native
+              // ACK was in flight. A subsequently observed forged receipt is
+              // stronger evidence than a generic cancellation marker.
+              if (current.pending && observedCode !== 'TRANSFER_WRITE_OUTCOME_UNKNOWN' &&
+                  (!current.errorCode || current.errorCode === 'TRANSFER_CANCEL_AFTER_MUTATION')) {
+                current.errorCode = observedCode;
+              }
             } else if (current.state !== 'CANCELLED') {
               // Reserved-only intents have not crossed the Native dispatch
               // fence; no external write may have occurred for this intent.
               const notDispatched = current.pending?.dispatched === false;
               current.state = !notDispatched || current.bytesConfirmed > 0
                 ? 'MUTATION_UNKNOWN' : 'FAILED';
-              current.errorCode = error instanceof TransferTrustError ? error.code :
-                'TRANSFER_WRITE_OUTCOME_UNKNOWN';
+              current.errorCode = observedCode;
             }
           });
           if (settled.state === 'CANCELLED') return;
@@ -682,19 +703,23 @@ export class CrossDeviceTransferJobs {
       // Never republish or downgrade UNKNOWN/pending after a stale callback.
     });
     if (before.state !== 'PUBLISHING') return;
-    await this.assertCurrentCore(before, 'PUBLISH');
-    await this.assertFence(before, 'PUBLISH', before.bytesTotal);
     try {
+      await this.assertCurrentCore(before, 'PUBLISH');
+      await this.assertFence(before, 'PUBLISH', before.bytesTotal);
       if (this.trust) {
         if (!before.fencing || !this.remote.publishFenced) {
           throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED', 'Missing fenced publication.');
         }
         await this.remote.publishFenced(before, before.fencing.epoch, before.fencing.token);
       } else await this.remote.moveNoOverwrite(job.targetDeviceId, job.stagePath, job.targetPath);
-    }
-    catch (error) {
+    } catch (error) {
       await this.update(id, current => {
-        current.state = 'MUTATION_UNKNOWN'; current.errorCode = 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN';
+        // PUBLISHING may have reached Native and an ACK can be lost. Keep
+        // durable UNKNOWN while retaining the specific authenticated cause
+        // of a rejected CORE grant, epoch or Native publish receipt.
+        current.state = 'MUTATION_UNKNOWN';
+        current.errorCode = error instanceof TransferTrustError ? error.code :
+          'TRANSFER_PUBLISH_OUTCOME_UNKNOWN';
       });
       throw error;
     }
