@@ -1,0 +1,597 @@
+{
+  "schema_version": 1,
+  "repository": "Naveax/Nexowire",
+  "main_head": "754cc4364822be5fda528f54042fb22a84f19924",
+  "observation_date": "2026-10-21",
+  "read_only_provenance": "GitHub get_pr_info (all 38 open PRs), per-exact-head fetch_commit_workflow_runs, compare_commits (12 key PRs), list_pr_changed_filenames (targeted subsets). Open PR and CI states are a dated snapshot, not live truth.",
+  "comparison_coverage": "12 specific PRs; no merge-base verification claimed for other 26",
+  "node_count": 38,
+  "nodes": [
+    {
+      "pr": 636,
+      "parent_pr": 632,
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+      "ci": {
+        "run_id": 39625147216,
+        "status": "in_progress",
+        "conclusion": null
+      }
+    },
+    {
+      "pr": 637,
+      "parent_pr": 631,
+      "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "ci": {
+        "run_id": 39625291153,
+        "status": "queued",
+        "conclusion": null
+      }
+    },
+    {
+      "pr": 635,
+      "parent_pr": 633,
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "ci": {
+        "run_id": 39624326925,
+        "status": "in_progress",
+        "conclusion": null
+      }
+    },
+    {
+      "pr": 627,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+      "ci": {
+        "run_id": 39608830918,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 576,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "ci": {
+        "run_id": 39598258315,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 629,
+      "parent_pr": 622,
+      "base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+      "ci": {
+        "run_id": 39608916753,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 634,
+      "parent_pr": 616,
+      "base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "head_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "ci": {
+        "run_id": 39610829832,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 616,
+      "parent_pr": 596,
+      "base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "ci": {
+        "run_id": 39598755514,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 633,
+      "parent_pr": 620,
+      "base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "ci": {
+        "run_id": 39610643900,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 618,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+      "ci": {
+        "run_id": 39610514919,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 575,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "336d200b84beff5900860dc9f0122a7b6bc0f466",
+      "ci": {
+        "run_id": 39610418398,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 614,
+      "parent_pr": 607,
+      "base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "ci": {
+        "run_id": 39598693419,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 620,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "ci": {
+        "run_id": 39604898508,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 572,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "f7cb4d96a22d32b10679f844c8c0c878d9d05bc4",
+      "ci": {
+        "run_id": 39609482502,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 551,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "ci": {
+        "run_id": 39606595530,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 610,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "ci": {
+        "run_id": 39597505104,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 625,
+      "parent_pr": 610,
+      "base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "ci": {
+        "run_id": 39608704634,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 632,
+      "parent_pr": 551,
+      "base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "ci": {
+        "run_id": 39609346798,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 631,
+      "parent_pr": 614,
+      "base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "ci": {
+        "run_id": 39609259161,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 612,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+      "ci": {
+        "run_id": 39597637188,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 621,
+      "parent_pr": 574,
+      "base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "ci": {
+        "run_id": 39608785843,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 628,
+      "parent_pr": 615,
+      "base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+      "ci": {
+        "run_id": 39608864172,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 596,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "ci": {
+        "run_id": 39557944551,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 624,
+      "parent_pr": 611,
+      "base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "ci": {
+        "run_id": 39608661483,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 611,
+      "parent_pr": 602,
+      "base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "ci": {
+        "run_id": 39597542588,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 613,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "ci": {
+        "run_id": 39608452356,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 553,
+      "parent_pr": null,
+      "base_sha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+      "head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "ci": {
+        "run_id": 39608315991,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 574,
+      "parent_pr": null,
+      "base_sha": "fd28d017ea291e8a935b05fda89d7ed2765d35d0",
+      "head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "ci": {
+        "run_id": 39604153782,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 622,
+      "parent_pr": 618,
+      "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "ci": {
+        "run_id": 39608093602,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 615,
+      "parent_pr": null,
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "ci": {
+        "run_id": 39598738701,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 609,
+      "parent_pr": 576,
+      "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+      "ci": {
+        "run_id": 39596941696,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 608,
+      "parent_pr": 598,
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+      "ci": {
+        "run_id": 39503650650,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 607,
+      "parent_pr": 582,
+      "base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "ci": {
+        "run_id": 39493908690,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    },
+    {
+      "pr": 602,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "ci": {
+        "run_id": 39492809099,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 598,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "ci": {
+        "run_id": 39502304557,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 599,
+      "parent_pr": null,
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+      "ci": {
+        "run_id": 39492086789,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 582,
+      "parent_pr": null,
+      "base_sha": "cb819d17ee581093d39626f13e985976def17f30",
+      "head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "ci": {
+        "run_id": 39416566585,
+        "status": "completed",
+        "conclusion": "failure"
+      }
+    },
+    {
+      "pr": 480,
+      "parent_pr": null,
+      "base_sha": "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
+      "head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+      "ci": {
+        "run_id": 39134168129,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "pr": 633,
+      "compare_base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "merge_base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "status": "ahead"
+    },
+    {
+      "pr": 620,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "status": "diverged"
+    },
+    {
+      "pr": 621,
+      "compare_base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "merge_base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "status": "ahead"
+    },
+    {
+      "pr": 574,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "822cb26f8e2531cf5c3f5dca309eb3aff22123c6",
+      "status": "diverged"
+    },
+    {
+      "pr": 632,
+      "compare_base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "merge_base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "status": "ahead"
+    },
+    {
+      "pr": 551,
+      "compare_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "status": "diverged"
+    },
+    {
+      "pr": 631,
+      "compare_base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "merge_base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "status": "ahead"
+    },
+    {
+      "pr": 614,
+      "compare_base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "merge_base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "status": "ahead"
+    },
+    {
+      "pr": 629,
+      "compare_base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "merge_base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "status": "ahead"
+    },
+    {
+      "pr": 622,
+      "compare_base_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+      "merge_base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "status": "diverged"
+    },
+    {
+      "pr": 634,
+      "compare_base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "merge_base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "status": "ahead"
+    },
+    {
+      "pr": 616,
+      "compare_base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "merge_base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "status": "ahead"
+    }
+  ],
+  "file_claims": [
+    {
+      "pr": 576,
+      "owner": "#03 Windows Job",
+      "files": [
+        ".github/workflows/ci.yml",
+        "native/windows-job-owner.c",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-owner.ts"
+      ]
+    },
+    {
+      "pr": 629,
+      "owner": "#02 integration with #03",
+      "files": [
+        ".github/workflows/ci.yml",
+        "native/windows-job-owner.c",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-owner.ts"
+      ]
+    },
+    {
+      "pr": 633,
+      "owner": "#03 CORE",
+      "files": [
+        ".github/workflows/ci.yml",
+        "native/windows-job-owner.c",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-owner.ts",
+        "src/security/privilege.ts"
+      ]
+    },
+    {
+      "pr": 620,
+      "owner": "#03 typed Hyper-V",
+      "files": [
+        ".github/workflows/ci.yml",
+        "src/security/privilege.ts"
+      ]
+    },
+    {
+      "pr": 574,
+      "owner": "#04 Access",
+      "files": [
+        "web/app.js",
+        "src/security/authorization-explain.ts"
+      ]
+    },
+    {
+      "pr": 621,
+      "owner": "#04 Access",
+      "files": [
+        "web/app.js"
+      ]
+    },
+    {
+      "pr": 614,
+      "owner": "#01 witness",
+      "files": [
+        "src/agent/postgres-monotonic-witness.ts"
+      ]
+    },
+    {
+      "pr": 631,
+      "owner": "#01 witness",
+      "files": [
+        "src/agent/postgres-monotonic-witness.ts"
+      ]
+    },
+    {
+      "pr": 616,
+      "owner": "#08 Artifact",
+      "files": [
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/mcp/create-server.ts"
+      ]
+    },
+    {
+      "pr": 634,
+      "owner": "#08 Artifact",
+      "files": [
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/mcp/create-server.ts"
+      ]
+    },
+    {
+      "pr": 596,
+      "owner": "#08 Artifact",
+      "files": [
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/mcp/create-server.ts"
+      ]
+    }
+  ]
+}
