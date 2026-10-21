@@ -1,0 +1,33 @@
+name: QA29 Native Receipt Verifier
+on:
+  pull_request:
+    paths:
+      - "test/qa29-native-receipt-verifier.ts"
+      - "test/qa29-native-receipt-verifier.test.ts"
+      - "docs/QA29_NATIVE_RECEIPT_PROVENANCE_NO_GO_617.md"
+      - ".github/workflows/qa29-native-receipt-verifier.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qa29-native-receipt-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-receipt-verification:
+    name: Synthetic signed OS audit Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Independent QA29 receipt and inherited audit acceptance; no native/elevated execution
+        run: node --test --import tsx test/qa29-elevated-command-audit-provenance.test.ts test/qa29-rotated-audit-crosshub-negative.test.ts test/qa29-native-receipt-verifier.test.ts
