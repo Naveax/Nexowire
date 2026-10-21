@@ -79,6 +79,8 @@ export function syntheticImportGraph(
           grantRoot:{...anchor,observedAfter:{...anchor.observedAfter}},
           steps,destinationLeaf:path.win32.basename(item.path),
         },
+        intermediateDirectoryAcls:steps.map(step=>
+          syntheticEffectiveAcl(step.child.fileId)),
         open:{
           provider:'native-retained-handle' as const,
           api:'NtCreateFile.RootDirectory' as const,
@@ -89,6 +91,9 @@ export function syntheticImportGraph(
             volumeGuid:handle.volumeGuid,diskId:handle.diskId,
             partitionNumber:handle.partitionNumber,
           },
+          digestAfterReadbackSha256:item.sha256,
+          signerDigestAfterReadbackSha256:item.signerCertificateSha256,
+          signerBinding:'same-retained-image' as const,
           noReparseTraversal:true,retainedUntilVerified:true,
         },
         effectiveAcl:syntheticEffectiveAcl(handle.fileId),

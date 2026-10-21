@@ -31,6 +31,11 @@ export interface VerifiedImportOpen {
   openedFileId:string;
   /** Observe again on the same retained handle after signed-byte readback. */
   afterReadback:NativeFileId;
+  /** Fresh SHA-256 over bytes reread through the same retained image handle. */
+  digestAfterReadbackSha256:string;
+  /** Authenticode/cert witness explicitly bound to those retained bytes. */
+  signerDigestAfterReadbackSha256:string;
+  signerBinding:'same-retained-image'|'unavailable';
   noReparseTraversal:boolean;
   retainedUntilVerified:boolean;
 }
@@ -38,6 +43,8 @@ export interface ObservedImport {
   key:string;
   handle:NativeHandleEvidence;
   parentRelativeChain:NativeRelativeChain;
+  /** Every directory below the protected anchor needs its OWN effective ACL. */
+  intermediateDirectoryAcls:readonly NativeEffectiveAcl[];
   open:VerifiedImportOpen;
   effectiveAcl:NativeEffectiveAcl;
   sha256:string;
@@ -189,6 +196,20 @@ export function assertProtectedImportClosure(
     // native RootDirectory/OpenFileById witness rooted at a pinned handle.
     const relative=authorizeNativeRelativeChain(
       observed.parentRelativeChain,ROOTS[pin.role],pin.path);
+    // #709's caller-supplied import path/boolean audit cannot stand in for
+    // protected native handle-bound ACL evidence. The signed manifest anchor
+    // and EVERY intermediate directory must independently pass effective ACE
+    // checks, including inherited future writes and delete-child rights.
+    assertEffectiveNativeAcl(anchor.effectiveAcl,anchor.handle);
+    const steps=observed.parentRelativeChain.steps;
+    if(!Array.isArray(observed.intermediateDirectoryAcls)||
+       observed.intermediateDirectoryAcls.length!==steps.length){
+      deny('IMPORT_ANCESTOR_ACL_INCOMPLETE');
+    }
+    for(let index=0;index<steps.length;index++){
+      assertEffectiveNativeAcl(observed.intermediateDirectoryAcls[index]!,
+        steps[index]!.child);
+    }
     const handle=observed.handle;
     if(!handle||handle.objectType!=='file'||!handle.noFollowVerified||
        handle.reparseTag!==null||handle.alternateStream||
@@ -207,6 +228,17 @@ export function assertProtectedImportClosure(
        nativeOpen.openedFileId!==handle.fileId||
        !sameNativeId(handle,nativeOpen.afterReadback)){
       deny('IMPORT_OPEN_BY_HANDLE_OR_POST_READBACK_UNVERIFIED');
+    }
+    // The unchanged file ID does NOT prove unchanged bytes: updates through
+    // the retained handle can change content without changing its identity.
+    // Both digest and Authenticode certificate proof must still bind to the
+    // exact retained image AFTER readback, independently from pathname data.
+    if(nativeOpen.signerBinding!=='same-retained-image'||
+       nativeOpen.digestAfterReadbackSha256?.toLowerCase()!==
+         pin.sha256.toLowerCase()||
+       nativeOpen.signerDigestAfterReadbackSha256?.toLowerCase()!==
+         pin.signerCertificateSha256.toLowerCase()){
+      deny('IMPORT_POST_READBACK_SIGNER_OR_BYTES_CHANGED');
     }
     // Checks *each* imported image's effective ACL rather than only the
     // role-wide root. Missing or medium-writable DLL rejects the full chain.

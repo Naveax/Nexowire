@@ -156,6 +156,56 @@ test('protected ancestor chain, anchored volume and immutable import root reject
     'IMPORT_UNSAFE_PATH');
 });
 
+test('each intermediary import directory requires independent effective ACL and stable held handle',()=>{
+  mutation(f=>{byKey(graph(f),'root').intermediateDirectoryAcls=[];},
+    'IMPORT_ANCESTOR_ACL_INCOMPLETE');
+  mutation(f=>{byKey(graph(f),'root').intermediateDirectoryAcls[0]!.provider='unavailable';},
+    'NATIVE_EFFECTIVE_ACL_UNVERIFIED');
+  mutation(f=>{byKey(graph(f),'root').intermediateDirectoryAcls[0]!.observedFileId='replaced-parent';},
+    'NATIVE_EFFECTIVE_ACL_UNVERIFIED');
+  mutation(f=>{byKey(graph(f),'root').intermediateDirectoryAcls[0]!.aces=[
+    ...byKey(graph(f),'root').intermediateDirectoryAcls[0]!.aces,
+    {sid:'S-1-5-11',type:'allow',accessMask:0x40,inheritOnly:false},
+  ];},'NATIVE_EFFECTIVE_UNTRUSTED_WRITE');
+  mutation(f=>{byKey(graph(f),'root').intermediateDirectoryAcls[0]!.aces=[
+    ...byKey(graph(f),'root').intermediateDirectoryAcls[0]!.aces,
+    {sid:'S-1-5-32-545',type:'allow',accessMask:0x40000,inheritOnly:true},
+  ];},'NATIVE_EFFECTIVE_UNTRUSTED_WRITE');
+});
+
+test('unchanged native file ID does not authorize changed DLL bytes or signer after retained readback',()=>{
+  for(const key of ['root','updater','module']){
+    mutation(f=>{byKey(graph(f),key).open.digestAfterReadbackSha256='0'.repeat(64);},
+      'IMPORT_POST_READBACK_SIGNER_OR_BYTES_CHANGED');
+    mutation(f=>{byKey(graph(f),key).open.signerDigestAfterReadbackSha256='0'.repeat(64);},
+      'IMPORT_POST_READBACK_SIGNER_OR_BYTES_CHANGED');
+    mutation(f=>{byKey(graph(f),key).open.signerBinding='unavailable';},
+      'IMPORT_POST_READBACK_SIGNER_OR_BYTES_CHANGED');
+  }
+});
+
+test('caller-selected #709 read-only audit booleans cannot substitute for authenticated import witnesses',()=>{
+  mutation(f=>{
+    // #709's schema explicitly disclaims independently enumerated imports
+    // and contains no native file-id, SHA or signer receipts per DLL.
+    const auditReport={
+      inputsInsideRoot:true,
+      allInspectedPathsHaveAclEvidence:true,
+      anyInspectedPathUnsafe:false,
+      importListIndependentlyEnumerated:false,
+      signedImportManifestVerified:false,
+      publisherOfEveryImportVerified:false,
+      protectedCompleteImageTreeAttested:false,
+    };
+    Object.assign(graph(f),{externalAuditReport:auditReport});
+    byKey(graph(f),'module').intermediateDirectoryAcls=undefined as never;
+  },'IMPORT_ANCESTOR_ACL_INCOMPLETE');
+  mutation(f=>{
+    Object.assign(graph(f),{callerProvidedApproval:true});
+    byKey(graph(f),'updater').open.digestAfterReadbackSha256='';
+  },'IMPORT_POST_READBACK_SIGNER_OR_BYTES_CHANGED');
+});
+
 test('hardlink aliases with distinct manifest keys cannot silently reuse same native file identity',()=>{
   mutation(f=>{
     const module=byKey(graph(f),'module'),updater=byKey(graph(f),'updater');

@@ -17,6 +17,16 @@ Policy remains source-only. This module does NOT invoke NtCreateFile or OpenFile
 - Independent #26 #694 findings and its exact-head CI SUCCESS are inputs for design, not proof of this child HEAD.
 - Exact child SHA and Actions run tracked in DRAFT child PR after opening.
 
+## #723 independent QA versus #709 protected-tree audit
+
+Independent #26 #723 at 7dc98916538c4f957dad5660ff6d328a2f932d3e (hosted CI 39659567874 SUCCESS) verifies the weakness in the earlier #690 root-wide Boolean acceptance, including Windows TEMP CreateFileW junction/ADS/hardlink and grant-volume/parent changes. Current #707 handles the transitive DLL manifest through mandatory per-import witnesses; #723 was based on #690 and is not a source implementation of #707.
+
+#709 at b083004b9ab8c18125a428cf74f3e97f7adf4e88 (hosted CI 39658979397 SUCCESS) runs read-only Windows security descriptor/ancestor checks on its own explicit JSON-envelope list of import paths. This is useful separate native TEMP ACL evidence, but the caller chooses the list and the report explicitly sets importListIndependentlyEnumerated=false, signedImportManifestVerified=false, publisherOfEveryImportVerified=false and productionReady=false. Consequently, its readable path booleans and wide SID filter do NOT meet the privileged #05 typed NativeEffectiveAcl and retained-handle signed-manifest requirements. No files or imports from #709 were copied into #707 or executed as an ACL audit on this device.
+
+The #707 closure now additionally requires a **separate effective ACL witness for each directory strictly between its protected anchor and every imported binary**. This witness must be bound to that open directory handle's file ID, correctly pinned parent chain and physical volume. Missing or mismatched intermediate security descriptors, inherited low-trust write/delete-child rights, reparse/junction and post-open rename changes deny. Parent/updater/import root ACLs are checked as well. Merely attesting the top-level updater directory cannot authorize a user-writable child directory.
+
+Native file ID remaining unchanged is NOT evidence that a writable file's contents remained unchanged after the first hash. For each DLL, source policy now demands a second SHA-256 digest and signer-cert fingerprint bound explicitly to the retained native image *after* readback; missing, changed or unbound receipts deny, even when observedAfter.fileId matches. This is a **contract**, not a real kernel-backed data-integrity or Authenticode implementation.
+
 ## Production block
 
 #271 protected runtime and effective parent ACL, #551 installer/rollback/signed owner high-token Broker, independent Windows native protected witness producer and handle-relative atomic writer remain NO-GO. Existing production elevated files capabilities remain unsupported. No live Agent/Broker/UAC/ACL/USB/VM or user files, no #08 transfer store, and no physical 1 GiB fixture are touched.
