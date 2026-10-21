@@ -1,4 +1,7 @@
-import {verify,type KeyObject} from 'node:crypto';
+import {verify,randomBytes,type KeyObject} from 'node:crypto';
+import {verifiesInstalledBrokerNonce,
+  type PinnedInstalledBrokerIdentity,type SignedInstalledBrokerNonceRecord}
+  from './access-native-broker-proof.js';
 import * as z from 'zod';
 import {AccessEffectiveAuthority,type EffectiveOwnerSession,
   type EffectiveMode} from './access-effective-authority.js';
@@ -16,7 +19,7 @@ const uid=z.string().uuid();
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 const signedRecord=z.strictObject({
   kind:z.literal('nexowire.access.cas-readback.v1'),
-  authorityId:uid,requestId:uid,deviceId:uid,ownerId:uid,
+  authorityId:uid,requestId:uid,challengeNonce:sha,deviceId:uid,ownerId:uid,
   deviceEpoch:uid,sessionEpoch:uid,
   ownerEpoch:z.number().int().positive().safe(),
   grantGeneration:z.number().int().positive().safe(),
@@ -29,7 +32,7 @@ export type CasReadbackRecord=z.infer<typeof signedRecord>;
 export const casReadbackSigningBytes=(record:CasReadbackRecord):Buffer=>{
   const r=signedRecord.parse(record);
   return Buffer.from(JSON.stringify([
-    r.kind,r.authorityId,r.requestId,r.deviceId,r.ownerId,
+    r.kind,r.authorityId,r.requestId,r.challengeNonce,r.deviceId,r.ownerId,
     r.deviceEpoch,r.sessionEpoch,r.ownerEpoch,r.grantGeneration,
     r.privilege,r.revoked,r.observedAtMs,r.expiresAtMs,
   ]),'utf8');
@@ -55,11 +58,17 @@ export interface QueuedAccessDependencies {
   effectiveAuthority:AccessEffectiveAuthority;
   /** Trusted from protected server config, NOT inbound JSON or Agent UI. */
   independentCasPublicKey:KeyObject;
+  /** Pinned installed Broker PID/FILETIME/file identity and protected key. */
+  installedBroker:PinnedInstalledBrokerIdentity;
   authorityId:string;
+  /** Must inspect a protected installed Broker, NOT calling PowerShell. */
+  readInstalledBroker:(request:QueuedAccessRequest,
+    nonce:string)=>Promise<SignedInstalledBrokerNonceRecord>;
   /** Authenticated protected readback client, absent in production currently. */
-  readCas:(request:QueuedAccessRequest)=>Promise<AuthenticatedReadback>;
+  readCas:(request:QueuedAccessRequest,nonce:string)=>Promise<AuthenticatedReadback>;
   /** Independent monotonic compare, not just another cached readback. */
   readHighWater:(deviceId:string)=>Promise<{
+    ownerId:string;deviceEpoch:string;sessionEpoch:string;
     ownerEpoch:number;grantGeneration:number;
   }>;
   now?:()=>number;
@@ -158,7 +167,26 @@ export async function reviewQueuedAccess(
       status.brokerVersionVerified!==true){
       return outcome('DENIED','FRESH_BROKER_OR_OWNER_PROOF_MISSING');
     }
-    const {statement,signature}=await dependencies.readCas(request);
+    // #712-style fresh 256-bit challenge binds both native report and
+    // independent CAS readback. Old signed UI/CAS from WAL rollback cannot
+    // satisfy a new review. Neither proof authorizes privileged dispatch.
+    const nonce=randomBytes(32).toString('hex');
+    const native=await dependencies.readInstalledBroker(request,nonce);
+    if(!verifiesInstalledBrokerNonce(native,{
+      requestId:request.requestId,challengeNonce:nonce,
+      ownerId:request.ownerId,deviceId:request.deviceId,
+      deviceEpoch:request.deviceEpoch,sessionEpoch:request.sessionEpoch,
+      ownerEpoch:request.ownerEpoch,grantGeneration:request.grantGeneration,
+      privilege:request.mode,now,
+    },dependencies.installedBroker)){
+      return outcome('DENIED','INSTALLED_BROKER_NONCE_TOKEN_UNVERIFIED');
+    }
+    // The external and native signing keys must not share an authority.
+    if(dependencies.installedBroker.publicKey.export({format:'der',type:'spki'}).equals(
+      dependencies.independentCasPublicKey.export({format:'der',type:'spki'}))){
+      return outcome('DENIED','BROKER_CAS_SIGNING_KEYS_NOT_INDEPENDENT');
+    }
+    const {statement,signature}=await dependencies.readCas(request,nonce);
     const parsed=signedRecord.safeParse(statement);
     if(!parsed.success||!validSignature(
       dependencies.independentCasPublicKey,parsed.data,signature)){
@@ -166,7 +194,7 @@ export async function reviewQueuedAccess(
     }
     const r=parsed.data;
     if(r.authorityId!==dependencies.authorityId||
-      r.requestId!==request.requestId||
+      r.requestId!==request.requestId||r.challengeNonce!==nonce||
       r.deviceId!==request.deviceId||
       r.ownerId!==request.ownerId||
       r.deviceEpoch!==request.deviceEpoch||
@@ -179,9 +207,22 @@ export async function reviewQueuedAccess(
       return outcome('DENIED','EXTERNAL_READBACK_STALE_OR_REVOKED');
     }
     const current=await dependencies.readHighWater(request.deviceId);
-    if(current?.ownerEpoch!==request.ownerEpoch||
+    if(current?.ownerId!==request.ownerId||
+      current?.deviceEpoch!==request.deviceEpoch||
+      current?.sessionEpoch!==request.sessionEpoch||
+      current?.ownerEpoch!==request.ownerEpoch||
       current.grantGeneration!==request.grantGeneration){
       return outcome('DENIED','INDEPENDENT_CAS_HIGHWATER_ADVANCED');
+    }
+    // The owner/ROOT session can expire while waiting for remote CAS.
+    // Re-evaluate against the actual final wall-clock boundary.
+    const finalNow=(dependencies.now??Date.now)();
+    if(!Number.isFinite(finalNow)||
+      Date.parse(s.sessionExpiresAt)<=finalNow||
+      r.expiresAtMs<=finalNow||
+      (request.mode==='ROOT'&&
+        Date.parse(request.rootExpiresAt??'')<=finalNow)){
+      return outcome('DENIED','ROOT_OR_READBACK_EXPIRED_DURING_REVIEW');
     }
     // TOCTOU remains between this read and the future native side effect.
     // Owner #702 beginIfCurrent must atomically fence the actual dispatch.
