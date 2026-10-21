@@ -59,6 +59,8 @@ jobs:
       - run: node --test --import tsx test/browser-live.test.ts
       - name: Verify additional private GUI, COM, WMI and UAC broker preflight
         run: node --test --import tsx test/private-desktop-additional-brokers.test.ts
+      - name: Verify AI Screen forged child launches and emergency-stop fences
+        run: node --test --import tsx test/private-child-forgery-emergency-stop.test.ts
       - name: Verify AI Screen PID creation FILETIME and kernel Job owner fences
         run: node --test --import tsx test/private-desktop-owner-fence.test.ts
       - name: Verify CORE trusted-Broker versus private GUI and UAC boundaries
