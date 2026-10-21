@@ -31,5 +31,6 @@ The exact Windows image handle/creation identity must be verified against the pi
 
 - npm run typecheck
 - node --test --import tsx test/s3-broker-crash-rollback-independent-qa.test.ts
+- npm test (test/fixtures/s3-worker28-runner.test.ts imports the same cases because some POSIX shells do not expand test/**/*.test.ts to root-level test files)
 
 This PR intentionally does not introduce a new CLI or workflow and must remain DRAFT. Record only exact-HEAD GitHub CI results as hosted CI; GitHub source fixture PASS is not an Agent/OS-level PASS.
