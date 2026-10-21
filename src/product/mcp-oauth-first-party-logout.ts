@@ -36,7 +36,7 @@ export class FirstPartyMcpOAuthLogoutBoundary {
         typeof input.operationId !== 'string' ||
         !/^[A-Za-z0-9_.:-]{8,128}$/.test(input.operationId))
       return {status:'denied'};
-    let identity:Awaited<ReturnType<typeof this.deps.verifyFirstPartyOwnerSession>>;
+    let identity:{accountId:string;role:'user'|'admin'|'service'}|null;
     try {
       identity=await this.deps.verifyFirstPartyOwnerSession(input.firstPartySessionProof);
     } catch {
