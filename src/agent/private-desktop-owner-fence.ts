@@ -130,3 +130,104 @@ export async function verifyPrivateDesktopOwnerFence(
   }
   return second;
 }
+
+/**
+ * The child launch reply (PID/stdout/exitCode=0) is UNTRUSTED until a
+ * separately protected native collector verifies the actual parent/child
+ * process creations and kernel Job membership. This is a pure source-only
+ * contract, never the runtime CreateProcess or Job path.
+ */
+export interface PrivateDesktopChildLaunchReceipt {
+  readonly child:PrivateDesktopLaunchIdentity;
+  readonly claimedParentPid:number;
+  readonly claimedParentCreationTime100ns:string;
+  readonly requestId:string;
+  readonly desktopGeneration:string;
+}
+export interface PrivateDesktopChildKernelWitness extends PrivateDesktopKernelWitness {
+  readonly actualParentPid:number;
+  readonly actualParentCreationTime100ns:string;
+  readonly observedLaunchRequestId:string;
+}
+export function assertPrivateDesktopChildLaunchProvenance(
+  protectedParent:PrivateDesktopLaunchIdentity,
+  parentWitness:PrivateDesktopKernelWitness,
+  untrustedReceipt:PrivateDesktopChildLaunchReceipt,
+  childWitness:PrivateDesktopChildKernelWitness,
+):Readonly<{childPid:number;childCreationTime100ns:string;result:'verified-source-only'}>{
+  // Never infer provenance from a successful process launch report or a
+  // matching PID alone. Both snapshots require the same protected Job.
+  assertPrivateDesktopProcessProvenance(protectedParent,parentWitness,'read');
+  const child=untrustedReceipt?.child;
+  if(!child||!Number.isSafeInteger(child.pid)||
+     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+       untrustedReceipt.requestId??'')){
+    refuse('PRIVATE_DESKTOP_PROVENANCE_MISSING');
+  }
+  if(untrustedReceipt.claimedParentPid!==protectedParent.pid||
+     untrustedReceipt.claimedParentCreationTime100ns!==protectedParent.creationTime100ns||
+     untrustedReceipt.desktopGeneration!==protectedParent.desktopGeneration||
+     child.pid===protectedParent.pid||
+     child.sessionId!==protectedParent.sessionId||
+     child.desktopGeneration!==protectedParent.desktopGeneration||
+     child.ownerEpoch!==protectedParent.ownerEpoch||
+     child.cancelEpoch!==protectedParent.cancelEpoch||
+     child.guardianPid!==protectedParent.guardianPid||
+     child.guardianCreationTime100ns!==protectedParent.guardianCreationTime100ns||
+     child.jobHandleId!==protectedParent.jobHandleId||
+     !validTime(child.creationTime100ns)||
+     BigInt(child.creationTime100ns)<BigInt(protectedParent.creationTime100ns)){
+    refuse('PRIVATE_DESKTOP_PROVENANCE_STALE');
+  }
+  // The untrusted receipt cannot assert its own true parent.
+  if(childWitness?.actualParentPid!==protectedParent.pid||
+     childWitness.actualParentCreationTime100ns!==protectedParent.creationTime100ns||
+     childWitness.observedLaunchRequestId!==untrustedReceipt.requestId){
+    refuse('PRIVATE_DESKTOP_PROVENANCE_STALE');
+  }
+  assertPrivateDesktopProcessProvenance(child,childWitness,'read');
+  return Object.freeze({
+    childPid:child.pid,childCreationTime100ns:child.creationTime100ns,
+    result:'verified-source-only' as const,
+  });
+}
+
+export interface PrivateDesktopEmergencyStopObservation {
+  readonly ownerEpoch:number;
+  readonly cancelEpoch:number;
+  /** If true, no new private UIA, child launch, or file-picker action. */
+  readonly emergencyStopPending:boolean;
+  readonly inputDesktop:string;
+  /** "unknown" means an OS side effect may already have begun. */
+  readonly pendingEffect:'none'|'native-write-in-flight'|'unknown';
+  readonly requestId:string;
+}
+/**
+ * Emergency STOP revokes NEW mutation dispatch and makes an in-flight write
+ * UNKNOWN, not "undone". Verified cleanup/Job close must use a separate
+ * protected OS path; it is never authorized by this function.
+ */
+export function assertPrivateDesktopEmergencyStopFence(
+  before:PrivateDesktopEmergencyStopObservation,
+  current:PrivateDesktopEmergencyStopObservation,
+):Readonly<{requestId:string;kind:'source-only-mutation-gate'}>{
+  if(!before||!current||
+     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(before.requestId??'')||
+     before.requestId!==current.requestId||
+     !Number.isSafeInteger(before.ownerEpoch)||before.ownerEpoch<1||
+     !Number.isSafeInteger(before.cancelEpoch)||before.cancelEpoch<0||
+     before.inputDesktop!=='Default'||current.inputDesktop!=='Default'){
+    refuse('PRIVATE_DESKTOP_INPUT_DESKTOP_UNSAFE');
+  }
+  if(before.ownerEpoch!==current.ownerEpoch||
+     before.cancelEpoch!==current.cancelEpoch||
+     before.emergencyStopPending||current.emergencyStopPending){
+    refuse('PRIVATE_DESKTOP_OWNER_REVOKED');
+  }
+  if(before.pendingEffect!=='none'||current.pendingEffect!=='none'){
+    refuse('PRIVATE_DESKTOP_PROVENANCE_STALE');
+  }
+  return Object.freeze({
+    requestId:before.requestId,kind:'source-only-mutation-gate' as const,
+  });
+}
