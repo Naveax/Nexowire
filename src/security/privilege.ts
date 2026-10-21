@@ -13,6 +13,12 @@ export function privilegeRequirement(
   input: unknown,
 ): PrivilegeRequirement {
   switch (capability) {
+    // Typed Hyper-V operations require separate authorization. They are
+    // deliberately NOT in isPrivilegedBrokerCapability and have NO dispatch.
+    // Generic shell.exec stays standard and must never become elevation.
+    case 'hyperv.vm.status':
+    case 'hyperv.vm.start':
+    case 'hyperv.vm.stop':
     case 'windows.service.control':
     case 'windows.task.control':
     case 'windows.firewall.control':
