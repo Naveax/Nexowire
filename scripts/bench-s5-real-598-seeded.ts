@@ -170,16 +170,20 @@ export async function runS5RealParserSeeded(options:{bodyBytes:number;rssGrowthL
       w.req.end(TAIL);
     }));
     const all=await Promise.all(writers.map(w=>w.response));
+    const canonicalHashByWriter:string[]=[];
     for(let i=0;i<4;i++){
       const got=all[i]!,want=writers[i]!.hash.digest('hex');
       assert.equal(got.status,200);assert.equal(got.data?.bytes,payloadBytes);
-      assert.equal(got.data?.sha,want);samplesLarge.push(got.durationMs);
+      assert.equal(got.data?.sha,want);
+      canonicalHashByWriter.push(want); // stable writer index, not HTTP completion order
+      samplesLarge.push(got.durationMs);
     }
     assert.equal(receivedSha.length,4);
     assert.equal(bytes,4*payloadBytes);
-    // Snapshot the four large transfers BEFORE the subsequent gzip probe,
-    // whose successful parse is a distinct fifth fixture request.
-    const fourLargeHashes=[...receivedSha];
+    // Stable per-writer hashes. The server's receivedSha is in nondeterministic
+    // completion order; NEVER use it as the combined fixed-seed fingerprint.
+    // Snapshot before the later successful gzip parse, a distinct fifth request.
+    const fourLargeHashes=canonicalHashByWriter;
     const gzipOk=await post(new Uint8Array(bomb),'gzip');
     assert.equal(gzipOk.status,200);assert.equal(gzipOk.data?.bytes,2*1024*1024);
     const oversized=gzipSync(Buffer.from(JSON.stringify({payload:'H'.repeat(NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES)})));
