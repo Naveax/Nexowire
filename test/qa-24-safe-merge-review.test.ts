@@ -39,6 +39,15 @@ test('QA24 SHA moved #572 #575 #642 #664 never inherits old merge-base',()=>{
   assert.equal(node(s,572).head_sha,'ca67b8adc717256906f8396d8057104df66be946');
 });
 
+test('QA24 incomplete open census and duplicated evidence refuse every review candidate',()=>{
+  const s=copy();s.open_pr_count=78;
+  assert.ok(risk(s,648).includes('INCOMPLETE_OR_DUPLICATED_SNAPSHOT'));
+  assert.equal(reviewFrozenDag(s).review_candidates.length,0);
+  const t=copy();t.file_claims.push(structuredClone(t.file_claims.find(x=>x.pr===657)!));
+  assert.ok(risk(t,648).includes('INCOMPLETE_OR_DUPLICATED_SNAPSHOT'));
+  assert.equal(reviewFrozenDag(t).review_candidates.length,0);
+});
+
 test('QA24 exact SHA mismatch denies former green CI',()=>{
   const s=copy();node(s,648).head_sha='f'.repeat(40);
   assert.ok(risk(s,648).includes('CI_HEAD_UNVERIFIED'));
