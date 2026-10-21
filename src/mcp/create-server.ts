@@ -623,6 +623,8 @@ async function execute(
               idempotency: {
                 key: idempotencyKey,
                 replayed: false,
+                // Recoverable identity must survive the error path too.
+                operationId,
                 ...(idempotencyCreated && !recoveryJournalFailed
                   ? { persistedStatus: recordedStatus }
                   : { outcomeUnconfirmed: providerDispatched }),
