@@ -10,7 +10,7 @@ import {createHash, createHmac, timingSafeEqual} from 'node:crypto';
 
 type Role = 'authority' | 'local_approval' | 'windows_kernel' | 'pipe_capture' | 'readback' | 'transport';
 type Kind = 'reserve' | 'approved' | 'token_attested' | 'launch' | 'stdout' | 'stderr' | 'exit' | 'postcondition' | 'ack' | 'unknown' | 'revoke';
-type Verdict = 'succeeded' | 'failed' | 'unknown' | 'denied';
+type Verdict = 'succeeded' | 'failed' | 'unknown';
 type Context = {
   requestId: string; ownerId: string; deviceId: string; sessionId: string;
   ownerEpoch: number; coreEpoch: number; mode: 'CORE' | 'ROOT'; requestExpiresMs: number;
@@ -109,18 +109,18 @@ function classify(entries: readonly Entry[], anchor: Anchor, context: Context, n
   const l = single('launch'), out = single('stdout'), err = single('stderr');
   const x = single('exit'), p = single('postcondition');
   if (get('revoke').length || get('unknown').length) return 'unknown'; // ACK cannot unstick uncertainty
-  if (!r || !a || !t || !l) return 'denied'; // no independently proven dispatch
+  if (!r || !a || !t || !l) return 'unknown'; // absence of proof is not proof of no dispatch
   const order = [r, a, t, l, out, err, x, p].filter((e): e is Entry => Boolean(e)).map(e => e.seq);
   if (order.some((n, i) => i > 0 && n <= order[i - 1]!)) return 'unknown';
   const matchProcess = (e: Entry | undefined) =>
     Boolean(e && e.data.pid === t.data.pid && e.data.startFiletime === t.data.startFiletime);
   const trusted = Number.isSafeInteger(r.data.counter) && (r.data.counter as number) > 0 &&
-    a.data.method === 'physical_local_uac' && nonempty(a.data.receiptId) &&
+    a.data.method === 'prior_physical_local_enrollment' && nonempty(a.data.receiptId) &&
     t.data.integrity === 'high' && t.data.adminsEnabled === true &&
     t.data.brokerImage === PINNED_IMAGE && t.data.publisher === PINNED_PUBLISHER &&
     t.data.aclProtected === true && Number.isSafeInteger(t.data.pid) &&
     nonempty(t.data.startFiletime) && matchProcess(l) && hex64(l.data.commandRef);
-  if (!trusted) return 'denied';
+  if (!trusted) return 'unknown'; // launch may have happened despite lost/untrusted proof
   if (!out || !err || !x || !p) return 'unknown';
   const streamValid = [out, err].every(e => matchProcess(e) && hex64(e.data.digest) &&
     Number.isSafeInteger(e.data.bytes) && (e.data.bytes as number) >= 0 &&
@@ -143,7 +143,7 @@ const NOW = 1_800_000_000_000;
 function example() {
   const q = new SyntheticAudit(ctx);
   q.append('reserve', {counter: 81});
-  q.append('approved', {method: 'physical_local_uac', receiptId: 'trusted-fixture-local-enrollment'});
+  q.append('approved', {method: 'prior_physical_local_enrollment', receiptId: 'trusted-fixture-local-enrollment'});
   const proc = {pid: 2719, startFiletime: '133800000000000001'};
   q.append('token_attested', {...proc, integrity: 'high', adminsEnabled: true,
     brokerImage: PINNED_IMAGE, publisher: PINNED_PUBLISHER, aclProtected: true});
@@ -192,7 +192,7 @@ test('duplicate ACKs do not create success without trusted readback', () => {
   q.append('reserve', {counter: 81});
   q.append('ack', {received: true});
   q.append('ack', {received: true});
-  assert.equal(classify(q.entries, q.witness(), ctx, NOW), 'denied');
+  assert.equal(classify(q.entries, q.witness(), ctx, NOW), 'unknown');
 });
 test('UNKNOWN after possible dispatch is sticky, never upgraded by duplicate ACK', () => {
   const q = example();
