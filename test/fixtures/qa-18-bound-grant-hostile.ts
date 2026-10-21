@@ -12,12 +12,12 @@ import {randomUUID} from 'node:crypto';
 import {PostgresBoundGrantCas,type AuthenticatedGrantScope,
   type ExternalGrantCas,type ExternalGrantCasReceipt,type ExternalRevokeRequest,
   type ExternalRevokeReceipt,type ExternalRePairRequest,
-  type ExternalRePairReceipt} from '../src/agent/postgres-bound-grant-cas.js';
-import {WitnessRevokeCoordinator} from '../src/agent/witness-revoke-coordinator.js';
-import {PostgresWitnessDelegation} from '../src/agent/witness-delegation.js';
-import type {CasRequest} from '../src/agent/remote-mutation-cas.js';
+  type ExternalRePairReceipt} from '../../src/agent/postgres-bound-grant-cas.js';
+import {WitnessRevokeCoordinator} from '../../src/agent/witness-revoke-coordinator.js';
+import {PostgresWitnessDelegation} from '../../src/agent/witness-delegation.js';
+import type {CasRequest} from '../../src/agent/remote-mutation-cas.js';
 import type {WitnessPgPool,WitnessPgConnection}
-  from '../src/agent/postgres-monotonic-witness.js';
+  from '../../src/agent/postgres-monotonic-witness.js';
 
 const fp='c'.repeat(64);
 type D={owner_id:string;epoch:string;generation:number;state:'active'};
