@@ -180,7 +180,9 @@ function exactPr(raw:unknown){
 /** Collects all OPEN PRs, CI, changed paths and true git merge-base comparisons. */
 export async function collectLiveSnapshot(api:GithubRead,repo:string,
   observedAt=new Date().toISOString()):Promise<LiveSnapshot> {
-  if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
+  const parts=repo.split('/');
+  if(parts.length!==2||parts.some(part=>
+    !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(part)||part.includes('..')))
     throw new Error('INVALID_REPO');
   const prefix=`/repos/${repo}`;
   const branchHead=async()=>str(nr(nr(await api(`${prefix}/branches/main`)).commit).sha);
