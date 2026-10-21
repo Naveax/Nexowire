@@ -172,6 +172,7 @@ class TestOnlyDurableOracle{
        proof.outcome!=='ACK_RECEIVED'||proof.atMs!==c.now.getTime()||
        proof.sequence<=i.sequence||
        digest(i.immutableScope)!==digest(proof.scope)||
+       digest(i.immutableScope)!==digest(scope(r))||
        proof.launchId!==i.launchId||
        !candidate(r,c))return false;
     // Source gate already rejects ROOT expiry; explicit anchored deadline
@@ -220,6 +221,7 @@ class TestOnlyDurableOracle{
     if(!this.online||!i.dispatched||!proof||i.integrityConflict)return i.state;
     if(!authentic(proof,'observer')||proof.phase!=='READBACK'||
        proof.outcome!=='EFFECT'||proof.atMs<=0||
+       proof.outputSha256!==SHA_A||
        proof.launchId!==i.launchId||
        proof.sequence<=i.sequence||
        digest(proof.scope)!==digest(i.immutableScope))return i.state;
@@ -324,6 +326,8 @@ test('independent immutable readback: wrong signer, swapped digest, wrong scope 
   assert.equal(o.observe(r,receipt(r,'observer','READBACK',3,ROOT_END+3,'EFFECT',
     SHA_A,strangerSigner.privateKey)),'MUTATION_UNKNOWN');
   assert.equal(o.observe(r,{...good,outputSha256:SHA_B}),'MUTATION_UNKNOWN');
+  assert.equal(o.observe(r,receipt(r,'observer','READBACK',3,ROOT_END+3,
+    'EFFECT',SHA_B)),'MUTATION_UNKNOWN');
   assert.equal(o.observe(r,{...good,scope:{...good.scope,ownerEpoch:26}}),'MUTATION_UNKNOWN');
   assert.equal(o.observe(r,{...good,launchId:'different'}),'MUTATION_UNKNOWN');
   assert.equal(o.observe(r,receipt(r,'observer','READBACK',1,ROOT_END+3,'EFFECT')),
