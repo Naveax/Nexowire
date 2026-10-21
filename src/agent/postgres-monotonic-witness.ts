@@ -56,8 +56,10 @@ export type IndependentProvenanceCheck =
   ()=>Promise<{verified:boolean;authorityId:string;validUntil:number}>;
 
 export interface WitnessOperatorIntent {
-  kind:'enroll'|'migrate'|'freeze';
+  kind:'enroll'|'migrate'|'freeze'|'bind_session'|'grant_core'|
+    'grant_root'|'revoke'|'rotate_session'|'re_pair';
   authorityId:string;deviceId:string;ownerId:string;epoch:string;
+  sessionEpoch?:string;nextSessionEpoch?:string;
   nextOwnerId?:string;nextEpoch?:string;generation?:number;
 }
 /**

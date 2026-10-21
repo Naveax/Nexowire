@@ -6,10 +6,12 @@ import type {
 
 const uuid=z.string().uuid();
 const intent=z.object({
-  kind:z.enum(['enroll','migrate','freeze']),
+  kind:z.enum(['enroll','migrate','freeze','bind_session','grant_core',
+    'grant_root','revoke','rotate_session','re_pair']),
   authorityId:uuid,deviceId:uuid,ownerId:uuid,epoch:uuid,
+  sessionEpoch:uuid.optional(),nextSessionEpoch:uuid.optional(),
   nextOwnerId:uuid.optional(),nextEpoch:uuid.optional(),
-  generation:z.number().int().positive().optional(),
+  generation:z.number().int().nonnegative().optional(),
 }).strict();
 const approval=z.object({
   version:z.literal(1),intent,nonce:uuid,
@@ -44,8 +46,10 @@ function decodeSigned(raw:string,key:KeyObject):unknown{
 function matching(a:WitnessOperatorIntent,b:WitnessOperatorIntent):boolean{
   return a.kind===b.kind&&a.authorityId===b.authorityId&&
     a.deviceId===b.deviceId&&a.ownerId===b.ownerId&&
-    a.epoch===b.epoch&&a.nextOwnerId===b.nextOwnerId&&
-    a.nextEpoch===b.nextEpoch&&a.generation===b.generation;
+    a.epoch===b.epoch&&a.sessionEpoch===b.sessionEpoch&&
+    a.nextSessionEpoch===b.nextSessionEpoch&&
+    a.nextOwnerId===b.nextOwnerId&&a.nextEpoch===b.nextEpoch&&
+    a.generation===b.generation;
 }
 export function signedOperatorGrantVerifier(
   trustedEd25519PublicKeyPem:string,now:()=>number=Date.now,
