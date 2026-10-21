@@ -217,3 +217,35 @@ test('#588 cancel during destination readback cannot erase dispatched Native mut
     assert.equal(fx.writes, 1);
     assert.equal(fx.publishes, 0);
   }));
+
+
+test('#588 later cancel MUST NOT downgrade a settled pending Native mutation from UNKNOWN',
+  { timeout: 15000 }, async () => isolated(async root => {
+    const fx = fixture(root, 'after-native-side-effect');
+    const started = await fx.jobs.start(input);
+    try {
+      await fx.blocked.reached;
+      assert.equal(fx.stage.length, CHUNK, 'write already committed to synthetic stage');
+    } finally {
+      fx.blocked.release(); // lose ACK, let worker fully finalize its unknown journal
+      await fx.jobs.waitForIdle(started.id);
+    }
+    const before = await journal(root, started.id);
+    assert.equal(before.state, 'MUTATION_UNKNOWN');
+    assert.equal(before.pending?.length, CHUNK);
+    assert.equal(fx.writes, 1);
+
+    // There is no live worker/PID now, but the durable pending operation still
+    // represents a real remote side effect. A later cancel is NOT evidence
+    // that the earlier write was safely rolled back.
+    const response = await fx.jobs.cancel(started.id,
+      input.accountId, input.sourceDeviceId, input.targetDeviceId);
+    assert.equal(response.state, 'MUTATION_UNKNOWN',
+      'cancel after worker termination must preserve uncertain write outcome');
+    const after = await journal(root, started.id);
+    assert.equal(after.state, 'MUTATION_UNKNOWN');
+    assert.equal(after.pending?.requestId, before.pending?.requestId);
+    assert.equal(after.bytesConfirmed, 0);
+    assert.equal(fx.writes, 1);
+    assert.equal(fx.publishes, 0);
+  }));
