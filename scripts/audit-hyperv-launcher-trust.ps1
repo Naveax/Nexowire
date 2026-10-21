@@ -12,6 +12,8 @@ param(
 )
 $ErrorActionPreference='Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'WINDOWS_ONLY' }
+try { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop } catch { # Fail closed in per-image evidence checks below
+}
 $unsafeSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
 $writeMask=0x2 -bor 0x4 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
 function Inspect-Executable([string]$literalPath, [string]$digestPinned) {
@@ -28,11 +30,18 @@ function Inspect-Executable([string]$literalPath, [string]$digestPinned) {
     $digest=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant()
   } finally {if ($stream) {$stream.Dispose()};$sha.Dispose()}
   $auth=$null;$acl=$null;$parentAcl=$null
-  try{$auth=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop}catch{}
-  try{
-    $acl=Microsoft.PowerShell.Security\Get-Acl -LiteralPath $p -ErrorAction Stop
-    $parentAcl=Microsoft.PowerShell.Security\Get-Acl -LiteralPath $parent.FullName -ErrorAction Stop
-  }catch{$acl=$null;$parentAcl=$null}
+  $signatureProviderError='';$aclProviderError=''
+  try {$auth=Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $p -ErrorAction Stop}
+  catch {$signatureProviderError=$_.Exception.GetType().Name}
+  try {
+    # Use the native .NET Windows ACL API. Hosted pwsh/WindowsPowerShell
+    # cmdlet availability varies; missing evidence must never be a clean ACL.
+    $acl=[IO.FileSystemAclExtensions]::GetAccessControl([IO.FileInfo]$item)
+    $parentAcl=[IO.FileSystemAclExtensions]::GetAccessControl([IO.DirectoryInfo]$parent)
+  } catch {
+    $aclProviderError=$_.Exception.GetType().Name
+    $acl=$null;$parentAcl=$null
+  }
   $badFile=@();$badParent=@()
   foreach($pair in @(@($acl,$badFile),@($parentAcl,$badParent))){
     $a=$pair[0]
@@ -48,6 +57,9 @@ function Inspect-Executable([string]$literalPath, [string]$digestPinned) {
   }
   return [ordered]@{
     signatureStatus=$(if($null -ne $auth){[string]$auth.Status}else{'UNAVAILABLE'})
+    signerThumbprint=$(if($null -ne $auth -and $null -ne $auth.SignerCertificate){[string]$auth.SignerCertificate.Thumbprint}else{''})
+    signatureProviderError=$signatureProviderError
+    aclProviderError=$aclProviderError
     publisherMatches=$null -ne $auth -and $auth.Status -eq 'Valid' -and
       $null -ne $auth.SignerCertificate -and
       $ExpectedPublisherThumbprint -match '^[a-fA-F0-9]{40}$' -and
