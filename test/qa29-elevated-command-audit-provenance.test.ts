@@ -69,7 +69,14 @@ class SyntheticAudit {
     return {seq, digest: head, mac: sign('anchor', JSON.stringify([seq, head]))};
   }
   append(kind: Kind, data: Record<string, unknown>, context = this.context): Entry {
-    if (!data || Object.keys(data).some(k => !fields[kind].includes(k))) {
+    // Synthetic reservation fence: never dispatch again after a possible launch,
+    // lost ACK or revoke. Production requires an *external* linearizable CAS.
+    if (kind === 'launch' && this.entries.some(e =>
+      e.kind === 'launch' || e.kind === 'unknown' || e.kind === 'revoke')) {
+      throw new Error('AUDIT_REPLAY_FENCED');
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data) ||
+        Object.keys(data).some(k => !fields[kind].includes(k))) {
       throw new Error('AUDIT_UNSAFE_OR_UNKNOWN_FIELD');
     }
     const entry: Entry = {
@@ -92,7 +99,9 @@ function verifyChain(entries: readonly Entry[], independentLatest: Anchor, expec
   let previous = sha('qa29-genesis');
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    if (!e || e.seq !== i + 1 || e.previous !== previous ||
+    if (!e || !e.context || typeof e.context !== 'object' ||
+        !e.data || typeof e.data !== 'object' || Array.isArray(e.data) ||
+        e.seq !== i + 1 || e.previous !== previous ||
         roles[e.kind] !== e.role || !fields[e.kind] ||
         Object.keys(e.data).some(k => !fields[e.kind].includes(k)) ||
         !validContext(e.context, expected, now) ||
@@ -259,4 +268,32 @@ test('allowlist refuses raw password/token/argv and records only bounded commitm
     assert.throws(() => q.append('launch', {[key]: 'SUPER_SECRET_PASSWORD'}), /AUDIT_UNSAFE_OR_UNKNOWN_FIELD/);
   }
   assert.doesNotMatch(JSON.stringify(q.entries), /SUPER_SECRET_PASSWORD|bearer |privateKey|credentialValue/);
+});
+
+test('UNKNOWN fences any new synthetic launch, including duplicate after an authenticated launch', () => {
+  const q = example();
+  q.append('unknown', {reason: 'lost_ack'});
+  assert.throws(() => q.append('launch', {
+    pid: 2719, startFiletime: '133800000000000001', commandRef: sha('replay'),
+  }), /AUDIT_REPLAY_FENCED/);
+  assert.equal(classify(q.entries, q.witness(), ctx, NOW), 'unknown');
+
+  const beforeDispatch = new SyntheticAudit(ctx);
+  beforeDispatch.append('reserve', {counter: 83});
+  beforeDispatch.append('unknown', {reason: 'may_have_dispatched_before_crash'});
+  assert.throws(() => beforeDispatch.append('launch', {
+    pid: 1, startFiletime: '123', commandRef: sha('late'),
+  }), /AUDIT_REPLAY_FENCED/);
+});
+test('malformed untrusted audit envelope rejects as UNKNOWN rather than throwing', () => {
+  for (const corrupt of [
+    (e: Entry[]) => {e[0]!.context = null as unknown as Context},
+    (e: Entry[]) => {e[2]!.data = null as unknown as Record<string, unknown>},
+    (e: Entry[]) => {e[4]!.data = {stdoutRaw: 'SECRET'}},
+  ]) {
+    const q = example(), w = q.witness();
+    corrupt(q.entries);
+    assert.doesNotThrow(() => classify(q.entries, w, ctx, NOW));
+    assert.equal(classify(q.entries, w, ctx, NOW), 'unknown');
+  }
 });
