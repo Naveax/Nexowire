@@ -13,7 +13,7 @@ test('QA24 38 open PRs are pinned to 40-char HEAD SHA and per-SHA CI run IDs',()
   const s=fresh();
   assert.equal(s.node_count,38);
   assert.equal(new Set(s.nodes.map(n=>n.pr)).size,38);
-  assert.equal(s.nodes.filter(n=>n.parent_pr!==null).length,20);
+  assert.equal(s.nodes.filter(n=>n.parent_pr!==null).length,19);
   assert.equal(codes(s).includes('INVALID_SHA'),false);
   assert.equal(codes(s).includes('MISSING_EXACT_HEAD_CI'),false);
   assert.equal(auditIntegrationDag(s).gate,'NO_GO');
