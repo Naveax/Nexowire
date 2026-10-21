@@ -21,7 +21,8 @@ const facts: CoreUiFacts = {deviceId:'d1',ownerAccountId:'o1',currentOwnerSessio
   agentReportedBrokerReady:true,consentExeSeen:true,brokerHttpStatus:401};
 const broker: BrokerNativeStatement = {
   schema:'nexowire.ui.broker-native.v1',deviceId:'d1',ownerAccountId:'o1',
-  ownerSessionId:'s1',ownerEpoch:4,grantGeneration:8,
+  ownerSessionId:'s1',ownerEpoch:4,grantGeneration:8,grantMode:'CORE',
+  rootLeaseIssuedAt:null,rootLeaseExpiresAt:null,
   observedAt:N.toISOString(),brokerImageSha256:SHA,brokerVersion:'1.0.5',
   nativeHighToken:true,administratorsEnabled:true,authenticatedBroker:true,
   pinnedPublisherSignature:true,protectedParentAcl:true,
@@ -77,12 +78,24 @@ test('ROOT current owner session with bounded 15m lease, and expiry at exact mil
   const issuedAt=new Date(N.getTime()-899_999).toISOString();
   const expiresAt=new Date(N.getTime()+1).toISOString();
   const root={...facts,requestedMode:'ROOT' as const,rootLease:{ownerAccountId:'o1',sessionId:'s1',issuedAt,expiresAt}};
-  assert.equal(evalUi(root).state,'ROOT_SIGNED_BROKER');
+  const rootEvidence=signed({...broker,grantMode:'ROOT',rootLeaseIssuedAt:issuedAt,rootLeaseExpiresAt:expiresAt});
+  assert.equal(evalUi(root,pins,rootEvidence).state,'ROOT_SIGNED_BROKER');
+  assert.equal(evalUi(root).effectiveElevatedBroker,false, 'CORE proof cannot elevate ROOT');
   assert.equal(evalUi(root,{...pins,now:new Date(N.getTime()+1)}).state,'ROOT_EXPIRED');
   const overlong={...root,rootLease:{...root.rootLease,issuedAt:new Date(N.getTime()-900_000).toISOString()}};
   assert.equal(evalUi(overlong).state,'ROOT_EXPIRED');
   const wrongSession={...root,rootLease:{...root.rootLease,sessionId:'other'}};
   assert.equal(evalUi(wrongSession).effectiveElevatedBroker,false);
+});
+test('ROOT lease is signed and mode-bound: forged lease and ROOT-to-CORE replay denied',()=>{
+  const issuedAt=new Date(N.getTime()-1000).toISOString();
+  const expiresAt=new Date(N.getTime()+899000).toISOString();
+  const root={...facts,requestedMode:'ROOT' as const,
+    rootLease:{ownerAccountId:'o1',sessionId:'s1',issuedAt,expiresAt}};
+  const proof=signed({...broker,grantMode:'ROOT',rootLeaseIssuedAt:issuedAt,rootLeaseExpiresAt:expiresAt});
+  assert.equal(evalUi(root,pins,proof).state,'ROOT_SIGNED_BROKER');
+  assert.equal(evalUi({...root,rootLease:{...root.rootLease,expiresAt:new Date(N.getTime()+900_000).toISOString()}},pins,proof).effectiveElevatedBroker,false);
+  assert.equal(evalUi(facts,pins,proof).effectiveElevatedBroker,false);
 });
 test('CORE persistence does not depend on 15m ROOT expiration, but needs fresh receipts on reconnect',()=>{
   const later=new Date(N.getTime()+24*60*60*1000);
