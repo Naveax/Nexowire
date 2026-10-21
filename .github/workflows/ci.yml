@@ -59,6 +59,8 @@ jobs:
       - run: node --test --import tsx test/browser-live.test.ts
       - name: Verify additional private GUI, COM, WMI and UAC broker preflight
         run: node --test --import tsx test/private-desktop-additional-brokers.test.ts
+      - name: Verify CORE trusted-Broker versus private GUI and UAC boundaries
+        run: node --test --import tsx test/private-core-broker-boundary-negative.test.ts
       - name: Verify AI Screen/Job child provenance and no physical GUI input
         run: node --test --import tsx test/private-desktop-job-compat-negative.test.ts
       - name: Verify private file-picker adversarial boundaries
