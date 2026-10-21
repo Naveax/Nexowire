@@ -16,6 +16,9 @@ export function privilegeRequirement(
     // Typed Hyper-V operations require separate authorization. They are
     // deliberately NOT in isPrivilegedBrokerCapability and have NO dispatch.
     // Generic shell.exec stays standard and must never become elevation.
+    case 'core.shell.exec':
+    case 'core.process.start':
+    case 'core.process.stop':
     case 'hyperv.vm.status':
     case 'hyperv.vm.start':
     case 'hyperv.vm.stop':
