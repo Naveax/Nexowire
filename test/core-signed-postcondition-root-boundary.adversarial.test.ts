@@ -111,6 +111,12 @@ function scopeTuple(s:Scope):unknown[]{
 function sameScope(a:Scope,b:Scope):boolean{
   return JSON.stringify(scopeTuple(a))===JSON.stringify(scopeTuple(b));
 }
+function exactScopeFields(s:Scope):boolean{
+  if(!s||typeof s!=='object')return false;
+  const required=['requestId','deviceId','ownerAccountId','ownerEpoch',
+    'grantGeneration','sessionEpoch','credentialBinding','mode','actionDigest'];
+  return Object.keys(s).sort().join(',')===required.sort().join(',');
+}
 interface Witness {
   protocol:'nexowire.test-only.witness.v1';
   issuer:'independent-witness-fixture';
@@ -161,7 +167,8 @@ function canonicalSignature(sig:string):Buffer|null{
 }
 function checkWitness(w:Witness):boolean{
   const required=['protocol','issuer','event','seq','atMs','launchId','scope','signature'];
-  if(Object.keys(w).sort().join(',')!==required.sort().join(','))return false;
+  if(Object.keys(w).sort().join(',')!==required.sort().join(',')||
+     !exactScopeFields(w.scope))return false;
   if(w.protocol!=='nexowire.test-only.witness.v1'||
      w.issuer!=='independent-witness-fixture'||
      !Number.isSafeInteger(w.seq)||w.seq<1||
@@ -173,7 +180,8 @@ function checkWitness(w:Witness):boolean{
 }
 function checkObservation(o:Observation):boolean{
   const required=['protocol','issuer','effect','observedAtMs','launchId','outputDigest','scope','signature'];
-  if(Object.keys(o).sort().join(',')!==required.sort().join(','))return false;
+  if(Object.keys(o).sort().join(',')!==required.sort().join(',')||
+     !exactScopeFields(o.scope))return false;
   if(o.protocol!=='nexowire.test-only.postcondition.v1'||
      o.issuer!=='independent-observer-fixture'||
      !Number.isSafeInteger(o.observedAtMs)||o.observedAtMs<1||
@@ -304,6 +312,7 @@ test('cryptographic negatives: wrong witness signer, altered scope, bad signatur
   assert.equal(oracle.witness({...good,scope:{...good.scope,grantGeneration:8}},r,c),false);
   assert.equal(oracle.witness({...good,scope:{...good.scope,sessionEpoch:'repaired'}},r,c),false);
   assert.equal(oracle.witness({...good,event:'DISPATCH_COMMITTED'},r,c),false);
+  assert.equal(oracle.witness({...good,scope:{...good.scope,clientApproved:true} as Scope},r,c),false);
   assert.equal(oracle.witness(good,r,c),true);
   assert.equal(oracle.witness(good,r,c),false);
   c.now=new Date(expiry-1);
@@ -333,6 +342,7 @@ test('independent observer key must verify immutable postcondition and historica
   }
   assert.equal(oracle.observe({...genuine,launchId:'other-launch'}),false);
   assert.equal(oracle.observe({...genuine,outputDigest:shaC}),false);
+  assert.equal(oracle.observe({...genuine,scope:{...genuine.scope,attested:true} as Scope}),false);
   assert.equal(oracle.observe(makeObservation(r,expiry-3)),false);
   assert.equal(oracle.state(r.requestId),'MUTATION_UNKNOWN');
   assert.equal(oracle.observe(genuine),true);
@@ -403,6 +413,22 @@ test('ROOT 900000ms before launch: no dispatch, signed no-send receipt required'
   assert.equal(oracle.witness(makeWitness('NO_DISPATCH',r,2,expiry),r,c),true);
   assert.equal(oracle.state(r.requestId),'CANCELLED_NO_EFFECT');
   assert.equal(oracle.syntheticLaunchIds.length,0);
+});
+
+
+test('ROOT expired before dispatch: signed timestamp backdating cannot override trusted now',()=>{
+  const r=request(baseId,'ROOT'),c=context('ROOT'),oracle=new TestOnlyEvidenceOracle();
+  c.now=new Date(expiry-1);
+  assert.equal(oracle.witness(makeWitness('RESERVED',r,1,expiry-1),r,c),true);
+  c.now=new Date(expiry);
+  const backdated=makeWitness('DISPATCH_COMMITTED',r,2,expiry-1);
+  assert.equal(checkWitness(backdated),true); // cryptographically valid but stale
+  assert.equal(oracle.witness(backdated,r,c),false);
+  assert.equal(oracle.witness(makeWitness('DISPATCH_COMMITTED',r,2,expiry),r,c),false);
+  assert.deepEqual(oracle.syntheticLaunchIds,[]);
+  assert.equal(oracle.state(r.requestId),'RESERVED');
+  assert.equal(oracle.witness(makeWitness('NO_DISPATCH',r,2,expiry),r,c),true);
+  assert.equal(oracle.state(r.requestId),'CANCELLED_NO_EFFECT');
 });
 
 test('preapproved CORE permits distinct commands without per-command UAC (source only)',()=>{
