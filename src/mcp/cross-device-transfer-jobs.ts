@@ -5,7 +5,9 @@ import path from 'node:path';
 
 import * as z from 'zod';
 import { requireTrustedAuthority, requireMonotonicLease,
-  type TrustedTransferAuthority, TransferTrustError } from '../workspace/artifact-job-trust.js';
+  type TrustedTransferAuthority, type TrustedTransferCoreGrants,
+  type FencedWriteEnvelope, type FencedWriteReceipt,
+  TransferTrustError } from '../workspace/artifact-job-trust.js';
 
 // Source/destination interaction must go through existing authorized native
 // capabilities. Never expose binary bodies through this public MCP surface.
@@ -18,6 +20,12 @@ export interface TransferRemote {
   write(device: string, file: string, contentBase64: string, first: boolean,
     offset: number): Promise<number>;
   moveNoOverwrite(device: string, from: string, to: string): Promise<void>;
+  /** #05 Native exact-offset atomic CAS + epoch fence: NOT available on Agent v1.0.5.
+   * Never substitute a Hub-only check for an atomic fenced mutation.
+   */
+  writeFenced?(job: Readonly<TransferJob>, envelope: Readonly<FencedWriteEnvelope>,
+    base64: string, first: boolean): Promise<FencedWriteReceipt>;
+  publishFenced?(job: Readonly<TransferJob>, epoch: number, token: string): Promise<void>;
 }
 export class TransferJobError extends Error {
   constructor(readonly code: string, message: string) {
@@ -41,6 +49,11 @@ const jobSchema = z.object({
   bytesConfirmed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   sha256: hex, sourceModifiedAt: z.string().optional(),
   fencing: z.object({ epoch: z.number().int().positive(), token: z.string().min(32).max(256) }).strict().optional(),
+  pending: z.object({
+    requestId: z.string().uuid(), offset: z.number().int().nonnegative(),
+    length: z.number().int().positive().max(65536),
+    sha256: hex, epoch: z.number().int().positive(),
+  }).strict().optional(),
   state: stateSchema, errorCode: z.string().optional(),
   createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
 }).strict();
@@ -66,8 +79,16 @@ export class CrossDeviceTransferJobs {
       authority?: TrustedTransferAuthority;
       /** Hosted production must set true; disabling is only for isolated legacy fixtures. */
       requireExternalAuthority: true;
+      grants?: TrustedTransferCoreGrants;
     },
   ) {}
+  private async assertCurrentCore(job: TransferJob,
+    stage: 'START'|'RESUME'|'WRITE'|'PUBLISH'|'STATUS'|'CANCEL'): Promise<void> {
+    if (!this.trust) return; // isolated legacy fixtures only
+    if (!this.trust.grants) throw new TransferTrustError('CORE_GRANT_AUTHORITY_REQUIRED',
+      'Current delegated owner CORE grants are unavailable.');
+    await this.trust.grants.assertCurrent(job, stage);
+  }
   private async assertFence(job: TransferJob, stage: 'WRITE' | 'PUBLISH',
     offset: number): Promise<void> {
     if (!this.trust) return; // pre-existing isolated legacy test path only
@@ -239,6 +260,7 @@ export class CrossDeviceTransferJobs {
   async status(id: string, account: string, source: string, target: string) {
     const job = await this.load(id);
     this.assertOwner(job, account, source, target);
+    await this.assertCurrentCore(job, 'STATUS');
     // A different process may have lost the worker after a restart. It is NOT
     // safe to report RUNNING or replay an unacknowledged remote mutation.
     if (job.state === 'RUNNING' && !this.workers.has(id) &&
@@ -248,6 +270,9 @@ export class CrossDeviceTransferJobs {
     return this.public(job);
   }
   async cancel(id: string, account: string, source: string, target: string) {
+    const original = await this.load(id);
+    this.assertOwner(original, account, source, target);
+    await this.assertCurrentCore(original, 'CANCEL');
     const runningElsewhere = this.workers.has(id) || await this.workerLeaseActive(id);
     const job = await this.update(id, record => {
       this.assertOwner(record, account, source, target);
@@ -273,6 +298,7 @@ export class CrossDeviceTransferJobs {
       const job = await this.load(input.resumeTransferId);
       this.assertOwner(job, input.accountId, input.sourceDeviceId,
         input.targetDeviceId, input.projectId);
+      await this.assertCurrentCore(job, 'RESUME');
       if (job.sourcePath !== input.sourcePath || job.targetPath !== input.targetPath) {
         return fail('TRANSFER_RESUME_MISMATCH', 'Resume path identity does not match durable job.');
       }
@@ -282,9 +308,11 @@ export class CrossDeviceTransferJobs {
       // Two MCP sessions may point at the same job; never adopt an actively
       // owned worker. A dead owner may be quarantined only on explicit resume.
       await this.assertWorkerLeaseAvailable(job);
-      // Reconcile remote stage and source BEFORE allowing any new write.
-      await this.reconcile(job);
+      // External higher epoch must fence the OLD writer before readback.
+      // A missing/torn stage while a pending mutation exists is UNKNOWN.
       await this.acquireFence(job, 'resume');
+      await this.reconcile(job);
+      delete job.pending;
       await this.recoverDeadWorkerLease(job.id);
       job.state = 'QUEUED';
       delete job.errorCode;
@@ -302,6 +330,21 @@ export class CrossDeviceTransferJobs {
           ['QUEUED', 'RUNNING', 'RECOVERY_REQUIRED'].includes(prior.state)) active++;
     }
     if (active >= 4) fail('TRANSFER_OWNER_BUSY', 'Owner has four unfinished transfers.');
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    // Check CURRENT owner CORE grant before even probing source file metadata.
+    // No revoked caller may induce a device read/hash before authorization.
+    if (this.trust) {
+      const preflight = jobSchema.parse({
+        version: 1, id, accountId: input.accountId, projectId: input.projectId,
+        sourceDeviceId: input.sourceDeviceId, targetDeviceId: input.targetDeviceId,
+        sourcePath: input.sourcePath, targetPath: input.targetPath,
+        stagePath: input.targetPath + '.nexowire-upload-' + id + '.part',
+        bytesTotal: 0, bytesConfirmed: 0, sha256: '0'.repeat(64),
+        state: 'QUEUED', createdAt: now, updatedAt: now,
+      });
+      await this.assertCurrentCore(preflight, 'START');
+    }
     const stat = await this.remote.stat(input.sourceDeviceId, input.sourcePath);
     if (stat.type !== 'file' || !Number.isSafeInteger(stat.size) || stat.size < 0) {
       return fail('TRANSFER_SOURCE_INVALID', 'Source must be an ordinary file with safe integer size.');
@@ -318,8 +361,6 @@ export class CrossDeviceTransferJobs {
         (input.expectedSourceSha256 && input.expectedSourceSha256 !== digest)) {
       return fail('TRANSFER_SOURCE_HASH_INVALID', 'Source full SHA-256 preflight failed.');
     }
-    const id = randomUUID();
-    const now = new Date().toISOString();
     const job: TransferJob = jobSchema.parse({
       version: 1, id, accountId: input.accountId, projectId: input.projectId,
       sourceDeviceId: input.sourceDeviceId, targetDeviceId: input.targetDeviceId,
@@ -329,6 +370,11 @@ export class CrossDeviceTransferJobs {
       ...(stat.modifiedAt ? { sourceModifiedAt: stat.modifiedAt } : {}),
       state: 'QUEUED', createdAt: now, updatedAt: now,
     });
+    await this.assertCurrentCore(job, 'START');
+    if (this.trust && (!this.remote.writeFenced || !this.remote.publishFenced)) {
+      throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED',
+        'Agent has no signed atomic writer epoch/offset fence.');
+    }
     await this.acquireFence(job, 'new');
     const fd = await fs.open(this.file(id), 'wx', 0o600);
     try { await fd.writeFile(JSON.stringify(job) + '\n'); await fd.sync(); }
@@ -382,7 +428,7 @@ export class CrossDeviceTransferJobs {
     let staged: { type: string; size: number };
     try { staged = await this.remote.stat(job.targetDeviceId, job.stagePath); }
     catch (error) {
-      if (isNotFound(error) && job.bytesConfirmed === 0) return;
+      if (isNotFound(error) && job.bytesConfirmed === 0 && !job.pending) return;
       // Stage missing with positive offset might mean an unknown commit.
       return fail('TRANSFER_STAGE_UNKNOWN', 'Stage disappeared; operator must reconcile destination.');
     }
@@ -412,6 +458,70 @@ export class CrossDeviceTransferJobs {
     job.bytesConfirmed = staged.size;
     await this.save(job);
   }
+  /** Strict hosted path: durable intent before dispatch, Native atomic
+   * epoch+offset CAS, correlated receipt, and independent per-chunk readback.
+   * A forged ACK cannot advance bytes. On any ambiguity pending stays in
+   * the journal; explicit resume must reconcile it after a higher fence.
+   */
+  private async strictlyWrite(job: TransferJob, offset: number, encoded: string,
+    length: number): Promise<void> {
+    const lease = job.fencing;
+    requireMonotonicLease(lease);
+    if (!this.remote.writeFenced) throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED',
+      'Native fenced write is unavailable.');
+    const binary = Buffer.from(encoded, 'base64');
+    const envelope: FencedWriteEnvelope = { requestId: randomUUID(),
+      epoch: lease.epoch, token: lease.token, offset, length,
+      sha256: createHash('sha256').update(binary).digest('hex') };
+    await this.update(job.id, current => {
+      if (current.state !== 'RUNNING' || current.bytesConfirmed !== offset ||
+          current.pending) throw new TransferTrustError('PENDING_MUTATION_UNKNOWN',
+          'Durable job revision or prior write outcome is unknown.');
+      current.pending = { requestId: envelope.requestId, offset, length,
+        sha256: envelope.sha256, epoch: envelope.epoch };
+    });
+    await this.assertCurrentCore(job, 'WRITE');
+    await this.assertFence(job, 'WRITE', offset);
+    const receipt = await this.remote.writeFenced(job, envelope, encoded, offset === 0);
+    if (receipt.requestId !== envelope.requestId ||
+        receipt.epoch !== envelope.epoch || receipt.offset !== offset ||
+        receipt.length !== length || receipt.sha256 !== envelope.sha256) {
+      throw new TransferTrustError('FORGED_WRITE_RECEIPT',
+        'Untrusted or stale Native write receipt cannot advance the journal.');
+    }
+    await this.assertCurrentCore(job, 'WRITE');
+    await this.assertFence(job, 'WRITE', offset);
+    const staged = await this.remote.stat(job.targetDeviceId, job.stagePath);
+    if (staged.type !== 'file' || staged.size !== offset + length) {
+      throw new TransferTrustError('DURABLE_STAGE_LENGTH_MISMATCH',
+        'Destination length does not match the reserved chunk.');
+    }
+    const verified = await this.remote.read(job.targetDeviceId, job.stagePath, offset, length);
+    if (verified.sourceBytes !== staged.size || verified.offsetBytes !== offset ||
+        verified.bytesRead !== length || typeof verified.contentBase64 !== 'string') {
+      throw new TransferTrustError('DURABLE_READBACK_INVALID',
+        'Native destination readback size or offset is not independently verified.');
+    }
+    const actual = Buffer.from(verified.contentBase64, 'base64');
+    if (actual.length !== length || actual.toString('base64') !== verified.contentBase64 ||
+        createHash('sha256').update(actual).digest('hex') !== envelope.sha256) {
+      throw new TransferTrustError('FORGED_WRITE_RECEIPT',
+        'Destination bytes contradict purported durable receipt.');
+    }
+    await this.assertCurrentCore(job, 'WRITE');
+    await this.assertFence(job, 'WRITE', offset);
+    await this.update(job.id, current => {
+      if (current.pending?.requestId !== envelope.requestId ||
+          current.pending.epoch !== envelope.epoch ||
+          current.bytesConfirmed !== offset || current.state !== 'RUNNING') {
+        throw new TransferTrustError('TRANSFER_RECEIPT_CAS_CONFLICT',
+          'Writer was canceled, revoked or superseded during readback.');
+      }
+      current.bytesConfirmed = offset + length;
+      delete current.pending;
+    });
+  }
+
   private async run(id: string): Promise<void> {
     let job = await this.update(id, current => {
       current.state = current.state === 'CANCEL_REQUESTED' ||
@@ -427,6 +537,7 @@ export class CrossDeviceTransferJobs {
       }
       // Mandatory external CAS before every potential mutation. A local PID
       // lease or a co-rollbackable JSON record is not trusted fencing.
+      await this.assertCurrentCore(job, 'WRITE');
       await this.assertFence(job, 'WRITE', offset);
       const size = Math.min(CHUNK, job.bytesTotal - offset);
       let content = '';
@@ -440,6 +551,20 @@ export class CrossDeviceTransferJobs {
           return fail('TRANSFER_CHUNK_INVALID', 'Invalid bounded Base64 source read.');
         }
         content = r.contentBase64;
+      }
+      if (this.trust) {
+        try { await this.strictlyWrite(job, offset, content, size); }
+        catch (error) {
+          await this.update(id, current => {
+            current.state = 'MUTATION_UNKNOWN';
+            current.errorCode = error instanceof TransferTrustError ? error.code :
+              'TRANSFER_WRITE_OUTCOME_UNKNOWN';
+          });
+          throw error;
+        }
+        offset += size;
+        if (job.bytesTotal === 0) break;
+        continue;
       }
       try {
         if (offset > 0) {
@@ -480,8 +605,16 @@ export class CrossDeviceTransferJobs {
       current.state = current.state === 'CANCEL_REQUESTED' ? 'CANCELLED' : 'PUBLISHING';
     });
     if (before.state === 'CANCELLED') return;
+    await this.assertCurrentCore(before, 'PUBLISH');
     await this.assertFence(before, 'PUBLISH', before.bytesTotal);
-    try { await this.remote.moveNoOverwrite(job.targetDeviceId, job.stagePath, job.targetPath); }
+    try {
+      if (this.trust) {
+        if (!before.fencing || !this.remote.publishFenced) {
+          throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED', 'Missing fenced publication.');
+        }
+        await this.remote.publishFenced(before, before.fencing.epoch, before.fencing.token);
+      } else await this.remote.moveNoOverwrite(job.targetDeviceId, job.stagePath, job.targetPath);
+    }
     catch (error) {
       await this.update(id, current => {
         current.state = 'MUTATION_UNKNOWN'; current.errorCode = 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN';

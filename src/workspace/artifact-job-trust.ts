@@ -1,5 +1,23 @@
 import type { TransferJob } from '../mcp/cross-device-transfer-jobs.js';
 
+export type TransferMutationStage = 'START' | 'RESUME' | 'WRITE' | 'PUBLISH' | 'STATUS' | 'CANCEL';
+/** Authoritative *current* CORE delegation, never a cached mode preference.
+ * Owner + both devices + project must be checked against the trusted grant
+ * store on each transition, including after a potentially lost ACK.
+ */
+export interface TrustedTransferCoreGrants {
+  assertCurrent(job: Readonly<TransferJob>, stage: TransferMutationStage): Promise<void>;
+}
+export interface FencedWriteEnvelope {
+  requestId: string; epoch: number; token: string;
+  offset: number; length: number; sha256: string;
+}
+export interface FencedWriteReceipt {
+  requestId: string; epoch: number; offset: number;
+  length: number; sha256: string;
+}
+
+
 /** #587: MUST be served by rollback-independent monotonic CAS.
  * A local SQLite file, PID lock, or another folder is NOT a trust root.
  * Only trusted Hub bootstrap may inject it; no MCP tool argument may set it.
@@ -33,4 +51,13 @@ export function requireMonotonicLease(
     throw new TransferTrustError('TRUSTED_LEASE_INVALID',
       'Missing verifiable independent monotonic lease.');
   }
+}
+
+/** Trusted-only Native/OS dispatch provider. Real Agent 1.0.5 does not
+ * implement atomic epoch fencing; production MUST leave this unset.
+ */
+export interface TrustedNativeTransferWriter {
+  writeFenced(job: Readonly<TransferJob>, envelope: Readonly<FencedWriteEnvelope>,
+    contentBase64: string, createExclusive: boolean): Promise<FencedWriteReceipt>;
+  publishFenced(job: Readonly<TransferJob>, epoch: number, token: string): Promise<void>;
 }

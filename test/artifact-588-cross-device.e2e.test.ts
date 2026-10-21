@@ -53,8 +53,60 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
       }
     },
   };
+  const artifactTransferCoreGrants = {
+    assertCurrent: async (job: { accountId: string; projectId: string;
+      sourceDeviceId: string; targetDeviceId: string }) => {
+      // TEST-ONLY CURRENT CORE GRANT emulator. No live owner enrollment.
+      if (job.accountId !== 'account:synthetic-e2e-account' || job.projectId !== 'Nexowire' ||
+          job.sourceDeviceId !== 'source' || job.targetDeviceId !== 'destination') {
+        throw Error('CORE_OWNER_SCOPE_REVOKED');
+      }
+    },
+  };
+  let sourceCount = 0, destCount = 0, publishCount = 0;
+  // Simulated fenced Native writer, NOT Agent 1.0.5's actual files.write.
+  const artifactTransferNativeWriter = {
+    writeFenced: async (job: { id: string; stagePath: string },
+      env: { requestId: string; epoch: number; token: string; offset: number;
+        length: number; sha256: string }, body: string, first: boolean) => {
+      if (epochs.get(job.id) !== env.epoch ||
+          env.token !== 'staging-only-' + job.id + '-' +
+            env.epoch.toString().padStart(10, '0')) throw Error('STALE_AGENT_WRITE_FENCE');
+      const bytes = Buffer.from(body, 'base64');
+      if (bytes.length !== env.length ||
+          createHash('sha256').update(bytes).digest('hex') !== env.sha256) {
+        throw Error('BAD_CHUNK_SHA');
+      }
+      const current = await fs.stat(job.stagePath).catch(() => null);
+      if (first ? current !== null : current?.size !== env.offset) {
+        throw Error('ATOMIC_STAGE_OFFSET_CAS_DENIED');
+      }
+      const written = await executeCapability('files.write', {
+        path: job.stagePath, content: body, encoding: 'base64',
+        mode: first ? 'create' : 'write_at',
+        ...(!first ? { offset_bytes: env.offset } : {}), create_parents: false,
+      }, new PathPolicy([dstRoot])) as { data: { bytesWritten: number } };
+      if (written.data.bytesWritten !== env.length) throw Error('SHORT_WRITE');
+      destCount++;
+      return { requestId: env.requestId, epoch: env.epoch,
+        offset: env.offset, length: env.length, sha256: env.sha256 };
+    },
+    publishFenced: async (job: { id: string; stagePath: string; targetPath: string },
+      epoch: number, token: string) => {
+      if (epochs.get(job.id) !== epoch ||
+          token !== 'staging-only-' + job.id + '-' + epoch.toString().padStart(10, '0')) {
+        throw Error('STALE_AGENT_PUBLISH_FENCE');
+      }
+      await executeCapability('files.move', {
+        source: job.stagePath, destination: job.targetPath, overwrite: false,
+        recursive: false, atomic_no_overwrite: true, create_parents: false,
+      }, new PathPolicy([dstRoot]));
+      publishCount++;
+    },
+  };
   const server = createNexowireMcpServer({
     broker, providers, workspaces, artifactTransferAuthority,
+    artifactTransferCoreGrants, artifactTransferNativeWriter,
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
     toolAuthorization: { kind: 'control-plane', scope: 'mcp',
       accountId: 'synthetic-e2e-account', role: 'admin',
@@ -109,7 +161,7 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
         agentVersion: 'synthetic-only', capabilities } }));
   }
   await connect('source', srcRoot, ['files.stat', 'files.hash', 'files.read']);
-  await connect('destination', dstRoot, ['files.stat', 'files.hash', 'files.write', 'files.move']);
+  await connect('destination', dstRoot, ['files.stat', 'files.hash', 'files.read', 'files.write', 'files.move']);
   for (let i = 0; i < 120 && (!broker.has('source') || !broker.has('destination')); i++) {
     await new Promise(done => setTimeout(done, 10));
   }
@@ -143,15 +195,16 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
   assert.equal(done.sha256, createHash('sha256').update(content).digest('hex'));
   assert.deepEqual(await fs.readFile(dstFile), content);
   assert.equal(counts.reads, 4);
-  assert.equal(counts.writes, 4);
-  assert.equal(counts.atomicMoves, 1);
+  assert.equal(destCount, 4);
+  assert.equal(publishCount, 1);
 
   // A different principal with both device IDs must not read the durable job
   // created by the original account. A same-account grant missing the target
   // must not trigger any remote source read/write.
   async function restricted(accountId: string, grants: string[]) {
     const mcp = createNexowireMcpServer({
-      broker, providers, workspaces, artifactTransferAuthority, skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
+      broker, providers, workspaces, artifactTransferAuthority,
+      artifactTransferCoreGrants, artifactTransferNativeWriter, skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
       toolAuthorization: { kind: 'control-plane', scope: 'mcp', accountId,
         role: 'admin', allowedDeviceIds: grants },
     });
