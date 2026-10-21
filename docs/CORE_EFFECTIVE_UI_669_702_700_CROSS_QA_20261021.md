@@ -75,3 +75,20 @@ are intentionally **hypothetical**, never real protected token evidence.
 Do not use cached badges, `401`, `consent.exe`, #719 readback or #712
 permit as native Windows HIGH proof. No #04/#03/#01 owner source changes,
 physical UAC/VM or production deployment. **DRAFT, PRODUCTION NO-GO**.
+
+## Hosted CI discovery and coverage correction
+
+The root package `npm test` script invokes
+`node --test --import tsx test/**/*.test.ts`.
+The default shell glob `test/**/*.test.ts` does **not automatically include**
+root `test/*.test.ts` files; before this fix a green Node check could
+compile the #23 tests without actually executing them.
+
+`test/qa/core-effective-ui-worker23.test.ts` now imports both existing
+root-level #23 suites. The npm script's nested pattern includes that QA
+entrypoint on Linux/Windows bash alike. This is intentional **CI coverage
+binding**, not new duplicate cases or a relaxation of any negative.
+Expected independent test registrations after prior 12-case extension:
+9 owner-#669 negatives plus 12 native/CAS UI-gate tests = **21**.
+An exact-HEAD hosted Node22/24 result for the wrapper is required before
+claiming the 21 tests PASS. No unrelated workflow or owner source is changed.
