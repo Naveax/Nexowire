@@ -1,0 +1,128 @@
+{
+  "census_count": 111,
+  "part": 4,
+  "ids": [
+    621,
+    622,
+    624,
+    625,
+    627,
+    628,
+    629,
+    631
+  ],
+  "nodes": [
+    {
+      "pr": 621,
+      "head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "head_ref": "feat/04-core-delegation-617",
+      "base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "base_ref": "fix/parallel-04-access-core-adminbridge-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39608785843,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23"
+      }
+    },
+    {
+      "pr": 622,
+      "head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "head_ref": "test/integration-core618-qa619-20261021",
+      "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "base_ref": "test/p0-hyperv-elevation-evidence-617-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608093602,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701"
+      }
+    },
+    {
+      "pr": 624,
+      "head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "head_ref": "test/09-core-broker-no-gui-escape-20261021",
+      "base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "base_ref": "test/09-private-job-compat-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608661483,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709"
+      }
+    },
+    {
+      "pr": 625,
+      "head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "head_ref": "test/parallel-14-core-quota-fencing-20261021",
+      "base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "base_ref": "test/parallel-14-quota-receipt-provenance-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608704634,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8"
+      }
+    },
+    {
+      "pr": 627,
+      "head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+      "head_ref": "feat/parallel-10-core-physical-evidence-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39608830918,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "fed460da0e80af191b6663f146890ec6fd33824c"
+      }
+    },
+    {
+      "pr": 628,
+      "head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+      "head_ref": "test/parallel-15-s5-38mib-lease-20261021",
+      "base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "base_ref": "test/parallel-15-s5-oct21-gzip-proof",
+      "draft": true,
+      "ci": {
+        "run_id": 39608864172,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256"
+      }
+    },
+    {
+      "pr": 629,
+      "head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+      "head_ref": "test/integration-core622-winjob576-20261021",
+      "base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "base_ref": "test/integration-core618-qa619-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608916753,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626"
+      }
+    },
+    {
+      "pr": 631,
+      "head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "head_ref": "fix/01-witness-delegation-20261021",
+      "base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "base_ref": "fix/01-witness-owner-epoch-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39609259161,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c"
+      }
+    }
+  ]
+}
