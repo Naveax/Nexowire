@@ -1,0 +1,24 @@
+name: QA19 Windows provider truth
+
+on:
+  pull_request:
+    branches:
+      - test/qa-19-winjob-hosted-repro-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  provider-truth:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Windows OS provider truth and disposable TEMP ACL/manifest negatives
+        run: node --test --test-concurrency=1 --import tsx test/qa-19-windows-provider-truth.test.ts
