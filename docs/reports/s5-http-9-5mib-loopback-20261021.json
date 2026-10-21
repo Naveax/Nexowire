@@ -1,0 +1,56 @@
+{
+  "kind": "S5_BOUNDED_LOCAL_HTTP_LOOPBACK_NO_MCP_PRODUCTION_PARSER",
+  "declaredLargeRequestBodyBytes": 9961472,
+  "sourceHead": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+  "startedUtc": "2026-10-21T13:23:37.051Z",
+  "completedUtc": "2026-10-21T13:23:38.626Z",
+  "host": {
+    "platform": "win32",
+    "node": "v24.15.0",
+    "cpuModel": "AMD Ryzen 5 2600X Six-Core Processor           ",
+    "totalMemoryBytes": 17101815808
+  },
+  "fixture": {
+    "classification": "REAL_LOCAL_HTTP_BYTES_SYNTHETIC_MCP_FIXTURE",
+    "configuredHttpBodyMaxBytes": 9961472,
+    "configuredLargeInFlightCap": 4,
+    "largeSuccessful": 4,
+    "largePeakActive": 4,
+    "smallSuccessful": 20,
+    "smallArrivedDuringLarge": 20,
+    "smallLatencyMs": {
+      "p50": 39.357,
+      "p95": 40.277,
+      "p99": 40.35
+    },
+    "largeLatencyMs": {
+      "p50": 1550.924,
+      "p95": 1554.91,
+      "p99": 1554.91
+    },
+    "http413Count": 1,
+    "http429Count": 0,
+    "http503BusyCount": 1,
+    "gzipBusy503Count": 1,
+    "backpressureWrites": 608,
+    "bytesReceived": 39845888,
+    "receivedHashes": [
+      "5dfb49081043966b698f7125fef184ff7c11636f7a46f66be45236c42ea7c8eb",
+      "5dfb49081043966b698f7125fef184ff7c11636f7a46f66be45236c42ea7c8eb",
+      "5dfb49081043966b698f7125fef184ff7c11636f7a46f66be45236c42ea7c8eb",
+      "5dfb49081043966b698f7125fef184ff7c11636f7a46f66be45236c42ea7c8eb"
+    ],
+    "rssGrowthPeakBytes": 30478336,
+    "memoryBudgetBytes": 134217728,
+    "externalWssAuthenticated": 0,
+    "actualNativeToolCompletions": 0,
+    "cloudflareMeterReadings": null
+  },
+  "maxHttpResponseBytes": "fixture only, no deployed parser exercised",
+  "cloudflareWorkersD1DoActualCost": null,
+  "externalAuthenticatedWssConnections": 0,
+  "verifiedNativeToolCompletions": 0,
+  "actual24hSoak": false,
+  "stagingAcceptance": "BLOCKED",
+  "productionAcceptance": "NO_GO"
+}
