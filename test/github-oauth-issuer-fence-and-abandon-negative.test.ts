@@ -61,8 +61,8 @@ function fixture(){
     a,b,make,
     close(){b.close();a.close();rmSync(dir,{recursive:true,force:true})},
     current(){
-      return a.prepare('SELECT signing_epoch,key_proof FROM github_oauth_issuer_signers').get()
-        as {signing_epoch:number;key_proof:string}|undefined;
+      return a.prepare('SELECT signing_epoch,key_proof FROM github_oauth_issuer_signers')
+        .get() as {signing_epoch:number;key_proof:string}|undefined;
     },
     status(state:string){
       return (a.prepare('SELECT status FROM github_oauth_browser_states WHERE state_hash=?')
