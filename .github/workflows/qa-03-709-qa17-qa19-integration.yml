@@ -1,0 +1,29 @@
+name: QA03 709 + QA17 + QA19 Windows Integration
+
+on:
+  pull_request:
+    branches:
+      - fix/03-protected-tree-hosted-path-binding-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  qa03-windows-integration:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Compile only synthetic native Windows Job helper
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Execute unchanged QA17 and QA19 plus #709 protected-tree and transitive ACL negatives
+        run: node --test --import tsx --test-concurrency=1 test/qa-17-700-native-red-preservation.test.ts test/qa-19-protected-tree-forensic.test.ts test/core-broker-protected-tree.test.ts test/core-broker-process-witness.test.ts test/core-broker-transitive-import-negative.test.ts
+      - name: Execute unchanged QA19 100-cycle real Windows Job and PID FILETIME kernel regressions
+        run: node --test --import tsx --test-concurrency=1 test/qa-19-windows-job-hosted-fast-exit.test.ts

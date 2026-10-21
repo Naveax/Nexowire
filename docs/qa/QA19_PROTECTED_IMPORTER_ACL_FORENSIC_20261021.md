@@ -1,0 +1,22 @@
+# QA19 | Windows protected import tree, provider provenance and fast-exit
+
+2026-10-21 | **DRAFT, source/test/docs only. Production NO-GO.**
+
+## Immutable comparison
+
+- **#679**: `b0b556b4cb2ee396ce699c356fb0515db529f350`. Dedicated [39644147679](https://github.com/Naveax/Nexowire/actions/runs/39644147679) SUCCESS, full [39644147390](https://github.com/Naveax/Nexowire/actions/runs/39644147390) SUCCESS. Exact byte-identical 100-cycle test file SHA `e5db891e5d04ad71770deaa0a4a9f2a744c2a64a`.
+- **#670**: `cc5f3db53ec38224a1c632bee96d1cf98095b89d`. Hosted native PowerShell Security module/Authenticode and .NET FileSystemAclExtensions provider tests successful in [39633083937](https://github.com/Naveax/Nexowire/actions/runs/39633083937). These only cover selected file/parent, not a full signed import/update graph.
+- **#700**: `637ff3a6e8705e94e6ffba91790fd83329beee3f`. Hosted [39645643225](https://github.com/Naveax/Nexowire/actions/runs/39645643225) **FAILURE**. Exact failed Windows `browser-live` job **119380363262**: the original native Job regression stage **35 PASS / 0 FAIL / 0 SKIP**, including two fast-exit drain tests. Expanded 20-test protected-tree/attestation stage **17 PASS / 3 FAIL / 0 SKIP**. Failures only in `test/core-broker-protected-tree.test.ts`: required EXE/import/updater path absent in report (line 52), out-of-root updater not reported (line 73), imported directory absent (line 96). Original independent provider/Authenticode/token tests all PASS in that stage.
+
+## Reproduction and differential interpretation
+
+- The original #700 reporter is invoked via `pwsh.exe -File ... -ImportedModulePaths ...`; it returns `inspectedEntries`, `inspectedFilesCount`, `requestedImportsCount`, `rejectedOutOfRootPaths`. Its source uses `$required=@($LauncherPath,$UpdaterPath)+@($ImportedModulePaths)`, `In-Root`, `Observe-Path` and `GetAccessRules`. Source review alone **cannot** prove whether real broad TEMP ancestor ACL, 8.3 `RUNNER~1` alias, PowerShell array-binding or path enumeration is the cause.
+- The new test creates a unique TEST-OWNED TEMP tree, grants **only its disposable import parent** `S-1-5-11:(OI)(CI)M` with `icacls.exe`, and independently reads actual NTFS DACLs using .NET `GetAccessControl` + `GetAccessRules(explicit=true,inherited=true)`. It enumerates ancestors up to root, recording low-trust Modify evidence.
+- It calls the **unchanged #700 production read-only audit twice**, once with exactly the original `-File` argv and once using a PowerShell hashtable splat. Compares literal path identities, requested/imported count, out-of-root rejection, native ACL truth and `inspectedEntries`, and prints `QA19_TREE_FORENSIC` / `QA19_IMPORT_PARAMETER_DIFFERENTIAL` JSON to hosted CI.
+- A diagnostic test may **PASS while correctly revealing an implementation bug** such as missing import paths. That is not a green protected-tree acceptance: the three original red owner tests must stay enabled, unmodified and failing until owner #03 resolves the cause. In particular, no `mock Valid`, `continue-on-error`, new skips or altered expectations.
+- A test-only **copy** of the signed helper audit redirects the protected PowerShell Security manifest lookup to a nonexistent TEMP-only name: native signed Microsoft OS surrogate must be `Valid` in the intact audit, while the modified copy yields real `UNAVAILABLE`, `publisherValid=false`, and `productionReady=false`, even though SHA-256 still matches. This is a **fault-injected provider-loss source proof**, not evidence of a physical outage and does not remove the real OS module.
+- The exact byte-identical previously passing #679 100-cycle Windows Job stdout/stderr before exit and PID/guardian FILETIME anti-spoof fixture is repeated on the #700 code tree.
+
+## No authority/deployment claims
+
+Only `test/qa-19-*`, `docs/qa/`, and a dedicated GitHub Actions workflow are added. #03's native Windows Job C, ACL/parser PowerShell and runtime Broker source remain untouched. No installed Broker, Windows service, privileged token, UAC/Secure Desktop interaction, VM, ReVoltVPN-Ubuntu-Lab, user process or system ACL modifications. The `signedImportManifestVerified`, `importListIndependentlyEnumerated`, `protectedCompleteImageTreeAttested`, `processDupHandleBoundaryVerified`, `elevatedCoreDispatchEnabled` and `productionReady` flags cannot become true from these synthetic inputs. #03 owns implementation; #00 owns merge.

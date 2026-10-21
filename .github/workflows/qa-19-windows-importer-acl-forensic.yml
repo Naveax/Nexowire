@@ -1,0 +1,29 @@
+name: QA19 Windows importer ACL forensics
+
+on:
+  pull_request:
+    branches:
+      - fix/03-protected-broker-tree-and-pid-gate-20261021
+
+permissions:
+  contents: read
+
+jobs:
+  qa19-import-acl:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Compile native Windows Job synthetic helper (no service/UAC)
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Independently classify physical TEMP ancestor ACL, import parser and missing signer
+        run: node --test --test-concurrency=1 --import tsx test/qa-19-protected-tree-forensic.test.ts
+      - name: Revalidate byte-identical 100-cycle stdout/stderr before exit and PID anti-spoof
+        run: node --test --test-concurrency=1 --import tsx test/qa-19-windows-job-hosted-fast-exit.test.ts
