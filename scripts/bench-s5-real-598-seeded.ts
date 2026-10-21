@@ -24,7 +24,7 @@ export type S5ParserEvidence=Readonly<{
   kind:'S5_REAL_598_EXPRESS_LOCAL_PARSER_NO_NATIVE';
   seed:number;sourceBodyBytes:number;largeCount:4;
   receivedBytes:number;largeSha256:string[];largeSuccesses:number;
-  smallSuccesses:number;smallDuringLarge:20;
+  smallSuccesses:number;smallDuringLarge:number;
   smallLatency:{method:'nearest-rank';clock:'performance.now';successN:number;attemptedN:number;p50:number;p95:number;p99:number};
   largeLatency:{method:'nearest-rank';clock:'performance.now';successN:number;attemptedN:number;p50:number;p95:number;p99:number};
   fifthBusy503:number;gzipBusy503:number;gzipAfterRelease200:number;gzipInflatedOversize413:number;
@@ -56,9 +56,11 @@ const quantiles=(values:number[],attempted:number)=>({
   p99:s5NearestRank(values,.99),
 });
 
-export async function runS5RealParserSeeded(options:{bodyBytes:number;rssGrowthLimitBytes?:number}):Promise<S5ParserEvidence>{
+export async function runS5RealParserSeeded(options:{bodyBytes:number;rssGrowthLimitBytes?:number;smallRequests?:number}):Promise<S5ParserEvidence>{
   if(!options||![BODY_MIN,NEXOWIRE_MCP_JSON_BODY_LIMIT_BYTES].includes(options.bodyBytes))
     throw Error('S5_UNBOUNDED_BODY');
+  const smallN=options.smallRequests??SMALL_N;
+  if(![20,64].includes(smallN))throw Error('S5_UNBOUNDED_SMALL_REQUESTS');
   const rssLimit=options.rssGrowthLimitBytes??256*1024*1024;
   if(!Number.isSafeInteger(rssLimit)||rssLimit<128*1024*1024||rssLimit>320*1024*1024)
     throw Error('S5_UNBOUNDED_RSS');
@@ -144,7 +146,7 @@ export async function runS5RealParserSeeded(options:{bodyBytes:number;rssGrowthL
     }
     await Promise.race([fourArrived,delay(4500).then(()=>{throw Error('S5_PARSER_ARRIVAL_TIMEOUT')})]);
     assert.equal(arrived,4);
-    const small=await Promise.all(Array.from({length:SMALL_N},()=>post('{"ping":true}')));
+    const small=await Promise.all(Array.from({length:smallN},()=>post('{"ping":true}')));
     for(const x of small){assert.equal(x.status,200);assert.equal(x.data?.ok,true);samplesSmall.push(x.durationMs);}
     const bomb=gzipSync(Buffer.from(JSON.stringify({payload:'G'.repeat(2*1024*1024)})));
     assert.ok(bomb.byteLength<100*1024);
@@ -190,8 +192,8 @@ export async function runS5RealParserSeeded(options:{bodyBytes:number;rssGrowthL
     return {kind:'S5_REAL_598_EXPRESS_LOCAL_PARSER_NO_NATIVE',seed:S5_SEED,
       sourceBodyBytes:options.bodyBytes,largeCount:4,
       receivedBytes:4*options.bodyBytes,largeSha256:fourLargeHashes,largeSuccesses:4,
-      smallSuccesses:SMALL_N,smallDuringLarge:20,
-      smallLatency:quantiles(samplesSmall,SMALL_N),
+      smallSuccesses:smallN,smallDuringLarge:smallN,
+      smallLatency:quantiles(samplesSmall,smallN),
       largeLatency:quantiles(samplesLarge,4),
       fifthBusy503:1,gzipBusy503:1,gzipAfterRelease200:1,gzipInflatedOversize413:1,
       backpressureDrainEvents:drainEvents,
