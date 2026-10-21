@@ -57,6 +57,8 @@ jobs:
       - name: Verify browser lockfile ownership and bounded Windows cleanup
         run: node --test --import tsx test/browser-session-cleanup.test.ts
       - run: node --test --import tsx test/browser-live.test.ts
+      - name: Verify additional private GUI, COM, WMI and UAC broker preflight
+        run: node --test --import tsx test/private-desktop-additional-brokers.test.ts
       - name: Verify private file-picker adversarial boundaries
         run: node --test --import tsx test/private-desktop-adversarial-acceptance.test.ts
       - name: Verify private worker fails closed outside NexowirePrivate
