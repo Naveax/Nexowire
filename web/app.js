@@ -575,16 +575,24 @@ function render(snapshot) {
       const coreText = row.querySelector('.core-copy');
       const coreShortcut = row.querySelector('.core-shortcut');
       const coreContainer = row.querySelector('.core-access');
-      coreContainer.classList.toggle('active', core.active === true);
-      coreShortcut.classList.toggle('active', core.active === true);
-      coreShortcut.setAttribute('aria-pressed', String(core.active === true));
-      coreShortcut.textContent = core.active ? 'CORE AÇIK' : core.enabled ? 'CORE BEKLEMEDE' : 'CORE';
+      // Agent readiness and CORE preference cannot attest an elevated Windows token.
+      // No independent protected Broker provenance is available to this dashboard yet.
+      const coreEffective = core.effective === true &&
+        core.authoritySource === 'independent-protected-windows-broker' &&
+        core.localEnrollmentVerified === true &&
+        core.actualElevatedTokenVerified === true &&
+        core.brokerSourceAclVerified === true &&
+        core.brokerVersionVerified === true;
+      coreContainer.classList.toggle('active', coreEffective);
+      coreShortcut.classList.toggle('active', coreEffective);
+      coreShortcut.setAttribute('aria-pressed', String(coreEffective));
+      coreShortcut.textContent = coreEffective ? 'CORE YÖNETİCİ ETKİN' : core.enabled ? 'CORE KAYITLI • YETKİ BEKLEMEDE' : 'CORE';
       coreButton.textContent = core.enabled ? 'CORE kapat' : 'CORE aç';
-      coreText.textContent = core.active
-        ? 'CORE tercihi süresiz etkin. Her yönetici işlemi ayrıca Broker ve Windows denetiminden geçer.'
+      coreText.textContent = coreEffective
+        ? 'CORE kalıcı yönetici delegasyonu doğrulandı. Başlangıçta yerel UAC onayı gerekir; yetkili Broker üzerinden her komutta tekrar UAC istenmez. Komutlar Windows ve sağlayıcı politikalarına tabidir.'
         : core.enabled
-          ? 'CORE tercih kaydı duruyor, ancak cihaz veya Admin Bridge hazır olmadığı için etkin değil.'
-          : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
+          ? 'CORE tercihi kayıtlı, fakat kalıcı yükseltilmiş yetki henüz kanıtlanmadı. Bir kez yerel UAC ile imzalı korumalı Broker kurulumu ve cihaz/sahip delegasyonu doğrulaması gerekir. FULL standart kullanıcı yetkisidir.'
+          : 'CORE kapalı. Kalıcı yönetici yetkisi için bağımsız yerel kurulum ve doğrulama gerekir; bu düğme tek başına yükseltme yapmaz.';
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
         setSettingsOpen(true);
