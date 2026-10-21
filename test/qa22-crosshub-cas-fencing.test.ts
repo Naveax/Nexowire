@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,7 +40,13 @@ const stored = async (root: string, id: string): Promise<TransferJob> =>
 
 /** One shared CAS for two separate Hub objects. No local JSON/PID is trusted. */
 class Cas {
-  readonly entries = new Map<string, { epoch: number; token: string; binding: string }>();
+  // A deterministic LOGICAL clock. This in-memory model is not an external
+  // monotonic witness and cannot survive real process/authority rollback.
+  private tick = 0;
+  readonly entries = new Map<string, {
+    epoch: number; token: string; binding: string; expiresAt: number;
+  }>();
+  expireAll() { this.tick += 100; }
   private binding(job: Readonly<TransferJob>) {
     return [job.accountId, job.projectId, job.sourceDeviceId, job.targetDeviceId,
       job.sourcePath, job.targetPath].join('|');
@@ -54,7 +60,7 @@ class Cas {
         throw new TransferTrustError('CAS_HISTORY_MISSING', 'Absent independent CAS history.');
       const epoch = (old?.epoch ?? 0) + 1;
       const token = 'SYNTHETIC-ONLY-NOT-EXTERNAL-' + job.id + '-' + epoch;
-      this.entries.set(job.id, { epoch, token, binding: this.binding(job) });
+      this.entries.set(job.id, { epoch, token, binding: this.binding(job), expiresAt: this.tick + 100 });
       return { epoch, token };
     },
     assertCurrent: async (job, lease) => { this.native(job, lease.epoch, lease.token); },
@@ -64,6 +70,8 @@ class Cas {
     if (!rec || rec.epoch !== epoch || rec.token !== token ||
         rec.binding !== this.binding(job))
       throw new TransferTrustError('NATIVE_STALE_EPOCH', 'Atomic Native lease CAS refused.');
+    if (this.tick >= rec.expiresAt)
+      throw new TransferTrustError('NATIVE_LEASE_EXPIRED', 'Expired Native lease cannot mutate.');
   }
 }
 class Grants {
@@ -92,12 +100,33 @@ type Hooks = {
   afterWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
 };
-type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage';
+type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage' |
+  'lost-publish-ack';
+
+/** Synthetic key-bound receipt. NOT a deployed Agent signer or a production proof. */
+type SyntheticPublishedReceipt = {
+  jobId: string; accountId: string; projectId: string;
+  targetDeviceId: string; targetPath: string; sha256: string;
+  epoch: number; grantGeneration: number; mac: string;
+};
 function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
   const cas = new Cas(), grants = new Grants();
   const stages = new Map<string, Buffer>();
   const writes: Array<{ id: string; offset: number; epoch: number }> = [];
   let target: Buffer | undefined, publications = 0, lost = false;
+  // Native mock alone owns this test key and emits a receipt only AFTER
+  // successful no-replace publication, not after ACK or Hub state change.
+  const nativeKey = randomBytes(32);
+  const publishedReceipts: SyntheticPublishedReceipt[] = [];
+  const macFor = (claims: Omit<SyntheticPublishedReceipt, 'mac'>) =>
+    createHmac('sha256', nativeKey).update(JSON.stringify(claims)).digest('hex');
+  const verifyReceipt = (receipt: SyntheticPublishedReceipt) => {
+    const { mac, ...claims } = receipt;
+    if (!/^[a-f0-9]{64}$/.test(mac)) return false;
+    const actual = Buffer.from(mac, 'hex');
+    const expected = Buffer.from(macFor(claims), 'hex');
+    return timingSafeEqual(actual, expected);
+  };
   const fileContent = (device: string, file: string) =>
     device === input.sourceDeviceId ? bytes :
       file === input.targetPath ? target : stages.get(file);
@@ -156,11 +185,18 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
       if (!stage || digest(stage) !== digest(bytes)) throw Error('NATIVE_BAD_STAGE');
       if (target !== undefined) throw Error('NATIVE_DESTINATION_EXISTS');
       target = Buffer.from(stage); publications++;
+      const claims = { jobId: job.id, accountId: job.accountId,
+        projectId: job.projectId, targetDeviceId: job.targetDeviceId,
+        targetPath: job.targetPath, sha256: digest(stage), epoch,
+        grantGeneration: grants.generation };
+      publishedReceipts.push({ ...claims, mac: macFor(claims) });
+      if (mode === 'lost-publish-ack') throw Error('NATIVE_PUBLISHED_BUT_ACK_LOST');
     },
   };
   const hub = (root: string) => new CrossDeviceTransferJobs(root, remote,
     { requireExternalAuthority: true, authority: cas.authority, grants: grants.adapter });
-  return { cas, grants, hub, writes,
+  return { cas, grants, hub, writes, verifyReceipt,
+    get publishedReceipts() { return publishedReceipts.map(r => ({ ...r })); },
     get target() { return target; }, get publications() { return publications; } };
 }
 
@@ -453,4 +489,185 @@ test('#22 next: dispatched lost ACK and local rollback after re-pair do not repl
     assert.equal(fx.writes.filter(w => w.id === replacement.id).length, 3);
     assert.equal(fx.publications, 1);
     assert.deepEqual(fx.target, bytes);
+  }));
+
+/**
+ * QA #22 follow-up: source-only, in-memory Native signer and external CAS
+ * simulator. This is NOT an OS/Agent/physical durability attestation.
+ * Barriers order races; their timeout only detects a deadlock.
+ */
+test('#22 gate: revoke CORE after one independently verified 64KiB chunk, never credit next write', async () =>
+  temp(async root => {
+    const verifiedFirst = gate(), releaseRead = gate();
+    const fx = mock('normal', { beforeRead: async (device, _file, offset) => {
+      // The second source read is entered only after first-chunk Native
+      // readback passed and bytesConfirmed was journaled to 65536.
+      if (device === input.sourceDeviceId && offset === 65_536) {
+        verifiedFirst.open(); await releaseRead.promise;
+      }
+    } });
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const started = await hubA.start(input);
+    try {
+      await expectGate(verifiedFirst.promise, 'first chunk externally read back');
+      const before = await stored(root, started.id);
+      assert.equal(before.state, 'RUNNING');
+      assert.equal(before.bytesConfirmed, 65_536);
+      assert.equal(before.pending, undefined);
+      assert.equal(fx.writes.length, 1);
+      fx.grants.enabled = false;
+      releaseRead.open();
+      await hubA.waitForIdle(started.id);
+      const after = await stored(root, started.id);
+      assert.equal(after.state, 'MUTATION_UNKNOWN');
+      assert.equal(after.errorCode, 'CORE_OWNER_REVOKED');
+      assert.equal(after.bytesConfirmed, 65_536);
+      assert.equal(after.pending?.offset, 65_536);
+      assert.equal(fx.writes.length, 1);
+      assert.equal(fx.publications, 0);
+      assert.equal(fx.publishedReceipts.length, 0);
+      await assert.rejects(hubB.status(started.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+    } finally {
+      releaseRead.open();
+      await hubA.waitForIdle(started.id);
+    }
+  }));
+
+test('#22 gate: lease expiry while PUBLISHING fences old Hub, only new job signs one receipt', async () =>
+  temp(async root => {
+    const entered = gate(), dispatch = gate();
+    let suspendOld = true;
+    const fx = mock('normal', { beforePublish: async () => {
+      if (suspendOld) {
+        suspendOld = false; entered.open(); await dispatch.promise;
+      }
+    } });
+    const hubA = fx.hub(root);
+    const old = await hubA.start(input);
+    try {
+      await expectGate(entered.promise, 'old Hub pending Native publish');
+      const pending = await stored(root, old.id);
+      assert.equal(pending.state, 'PUBLISHING');
+      assert.equal(pending.bytesConfirmed, bytes.length);
+      assert.equal(fx.writes.filter(x => x.id === old.id).length, 3);
+      assert.equal(fx.publishedReceipts.length, 0);
+      fx.cas.expireAll(); // deterministic logical expiry, no clock sleeps
+      dispatch.open();
+      await hubA.waitForIdle(old.id);
+      const rejected = await stored(root, old.id);
+      assert.equal(rejected.state, 'MUTATION_UNKNOWN');
+      assert.equal(rejected.bytesConfirmed, bytes.length);
+      assert.equal(rejected.errorCode, 'NATIVE_LEASE_EXPIRED');
+      assert.equal(fx.publications, 0);
+      assert.equal(fx.publishedReceipts.length, 0);
+      const hubB = fx.hub(root);
+      assert.equal((await hubB.status(old.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId)).state, 'MUTATION_UNKNOWN');
+      const fresh = await hubB.start(input);
+      await hubB.waitForIdle(fresh.id);
+      assert.equal((await stored(root, fresh.id)).state, 'COMPLETED');
+      assert.equal(fx.publications, 1);
+      const receipts = fx.publishedReceipts;
+      assert.equal(receipts.length, 1);
+      assert.equal(receipts[0]!.jobId, fresh.id);
+      assert.equal(receipts[0]!.sha256, digest(bytes));
+      assert.equal(fx.verifyReceipt(receipts[0]!), true);
+      assert.deepEqual(fx.target, bytes);
+    } finally {
+      dispatch.open();
+      await hubA.waitForIdle(old.id);
+    }
+  }));
+
+test('#22 gate: CORE re-pair during pending Native publish cannot authenticate stale receipt', async () =>
+  temp(async root => {
+    const entered = gate(), dispatch = gate();
+    let suspendOld = true;
+    const fx = mock('normal', { beforePublish: async () => {
+      if (suspendOld) {
+        suspendOld = false; entered.open(); await dispatch.promise;
+      }
+    } });
+    const a = fx.hub(root), b = fx.hub(root), old = await a.start(input);
+    try {
+      await expectGate(entered.promise, 'stale CORE owner publish');
+      assert.equal((await stored(root, old.id)).state, 'PUBLISHING');
+      fx.grants.rePair();
+      dispatch.open();
+      await a.waitForIdle(old.id);
+      const rejected = await stored(root, old.id);
+      assert.equal(rejected.state, 'MUTATION_UNKNOWN');
+      assert.equal(rejected.errorCode, 'CORE_GRANT_EPOCH_STALE');
+      assert.equal(fx.publications, 0);
+      assert.equal(fx.publishedReceipts.length, 0);
+      await assert.rejects(b.status(old.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_GRANT_EPOCH_STALE');
+      const current = await b.start(input);
+      await b.waitForIdle(current.id);
+      assert.equal((await stored(root, current.id)).state, 'COMPLETED');
+      const [receipt] = fx.publishedReceipts;
+      assert.equal(fx.publishedReceipts.length, 1);
+      assert.ok(receipt);
+      assert.equal(receipt.jobId, current.id);
+      assert.equal(receipt.grantGeneration, fx.grants.generation);
+      assert.equal(fx.verifyReceipt(receipt), true);
+      assert.equal(fx.verifyReceipt({ ...receipt, accountId: 'forged-account' }), false);
+      assert.equal(fx.verifyReceipt({ ...receipt, epoch: receipt.epoch + 1 }), false);
+      assert.equal(fx.verifyReceipt({ ...receipt, sha256: 'f'.repeat(64) }), false);
+    } finally {
+      dispatch.open();
+      await a.waitForIdle(old.id);
+    }
+  }));
+
+test('#22 gate: lost publish ACK yields one signed Native receipt but Hub UNKNOWN, no inferred durability', async () =>
+  temp(async root => {
+    const fx = mock('lost-publish-ack');
+    const a = fx.hub(root), b = fx.hub(root);
+    const job = await a.start(input);
+    await a.waitForIdle(job.id);
+    const state = await stored(root, job.id);
+    assert.equal(state.state, 'MUTATION_UNKNOWN');
+    assert.equal(state.bytesConfirmed, bytes.length);
+    assert.equal(state.pending, undefined);
+    assert.equal((await b.status(job.id, input.accountId,
+      input.sourceDeviceId, input.targetDeviceId)).state, 'MUTATION_UNKNOWN');
+    // Synthetic native signer's receipt is independent of a lost ACK and
+    // cannot be asserted by arbitrary client data or upgraded via Hub status.
+    const receipts = fx.publishedReceipts;
+    assert.equal(fx.publications, 1);
+    assert.equal(receipts.length, 1);
+    const [receipt] = receipts;
+    assert.ok(receipt);
+    assert.equal(receipt.jobId, job.id);
+    assert.equal(receipt.sha256, digest(bytes));
+    assert.equal(fx.verifyReceipt(receipt), true);
+    assert.equal(fx.verifyReceipt({ ...receipt, targetPath: '/foreign/path' }), false);
+    assert.equal(fx.verifyReceipt({ ...receipt, mac: '0'.repeat(64) }), false);
+    assert.deepEqual(fx.target, bytes);
+    // Neither status nor the Native ledger is an automatic Hub COMPLETED
+    // transition; readback reconciliation must be independently authenticated.
+    assert.equal((await stored(root, job.id)).state, 'MUTATION_UNKNOWN');
+    assert.equal(fx.publishedReceipts.length, 1);
+  }));
+
+test('#22 P0 acceptance RED until #08: late cancel cannot downgrade UNKNOWN after published ACK lost', async () =>
+  temp(async root => {
+    const fx = mock('lost-publish-ack'), a = fx.hub(root), b = fx.hub(root);
+    const started = await a.start(input);
+    await a.waitForIdle(started.id);
+    assert.equal((await stored(root, started.id)).state, 'MUTATION_UNKNOWN');
+    assert.equal(fx.publishedReceipts.length, 1);
+    // The Native side effect MAY have succeeded (and did in this isolated
+    // fixture). A later Hub may NOT call it CANCELLED without an independently
+    // authenticated fence/receipt or deletion proof.
+    const canceled = await b.cancel(started.id, input.accountId,
+      input.sourceDeviceId, input.targetDeviceId);
+    assert.equal(canceled.state, 'MUTATION_UNKNOWN',
+      'late cancel must preserve unknown physical mutation, not invent CANCELLED');
+    assert.equal((await stored(root, started.id)).state, 'MUTATION_UNKNOWN');
+    assert.equal(fx.publishedReceipts.length, 1);
   }));
