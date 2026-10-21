@@ -7,7 +7,7 @@ test('four overlapping bounded HTTP uploads do not starve small synthetic MCP ro
     const r=await runS5LocalHttpIsolation({
       largeRequests:4,largeRequestBytes:1024*1024,smallRequests:16,
       perChunkPauseMs:2,runLimitMs:15000,probeFifthRequest:true,
-      probeOverLimit:true,
+      probeOverLimit:true,probeGzipUnderLoad:true,
     });
     assert.equal(r.classification,'REAL_LOCAL_HTTP_BYTES_SYNTHETIC_MCP_FIXTURE');
     assert.equal(r.largePeakActive,4);
@@ -15,7 +15,9 @@ test('four overlapping bounded HTTP uploads do not starve small synthetic MCP ro
     assert.equal(r.smallSuccessful,16);
     assert.ok(r.smallArrivedDuringLarge>=1);
     assert.equal(r.bytesReceived,4*1024*1024);
-    assert.equal(r.http429Count,1);
+    assert.equal(r.http429Count,0);
+    assert.equal(r.http503BusyCount,1);
+    assert.equal(r.gzipBusy503Count,1, 'compressed small wire body must not bypass four parser-stage slots');
     assert.equal(r.http413Count,1);
     assert.equal(r.configuredHttpBodyMaxBytes,S5_HTTP_MAX_BYTES);
     assert.ok(r.smallLatencyMs.p99>=r.smallLatencyMs.p95);
@@ -32,7 +34,8 @@ test('four overlapping bounded HTTP uploads do not starve small synthetic MCP ro
       smallP95Ms:r.smallLatencyMs.p95,smallP99Ms:r.smallLatencyMs.p99,
       largeP95Ms:r.largeLatencyMs.p95,largeP99Ms:r.largeLatencyMs.p99,
       tcpBackpressureWrites:r.backpressureWrites,http413:r.http413Count,
-      http429:r.http429Count,rssGrowthPeakBytes:r.rssGrowthPeakBytes,
+      http429:r.http429Count,http503:r.http503BusyCount,gzip503:r.gzipBusy503Count,
+      rssGrowthPeakBytes:r.rssGrowthPeakBytes,
       staging:'NOT_TESTED',actualNativeToolCompletions:0,
     })+'\n');
   });
