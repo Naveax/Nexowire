@@ -149,3 +149,73 @@ additional tool permissions or escalate the current account to bypass this.
    confirmation and UAC/console approvals remain NOT_TESTED.
 
 **Production verdict: NO-GO; no live ACL/service/UAC changes, no main merge.**
+
+## 2026-10-21 #04 Access: conservative cross-PR review and VM-only rollback gating
+
+PR #574 remains **DRAFT / SOURCE-ONLY**. PRs #551 and #576 were reviewed
+against P0 #271; independent comments were posted to their actual GitHub
+discussions. Their source CI success does not create production acceptance.
+
+### Exact source review findings
+
+- **#551 signed installer**:
+  `scripts/s3-windows-acl-preflight.ts` performs a bounded read-only native
+  ACL observation for roots plus ancestors/descendants, and
+  `scripts/s3-release-bundle-audit.ts` invokes it on OFFLINE
+  `target` and `rollback` directories. This is not an attestation of the
+  later **installed live source/import graph** or updater paths outside the
+  two offline subtrees. The result correctly says `executionSafe:false`
+  and `productionApproved:false`. Independent post-cutover effective
+  ACL, source hash, updater and running image proof remain missing.
+- **#576 native Job trust**:
+  `scripts/audit-windows-job-helper-trust.ps1` checks risky writers on
+  `$acl.Access` (helper file). It reads `$parentAcl` but checks only
+  `AreAccessRulesProtected`, rather than testing the parent ACL's explicit
+  writable ACEs and separately protecting `windows-job-owner.sha256`.
+  A parent can disable inheritance yet grant Authenticated Users Modify.
+  The provisional file-trust summary must fail closed for such parent or
+  manifest replacement opportunities. The script's final
+  `productionReady:false` is correct and must remain so.
+- Review requests posted on #551 and #576 without changing their branches.
+
+### Added isolated validation in #574
+
+- `src/security/access-acl-candidate-gate.ts`: intentionally
+  **non-authoritative** candidate-only ACL evaluator requiring each of
+  seven distinct role samples: private parent, updater parent, updater,
+  launcher, broker binary, Job helper and helper manifest. It conservatively
+  rejects non-SYSTEM/Admin write, append, delete child, DELETE,
+  WRITE_DAC, WRITE_OWNER and generic write/all ACEs, including inherited
+  entries, regardless of a separate Deny ACE. Rejects missing/duplicate
+  chain, reparse, unknown owner/ACL, malformed rights, path and identity
+  mismatch. It has no production authorization output. Even a locally clean
+  sample returns `CANDIDATE_SAFE_ONLY` with
+  `productionApproved:false` and `independentEffectiveAccessVerified:false`.
+  There is **no elevated native effective AccessCheck proof** in this PR.
+- `scripts/acceptance-access-vm-acl-migration.ps1`: operator opt-in
+  `-AuthorizedVmFixture` and Windows virtual-machine model precheck
+  *before* any ACL modifications. Calls the pre-existing random OS-temp-only
+  harden-and-restore fixture for both normal and injected-failure cases,
+  verifies DACL restoration and cleanup, and always returns VM fixture-only
+  and production-denied results. A VM model string is **not** cryptographic
+  hypervisor attestation; operator authorization still required. The VM
+  workflow was **not run on an authorized VM**. The non-opted-in invocation
+  was exercised on Work PC and correctly rejected before any ACL writes.
+- `test/access-acl-candidate-gate.test.ts` and
+  `test/access-vm-acl-migration.test.ts` include conservative inherited
+  Modify/parent/updater/manifest/unknown-token negative tests and safe-deny.
+  Local scoped suite 21/21 PASS; typecheck and build PASS. Existing
+  root session, CORE, Guardian, Admin Bridge and D1 staging gates unchanged.
+  No elevated physical ACL proof or actual D1 staging migration asserted.
+
+### Physical P0 gates remain NO-GO
+
+Naveax physical `icacls` evidence dated 2026-10-20 shows inherited
+`Authenticated Users:(I)(M)` on both `C:\ProgramData\NexowireStack`
+and `...\dist\src\cli.js`. Both physical Broker protected root
+ACL queries returned exit 5 Access Denied: **UNKNOWN**, never safe.
+Independent Guardian tasks and installed source have not been attested.
+A separately approved elevated *read-only* observer, approved isolated VM
+migration/rollback, native effective AccessCheck identity, publisher signing,
+post-cutover updater/binary identity and UAC/Guardian gates are outstanding.
+**NO live ACL/UAC/service/Task write, NO policy bypass, NO merge/deploy.**
