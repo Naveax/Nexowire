@@ -3,7 +3,7 @@
   "capturedAt": "2026-10-21",
   "baselineSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "QA16 new-main 754cc436, PR #635-649 stacked exact-head source evidence; source failures remain hard release gates. Trusted real Windows high token CORE persists only after once signed Broker local UAC enrollment, with revocable epoch. Physical staging/production/original incident all blocked.",
+  "meaning": "QA16 exact-head checks for #650/#652/#666-#676, actual 77 open PRs and 85 historically tracked PR source snapshots. Source results cannot grant production acceptance, Windows high token or independent anti-rollback proof.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#640 two real cancel semantics FAIL: pre-Native write wrongly MUTATION_UNKNOWN, later cancel downgrades pending unknown. #648 audit source CI+QA PASS only, no independent effect readback; no re-dispatch on UNKNOWN."
+          "evidence": "One-call #666 read-only worker/journal negative source 6/7 jobs PASS but macOS job cancelled overall FAIL; #667 UNKNOWN cancellation state source author-reported fixed, exact CI browser-live FAIL; independent side-effect witness missing."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 SQLite co-rollback active; #637 hosted source CI SUCCESS signed external witness hostility but no physical non-co-restorable monotonic storage; #640 cancel state transition fail, no replay."
+          "evidence": "#587 durable journal+authority rollback remains; #676 externally atomic HTTPS/Postgres grant CAS exact CI SUCCESS SOURCE ONLY; no independent non-restorable real external witness or owner epoch physical test."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Current main #605 source reconciliation verified; missing independently authenticated VM GUID Running and unknown Native write/ack postconditions. #641 two-Hub CAS QA exact CI FAIL inherited Node/Windows checks."
+          "evidence": "#666 connection/worker journal source checks isolated pass, but whole CI FAILURE macOS CANCELLED. Signed multi-device 1GiB mutation/postcondition/VM Running physical not validated."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "CORE must be true owner-bound high Windows token through signed immutable Broker after one genuine local UAC; #635/#636/#639/#643/#644 source QA green but physical sign/UAC/ACL/token and revoke/re-pair epoch not verified, #642 CORE UI CI IN_PROGRESS."
+          "evidence": "#669 signed dual native/CAS EFFECTIVE source CI SUCCESS but shipping provider not configured, effective false. #670 own disposable token native provider source CI SUCCESS cannot attest installed Broker high Windows token, signed imports or owner epoch. CORE broad real admin NO-GO."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#647 native Windows handle proof QA exact CI FAIL inherited fast-exit Windows Job; required verified descriptor identity/reparse/ADS/Junction scope, no real file/ACL modifications."
+          "evidence": "#673 trusted source handle identity and ACL witnesses source CI SUCCESS; effective protected parent/module/updater signer provider still not wired, no authorized physical 1GiB or user-file mutation."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -145,19 +145,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged generic reconnect source PASS. #612 signed owner enrollment, #613 current epoch checkpoint CI green only on separate branches; production cannot claim owner revoke/re-pair freshness."
+          "evidence": "Main WSS/owner reconnect source PASS; #671 signed receipt replay across reconnect and issuer rotation CI SUCCESS on feature branch. Local SQLite rollback remains unsuitable as global monotonic trust."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#638 isolated 100-cycle Windows Job workflow 39625276215 SUCCESS but same HEAD CI 39625275778 FAIL Authenticode UNAVAILABLE and inherited Modify parent ACL null; #649 Windows stdout-before-exited iteration1 CI FAIL. No source laundering."
+          "evidence": "#670 native Windows PowerShell Authenticode and ACL provider source CI SUCCESS (no running installed Broker attestation). #667/#668/#674 browser-live stdout-before-exited iterations 1/1/10 CI FAIL; no stale-green promotion."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -201,15 +201,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#645 Remote Assistance UAC coverage CI FAIL shared Windows fast-exit. Actual secure desktop physical approval cannot be simulated or automated, keep local UAC witnessed and signed Broker preflight."
+          "evidence": "#672 installer stage source CI SUCCESS but local UAC approval actual one-time secure-desktop event and physical protected launcher trust not independently proven; no UAC per-command after signed enrollment target."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -253,15 +253,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -279,15 +279,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#649 9.5MiB parser/tenant fairness source QA CI 39628451245 FAIL Windows fast-exit; pending completion/tenant memory release and seeded p95/p99 cannot certify physical 101+ WSS or 1GiB, no paid tenant staging."
+          "evidence": "#668 fenced writer-stop/delete quota source has 6/7 CI PASS but inherited Windows Job red; #674 seeded localhost parser source red overall, 4×9.5MiB actual parser preflight blocked on low disk; no live Cloudflare proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -331,15 +331,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -353,19 +353,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #577/#578 real Codex CLI against isolated synthetic OAuth issuer; genuine production issuer not accepted."
+          "evidence": "Current main existing OAuth CI source baseline PASS. #675 browser cookie-bound one-time GitHub state CAS CI SUCCESS branch only; D1 schema and BOTH redirect/callback store injections not deployed; may fail closed if merged unwired. No Windows CORE elevation from OAuth."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#640 source 2 true cancellation semantics FAIL, gated pre-write cancel not properly CANCELLED and post-dispatch UNKNOWN can be overwritten; #641 two-Hub stacked test CI red. #616 earlier source green does not fix current #634-based cancellation."
+          "evidence": "#667 owner reports #640 5/5 and #641 7/7 after code fix, not independently rerun at #667 exact SHA; #667 exact CI FAILURE Windows browser-live despite Node22/24 green. #640 earlier real red still provenance. Main public one-call transfer not merged."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -409,15 +409,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -435,15 +435,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -461,15 +461,15 @@
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#636/#639/#644 signed bootstrap negative QA source CI green only; #638 Authenticode/parent ACL red; #551 signed deployment still no Nexowire-owned verified first-party native signed installer/full rollback physical canary; #271 legacy inherited writable source."
+          "evidence": "#672 signed protected staged import graph CI SUCCESS; #670 Windows signature provider source green; #551 first-party signed complete installer/old-Agent recovery unverified, inherited #271 ACL still unsafe, local UAC physical not done."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#637 hostile CAS QA exact CI SUCCESS but external PostgreSQL real independent CAS not proved; #640 source cancel semantics and replay risks red; owner/CORE epoch revoke and lost ACK UNKNOWN must preserve no replay."
+          "evidence": "#676 remote atomic bound CAS, signed revoke/re-pair source CI green, but real independent rollback-resistant authority never deployed. #650 post-reservation queued revoke race source shows need second epoch fence; UNKNOWN no replay remains."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "No physical Agent 1.0.5 upgraded, no real high Windows token signed Broker, no UAC approval or Hyper-V GUID Running readback, no physical 1GiB two-device writer proof."
+          "evidence": "No actual CORE elevated high-integrity Broker token, signed UAC bootstrap or VM GUID Running readback; #673 temporary Windows handle tests do not authorize installed protected paths."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#572 exact head f7cb4d9 GitHub CI 39609482502 FAILED (not no workflow). #638 stand-alone 100cycle PASS but full CI FAIL; #640 two semantic failures, #641 inherited CI red, #648 dual green only source, #649 inherited fast-exit red. #642 pending."
+          "evidence": "#572 prior HEAD ca67b8a CI 39632915464 FAILURE. #666 CANCELLED macOS => overall FAIL; #667/#668/#674 fast-exit CI failures; #652 dedicated QA PASS/full CI FAIL; #669-673/#675/#676 exact HEAD source green but no real signed CORE acceptance."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and stacked PR #635-#649 exact CI are only source evidence; no independent signed elevated CORE, complete physical Agent rollout, external rollback-proof witness, or verified VM/postcondition, #271/#551/#587 P0 remain open."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 and feature PR source fixtures do not verify actual high token signed Broker, local UAC, #271 safe ACL, #551 release/rollback or physically independent #587 CAS."
         }
       }
     }
@@ -766,6 +766,6 @@
     "headSha": "754cc4364822be5fda528f54042fb22a84f19924",
     "runId": 39622251466,
     "conclusion": "PASS",
-    "scope": "exact-HEAD main source CI only; no signed CORE physical production claim"
+    "scope": "main source CI, not signed physical CORE"
   }
 }

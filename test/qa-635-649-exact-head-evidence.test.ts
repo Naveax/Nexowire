@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -16,7 +16,7 @@ test('#572 previous f7cb4d9 exact workflow exists and is FAILED, never no-run or
 test('all #635 through #649 have exact 40-char HEAD and PR-CI independently tracked without parent laundering',()=>{
  const x=rd('QA_20261021_PR635_649_EXACT_EVIDENCE.json');
  const l=rd('PR_SOURCE_AND_RELEASE_GATES.json');
- assert.equal(l.entries.length,72);
+ assert.equal(l.entries.length,85);
  assert.equal(x.prs.length,15);
  assert.deepEqual(x.prs.map((p:any)=>p.pr),Array.from({length:15},(_,i)=>635+i));
  for(const p of x.prs){
@@ -83,8 +83,8 @@ test('R01-R22 remains source-specific and ALL physical acceptance blocked by 271
  const p=rd('QA_20261021_PR635_649_EXACT_EVIDENCE.json');
  assert.equal(m.baselineSha,'754cc4364822be5fda528f54042fb22a84f19924');
  assert.equal(m.requirements.length,22);
- assert.equal(a.findingCount,27);
- assert.equal(a.findings.length,27);
+ assert.equal(a.findingCount,33);
+ assert.equal(a.findings.length,33);
  for(const n of [271,551,587,617])assert.ok(p.mandatoryNoGo.some((b:any)=>b.issue===n),'#'+n);
  for(const id of ['QA16-640-CANCEL-TRUE-SEMANTIC-BUGS','QA16-638-100CYCLE-SIGNED-ACL-TRUST','QA16-648-AUDIT-DUAL-SOURCE-ONLY','QA16-649-FAIRNESS-WINDOWS-RED','QA16-635-649-STACKED-CORE-RELEASE'])
   assert.ok(a.findings.some((r:any)=>r.id===id),id);

@@ -6,8 +6,8 @@ const read=(x:string)=>JSON.parse(readFileSync(path.resolve('docs/qa',x),'utf8')
 const matrix=read('cross-project-final-acceptance.json');
 const prs=read('PR_SOURCE_AND_RELEASE_GATES.json');
 const audit=read('QA_BLOCKING_FINDINGS_CURRENT_MAIN.json');
-test('72 exact-head PRs include merged 567 anti-rollback and prior 572 CI failure without false final acceptance',()=>{
- assert.equal(prs.entries.length,72);
+test('85 historical exact-head PRs include merged 567 anti-rollback and prior 572 CI failure without false final acceptance',()=>{
+ assert.equal(prs.entries.length,85);
  assert.equal(prs.entries.find((x:any)=>x.pr===559).prState,'MERGED');
  assert.equal(prs.entries.find((x:any)=>x.pr===563).ci.status,'PASS');
  assert.equal(prs.entries.find((x:any)=>x.pr===553).ci.status,'NOT_VERIFIED');
@@ -31,9 +31,9 @@ test('all 22 requirements are evaluated against current pinned main and no produ
  assert.equal(prs.entries.find((x:any)=>x.pr===598).ci.status,'FAIL');
  assert.ok(matrix.requirements.every((x:any)=>levels.slice(1).every(k=>x.levels[k].status==='BLOCKED')));
 });
-test('twenty-seven priority findings have exact SHA reproduction and correction without false physical proof',()=>{
- assert.equal(audit.findingCount,27);
- assert.equal(audit.findings.length,27);
+test('thirty-three priority findings have exact SHA reproduction and correction without false physical proof',()=>{
+ assert.equal(audit.findingCount,33);
+ assert.equal(audit.findings.length,33);
  const ids=new Set();
  for(const f of audit.findings){
   assert.ok(!ids.has(f.id));ids.add(f.id);

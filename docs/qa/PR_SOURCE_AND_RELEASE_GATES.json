@@ -581,7 +581,7 @@
     },
     {
       "pr": 572,
-      "headSha": "99df8e60a2a7189429e9a8e8e6c45107328e71a4",
+      "headSha": "ca67b8adc717256906f8396d8057104df66be946",
       "prState": "OPEN_DRAFT",
       "requirements": [
         "R01",
@@ -596,8 +596,8 @@
       "physicalAcceptanceMissing": "Historical QA CI browser-live durable READY and intentional red source assertions",
       "ci": {
         "status": "FAIL",
-        "runId": 39604979439,
-        "reason": "Historical QA CI browser-live durable READY and intentional red source assertions"
+        "runId": 39632915464,
+        "reason": "Exactly pinned prior #572 QA head CI FAILED from preserved 7 negative sources, durable READY browser-live and Node24; new QA HEAD requires separate workflow validation."
       },
       "staging": "BLOCKED",
       "production": "BLOCKED",
@@ -1375,8 +1375,281 @@
       "staging": "BLOCKED",
       "production": "BLOCKED",
       "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 650,
+      "headSha": "5a76c826de58d906c430153488d96912e0d1827e",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R07",
+        "R19",
+        "R20"
+      ],
+      "sourceReproducer": "test/qa-17-provider-unavailable-queued-revoke.test.ts",
+      "physicalAcceptanceMissing": "Provider UNAVAILABLE, queued CORE revoke after reservation source tests, note post-reservation pre-effect epoch fence remains unimplemented.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39629695531,
+        "reason": "Provider UNAVAILABLE, queued CORE revoke after reservation source tests, note post-reservation pre-effect epoch fence remains unimplemented."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 652,
+      "headSha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/qa-19-windows-provider-truth.test.ts",
+      "physicalAcceptanceMissing": "Dedicated QA provider-truth 39629996167 SUCCESS; full CI browser-live Authenticode/ACL FAIL (not stdout fast-exit).",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39629996191,
+        "reason": "Dedicated QA provider-truth 39629996167 SUCCESS; full CI browser-live Authenticode/ACL FAIL (not stdout fast-exit).",
+        "dedicatedQaRunId": 39629996167,
+        "dedicatedQaStatus": "PASS"
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 666,
+      "headSha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/cross-device-worker-journal-link.test.ts",
+      "physicalAcceptanceMissing": "Six jobs SUCCESS, macos-agent-lifecycle-live CANCELLED; overall CI FAILURE. Worker/journal linkage source-only, no side effect.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39631675531,
+        "reason": "Six jobs SUCCESS, macos-agent-lifecycle-live CANCELLED; overall CI FAILURE. Worker/journal linkage source-only, no side effect."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 667,
+      "headSha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/artifact-588-cross-device.e2e.test.ts",
+      "physicalAcceptanceMissing": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 1 FAIL; PR author reports #640 5/5 and #641 7/7 locally PASS after semantic fix; independently merge-tested physical 1GiB NOT verified.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39631999739,
+        "reason": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 1 FAIL; PR author reports #640 5/5 and #641 7/7 locally PASS after semantic fix; independently merge-tested physical 1GiB NOT verified."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 668,
+      "headSha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "sourceReproducer": "test/scale-v2-artifact-fenced-cleanup-admission.test.ts",
+      "physicalAcceptanceMissing": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 1 FAIL; writer stop/deletion receipt provider source-only, Cloudflare D1 and disk release physical blocked.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39632010226,
+        "reason": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 1 FAIL; writer stop/deletion receipt provider source-only, Cloudflare D1 and disk release physical blocked."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 669,
+      "headSha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R20",
+        "R22"
+      ],
+      "sourceReproducer": "test/access-effective-authority.test.ts",
+      "physicalAcceptanceMissing": "Access CORE/ROOT EFFECTIVE source signed dual evidence and dashboard source PASS; no server configured native/CAS provider, effective false by default.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39632774193,
+        "reason": "Access CORE/ROOT EFFECTIVE source signed dual evidence and dashboard source PASS; no server configured native/CAS provider, effective false by default."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 670,
+      "headSha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/windows-broker-provider-attestation.test.ts",
+      "physicalAcceptanceMissing": "Native real Windows Authenticode module and parent ACL source proof + disposable own token tests PASS; not actual installed Broker running image, imported DLL/protected updaters/elevated token/owner epoch.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39633083937,
+        "reason": "Native real Windows Authenticode module and parent ACL source proof + disposable own token tests PASS; not actual installed Broker running image, imported DLL/protected updaters/elevated token/owner epoch."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 671,
+      "headSha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R06",
+        "R12",
+        "R20"
+      ],
+      "sourceReproducer": "test/owner-public-wss-receipt-replay-rotation.test.ts",
+      "physicalAcceptanceMissing": "SQLite signed receipt one-time/reconnect/revoke/issuer rotation source tests; restored DB and multi-tenant WSS outside source not independently anchored.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39632434610,
+        "reason": "SQLite signed receipt one-time/reconnect/revoke/issuer rotation source tests; restored DB and multi-tenant WSS outside source not independently anchored."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 672,
+      "headSha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R21"
+      ],
+      "sourceReproducer": "test/s3-protected-core-installer-stage-owner.test.ts",
+      "physicalAcceptanceMissing": "Signed installer, protected recursive imports/updater and same owner Bootstrap stage source tests only; no genuine Nexowire first-party signed release or UAC/VM canary.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39632489293,
+        "reason": "Signed installer, protected recursive imports/updater and same owner Bootstrap stage source tests only; no genuine Nexowire first-party signed release or UAC/VM canary."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 673,
+      "headSha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R05",
+        "R19",
+        "R22"
+      ],
+      "sourceReproducer": "test/p05-native-source-handle-acl-negative.test.ts",
+      "physicalAcceptanceMissing": "Temporary native handle/rename/ADS/junction negatives + source ACL proof tests, provider not implemented/wired, no protected real file ACL verified.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39632538963,
+        "reason": "Temporary native handle/rename/ADS/junction negatives + source ACL proof tests, provider not implemented/wired, no protected real file ACL verified."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 674,
+      "headSha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "sourceReproducer": "test/s5-real-598-seeded-parser.test.ts",
+      "physicalAcceptanceMissing": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 10 FAIL; seeded source timing non-repeatable, 4x9.5MiB real parser run physically BLOCKED low disk.",
+      "ci": {
+        "status": "FAIL",
+        "runId": 39632610866,
+        "reason": "6/7 jobs PASS, browser-live Windows Job stdout-before-exited iteration 10 FAIL; seeded source timing non-repeatable, 4x9.5MiB real parser run physically BLOCKED low disk."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 675,
+      "headSha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R06",
+        "R14",
+        "R20"
+      ],
+      "sourceReproducer": "test/github-oauth-browser-state-negative.test.ts",
+      "physicalAcceptanceMissing": "Browser-bound one-time OAuth nonce/cookie and CAS source tests green; D1 storage migration/wiring not deployed, login could fail closed if merged without wiring; OAuth is not Windows elevation.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39632701546,
+        "reason": "Browser-bound one-time OAuth nonce/cookie and CAS source tests green; D1 storage migration/wiring not deployed, login could fail closed if merged without wiring; OAuth is not Windows elevation."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "pr": 676,
+      "headSha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "sourceReproducer": "test/https-external-grant-cas.integration.test.ts",
+      "physicalAcceptanceMissing": "Source PostgreSQL and HTTPS external atomic owner grant CAS, signed revoke/re-pair and lost ACK tests green, no non-restorable real remote witness deployed.",
+      "ci": {
+        "status": "PASS",
+        "runId": 39634099233,
+        "reason": "Source PostgreSQL and HTTPS external atomic owner grant CAS, signed revoke/re-pair and lost ACK tests green, no non-restorable real remote witness deployed."
+      },
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
     }
   ],
   "inspectedMainSha": "754cc4364822be5fda528f54042fb22a84f19924",
-  "meaning": "Exact HEAD GitHub PR 635-649 queries, single SHA each, no source green promotion to signed elevated physical acceptance; #640 has 2 real semantic red tests; #638 hosted 100cycles separately green; #648 two green; #649 Windows inherited red. Snapshots not guaranteed current for all historical 57 PRs."
+  "meaning": "85 unique HISTORICAL source PR evidence entries, separate from 77 currently open GitHub PRs. Source HEAD successes are not physical CORE/production. #666 overall FAILURE due cancelled macOS; #652 dedicated green/full red; #667/#668/#674 Windows browser-live fail, never claim green from 6 passing jobs.",
+  "openPrCountAtSnapshot": 77
 }
