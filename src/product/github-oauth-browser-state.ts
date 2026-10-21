@@ -185,23 +185,23 @@ function browserToken(request: Request): string | null {
   return token.length === 43 && TOKEN_FORMAT.test(token) ? token : null;
 }
 
-export async function consumeGitHubOAuthBrowserState(
-  request: Request, state: string, signingSecret: string,
-  store: GitHubOAuthStateConsumeStore, now = new Date(),
-): Promise<{ next: string } | null> {
+/** Browser-bound verification shared by consumption and cancellation. */
+function verifiedBrowserState(
+  request: Request, state: string, signingSecret: string, now: Date,
+): { digest:string; next:string; expiresAt:number; nowSeconds:number } | null {
   if (typeof state !== 'string' || state.length > STATE_MAX_CHARS ||
       state.length < 40) return null;
-  const [encoded, signed, extra] = state.split('.');
+  const [encoded,signed,extra]=state.split('.');
   if (extra !== undefined || !encoded || !signed ||
       !TOKEN_FORMAT.test(encoded) || !TOKEN_FORMAT.test(signed)) return null;
-  let payload: State;
-  let nowSeconds: number;
   try {
-    const supplied = Buffer.from(signed, 'base64url');
-    if (!equal(supplied, hmac('state:' + encoded, signingSecret))) return null;
-    payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as State;
-    nowSeconds = Math.floor(now.getTime() / 1000);
-    const origin = originOf(request.url);
+    if (!equal(Buffer.from(signed,'base64url'),
+      hmac('state:' + encoded,signingSecret))) return null;
+    const payload=JSON.parse(
+      Buffer.from(encoded,'base64url').toString('utf8'),
+    ) as State;
+    const nowSeconds=Math.floor(now.getTime()/1000);
+    const origin=originOf(request.url);
     if (payload?.v !== 2 || payload.kind !== 'github-browser-oauth-state' ||
         payload.origin !== origin ||
         typeof payload.nonce !== 'string' ||
@@ -211,24 +211,46 @@ export async function consumeGitHubOAuthBrowserState(
         !Number.isSafeInteger(payload.iat) || !Number.isSafeInteger(payload.exp) ||
         !Number.isSafeInteger(nowSeconds) ||
         payload.iat > nowSeconds || payload.exp <= nowSeconds ||
-        payload.exp - payload.iat !== MAX_AGE_SECONDS ||
+        payload.exp-payload.iat !== MAX_AGE_SECONDS ||
         payload.next !== safeNext(payload.next)) return null;
-    const browser = browserToken(request);
-    if (!browser) return null;
-    if (!equal(Buffer.from(payload.browser, 'base64url'),
-      hmac('browser:' + origin + ':' + browser, signingSecret))) return null;
+    const browser=browserToken(request);
+    if (!browser || !equal(Buffer.from(payload.browser,'base64url'),
+      hmac('browser:' + origin + ':' + browser,signingSecret))) return null;
+    return {digest:githubOAuthStateDigest(state), next:payload.next,
+      expiresAt:payload.exp,nowSeconds};
   } catch {
-    return null; // Invalid signature, browser binding, origin or JSON.
+    return null;
   }
+}
 
-  // Storage exceptions are intentionally OUTSIDE the invalid-user catch:
-  // a D1 outage/invalid response is an infrastructure 503, never login 400.
+export async function consumeGitHubOAuthBrowserState(
+  request: Request, state: string, signingSecret: string,
+  store: GitHubOAuthStateConsumeStore, now = new Date(),
+): Promise<{ next: string } | null> {
+  const verified=verifiedBrowserState(request,state,signingSecret,now);
+  if (!verified) return null;
   try {
-    if (!await store.consumeOnce(
-      githubOAuthStateDigest(state), payload.exp, nowSeconds,
-    )) return null;
+    return await store.consumeOnce(verified.digest,verified.expiresAt,
+      verified.nowSeconds) ? {next:verified.next} : null;
   } catch {
     throw new Error('OAUTH_STATE_STORE_UNAVAILABLE');
   }
-  return {next:payload.next};
+}
+
+/**
+ * Deliberate browser cancel/logout hook for a pending attempt.
+ * Closing a tab is unobservable by a server: timeout remains mandatory.
+ * Wire only to a separately approved same-origin action before deployment.
+ */
+export async function revokeGitHubOAuthBrowserState(
+  request: Request, state: string, signingSecret: string,
+  store: GitHubOAuthStateConsumeStore, now = new Date(),
+): Promise<boolean> {
+  const verified=verifiedBrowserState(request,state,signingSecret,now);
+  if (!verified) return false;
+  try {
+    return await store.revoke(verified.digest,verified.nowSeconds);
+  } catch {
+    throw new Error('OAUTH_STATE_STORE_UNAVAILABLE');
+  }
 }
