@@ -123,11 +123,11 @@ export function assertProtectedImportClosure(
        !sha.test(pin.sha256)||!sha.test(pin.signerCertificateSha256)||
        !Array.isArray(pin.imports)||pin.imports.length>128||
        new Set(pin.imports).size!==pin.imports.length||
-       !pin.imports.every(k=>typeof k==='string'&&k.length>0)){
+       !pin.imports.every((k:string)=>typeof k==='string'&&k.length>0)){
       deny('IMPORT_INVALID_PIN_OR_DUPLICATE');
     }
     const diskPath=clean(pin.path);
-    if(!isWithin(ROOTS[pin.role],diskPath)||physicalPaths.has(diskPath)){
+    if(!isWithin(ROOTS[pin.role as ProtectedRole],diskPath)||physicalPaths.has(diskPath)){
       deny('IMPORT_UNPROTECTED_OR_ALIASED_PATH');
     }
     physicalPaths.add(diskPath);
