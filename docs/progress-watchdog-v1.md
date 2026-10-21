@@ -478,3 +478,66 @@ crypto bot/GPU workloads were launched.
   #08 Artifact Store, #03 ProcessManager, physical Agent and broker
   remain untouched. **Production completion acceptance is NO-GO**
   pending genuine second-party sealed custody and independent QA.
+
+
+### 2026-10-21 #11 follow-up: independent runtime SHA-256 postcondition (staging only)
+
+PR #575 introduces `src/agent/progress-runtime-postcondition.ts` as a
+**read-only, source-only** handoff adapter. The runtime never starts a
+transfer, writes Artifact Bridge files, controls a Job owner, or replays a
+remote mutation. It requires **three distinct pre-pinned Ed25519
+authorities**: the worker-result issuer, an immutable off-host storage
+seal issuer, and a separate independent postcondition witness. None of
+these keys may be worker stdout, user JSON, or the unauthenticated RPC
+receipt. No production keys or provider are wired by this PR.
+
+1. Bind owner/device/project/run/session, request UUID, CORE grant ID and
+   exact owner grant epoch, job ID, source/target and expected result-set
+   SHA-256. Read `readGrant` and `readTransfer` from **independently
+   authenticated read-only transports**. CORE must be `ACTIVE` with
+   exactly the current epoch. Transfer must be `COMPLETED`, full offset
+   recorded, and target full SHA/length bound to signed proof.
+2. `readPostcondition()` returns a separately signed Ed25519 result:
+   requester UUID, job UUID, owner, project, target device/path, owner
+   grant epoch, full-object SHA-256, confirmed bytes and timestamp.
+   Signature and freshness (30s), digest, byte length and provenance
+   are validated before trusting the response. A forged
+   `COMPLETED` RPC is **never** sufficient.
+3. Existing `verifyOffhostCompletion` independently re-hashes every
+   64KiB chunk of the bounded 128KiB signed metadata object via remote
+   `readOffhost`, checks a second differently signed immutable storage
+   seal, and rereads CORE grant and transfer state after readback.
+4. Before presenting the opaque permit to `ProgressSupervisor`,
+   runtime rereads owner and transfer. After the supervisor rereads
+   local result JSON, checks completed/pending/failed counts, exitCode=0,
+   timestamps, output SHA and result-set digest, runtime repeats owner
+   and transfer rechecks. CORE revoke/cancel/re-pair invalidates session
+   proof; `CANCEL_REQUESTED` is not completion.
+5. Lost ACK, missing/partial offhost bytes, forged digest/signature,
+   transfer `MUTATION_UNKNOWN` / `RECOVERY_REQUIRED`, transport loss,
+   stale grant epoch, failed release/cancel and corrupt result hashes
+   fail closed. Ambiguous outcome becomes **sticky UNKNOWN** in this
+   runtime adapter. `automaticReplayAllowed=false` always. Resuming
+   requires a fresh, separately approved/reconciled session or operator
+   workflow, never a silent worker retry.
+6. Worker PID alive, fake 100%, stalled work and reported progress alone
+   remain insufficient. The adapter cannot transform #616's test-only
+   monotonic CAS or an unverified remote receipt into a real immutable
+   custody service.
+
+**Test evidence:** temporary result-worker fixture, in-memory synthetic
+off-host provider, locally generated *test-only* Ed25519 keys; positive
+runtime proof and adversarial old owner epoch, pending CORE cancellation
+(including races across readback), forged postcondition or COMPLETED
+receipt, lost ACK, tampered/truncated disk content, UNKNOWN job and lost
+worker PID scenarios. These prove source contract behavior, **not**
+production cryptographic key custody, durable revocation, independent
+witness deployment or a physical off-host acceptance run.
+
+**Production acceptance remains NO-GO.** Requires real authenticated
+transport ports with independent key management, nonforgeable monotonic
+CORE grant persistence / revoke delivery, real off-host immutable
+artifact seal and separate postcondition witness, #616 genuine CAS/
+writer fence and crash recovery, and two-device physical acceptance.
+No #08 store source, #03 Job owner source, live Agent/UAC/VM, crypto
+bot, or GPU workload was modified or started.
