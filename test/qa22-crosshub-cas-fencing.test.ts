@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,7 +40,13 @@ const stored = async (root: string, id: string): Promise<TransferJob> =>
 
 /** One shared CAS for two separate Hub objects. No local JSON/PID is trusted. */
 class Cas {
-  readonly entries = new Map<string, { epoch: number; token: string; binding: string }>();
+  // A deterministic LOGICAL clock. This in-memory model is not an external
+  // monotonic witness and cannot survive real process/authority rollback.
+  private tick = 0;
+  readonly entries = new Map<string, {
+    epoch: number; token: string; binding: string; expiresAt: number;
+  }>();
+  expireAll() { this.tick += 100; }
   private binding(job: Readonly<TransferJob>) {
     return [job.accountId, job.projectId, job.sourceDeviceId, job.targetDeviceId,
       job.sourcePath, job.targetPath].join('|');
@@ -54,7 +60,7 @@ class Cas {
         throw new TransferTrustError('CAS_HISTORY_MISSING', 'Absent independent CAS history.');
       const epoch = (old?.epoch ?? 0) + 1;
       const token = 'SYNTHETIC-ONLY-NOT-EXTERNAL-' + job.id + '-' + epoch;
-      this.entries.set(job.id, { epoch, token, binding: this.binding(job) });
+      this.entries.set(job.id, { epoch, token, binding: this.binding(job), expiresAt: this.tick + 100 });
       return { epoch, token };
     },
     assertCurrent: async (job, lease) => { this.native(job, lease.epoch, lease.token); },
@@ -64,6 +70,8 @@ class Cas {
     if (!rec || rec.epoch !== epoch || rec.token !== token ||
         rec.binding !== this.binding(job))
       throw new TransferTrustError('NATIVE_STALE_EPOCH', 'Atomic Native lease CAS refused.');
+    if (this.tick >= rec.expiresAt)
+      throw new TransferTrustError('NATIVE_LEASE_EXPIRED', 'Expired Native lease cannot mutate.');
   }
 }
 class Grants {
@@ -92,12 +100,33 @@ type Hooks = {
   afterWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
 };
-type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage';
+type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage' |
+  'lost-publish-ack';
+
+/** Synthetic key-bound receipt. NOT a deployed Agent signer or a production proof. */
+type SyntheticPublishedReceipt = {
+  jobId: string; accountId: string; projectId: string;
+  targetDeviceId: string; targetPath: string; sha256: string;
+  epoch: number; grantGeneration: number; mac: string;
+};
 function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
   const cas = new Cas(), grants = new Grants();
   const stages = new Map<string, Buffer>();
   const writes: Array<{ id: string; offset: number; epoch: number }> = [];
   let target: Buffer | undefined, publications = 0, lost = false;
+  // Native mock alone owns this test key and emits a receipt only AFTER
+  // successful no-replace publication, not after ACK or Hub state change.
+  const nativeKey = randomBytes(32);
+  const publishedReceipts: SyntheticPublishedReceipt[] = [];
+  const macFor = (claims: Omit<SyntheticPublishedReceipt, 'mac'>) =>
+    createHmac('sha256', nativeKey).update(JSON.stringify(claims)).digest('hex');
+  const verifyReceipt = (receipt: SyntheticPublishedReceipt) => {
+    const { mac, ...claims } = receipt;
+    if (!/^[a-f0-9]{64}$/.test(mac)) return false;
+    const actual = Buffer.from(mac, 'hex');
+    const expected = Buffer.from(macFor(claims), 'hex');
+    return timingSafeEqual(actual, expected);
+  };
   const fileContent = (device: string, file: string) =>
     device === input.sourceDeviceId ? bytes :
       file === input.targetPath ? target : stages.get(file);
@@ -156,11 +185,18 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
       if (!stage || digest(stage) !== digest(bytes)) throw Error('NATIVE_BAD_STAGE');
       if (target !== undefined) throw Error('NATIVE_DESTINATION_EXISTS');
       target = Buffer.from(stage); publications++;
+      const claims = { jobId: job.id, accountId: job.accountId,
+        projectId: job.projectId, targetDeviceId: job.targetDeviceId,
+        targetPath: job.targetPath, sha256: digest(stage), epoch,
+        grantGeneration: grants.generation };
+      publishedReceipts.push({ ...claims, mac: macFor(claims) });
+      if (mode === 'lost-publish-ack') throw Error('NATIVE_PUBLISHED_BUT_ACK_LOST');
     },
   };
   const hub = (root: string) => new CrossDeviceTransferJobs(root, remote,
     { requireExternalAuthority: true, authority: cas.authority, grants: grants.adapter });
-  return { cas, grants, hub, writes,
+  return { cas, grants, hub, writes, verifyReceipt,
+    get publishedReceipts() { return publishedReceipts.map(r => ({ ...r })); },
     get target() { return target; }, get publications() { return publications; } };
 }
 
