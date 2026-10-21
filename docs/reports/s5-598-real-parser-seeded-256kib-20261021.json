@@ -1,0 +1,83 @@
+{
+  "class": "REAL_598_EXPRESS_PARSER_LOCAL_ONLY_NOT_NATIVE",
+  "sourceHead": "6f5ae657e98ec1bcc06f7b3454b0e4d99dbb69b1",
+  "startedUtc": "2026-10-21T16:09:06.612Z",
+  "completedUtc": "2026-10-21T16:09:07.259Z",
+  "host": {
+    "platform": "win32",
+    "node": "v24.15.0",
+    "cpuModel": "AMD Ryzen 5 2600X Six-Core Processor           ",
+    "totalMemoryBytes": 17101815808
+  },
+  "limits": {
+    "largeConcurrent": 4,
+    "bodyBytesEach": 262144,
+    "rssGrowthStopBytes": 268435456,
+    "freeRamPrecheckBytes": 3221225472,
+    "freeDiskPrecheckBytes": 268435456
+  },
+  "result": {
+    "kind": "S5_REAL_598_EXPRESS_LOCAL_PARSER_NO_NATIVE",
+    "seed": 1511506142,
+    "sourceBodyBytes": 262144,
+    "largeCount": 4,
+    "receivedBytes": 1048576,
+    "largeSha256": [
+      "e8c0d99e079ab2e801e92f02b45e72f0381fd05a21b986851fcffbab55e01102",
+      "9bc890e1e155000cf7b46d053d4ce70bdbdb9175070ad355ed0c5a003e545bc2",
+      "19bbe7a8c5433519e53c28ab90466b62c032764f90781536baac8bcbe49c3bdf",
+      "47a81149ff49a4e910322d3f0377d8d39e32ae95c4fa359598344bdc7d1c6615"
+    ],
+    "largeSuccesses": 4,
+    "smallSuccesses": 20,
+    "smallDuringLarge": 20,
+    "smallLatency": {
+      "method": "nearest-rank",
+      "clock": "performance.now",
+      "successN": 20,
+      "attemptedN": 20,
+      "p50": 117.718,
+      "p95": 128.201,
+      "p99": 137.367
+    },
+    "largeLatency": {
+      "method": "nearest-rank",
+      "clock": "performance.now",
+      "successN": 4,
+      "attemptedN": 4,
+      "p50": 319.988,
+      "p95": 325.046,
+      "p99": 325.046
+    },
+    "fifthBusy503": 1,
+    "gzipBusy503": 1,
+    "gzipAfterRelease200": 1,
+    "gzipInflatedOversize413": 1,
+    "backpressureDrainEvents": 16,
+    "rssGrowthPeakBytes": 53284864,
+    "rssGrowthLimitBytes": 268435456,
+    "cpuUserUs": 704000,
+    "cpuSystemUs": 187000,
+    "wallDurationMs": 641.935,
+    "actualNativeToolCompletions": 0,
+    "authenticatedPublicWss": 0,
+    "actualCloudflareCost": null,
+    "oneGiBPhysicalFiles": 0,
+    "productionAcceptance": "NO_GO"
+  },
+  "percentileProvenance": {
+    "boundary": "performance.now before localhost HTTP request until full response body consumed",
+    "method": "nearest-rank sorted ceil(p*N)-1",
+    "smallSuccessN": 20,
+    "largeSuccessN": 4,
+    "excluded": "busy/gzip 503, gzip 413, cancelled or failed requests",
+    "caveat": "one local process/host only; CPU/RSS nondeterministic; do not infer provider SLO"
+  },
+  "tenantProviderCounters": null,
+  "cloudflareD1DurableObjectsInvoice": null,
+  "nativeWssSuccessful": 0,
+  "nativeToolCompletionsVerified": 0,
+  "physicalOneGiBCrossDeviceTransfer": false,
+  "continuous24hSoak": false,
+  "productionDecision": "NO_GO"
+}
