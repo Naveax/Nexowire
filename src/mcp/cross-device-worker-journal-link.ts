@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type {
   AuthenticatedTransferRoute, TransferAuthorization, TransferBinding,
   TransferCheckpoint, PendingTransferChunk,
@@ -23,6 +24,8 @@ export interface FencedWorkerJournalSnapshot {
   bytesTotal: number;
   bytesConfirmed: number;
   sha256: string;
+  /** #725 typed diagnostic metadata is forensic only, never a dispatch grant. */
+  errorCode?: string;
   state: 'QUEUED' | 'RUNNING' | 'RECOVERY_REQUIRED' | 'FAILED' |
     'MUTATION_UNKNOWN' | 'CANCEL_REQUESTED' | 'CANCELLED' |
     'PUBLISHING' | 'COMPLETED';
@@ -43,6 +46,30 @@ export interface FencedWorkerJournalSnapshot {
  * epoch from the worker, Agent ACK, or control-plane badge. */
 export interface ConnectionSessionWitness {
   currentEpoch(route: Readonly<AuthenticatedTransferRoute>): Promise<number | undefined>;
+}
+
+/** #712 scope is distinct from numeric WebSocket and Artifact writer epochs.
+ * Admission MUST be derived from independently protected Broker/owner state;
+ * this read-only module never creates or validates a signed dispatch permit. */
+export interface BrokerOwnerEpochAdmission {
+  ownerEpoch: number;
+  grantGeneration: number;
+  deviceEpoch: string;
+  sessionEpoch: string;
+  privilege: 'CORE' | 'ROOT';
+}
+export interface BrokerOwnerEpochChallenge extends BrokerOwnerEpochAdmission {
+  ownerId: string;
+  deviceId: string;
+  challengeNonce: string;
+}
+export interface BrokerOwnerEpochWitness {
+  /** Must authenticate protected Broker ownerEpoch/generation with a NEW
+   * nonce-bound *read-only* proof against independent revoke authority.
+   * NEVER call #712's beginIfCurrent merely to inspect: it reserves an
+   * external dispatch claim. If read-only signed evidence is unavailable,
+   * the witness must deny. Caller/Agent/WAL booleans are NEVER proof. */
+  assertFresh(challenge: Readonly<BrokerOwnerEpochChallenge>): Promise<boolean>;
 }
 
 export interface WorkerLeaseWitness {
@@ -124,6 +151,9 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
   authorize?: TransferAuthorization;
   /** #616/#634 rollback-independent *worker* CAS lease check. */
   workerLease?: WorkerLeaseWitness;
+  /** Required #712 protected owner/session admission and nonce-bound oracle. */
+  ownerAdmission?: Readonly<BrokerOwnerEpochAdmission>;
+  ownerEpochWitness?: BrokerOwnerEpochWitness;
   /** Required fresh Broker witness; read again after any awaited readback. */
   sessionWitness?: ConnectionSessionWitness;
   /** Optional independent non-mutating destination readback. */
@@ -151,21 +181,37 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
       checkpoint.epoch !== route.epoch) {
     return denied('epoch_stale', offset, id);
   }
-  if (!input.authorize || !input.workerLease || !input.sessionWitness || !worker.fencing ||
+  const admission = input.ownerAdmission;
+  if (!input.authorize || !input.workerLease || !input.sessionWitness ||
+      !input.ownerEpochWitness || !admission ||
+      !Number.isSafeInteger(admission.ownerEpoch) || admission.ownerEpoch < 1 ||
+      !Number.isSafeInteger(admission.grantGeneration) || admission.grantGeneration < 1 ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(admission.deviceEpoch) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(admission.sessionEpoch) ||
+      (admission.privilege !== 'CORE' && admission.privilege !== 'ROOT') ||
+      !worker.fencing ||
       !Number.isSafeInteger(worker.fencing.epoch) ||
       worker.fencing.epoch < 1 ||
       typeof worker.fencing.token !== 'string' ||
       worker.fencing.token.length < 32 || worker.fencing.token.length > 256) {
     return denied('authority_blocked', offset, id);
   }
-  let current = false, leased = false;
+  // Each inspection phase MUST obtain a fresh signed nonce-bound owner proof;
+  // a correctly signed permit resurrected from a rolled-back WAL is stale.
+  const ownerChallenge = (): BrokerOwnerEpochChallenge => ({
+    ...admission, ownerId: checkpoint.binding.ownerId,
+    deviceId: checkpoint.binding.destinationDeviceId,
+    challengeNonce: randomBytes(32).toString('hex'),
+  });
+  let current = false, leased = false, ownerEpochCurrent = false;
   let liveSocketEpoch: number | undefined;
   try {
     current = await input.authorize(route, checkpoint.binding);
     if (current) leased = await input.workerLease.check(worker, route);
-    if (leased) liveSocketEpoch = await input.sessionWitness.currentEpoch(route);
+    if (leased) ownerEpochCurrent = await input.ownerEpochWitness.assertFresh(ownerChallenge());
+    if (ownerEpochCurrent) liveSocketEpoch = await input.sessionWitness.currentEpoch(route);
   } catch { /* unreachable authority must fail closed */ }
-  if (!current || !leased || !Number.isSafeInteger(liveSocketEpoch)) {
+  if (!current || !leased || !ownerEpochCurrent || !Number.isSafeInteger(liveSocketEpoch)) {
     return denied('authority_blocked', offset, id);
   }
   if (liveSocketEpoch !== route.epoch) {
@@ -210,7 +256,8 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
     // invalidates the evidence. No checkpoint CAS in this read-only adapter.
     try {
       if (!(await input.authorize(route, checkpoint.binding)) ||
-          !(await input.workerLease.check(worker, route))) {
+          !(await input.workerLease.check(worker, route)) ||
+          !(await input.ownerEpochWitness.assertFresh(ownerChallenge()))) {
         return denied('authority_blocked', offset, id);
       }
       // Reconnect can happen during the independent destination read. A
