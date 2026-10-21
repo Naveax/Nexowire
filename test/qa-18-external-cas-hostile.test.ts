@@ -144,7 +144,7 @@ function fixture(){
   const key=generateKeyPairSync('ed25519');
   const intruder=generateKeyPairSync('ed25519');
   const publicKey=key.publicKey.export({type:'spki',format:'pem'}).toString();
-  const sessions=new Set([sessionEpoch]);
+  const sessions=new Set<string>([sessionEpoch]);
   const signedProvenance=()=>envelope({
     version:1,authorityId,deploymentId,witnessDomainId,agentRollbackDomainId,
     independentlyOperated:true,immutableRetentionVerified:true,
