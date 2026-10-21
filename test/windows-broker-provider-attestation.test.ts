@@ -114,3 +114,47 @@ test('explicit native provider UNKNOWN is never upgraded to high-token or signed
  assert.equal(missing.highTokenBrokerIdentityAttested,false);
  assert.equal(missing.productionReady,false);
 });
+
+test('malicious same-name PowerShell Security module cannot forge Authenticode Valid', {
+ skip:process.platform!=='win32',timeout:30000,
+},async()=>{
+ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nx-fake-provider-'));
+ try{
+  const moduleDir=path.join(dir,'Microsoft.PowerShell.Security');
+  await fs.mkdir(moduleDir,{recursive:true});
+  const psModule=path.join(moduleDir,'Microsoft.PowerShell.Security.psm1');
+  await fs.writeFile(psModule,[
+   'function Get-AuthenticodeSignature {',
+   "  [pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Thumbprint='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'}}",
+   '}',
+   "function Get-Acl { [pscustomobject]@{AreAccessRulesProtected=$true;Access=@()} }",
+   'Export-ModuleMember -Function Get-AuthenticodeSignature,Get-Acl',
+  ].join('\n'));
+  const manifest=path.join(moduleDir,'Microsoft.PowerShell.Security.psd1');
+  await fs.writeFile(manifest,[
+   "@{RootModule='Microsoft.PowerShell.Security.psm1';ModuleVersion='1.0.0'",
+   "GUID='bde4b59d-70d4-4a4d-bf95-2e33ce172f34'",
+   "FunctionsToExport=@('Get-AuthenticodeSignature','Get-Acl')}",
+  ].join('\n'));
+  const helper=path.resolve('native/windows-job-owner.exe');
+  const audit=path.resolve('scripts/audit-windows-job-helper-trust.ps1');
+  const escaped=(x:string)=>x.replace(/'/g,"''");
+  const command=[
+    "$env:PSModulePath='"+escaped(dir)+"'+[IO.Path]::PathSeparator+$env:PSModulePath",
+    "Microsoft.PowerShell.Core\\Import-Module -Name '"+escaped(manifest)+"'",
+    "& '"+escaped(audit)+"' -HelperPath '"+escaped(helper)+"'",
+  ].join('; ');
+  const output=spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-Command',command],
+    {windowsHide:true,encoding:'utf8',timeout:15000,maxBuffer:8192});
+  assert.equal(output.status,0,(output.stderr??'').slice(0,1000));
+  const data=JSON.parse(output.stdout.trim()) as {
+    authenticodeStatus:string;publisherValid:boolean;securityModuleAvailable:boolean;
+    provisionalFileTrustChecksPassed:boolean;productionReady:boolean;
+  };
+  assert.notEqual(data.authenticodeStatus,'Valid',
+    'forged module in PSModulePath must not masquerade as OS signature evidence');
+  assert.equal(data.publisherValid,false);
+  assert.equal(data.provisionalFileTrustChecksPassed,false);
+  assert.equal(data.productionReady,false);
+ }finally{await fs.rm(dir,{recursive:true,force:true})}
+});

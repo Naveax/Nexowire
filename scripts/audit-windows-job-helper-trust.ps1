@@ -50,8 +50,18 @@ $hashMatches = $manifestDigest -match '^[0-9a-f]{64}$' -and $hash -eq $manifestD
 # must not furnish signed/ACL evidence. No module -> explicit NO-GO.
 $securityModuleLoaded=$false
 $securityModuleError=''
+$nativeModuleManifest=Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1'
 try {
-  Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+  # Pin the built-in engine module by its *actual* protected installation path.
+  # A fake Microsoft.PowerShell.Security earlier in PSModulePath is not allowed
+  # to masquerade as OS Authenticode/ACL evidence.
+  if (-not [IO.File]::Exists($nativeModuleManifest)) {throw 'NATIVE_SECURITY_MODULE_MISSING'}
+  Microsoft.PowerShell.Core\Import-Module -Name $nativeModuleManifest -Force -ErrorAction Stop
+  $loaded=Microsoft.PowerShell.Core\Get-Module -Name Microsoft.PowerShell.Security
+  if ($null -eq $loaded -or -not (
+    [string]::Equals($loaded.Path,$nativeModuleManifest,
+      [StringComparison]::OrdinalIgnoreCase)
+  )) {throw 'NATIVE_SECURITY_MODULE_IDENTITY_MISMATCH'}
   $securityModuleLoaded=$true
 } catch {$securityModuleError=$_.Exception.GetType().Name}
 $auth = $null
@@ -125,6 +135,7 @@ $evidence=[ordered]@{
   authenticodeEvidenceAvailable=[bool]$authAvailable
   authenticodeEvidenceError=$authError
   securityModuleAvailable=[bool]$securityModuleLoaded
+  expectedSecurityModuleLocation=$nativeModuleManifest
   securityModuleError=$securityModuleError
   authenticodeProvider='Microsoft.PowerShell.Security/Get-AuthenticodeSignature'
   publisherValid=[bool]$validSigner

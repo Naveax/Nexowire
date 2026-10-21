@@ -13,7 +13,7 @@
 
 ## Native signature and ACL evidence, no fake success
 
-`scripts/audit-windows-job-helper-trust.ps1` now explicitly loads the genuine `Microsoft.PowerShell.Security` module and calls its **module-qualified** `Get-AuthenticodeSignature`. Caller-defined functions with matching names cannot simulate `Valid` or ACL protection.
+`scripts/audit-windows-job-helper-trust.ps1` now loads the genuine `Microsoft.PowerShell.Security` module by its absolute protected `$PSHOME/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1` path and calls its **module-qualified** `Get-AuthenticodeSignature`. Caller-defined functions **and a malicious same-named module earlier in `PSModulePath`** cannot simulate `Valid` or ACL protection. If the pinned genuine provider cannot be established, evidence remains `UNAVAILABLE` and production NO-GO.
 
 Windows file and parent ACL are obtained using native .NET `FileSystemAclExtensions.GetAccessControl` with the explicit native PowerShell Security cmdlet as a legacy fallback. Any missing verification provider remains `UNAVAILABLE` with unavailable evidence, not `Valid` or `no broad write`.
 
@@ -37,7 +37,7 @@ A high-integrity token detected on an unrelated hosted runner must not be misrep
 
 `test/windows-job-helper-acl-publisher.test.ts` covers forged caller PowerShell functions being ignored and a source-built unsigned helper remaining NO-GO.
 
-`test/windows-broker-provider-attestation.test.ts` uses a **disposable copy** of a real Microsoft Authenticode-signed Windows EXE. After mutating its signed bytes and replacing its loose companion digest, Authenticode is rejected even though the new loose checksum matches. A disposable directory with an Authenticated Users Modify ACE is identified as parent-ACL replacement risk. Native caller token evidence must be genuinely available. No installed file or running user process is touched.
+`test/windows-broker-provider-attestation.test.ts` uses a **disposable copy** of a real Microsoft Authenticode-signed Windows EXE. After mutating its signed bytes and replacing its loose companion digest, Authenticode is rejected even though the new loose checksum matches. A disposable directory with an Authenticated Users Modify ACE is identified as parent-ACL replacement risk. A separate disposable PowerShell module hijack fixture fails to forge `Valid`. Native caller token evidence must be genuinely available. No installed file or running user process is touched.
 
 The test suite runs in a dedicated GitHub-hosted Windows CI step. An unavailable real provider or failed negative assertion must yield a red CI, **not skipped/mocked success**.
 
