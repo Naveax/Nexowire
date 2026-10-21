@@ -127,11 +127,42 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
     assert.equal(accepted.status,'transitioned');
     assert.equal((await epoch.state(ownerA)).locked,true);
     assert.equal((await epoch.state(ownerB)).locked,false);
+    // The trusted staging logout trigger revokes the owner's refresh records
+    // AND locks the epoch. Rotation correctly denies the revoked credential
+    // at its earlier lookup gate, before reaching the session-epoch gate.
+    // Never weaken the revocation trigger to make an expected error match.
+    const refreshRow=(token:string)=>sqlite.prepare(
+      'SELECT account_id,session_epoch,revoked_at FROM mcp_oauth_refresh_tokens WHERE token_hash=?'
+    ).get(digest(token)) as {
+      account_id:string;session_epoch:number;revoked_at:string|null
+    };
+    assert.deepEqual(refreshRow(a.refresh),{
+      account_id:ownerA,session_epoch:0,revoked_at:at.toISOString(),
+    });
+    assert.deepEqual(refreshRow(b.refresh),{
+      account_id:ownerB,session_epoch:0,revoked_at:null,
+    });
+    assert.equal(await oauth.authenticateAccessToken(a.access),null);
+    const beforeOwnerA=(sqlite.prepare(
+      'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
+    ).get(ownerA) as {n:number}).n;
     const rotator=new ProposedMcpOAuthEpochAtomicRefresh({db,resource,now:()=>at});
     const rotate=(refresh:string)=>rotator.rotate({
       refreshToken:refresh,clientId:client,requestedResource:resource,
     });
-    await assert.rejects(rotate(a.refresh),/OAuth refresh session epoch unavailable/);
+    // Concurrent retries of an already revoked refresh may never mint a
+    // new token or unlock the session. This is an expected fail-closed path.
+    const replay=await Promise.allSettled(Array.from({length:8},()=>rotate(a.refresh)));
+    assert.equal(replay.filter(x=>x.status==='fulfilled').length,0);
+    for(const denial of replay) {
+      assert.equal(denial.status,'rejected');
+      assert.match(String((denial as PromiseRejectedResult).reason),
+        /OAuth refresh credential unavailable/);
+    }
+    assert.equal((sqlite.prepare(
+      'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
+    ).get(ownerA) as {n:number}).n,beforeOwnerA);
+    assert.equal(refreshRow(a.refresh).revoked_at,at.toISOString());
     const unrelated=await rotate(b.refresh);
     assert.match(unrelated.access_token,/^nwx_mcp_/);
     assert.match(unrelated.refresh_token,/^nwx_refresh_/);
