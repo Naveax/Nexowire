@@ -33,4 +33,4 @@ jobs:
       - name: Existing purpose-bound and protected-secret DPAPI contract
         run: node --test --import tsx --test-concurrency=1 test/protected-secret-files.test.ts
       - name: Source-only DPAPI timeout and CORE no-replay negatives
-        run: node --test --import tsx --test-concurrency=1 test/qa-02-683-dpapi-timeout-negative.test.ts test/qa-02-670-native-broker-truth-negative.test.ts test/qa-02-core-633-elevated-outcome-negative.test.ts
+        run: node --test --import tsx --test-concurrency=1 test/qa-02-683-dpapi-timeout-negative.test.ts test/qa-02-670-native-broker-truth-negative.test.ts test/qa-02-core-633-elevated-outcome-negative.test.ts test/qa-02-elevated-outcome-error-contract.test.ts
