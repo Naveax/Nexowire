@@ -4,7 +4,8 @@ import { ArtifactBridgeError } from '../workspace/artifact-bridge.js';
 import type { WorkspaceStore } from '../workspace/store.js';
 import type { BearerAuthorization } from '../security/auth.js';
 import { artifactPrincipal } from './artifact-bridge-tools.js';
-import { TransferTrustError, type TrustedTransferAuthority } from '../workspace/artifact-job-trust.js';
+import { TransferTrustError, type TrustedTransferAuthority,
+  type TrustedTransferCoreGrants } from '../workspace/artifact-job-trust.js';
 import { CrossDeviceTransferJobs, TransferJobError,
   type TransferRemote } from './cross-device-transfer-jobs.js';
 
@@ -32,11 +33,12 @@ export function registerCrossDeviceTransferJobTools(
   auth: BearerAuthorization | undefined,
   remote: TransferRemote,
   authority?: TrustedTransferAuthority,
+  grants?: TrustedTransferCoreGrants,
 ): void {
   // No external trust root = no hosted file mutation. It is deliberately
   // impossible for client JSON to supply the authority.
   const jobs = new CrossDeviceTransferJobs(workspaces.transferJobsDirectory(), remote,
-    { requireExternalAuthority: true, authority });
+    { requireExternalAuthority: true, authority, grants });
   const principal = (source: string, target: string) => {
     const src = artifactPrincipal(auth, source);
     const dst = artifactPrincipal(auth, target);

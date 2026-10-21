@@ -50,9 +50,14 @@ function mockJob(): TransferJob {
 test('hosted fail closed: no independent monotonic authority -> no mutating writes', async () =>
   fixture(async root => {
     let writes = 0;
-    const remote = { ...ops(), write: async () => { writes++; return 65536; } };
+    const remote: TransferRemote = { ...ops(),
+      write: async () => { writes++; return 65536; },
+      writeFenced: async () => { writes++; throw Error('NEVER_ALLOWED'); },
+      publishFenced: async () => { writes++; throw Error('NEVER_ALLOWED'); },
+    };
+    const grants = { assertCurrent: async () => undefined };
     const jobs = new CrossDeviceTransferJobs(root, remote,
-      { requireExternalAuthority: true });
+      { requireExternalAuthority: true, grants });
     await assert.rejects(jobs.start(args), (e: unknown) =>
       e instanceof TransferTrustError && e.code === 'EXTERNAL_AUTHORITY_REQUIRED');
     assert.equal(writes, 0);
@@ -93,6 +98,12 @@ test('#587 two-stage co-rollback modeled by independent monotonic authority: sta
       },
       hash: async (device) => device === args.sourceDeviceId
         ? digest : createHash('sha256').update(stage).digest('hex'),
+      read: async (device, _file, offset, length) => {
+        const actual = (device === args.targetDeviceId ? stage : bytes);
+        const chunk = actual.subarray(offset, offset + length);
+        return { sourceBytes: actual.length, offsetBytes: offset, bytesRead: chunk.length,
+          contentBase64: chunk.toString('base64') };
+      },
       write: async (_device, _file, encoded, first, offset) => {
         const chunk = Buffer.from(encoded, 'base64');
         if (first) stage = chunk;
@@ -101,9 +112,18 @@ test('#587 two-stage co-rollback modeled by independent monotonic authority: sta
         if (stop) { stop = false; throw Error('LOST_ACK'); }
         return chunk.length;
       },
+      writeFenced: async (_job, env, encoded, first) => {
+        const written = await remote.write(args.targetDeviceId, '/stage',
+          encoded, first, env.offset);
+        assert.equal(written, env.length);
+        return { requestId: env.requestId, epoch: env.epoch, offset: env.offset,
+          length: env.length, sha256: env.sha256 };
+      },
+      publishFenced: async () => { throw Error('SHOULD_NOT_PUBLISH'); },
     };
+    const grants = { assertCurrent: async () => undefined };
     const first = new CrossDeviceTransferJobs(root, remote,
-      { requireExternalAuthority: true, authority });
+      { requireExternalAuthority: true, authority, grants });
     const started = await first.start(args);
     for (let n=0;n<100;n++) {
       const s = await first.status(started.id,args.accountId,args.sourceDeviceId,args.targetDeviceId);
@@ -118,7 +138,7 @@ test('#587 two-stage co-rollback modeled by independent monotonic authority: sta
     const record = independent.get(started.id)!;
     record.highwater = 131072;
     const second = new CrossDeviceTransferJobs(root, remote,
-      { requireExternalAuthority: true, authority });
+      { requireExternalAuthority: true, authority, grants });
     await assert.rejects(second.start({ ...args, resumeTransferId: started.id }),
       (e: unknown) => e instanceof TransferTrustError &&
         e.code === 'EXTERNAL_ROLLBACK_DETECTED');
@@ -154,7 +174,12 @@ test('#601 staged quota: cancel tombstones reservation; no refund without truste
 test('checkpoint adapter never treats job COMPLETED or a wrong digest as verified artifact', async () =>
   fixture(async root => {
     const bridge = new ArtifactBridgeStore(path.join(root, 'verified-store'));
-    const adapter = new VerifiedTransferCheckpointAdapter(bridge);
+    let grantActive = true;
+    const adapter = new VerifiedTransferCheckpointAdapter(bridge, {
+      assertCurrent: async () => {
+        if (!grantActive) throw new TransferTrustError('CORE_OWNER_REVOKED','CORE grant revoked');
+      },
+    });
     const job = mockJob();
     const scope = { accountId: job.accountId, projectId: job.projectId,
       deviceId: job.targetDeviceId };
@@ -190,6 +215,12 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
     const independent = new ArtifactBridgeStore(path.join(root, 'verified-store'));
     const retrieved = await independent.getCheckpoint(scope, input.workspaceId);
     assert.equal(retrieved?.artifacts[0]?.sha256, digest);
+    assert.equal((await adapter.get(scope, input.workspaceId, done))?.artifacts[0]?.sha256,digest);
+    grantActive = false;
+    await assert.rejects(adapter.get(scope,input.workspaceId,done),
+      (e:unknown)=>e instanceof TransferTrustError&&e.code==='CORE_OWNER_REVOKED');
+    await assert.rejects(adapter.persist({ ...input, job:done }),
+      (e:unknown)=>e instanceof TransferTrustError&&e.code==='CORE_OWNER_REVOKED');
   }));
 
 test('externally revoked lease stops the next bounded native write and never publishes', async () =>
@@ -212,6 +243,12 @@ test('externally revoked lease stops the next bounded native write and never pub
         : { type: 'file', size: stage.bytes.length },
       hash: async (device) => device === args.sourceDeviceId
         ? digest : createHash('sha256').update(stage.bytes).digest('hex'),
+      read: async (device, _file, offset, size) => {
+        const sourceBytes = device === args.sourceDeviceId ? bytes : stage.bytes;
+        const chunk = sourceBytes.subarray(offset, offset + size);
+        return { sourceBytes: sourceBytes.length, offsetBytes: offset,
+          bytesRead: chunk.length, contentBase64: chunk.toString('base64') };
+      },
       write: async (_dev, _file, b, first, offset) => {
         const chunk = Buffer.from(b, 'base64');
         if (first) stage.bytes = chunk;
@@ -221,9 +258,18 @@ test('externally revoked lease stops the next bounded native write and never pub
         return chunk.length;
       },
       moveNoOverwrite: async () => { stage.published++; },
+      writeFenced: async (_job, envelope, encoded, first) => {
+        const result = await remote.write(args.targetDeviceId, '/synthetic/stage',
+          encoded, first, envelope.offset);
+        assert.equal(result, envelope.length);
+        return { requestId: envelope.requestId, epoch: envelope.epoch,
+          offset: envelope.offset, length: envelope.length, sha256: envelope.sha256 };
+      },
+      publishFenced: async () => { stage.published++; },
     };
+    const grants = { assertCurrent: async () => undefined };
     const jobs = new CrossDeviceTransferJobs(root, remote,
-      { requireExternalAuthority: true, authority });
+      { requireExternalAuthority: true, authority, grants });
     const started = await jobs.start(args);
     let status: Awaited<ReturnType<typeof jobs.status>> | undefined;
     for (let i = 0; i < 100; i++) {
