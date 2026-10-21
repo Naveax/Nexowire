@@ -37,6 +37,8 @@ const TrustedPolicy = z.object({
   targetVersion: Semver,
   rollbackArtifactSha256: SHA,
   targetArtifactSha256: SHA,
+  /** Independent pin for the standalone installation helper executable. */
+  installerHelperSha256: SHA,
 }).strict();
 
 export interface ReleaseBundleAuditOptions {
@@ -49,6 +51,7 @@ export interface ReleaseBundleAuditResult {
   status: 'offline_artifacts_verified';
   targetArtifactSha256: string;
   rollbackArtifactSha256: string;
+  installerHelperSha256: string;
   signedManifestAndAuthenticodeVerified: true;
   canaryApproved: false;
   productionApproved: false;
@@ -130,11 +133,12 @@ export async function auditOfflineReleaseBundles(
   await checkDirectory(input.bundleRoot);
   const targetRoot=path.join(input.bundleRoot, 'target');
   const rollbackRoot=path.join(input.bundleRoot, 'rollback');
+  const helperRoot=path.join(input.bundleRoot, 'helper');
   // P0 #271: integrity of a signed binary is meaningless if unprivileged
   // users can replace its path or an imported executable before elevation.
   // Inspect all ancestors and the complete bounded target/rollback trees.
   // No ACL changes are made here, ever.
-  for (const protectedRoot of [targetRoot, rollbackRoot]) {
+  for (const protectedRoot of [targetRoot, rollbackRoot, helperRoot]) {
     let audit: WindowsAclAudit;
     try { audit = inspectAcl(protectedRoot); }
     catch { deny('ACL_UNTRUSTED'); }
@@ -145,6 +149,24 @@ export async function auditOfflineReleaseBundles(
       deny('ACL_UNTRUSTED');
     }
   }
+  await checkDirectory(helperRoot);
+  const helperPath=path.join(helperRoot,'installer-helper.exe');
+  const helperBytes=await readStableFile(helperPath,maxBinaryBytes);
+  if(hash(helperBytes)!==policy.installerHelperSha256)deny('HELPER_HASH_MISMATCH');
+  let helperInspection:ReturnType<BinaryInspector>;
+  try {
+    helperInspection=inspectBinary({
+      filePath:helperPath,expectedSha256:policy.installerHelperSha256,
+      expectedCertificateSha256:policy.trustedCertificateSha256,
+      expectedPublisherSubject:policy.trustedPublisher,
+    });
+  }catch{deny('HELPER_SIGNATURE_UNTRUSTED');}
+  if(helperInspection?.status!=='signature_verified' ||
+      helperInspection.fileSha256!==policy.installerHelperSha256 ||
+      helperInspection.certificateSha256!==policy.trustedCertificateSha256 ||
+      helperInspection.publisherSubject!==policy.trustedPublisher)deny('HELPER_SIGNATURE_UNTRUSTED');
+  const helperReadback=await readStableFile(helperPath,maxBinaryBytes);
+  if(hash(helperReadback)!==policy.installerHelperSha256)deny('HELPER_CHANGED');
   const target=await loadRelease(targetRoot);
   const rollback=await loadRelease(rollbackRoot);
   if(target.manifest.artifactSha256 !== policy.targetArtifactSha256 ||
@@ -202,6 +224,7 @@ export async function auditOfflineReleaseBundles(
     status:'offline_artifacts_verified',
     targetArtifactSha256:policy.targetArtifactSha256,
     rollbackArtifactSha256:policy.rollbackArtifactSha256,
+    installerHelperSha256:policy.installerHelperSha256,
     signedManifestAndAuthenticodeVerified:true,
     canaryApproved:false,productionApproved:false,executionSafe:false,
   };

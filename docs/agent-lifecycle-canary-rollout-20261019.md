@@ -220,3 +220,54 @@ require successful Windows 10/11 isolated signed-install/rollback VM
 crash acceptance, explicit ownership, compatibility and safe canary.
 #551 adds source tests, not the actual Windows installer or VM evidence.
 Both real Agent 1.0.5 devices remain unchanged. Production NO-GO.
+
+
+## 21 October 2026: separately signed helper and crash/restart freeze
+
+The offline signed installer package is now a THREE-artifact trust contract:
+1. target/installer.exe, target/manifest.json, target/manifest.sig
+2. rollback/installer.exe, rollback/manifest.json, rollback/manifest.sig
+3. helper/installer-helper.exe (separate helper, never assumed signed
+   simply because an Agent binary or Microsoft Node runtime is signed).
+
+Trusted policy supplied independently of release downloads MUST include
+installerHelperSha256 (64 lowercase SHA-256 hex) in addition to the
+target and rollback artifact SHA-256, trusted Ed25519 manifest public
+key, exact Authenticode Subject, signing certificate DER SHA-256,
+target/prior Agent versions, current Hub version, account owner and
+device identity.
+
+Source audit first verifies protected ACLs of helper, target and
+rollback roots, then independently SHA-256 checks helper and calls
+native Windows Authenticode with exact publisher Subject and cert pin.
+It rehashes helper after inspection, then checks signed target and
+rollback manifests and native Authenticode. Missing helper, modified
+bytes, unsigned helper, wrong certificate/publisher, user-writable
+helper ancestor/contents, wrong source-version identity or tampered
+independent policy hash = fail closed.
+
+The synthetic fixture tests use an injected fake signature inspector,
+not a Nexowire production-signed helper. Real Windows Authenticode OS
+API is tested separately in test/windows-binary-trust-s3.test.ts.
+No actual Nexowire-signed helper/installer was available. The source
+preflight always returns executionSafe:false and productionApproved:false.
+
+scripts/s3-crash-recovery-assessment.ts is an ISOLATED fail-closed
+crash/restart decision helper. It validates exact installation
+transaction, old/target Agent versions, owner/device, Hub, independently
+pinned old/target/helper SHA-256 and an external monotonic minimum
+sequence. It deliberately returns NO_AUTOMATIC_RESTART_OR_ROLLBACK for
+every valid crash phase, even a signed_stage_ready snapshot, because
+local disk and installer journal can be co-rolled back. Truncated
+journal, stale sequence, wrong old version, owner/device mismatch
+and hash drift likewise deny. This is NOT a durable journal
+implementation, NOT native Windows process attestation, NOT a VM
+reboot/restore test and NEVER restores or restarts a live service.
+
+Physical acceptance still needs a first-party Authenticode signed
+native helper and installer, full signed Agent 1.0.5 rollback
+archive/hash, independently stored durable monotonic transaction
+authority, protected ACL/parent write-denial #271, exact binary
+file-handle/process identity, disposable Windows VM crash/restart
+tests and two-device staged canary. Until proven, #596/#608 rollout
+and production remain NO-GO. Live Work PC and Naveax unchanged.
