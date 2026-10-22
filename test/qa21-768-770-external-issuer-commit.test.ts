@@ -160,9 +160,12 @@ function rig(file: string, mode: Mode) {
       if (!data) throw Object.assign(Error('ENOENT'), { code: 'ENOENT' });
       return digest(data);
     },
-    read: async (_dev, _p, off, size) => {
-      const chunk = bytes.subarray(off, off + size);
-      return { sourceBytes: bytes.length, offsetBytes: off,
+    read: async (dev, _p, off, size) => {
+      // Target-stage readback must report STAGE length, not source file size.
+      // Otherwise this negative never reaches its intended publication gate.
+      const full = dev === req.sourceDeviceId ? bytes : stage;
+      const chunk = full.subarray(off, off + size);
+      return { sourceBytes: full.length, offsetBytes: off,
         bytesRead: chunk.length, contentBase64: chunk.toString('base64') };
     },
     write: async () => { throw Error('UNFENCED_WRITE_PROHIBITED'); },
