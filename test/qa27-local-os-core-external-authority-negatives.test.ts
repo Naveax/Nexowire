@@ -270,6 +270,127 @@ test('QA27 #743 composed gate: inspected DACL is not token-aware AccessCheck and
   // publisher/AccessCheck provider or permit to dispatch.
   assert.equal(productionExplain().operation.elevatedExecutionProven,false);
 });
+test('QA27 #756/#747/#757: real low-token Broker boundary and external atomic commit must both survive cross-Hub revoke',async t=>{
+  // Single independent COMPOSITION test. #756 already tests disposable TEMP
+  // caller-token access/PID; #747 already reproduces the two-Hub race with
+  // an injected fake native callback. Neither is a physically installed HIGH
+  // Broker, complete transitive DLL dependency witness or real remote CAS.
+  // This acceptance oracle never calls a native effect or UAC.
+  const initiallyAuthorized=caseWith({
+    enrollment:{origin:'local-os-elevated-launch-attestation'},
+    authority:{
+      ownerPhysicallyPresentNow:false, // no repeat UAC after real enrollment
+      revokeAndDrainPending:false,
+      dispatchChallengeNonce:'e'.repeat(64),
+    },
+    remote:{
+      issuerSignatureVerified:true,
+      claimChallengeNonce:'e'.repeat(64),
+      remoteRevokeGenerationCurrent:true,
+      finalNativeDispatchAuthority:'synthetic-external-atomic-commit',
+      revokeCommitOrder:'no-revoke',
+    },
+  });
+  const candidate=classifySourceOnlyCrossBranchCase(initiallyAuthorized);
+  assert.equal(candidate.result,'CONTRACT_CANDIDATE');
+  assert.equal(candidate.reason,'SOURCE_CONTRACT_ONLY');
+  noPhysicalClaim(candidate);
+  let nativeEffects=0; // No invocations, not an actual Broker mock.
+
+  const negatives:ReadonlyArray<{
+    name:string;changes:Parameters<typeof caseWith>[0];
+    result:'BLOCKED'|'UNKNOWN';reason:string;
+  }>=[
+    {
+      name:'declared EXE DLL updater ACL without independently complete transitive dependency DAG',
+      changes:{broker:{
+        everyImportAndUpdaterAncestorAclVerified:true,
+        transitiveImportsIndependentlyEnumerated:false,
+        nativeLowPrivilegeEffectiveAccessCheckCompleted:true,
+        separateLowPrivilegeTokenAndInstalledTreeAccessCheckVerified:true,
+      }},
+      result:'BLOCKED',reason:'BROKER_EXE_IMPORT_UPDATER_TRUST_INCOMPLETE',
+    },
+    {
+      name:'TEMP current-user CreateFile and PID FILETIME PASS but no separate restricted low-token installed-tree AccessCheck',
+      changes:{broker:{
+        transitiveImportsIndependentlyEnumerated:true,
+        nativeLowPrivilegeEffectiveAccessCheckCompleted:true,
+        separateLowPrivilegeTokenAndInstalledTreeAccessCheckVerified:false,
+      }},
+      result:'BLOCKED',reason:'BROKER_SEPARATE_LOW_PRIVILEGE_ACCESS_UNVERIFIED',
+    },
+    {
+      name:'late authentic Ed25519 permit and fresh nonce with merely signed post-read, no atomic native dispatch commit',
+      changes:{remote:{
+        issuerSignatureVerified:true,claimChallengeNonce:'e'.repeat(64),
+        finalNativeDispatchAuthority:'signed-status-readback',
+        revokeCommitOrder:'no-revoke',
+      }},
+      result:'BLOCKED',reason:'EXTERNAL_ATOMIC_NATIVE_COMMIT_UNVERIFIED',
+    },
+    {
+      name:'Hub A process-local green flag while Hub B can start revoke',
+      changes:{remote:{
+        finalNativeDispatchAuthority:'process-local-flag',
+        revokeCommitOrder:'no-revoke',
+      }},
+      result:'BLOCKED',reason:'EXTERNAL_ATOMIC_NATIVE_COMMIT_UNVERIFIED',
+    },
+    {
+      name:'Hub B revoke-start linearizes before Hub A actual native-effect commit despite pre-revoke correctly signed permit',
+      changes:{remote:{
+        issuerSignatureVerified:true,
+        claimSingleUse:true,
+        remoteRevokeGenerationCurrent:true, // a stale snapshot can say true
+        finalNativeDispatchAuthority:'synthetic-external-atomic-commit',
+        revokeCommitOrder:'revoke-start-before-commit',
+      }},
+      result:'BLOCKED',reason:'REVOKE_START_PRECEDES_ATOMIC_COMMIT',
+    },
+    {
+      name:'effect admitted BEFORE revoke-start cannot be relabeled never executed or blindly replayed',
+      changes:{remote:{
+        finalNativeDispatchAuthority:'synthetic-external-atomic-commit',
+        revokeCommitOrder:'commit-before-revoke',
+      }},
+      result:'UNKNOWN',reason:'COMMIT_ORDER_OR_EFFECT_UNKNOWN_NO_REPLAY',
+    },
+    {
+      name:'unknown native-effect commit order remains UNKNOWN without replay',
+      changes:{remote:{
+        finalNativeDispatchAuthority:'synthetic-external-atomic-commit',
+        revokeCommitOrder:'unknown',
+      }},
+      result:'UNKNOWN',reason:'COMMIT_ORDER_OR_EFFECT_UNKNOWN_NO_REPLAY',
+    },
+    {
+      name:'owner revoked CORE regardless of preapproved Broker, signed permit and matching nonce',
+      changes:{authority:{revoked:true,ownerPhysicallyPresentNow:false}},
+      result:'BLOCKED',reason:'OWNER_SESSION_OR_EPOCH_REVOKED',
+    },
+  ];
+  // Use the same fresh nonce/owner scope as the candidate in each synthetic
+  // case unless that specific field is under test. A forged/stale consent.exe
+  // count never enters these authoritative fields.
+  assert.equal(new Set(negatives.map(x=>x.name)).size,negatives.length);
+  for(const c of negatives){
+    await t.test(c.name,()=>{
+      const scenario:CrossBranchCase={
+        enrollment:{...initiallyAuthorized.enrollment,...c.changes.enrollment},
+        broker:{...initiallyAuthorized.broker,...c.changes.broker},
+        authority:{...initiallyAuthorized.authority,...c.changes.authority},
+        remote:{...initiallyAuthorized.remote,...c.changes.remote},
+      };
+      const result=classifySourceOnlyCrossBranchCase(scenario);
+      assert.equal(result.result,c.result);
+      assert.equal(result.reason,c.reason);
+      noPhysicalClaim(result);
+      assert.equal(nativeEffects,0);
+    });
+  }
+  assert.equal(productionExplain().operation.elevatedExecutionProven,false);
+});
 test('no UAC auto-click, secure-desktop bypass or arbitrary Broker dispatch capability appeared',()=>{
   const win=capabilitiesForPlatform('win32');
   assert.equal(isReadOnlyCapability('windows.uac.status'),true);
