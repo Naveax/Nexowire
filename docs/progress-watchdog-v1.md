@@ -670,3 +670,51 @@ No #725 Artifact Store/native writer files, #712 Broker dispatch
 files, #03 ProcessManager/Job owner files or live Agent/VM/UAC were
 modified. This patch is restricted to #575's Progress-owned
 source/QA/documentation on its existing DRAFT PR.
+
+
+### 2026-10-22 #11 exact hosted CI and cached-acceptance revoke regression
+
+Reviewed exact hosted #575 HEAD `b8854de9d32474c62104d2b0f4c1515f1f6eb383`:
+CI `39677612780` **7/7 SUCCESS** and Release Readiness
+`39677612756` **3/3 package SUCCESS** (publishing and tagged
+attestation were SKIPPED). Reviewed #725 HEAD
+`09c3dcaf23103b429780c2862c846956058bdcb8`; #712
+**current** HEAD `1d78a7a9174e91e3b6baaa1319a063917391a64f`
+(hosted CI `39676838080` SUCCESS). Neither source PR proves a
+deployed rollback-independent owner/custody authority.
+
+**Reproduced genuine Progress-owner gap:** after a prior
+`COMPLETED_VERIFIED`, an independently invalidated
+`ProgressSupervisor` grant/proof left
+`ProgressRuntimePostconditionAdapter.snapshot()` reporting the
+cached `COMPLETED_VERIFIED` result and cached postcondition SHA
+until another asynchronous reconcile was requested. The regression
+test failed (25 PASS / 1 FAIL) *before* the fix. The adapter now
+cross-checks its cached completion against the supervisor's
+current independently scoped `completed_verified` state at each
+synchronous snapshot. If revoked, reconnected, expired or otherwise
+invalidated, the snapshot reports `MUTATION_UNKNOWN` and no digest
+without making a new network call or mutating other owners' state.
+The next `reconcile()` becomes sticky UNKNOWN and refuses to re-poll
+a possibly replayed transfer. This is only a local cache fence:
+physical off-host revoke/epoch readback remains an external
+unfulfilled production contract.
+
+**Forensic #725 comparison:** a `COMPLETED` with late
+`FORGED_WRITE_RECEIPT` when the lower-level off-host verifier
+rereads status was independently re-tested. It remains sticky
+UNKNOWN, with no accepted output SHA and no replay. No additional
+#725 artifact-store/native writer implementation change is warranted.
+#712 distinguishes its Broker CAS ownerEpoch and grantGeneration
+from Progress's separately authenticated ownerGrantEpoch: they must
+not be silently conflated.
+
+New deterministic fixture QA covers a revoked previously accepted
+grant (red before fix), expiring cached proof, stale reconnect,
+and a forensic `errorCode` arriving only after the first signed
+postcondition. All tests are generated TEMP/read-only providers,
+not physical independent authority evidence. No #08 store, #03
+Job owner, live Agent/VM/UAC, user files or production workloads
+were modified. **Production remains NO-GO** pending genuine signed
+immutable off-host output SHA readback, physical owner-epoch
+attestation and independent durable monotonic grant/cancel CAS.

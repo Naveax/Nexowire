@@ -151,13 +151,23 @@ export class ProgressRuntimePostconditionAdapter {
     return state.processState==='lost'||state.processState==='orphaned'||
       state.state==='stalled';
   }
+  /** Never expose a cached COMPLETED result after the trusted supervisor
+   * invalidates its owner grant, reconnect generation or proof freshness.
+   * This local read is NOT independent off-host grant readback. */
+  private acceptedProofNoLongerCurrent():boolean{
+    return this.lastResult==='COMPLETED_VERIFIED' &&
+      this.supervisor.snapshot(this.expected.sessionId).state!=='completed_verified';
+  }
   snapshot(){
-    return {status:this.blocked??this.lastResult,
-      pending:this.pending,postconditionSha256:this.lastWitnessDigest,
+    const invalidated=this.acceptedProofNoLongerCurrent();
+    return {status:this.blocked??(invalidated?'MUTATION_UNKNOWN':this.lastResult),
+      pending:this.pending,
+      postconditionSha256:invalidated?null:this.lastWitnessDigest,
       automaticReplayAllowed:false,productionAuthorityConnected:false};
   }
   async reconcile(signed:SignedCompletion):Promise<RuntimeCompletionStatus>{
     if(this.blocked)return this.blocked;
+    if(this.acceptedProofNoLongerCurrent())return this.blockUnknown();
     if(this.sourceProcessUnknown())return this.blockUnknown();
     if(this.pending)return this.blockUnknown();
     this.pending=true;

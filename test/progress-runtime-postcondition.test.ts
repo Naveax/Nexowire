@@ -471,3 +471,51 @@ test('stale Progress receipt after reconnect cannot restore off-host completion'
   assert.notEqual(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
+
+test('#712 post-accept CORE revoke cannot leave cached COMPLETED_VERIFIED snapshot or replay',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  assert.equal(f.adapter.snapshot().status,'COMPLETED_VERIFIED');
+  f.p.invalidateOwnerGrant(sessionId);
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.snapshot().status,'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().postconditionSha256,null);
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+}));
+
+test('#725 late forensic errorCode arriving after valid signed postcondition cannot commit',()=>scenario(async f=>{
+  const read=f.ports.readTransfer;
+  let count=0;
+  f.ports.readTransfer=async()=>{
+    const receipt=await read();
+    count++;
+    return count>=3?{...receipt,errorCode:'FORGED_WRITE_RECEIPT'}:receipt;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().postconditionSha256,null);
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('expired local immutable proof cannot remain cached COMPLETED_VERIFIED',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  f.setNow(f.now()+31_000);
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.adapter.snapshot().status,'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().postconditionSha256,null);
+  f.ports.readTransfer=async()=>{throw Error('NO_REPOLL_AFTER_STALE_PROOF');};
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('reconnect invalidates cached signed output snapshot before any new RPC',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  f.p.invalidateOnReconnect();
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(f.adapter.snapshot().status,'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().postconditionSha256,null);
+  f.ports.readTransfer=async()=>{throw Error('NO_REPOLL_AFTER_RECONNECT');};
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
