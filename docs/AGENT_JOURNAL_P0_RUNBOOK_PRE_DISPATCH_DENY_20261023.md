@@ -58,3 +58,46 @@ No #18 test, #03 Broker, #04 Access, #08 checkpoint, live Agent 1.0.5,
 D1, UAC, ACL, VM, user workspace or ReVoltVPN-Ubuntu-Lab was changed.
 
 **Production NO-GO; P0 #587 OPEN. Source CI is not physical proof.**
+
+## Second round: why four legacy positive tests are RED (23 October)
+
+Exact parent #826 HEAD `f9411fb09633c139920e7166c0901b85fdf3e9e2`,
+workflow `39862856414` **FAILURE**. Node24 breaks exactly four
+unchanged positive runbook tests (Node22 CANCELLED). All five original
+#01 deny-path source tests PASS. This is a deliberate compatibility
+blocker, not a production-ready result.
+
+| Existing positive | Nested real task graph | Safety classification |
+| --- | --- | --- |
+| `test/runbooks.test.ts` dependency-aware build/verify | `echo build` via shell; separate verification assertions | Shell command execution, not a proven read-only capability |
+| `test/runbooks.test.ts` unknown task graph retry | `echo build` shell, then `retry_unknown:true` expects second shell callback | Blind mutation replay risk from UNKNOWN; must remain RED |
+| `test/private-runbook.test.ts` private desktop | `echo private` shell command with desktop routing | Private desktop is not signed native dispatch admission |
+| `test/private-runbook-default-policy.test.ts` explicit headless override | `echo hello` shell command | Headless configuration is not remote mutation authority |
+
+Source evidence: `src/agent/executors.ts::runTaskGraph` parses
+`TaskGraphJobSchema` which requires arbitrary `command` and executes
+that command through `runProcess` or `runWindowsPrivateShell`.
+There is NO restricted read-only task-graph execution mode, and a
+string that appears innocuous is not proof of no OS side effect.
+`src/protocol/capabilities.ts` explicitly excludes `task.graph.run`
+and `shell.exec` from READ_ONLY_CAPABILITIES, while
+`verify.assertions` is included. A local/mock callback cannot attest
+the installed HIGH Broker or external CAS.
+
+**Decision:** do NOT bypass the source gate for any task_graph or
+modify legacy tests to expect invented approvals. The existing
+`assertions` path is the only currently supported read-only
+runbook step. New tests verify assertion-only UNKNOWN resume succeeds,
+independent assertions in mixed runbooks still execute, assertions
+dependent on denied graph are blocked, and benign-looking shell
+commands always remain RECONCILE_REQUIRED. Mixed graph retry does not
+erase UNKNOWN. No production code changes in this round, only own QA
+and this review ledger. These added tests CANNOT turn the historical
+four shell-positive tests green. PR #826 stays DRAFT and CI RED
+unless an approved separately operated rollback-independent remote
+admission provider and a reviewed compatibility strategy are supplied.
+
+Independent #18 hostile #781 remains byte-identical; its old-SHA
+reproduction should be interpreted as UNSAFE, and a changed outcome
+against #826 would be evidence of fail-closed denial, not a proof
+of physical exactly-once. #587 P0 OPEN; production NO-GO.
