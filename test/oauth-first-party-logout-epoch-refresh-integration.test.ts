@@ -216,7 +216,6 @@ test('strict issuer refresh refuses missing authority, unknown DB failure and an
   }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
   assert.throws(()=>new McpOAuthService(store,{
     ...options,refreshMode:'epoch-atomic',
-    epochAccessVerifier:denyAccess,
     epochAtomicRefresh:{rotate:async()=>{throw Error('unreachable')}},
   }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
   assert.throws(()=>new McpOAuthService(store,{
