@@ -1,0 +1,218 @@
+{
+  "schema": "qa24-next2-13-critical-v1",
+  "captured_date": "2026-10-23",
+  "repo": "Naveax/Nexowire",
+  "main_head": "754cc4364822be5fda528f54042fb22a84f19924",
+  "source": "independent GitHub get_pr_info+fetch_commit_workflow_runs+list_pr_changed_filenames+compare_commits",
+  "notes": "source-only observations, not a full 242-node two-pass detailed live scan; #811's original #786 and #800 test contents were separately compared and found byte-identical",
+  "pr_rows": [
+    {
+      "pr": 708,
+      "head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+      "base_sha": "e7e46b970dd9123ea3d827f4f60cb91b209",
+      "base_ref": "fix/08-checkpoint-external-commit-20261022",
+      "run_id": 39824007092,
+      "conclusion": "failure",
+      "compare": "diverged",
+      "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ]
+    },
+    {
+      "pr": 726,
+      "head_sha": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+      "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "base_ref": "qa/23-effective-owner669-negative-20261021",
+      "run_id": 39823764746,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_702_700_CROSS_QA_20261021.md",
+        "src/diagnostics/core-effective-native-cas-ui-gate.ts",
+        "test/core-effective-native-cas-ui-gate.test.ts",
+        "test/qa/core-card-approval-pref-only.test.ts",
+        "test/qa/core-effective-ui-worker23.test.ts"
+      ]
+    },
+    {
+      "pr": 786,
+      "head_sha": "8d5390dc8ed94e13ac380c6e37aa6f4de2888d4b",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "run_id": 39817020745,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "files": [
+        "test/p26-780-git-worktree-root-escape-negative.test.ts"
+      ]
+    },
+    {
+      "pr": 800,
+      "head_sha": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "run_id": 39823730640,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "files": [
+        "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts"
+      ]
+    },
+    {
+      "pr": 801,
+      "head_sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1",
+      "base_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "base_ref": "fix/09-759-stop-missing-state-unknown-20261022",
+      "run_id": 39823885977,
+      "conclusion": "success",
+      "compare": "ahead",
+      "merge_base_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_780_CDP_MICRO_SCENARIO_CONTRACT_20261022.md",
+        "src/agent/browser-micro-scenario-contract.ts",
+        "test/browser-micro-scenario-contract.test.ts"
+      ]
+    },
+    {
+      "pr": 802,
+      "head_sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+      "base_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "base_ref": "test/qa16-pr774-780-p1-checklist-20261022",
+      "run_id": 39824624827,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR779_790_CI_FAILURE_AUDIT_20261022.md",
+        "docs/qa/QA_20261022_P1_ISSUE780_FEATURE_MATRIX.json",
+        "docs/qa/QA_20261022_PR779_790_FAILED_STEPS.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-779-790-failed-step-provenance.test.ts"
+      ]
+    },
+    {
+      "pr": 810,
+      "head_sha": "0ef7e6290bbb5bb64d4b6a01839ff33c252eb7f7",
+      "base_sha": "7fa4bdc65c5f59c09179d3afa3fb896c4280aa87",
+      "base_ref": "test/24-delta-781-790-source-20261022",
+      "run_id": 39843615134,
+      "conclusion": "success",
+      "compare": "ahead",
+      "merge_base_sha": "7fa4bdc65c5f59c09179d3afa3fb896c4280aa87",
+      "files": [
+        "docs/qa/QA24_DELTA_791_803_20261022.md",
+        "docs/qa/fixtures/qa24-current-708-726-witness.json",
+        "docs/qa/fixtures/qa24-delta-791-794.json",
+        "docs/qa/fixtures/qa24-delta-795-798.json",
+        "docs/qa/fixtures/qa24-delta-799-803.json",
+        "docs/qa/fixtures/qa24-open-census-791-803.json",
+        "scripts/qa24-delta791-live.ts",
+        "scripts/qa24-delta791-review.ts",
+        "test/qa-24-delta791-live.test.ts",
+        "test/qa-24-delta791-review.test.ts"
+      ]
+    },
+    {
+      "pr": 811,
+      "head_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "run_id": 39854971347,
+      "conclusion": "success",
+      "compare": "ahead",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "files": [
+        "src/agent/executors.ts",
+        "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts",
+        "test/p26-780-git-worktree-root-escape-negative.test.ts"
+      ]
+    },
+    {
+      "pr": 814,
+      "head_sha": "daec5dbd6da1a9e1b703afdee660548ccb96367a",
+      "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "base_ref": "fix/31-scoped-git-executor-20261022",
+      "run_id": 39865936576,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "files": [
+        "test/p37-780-adversarial-git-metadata-fuzz.test.ts",
+        "test/p37-780-git-packed-objects-escape-negative.test.ts"
+      ]
+    },
+    {
+      "pr": 821,
+      "head_sha": "ef87410cc7921540dabf33b83e42824cce4f4668",
+      "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "base_ref": "fix/31-scoped-git-executor-20261022",
+      "run_id": 39862537837,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "files": [
+        "test/p50-780-git-clean-filter-external-command-negative.test.ts"
+      ]
+    },
+    {
+      "pr": 826,
+      "head_sha": "5e307dd48657512ed0e5d5b2908e7d2cd93ec6b5",
+      "base_sha": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "base_ref": "docs/01-agent-loop-journal-contract-20261022",
+      "run_id": 39866105972,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "files": [
+        "docs/AGENT_JOURNAL_P0_RUNBOOK_PRE_DISPATCH_DENY_20261023.md",
+        "src/agent/runbooks.ts",
+        "test/agent-runbook-unknown-source-guard.test.ts"
+      ]
+    },
+    {
+      "pr": 831,
+      "head_sha": "d81fe9019121f83753d65fa80fe3beea67b0a4e9",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "run_id": 39863973746,
+      "conclusion": "success",
+      "compare": "ahead",
+      "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "files": [
+        "docs/qa/QA44_OPEN_PR_DAG_20261023.md",
+        "scripts/qa44-open-pr-integration.ts",
+        "test/qa-44-open-pr-integration.test.ts"
+      ]
+    },
+    {
+      "pr": 837,
+      "head_sha": "1d2a455803407b077d6838b51a3a4b0d685150e8",
+      "base_sha": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "base_ref": "test/qa16-pr791-803-exact-proof-20261022",
+      "run_id": 39864371572,
+      "conclusion": "failure",
+      "compare": "ahead",
+      "merge_base_sha": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR806_811_20261023.md",
+        "docs/qa/QA_20261022_P1_ISSUE780_FEATURE_MATRIX.json",
+        "docs/qa/QA_20261023_PR806_811_PHYSICAL_PROOF.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-806-811-physical-proof.test.ts"
+      ]
+    }
+  ],
+  "unchanged_hostile_test_content": {
+    "original_786_vs_811": true,
+    "original_800_vs_811": true
+  },
+  "gate": "NO_GO",
+  "safe_merge_queue": []
+}
