@@ -1,4 +1,5 @@
-import { ArtifactBridgeError, type ArtifactBridgeStore, type ArtifactScope
+import { ArtifactBridgeError, type ArtifactBridgeStore, type ArtifactScope,
+  type ArtifactCheckpoint
 } from './artifact-bridge.js';
 import type { TransferJob } from '../mcp/cross-device-transfer-jobs.js';
 import type { TrustedTransferCoreGrants, TrustedPublicationCommit
@@ -15,6 +16,16 @@ import type { TrustedTransferCoreGrants, TrustedPublicationCommit
  */
 export interface TrustedCheckpointPublicationReadback {
   inspect(job: Readonly<TransferJob>): Promise<TrustedPublicationCommit | null>;
+  /** P0: Independently serialize owner revoke-start AND Artifact's durable
+   * save transaction with current ownerEpoch/grantGeneration and exact
+   * publication requestId/epoch/SHA/commitId. The provider MUST hold that
+   * externally protected admission through the entire async save callback,
+   * including fsync/rename, and refuse if revoke-start has already won.
+   * Neither inspect(), a Hub-local mutex nor a second assertCurrent()
+   * provides that atomicity. NO production implementation exists today.
+   */
+  saveIfCurrent?(job: Readonly<TransferJob>,
+    save: () => Promise<ArtifactCheckpoint>): Promise<ArtifactCheckpoint>;
 }
 export class VerifiedTransferCheckpointAdapter {
   constructor(private readonly store: ArtifactBridgeStore,
@@ -91,16 +102,34 @@ export class VerifiedTransferCheckpointAdapter {
       throw new ArtifactBridgeError('JOB_ARTIFACT_ATTESTATION_MISSING',
         'Remote status alone cannot certify a Hub artifact or repository commit.');
     }
-    // Repeat authoritative readback after awaiting the manifest. This is
-    // fail-closed source acceptance, NOT cross-store atomic physical proof.
+    // Two readbacks cannot close the race from final check to durable
+    // checkpoint mutation. Without an INDEPENDENT revocation-serialized
+    // admission provider, save must fail closed, before touching the store.
+    if (!this.publicationReadback?.saveIfCurrent) {
+      throw new ArtifactBridgeError('JOB_CHECKPOINT_ATOMIC_ADMISSION_REQUIRED',
+        'Protected owner epoch/revoke-start admission must span durable checkpoint save.');
+    }
     await this.published(scope, job);
-    return this.store.saveCheckpoint({
-      scope, workspaceId: input.workspaceId, repository: input.repository,
-      commitSha: input.commitSha,
-      summary: 'Cross-device transfer is independently attested by the Artifact Bridge manifest.',
-      completed: ['Artifact SHA-256 and scope verified'],
-      remaining: ['Physical/staging acceptance remains independent of source verification'],
-      lastCommands: [], artifactPaths: [input.artifactPath],
+    let committed: ArtifactCheckpoint | undefined;
+    const result = await this.publicationReadback.saveIfCurrent(job, async () => {
+      if (committed) {
+        throw new ArtifactBridgeError('JOB_CHECKPOINT_WRITE_REPLAY',
+          'Protected checkpoint admission cannot replay the local durable write.');
+      }
+      committed = await this.store.saveCheckpoint({
+        scope, workspaceId: input.workspaceId, repository: input.repository,
+        commitSha: input.commitSha,
+        summary: 'Cross-device transfer is independently attested by the Artifact Bridge manifest.',
+        completed: ['Artifact SHA-256 and scope verified'],
+        remaining: ['Physical/staging acceptance remains independent of source verification'],
+        lastCommands: [], artifactPaths: [input.artifactPath],
+      });
+      return committed;
     });
+    if (!committed || result !== committed) {
+      throw new ArtifactBridgeError('JOB_CHECKPOINT_ATOMIC_ADMISSION_INVALID',
+        'Protected provider did not return the exact committed checkpoint.');
+    }
+    return committed;
   }
 }

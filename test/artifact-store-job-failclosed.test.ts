@@ -188,6 +188,12 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
         jobId: job.id, requestId: authoritativeRequestId, epoch: 5,
         sha256: digest, durableCommitId: authoritativeCommitId,
       }),
+      // Synthetic ONLY: the real protected provider must independently hold
+      // a durable owner/grant epoch fence across the callback's fsync/rename.
+      saveIfCurrent: async (_job, write) => {
+        if (!grantActive) throw new TransferTrustError('CORE_OWNER_REVOKED','CORE grant revoked');
+        return write();
+      },
     });
     const job = mockJob();
     const scope = { accountId: job.accountId, projectId: job.projectId,
@@ -214,6 +220,16 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
       await bridge.putChunk(scope, staged.sessionId!, offset, chunk.toString('base64'));
     }
     await bridge.commit(scope, staged.sessionId!);
+    const readonlyWitness = new VerifiedTransferCheckpointAdapter(bridge,
+      { assertCurrent: async () => undefined }, {
+        inspect: async () => ({ jobId: job.id, requestId: authoritativeRequestId,
+          epoch: 5, sha256: digest, durableCommitId: authoritativeCommitId }),
+      });
+    await assert.rejects(readonlyWitness.persist({ ...input, job: done }),
+      (e:unknown)=>e instanceof ArtifactBridgeError &&
+        e.code==='JOB_CHECKPOINT_ATOMIC_ADMISSION_REQUIRED');
+    assert.equal(await bridge.getCheckpoint(scope,input.workspaceId),null,
+      'independent readback alone cannot write a checkpoint');
     const checkpoint = await adapter.persist({ ...input, job: done });
     assert.equal(checkpoint.artifacts[0]?.sha256, digest);
     // The SHA can be identical but a manifest produced by a different
@@ -359,4 +375,67 @@ test('P0 checkpoint cannot accept local COMPLETED+manifest without external publ
     }),(e:unknown)=>e instanceof ArtifactBridgeError &&
       e.code==='JOB_PUBLICATION_COMMIT_REQUIRED');
     assert.equal(await bridge.getCheckpoint(scope,'no-false-complete'),null);
+  }));
+
+test('P0: external revoke-start wins protected admission before durable checkpoint write',
+  async()=>fixture(async root=>{
+    const bridge=new ArtifactBridgeStore(path.join(root,'atomic-gate'));
+    const base=mockJob();
+    const requestId=randomUUID(), commitId='TEST-MONOTONIC-'+randomUUID();
+    const completed:TransferJob={...base,state:'COMPLETED',
+      bytesConfirmed:bytes.length,fencing:{epoch:5,token:'f'.repeat(64)},
+      publication:{requestId,epoch:5,sha256:digest,dispatched:true,
+        durableCommitId:commitId}};
+    const scope={accountId:completed.accountId,projectId:completed.projectId,
+      deviceId:completed.targetDeviceId};
+    const artifactPath='proof/final.bin', repository='Naveax/Nexowire';
+    const commitSha='a'.repeat(40);
+    const manifest=await bridge.begin({scope,artifactPath,repository,commitSha,
+      producerOperationId:completed.id,size:bytes.length,sha256:digest,
+      testStatus:'unverified',acceptanceStatus:'pending'});
+    for(let offset=0;offset<bytes.length;offset+=65_536) {
+      await bridge.putChunk(scope,manifest.sessionId!,offset,
+        bytes.subarray(offset,offset+65_536).toString('base64'));
+    }
+    await bridge.commit(scope,manifest.sessionId!);
+    let ownerEpoch=7,writes=0;
+    let admitted!:()=>void, release!:()=>void;
+    const reached=new Promise<void>(resolve=>{admitted=resolve});
+    const released=new Promise<void>(resolve=>{release=resolve});
+    class TrackingBridge extends ArtifactBridgeStore {
+      override async saveCheckpoint(
+        input:Parameters<ArtifactBridgeStore['saveCheckpoint']>[0]) {
+        writes++;
+        return super.saveCheckpoint(input);
+      }
+    }
+    const store=new TrackingBridge(path.join(root,'atomic-gate'));
+    const check=async()=>{
+      if(ownerEpoch!==7)throw new TransferTrustError('CORE_GRANT_EPOCH_STALE',
+        'Synthetic external owner revoke-start won checkpoint admission.');
+    };
+    const adapter=new VerifiedTransferCheckpointAdapter(store,{
+      assertCurrent:async()=>{await check()}
+    },{
+      inspect:async()=>({jobId:completed.id,requestId,epoch:5,
+        sha256:digest,durableCommitId:commitId}),
+      saveIfCurrent:async(_job,write)=>{
+        admitted();
+        await released;
+        // TEST-ONLY protected gate: real off-host provider must serialize
+        // revoke-start and the ENTIRE durable fsync/rename operation.
+        await check();
+        return write();
+      },
+    });
+    const pending=adapter.persist({scope,job:completed,
+      workspaceId:'owner-epoch-admission',artifactPath,repository,commitSha});
+    try{
+      await reached;
+      ownerEpoch=8;
+    }finally{release()}
+    await assert.rejects(pending,(e:unknown)=>
+      e instanceof TransferTrustError&&e.code==='CORE_GRANT_EPOCH_STALE');
+    assert.equal(writes,0,'revoked external admission may not call Artifact save');
+    assert.equal(await bridge.getCheckpoint(scope,'owner-epoch-admission'),null);
   }));
