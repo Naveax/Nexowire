@@ -59,7 +59,8 @@ export type ElevatedReconciliationReason=
   | 'INVALID_EXPECTED_OPERATION' | 'FORGED_OR_INVALID_OBSERVATION'
   | 'OWNER_EPOCH_NOT_CURRENT' | 'CORE_GRANT_NOT_CURRENT'
   | 'BROKER_HIGH_TOKEN_WITNESS_MISSING' | 'INITIAL_PHYSICAL_UAC_PROOF_MISSING'
-  | 'ACK_REQUEST_ID_MISMATCH' | 'POSTCONDITION_MISSING'
+  | 'ACK_REQUEST_ID_MISMATCH' | 'ACK_TRANSPORT_UNCONFIRMED'
+  | 'POSTCONDITION_MISSING' | 'POSTCONDITION_NOT_APPLICABLE'
   | 'POSTCONDITION_IDENTITY_MISMATCH' | 'POSTCONDITION_STALE'
   | 'POSTCONDITION_STATE_MISMATCH' | 'POSTCONDITION_NATIVE_ATTESTATION_MISSING';
 
@@ -105,6 +106,14 @@ export function reconcileElevatedOutcomeEvidence(
   if(gate.physicalBootstrap!=='verified')return base('INITIAL_PHYSICAL_UAC_PROOF_MISSING');
   if(observed.ack&&(observed.ack.requestId!==req.requestId||
       observed.ack.operationId!==req.operationId))return base('ACK_REQUEST_ID_MISMATCH');
+  // A negative or missing transport ACK cannot be promoted by a cached VM
+  // state. The remote side effect remains UNKNOWN, never automatically rerun.
+  if(observed.ack?.transportOk===false)return base('ACK_TRANSPORT_UNCONFIRMED');
+  // A VM Running receipt cannot possibly substantiate a shell command; only
+  // an independently attested command-specific postcondition could do that.
+  if(req.action==='core.shell.exec'&&observed.vmReadback){
+    return base('POSTCONDITION_NOT_APPLICABLE');
+  }
   const post=observed.vmReadback;
   if(!post)return base('POSTCONDITION_MISSING');
   if(post.requestId!==req.requestId||post.operationId!==req.operationId||
