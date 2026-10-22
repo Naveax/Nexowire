@@ -339,3 +339,73 @@ test('#47: fake provider response without executing callback cannot invent a che
     await assert.rejects(bogus.persist(input), hasCode('JOB_CHECKPOINT_ATOMIC_ADMISSION_INVALID'));
     assert.equal(await store.getCheckpoint(scope, input.workspaceId), null);
   }));
+
+
+/**
+ * #47 NEXT2 intentionally RED SOURCE negative, distinct from #22/#708:
+ * a trusted-admission adapter must invoke the write callback at most once
+ * even when its provider accidentally calls it concurrently while the first
+ * checkpoint write is unresolved. The source currently checks "committed"
+ * AFTER awaiting saveCheckpoint, so both invocations can enter the write.
+ *
+ * This is a source callback contract defect, not independent external CAS
+ * or a two-device/rollback security proof. The deliberately adversarial
+ * provider below is NOT eligible for production installation.
+ */
+test('#47 NEXT2 RED: concurrent saveIfCurrent callbacks must not enter two durable checkpoint writes', async () =>
+  isolated(async root => {
+    const job = completed();
+    const { storeRoot, input, scope } = await seeded(root, job);
+    const model = new AuthorityModel(job);
+    const enteredFirstSave = barrier();
+    const releaseFirstSave = barrier();
+    let writeEntries = 0;
+    class CountingBridge extends ArtifactBridgeStore {
+      override async saveCheckpoint(args: Parameters<ArtifactBridgeStore['saveCheckpoint']>[0]) {
+        writeEntries++;
+        if (writeEntries === 1) {
+          enteredFirstSave.release();
+          await releaseFirstSave.promise;
+        }
+        return super.saveCheckpoint(args);
+      }
+    }
+    const store = new CountingBridge(storeRoot);
+    const hostileProvider: TrustedCheckpointPublicationReadback = {
+      inspect: model.readback.inspect,
+      saveIfCurrent: async (_job, save) => {
+        const first = save();
+        try {
+          await enteredFirstSave.promise;
+          // Invoke again before the first callback resolves. This is NOT a
+          // mock claiming atomic CAS; it is an intentionally broken caller.
+          const second = save();
+          releaseFirstSave.release();
+          const [a, b] = await Promise.allSettled([first, second]);
+          if (a.status === 'rejected') throw a.reason;
+          // Observe the second even if the adapter correctly rejects it.
+          if (b.status === 'fulfilled') {
+            assert.equal(writeEntries, 1,
+              'A second provider callback must never reach the durable ArtifactBridge writer');
+          }
+          return a.value;
+        } finally {
+          releaseFirstSave.release();
+        }
+      },
+    };
+    const hubA = new VerifiedTransferCheckpointAdapter(store, model.grants, hostileProvider);
+    const outcome = await hubA.persist(input).then(
+      () => 'ACKNOWLEDGED',
+      (error: unknown) => error instanceof Error && 'code' in error
+        ? String(error.code) : 'UNKNOWN_ERROR',
+    );
+    assert.equal(writeEntries, 1,
+      'REPRODUCED P0 SOURCE GAP: concurrent callback invocations entered ArtifactBridge.saveCheckpoint twice before committed was set');
+    assert.ok(await store.getCheckpoint(scope, input.workspaceId),
+      'At most one independently tracked local checkpoint can be left by this fixture');
+    assert.ok(outcome === 'ACKNOWLEDGED' ||
+      outcome === 'JOB_CHECKPOINT_WRITE_REPLAY' ||
+      outcome === 'JOB_CHECKPOINT_ATOMIC_ADMISSION_INVALID',
+      'Outcome must be explicit, never trusted as native publication or retry permission');
+  }));
