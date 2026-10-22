@@ -1102,6 +1102,14 @@ async function findScopedGitWorkspace(
       }
 
       for (const dir of new Set([gitDir, commonDir])) {
+        // Authorize parent metadata directories before probing nested paths.
+        for (const name of ['objects', 'objects/info', 'info']) {
+          const file = path.join(dir, name);
+          try { await fs.lstat(file); await policy.resolveExisting(file); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+        }
         for (const name of ['config', 'config.worktree']) {
           const config = await readScopedGitFile(path.join(dir, name), policy);
           if (config && (
@@ -2221,9 +2229,20 @@ async function workspaceSnapshot(
     runScopedGit(executable, scoped, ['rev-parse', '--abbrev-ref', 'HEAD']),
     runScopedGit(executable, scoped, ['log', '-1', '--format=%H%x09%s']),
   ]);
-  if ([statusResult, headResult, logResult].some((result) =>
-    result.exitCode !== 0 || result.timedOut || result.truncated)) {
+  if ([statusResult, headResult].some((result) =>
+    result.exitCode !== 0 || result.timedOut || result.truncated) ||
+    logResult.timedOut || logResult.truncated) {
     throw new Error('WORKSPACE_GIT_READ_FAILED');
+  }
+  if (logResult.exitCode !== 0) {
+    // A newly initialized repository legitimately has an unborn HEAD.
+    // Distinguish it from failures reading an existing commit.
+    const commit = await runScopedGit(
+      executable, scoped, ['rev-parse', '--verify', '--quiet', 'HEAD'],
+    );
+    if (commit.exitCode === 0 || commit.timedOut || commit.truncated) {
+      throw new Error('WORKSPACE_GIT_READ_FAILED');
+    }
   }
   await policy.resolveExisting(root);
 
