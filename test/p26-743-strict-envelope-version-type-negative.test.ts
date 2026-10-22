@@ -36,7 +36,7 @@ function invoke(request: Record<string,unknown>) {
   };
 }
 
-test('W26/#743 strict JSON version must be typed; string and boolean v1 are currently misaccepted', {
+test('W26/#743 strict JSON must REJECT string, boolean and collection version spoofing (P0)', {
   skip:onlyWindows,timeout:120000,
 },async t=>{
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-w26-743-version-'));
@@ -65,23 +65,29 @@ test('W26/#743 strict JSON version must be typed; string and boolean v1 are curr
   assert.equal(canonical.report?.nativeEffectiveLowPrivilegeAccessCheckCompleted,false);
   assert.equal(canonical.report?.elevatedCoreDispatchEnabled,false);
 
-  // Source contract gap: PowerShell's '-cne 1' coerces a JSON string and
-  // boolean into the numeric comparison, rather than validating JSON types.
-  // A schema-correcting owner change SHOULD make these exit nonzero; this
-  // witness deliberately records the current broken v1 strict-type behavior.
-  for(const [label,version] of [['string "1"','1'],['boolean true',true]] as const){
+  // Preserve the old exploit reproduction, but make it a REAL rejecting
+  // negative assertion instead of "PASS because exploitation succeeded".
+  // Against exact #743, both string "1" and boolean true are ACCEPTED.
+  // A fixed #03 source must reject them before any read-only report is built.
+  const violated:string[]=[];
+  for(const [label,version] of [
+    ['string "1"','1'],['boolean true',true],
+    ['array [1]',[1]],['object version',{value:1}],
+  ] as const){
     const result=invoke(make(version));
-    assert.equal(result.status,0,
-      'known wrong-type version currently accepted: '+label+' '+result.error);
-    assert.equal(result.report?.requestInputKind,'envelope-v1-readonly',label);
-    assert.equal(result.report?.requestEnvelopeVersion,1,label);
-    assert.equal(result.report?.productionReady,false,label);
-    assert.equal(result.report?.elevatedCoreDispatchEnabled,false,label);
+    if(result.status===0){
+      violated.push(label);
+      assert.equal(result.report?.productionReady,false,label);
+      assert.equal(result.report?.elevatedCoreDispatchEnabled,false,label);
+    }
   }
 
-  // Controls: unsupported numeric version and unexpected fields are already
-  // rejected. The bug is NARROW, in type validation of allowed v1.
+  // Controls: numeric non-v1 and unknown keys fail in the original owner
+  // schema already. Keep these checks even when fixing the type confusion.
   assert.notEqual(invoke(make(2)).status,0,'future version must be rejected');
   assert.notEqual(invoke({...make(1),untrustedExtra:'x'}).status,0,
     'unknown JSON fields must be rejected');
+  assert.deepEqual(violated,[],
+    'P0 strict JSON version-type policy violated; wrong types accepted: '+
+      violated.join(', '));
 });
