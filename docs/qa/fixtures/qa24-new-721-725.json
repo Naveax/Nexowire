@@ -1,0 +1,127 @@
+{
+  "nodes": [
+    {
+      "pr": 721,
+      "head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "base_ref": "test/07-oauth-hostile-state-rotation-20261021",
+      "ci": {
+        "run_id": 39676732876,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d"
+      },
+      "files": [
+        "docs/OAUTH_ISSUER_EPOCH_BROWSER_OWNER_REVOKE_QA_20261021.md",
+        "src/product/github-oauth-browser-state.ts",
+        "src/product/github-oauth-issuer-fence.ts",
+        "src/product/mcp-oauth-first-party-logout.ts",
+        "test/github-oauth-issuer-fence-and-abandon-negative.test.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts",
+        "test/oauth-first-party-owner-session-logout-gate.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+        "base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+        "head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d"
+      }
+    },
+    {
+      "pr": 722,
+      "head_sha": "d4bd3e23bb37154284dee1745593afc92f37bec0",
+      "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "base_ref": "test/qa27-windows-approval-native-witness-20261021",
+      "ci": {
+        "run_id": 39676971419,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "d4bd3e23bb37154284dee1745593afc92f37bec0"
+      },
+      "files": [
+        "docs/QA27_LOCAL_OS_BROKER_EXTERNAL_CORE_MATRIX_20261021.md",
+        "test/fixtures/qa27-core-broker-external-authority-contract.ts",
+        "test/qa27-local-os-core-external-authority-negatives.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "head_sha": "d4bd3e23bb37154284dee1745593afc92f37bec0"
+      }
+    },
+    {
+      "pr": 723,
+      "head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e",
+      "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "base_ref": "test/p05-native-relative-acl-20261021",
+      "ci": {
+        "run_id": 39659567874,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e"
+      },
+      "files": [
+        "docs/security/p26-owner690-import-dag-native-negative.md",
+        "test/p26-owner690-transitive-import-native-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e"
+      }
+    },
+    {
+      "pr": 724,
+      "head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "base_ref": "qa/worker30-gzip95-tenant-memory-20261021",
+      "ci": {
+        "run_id": 39659574218,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482"
+      },
+      "files": [
+        "docs/SCALE_WORKER30_GZIP_ADMISSION_ISOLATION_CI_20261021.md",
+        "test/worker30-epoch-repair-pending-regression.test.ts",
+        "test/worker30-quiet-gzip-starvation-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+        "base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+        "head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482"
+      }
+    },
+    {
+      "pr": 725,
+      "head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "ci": {
+        "run_id": 39659633982,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8"
+      },
+      "files": [
+        "docs/ARTIFACT_NATIVE_UNKNOWN_PROVENANCE_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-08-owner-receipt-cancel.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8"
+      }
+    }
+  ]
+}
