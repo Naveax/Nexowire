@@ -298,7 +298,7 @@ test('QA27 #756/#747/#757: real low-token Broker boundary and external atomic co
   let nativeEffects=0; // No invocations, not an actual Broker mock.
 
   const negatives:ReadonlyArray<{
-    name:string;changes:Parameters<typeof caseWith>[0];
+    name:string;changes:NonNullable<Parameters<typeof caseWith>[0]>;
     result:'BLOCKED'|'UNKNOWN';reason:string;
   }>=[
     {
