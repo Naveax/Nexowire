@@ -10,6 +10,7 @@ import * as z from 'zod';
 const identity=z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const guid=z.string().uuid();
 const stamp=z.string().datetime({offset:true});
+const sha256=z.string().regex(/^[a-f0-9]{64}$/);
 
 export const ElevatedExpectedOperationSchema=z.strictObject({
   requestId:guid,
@@ -39,6 +40,16 @@ export const ElevatedUntrustedObservationSchema=z.strictObject({
     vmId:guid,state:z.enum(['Running','Off','Unknown']),
     observedAt:stamp,
   }).optional(),
+  // A claim of immutable target-state observation, NOT a trusted witness.
+  // The SHA is caller data: only a separately authenticated native issuer
+  // and independently read physical target can establish its provenance.
+  immutableVmEffect:z.strictObject({
+    requestId:guid,operationId:guid,deviceId:identity,
+    ownerAccountId:identity,ownerEpoch:z.number().int().positive(),
+    capability:z.enum(['hyperv.vm.start','hyperv.vm.stop']),
+    vmId:guid,state:z.enum(['Running','Off','Unknown']),
+    stateSha256:sha256,observedAt:stamp,
+  }).optional(),
 });
 
 // A trusted *external* verifier needs to supply these decisions. No caller
@@ -62,6 +73,7 @@ export type ElevatedReconciliationReason=
   | 'ACK_REQUEST_ID_MISMATCH' | 'ACK_TRANSPORT_UNCONFIRMED'
   | 'POSTCONDITION_MISSING' | 'POSTCONDITION_NOT_APPLICABLE'
   | 'POSTCONDITION_IDENTITY_MISMATCH' | 'POSTCONDITION_STALE'
+  | 'POSTCONDITION_CAPABILITY_MISMATCH' | 'POSTCONDITION_RECEIPT_INCONSISTENT'
   | 'POSTCONDITION_STATE_MISMATCH' | 'POSTCONDITION_NATIVE_ATTESTATION_MISSING';
 
 export interface ElevatedReconciliationResult {
@@ -111,11 +123,46 @@ export function reconcileElevatedOutcomeEvidence(
   if(observed.ack?.transportOk===false)return base('ACK_TRANSPORT_UNCONFIRMED');
   // A VM Running receipt cannot possibly substantiate a shell command; only
   // an independently attested command-specific postcondition could do that.
-  if(req.action==='core.shell.exec'&&observed.vmReadback){
+  if(req.action==='core.shell.exec'&&
+      (observed.vmReadback||observed.immutableVmEffect)){
     return base('POSTCONDITION_NOT_APPLICABLE');
   }
+  const candidate=observed.immutableVmEffect;
+  // A signed-looking, SHA-labelled VM receipt cannot cross from StartVM to
+  // StopVM or from a foreign owner/device/request. Even perfect matching
+  // content cannot self-attest that the target was actually observed.
+  if(candidate){
+    if(candidate.capability!==req.action){
+      return base('POSTCONDITION_CAPABILITY_MISMATCH');
+    }
+    if(candidate.requestId!==req.requestId||
+        candidate.operationId!==req.operationId||
+        candidate.deviceId!==req.deviceId||
+        candidate.ownerAccountId!==req.ownerAccountId||
+        candidate.ownerEpoch!==req.ownerEpoch||candidate.vmId!==req.vmId){
+      return base('POSTCONDITION_IDENTITY_MISMATCH');
+    }
+    if(Date.parse(candidate.observedAt)<=Date.parse(req.issuedAt)){
+      return base('POSTCONDITION_STALE');
+    }
+    const desired=req.action==='hyperv.vm.start'?'Running':'Off';
+    if(candidate.state!==desired){
+      return base('POSTCONDITION_STATE_MISMATCH');
+    }
+    if(observed.vmReadback&&(
+      observed.vmReadback.state!==candidate.state||
+      observed.vmReadback.vmId!==candidate.vmId||
+      observed.vmReadback.requestId!==candidate.requestId||
+      observed.vmReadback.operationId!==candidate.operationId||
+      observed.vmReadback.ownerEpoch!==candidate.ownerEpoch||
+      observed.vmReadback.deviceId!==candidate.deviceId||
+      observed.vmReadback.ownerAccountId!==candidate.ownerAccountId)){
+      return base('POSTCONDITION_RECEIPT_INCONSISTENT');
+    }
+  }
   const post=observed.vmReadback;
-  if(!post)return base('POSTCONDITION_MISSING');
+  if(!post&&!candidate)return base('POSTCONDITION_MISSING');
+  if(!post)return base('POSTCONDITION_NATIVE_ATTESTATION_MISSING');
   if(post.requestId!==req.requestId||post.operationId!==req.operationId||
       post.deviceId!==req.deviceId||post.ownerAccountId!==req.ownerAccountId||
       post.ownerEpoch!==req.ownerEpoch||post.vmId!==req.vmId){
