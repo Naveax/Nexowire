@@ -38,7 +38,11 @@ if($request -isnot [System.Collections.IDictionary] -or
    $request.Count -ne $expectedFields.Count -or
    @($request.Keys | Where-Object {$_ -notin $expectedFields}).Count -gt 0 -or
    @($expectedFields | Where-Object {-not $request.ContainsKey($_)}).Count -gt 0 -or
-   $request.version -cne 1 -or
+   # ConvertFrom-Json -AsHashtable returns an Int64 for JSON integer 1,
+   # while legacy named-parameter mode constructs Int32 1. Explicitly
+   # reject JSON string "1", boolean true and floating-point 1.0/1e0.
+   -not (($request.version -is [long] -or $request.version -is [int]) -and
+     $request.version -eq 1) -or
    $request.protectedInstallRoot -isnot [string] -or
    $request.launcherPath -isnot [string] -or
    $request.updaterPath -isnot [string] -or
@@ -46,6 +50,12 @@ if($request -isnot [System.Collections.IDictionary] -or
    $request.importedModulePaths.Count -gt 128 -or
    $request.importedModulePaths.Count -lt 1){
  throw 'BROKER_TREE_REQUEST_SCHEMA_INVALID'
+}
+# Never coerce JSON imported-module values to strings before validation:
+# PowerShell [string[]] would silently accept booleans/numbers and turn
+# malformed requests into filesystem paths.
+foreach($imported in $request.importedModulePaths){
+ if($imported -isnot [string]){throw 'BROKER_TREE_REQUEST_SCHEMA_INVALID'}
 }
 $ProtectedInstallRoot=[string]$request.protectedInstallRoot
 $LauncherPath=[string]$request.launcherPath

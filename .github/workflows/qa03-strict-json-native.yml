@@ -1,0 +1,25 @@
+name: QA03 Strict Windows JSON V1 and Native Trust
+on:
+  pull_request:
+    branches:
+      - fix/03-native-effective-acl-pid-dup-20261022
+
+permissions:
+  contents: read
+
+jobs:
+  windows-strict-json-native:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - name: Strict JSON literal types and preserved legacy PowerShell ACL interface
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-strict-json-v1-schema.test.ts test/core-broker-protected-tree.test.ts test/core-broker-transitive-import-negative.test.ts
+      - name: OS effective ACL and synthetic PID FILETIME/DUP_HANDLE negatives
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-native-effective-access.test.ts test/core-broker-native-pid-dup-access.test.ts test/core-broker-process-witness.test.ts
