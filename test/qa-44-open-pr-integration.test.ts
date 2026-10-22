@@ -6,7 +6,7 @@ type Seed={n:number;h:string;b:string;ref:string;baseRef:string;files:string[];c
 function seed(n:number,baseRef='main',b=SHA(1),files=[`src/owner-${n}.ts`]):Seed{
  return {n,h:SHA(n+300),b,ref:`branch-${n}`,baseRef,files,ci:'success',merge:b};
 }
-function fixture(options?:{extra?:boolean;changeHead?:boolean;changeCi?:boolean;incompleteFiles?:boolean;staleMain?:boolean}){
+function fixture(options?:{extra?:boolean;changeHead?:boolean;changeCi?:boolean;incompleteFiles?:boolean;staleMain?:boolean;duplicateFile?:boolean}){
  const p1=seed(1,'main',options?.staleMain?SHA(99):SHA(1),['src/shared.ts']);
  const p2=seed(2,'branch-1',p1.h,['src/shared.ts']);
  const p3=seed(3,'main',SHA(1),['src/shared.ts']);
@@ -30,10 +30,11 @@ function fixture(options?:{extra?:boolean;changeHead?:boolean;changeCi?:boolean;
   }
   const one=u.pathname.match(/\/pulls\/(\d+)$/);
   if(one){const p=old.find(x=>x.n===Number(one[1]));if(!p)throw Error('EXTRA_PR_DETAIL');
-   return {number:p.n,state:'open',head:{sha:p.h,ref:p.ref},base:{sha:p.b,ref:p.baseRef},changed_files:p.files.length};}
+   return {number:p.n,state:'open',head:{sha:p.h,ref:p.ref},base:{sha:p.b,ref:p.baseRef},changed_files:options?.duplicateFile&&p.n===2?2:p.files.length};}
   const files=u.pathname.match(/\/pulls\/(\d+)\/files$/);
   if(files){const p=old.find(x=>x.n===Number(files[1]));if(!p)throw Error('EXTRA_FILES');
    if(options?.incompleteFiles&&p.n===2)return [];
+   if(options?.duplicateFile&&p.n===2){if(Number(u.searchParams.get('page'))===1)return [{filename:'src/a.ts'},{filename:'src/a.ts'}];return [];}
    const page=Number(u.searchParams.get('page'));
    return p.files.slice((page-1)*100,page*100).map(filename=>({filename}));}
   if(u.pathname.includes('/compare/')){
@@ -97,4 +98,8 @@ test('QA44 divergent merge base and stale main are independent blockers',async()
  const r=await collectOpenPrIntegration(f.api,'Naveax/Nexowire',[1,3]);
  assert.ok(r.blockers.some(x=>x.pr===1&&x.reason==='STALE_MAIN_BASE_SHA'));
  assert.ok(r.blockers.some(x=>x.pr===3&&x.reason==='DIVERGED_OR_STALE_MERGE_BASE'));
+});
+
+test('QA44 duplicated changed filename is rejected, not silently deduplicated',async()=>{
+ await assert.rejects(collectOpenPrIntegration(fixture({duplicateFile:true}).api,'Naveax/Nexowire',[2]),/DUPLICATE_CHANGED_FILENAME_2/);
 });
