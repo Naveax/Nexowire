@@ -32,6 +32,9 @@ const finalGrant=z.strictObject({
   privilege:z.enum(['CORE','ROOT']),
   installedBrokerPid:z.number().int().positive().safe(),
   installedBrokerCreationFiletime:z.string().regex(/^[1-9][0-9]{9,19}$/),
+  installedBrokerVolumeSerialHex:z.string().regex(/^[a-f0-9]{8,16}$/),
+  installedBrokerImageFileIdHex:z.string().regex(/^[a-f0-9]{16,64}$/),
+  installedBrokerVersion:z.string().regex(/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/),
   installedImageSha256:sha,
   ownerRevoked:z.literal(false),
   revoking:z.literal(false),
@@ -155,6 +158,9 @@ export async function reviewFinalDispatchAuthority(
       job,nonce,info.challengeNonce,info.dispatchId,
     );
     const signed=verified(raw,dependencies.finalGrantPublicKey);
+    // Strict native schema has already been checked by
+    // verifiesInstalledBrokerNonce; never coerce untyped JSON fields.
+    const nativeWhen=(native.statement as {observedAtMs:number}).observedAtMs;
     const finished=(dependencies.now??Date.now)();
     if(!signed||!Number.isSafeInteger(finished)||
       signed.authorityId!==dependencies.dispatchAuthorityId||
@@ -173,14 +179,24 @@ export async function reviewFinalDispatchAuthority(
       signed.privilege!==job.mode||
       signed.installedBrokerPid!==expected.pid||
       signed.installedBrokerCreationFiletime!==expected.creationFiletime||
+      signed.installedBrokerVolumeSerialHex!==expected.volumeSerialHex||
+      signed.installedBrokerImageFileIdHex!==expected.imageFileIdHex||
+      signed.installedBrokerVersion!==expected.brokerVersion||
       signed.installedImageSha256!==expected.imageSha256||
+      // An external final grant from BEFORE the native launch witness is
+      // only an earlier reserve (not a final commit at this boundary).
+      signed.issuedAtMs<nativeWhen||
       signed.issuedAtMs>finished+1000||finished-signed.issuedAtMs>1500||
       signed.expiresAtMs<=finished||
       typeof info.expiresAtMs!=='number'||
       info.expiresAtMs<=finished||
       signed.expiresAtMs-signed.issuedAtMs>1500||
       Date.parse(context.session?.sessionExpiresAt??'')<=finished||
-      (job.mode==='ROOT'&&Date.parse(job.rootExpiresAt??'')<=finished)){
+      (job.mode==='ROOT'&&(
+        !Number.isFinite(Date.parse(job.rootIssuedAt??''))||
+        !Number.isFinite(Date.parse(job.rootExpiresAt??''))||
+        Date.parse(job.rootExpiresAt??'')-Date.parse(job.rootIssuedAt??'')>900_000||
+        Date.parse(job.rootExpiresAt??'')<=finished))){
       return result('DENIED','FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
     }
     return result('FINAL_SOURCE_CANDIDATE_ONLY',

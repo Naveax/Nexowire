@@ -380,6 +380,9 @@ function finalFixture(config:{
        ownerEpoch:job.ownerEpoch,grantGeneration:job.grantGeneration,
        privilege:job.mode,installedBrokerPid:image.pid,
        installedBrokerCreationFiletime:image.creationFiletime,
+       installedBrokerVolumeSerialHex:image.volumeSerialHex,
+       installedBrokerImageFileIdHex:image.imageFileIdHex,
+       installedBrokerVersion:image.brokerVersion,
        installedImageSha256:image.imageSha256,
        ownerRevoked:false,revoking:false,
        reservationState:'FINAL_NATIVE_EFFECT_FENCED',
@@ -437,7 +440,11 @@ test('signed final CAS proof must bind fresh launch nonce, request, owner/epoch,
    r=>({...r,privilege:'ROOT'}),
    r=>({...r,installedBrokerPid:r.installedBrokerPid+1}),
    r=>({...r,installedBrokerCreationFiletime:'134092012301239778'}),
+   r=>({...r,installedBrokerVolumeSerialHex:'beef1234'}),
+   r=>({...r,installedBrokerImageFileIdHex:'ee'.repeat(16)}),
+   r=>({...r,installedBrokerVersion:'1.0.4'}),
    r=>({...r,installedImageSha256:'f'.repeat(64)}),
+   r=>({...r,issuedAtMs:now-101}),
    r=>({...r,capability:'admin.hyperv'}),
    r=>({...r,authorityId:randomUUID()}),
    r=>({...r,issuedAtMs:now-5000}),
@@ -518,4 +525,46 @@ test('signed final CAS grant cannot resurrect a permit expired during native pro
  assert.equal(result.status,'DENIED');
  assert.equal(result.reason,'FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
  assert.equal(result.canLaunch,false);
+});
+
+test('Access strict signed final grant JSON rejects version/type confusion and unrecognized privileged fields',async()=>{
+ const mutated:Array<(r:FinalNativeEffectGrant)=>Record<string,unknown>>=[
+  r=>({...r,installedBrokerPid:String(r.installedBrokerPid)}),
+  r=>({...r,installedBrokerCreationFiletime:Number(r.installedBrokerCreationFiletime)}),
+  r=>({...r,installedBrokerVolumeSerialHex:true}),
+  r=>({...r,installedBrokerImageFileIdHex:['a1']}),
+  r=>({...r,installedBrokerVersion:1}),
+  r=>({...r,grantGeneration:'11'}),
+  r=>({...r,ownerRevoked:'false'}),
+  r=>({...r,revoking:0}),
+  r=>({...r,externalCommitApproved:true}),
+  r=>({...r,reservationState:'RESERVED_ONLY'}),
+ ];
+ for(const mutate of mutated){
+  const x=finalFixture();
+  const trusted=x.dep.getFinalExternalGrant;
+  x.dep.getFinalExternalGrant=async (job,nonce,permitNonce,dispatchId)=>{
+   const old=await trusted(job,nonce,permitNonce,dispatchId);
+   const raw=mutate(old.statement as FinalNativeEffectGrant);
+   // Deliberately sign malformed JSON, bypassing only the TEST signer
+   // builder; Access strict parser must reject it before any admission.
+   return {statement:raw,signature:signAs(
+     Buffer.from(JSON.stringify(raw)),finalKeys.privateKey)};
+  };
+  const r=await finalReview(x);
+  assert.equal(r.status,'DENIED');
+  assert.equal(r.canLaunch,false);
+  assert.equal(r.reason,'FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
+ }
+});
+
+test('otherwise valid signed FINAL grant issued one millisecond before installed native witness is only an old reservation',async()=>{
+ const x=finalFixture({
+  finalMutation:r=>({...r,issuedAtMs:now-101}),
+ });
+ const r=await finalReview(x);
+ assert.equal(r.status,'DENIED');
+ assert.equal(r.reason,'FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
+ assert.equal(r.canLaunch,false);
+ assert.equal(r.canReplay,false);
 });
