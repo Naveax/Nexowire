@@ -24,7 +24,7 @@ const signedRecord=z.strictObject({
   ownerEpoch:z.number().int().positive().safe(),
   grantGeneration:z.number().int().positive().safe(),
   privilege:z.enum(['CORE','ROOT']),
-  revoked:z.boolean(),
+  revoked:z.boolean(),revoking:z.boolean(),
   observedAtMs:z.number().int().nonnegative().safe(),
   expiresAtMs:z.number().int().positive().safe(),
 });
@@ -34,7 +34,7 @@ export const casReadbackSigningBytes=(record:CasReadbackRecord):Buffer=>{
   return Buffer.from(JSON.stringify([
     r.kind,r.authorityId,r.requestId,r.challengeNonce,r.deviceId,r.ownerId,
     r.deviceEpoch,r.sessionEpoch,r.ownerEpoch,r.grantGeneration,
-    r.privilege,r.revoked,r.observedAtMs,r.expiresAtMs,
+    r.privilege,r.revoked,r.revoking,r.observedAtMs,r.expiresAtMs,
   ]),'utf8');
 };
 export interface QueuedAccessRequest {
@@ -70,6 +70,8 @@ export interface QueuedAccessDependencies {
   readHighWater:(deviceId:string)=>Promise<{
     ownerId:string;deviceEpoch:string;sessionEpoch:string;
     ownerEpoch:number;grantGeneration:number;
+    /** Revocation begins BEFORE the drain completes; not just final revoked. */
+    revoking:boolean;revoked:boolean;
   }>;
   now?:()=>number;
 }
@@ -201,7 +203,7 @@ export async function reviewQueuedAccess(
       r.sessionEpoch!==request.sessionEpoch||
       r.ownerEpoch!==request.ownerEpoch||
       r.grantGeneration!==request.grantGeneration||
-      r.privilege!==request.mode||r.revoked||
+      r.privilege!==request.mode||r.revoked||r.revoking||
       r.observedAtMs>now+1_000||now-r.observedAtMs>5_000||
       r.expiresAtMs<=now||r.expiresAtMs-r.observedAtMs>5_000){
       return outcome('DENIED','EXTERNAL_READBACK_STALE_OR_REVOKED');
@@ -211,7 +213,8 @@ export async function reviewQueuedAccess(
       current?.deviceEpoch!==request.deviceEpoch||
       current?.sessionEpoch!==request.sessionEpoch||
       current?.ownerEpoch!==request.ownerEpoch||
-      current.grantGeneration!==request.grantGeneration){
+      current.grantGeneration!==request.grantGeneration||
+      current.revoking!==false||current.revoked!==false){
       return outcome('DENIED','INDEPENDENT_CAS_HIGHWATER_ADVANCED');
     }
     // The owner/ROOT session can expire while waiting for remote CAS.

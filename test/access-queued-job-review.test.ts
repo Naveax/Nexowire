@@ -53,7 +53,7 @@ function record(job:QueuedAccessRequest,nonce:string):CasReadbackRecord{
     deviceId:job.deviceId,ownerId:job.ownerId,
     deviceEpoch:job.deviceEpoch,sessionEpoch:job.sessionEpoch,
     ownerEpoch:job.ownerEpoch,grantGeneration:job.grantGeneration,
-    privilege:job.mode,revoked:false,
+    privilege:job.mode,revoked:false,revoking:false,
     observedAtMs:t0,expiresAtMs:t0+4000,
   };
 }
@@ -88,7 +88,8 @@ const positive:EffectiveAccessStatus={
 };
 function fixture(options:{
   positiveStatus?:boolean;
-  casRevoked?:boolean;
+  casRevoked?:boolean;casRevoking?:boolean;
+  highWaterRevoking?:boolean;highWaterRevoked?:boolean;
   externalOwnerEpoch?:number;
   externalGeneration?:number;
   currentOwnerEpoch?:number;
@@ -138,6 +139,7 @@ function fixture(options:{
       read++;
       if(options.readThrows)throw Error('CAS_UNAVAILABLE');
       const data={...record(job,nonce),revoked:options.casRevoked??false,
+        revoking:options.casRevoking??false,
         ownerEpoch:options.externalOwnerEpoch??job.ownerEpoch,
         grantGeneration:options.externalGeneration??job.grantGeneration};
       const output=options.mutateReadback?.(data)??data;
@@ -154,6 +156,8 @@ function fixture(options:{
         sessionEpoch:options.currentSessionEpoch??ids.sessionEpoch,
         ownerEpoch:options.currentOwnerEpoch??8,
         grantGeneration:options.currentGeneration??9,
+        revoking:options.highWaterRevoking??false,
+        revoked:options.highWaterRevoked??false,
       };
     },
     now:()=>options.clockSequence?.[tick++]??options.clock??t0,
@@ -299,6 +303,7 @@ test('queued revoke while CAS response pending denies at external high-water rea
  f.dependencies.readHighWater=async()=>({
    ownerId:ids.owner,deviceEpoch:ids.deviceEpoch,
    sessionEpoch:ids.sessionEpoch,ownerEpoch:8,grantGeneration:generation,
+   revoking:false,revoked:false,
  });
  const outstanding=reviewQueuedAccess(queued(),f.ctx,f.dependencies);
  generation=10; // External #702 revoke/re-pair fencing advances before readback.
