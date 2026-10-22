@@ -75,6 +75,22 @@ export interface McpAccessIdentity {
   scopes: string[];
 }
 
+/**
+ * Source-only current-owner authentication evidence for a WSS/coding
+ * operator to combine with INDEPENDENT device, task and worktree grants.
+ * The OAuth session epoch is NOT WSS sessionGeneration, issuer signing-key
+ * rotation epoch, a replayable credential or Windows HIGH/CORE authority.
+ */
+export interface McpEpochBoundOwnerPrincipal {
+  readonly accountId: string;
+  readonly clientId: string;
+  readonly issuer: string;
+  readonly resource: string;
+  readonly scopes: readonly string[];
+  readonly oauthSessionEpoch: number;
+  readonly authority: 'owner-authentication-only';
+}
+
 function normalizeHttpsUrl(
   input: string,
   name: string,
@@ -515,31 +531,14 @@ export class McpOAuthService {
     }
 
     if (this.epochAccessVerifier) {
-      // This trusted verifier joins the access row to the CURRENT owner's
-      // unlocked session generation. An unexpired legacy/stale access token
-      // must not survive owner logout, re-pair or epoch rollover.
-      // Provider failure is an infrastructure error, not a license to try
-      // the legacy store. Verify the client/resource/scope shape as well.
-      const identity = await this.epochAccessVerifier.authenticateAccessToken(value);
-      if (
-        !identity ||
-        typeof identity.accountId !== 'string' ||
-        !identity.accountId ||
-        typeof identity.clientId !== 'string' ||
-        !identity.clientId ||
-        identity.resource !== this.resource ||
-        !Number.isSafeInteger(identity.sessionEpoch) ||
-        identity.sessionEpoch < 0 ||
-        !Array.isArray(identity.scopes) ||
-        !identity.scopes.includes('mcp') ||
-        identity.scopes.some(
-          (scope) => typeof scope !== 'string' || !ALLOWED_SCOPES.has(scope),
-        )
-      ) return null;
+      const identity = await this.verifyCurrentEpochAccessIdentity(value);
+      if (!identity) return null;
+      // Compatibility: MCP tool authentication is still only OAuth
+      // identity; no device/worktree/Windows permission is inferred here.
       return {
         accountId: identity.accountId,
         clientId: identity.clientId,
-        resource: this.resource,
+        resource: identity.resource,
         scopes: [...identity.scopes],
       };
     }
@@ -563,6 +562,76 @@ export class McpOAuthService {
       resource: record.resource,
       scopes: [...record.scopes],
     };
+  }
+
+  /**
+   * This helper MUST only use the trusted, source opt-in joined owner-epoch
+   * verifier. Any absence or provider error is fail-closed: never fall back
+   * to the legacy token record, nor treat a token hash as a grant.
+   */
+  private async verifyCurrentEpochAccessIdentity(
+    rawToken: string,
+  ): Promise<(McpAccessIdentity & { sessionEpoch: number }) | null> {
+    if (!this.epochAccessVerifier || typeof rawToken !== 'string') return null;
+    const token = rawToken.trim();
+    if (!token.startsWith('nwx_mcp_') || token.length > 512 ||
+        /[\r\n\0]/.test(token)) return null;
+    const identity = await this.epochAccessVerifier.authenticateAccessToken(token);
+    if (
+      !identity ||
+      typeof identity.accountId !== 'string' || !identity.accountId ||
+      typeof identity.clientId !== 'string' || !identity.clientId ||
+      identity.resource !== this.resource ||
+      !Number.isSafeInteger(identity.sessionEpoch) ||
+      identity.sessionEpoch < 0 ||
+      !Array.isArray(identity.scopes) ||
+      !identity.scopes.includes('mcp') ||
+      identity.scopes.some(
+        scope => typeof scope !== 'string' || !ALLOWED_SCOPES.has(scope),
+      )
+    ) return null;
+    return {
+      accountId: identity.accountId,
+      clientId: identity.clientId,
+      resource: this.resource,
+      scopes: [...identity.scopes],
+      sessionEpoch: identity.sessionEpoch,
+    };
+  }
+
+  /**
+   * The narrow first-party issuer callback for downstream WSS/worker
+   * operators. expectedClientId and expectedResource MUST be pinned trusted
+   * server configuration, never copied from token claims, HTTP body, signed
+   * WSS receipt or task checkpoint. This is a current snapshot, not a
+   * durable grant: the WSS writer MUST recheck owner/device/task/worktree
+   * and independently atomically fence dispatch against revoke-start.
+   *
+   * No raw access/refresh token, signing secret, WSS generation, device or
+   * worktree ID appears in the returned object. Never checkpoint the token.
+   */
+  async authenticateOwnerForExternalWriter(input: {
+    accessToken: string;
+    expectedClientId: string;
+    expectedResource: string;
+  }): Promise<McpEpochBoundOwnerPrincipal | null> {
+    if (!this.epochAccessVerifier)
+      throw new Error('OAUTH_EPOCH_BOUND_AUTHORITY_REQUIRED');
+    if (!input || typeof input.expectedClientId !== 'string' ||
+        input.expectedClientId.length < 1 || input.expectedClientId.length > 512 ||
+        /[\r\n\0]/.test(input.expectedClientId) ||
+        input.expectedResource !== this.resource) return null;
+    const identity = await this.verifyCurrentEpochAccessIdentity(input.accessToken);
+    if (!identity || identity.clientId !== input.expectedClientId) return null;
+    return Object.freeze({
+      accountId: identity.accountId,
+      clientId: identity.clientId,
+      issuer: this.issuer,
+      resource: identity.resource,
+      scopes: Object.freeze([...identity.scopes]),
+      oauthSessionEpoch: identity.sessionEpoch,
+      authority: 'owner-authentication-only' as const,
+    });
   }
 
   /**
