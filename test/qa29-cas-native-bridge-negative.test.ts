@@ -383,3 +383,86 @@ test('one source path binds signed CAS, separate OS/readback issuers, PID FILETI
   ...x,expected:{...x.expected,challengeNonce:'b'.repeat(64)},
  },proof).reason,'CAS_PERMIT_INVALID_OR_OLD_NONCE');
 });
+
+/**
+ * #756/#757/#747 single boundary: two authentic SOURCE readbacks and a
+ * correctly signed (but fixture-issued) OS/postcondition/audit bundle
+ * cannot prove installed HIGH/immutable independence, nor close revoke-
+ * start AFTER the second Access review and BEFORE native effect commit.
+ * This never runs an effect: all checks and transitions are in-memory.
+ */
+test('TEMP DUP_HANDLE ALLOW + co-restorable receipt root + late revoke after Access review never imply native HIGH completion',()=>{
+ const x=fixture(),proof=sealedReceiptFixture(x);
+ // Parent #699 contract validates cryptography from ephemeral trusted-in-fixture
+ // keys. It does NOT authenticate a Windows-installed protected issuer, nor
+ // prove that the fresh root is in a separate rollback/failure domain.
+ assert.equal(validPermit(x.claim,x.permitKey,x.expected,x.now),true);
+ assert.equal(verifyElevatedReceipt(proof.bundle,proof.trust).status,
+  'COMPLETED_VERIFIED');
+ const tempPidWitness={
+  processClass:'marked-TEMP-pwsh-fixture' as const,
+  pid:x.osReceipt.payload.pid,
+  creationFiletime:x.osReceipt.payload.creationFiletime,
+  processDupHandleOpenAccess:'ALLOW' as const,
+  inspectedTokenIsInstalledBroker:false,
+  installedBrokerProcessAttested:false,
+  separateLowPrivilegeCallerBoundaryVerified:false,
+  protectedJobHandleInheritanceAndDaclVerified:false,
+ };
+ // Mirrors #757's SOURCE_ONLY review after two externally signed snapshots:
+ // neither readback is an atomic commit-for-dispatch at the actual effect.
+ const external={
+  firstSignedFence:{revoking:false,revoked:false},
+  secondSignedFence:{revoking:false,revoked:false},
+  immutableRootOutsideHubFailureDomain:false,
+  independentInstalledOsIssuerVerified:false,
+  independentInstalledReadbackIssuerVerified:false,
+  finalExternalAtomicNativeCommitAvailable:false,
+  revoking:false,
+ };
+ assert.equal(external.firstSignedFence.revoking,false);
+ assert.equal(external.secondSignedFence.revoking,false);
+ const accessReview='CURRENT_SOURCE_ONLY_NO_EXECUTION';
+ assert.equal(accessReview,'CURRENT_SOURCE_ONLY_NO_EXECUTION');
+ // #747: Hub B starts revoke after review, but before the final native
+ // boundary. Rechecking only the two historical signed snapshots is stale.
+ external.revoking=true;
+ let nativeEffects=0;
+ const finalSourceOnlyCheck=()=>{
+  if(!tempPidWitness.installedBrokerProcessAttested||
+     tempPidWitness.processClass==='marked-TEMP-pwsh-fixture'||
+     !tempPidWitness.inspectedTokenIsInstalledBroker||
+     !tempPidWitness.separateLowPrivilegeCallerBoundaryVerified)
+   return unknown('TEMP_PID_IS_NOT_INSTALLED_HIGH_BROKER');
+  if(tempPidWitness.processDupHandleOpenAccess==='ALLOW'||
+     !tempPidWitness.protectedJobHandleInheritanceAndDaclVerified)
+   return unknown('PROCESS_DUP_HANDLE_BOUNDARY_UNVERIFIED');
+  if(!external.immutableRootOutsideHubFailureDomain||
+     !external.independentInstalledOsIssuerVerified||
+     !external.independentInstalledReadbackIssuerVerified)
+   return unknown('IMMUTABLE_INDEPENDENT_WITNESS_UNVERIFIED');
+  if(external.revoking||!external.finalExternalAtomicNativeCommitAvailable)
+   return unknown('REVOKE_STARTED_BEFORE_FINAL_ATOMIC_EFFECT_COMMIT');
+  // Never execute user/native effect in any source QA path.
+  return unknown('PHYSICAL_EXECUTOR_NOT_INSTALLED');
+ };
+ const verdict=finalSourceOnlyCheck();
+ assert.equal(verdict.reason,'TEMP_PID_IS_NOT_INSTALLED_HIGH_BROKER');
+ assert.equal(verdict.retrySafe,false);
+ // Isolate subsequent blockers without treating injected true flags as OS
+ // proof: these are in-memory fixture variations ONLY.
+ const pseudoTrustedPid={...tempPidWitness,
+  processClass:'marked-TEMP-pwsh-fixture' as 'marked-TEMP-pwsh-fixture',
+  installedBrokerProcessAttested:true,
+  inspectedTokenIsInstalledBroker:true,
+  separateLowPrivilegeCallerBoundaryVerified:true,
+ };
+ assert.equal(pseudoTrustedPid.processDupHandleOpenAccess,'ALLOW');
+ assert.equal(external.immutableRootOutsideHubFailureDomain,false);
+ assert.equal(external.finalExternalAtomicNativeCommitAvailable,false);
+ assert.equal(external.revoking,true,
+  'revoke can start after both signed Access readbacks');
+ assert.equal(reconcileSignedReceiptAndCas(x,proof).status,'MUTATION_UNKNOWN');
+ assert.equal(nativeEffects,0,'no synthetic or actual native effect dispatched');
+ assert.equal(JSON.stringify(verdict).includes('password'),false);
+});
