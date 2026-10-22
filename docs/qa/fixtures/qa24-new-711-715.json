@@ -1,0 +1,124 @@
+{
+  "nodes": [
+    {
+      "pr": 711,
+      "head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "base_ref": "test/parallel-15-s5-cancel-ack-fairness-20261021",
+      "ci": {
+        "run_id": 39659054823,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110"
+      },
+      "files": [
+        "docs/SCALE_S5_REAL_598_FULL_BOUNDARY_20261021.md",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "test/s5-598-full-boundary-ci-source-20261021.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+        "base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+        "head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110"
+      }
+    },
+    {
+      "pr": 712,
+      "head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "base_ref": "fix/01-broker-dispatch-external-fence-20261021",
+      "ci": {
+        "run_id": 39676838080,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f"
+      },
+      "files": [
+        "docs/AGENT_P0_BROKER_NONCE_OWNER_EPOCH_20261021.md",
+        "src/agent/broker-external-dispatch-fence.ts",
+        "src/agent/https-broker-dispatch-authority.ts",
+        "test/broker-external-dispatch-fence.test.ts",
+        "test/https-broker-dispatch-authority.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f"
+      }
+    },
+    {
+      "pr": 713,
+      "head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "ci": {
+        "run_id": 39659243880,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807"
+      },
+      "files": [
+        "test/fixtures/s3-worker28-import-dag-durable-journal.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807"
+      }
+    },
+    {
+      "pr": 714,
+      "head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "ci": {
+        "run_id": 39659270493,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449"
+      },
+      "files": [
+        "docs/s3-core-atomic-switch-qa-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449"
+      }
+    },
+    {
+      "pr": 715,
+      "head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026",
+      "base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+      "base_ref": "feat/parallel-10-broker-preflight-20261021",
+      "ci": {
+        "run_id": 39659290064,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026"
+      },
+      "files": [
+        "docs/CORE_BROKER_FILETIME_CAS_QA_20261021.md",
+        "src/diagnostics/core-broker-filetime-cas-evidence.ts",
+        "test/core-broker-filetime-cas-evidence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+        "base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+        "head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026"
+      }
+    }
+  ]
+}

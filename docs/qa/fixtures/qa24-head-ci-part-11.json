@@ -1,0 +1,221 @@
+{
+  "census_count": 111,
+  "part": 11,
+  "ids": [
+    680,
+    681,
+    682,
+    683,
+    684,
+    685,
+    686,
+    687
+  ],
+  "nodes": [
+    {
+      "pr": 680,
+      "head_sha": "901d6d34708b2181a016075e14251656d3b34f36",
+      "head_ref": "qa/18-bound-grant-rollback-timestamp-20261021",
+      "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "base_ref": "fix/01-bound-grant-monotonic-cas-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644719058,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "901d6d34708b2181a016075e14251656d3b34f36"
+      },
+      "files": [
+        "docs/QA_18_BOUND_GRANT_TIMESTAMP_20261021.md",
+        "test/fixtures/qa-18-bound-grant-hostile.ts",
+        "test/qa-18-bound-grant-crosshub-timestamp.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "head_sha": "901d6d34708b2181a016075e14251656d3b34f36",
+        "merge_base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 681,
+      "head_sha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8",
+      "head_ref": "test/qa17-670-native-provider-import-epoch-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644262152,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8"
+      },
+      "files": [
+        ".github/workflows/qa17-windows-broker-evidence.yml",
+        "test/qa-17-native-provider-import-epoch-670.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 682,
+      "head_sha": "0dcd05debfeda91882bccc09834d216223c935ca",
+      "head_ref": "test/22-crosshub-expiry-receipts-20261021",
+      "base_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+      "base_ref": "test/22-crosshub-repair-publish-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644551666,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0dcd05debfeda91882bccc09834d216223c935ca"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "head_sha": "0dcd05debfeda91882bccc09834d216223c935ca",
+        "merge_base_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 683,
+      "head_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "head_ref": "test/02-broker-native-truth-negative-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644505625,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49"
+      },
+      "files": [
+        "docs/QA_02_670_BROKER_TRUTH_UNKNOWN_20261021.md",
+        "docs/QA_02_CORE_633_ELEVATED_ERROR_PROVENANCE_20261021.md",
+        "test/qa-02-670-native-broker-truth-negative.test.ts",
+        "test/qa-02-core-633-elevated-outcome-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 684,
+      "head_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "head_ref": "test/qa27-windows-approval-native-witness-20261021",
+      "base_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+      "base_ref": "test/qa27-remote-admin-provenance-followup-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644577730,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60"
+      },
+      "files": [
+        "docs/QA27_WINDOWS_NATIVE_ASSISTED_APPROVAL_EVIDENCE_20261021.md",
+        "test/fixtures/qa27-native-windows-approval-witness.ts",
+        "test/qa27-windows-native-approval-witness-matrix.test.ts"
+      ],
+      "compare": {
+        "base_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+        "head_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "merge_base_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 685,
+      "head_sha": "536fce89c4197335c0eab7fa286bc1c3015b4545",
+      "head_ref": "test/28-signed-stage-crash-idempotent-recovery-20261021",
+      "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "base_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644586410,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "536fce89c4197335c0eab7fa286bc1c3015b4545"
+      },
+      "files": [
+        "docs/s3-worker28-signed-stage-crash-rollback-qa-20261021.md",
+        "test/fixtures/s3-worker28-signed-stage-crash-idempotence.test.ts"
+      ],
+      "compare": {
+        "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "head_sha": "536fce89c4197335c0eab7fa286bc1c3015b4545",
+        "merge_base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 686,
+      "head_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "head_ref": "qa/23-effective-owner669-negative-20261021",
+      "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "base_ref": "feat/04-core-effective-authority-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644614653,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_CROSS_REVIEW_20261021.md",
+        "test/core-effective-ui-669-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "head_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "merge_base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 687,
+      "head_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "head_ref": "test/parallel-14-crosshub-revoke-readback-20261021",
+      "base_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "base_ref": "feat/parallel-14-trusted-cleanup-admission-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644697445,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_CROSS_HUB_REVOKE_READBACK_20261021.md",
+        "src/ops/scale-v2-artifact-byte-budget-staging.ts",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "compare": {
+        "base_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "head_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+        "merge_base_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "status": "ahead"
+      },
+      "files_complete": true
+    }
+  ]
+}

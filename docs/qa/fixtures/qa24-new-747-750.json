@@ -1,0 +1,103 @@
+{
+  "nodes": [
+    {
+      "pr": 747,
+      "head_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+      "head_ref": "qa/18-final-dispatch-check-crosshub-20261022",
+      "base_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+      "base_ref": "qa/18-crosshub-pending-permit-after-revoke-20261022",
+      "ci": {
+        "run_id": 39735278263,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42"
+      },
+      "files": [
+        "test/qa-18-crosshub-final-authority-fence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+        "head_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+        "merge_base_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 748,
+      "head_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+      "head_ref": "feat/07-oauth-epoch-refresh-service-adapter-20261022",
+      "base_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "base_ref": "security/07-oauth-issuer-fence-browser-revoke-20261021",
+      "ci": {
+        "run_id": 39735987704,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0"
+      },
+      "files": [
+        "docs/OAUTH_EPOCH_REFRESH_ISSUER_SOURCE_BRIDGE_20261022.md",
+        "src/product/mcp-oauth.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+        "head_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+        "merge_base_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 749,
+      "head_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+      "head_ref": "test/25-late-permit-posteffect-unknown-20261022",
+      "base_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+      "base_ref": "test/25-two-hub-cas-revoke-readback-20261022",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6"
+      },
+      "files": [
+        "test/core-late-permit-revoke-drain-posteffect-unknown.qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+        "head_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+        "merge_base_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 750,
+      "head_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+      "head_ref": "fix/09-private-picker-owner-witness-20261022",
+      "base_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+      "base_ref": "fix/09-private-emergency-preflight-fence-20261022",
+      "ci": {
+        "run_id": 39735615243,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_743_PRIVATE_PICKER_OWNER_REVIEW_20261022.md",
+        "src/agent/private-desktop-runtime-owner-gate.ts",
+        "src/agent/windows-private-desktop.ts",
+        "src/agent/windows-private-file-picker.ts",
+        "test/private-picker-native-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+        "head_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+        "merge_base_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+        "status": "ahead"
+      }
+    }
+  ]
+}

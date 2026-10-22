@@ -1,0 +1,5223 @@
+{
+  "schema_version": 4,
+  "repo": "Naveax/Nexowire",
+  "main_head": "754cc4364822be5fda528f54042fb22a84f19924",
+  "census_count_at_capture": 160,
+  "observation": "2026-10-22",
+  "all_current_now": false,
+  "complete_census_in_snapshot": true,
+  "source_files": [
+    "docs/qa/p0-open-dag-20261022.partial.json",
+    "docs/qa/fixtures/qa24-open-census-current-20261022.json",
+    "docs/qa/fixtures/qa24-new-730-733.json",
+    "docs/qa/fixtures/qa24-new-734-738.json",
+    "docs/qa/fixtures/qa24-new-739-742.json",
+    "docs/qa/fixtures/qa24-new-743-746.json",
+    "docs/qa/fixtures/qa24-new-747-750.json",
+    "docs/qa/fixtures/qa24-new-751-754.json",
+    "docs/qa/fixtures/qa24-new-755-758.json",
+    "docs/qa/fixtures/qa24-new-759-760.json"
+  ],
+  "coverage": {
+    "total": 160,
+    "missing": [],
+    "extras": [],
+    "missing_refs": [],
+    "stale_or_inconsistent": [],
+    "stale_parent": [
+      609,
+      622
+    ],
+    "ci_unknown": [
+      575,
+      699,
+      703,
+      705,
+      707,
+      708,
+      709,
+      710,
+      718,
+      722,
+      726,
+      727,
+      732,
+      735,
+      746,
+      749,
+      753,
+      757,
+      759,
+      760
+    ],
+    "unverified_against_latest_remote": true
+  },
+  "nodes": [
+    {
+      "pr": 480,
+      "head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+      "head_ref": "fix/ai-screen-direct-bridge-broker-guard-20261014",
+      "base_sha": "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39134168129,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2"
+      },
+      "files": [
+        "docs/ai-screen-displays.md",
+        "src/agent/windows-private-desktop.ts",
+        "src/agent/windows-private-shell-broker-guard.ts",
+        "test/private-desktop-shell-broker-gate.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
+        "head_sha": "ec3c54d77e3b9fabb4c85831222fb48b112cd7b2",
+        "merge_base_sha": "a54cbbdd37e981a169631d688b53c7e3b3e90f48",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 551,
+      "head_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "head_ref": "feat/parallel-12-agent-lifecycle-onboarding-20261018",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39606595530,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9fdee36897ded643594795ba354fc25e894b65c3"
+      },
+      "files": [
+        "docs/agent-lifecycle-canary-rollout-20261019.md",
+        "docs/agent-lifecycle-core-onetime-uac-gate-20261021.md",
+        "docs/agent-lifecycle-hyperv-broker-trust-20261021.md",
+        "docs/agent-lifecycle-s3-acceptance.md",
+        "package.json",
+        "scripts/s3-core-broker-install-gate.ts",
+        "scripts/s3-crash-recovery-assessment.ts",
+        "scripts/s3-hyperv-broker-trust.ts",
+        "scripts/s3-release-bundle-audit.ts",
+        "scripts/s3-windows-acl-preflight.ts",
+        "scripts/s3-windows-binary-trust.ts",
+        "scripts/verify-s3-release-bundle.ts",
+        "scripts/verify-windows-agent-binary.ts",
+        "src/connect.ts",
+        "src/update/agent-lifecycle-manager.ts",
+        "src/update/live-update.ts",
+        "test/agent-lifecycle-disk-fixture.test.ts",
+        "test/agent-lifecycle-manager.test.ts",
+        "test/agent-lifecycle-two-device-canary.test.ts",
+        "test/connect-web.test.ts",
+        "test/connect.test.ts",
+        "test/console-ui-polish.test.ts",
+        "test/live-update.test.ts",
+        "test/machine-update-rollback-integrity.test.ts",
+        "test/s3-core-broker-install-gate.test.ts",
+        "test/s3-crash-recovery-assessment.test.ts",
+        "test/s3-hyperv-broker-trust.test.ts",
+        "test/s3-release-bundle-audit.test.ts",
+        "test/s3-release-cli.test.ts",
+        "test/s3-windows-acl-preflight.test.ts",
+        "test/windows-binary-trust-s3.test.ts",
+        "web/connect.js"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 553,
+      "head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "head_ref": "fix/parallel-05-scoped-path-usb-grants-20261018",
+      "base_sha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39608315991,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e"
+      },
+      "files": [
+        "docs/security/agent-bounded-large-file-api.md",
+        "docs/security/scoped-path-usb-grants.md",
+        "scripts/ai-screen-launch-sinks-baseline.json",
+        "src/agent/broker-filesystem-preflight.ts",
+        "src/agent/executors.ts",
+        "src/agent/native-agent.ts",
+        "src/agent/path-policy.ts",
+        "src/agent/scoped-path-grant-approval.ts",
+        "src/agent/scoped-path-grants.ts",
+        "src/mcp/create-server.ts",
+        "src/mcp/tool-capabilities.ts",
+        "src/protocol/capabilities.ts",
+        "test/agent-executors.test.ts",
+        "test/agent-large-file-stream.test.ts",
+        "test/broker-filesystem-preflight-negative.test.ts",
+        "test/linux-native-agent-live.test.ts",
+        "test/macos-native-agent-live.test.ts",
+        "test/relay-native-agent-live.test.ts",
+        "test/scoped-path-grant-approval.test.ts",
+        "test/scoped-path-grants.test.ts",
+        "test/windows-native-filesystem-handle.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+        "head_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+        "merge_base_sha": "ca7fc2c457cd47181e5b5d6c4db7b0ac32698838",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 572,
+      "head_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+      "head_ref": "test/qa16-final-acceptance-refresh-20261018",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39645070120,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_20261018.md",
+        "docs/qa/INDEPENDENT_QA_20261020.md",
+        "docs/qa/INDEPENDENT_QA_20261021.md",
+        "docs/qa/INDEPENDENT_QA_617_HYPERV_20261021.md",
+        "docs/qa/INDEPENDENT_QA_CORE_MASTER_20261021.md",
+        "docs/qa/INDEPENDENT_QA_PR635_649_20261021.md",
+        "docs/qa/INDEPENDENT_QA_PR666_676_20261021.md",
+        "docs/qa/PR_SOURCE_AND_RELEASE_GATES.json",
+        "docs/qa/QA_20261020_EXACT_HEAD_EVIDENCE.json",
+        "docs/qa/QA_20261021_CORE_MASTER_ACCEPTANCE.json",
+        "docs/qa/QA_20261021_EXACT_HEAD_EVIDENCE.json",
+        "docs/qa/QA_20261021_HYPERV_617_ACCEPTANCE.json",
+        "docs/qa/QA_20261021_PR635_649_EXACT_EVIDENCE.json",
+        "docs/qa/QA_20261021_PR650_652_666_676_EXACT_EVIDENCE.json",
+        "docs/qa/QA_BLOCKING_FINDINGS_CURRENT_MAIN.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/durable-process.test.ts",
+        "test/qa-635-649-exact-head-evidence.test.ts",
+        "test/qa-666-676-exact-head-evidence.test.ts",
+        "test/qa-core-broker-p0-negative.test.ts",
+        "test/qa-core-master-evidence.test.ts",
+        "test/qa-current-release-blockers.test.ts",
+        "test/qa-hyperv-617-source-negative.test.ts",
+        "test/qa-pr-intake-negative.test.ts",
+        "test/qa-release-evidence-20261020.test.ts",
+        "test/qa-release-evidence-20261021.test.ts",
+        "test/qa-release-evidence-617.test.ts",
+        "test/qa-rollback-source-negative.test.ts",
+        "test/qa-transfer-onecall-source-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 574,
+      "head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "head_ref": "fix/parallel-04-access-core-adminbridge-20261018",
+      "base_sha": "fd28d017ea291e8a935b05fda89d7ed2765d35d0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39604153782,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103"
+      },
+      "files": [
+        "cloudflare/migrations/0019_root_session_lifecycle.sql",
+        "cloudflare/worker.js",
+        "docs/NEXOWIRE_P0_HYPERV_LOCAL_APPROVAL_20261021.md",
+        "docs/NEXOWIRE_P0_ROOT_GUARDIAN_LIFECYCLE_ACCEPTANCE_20261018.md",
+        "docs/P0_ACCESS_PHYSICAL_ACCEPTANCE_20261020.md",
+        "scripts/acceptance-access-vm-acl-migration.ps1",
+        "scripts/audit-access-elevated-readonly.ps1",
+        "scripts/test-isolated-broker-acl-rollback.ps1",
+        "scripts/test-isolated-broker-source-evidence.ps1",
+        "src/product/control-plane-http.ts",
+        "src/product/control-plane-service.ts",
+        "src/product/control-plane-session.ts",
+        "src/product/control-plane-store.ts",
+        "src/product/d1-control-plane-store.ts",
+        "src/product/memory-control-plane-store.ts",
+        "src/product/root-session-migration-preflight.ts",
+        "src/security/access-acl-candidate-gate.ts",
+        "src/security/authorization-explain.ts",
+        "src/security/hyperv-local-approval-authority.ts",
+        "test/access-acl-candidate-gate.test.ts",
+        "test/access-elevated-readonly-audit.test.ts",
+        "test/access-runtime-boundary.test.ts",
+        "test/access-vm-acl-migration.test.ts",
+        "test/authorization-explain.test.ts",
+        "test/console-ui-polish.test.ts",
+        "test/control-plane-http.test.ts",
+        "test/control-plane-service.test.ts",
+        "test/control-plane-session.test.ts",
+        "test/guardian-independent-attestation-negative.test.ts",
+        "test/hyperv-adminbridge-ui-truth.test.ts",
+        "test/hyperv-local-approval-authority.test.ts",
+        "test/isolated-broker-acl-rollback.test.ts",
+        "test/isolated-broker-source-evidence.test.ts",
+        "test/root-session-authorization-ui.test.ts",
+        "test/root-session-lifecycle-d1.test.ts",
+        "test/root-session-migration-staging.test.ts",
+        "web/app.js"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fd28d017ea291e8a935b05fda89d7ed2765d35d0",
+        "head_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+        "merge_base_sha": "822cb26f8e2531cf5c3f5dca309eb3aff22123c6",
+        "status": "diverged"
+      }
+    },
+    {
+      "pr": 575,
+      "head_sha": "637156732bd596b1eae5a12ddb76bb35d0867bf8",
+      "head_ref": "fix/parallel-11-progress-proof-acceptance-20261018",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39659176369,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "637156732bd596b1eae5a12ddb76bb35d0867bf8"
+      },
+      "files": [
+        "docs/progress-watchdog-v1.md",
+        "package.json",
+        "scripts/verify-progress-proof.ts",
+        "src/agent/artifact-transfer-progress-adapter.ts",
+        "src/agent/native-agent.ts",
+        "src/agent/one-call-transfer-watchdog.ts",
+        "src/agent/progress-proof-verifier.ts",
+        "src/agent/progress-runtime-postcondition.ts",
+        "src/agent/progress-supervisor.ts",
+        "src/agent/trusted-worker-completion.ts",
+        "test/artifact-transfer-progress-adapter.test.ts",
+        "test/fixtures/progress-managed-proof-worker.cjs",
+        "test/fixtures/progress-result-worker-fixture.cjs",
+        "test/one-call-transfer-watchdog.test.ts",
+        "test/progress-proof-verifier.test.ts",
+        "test/progress-runtime-postcondition.test.ts",
+        "test/progress-supervisor-integration.test.ts",
+        "test/trusted-worker-completion.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "637156732bd596b1eae5a12ddb76bb35d0867bf8",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 576,
+      "head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "head_ref": "fix/windows-job-helper-trust-qa-20261018",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39598258315,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/process-manager-tree-cleanup.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 582,
+      "head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "head_ref": "fix/p0-agent-journal-antirollback-20261019",
+      "base_sha": "cb819d17ee581093d39626f13e985976def17f30",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39416566585,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_ANTIROLLBACK_20261019.md",
+        "docs/AGENT_JOURNAL_P0_EXTERNAL_CAS_20261020.md",
+        "src/agent/native-agent.ts",
+        "src/agent/operation-journal-authority.ts",
+        "src/agent/operation-journal.ts",
+        "src/agent/remote-mutation-cas.ts",
+        "test/agent-native-remote-cas-live.test.ts",
+        "test/agent-operation-antirollback.test.ts",
+        "test/agent-readonly-without-cas.test.ts",
+        "test/agent-remote-cas.test.ts",
+        "test/fixtures/agent-remote-cas-fixture.ts",
+        "test/linux-native-agent-live.test.ts",
+        "test/macos-native-agent-live.test.ts",
+        "test/relay-native-agent-live.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "cb819d17ee581093d39626f13e985976def17f30",
+        "head_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+        "merge_base_sha": "cb819d17ee581093d39626f13e985976def17f30",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 596,
+      "head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "head_ref": "feat/parallel-08-large-artifact-588-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39557944551,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb"
+      },
+      "files": [
+        "docs/ARTIFACT_LARGE_STREAM_588_20261020.md",
+        "docs/ARTIFACT_ONE_CALL_TRANSFER_588.md",
+        "scripts/artifact-588-index-proof.ts",
+        "scripts/artifact-588-large-lab.ts",
+        "src/mcp/artifact-bridge-device-ingest.ts",
+        "src/mcp/artifact-bridge-tools.ts",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/workspace/artifact-bridge.ts",
+        "src/workspace/store.ts",
+        "test/artifact-588-cross-device-worker.test.ts",
+        "test/artifact-588-cross-device.e2e.test.ts",
+        "test/artifact-588-single-call-contract.test.ts",
+        "test/artifact-bridge-device-ingest.test.ts",
+        "test/artifact-large-stream.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "merge_base_sha": "97977a9f81f2e21102bdf910d2cbe45c9b4c484b",
+        "status": "diverged"
+      }
+    },
+    {
+      "pr": 598,
+      "head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "head_ref": "fix/mcp-http-body-cap-588-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39502304557,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "cf58e6882e44968698f3f548b353287ba1698747"
+      },
+      "files": [
+        "docs/MCP_OAUTH_HTTP_PARSER_ACCEPTANCE_20261020.md",
+        "src/hub/control-plane-mcp-auth.ts",
+        "src/mcp/http-app.ts",
+        "src/mcp/http.ts",
+        "test/mcp-http-json-limit.test.ts",
+        "test/mcp-oauth-http-parser-isolation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "merge_base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 599,
+      "head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+      "head_ref": "test/02-error-ordering-negative-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39492086789,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/QA_02_ERROR_CONTRACT_OUTPUT_ORDERING_20261020.md",
+        "src/mcp/create-server.ts",
+        "test/qa-02-error-contract-no-replay.test.ts",
+        "test/qa-02-windows-output-ordering.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "0c24d2acf14b4d10f1f37a9f7072a30799665386",
+        "merge_base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 602,
+      "head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "head_ref": "fix/09-ai-screen-additional-gui-broker-20261020",
+      "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39492809099,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_ADDITIONAL_GUI_BROKER_ACCEPTANCE_20261020.md",
+        "src/agent/windows-private-shell-broker-guard.ts",
+        "test/private-desktop-additional-brokers.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "head_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "merge_base_sha": "fda2a2da164ea7c6a2fe2271fc669f1fd623cede",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 607,
+      "head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "head_ref": "fix/01-monotonic-remote-trust-20261020",
+      "base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+      "base_ref": "fix/p0-agent-journal-antirollback-20261019",
+      "draft": true,
+      "ci": {
+        "run_id": 39493908690,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_EXTERNAL_CAS_20261020.md",
+        "src/agent/remote-mutation-cas.ts",
+        "test/agent-remote-cas.test.ts",
+        "test/fixtures/agent-remote-cas-fixture.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+        "head_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "merge_base_sha": "0e322c94c1e2ab0e58cf7b95115a03dee6bf1ccc",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 608,
+      "head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+      "head_ref": "test/integration-576-job-598-mcp-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39503650650,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "d34c0d3c85bc508be50c2e5f532aa964d8325106",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 609,
+      "head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+      "head_ref": "test/02-error-576-integrated-proof-20261021",
+      "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "base_ref": "fix/windows-job-helper-trust-qa-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39596941696,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/QA_02_576_JOB_SOURCE_PROOF_20261021.md",
+        "docs/QA_02_ERROR_CONTRACT_OUTPUT_ORDERING_20261020.md",
+        "src/mcp/create-server.ts",
+        "test/qa-02-error-contract-no-replay.test.ts",
+        "test/qa-02-windows-output-ordering.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+        "head_sha": "fd54719ae706a48d99ad21c4bc96305f50baa058",
+        "merge_base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 610,
+      "head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "head_ref": "test/parallel-14-quota-receipt-provenance-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39597505104,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_RECEIPT_PROVENANCE_ACCEPTANCE.md",
+        "src/ops/scale-v2-artifact-byte-budget-staging.ts",
+        "test/scale-v2-artifact-byte-budget-staging.test.ts",
+        "test/scale-v2-artifact-cancel-fencing-staging.test.ts",
+        "test/scale-v2-artifact-receipt-provenance-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 611,
+      "head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "head_ref": "test/09-private-job-compat-20261021",
+      "base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+      "base_ref": "fix/09-ai-screen-additional-gui-broker-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39597542588,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_576_JOB_COMPAT_ACCEPTANCE_20261021.md",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/private-desktop-job-compat-negative.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "head_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "merge_base_sha": "a55ef463e42a65506cfe2723d7fffdd03a17268e",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 612,
+      "head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+      "head_ref": "test/13-wss-revocation-regression-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39597637188,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_21OCT_ISSUER_TOCTOU_OWNER_DEVICE_REGRESSION.md",
+        "src/product/owner-public-wss-device-issuer-proposal.ts",
+        "test/owner-public-wss-device-issuer-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "ed7b6a9638fd3f9b7bf86e4dca7f5047fb7a5798",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 613,
+      "head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "head_ref": "fix/06-transfer-grant-epoch-followup-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39608452356,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd"
+      },
+      "files": [
+        "docs/CONNECTION_06_596_33504656_INTEGRATION_20261021.md",
+        "docs/CONNECTION_06_CORE_ROOT_GRANT_616_ACCEPTANCE_20261021.md",
+        "docs/CONNECTION_06_DURABLE_CROSS_DEVICE_588_ACCEPTANCE.md",
+        "src/mcp/cross-device-transfer-continuity.ts",
+        "src/mcp/cross-device-transfer-owner-grant.ts",
+        "test/cross-device-transfer-continuity.test.ts",
+        "test/cross-device-transfer-owner-grant.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 614,
+      "head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "head_ref": "fix/01-witness-owner-epoch-20261021",
+      "base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+      "base_ref": "fix/01-monotonic-remote-trust-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39598693419,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_MONOTONIC_WITNESS_20261021.md",
+        "sql/agent-monotonic-witness.sql",
+        "src/agent/postgres-monotonic-witness.ts",
+        "src/agent/witness-signed-provenance.ts",
+        "test/postgres-monotonic-witness.test.ts",
+        "test/witness-signed-provenance.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "head_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "merge_base_sha": "0c60d5ef01144e38cdf31afdf65044cb7ebff093",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 615,
+      "head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "head_ref": "test/parallel-15-s5-oct21-gzip-proof",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39598738701,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30"
+      },
+      "files": [
+        "docs/SCALE_V2_S5_CURRENT_SOURCE_GZIP_ONECALL_20261021.md",
+        "docs/reports/s5-http-4mib-loopback-20261021.json",
+        "docs/reports/s5-http-4mib-main4c-20261021.json",
+        "scripts/bench-s5-http-mcp-isolation.ts",
+        "scripts/report-s5-http-mcp-isolation.ts",
+        "test/s5-http-mcp-isolation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 616,
+      "head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "head_ref": "feat/parallel-08-store-job-failclosed-20261021",
+      "base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+      "base_ref": "feat/parallel-08-large-artifact-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39598755514,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4"
+      },
+      "files": [
+        "docs/ARTIFACT_STORE_JOB_FAILCLOSED_20261021.md",
+        "docs/SCALE_V2_ARTIFACT_CANCEL_FENCING_STAGING.md",
+        "docs/SCALE_V2_S2_SIGNATURE_CANONICALITY_SECURITY_ACCEPTANCE_20261020.md",
+        "docs/SCALE_V2_S2_WSS_STREAM_SCOPE_BACKPRESSURE_ACCEPTANCE_20261020.md",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/ops/scale-v2-artifact-byte-budget-staging.ts",
+        "src/product/owner-public-wss-device-issuer-proposal.ts",
+        "src/product/owner-public-wss-operator-enrollment-proposal.ts",
+        "src/product/owner-public-wss-stream-flow-proposal.ts",
+        "src/workspace/artifact-job-budget-staging.ts",
+        "src/workspace/artifact-job-checkpoint.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-588-cross-device.e2e.test.ts",
+        "test/artifact-store-job-failclosed.test.ts",
+        "test/owner-public-wss-device-issuer-staging.test.ts",
+        "test/owner-public-wss-signed-enrollment-staging.test.ts",
+        "test/owner-public-wss-stream-flow-staging.test.ts",
+        "test/owner-public-wss-stream-wss-loopback.test.ts",
+        "test/scale-v2-artifact-cancel-fencing-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "head_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "merge_base_sha": "335046569a38f3a1a3fc82bf851f9b7df7640fdb",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 618,
+      "head_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+      "head_ref": "test/p0-hyperv-elevation-evidence-617-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39610514919,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "4e66122dea21e86abbcb57058affc516485d7465"
+      },
+      "files": [
+        "docs/CORE_REAL_WINDOWS_ADMIN_EXECUTION_TARGET_20261021.md",
+        "docs/QA_02_HYPERV_617_DENIAL_AUDIT_20261021.md",
+        "src/protocol/hyperv-elevation-evidence.ts",
+        "test/hyperv-elevation-evidence.test.ts",
+        "test/qa-02-core-grant-epoch-provenance.test.ts",
+        "test/qa-02-hyperv-denial-provenance.test.ts",
+        "test/qa-02-hyperv-unknown-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 620,
+      "head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "head_ref": "feat/03-hyperv-typed-gate-617",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39604898508,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/HYPERV_TYPED_NO_ELEVATION_617.md",
+        "scripts/audit-hyperv-launcher-trust.ps1",
+        "src/security/hyperv-vm-admission.ts",
+        "src/security/privilege.ts",
+        "test/hyperv-launcher-trust.test.ts",
+        "test/hyperv-vm-admission.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 621,
+      "head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "head_ref": "feat/04-core-delegation-617",
+      "base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+      "base_ref": "fix/parallel-04-access-core-adminbridge-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39608785843,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23"
+      },
+      "files": [
+        "cloudflare/migrations/0020_core_admin_delegations.sql",
+        "docs/NEXOWIRE_CORE_REAL_DELEGATION_20261021.md",
+        "src/security/core-admin-delegation.ts",
+        "src/security/core-elevated-admission.ts",
+        "test/core-admin-delegation-d1.test.ts",
+        "test/core-effective-ui-truth.test.ts",
+        "test/core-elevated-admission.test.ts",
+        "web/app.js"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+        "head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "merge_base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 622,
+      "head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "head_ref": "test/integration-core618-qa619-20261021",
+      "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "base_ref": "test/p0-hyperv-elevation-evidence-617-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608093602,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701"
+      },
+      "files": [
+        "docs/QA_02_HYPERV_617_DENIAL_AUDIT_20261021.md",
+        "test/qa-02-hyperv-denial-provenance.test.ts",
+        "test/qa-02-hyperv-unknown-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+        "head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "merge_base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 624,
+      "head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "head_ref": "test/09-core-broker-no-gui-escape-20261021",
+      "base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+      "base_ref": "test/09-private-job-compat-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608661483,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_CORE_BROKER_PRIVATE_DESKTOP_MATRIX_20261021.md",
+        "test/private-core-broker-boundary-negative.test.ts",
+        "test/private-desktop-additional-brokers.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+        "merge_base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 625,
+      "head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "head_ref": "test/parallel-14-core-quota-fencing-20261021",
+      "base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+      "base_ref": "test/parallel-14-quota-receipt-provenance-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608704634,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8"
+      },
+      "files": [
+        "docs/SCALE_V2_CORE_ARTIFACT_CANCEL_QUOTA_ACCEPTANCE.md",
+        "src/ops/scale-v2-core-artifact-cancel-staging.ts",
+        "test/scale-v2-core-artifact-cancel-authority-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "merge_base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 627,
+      "head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+      "head_ref": "feat/parallel-10-core-physical-evidence-20261021",
+      "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39608830918,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "fed460da0e80af191b6663f146890ec6fd33824c"
+      },
+      "files": [
+        "docs/CORE_PHYSICAL_READINESS_EVIDENCE_20261021.md",
+        "src/diagnostics/core-physical-readiness.ts",
+        "test/core-physical-readiness.test.ts",
+        "test/fixtures/core-medium-untrusted-fixture.json"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 628,
+      "head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+      "head_ref": "test/parallel-15-s5-38mib-lease-20261021",
+      "base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+      "base_ref": "test/parallel-15-s5-oct21-gzip-proof",
+      "draft": true,
+      "ci": {
+        "run_id": 39608864172,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256"
+      },
+      "files": [
+        "docs/SCALE_S5_38MIB_LEASE_REVIEW_20261021.md",
+        "docs/reports/s5-http-9-5mib-loopback-20261021.json",
+        "test/s5-lease-fairness-chunk-contract.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+        "merge_base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 629,
+      "head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+      "head_ref": "test/integration-core622-winjob576-20261021",
+      "base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+      "base_ref": "test/integration-core618-qa619-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39608916753,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/process-manager-tree-cleanup.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+        "merge_base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 631,
+      "head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "head_ref": "fix/01-witness-delegation-20261021",
+      "base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+      "base_ref": "fix/01-witness-owner-epoch-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39609259161,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_WITNESS_DELEGATION_EPOCH_20261021.md",
+        "sql/agent-witness-delegation.sql",
+        "src/agent/postgres-monotonic-witness.ts",
+        "src/agent/witness-delegation.ts",
+        "src/agent/witness-signed-provenance.ts",
+        "test/witness-delegation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "merge_base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 632,
+      "head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "head_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+      "base_ref": "feat/parallel-12-agent-lifecycle-onboarding-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39609346798,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040"
+      },
+      "files": [
+        "docs/s3-core-bootstrap-delegation-acceptance-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-core-bootstrap-delegation-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+        "head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "merge_base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 633,
+      "head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "head_ref": "feat/03-core-executor-gates-617",
+      "base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+      "base_ref": "feat/03-hyperv-typed-gate-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39610643900,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/CORE_ROOT_SIGNED_BROKER_EXECUTOR_NO_GO_617.md",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-hyperv-launcher-trust.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "src/security/core-broker-executor-contract.ts",
+        "src/security/privilege.ts",
+        "test/core-broker-executor-contract.test.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/hyperv-launcher-trust.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "merge_base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 634,
+      "head_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "head_ref": "feat/08-mutation-fence-20261021",
+      "base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+      "base_ref": "feat/parallel-08-store-job-failclosed-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39610829832,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "9266f9b65a1f193360469223360552a50892949a"
+      },
+      "files": [
+        "docs/ARTIFACT_WRITER_FENCE_CORE_20261021.md",
+        "docs/CONNECTION_06_DURABLE_CROSS_DEVICE_588_ACCEPTANCE.md",
+        "docs/SCALE_V2_S5_HTTP_CHUNK_ISOLATION_20261020.md",
+        "docs/reports/s5-http-4mib-loopback-20261020.json",
+        "scripts/bench-s5-http-mcp-isolation.ts",
+        "scripts/report-s5-http-mcp-isolation.ts",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-continuity.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/ops/scale-s5-chunk-receipt-audit.ts",
+        "src/workspace/artifact-job-checkpoint.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-588-cross-device.e2e.test.ts",
+        "test/artifact-store-job-failclosed.test.ts",
+        "test/artifact-writer-fence-221k.test.ts",
+        "test/cross-device-transfer-continuity.test.ts",
+        "test/s5-http-mcp-isolation.test.ts",
+        "test/scale-s5-chunk-receipt-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "head_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "merge_base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 635,
+      "head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "head_ref": "test/qa17-core-broker-adversarial-617-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39624326925,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf"
+      },
+      "files": [
+        "test/qa-17-core-broker-independent-adversarial.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 636,
+      "head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+      "head_ref": "test/qa17-core-bootstrap-revoke-617-20261021",
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "base_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39625147216,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81"
+      },
+      "files": [
+        "test/qa-17-core-bootstrap-revoke-independent.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 637,
+      "head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "head_ref": "qa/18-antirollback-cas-hostile-20261021",
+      "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "base_ref": "fix/01-witness-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39625291153,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a"
+      },
+      "files": [
+        "docs/QA_18_ANTIROLLBACK_CAS_CORE_20261021.md",
+        "test/qa-18-external-cas-hostile.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+        "merge_base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 638,
+      "head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "head_ref": "test/qa-19-winjob-hosted-repro-20261021",
+      "base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "base_ref": "fix/windows-job-helper-trust-qa-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39625275778,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-job-hosted.yml",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+        "head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "merge_base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 639,
+      "head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "head_ref": "test/20-signed-broker-installer-negative-qa-20261021",
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "base_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39625620173,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff"
+      },
+      "files": [
+        "test/s3-worker20-signed-broker-installer-negative-qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 640,
+      "head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+      "head_ref": "test/21-artifact-cancel-read-gates-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39626203944,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73"
+      },
+      "files": [
+        "test/artifact-588-cancel-read-race.qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 641,
+      "head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "head_ref": "test/22-crosshub-fencing-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39626185867,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 642,
+      "head_sha": "87644090113d21544f42a738d919d5422ed200c0",
+      "head_ref": "qa/23-core-effective-ui-status-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39630395647,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "87644090113d21544f42a738d919d5422ed200c0"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_STATUS_UI_QA_20261021.md",
+        "src/diagnostics/core-effective-ui-status.ts",
+        "test/core-effective-ui-status.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "87644090113d21544f42a738d919d5422ed200c0",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 643,
+      "head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "head_ref": "test/25-owner-revoke-mid-exec-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39626754232,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49"
+      },
+      "files": [
+        "docs/CORE_OWNER_REVOKE_MID_EXECUTION_QA_20261021.md",
+        "test/core-owner-revoke-mid-execution.adversarial.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 644,
+      "head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "head_ref": "test/28-broker-crash-rollback-independent-qa-20261021",
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "base_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39627727657,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f"
+      },
+      "files": [
+        "docs/s3-worker28-crash-rollback-independent-qa-20261021.md",
+        "test/fixtures/s3-worker28-runner.test.ts",
+        "test/s3-broker-crash-rollback-independent-qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 645,
+      "head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "head_ref": "test/qa27-uac-remote-approval-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39626967547,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4"
+      },
+      "files": [
+        "docs/QA_UAC_REMOTE_APPROVAL_MATRIX_20261021.md",
+        "test/fixtures/uac-remote-approval-matrix.ts",
+        "test/qa-uac-remote-approval-capability.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 646,
+      "head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "head_ref": "test/24-integration-dag-provenance-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39627296601,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975"
+      },
+      "files": [
+        "docs/qa/INTEGRATION_DAG_CORE_CRITICAL_PATH_20261021.md",
+        "docs/qa/p0-integration-dag-20261021.json",
+        "scripts/qa24-integration-dag.ts",
+        "test/qa-24-integration-dag.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 647,
+      "head_sha": "3b3f26d068f169b941383308a1763124e3a3feef",
+      "head_ref": "qa/w26-native-handle-provenance-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39627227248,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "3b3f26d068f169b941383308a1763124e3a3feef"
+      },
+      "files": [
+        "docs/security/p0-native-handle-provenance-w26.md",
+        "test/p0-native-handle-provenance-w26.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "3b3f26d068f169b941383308a1763124e3a3feef",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 648,
+      "head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "head_ref": "test/29-elevated-audit-provenance-617",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39628249630,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb"
+      },
+      "files": [
+        ".github/workflows/qa29-elevated-audit-source.yml",
+        "docs/QA29_ELEVATED_COMMAND_AUDIT_PROVENANCE_617.md",
+        "test/qa29-elevated-command-audit-provenance.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 649,
+      "head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+      "head_ref": "qa/worker30-bounded-parser-fairness-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39628451245,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135"
+      },
+      "files": [
+        "docs/SCALE_P1_WORKER30_BOUNDED_FAIRNESS_QA_20261021.md",
+        "test/worker30-mcp-parser-admission.test.ts",
+        "test/worker30-staging-tenant-byte-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 650,
+      "head_sha": "5a76c826de58d906c430153488d96912e0d1827e",
+      "head_ref": "test/qa17-provider-unavailable-queued-revoke-617-20261021",
+      "base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+      "base_ref": "test/qa17-core-broker-adversarial-617-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39629695531,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5a76c826de58d906c430153488d96912e0d1827e"
+      },
+      "files": [
+        "docs/QA_17_WINDOWS_BROKER_UNAVAILABLE_AND_REVOKE_617.md",
+        "test/qa-17-provider-unavailable-queued-revoke.test.ts"
+      ],
+      "compare": {
+        "base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "head_sha": "5a76c826de58d906c430153488d96912e0d1827e",
+        "merge_base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 651,
+      "head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9",
+      "head_ref": "test/21-artifact-cancel-postchunk-ack-status-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39629942445,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9"
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 652,
+      "head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+      "head_ref": "test/qa-19-provider-truth-20261021",
+      "base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+      "base_ref": "test/qa-19-winjob-hosted-repro-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39629996191,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-provider-truth.yml",
+        "docs/qa/QA19_WINDOWS_PROVIDER_TRUTH_20261021.md",
+        "test/qa-19-windows-provider-truth.test.ts"
+      ],
+      "compare": {
+        "base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+        "merge_base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 653,
+      "head_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+      "head_ref": "test/22-crosshub-repair-publish-20261021",
+      "base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "base_ref": "test/22-crosshub-fencing-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630423148,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "1eabf9040120acfe173cef4121541c67d66fc499"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "head_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "merge_base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 654,
+      "head_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+      "head_ref": "test/25-postlaunch-revoke-ack-20261021",
+      "base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "base_ref": "test/25-owner-revoke-mid-exec-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630142422,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "f369683a0c164d9cb3ef679956062298b021feb1"
+      },
+      "files": [
+        "docs/CORE_POSTLAUNCH_REVOKE_UNKNOWN_QA_20261021.md",
+        "test/core-owner-postlaunch-unknown.adversarial.test.ts"
+      ],
+      "compare": {
+        "base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "head_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+        "merge_base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 655,
+      "head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07",
+      "head_ref": "test/20-install-manifest-chain-source-qa-20261021",
+      "base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+      "base_ref": "test/20-signed-broker-installer-negative-qa-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630947296,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07"
+      },
+      "files": [
+        "docs/s3-worker20-install-manifest-chain-acceptance-20261021.md",
+        "scripts/s3-worker20-install-manifest-chain-qa.ts",
+        "test/s3-worker20-install-manifest-chain-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07",
+        "merge_base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 656,
+      "head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+      "head_ref": "test/qa27-remote-admin-provenance-followup-20261021",
+      "base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "base_ref": "test/qa27-uac-remote-approval-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630515426,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f"
+      },
+      "files": [
+        "docs/QA27_REMOTE_ADMIN_APPROVAL_PROVENANCE_20261021.md",
+        "test/fixtures/qa27-remote-admin-provenance-oracle.ts",
+        "test/qa27-remote-admin-approval-provenance-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+        "head_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+        "merge_base_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 657,
+      "head_sha": "561af65b6cc1659f413bf11918b4ff356738c960",
+      "head_ref": "qa/w26-native-handle-volume-v2-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39630539339,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "561af65b6cc1659f413bf11918b4ff356738c960"
+      },
+      "files": [
+        "docs/security/p0-native-handle-volume-w26v2.md",
+        "test/p0-native-handle-volume-w26v2.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "561af65b6cc1659f413bf11918b4ff356738c960",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 658,
+      "head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3",
+      "head_ref": "test/28-recovery-narrow-20261021",
+      "base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "base_ref": "test/28-broker-crash-rollback-independent-qa-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39630933999,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3"
+      },
+      "files": [
+        "docs/s3-worker28-recovery-narrow-20261021.md",
+        "test/fixtures/s3-worker28-recovery-narrow.test.ts"
+      ],
+      "compare": {
+        "base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+        "head_sha": "c643222692e5f3130b0fc5f90886b1a2fa0dbff3",
+        "merge_base_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 659,
+      "head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949",
+      "head_ref": "qa/18-migration-rollback-crosshub-20261021",
+      "base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+      "base_ref": "qa/18-antirollback-cas-hostile-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631464079,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949"
+      },
+      "files": [
+        "docs/QA_18_CROSSHUB_MIGRATION_WAL_20261021.md",
+        "test/fixtures/qa-18-migration-fixture.ts",
+        "test/qa-18-crosshub-migration-rollback.test.ts"
+      ],
+      "compare": {
+        "base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+        "head_sha": "87425f98fef6b8beb1bdf3675cf51ecf86c91949",
+        "merge_base_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 660,
+      "head_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+      "head_ref": "qa/worker30-next-compressed-fairness-cancel-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39630981024,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "554528df1dd2be0c265571ac8a1233fade78da13"
+      },
+      "files": [
+        "docs/SCALE_WORKER30_NEXT_COMPRESSED_FAIRNESS_CANCEL_20261021.md",
+        "test/worker30-next-compressed-fairness-source.test.ts",
+        "test/worker30-next-memory-cancel-reference.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 661,
+      "head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a",
+      "head_ref": "test/02-core-633-elevated-error-qa-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39631109283,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a"
+      },
+      "files": [
+        "docs/QA_02_CORE_633_ELEVATED_ERROR_PROVENANCE_20261021.md",
+        "test/qa-02-core-633-elevated-outcome-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "849035d0186938a7ba4e717e03c7a039a7f0598a",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 662,
+      "head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+      "head_ref": "test/29-audit-rotation-crosshub-617",
+      "base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+      "base_ref": "test/29-elevated-audit-provenance-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39631780531,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6"
+      },
+      "files": [
+        ".github/workflows/qa29-crosshub-audit-negative.yml",
+        "docs/QA29_CROSSHUB_ROTATED_AUDIT_NO_GO_617.md",
+        "test/qa29-rotated-audit-crosshub-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+        "head_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+        "merge_base_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 663,
+      "head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+      "head_ref": "test/09-ai-screen-creationtime-owner-fence-20261021",
+      "base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+      "base_ref": "test/09-core-broker-no-gui-escape-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631336087,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_PRIVATE_OWNER_FENCE_20261021.md",
+        "src/agent/private-desktop-owner-fence.ts",
+        "test/private-desktop-owner-fence.test.ts"
+      ],
+      "compare": {
+        "base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+        "head_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+        "merge_base_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 664,
+      "head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+      "head_ref": "test/24-live-dag-drift-gates-20261021",
+      "base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "base_ref": "test/24-integration-dag-provenance-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39632679723,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f"
+      },
+      "files": [
+        "docs/qa/LIVE_DAG_DRIFT_GATES_CORE_20261021.md",
+        "docs/qa/p0-integration-dag-open50-20261021.json",
+        "docs/qa/p0-integration-dag-open67-20261021.json",
+        "scripts/qa24-live-dag.ts",
+        "test/qa-24-live-dag.test.ts"
+      ],
+      "compare": {
+        "base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "merge_base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 665,
+      "head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+      "head_ref": "feat/parallel-10-broker-preflight-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39644548125,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138"
+      },
+      "files": [
+        "docs/CORE_BROKER_NATIVE_UNAVAILABLE_20261021.md",
+        "docs/CORE_BROKER_SOURCE_PREFLIGHT_20261021.md",
+        "src/diagnostics/core-broker-native-unavailable.ts",
+        "src/diagnostics/core-broker-readonly-preflight.ts",
+        "test/core-broker-native-unavailable.test.ts",
+        "test/core-broker-readonly-preflight.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 666,
+      "head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "head_ref": "test/06-journal-634-failclosed-20261021",
+      "base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+      "base_ref": "fix/06-transfer-grant-epoch-followup-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631675531,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9"
+      },
+      "files": [
+        "docs/CONNECTION_06_WORKER_JOURNAL_634_REVIEW_20261021.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+        "merge_base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 667,
+      "head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "head_ref": "fix/08-cancel-native-dispatch-race-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39631999739,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458"
+      },
+      "files": [
+        "docs/ARTIFACT_CANCEL_NATIVE_RACE_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 668,
+      "head_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "head_ref": "feat/parallel-14-trusted-cleanup-admission-20261021",
+      "base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+      "base_ref": "test/parallel-14-core-quota-fencing-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39632010226,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "72a4f923d92c1830afa8947852d1557194540b5a"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_TRUSTED_FENCED_DELETION_20261021.md",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "compare": {
+        "base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "head_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "merge_base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 669,
+      "head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "head_ref": "feat/04-core-effective-authority-20261021",
+      "base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+      "base_ref": "feat/04-core-delegation-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39632774193,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8"
+      },
+      "files": [
+        "docs/NEXOWIRE_CORE_EFFECTIVE_ACCESS_INTEGRATION_20261021.md",
+        "src/product/access-effective-authority.ts",
+        "src/product/control-plane-contract.ts",
+        "src/product/control-plane-service.ts",
+        "test/access-effective-authority.test.ts",
+        "test/access-effective-dashboard.test.ts"
+      ],
+      "compare": {
+        "base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "merge_base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 670,
+      "head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "head_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39633083937,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/P0_WINDOWS_BROKER_PROVIDER_ATTESTATION_20261021.md",
+        "scripts/audit-windows-broker-token-provider.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "test/windows-broker-provider-attestation.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts"
+      ],
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 671,
+      "head_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "head_ref": "fix/13-owner-wss-receipt-replay-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39632434610,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "1e9425c970219834d6488add77d53c1cdade750d"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_WSS_RECEIPT_REPLAY_ROTATION_20261021.md",
+        "src/product/owner-public-wss-enrollment-lease-proposal.ts",
+        "test/fixtures/scale-v2-owner-wss-device-enrollment-dev.sql",
+        "test/owner-public-wss-enrollment-lease-staging.test.ts",
+        "test/owner-public-wss-receipt-replay-rotation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 672,
+      "head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "head_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "base_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39632489293,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975"
+      },
+      "files": [
+        "docs/s3-signed-bootstrap-owner-inventory-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "scripts/s3-core-broker-install-gate.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 673,
+      "head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "head_ref": "test/p05-verified-handle-acl-20261021",
+      "base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+      "base_ref": "fix/parallel-05-scoped-path-usb-grants-20261018",
+      "draft": true,
+      "ci": {
+        "run_id": 39632538963,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449"
+      },
+      "files": [
+        "docs/security/p0-filesystem-source-handle-acl-20261021.md",
+        "src/agent/broker-filesystem-preflight.ts",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "test/broker-filesystem-preflight-negative.test.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-native-source-handle-acl-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+        "head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "merge_base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 674,
+      "head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "head_ref": "test/parallel-15-s5-598-seeded-parser-20261021",
+      "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+      "base_ref": "fix/mcp-http-body-cap-588-20261020",
+      "draft": true,
+      "ci": {
+        "run_id": 39632610866,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401"
+      },
+      "files": [
+        "docs/SCALE_S5_598_FIXED_SEED_SOURCE_20261021.md",
+        "docs/reports/s5-598-real-parser-seeded-256kib-20261021.json",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "scripts/report-s5-real-598-seeded.ts",
+        "test/s5-real-598-seeded-parser.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 675,
+      "head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "head_ref": "test/07-oauth-csrf-state-consume-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39632701546,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5"
+      },
+      "files": [
+        "docs/MCP_GITHUB_OAUTH_STATE_CAS_20261021.md",
+        "src/product/github-oauth-browser-state.ts",
+        "src/product/github-oauth.ts",
+        "test/github-oauth-browser-state-negative.test.ts",
+        "test/github-oauth.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 676,
+      "head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "head_ref": "fix/01-bound-grant-monotonic-cas-20261021",
+      "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+      "base_ref": "fix/01-witness-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39634099233,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07"
+      },
+      "files": [
+        "docs/AGENT_P0_EXTERNAL_GRANT_ATOMIC_RECONCILIATION_20261021.md",
+        "src/agent/https-external-grant-cas.ts",
+        "src/agent/postgres-bound-grant-cas.ts",
+        "src/agent/witness-revoke-coordinator.ts",
+        "test/https-external-grant-cas.integration.test.ts",
+        "test/postgres-bound-grant-cas.integration.test.ts"
+      ],
+      "compare": {
+        "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "merge_base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 677,
+      "head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209",
+      "head_ref": "test/21-qa640-651-on-667-20261021",
+      "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "base_ref": "fix/08-cancel-native-dispatch-race-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644025130,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209"
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+        "test/artifact-588-cancel-read-race.qa.test.ts",
+        "test/qa21-artifact-unknown-reopen-idempotency.test.ts"
+      ],
+      "compare": {
+        "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209",
+        "merge_base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 678,
+      "head_sha": "807725eadece998fc4928a0a3898e71afa828da8",
+      "head_ref": "test/20-owner-stage-repair-crash-negative-20261021",
+      "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "base_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644040656,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "807725eadece998fc4928a0a3898e71afa828da8"
+      },
+      "files": [
+        "docs/s3-worker20-owner-stage-repair-crash-qa-20261021.md",
+        "test/s3-worker20-owner-stage-repair-crash-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "head_sha": "807725eadece998fc4928a0a3898e71afa828da8",
+        "merge_base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 679,
+      "head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350",
+      "head_ref": "test/qa-19-provider-cross-head-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644147390,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-native-crosshead.yml",
+        "docs/qa/QA19_WINDOWS_NATIVE_PROVIDER_CROSSHEAD_20261021.md",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts",
+        "test/qa-19-windows-native-provider-crosshead.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 680,
+      "head_sha": "901d6d34708b2181a016075e14251656d3b34f36",
+      "head_ref": "qa/18-bound-grant-rollback-timestamp-20261021",
+      "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "base_ref": "fix/01-bound-grant-monotonic-cas-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644719058,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "901d6d34708b2181a016075e14251656d3b34f36"
+      },
+      "files": [
+        "docs/QA_18_BOUND_GRANT_TIMESTAMP_20261021.md",
+        "test/fixtures/qa-18-bound-grant-hostile.ts",
+        "test/qa-18-bound-grant-crosshub-timestamp.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "head_sha": "901d6d34708b2181a016075e14251656d3b34f36",
+        "merge_base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 681,
+      "head_sha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8",
+      "head_ref": "test/qa17-670-native-provider-import-epoch-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644262152,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8"
+      },
+      "files": [
+        ".github/workflows/qa17-windows-broker-evidence.yml",
+        "test/qa-17-native-provider-import-epoch-670.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "9e6bfb0d9093d57d3537866ee08c7ded8b4b66e8",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 682,
+      "head_sha": "0dcd05debfeda91882bccc09834d216223c935ca",
+      "head_ref": "test/22-crosshub-expiry-receipts-20261021",
+      "base_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+      "base_ref": "test/22-crosshub-repair-publish-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644551666,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0dcd05debfeda91882bccc09834d216223c935ca"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "head_sha": "0dcd05debfeda91882bccc09834d216223c935ca",
+        "merge_base_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 683,
+      "head_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "head_ref": "test/02-broker-native-truth-negative-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644505625,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49"
+      },
+      "files": [
+        "docs/QA_02_670_BROKER_TRUTH_UNKNOWN_20261021.md",
+        "docs/QA_02_CORE_633_ELEVATED_ERROR_PROVENANCE_20261021.md",
+        "test/qa-02-670-native-broker-truth-negative.test.ts",
+        "test/qa-02-core-633-elevated-outcome-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 684,
+      "head_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "head_ref": "test/qa27-windows-approval-native-witness-20261021",
+      "base_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+      "base_ref": "test/qa27-remote-admin-provenance-followup-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644577730,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60"
+      },
+      "files": [
+        "docs/QA27_WINDOWS_NATIVE_ASSISTED_APPROVAL_EVIDENCE_20261021.md",
+        "test/fixtures/qa27-native-windows-approval-witness.ts",
+        "test/qa27-windows-native-approval-witness-matrix.test.ts"
+      ],
+      "compare": {
+        "base_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+        "head_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "merge_base_sha": "07587d7153c184f3c04da75f62c07aa09fc26e3f",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 685,
+      "head_sha": "536fce89c4197335c0eab7fa286bc1c3015b4545",
+      "head_ref": "test/28-signed-stage-crash-idempotent-recovery-20261021",
+      "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "base_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644586410,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "536fce89c4197335c0eab7fa286bc1c3015b4545"
+      },
+      "files": [
+        "docs/s3-worker28-signed-stage-crash-rollback-qa-20261021.md",
+        "test/fixtures/s3-worker28-signed-stage-crash-idempotence.test.ts"
+      ],
+      "compare": {
+        "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "head_sha": "536fce89c4197335c0eab7fa286bc1c3015b4545",
+        "merge_base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 686,
+      "head_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "head_ref": "qa/23-effective-owner669-negative-20261021",
+      "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "base_ref": "feat/04-core-effective-authority-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644614653,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_CROSS_REVIEW_20261021.md",
+        "test/core-effective-ui-669-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "head_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "merge_base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 687,
+      "head_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "head_ref": "test/parallel-14-crosshub-revoke-readback-20261021",
+      "base_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+      "base_ref": "feat/parallel-14-trusted-cleanup-admission-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644697445,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_CROSS_HUB_REVOKE_READBACK_20261021.md",
+        "src/ops/scale-v2-artifact-byte-budget-staging.ts",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "compare": {
+        "base_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "head_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+        "merge_base_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 688,
+      "head_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "head_ref": "test/25-signed-postcondition-root-boundary-20261021",
+      "base_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+      "base_ref": "test/25-postlaunch-revoke-ack-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644726990,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e"
+      },
+      "files": [
+        "docs/CORE_SIGNED_POSTCONDITION_WITNESS_NEGATIVE_QA_20261021.md",
+        "test/core-signed-postcondition-root-boundary.adversarial.test.ts"
+      ],
+      "compare": {
+        "base_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+        "head_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+        "merge_base_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 689,
+      "head_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "head_ref": "test/parallel-15-s5-cancel-ack-fairness-20261021",
+      "base_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+      "base_ref": "test/parallel-15-s5-598-seeded-parser-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644753494,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0"
+      },
+      "files": [
+        "docs/SCALE_S5_CANCEL_ACK_FAIRNESS_20261021.md",
+        "test/s5-source-cancel-close-budget-20261021.test.ts"
+      ],
+      "compare": {
+        "base_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+        "head_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+        "merge_base_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 690,
+      "head_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "head_ref": "test/p05-native-relative-acl-20261021",
+      "base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "base_ref": "test/p05-verified-handle-acl-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644754728,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646"
+      },
+      "files": [
+        "docs/security/p0-filesystem-source-handle-acl-20261021.md",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "src/agent/windows-native-relative-access.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-native-relative-effective-acl-negative.test.ts",
+        "test/p05-native-source-handle-acl-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "head_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "merge_base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 691,
+      "head_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "head_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+      "base_ref": "fix/08-cancel-native-dispatch-race-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644905819,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "437030d288fdf13441f506ce83a9ff72644822dd"
+      },
+      "files": [
+        "docs/ARTIFACT_PENDING_DISPATCH_CANCEL_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-588-postjournal-predispatch.qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "head_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "merge_base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 692,
+      "head_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "head_ref": "test/09-private-child-receipt-emergency-stop-20261021",
+      "base_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+      "base_ref": "test/09-ai-screen-creationtime-owner-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644955345,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "e8d44653fdb4175565a24facd17381fca18ed514"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_CHILD_LAUNCH_EMERGENCY_NEGATIVES_20261021.md",
+        "src/agent/private-desktop-owner-fence.ts",
+        "test/private-child-forgery-emergency-stop.test.ts"
+      ],
+      "compare": {
+        "base_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+        "head_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+        "merge_base_sha": "508cc0870699b58d384f04fcb6b675a4dfac0a87",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 693,
+      "head_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "head_ref": "qa/worker30-gzip95-tenant-memory-20261021",
+      "base_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+      "base_ref": "qa/worker30-next-compressed-fairness-cancel-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39644977870,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "8b08ede8db29fd9a95abb762b238601def07082d"
+      },
+      "files": [
+        "docs/SCALE_WORKER30_GZIP95_TENANT_CANCEL_QA_20261021.md",
+        "test/worker30-gzip95-tenant-isolation.test.ts",
+        "test/worker30-pending-memory-fence.test.ts"
+      ],
+      "compare": {
+        "base_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+        "head_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+        "merge_base_sha": "554528df1dd2be0c265571ac8a1233fade78da13",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 694,
+      "head_sha": "76a88b22a76d72d1824559dbd4f741c7f2da1b7d",
+      "head_ref": "qa/w26-p673-handle-import-negative-20261021",
+      "base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+      "base_ref": "test/p05-verified-handle-acl-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645047557,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "76a88b22a76d72d1824559dbd4f741c7f2da1b7d"
+      },
+      "files": [
+        "docs/security/p26-owner673-native-handle-negative.md",
+        "test/p26-native-owner673-adversarial.test.ts"
+      ],
+      "compare": {
+        "base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "head_sha": "76a88b22a76d72d1824559dbd4f741c7f2da1b7d",
+        "merge_base_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 695,
+      "head_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+      "head_ref": "test/06-reconnect-epoch-no-replay-20261021",
+      "base_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+      "base_ref": "test/06-journal-634-failclosed-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645105869,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "da37dcc034adc10db7149917a6af557d7770d8b5"
+      },
+      "files": [
+        "docs/CONNECTION_06_RECONNECT_667_ACCEPTANCE_20261021.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "compare": {
+        "base_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+        "head_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+        "merge_base_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 696,
+      "head_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "head_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+      "base_ref": "fix/12-signed-bootstrap-owner-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645131289,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0b43332289a478a3285673f43f6bb54da5325459"
+      },
+      "files": [
+        "docs/s3-core-import-dag-repair-evidence-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "scripts/s3-core-broker-install-gate.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "compare": {
+        "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "head_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "merge_base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 697,
+      "head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "head_ref": "test/07-oauth-hostile-state-rotation-20261021",
+      "base_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+      "base_ref": "test/07-oauth-csrf-state-consume-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645250913,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934"
+      },
+      "files": [
+        "docs/OAUTH_GITHUB_CSRF_MULTI_SESSION_ROTATION_QA_20261021.md",
+        "test/github-oauth-cross-session-hostile-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+        "merge_base_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 698,
+      "head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+      "head_ref": "test/24-live-dag-77-merge-evidence-20261021",
+      "base_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+      "base_ref": "test/24-live-dag-drift-gates-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645743195,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c"
+      },
+      "files": [
+        "docs/qa/INTEGRATION_DAG_77_SAFE_REVIEW_20261021.md",
+        "docs/qa/p0-integration-dag-open77-20261021.json",
+        "scripts/qa24-safe-merge-review.ts",
+        "test/qa-24-safe-merge-review.test.ts"
+      ],
+      "compare": {
+        "base_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+        "merge_base_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 699,
+      "head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+      "head_ref": "test/29-native-receipt-verifier-617",
+      "base_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+      "base_ref": "test/29-audit-rotation-crosshub-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39658654687,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8"
+      },
+      "files": [
+        ".github/workflows/qa29-native-receipt-verifier.yml",
+        "docs/QA29_NATIVE_RECEIPT_PROVENANCE_NO_GO_617.md",
+        "test/qa29-native-receipt-verifier.test.ts",
+        "test/qa29-native-receipt-verifier.ts"
+      ],
+      "compare": {
+        "base_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+        "head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+        "merge_base_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 700,
+      "head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "head_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+      "base_ref": "fix/03-windows-broker-provider-attestation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39645643225,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/P0_CORE_BROKER_PROTECTED_TREE_PID_CAS_20261021.md",
+        "scripts/audit-core-broker-protected-tree.ps1",
+        "scripts/audit-windows-broker-token-provider.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "src/security/core-broker-process-witness.ts",
+        "test/core-broker-process-witness.test.ts",
+        "test/core-broker-protected-tree.test.ts",
+        "test/windows-broker-provider-attestation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 701,
+      "head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "head_ref": "test/13-wss-keyrotate-owner-revoke-20261021",
+      "base_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+      "base_ref": "fix/13-owner-wss-receipt-replay-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39646018390,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_PAIRING_KEY_ROTATION_FOREIGN_OWNER_NONCE_QA_20261021.md",
+        "test/fixtures/scale-v2-owner-wss-pairing-revision-guard-dev.sql",
+        "test/owner-public-wss-cross-device-pairing-rotation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+        "merge_base_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 702,
+      "head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "head_ref": "fix/01-broker-dispatch-external-fence-20261021",
+      "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+      "base_ref": "fix/01-bound-grant-monotonic-cas-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39646460335,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190"
+      },
+      "files": [
+        "docs/AGENT_P0_EXTERNAL_BROKER_DISPATCH_FENCE_20261021.md",
+        "src/agent/broker-external-dispatch-fence.ts",
+        "src/agent/https-broker-dispatch-authority.ts",
+        "test/broker-external-dispatch-fence.test.ts",
+        "test/https-broker-dispatch-authority.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "merge_base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 703,
+      "head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "head_ref": "test/06-691-predispatch-reopen-20261021",
+      "base_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+      "base_ref": "test/06-reconnect-epoch-no-replay-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658452754,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d"
+      },
+      "files": [
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-691-predispatch-reopen.qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+        "head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+        "merge_base_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 704,
+      "head_sha": "98876d163aac7a7a580725e814b19dda621fbad0",
+      "head_ref": "test/21-replay-640-651-677-on-691-20261021",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658648859,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "98876d163aac7a7a580725e814b19dda621fbad0"
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+        "test/artifact-588-cancel-read-race.qa.test.ts",
+        "test/qa21-artifact-unknown-reopen-idempotency.test.ts"
+      ],
+      "compare": {
+        "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "head_sha": "98876d163aac7a7a580725e814b19dda621fbad0",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 705,
+      "head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+      "head_ref": "test/qa17-700-unavailable-filetime-acceptance-20261021",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658856961,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5"
+      },
+      "files": [
+        ".github/workflows/qa17-700-broker-negative.yml",
+        "test/qa-17-700-native-red-preservation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+        "merge_base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 706,
+      "head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea",
+      "head_ref": "test/20-agent105-preswitch-repair-qa-20261021",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658875463,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea"
+      },
+      "files": [
+        "docs/s3-worker20-agent105-preswitch-repair-qa-20261021.md",
+        "test/s3-worker20-agent105-preswitch-dag-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea",
+        "merge_base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 707,
+      "head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996",
+      "head_ref": "test/p05-transitive-import-handle-20261021",
+      "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "base_ref": "test/p05-native-relative-acl-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39659960377,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996"
+      },
+      "files": [
+        "docs/security/p05-transitive-updater-import-closure-20261021.md",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "src/agent/windows-native-protected-import-closure.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-transitive-protected-import-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996",
+        "merge_base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 708,
+      "head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac",
+      "head_ref": "test/22-691-crosshub-dispatch-20261021",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39659365444,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 709,
+      "head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "head_ref": "fix/03-protected-tree-hosted-path-binding-20261021",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658979397,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88"
+      },
+      "files": [
+        "scripts/audit-core-broker-protected-tree.ps1",
+        "test/core-broker-protected-tree.test.ts"
+      ],
+      "compare": {
+        "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "merge_base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 710,
+      "head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0",
+      "head_ref": "qa/18-crossbroker-revoke-drain-20261021",
+      "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "base_ref": "fix/01-broker-dispatch-external-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39658983007,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0"
+      },
+      "files": [
+        "docs/QA_18_CROSSBROKER_REVOKE_DRAIN_20261021.md",
+        "test/qa-18-broker-revoke-drain-hostile.test.ts"
+      ],
+      "compare": {
+        "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0",
+        "merge_base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "status": "ahead"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 711,
+      "head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "base_ref": "test/parallel-15-s5-cancel-ack-fairness-20261021",
+      "ci": {
+        "run_id": 39659054823,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110"
+      },
+      "files": [
+        "docs/SCALE_S5_REAL_598_FULL_BOUNDARY_20261021.md",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "test/s5-598-full-boundary-ci-source-20261021.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+        "base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+        "head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110"
+      },
+      "head_ref": "test/parallel-15-s5-598-full-source-ci-20261021"
+    },
+    {
+      "pr": 712,
+      "head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "base_ref": "fix/01-broker-dispatch-external-fence-20261021",
+      "ci": {
+        "run_id": 39676838080,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f"
+      },
+      "files": [
+        "docs/AGENT_P0_BROKER_NONCE_OWNER_EPOCH_20261021.md",
+        "src/agent/broker-external-dispatch-fence.ts",
+        "src/agent/https-broker-dispatch-authority.ts",
+        "test/broker-external-dispatch-fence.test.ts",
+        "test/https-broker-dispatch-authority.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f"
+      },
+      "head_ref": "fix/01-broker-dispatch-nonce-epoch-20261021"
+    },
+    {
+      "pr": 713,
+      "head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "ci": {
+        "run_id": 39659243880,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807"
+      },
+      "files": [
+        "test/fixtures/s3-worker28-import-dag-durable-journal.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807"
+      },
+      "head_ref": "test/28-import-dag-durable-journal-adversarial-20261021"
+    },
+    {
+      "pr": 714,
+      "head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021",
+      "ci": {
+        "run_id": 39659270493,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449"
+      },
+      "files": [
+        "docs/s3-core-atomic-switch-qa-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449"
+      },
+      "head_ref": "fix/12-atomic-switch-repair-20261021"
+    },
+    {
+      "pr": 715,
+      "head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026",
+      "base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+      "base_ref": "feat/parallel-10-broker-preflight-20261021",
+      "ci": {
+        "run_id": 39659290064,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026"
+      },
+      "files": [
+        "docs/CORE_BROKER_FILETIME_CAS_QA_20261021.md",
+        "src/diagnostics/core-broker-filetime-cas-evidence.ts",
+        "test/core-broker-filetime-cas-evidence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+        "base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+        "head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026"
+      },
+      "head_ref": "feat/parallel-10-immutable-pid-filetime-cas-qa-20261021"
+    },
+    {
+      "pr": 716,
+      "head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "base_ref": "test/25-signed-postcondition-root-boundary-20261021",
+      "ci": {
+        "run_id": 39659320381,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723"
+      },
+      "files": [
+        "docs/CORE_CRASH_ACK_ROOT_READBACK_NEGATIVE_QA_20261021.md",
+        "test/core-broker-crash-ack-readback-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+        "base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+        "head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723"
+      },
+      "head_ref": "test/25-crash-ack-root-readback-20261021"
+    },
+    {
+      "pr": 717,
+      "head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "ci": {
+        "run_id": 39659333082,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-importer-acl-forensic.yml",
+        "docs/qa/QA19_PROTECTED_IMPORTER_ACL_FORENSIC_20261021.md",
+        "test/qa-19-protected-tree-forensic.test.ts",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97"
+      },
+      "head_ref": "test/qa-19-protected-import-witness-20261021"
+    },
+    {
+      "pr": 718,
+      "head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9",
+      "base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "base_ref": "test/parallel-14-crosshub-revoke-readback-20261021",
+      "ci": {
+        "run_id": 39734543164,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_691_682_CROSSTEST_20261021.md",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+        "base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+        "head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9"
+      },
+      "head_ref": "test/parallel-14-predispatch-unknown-20261021"
+    },
+    {
+      "pr": 719,
+      "head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "base_ref": "feat/04-core-effective-authority-20261021",
+      "ci": {
+        "run_id": 39659394811,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52"
+      },
+      "files": [
+        "docs/NEXOWIRE_ACCESS_QUEUE_CAS_READBACK_NEGATIVES_20261021.md",
+        "src/product/access-queued-job-review.ts",
+        "test/access-queued-job-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52"
+      },
+      "head_ref": "feat/04-active-job-auth-fence-20261021"
+    },
+    {
+      "pr": 720,
+      "head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594",
+      "base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "base_ref": "test/13-wss-keyrotate-owner-revoke-20261021",
+      "ci": {
+        "run_id": 39659414593,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_WSS_DEVICE_REPLACE_REVOKE_RECONNECT_QA_20261021.md",
+        "test/fixtures/scale-v2-owner-wss-pairing-revision-guard-dev.sql",
+        "test/owner-public-wss-cross-device-pairing-rotation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+        "base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+        "head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594"
+      },
+      "head_ref": "test/13-wss-pairing-replace-replay-20261021"
+    },
+    {
+      "pr": 721,
+      "head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "base_ref": "test/07-oauth-hostile-state-rotation-20261021",
+      "ci": {
+        "run_id": 39676732876,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d"
+      },
+      "files": [
+        "docs/OAUTH_ISSUER_EPOCH_BROWSER_OWNER_REVOKE_QA_20261021.md",
+        "src/product/github-oauth-browser-state.ts",
+        "src/product/github-oauth-issuer-fence.ts",
+        "src/product/mcp-oauth-first-party-logout.ts",
+        "test/github-oauth-issuer-fence-and-abandon-negative.test.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts",
+        "test/oauth-first-party-owner-session-logout-gate.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+        "base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+        "head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d"
+      },
+      "head_ref": "security/07-oauth-issuer-fence-browser-revoke-20261021"
+    },
+    {
+      "pr": 722,
+      "head_sha": "78e6494e06bc97b97caa27f4a8028a2bdbce235b",
+      "head_ref": "test/qa27-local-broker-external-core-matrix-20261021",
+      "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "base_ref": "test/qa27-windows-approval-native-witness-20261021",
+      "ci": {
+        "run_id": 39803430794,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "78e6494e06bc97b97caa27f4a8028a2bdbce235b"
+      },
+      "files": [
+        "docs/QA27_LOCAL_OS_BROKER_EXTERNAL_CORE_MATRIX_20261021.md",
+        "test/fixtures/qa27-core-broker-external-authority-contract.ts",
+        "test/qa27-local-os-core-external-authority-negatives.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "head_sha": "78e6494e06bc97b97caa27f4a8028a2bdbce235b",
+        "merge_base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 723,
+      "head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e",
+      "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "base_ref": "test/p05-native-relative-acl-20261021",
+      "ci": {
+        "run_id": 39659567874,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e"
+      },
+      "files": [
+        "docs/security/p26-owner690-import-dag-native-negative.md",
+        "test/p26-owner690-transitive-import-native-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e"
+      },
+      "head_ref": "qa/w26-p690-import-dag-20261021"
+    },
+    {
+      "pr": 724,
+      "head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "base_ref": "qa/worker30-gzip95-tenant-memory-20261021",
+      "ci": {
+        "run_id": 39659574218,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482"
+      },
+      "files": [
+        "docs/SCALE_WORKER30_GZIP_ADMISSION_ISOLATION_CI_20261021.md",
+        "test/worker30-epoch-repair-pending-regression.test.ts",
+        "test/worker30-quiet-gzip-starvation-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+        "base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+        "head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482"
+      },
+      "head_ref": "qa/worker30-stalled-gzip-quiet-isolation-20261021"
+    },
+    {
+      "pr": 725,
+      "head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021",
+      "ci": {
+        "run_id": 39659633982,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8"
+      },
+      "files": [
+        "docs/ARTIFACT_NATIVE_UNKNOWN_PROVENANCE_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-08-owner-receipt-cancel.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8"
+      },
+      "head_ref": "fix/08-forged-receipt-late-cancel-20261021"
+    },
+    {
+      "pr": 726,
+      "head_sha": "ea0df4788b9efb1d457f941f70024a60e9b4c815",
+      "head_ref": "qa/23-ui-native-cas-reconnect-20261021",
+      "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "base_ref": "qa/23-effective-owner669-negative-20261021",
+      "ci": {
+        "run_id": 39802783523,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "ea0df4788b9efb1d457f941f70024a60e9b4c815"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_702_700_CROSS_QA_20261021.md",
+        "src/diagnostics/core-effective-native-cas-ui-gate.ts",
+        "test/core-effective-native-cas-ui-gate.test.ts",
+        "test/qa/core-effective-ui-worker23.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "head_sha": "ea0df4788b9efb1d457f941f70024a60e9b4c815",
+        "merge_base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 727,
+      "head_sha": "297d5e51f7603e2abda4a53b84e2868c7e930c67",
+      "head_ref": "test/02-dpapi-683-failclosed-isolation-20261021",
+      "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "base_ref": "test/02-broker-native-truth-negative-20261021",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "297d5e51f7603e2abda4a53b84e2868c7e930c67"
+      },
+      "files": [
+        ".github/workflows/qa-02-dpapi-isolated.yml",
+        "docs/QA_02_683_DPAPI_HOSTED_ISOLATION_20261021.md",
+        "docs/QA_02_741_743_712_CROSS_OWNER_NEGATIVES_20261022.md",
+        "docs/QA_02_754_RECEIPT_757_REVOKE_SCOPE_20261022.md",
+        "docs/QA_02_ELEVATED_OUTCOME_RECONCILIATION_20261022.md",
+        "src/protocol/elevated-outcome-error-contract.ts",
+        "test/qa-02-683-dpapi-timeout-negative.test.ts",
+        "test/qa-02-754-757-immutable-effect-scope.test.ts",
+        "test/qa-02-access-native-cas-cross-owner-negative.test.ts",
+        "test/qa-02-elevated-outcome-error-contract.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "head_sha": "297d5e51f7603e2abda4a53b84e2868c7e930c67",
+        "merge_base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 728,
+      "head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "base_ref": "test/09-private-child-receipt-emergency-stop-20261021",
+      "ci": {
+        "run_id": 39659941037,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_RUNTIME_OWNER_FAILCLOSE_20261021.md",
+        "src/agent/private-desktop-runtime-owner-gate.ts",
+        "src/agent/windows-private-desktop.ts",
+        "test/private-desktop-runtime-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+        "base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+        "head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60"
+      },
+      "head_ref": "fix/09-private-runtime-owner-failclosed-20261021"
+    },
+    {
+      "pr": 729,
+      "head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+      "base_ref": "test/qa16-final-acceptance-refresh-20261018",
+      "ci": {
+        "run_id": 39662119627,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR677_702_20261021.md",
+        "docs/qa/PR_SOURCE_AND_RELEASE_GATES.json",
+        "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+        "docs/qa/QA_BLOCKING_FINDINGS_CURRENT_MAIN.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-635-649-exact-head-evidence.test.ts",
+        "test/qa-666-676-exact-head-evidence.test.ts",
+        "test/qa-677-702-exact-head-evidence.test.ts",
+        "test/qa-core-master-evidence.test.ts",
+        "test/qa-current-release-blockers.test.ts",
+        "test/qa-pr-intake-negative.test.ts",
+        "test/qa-release-evidence-617.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+        "base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+        "head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9"
+      },
+      "head_ref": "test/qa16-pr677-702-exact-ci-20261021"
+    },
+    {
+      "pr": 730,
+      "head_sha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4",
+      "head_ref": "test/21-unchanged-qa640-651-677-on-725-20261022",
+      "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "base_ref": "fix/08-forged-receipt-late-cancel-20261021",
+      "ci": {
+        "run_id": 39676785591,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4"
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+        "test/artifact-588-cancel-read-race.qa.test.ts",
+        "test/qa21-artifact-unknown-reopen-idempotency.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "head_sha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4",
+        "merge_base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 731,
+      "head_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+      "head_ref": "qa/18-crosshub-pending-permit-after-revoke-20261022",
+      "base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "base_ref": "fix/01-broker-dispatch-nonce-epoch-20261021",
+      "ci": {
+        "run_id": 39676999169,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "df239ce88f4b98ba97f29e48495fee86049f8856"
+      },
+      "files": [
+        "test/qa-18-crosshub-late-permit-revoke-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+        "head_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+        "merge_base_sha": "62800af17d2a9ce18670dba6a8ac861a5d7f4ba5",
+        "status": "diverged"
+      }
+    },
+    {
+      "pr": 732,
+      "head_sha": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+      "head_ref": "test/20-deep-dll-rollback-epoch-qa-20261022",
+      "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "base_ref": "fix/12-native-acl-dispatch-permit-source-20261022",
+      "ci": {
+        "run_id": 39735234697,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "9014449ef9f3513064d0cd42cb016e53a705fc6c"
+      },
+      "files": [
+        "docs/s3-worker20-deep-dll-repair-acceptance-20261022.md",
+        "test/s3-worker20-transitive-leaf-rollback-epoch-qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "head_sha": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+        "merge_base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 733,
+      "head_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+      "head_ref": "test/10-broker-filetime-on-709-20261022",
+      "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "base_ref": "fix/03-protected-tree-hosted-path-binding-20261021",
+      "ci": {
+        "run_id": 39677163113,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0f7c6af824c282764cdb594d0fba474686683062"
+      },
+      "files": [
+        "docs/CORE_BROKER_FILETIME_CAS_QA_20261021.md",
+        "docs/CORE_NATIVE_PROVIDER_AVAILABILITY_20261022.md",
+        "src/diagnostics/core-broker-filetime-cas-evidence.ts",
+        "src/diagnostics/core-native-provider-availability.ts",
+        "test/core-broker-filetime-cas-evidence.test.ts",
+        "test/core-native-provider-availability.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "head_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+        "merge_base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 734,
+      "head_sha": "5e2482bfe7ccd2dc9cbbaca040710affa90f74d6",
+      "head_ref": "test/qa-19-709-path-identity-independent-20261022",
+      "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "base_ref": "fix/03-protected-tree-hosted-path-binding-20261021",
+      "ci": {
+        "run_id": 39677224071,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5e2482bfe7ccd2dc9cbbaca040710affa90f74d6"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-709-independent.yml",
+        "docs/qa/QA19_WINDOWS_709_INDEPENDENT_ACCEPTANCE_20261022.md",
+        "test/qa-19-709-independent-file-identity.test.ts",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "head_sha": "5e2482bfe7ccd2dc9cbbaca040710affa90f74d6",
+        "merge_base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 735,
+      "head_sha": "d4c35e2a7adec3b845b03886f314772a65473d63",
+      "head_ref": "qa/worker30-single-slot-close-barrier-20261022",
+      "base_sha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "base_ref": "qa/worker30-stalled-gzip-quiet-isolation-20261021",
+      "ci": {
+        "run_id": 39735083325,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "d4c35e2a7adec3b845b03886f314772a65473d63"
+      },
+      "files": [
+        "docs/SCALE_WORKER30_SINGLE_SLOT_SOURCE_QA_20261022.md",
+        "test/worker30-single-slot-close-admission.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+        "head_sha": "d4c35e2a7adec3b845b03886f314772a65473d63",
+        "merge_base_sha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 736,
+      "head_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+      "head_ref": "fix/09-private-emergency-preflight-fence-20261022",
+      "base_sha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "base_ref": "fix/09-private-runtime-owner-failclosed-20261021",
+      "ci": {
+        "run_id": 39677383239,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6"
+      },
+      "files": [
+        "docs/NEXOWIRE_09_VIEWER_EMERGENCY_PREFLIGHT_20261022.md",
+        "src/agent/windows-private-desktop.ts",
+        "src/agent/windows-private-viewer.ts",
+        "test/private-desktop-runtime-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+        "head_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+        "merge_base_sha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 738,
+      "head_sha": "ce85d257c2f005156175a4d14a65ec81565575fc",
+      "head_ref": "test/parallel-15-s5-gzip-full-quiet-receipt-20261021",
+      "base_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "base_ref": "test/parallel-15-s5-598-full-source-ci-20261021",
+      "ci": {
+        "run_id": 39677587592,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "ce85d257c2f005156175a4d14a65ec81565575fc"
+      },
+      "files": [
+        "docs/SCALE_S5_FOUR_INFLATED_GZIP_QUIET_20261021.md",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "test/s5-598-four-inflated-gzip-quiet-20261021.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+        "head_sha": "ce85d257c2f005156175a4d14a65ec81565575fc",
+        "merge_base_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 739,
+      "head_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "head_ref": "fix/12-native-acl-dispatch-permit-source-20261022",
+      "base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "base_ref": "fix/12-atomic-switch-repair-20261021",
+      "ci": {
+        "run_id": 39677691555,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde"
+      },
+      "files": [
+        "docs/s3-native-acl-dispatch-fence-owner-20261022.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+        "head_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "merge_base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 740,
+      "head_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+      "head_ref": "test/25-two-hub-cas-revoke-readback-20261022",
+      "base_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "base_ref": "test/25-crash-ack-root-readback-20261021",
+      "ci": {
+        "run_id": 39677694668,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "8b17168e610268aba30ac94213befba406a41cf2"
+      },
+      "files": [
+        "docs/CORE_TWO_HUB_CAS_REVOKE_READBACK_QA_20261022.md",
+        "test/core-two-hub-owner-revoke-cas-postcondition.qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+        "head_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+        "merge_base_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 741,
+      "head_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+      "head_ref": "feat/04-nonce-native-cas-readback-20261022",
+      "base_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "base_ref": "feat/04-active-job-auth-fence-20261021",
+      "ci": {
+        "run_id": 39677981833,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8"
+      },
+      "files": [
+        "docs/NEXOWIRE_ACCESS_NATIVE_NONCE_RECONNECT_20261022.md",
+        "src/product/access-native-broker-proof.ts",
+        "src/product/access-queued-job-review.ts",
+        "test/access-queued-job-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+        "head_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+        "merge_base_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 742,
+      "head_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "head_ref": "test/06-725-712-double-reconnect-20261022",
+      "base_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "base_ref": "test/06-691-predispatch-reopen-20261021",
+      "ci": {
+        "run_id": 39678274991,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b93ee12a7737085050768261bff9b4fc71019b65"
+      },
+      "files": [
+        "docs/CONNECTION_06_725_712_FORENSIC_RECONNECT_20261022.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-691-predispatch-reopen.qa.test.ts",
+        "test/connection-725-712-forensic-reconnect.test.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+        "head_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "merge_base_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 743,
+      "head_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "head_ref": "test/03-709-qa17-qa19-integration-20261022",
+      "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "base_ref": "fix/03-protected-tree-hosted-path-binding-20261021",
+      "ci": {
+        "run_id": 39678489196,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade"
+      },
+      "files": [
+        ".github/workflows/qa-03-709-qa17-qa19-integration.yml",
+        ".github/workflows/qa-19-windows-importer-acl-forensic.yml",
+        ".github/workflows/qa17-700-broker-negative.yml",
+        "docs/qa/QA03_709_QA17_QA19_INTEGRATION_20261022.md",
+        "docs/qa/QA19_PROTECTED_IMPORTER_ACL_FORENSIC_20261021.md",
+        "scripts/audit-core-broker-protected-tree.ps1",
+        "test/core-broker-transitive-import-negative.test.ts",
+        "test/qa-17-700-native-red-preservation.test.ts",
+        "test/qa-19-protected-tree-forensic.test.ts",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "head_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "merge_base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 744,
+      "head_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+      "head_ref": "test/qa16-pr703-729-exact-ci-20261022",
+      "base_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "base_ref": "test/qa16-pr677-702-exact-ci-20261021",
+      "ci": {
+        "run_id": 39678517442,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR703_729_20261022.md",
+        "docs/qa/PR_SOURCE_AND_RELEASE_GATES.json",
+        "docs/qa/QA_20261022_PR703_729_EXACT_HEAD.json",
+        "docs/qa/QA_BLOCKING_FINDINGS_CURRENT_MAIN.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-635-649-exact-head-evidence.test.ts",
+        "test/qa-666-676-exact-head-evidence.test.ts",
+        "test/qa-677-702-exact-head-evidence.test.ts",
+        "test/qa-703-729-exact-head-evidence.test.ts",
+        "test/qa-core-master-evidence.test.ts",
+        "test/qa-current-release-blockers.test.ts",
+        "test/qa-pr-intake-negative.test.ts",
+        "test/qa-release-evidence-617.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+        "head_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+        "merge_base_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 745,
+      "head_sha": "8a4722341355ee2edd680a35321f9f946c175657",
+      "head_ref": "test/28-rebase-714-unchanged-journal-qa-20261022",
+      "base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "base_ref": "fix/12-atomic-switch-repair-20261021",
+      "ci": {
+        "run_id": 39733783135,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "8a4722341355ee2edd680a35321f9f946c175657"
+      },
+      "files": [
+        "test/fixtures/s3-worker28-import-dag-durable-journal.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+        "head_sha": "8a4722341355ee2edd680a35321f9f946c175657",
+        "merge_base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 746,
+      "head_sha": "49a10d1b4ee87963d4034cf4e924c7b1e0a157dc",
+      "head_ref": "test/29-cas-native-cross-owner-negatives-20261022",
+      "base_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+      "base_ref": "test/29-native-receipt-verifier-617",
+      "ci": {
+        "run_id": 39734543444,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "49a10d1b4ee87963d4034cf4e924c7b1e0a157dc"
+      },
+      "files": [
+        ".github/workflows/qa29-cross-owner-source.yml",
+        "docs/QA29_CROSS_OWNER_CAS_NATIVE_NO_GO_20261022.md",
+        "test/qa29-cas-native-bridge-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+        "head_sha": "49a10d1b4ee87963d4034cf4e924c7b1e0a157dc",
+        "merge_base_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 747,
+      "head_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+      "head_ref": "qa/18-final-dispatch-check-crosshub-20261022",
+      "base_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+      "base_ref": "qa/18-crosshub-pending-permit-after-revoke-20261022",
+      "ci": {
+        "run_id": 39735278263,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42"
+      },
+      "files": [
+        "test/qa-18-crosshub-final-authority-fence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+        "head_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+        "merge_base_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 748,
+      "head_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+      "head_ref": "feat/07-oauth-epoch-refresh-service-adapter-20261022",
+      "base_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "base_ref": "security/07-oauth-issuer-fence-browser-revoke-20261021",
+      "ci": {
+        "run_id": 39735987704,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0"
+      },
+      "files": [
+        "docs/OAUTH_EPOCH_REFRESH_ISSUER_SOURCE_BRIDGE_20261022.md",
+        "src/product/mcp-oauth.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+        "head_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+        "merge_base_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 749,
+      "head_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+      "head_ref": "test/25-late-permit-posteffect-unknown-20261022",
+      "base_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+      "base_ref": "test/25-two-hub-cas-revoke-readback-20261022",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6"
+      },
+      "files": [
+        "test/core-late-permit-revoke-drain-posteffect-unknown.qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+        "head_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+        "merge_base_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 750,
+      "head_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+      "head_ref": "fix/09-private-picker-owner-witness-20261022",
+      "base_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+      "base_ref": "fix/09-private-emergency-preflight-fence-20261022",
+      "ci": {
+        "run_id": 39735615243,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_743_PRIVATE_PICKER_OWNER_REVIEW_20261022.md",
+        "src/agent/private-desktop-runtime-owner-gate.ts",
+        "src/agent/windows-private-desktop.ts",
+        "src/agent/windows-private-file-picker.ts",
+        "test/private-picker-native-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+        "head_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+        "merge_base_sha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 751,
+      "head_sha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19",
+      "head_ref": "test/21-external-witness-rollback-742-20261022",
+      "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "base_ref": "test/06-725-712-double-reconnect-20261022",
+      "ci": {
+        "run_id": 39735623362,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19"
+      },
+      "files": [
+        "test/qa21-independent-witness-local-rollback.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "head_sha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19",
+        "merge_base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 752,
+      "head_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+      "head_ref": "test/06-742-orphan-status-no-replay-20261022",
+      "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "base_ref": "test/06-725-712-double-reconnect-20261022",
+      "ci": {
+        "run_id": 39735641942,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573"
+      },
+      "files": [
+        "docs/CONNECTION_06_725_EXACT_FAILURE_ORPHAN_20261022.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-725-712-forensic-reconnect.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "head_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+        "merge_base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 753,
+      "head_sha": "66a3bb1018a4bf2d71b53972f14a2a1d1a9231a6",
+      "head_ref": "qa/w26-743-json-version-type-20261022",
+      "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "base_ref": "test/03-709-qa17-qa19-integration-20261022",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "66a3bb1018a4bf2d71b53972f14a2a1d1a9231a6"
+      },
+      "files": [
+        ".github/workflows/qa26-743-strict-json-version-witness.yml",
+        "docs/security/p26-743-strict-json-type-native-gap.md",
+        "test/p26-743-strict-envelope-version-type-negative.test.ts",
+        "test/p26-753-envelope-malformed-legacy-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "head_sha": "66a3bb1018a4bf2d71b53972f14a2a1d1a9231a6",
+        "merge_base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 754,
+      "head_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "head_ref": "feat/08-publish-receipt-20261022",
+      "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "base_ref": "fix/08-forged-receipt-late-cancel-20261021",
+      "ci": {
+        "run_id": 39736052869,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "3a5bf392109d17dbf2650a18398917d5501fd488"
+      },
+      "files": [
+        "docs/ARTIFACT_FINAL_RECEIPT_20261022.md",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-08-final-native-receipt.test.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "head_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "merge_base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 755,
+      "head_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+      "head_ref": "fix/12-signed-release-dag-permit-v2-20261022",
+      "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "base_ref": "fix/12-native-acl-dispatch-permit-source-20261022",
+      "ci": {
+        "run_id": 39736251296,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6316643684755f9b4e227de13323aaac26077e4d"
+      },
+      "files": [
+        "docs/s3-signed-importer-repair-owner-permit-20261022.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "head_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+        "merge_base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 756,
+      "head_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+      "head_ref": "fix/03-native-effective-acl-pid-dup-20261022",
+      "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "base_ref": "test/03-709-qa17-qa19-integration-20261022",
+      "ci": {
+        "run_id": 39736305461,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57"
+      },
+      "files": [
+        ".github/workflows/qa03-native-effective-pid.yml",
+        "docs/qa/QA03_NATIVE_EFFECTIVE_ACL_PID_DUP_20261022.md",
+        "scripts/audit-core-broker-fixture-effective-access.ps1",
+        "scripts/audit-core-broker-fixture-pid-handle.ps1",
+        "test/core-broker-native-effective-access.test.ts",
+        "test/core-broker-native-pid-dup-access.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "head_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+        "merge_base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 757,
+      "head_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+      "head_ref": "feat/04-late-permit-effective-20261022",
+      "base_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+      "base_ref": "feat/04-nonce-native-cas-readback-20261022",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34"
+      },
+      "files": [
+        "docs/NEXOWIRE_ACCESS_LATE_PERMIT_EFFECTIVE_20261022.md",
+        "src/product/access-late-permit-review.ts",
+        "src/product/access-queued-job-review.ts",
+        "test/access-late-permit-review.test.ts",
+        "test/access-queued-job-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+        "head_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+        "merge_base_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 758,
+      "head_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+      "head_ref": "test/qa16-pr730-745-docsonly-20261022",
+      "base_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+      "base_ref": "test/qa16-pr703-729-exact-ci-20261022",
+      "ci": {
+        "run_id": 39736944182,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "74917540d8977c50430b103f32c872ce800bf86e"
+      },
+      "files": [
+        "docs/qa/INDEPENDENT_QA_PR730_745_20261022.md",
+        "docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json",
+        "docs/qa/cross-project-final-acceptance.json"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+        "head_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+        "merge_base_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 759,
+      "head_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+      "head_ref": "test/09-750-platform-owner-blocked-20261022",
+      "base_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+      "base_ref": "fix/09-private-picker-owner-witness-20261022",
+      "ci": {
+        "run_id": 39802773499,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d"
+      },
+      "files": [
+        "docs/NEXOWIRE_09_750_756_757_OWNER_BLOCKED_20261022.md",
+        "test/private-picker-native-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+        "head_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+        "merge_base_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 760,
+      "head_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+      "head_ref": "security/07-oauth-atomic-access-verifier-20261022",
+      "base_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+      "base_ref": "feat/07-oauth-epoch-refresh-service-adapter-20261022",
+      "ci": {
+        "run_id": 39802818096,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "1e41df6cfc60a57e6d0b50344731136705f37030"
+      },
+      "files": [
+        "docs/OAUTH_ATOMIC_ACCESS_EPOCH_BRIDGE_20261022.md",
+        "src/product/mcp-oauth.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+        "head_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+        "merge_base_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+        "status": "ahead"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": 582,
+      "to": 607,
+      "stale": false
+    },
+    {
+      "from": 598,
+      "to": 608,
+      "stale": false
+    },
+    {
+      "from": 576,
+      "to": 609,
+      "stale": true
+    },
+    {
+      "from": 602,
+      "to": 611,
+      "stale": false
+    },
+    {
+      "from": 607,
+      "to": 614,
+      "stale": false
+    },
+    {
+      "from": 596,
+      "to": 616,
+      "stale": false
+    },
+    {
+      "from": 574,
+      "to": 621,
+      "stale": false
+    },
+    {
+      "from": 618,
+      "to": 622,
+      "stale": true
+    },
+    {
+      "from": 611,
+      "to": 624,
+      "stale": false
+    },
+    {
+      "from": 610,
+      "to": 625,
+      "stale": false
+    },
+    {
+      "from": 615,
+      "to": 628,
+      "stale": false
+    },
+    {
+      "from": 622,
+      "to": 629,
+      "stale": false
+    },
+    {
+      "from": 614,
+      "to": 631,
+      "stale": false
+    },
+    {
+      "from": 551,
+      "to": 632,
+      "stale": false
+    },
+    {
+      "from": 620,
+      "to": 633,
+      "stale": false
+    },
+    {
+      "from": 616,
+      "to": 634,
+      "stale": false
+    },
+    {
+      "from": 633,
+      "to": 635,
+      "stale": false
+    },
+    {
+      "from": 632,
+      "to": 636,
+      "stale": false
+    },
+    {
+      "from": 631,
+      "to": 637,
+      "stale": false
+    },
+    {
+      "from": 576,
+      "to": 638,
+      "stale": false
+    },
+    {
+      "from": 632,
+      "to": 639,
+      "stale": false
+    },
+    {
+      "from": 634,
+      "to": 640,
+      "stale": false
+    },
+    {
+      "from": 634,
+      "to": 641,
+      "stale": false
+    },
+    {
+      "from": 633,
+      "to": 643,
+      "stale": false
+    },
+    {
+      "from": 632,
+      "to": 644,
+      "stale": false
+    },
+    {
+      "from": 598,
+      "to": 649,
+      "stale": false
+    },
+    {
+      "from": 635,
+      "to": 650,
+      "stale": false
+    },
+    {
+      "from": 634,
+      "to": 651,
+      "stale": false
+    },
+    {
+      "from": 638,
+      "to": 652,
+      "stale": false
+    },
+    {
+      "from": 641,
+      "to": 653,
+      "stale": false
+    },
+    {
+      "from": 643,
+      "to": 654,
+      "stale": false
+    },
+    {
+      "from": 639,
+      "to": 655,
+      "stale": false
+    },
+    {
+      "from": 645,
+      "to": 656,
+      "stale": false
+    },
+    {
+      "from": 644,
+      "to": 658,
+      "stale": false
+    },
+    {
+      "from": 637,
+      "to": 659,
+      "stale": false
+    },
+    {
+      "from": 598,
+      "to": 660,
+      "stale": false
+    },
+    {
+      "from": 633,
+      "to": 661,
+      "stale": false
+    },
+    {
+      "from": 648,
+      "to": 662,
+      "stale": false
+    },
+    {
+      "from": 624,
+      "to": 663,
+      "stale": false
+    },
+    {
+      "from": 646,
+      "to": 664,
+      "stale": false
+    },
+    {
+      "from": 613,
+      "to": 666,
+      "stale": false
+    },
+    {
+      "from": 634,
+      "to": 667,
+      "stale": false
+    },
+    {
+      "from": 625,
+      "to": 668,
+      "stale": false
+    },
+    {
+      "from": 621,
+      "to": 669,
+      "stale": false
+    },
+    {
+      "from": 633,
+      "to": 670,
+      "stale": false
+    },
+    {
+      "from": 632,
+      "to": 672,
+      "stale": false
+    },
+    {
+      "from": 553,
+      "to": 673,
+      "stale": false
+    },
+    {
+      "from": 598,
+      "to": 674,
+      "stale": false
+    },
+    {
+      "from": 631,
+      "to": 676,
+      "stale": false
+    },
+    {
+      "from": 667,
+      "to": 677,
+      "stale": false
+    },
+    {
+      "from": 672,
+      "to": 678,
+      "stale": false
+    },
+    {
+      "from": 670,
+      "to": 679,
+      "stale": false
+    },
+    {
+      "from": 676,
+      "to": 680,
+      "stale": false
+    },
+    {
+      "from": 670,
+      "to": 681,
+      "stale": false
+    },
+    {
+      "from": 653,
+      "to": 682,
+      "stale": false
+    },
+    {
+      "from": 670,
+      "to": 683,
+      "stale": false
+    },
+    {
+      "from": 656,
+      "to": 684,
+      "stale": false
+    },
+    {
+      "from": 672,
+      "to": 685,
+      "stale": false
+    },
+    {
+      "from": 669,
+      "to": 686,
+      "stale": false
+    },
+    {
+      "from": 668,
+      "to": 687,
+      "stale": false
+    },
+    {
+      "from": 654,
+      "to": 688,
+      "stale": false
+    },
+    {
+      "from": 674,
+      "to": 689,
+      "stale": false
+    },
+    {
+      "from": 673,
+      "to": 690,
+      "stale": false
+    },
+    {
+      "from": 667,
+      "to": 691,
+      "stale": false
+    },
+    {
+      "from": 663,
+      "to": 692,
+      "stale": false
+    },
+    {
+      "from": 660,
+      "to": 693,
+      "stale": false
+    },
+    {
+      "from": 673,
+      "to": 694,
+      "stale": false
+    },
+    {
+      "from": 666,
+      "to": 695,
+      "stale": false
+    },
+    {
+      "from": 672,
+      "to": 696,
+      "stale": false
+    },
+    {
+      "from": 675,
+      "to": 697,
+      "stale": false
+    },
+    {
+      "from": 664,
+      "to": 698,
+      "stale": false
+    },
+    {
+      "from": 662,
+      "to": 699,
+      "stale": false
+    },
+    {
+      "from": 670,
+      "to": 700,
+      "stale": false
+    },
+    {
+      "from": 671,
+      "to": 701,
+      "stale": false
+    },
+    {
+      "from": 676,
+      "to": 702,
+      "stale": false
+    },
+    {
+      "from": 695,
+      "to": 703,
+      "stale": false
+    },
+    {
+      "from": 691,
+      "to": 704,
+      "stale": false
+    },
+    {
+      "from": 700,
+      "to": 705,
+      "stale": false
+    },
+    {
+      "from": 696,
+      "to": 706,
+      "stale": false
+    },
+    {
+      "from": 690,
+      "to": 707,
+      "stale": false
+    },
+    {
+      "from": 691,
+      "to": 708,
+      "stale": false
+    },
+    {
+      "from": 700,
+      "to": 709,
+      "stale": false
+    },
+    {
+      "from": 702,
+      "to": 710,
+      "stale": false
+    },
+    {
+      "from": 689,
+      "to": 711,
+      "stale": false
+    },
+    {
+      "from": 702,
+      "to": 712,
+      "stale": false
+    },
+    {
+      "from": 696,
+      "to": 713,
+      "stale": false
+    },
+    {
+      "from": 696,
+      "to": 714,
+      "stale": false
+    },
+    {
+      "from": 665,
+      "to": 715,
+      "stale": false
+    },
+    {
+      "from": 688,
+      "to": 716,
+      "stale": false
+    },
+    {
+      "from": 700,
+      "to": 717,
+      "stale": false
+    },
+    {
+      "from": 687,
+      "to": 718,
+      "stale": false
+    },
+    {
+      "from": 669,
+      "to": 719,
+      "stale": false
+    },
+    {
+      "from": 701,
+      "to": 720,
+      "stale": false
+    },
+    {
+      "from": 697,
+      "to": 721,
+      "stale": false
+    },
+    {
+      "from": 684,
+      "to": 722,
+      "stale": false
+    },
+    {
+      "from": 690,
+      "to": 723,
+      "stale": false
+    },
+    {
+      "from": 693,
+      "to": 724,
+      "stale": false
+    },
+    {
+      "from": 691,
+      "to": 725,
+      "stale": false
+    },
+    {
+      "from": 686,
+      "to": 726,
+      "stale": false
+    },
+    {
+      "from": 683,
+      "to": 727,
+      "stale": false
+    },
+    {
+      "from": 692,
+      "to": 728,
+      "stale": false
+    },
+    {
+      "from": 572,
+      "to": 729,
+      "stale": false
+    },
+    {
+      "from": 725,
+      "to": 730,
+      "stale": false
+    },
+    {
+      "from": 712,
+      "to": 731,
+      "stale": false
+    },
+    {
+      "from": 739,
+      "to": 732,
+      "stale": false
+    },
+    {
+      "from": 709,
+      "to": 733,
+      "stale": false
+    },
+    {
+      "from": 709,
+      "to": 734,
+      "stale": false
+    },
+    {
+      "from": 724,
+      "to": 735,
+      "stale": false
+    },
+    {
+      "from": 728,
+      "to": 736,
+      "stale": false
+    },
+    {
+      "from": 711,
+      "to": 738,
+      "stale": false
+    },
+    {
+      "from": 714,
+      "to": 739,
+      "stale": false
+    },
+    {
+      "from": 716,
+      "to": 740,
+      "stale": false
+    },
+    {
+      "from": 719,
+      "to": 741,
+      "stale": false
+    },
+    {
+      "from": 703,
+      "to": 742,
+      "stale": false
+    },
+    {
+      "from": 709,
+      "to": 743,
+      "stale": false
+    },
+    {
+      "from": 729,
+      "to": 744,
+      "stale": false
+    },
+    {
+      "from": 714,
+      "to": 745,
+      "stale": false
+    },
+    {
+      "from": 699,
+      "to": 746,
+      "stale": false
+    },
+    {
+      "from": 731,
+      "to": 747,
+      "stale": false
+    },
+    {
+      "from": 721,
+      "to": 748,
+      "stale": false
+    },
+    {
+      "from": 740,
+      "to": 749,
+      "stale": false
+    },
+    {
+      "from": 736,
+      "to": 750,
+      "stale": false
+    },
+    {
+      "from": 742,
+      "to": 751,
+      "stale": false
+    },
+    {
+      "from": 742,
+      "to": 752,
+      "stale": false
+    },
+    {
+      "from": 743,
+      "to": 753,
+      "stale": false
+    },
+    {
+      "from": 725,
+      "to": 754,
+      "stale": false
+    },
+    {
+      "from": 739,
+      "to": 755,
+      "stale": false
+    },
+    {
+      "from": 743,
+      "to": 756,
+      "stale": false
+    },
+    {
+      "from": 741,
+      "to": 757,
+      "stale": false
+    },
+    {
+      "from": 744,
+      "to": 758,
+      "stale": false
+    },
+    {
+      "from": 750,
+      "to": 759,
+      "stale": false
+    },
+    {
+      "from": 748,
+      "to": 760,
+      "stale": false
+    }
+  ],
+  "observation_notes": "Sources may change at any time. #722 #726 #727 were refreshed after initial evidence; zero CI assumed UNKNOWN."
+}

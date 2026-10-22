@@ -1,0 +1,116 @@
+{
+  "nodes": [
+    {
+      "pr": 726,
+      "head_sha": "e6e79226c51fc17d1df801e5013d79887db9a45d",
+      "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "base_ref": "qa/23-effective-owner669-negative-20261021",
+      "ci": {
+        "run_id": 39677945795,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "e6e79226c51fc17d1df801e5013d79887db9a45d"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_702_700_CROSS_QA_20261021.md",
+        "src/diagnostics/core-effective-native-cas-ui-gate.ts",
+        "test/core-effective-native-cas-ui-gate.test.ts",
+        "test/qa/core-effective-ui-worker23.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "head_sha": "e6e79226c51fc17d1df801e5013d79887db9a45d"
+      }
+    },
+    {
+      "pr": 727,
+      "head_sha": "c0fb307fe9198dff1a85b5f375524a5b6107fe7a",
+      "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "base_ref": "test/02-broker-native-truth-negative-20261021",
+      "ci": {
+        "run_id": 39677239175,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "c0fb307fe9198dff1a85b5f375524a5b6107fe7a"
+      },
+      "files": [
+        ".github/workflows/qa-02-dpapi-isolated.yml",
+        "docs/QA_02_683_DPAPI_HOSTED_ISOLATION_20261021.md",
+        "docs/QA_02_ELEVATED_OUTCOME_RECONCILIATION_20261022.md",
+        "src/protocol/elevated-outcome-error-contract.ts",
+        "test/qa-02-683-dpapi-timeout-negative.test.ts",
+        "test/qa-02-elevated-outcome-error-contract.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "head_sha": "c0fb307fe9198dff1a85b5f375524a5b6107fe7a"
+      }
+    },
+    {
+      "pr": 728,
+      "head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "base_ref": "test/09-private-child-receipt-emergency-stop-20261021",
+      "ci": {
+        "run_id": 39659941037,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_RUNTIME_OWNER_FAILCLOSE_20261021.md",
+        "src/agent/private-desktop-runtime-owner-gate.ts",
+        "src/agent/windows-private-desktop.ts",
+        "test/private-desktop-runtime-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+        "base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+        "head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60"
+      }
+    },
+    {
+      "pr": 729,
+      "head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+      "base_ref": "test/qa16-final-acceptance-refresh-20261018",
+      "ci": {
+        "run_id": 39662119627,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR677_702_20261021.md",
+        "docs/qa/PR_SOURCE_AND_RELEASE_GATES.json",
+        "docs/qa/QA_20261021_PR677_702_EXACT_CI.json",
+        "docs/qa/QA_BLOCKING_FINDINGS_CURRENT_MAIN.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-635-649-exact-head-evidence.test.ts",
+        "test/qa-666-676-exact-head-evidence.test.ts",
+        "test/qa-677-702-exact-head-evidence.test.ts",
+        "test/qa-core-master-evidence.test.ts",
+        "test/qa-current-release-blockers.test.ts",
+        "test/qa-pr-intake-negative.test.ts",
+        "test/qa-release-evidence-617.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+        "base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+        "head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9"
+      }
+    }
+  ]
+}

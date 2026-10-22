@@ -1,0 +1,219 @@
+{
+  "census_count": 111,
+  "part": 6,
+  "ids": [
+    640,
+    641,
+    642,
+    643,
+    644,
+    645,
+    646,
+    647
+  ],
+  "nodes": [
+    {
+      "pr": 640,
+      "head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+      "head_ref": "test/21-artifact-cancel-read-gates-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39626203944,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73"
+      },
+      "files": [
+        "test/artifact-588-cancel-read-race.qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 641,
+      "head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+      "head_ref": "test/22-crosshub-fencing-20261021",
+      "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+      "base_ref": "feat/08-mutation-fence-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39626185867,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 642,
+      "head_sha": "87644090113d21544f42a738d919d5422ed200c0",
+      "head_ref": "qa/23-core-effective-ui-status-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39630395647,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "87644090113d21544f42a738d919d5422ed200c0"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_STATUS_UI_QA_20261021.md",
+        "src/diagnostics/core-effective-ui-status.ts",
+        "test/core-effective-ui-status.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "87644090113d21544f42a738d919d5422ed200c0",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 643,
+      "head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+      "head_ref": "test/25-owner-revoke-mid-exec-20261021",
+      "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+      "base_ref": "feat/03-core-executor-gates-617",
+      "draft": true,
+      "ci": {
+        "run_id": 39626754232,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49"
+      },
+      "files": [
+        "docs/CORE_OWNER_REVOKE_MID_EXECUTION_QA_20261021.md",
+        "test/core-owner-revoke-mid-execution.adversarial.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 644,
+      "head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+      "head_ref": "test/28-broker-crash-rollback-independent-qa-20261021",
+      "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+      "base_ref": "feat/12-core-bootstrap-delegation-20261021",
+      "draft": true,
+      "ci": {
+        "run_id": 39627727657,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f"
+      },
+      "files": [
+        "docs/s3-worker28-crash-rollback-independent-qa-20261021.md",
+        "test/fixtures/s3-worker28-runner.test.ts",
+        "test/s3-broker-crash-rollback-independent-qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 645,
+      "head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+      "head_ref": "test/qa27-uac-remote-approval-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39626967547,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4"
+      },
+      "files": [
+        "docs/QA_UAC_REMOTE_APPROVAL_MATRIX_20261021.md",
+        "test/fixtures/uac-remote-approval-matrix.ts",
+        "test/qa-uac-remote-approval-capability.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 646,
+      "head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+      "head_ref": "test/24-integration-dag-provenance-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39627296601,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975"
+      },
+      "files": [
+        "docs/qa/INTEGRATION_DAG_CORE_CRITICAL_PATH_20261021.md",
+        "docs/qa/p0-integration-dag-20261021.json",
+        "scripts/qa24-integration-dag.ts",
+        "test/qa-24-integration-dag.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 647,
+      "head_sha": "3b3f26d068f169b941383308a1763124e3a3feef",
+      "head_ref": "qa/w26-native-handle-provenance-20261021",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "draft": true,
+      "ci": {
+        "run_id": 39627227248,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "3b3f26d068f169b941383308a1763124e3a3feef"
+      },
+      "files": [
+        "docs/security/p0-native-handle-provenance-w26.md",
+        "test/p0-native-handle-provenance-w26.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "3b3f26d068f169b941383308a1763124e3a3feef",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      }
+    }
+  ]
+}

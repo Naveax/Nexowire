@@ -1,0 +1,137 @@
+{
+  "nodes": [
+    {
+      "pr": 711,
+      "head_sha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "head_ref": "test/parallel-15-s5-598-full-source-ci-20261021",
+      "base_sha": "58ebfbf608e91d6163169f8fbd9d0ebf6418adf0",
+      "base_ref": "test/parallel-15-s5-cancel-ack-fairness-20261021"
+    },
+    {
+      "pr": 712,
+      "head_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "head_ref": "fix/01-broker-dispatch-nonce-epoch-20261021",
+      "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+      "base_ref": "fix/01-broker-dispatch-external-fence-20261021"
+    },
+    {
+      "pr": 713,
+      "head_sha": "688732dd7c90c2883c3255d825b0dfa74a124807",
+      "head_ref": "test/28-import-dag-durable-journal-adversarial-20261021",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021"
+    },
+    {
+      "pr": 714,
+      "head_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "head_ref": "fix/12-atomic-switch-repair-20261021",
+      "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+      "base_ref": "fix/12-import-dag-repair-bootstrap-20261021"
+    },
+    {
+      "pr": 715,
+      "head_sha": "550b10c07df648e1b0991770ec7c78fb2984d026",
+      "head_ref": "feat/parallel-10-immutable-pid-filetime-cas-qa-20261021",
+      "base_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+      "base_ref": "feat/parallel-10-broker-preflight-20261021"
+    },
+    {
+      "pr": 716,
+      "head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "head_ref": "test/25-crash-ack-root-readback-20261021",
+      "base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "base_ref": "test/25-signed-postcondition-root-boundary-20261021"
+    },
+    {
+      "pr": 717,
+      "head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97",
+      "head_ref": "test/qa-19-protected-import-witness-20261021",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021"
+    },
+    {
+      "pr": 718,
+      "head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9",
+      "head_ref": "test/parallel-14-predispatch-unknown-20261021",
+      "base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "base_ref": "test/parallel-14-crosshub-revoke-readback-20261021"
+    },
+    {
+      "pr": 719,
+      "head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "head_ref": "feat/04-active-job-auth-fence-20261021",
+      "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "base_ref": "feat/04-core-effective-authority-20261021"
+    },
+    {
+      "pr": 720,
+      "head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594",
+      "head_ref": "test/13-wss-pairing-replace-replay-20261021",
+      "base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "base_ref": "test/13-wss-keyrotate-owner-revoke-20261021"
+    },
+    {
+      "pr": 721,
+      "head_sha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "head_ref": "security/07-oauth-issuer-fence-browser-revoke-20261021",
+      "base_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+      "base_ref": "test/07-oauth-hostile-state-rotation-20261021"
+    },
+    {
+      "pr": 722,
+      "head_sha": "43c5a23d48a00d4e0504f08628dfdce749c35067",
+      "head_ref": "test/qa27-local-broker-external-core-matrix-20261021",
+      "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+      "base_ref": "test/qa27-windows-approval-native-witness-20261021"
+    },
+    {
+      "pr": 723,
+      "head_sha": "7dc98916538c4f957dad5660ff6d328a2f932d3e",
+      "head_ref": "qa/w26-p690-import-dag-20261021",
+      "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+      "base_ref": "test/p05-native-relative-acl-20261021"
+    },
+    {
+      "pr": 724,
+      "head_sha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "head_ref": "qa/worker30-stalled-gzip-quiet-isolation-20261021",
+      "base_sha": "8b08ede8db29fd9a95abb762b238601def07082d",
+      "base_ref": "qa/worker30-gzip95-tenant-memory-20261021"
+    },
+    {
+      "pr": 725,
+      "head_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "head_ref": "fix/08-forged-receipt-late-cancel-20261021",
+      "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "base_ref": "fix/08-predispatch-cancel-fence-20261021"
+    },
+    {
+      "pr": 726,
+      "head_sha": "2c0b7a99401ed7432bbf6f31fd2da59bab97e091",
+      "head_ref": "qa/23-ui-native-cas-reconnect-20261021",
+      "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "base_ref": "qa/23-effective-owner669-negative-20261021"
+    },
+    {
+      "pr": 727,
+      "head_sha": "47900da1479b80570543bf4971cdfa789bd56ac5",
+      "head_ref": "test/02-dpapi-683-failclosed-isolation-20261021",
+      "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+      "base_ref": "test/02-broker-native-truth-negative-20261021"
+    },
+    {
+      "pr": 728,
+      "head_sha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "head_ref": "fix/09-private-runtime-owner-failclosed-20261021",
+      "base_sha": "e8d44653fdb4175565a24facd17381fca18ed514",
+      "base_ref": "test/09-private-child-receipt-emergency-stop-20261021"
+    },
+    {
+      "pr": 729,
+      "head_sha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "head_ref": "test/qa16-pr677-702-exact-ci-20261021",
+      "base_sha": "19fe2c752e2d5978b586004a111ad1351a4b14fb",
+      "base_ref": "test/qa16-final-acceptance-refresh-20261018"
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "nodes": [
+    {
+      "pr": 730,
+      "head_sha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4",
+      "head_ref": "test/21-unchanged-qa640-651-677-on-725-20261022",
+      "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "base_ref": "fix/08-forged-receipt-late-cancel-20261021",
+      "ci": {
+        "run_id": 39676785591,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4"
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+        "test/artifact-588-cancel-read-race.qa.test.ts",
+        "test/qa21-artifact-unknown-reopen-idempotency.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "head_sha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4",
+        "merge_base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 731,
+      "head_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+      "head_ref": "qa/18-crosshub-pending-permit-after-revoke-20261022",
+      "base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "base_ref": "fix/01-broker-dispatch-nonce-epoch-20261021",
+      "ci": {
+        "run_id": 39676999169,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "df239ce88f4b98ba97f29e48495fee86049f8856"
+      },
+      "files": [
+        "test/qa-18-crosshub-late-permit-revoke-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+        "head_sha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+        "merge_base_sha": "62800af17d2a9ce18670dba6a8ac861a5d7f4ba5",
+        "status": "diverged"
+      }
+    },
+    {
+      "pr": 732,
+      "head_sha": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+      "head_ref": "test/20-deep-dll-rollback-epoch-qa-20261022",
+      "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "base_ref": "fix/12-native-acl-dispatch-permit-source-20261022",
+      "ci": {
+        "run_id": 39735234697,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "9014449ef9f3513064d0cd42cb016e53a705fc6c"
+      },
+      "files": [
+        "docs/s3-worker20-deep-dll-repair-acceptance-20261022.md",
+        "test/s3-worker20-transitive-leaf-rollback-epoch-qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "head_sha": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+        "merge_base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 733,
+      "head_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+      "head_ref": "test/10-broker-filetime-on-709-20261022",
+      "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "base_ref": "fix/03-protected-tree-hosted-path-binding-20261021",
+      "ci": {
+        "run_id": 39677163113,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0f7c6af824c282764cdb594d0fba474686683062"
+      },
+      "files": [
+        "docs/CORE_BROKER_FILETIME_CAS_QA_20261021.md",
+        "docs/CORE_NATIVE_PROVIDER_AVAILABILITY_20261022.md",
+        "src/diagnostics/core-broker-filetime-cas-evidence.ts",
+        "src/diagnostics/core-native-provider-availability.ts",
+        "test/core-broker-filetime-cas-evidence.test.ts",
+        "test/core-native-provider-availability.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "head_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+        "merge_base_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "status": "ahead"
+      }
+    }
+  ]
+}
