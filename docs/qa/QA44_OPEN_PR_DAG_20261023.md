@@ -25,7 +25,7 @@ Output fields are invariant: gate=NO_GO, production_merge_authorized=false, safe
 
 `node --test --import tsx test/qa-44-open-pr-integration.test.ts`
 
-Seven local deterministic cases passed with a 205-open-PR mock: two-pass pagination, torn count/HEAD, incomplete changed-file pages, stale SHA, red ancestor, independent-file collisions, concurrent workflow and rerun, Actions drift, divergent base and empty merge queue. Mock fixture results are source-only, not live integration proof.
+Eight local deterministic cases passed with a 205-open-PR mock: two-pass pagination, torn count/HEAD, incomplete changed-file pages, stale SHA, red ancestor, independent-file collisions, concurrent workflow and rerun, Actions drift, divergent base and empty merge queue. Mock fixture results are source-only, not live integration proof.
 
 ## Point-in-time live observations
 
