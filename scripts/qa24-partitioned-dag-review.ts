@@ -54,7 +54,7 @@ export function evaluatePartitionedDag(graph:Graph,census:Census) {
     if(n.compare?.head_sha!==n.head_sha||n.compare?.base_sha!==n.base_sha||
        n.compare?.merge_base_sha!==n.base_sha||n.compare?.status!=='ahead')
       add('INVALID_MERGE_BASE',[n.pr],'Exact SHA compare missing, stale or not ahead');
-    if(n.ci.queried_head_sha!==n.head_sha||!Number.isSafeInteger(n.ci.run_id)||
+    if(n.ci.queried_head_sha!==n.head_sha||(typeof n.ci.run_id!=='number'||!Number.isSafeInteger(n.ci.run_id))||
        (n.ci.run_id??0)<=0)
       add('UNVERIFIED_EXACT_HEAD_CI',[n.pr],'CI run missing or for an old SHA');
     else if(n.ci.status!=='completed'||n.ci.conclusion!=='success')
@@ -121,4 +121,10 @@ export function loadPinnedGraph():{graph:Graph;census:Census} {
   const graph=read('../docs/qa/p0-open-dag-160-source-20261022.json') as Graph;
   const census=read('../docs/qa/fixtures/qa24-open-census-current-20261022.json') as Census;
   return {graph,census};
+}
+
+if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]) {
+  const {graph,census}=loadPinnedGraph();
+  process.stdout.write(JSON.stringify(evaluatePartitionedDag(graph,census),null,2)+'\n');
+  process.exitCode=2; // Intentionally no merge authority even if snapshot passes.
 }
