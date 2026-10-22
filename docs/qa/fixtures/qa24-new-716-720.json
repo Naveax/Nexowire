@@ -1,0 +1,124 @@
+{
+  "nodes": [
+    {
+      "pr": 716,
+      "head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+      "base_ref": "test/25-signed-postcondition-root-boundary-20261021",
+      "ci": {
+        "run_id": 39659320381,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723"
+      },
+      "files": [
+        "docs/CORE_CRASH_ACK_ROOT_READBACK_NEGATIVE_QA_20261021.md",
+        "test/core-broker-crash-ack-readback-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+        "base_sha": "4bc4ccdbb1ab69e39f25ee6577b1dcc018a3b72e",
+        "head_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723"
+      }
+    },
+    {
+      "pr": 717,
+      "head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97",
+      "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+      "base_ref": "fix/03-protected-broker-tree-and-pid-gate-20261021",
+      "ci": {
+        "run_id": 39659333082,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-importer-acl-forensic.yml",
+        "docs/qa/QA19_PROTECTED_IMPORTER_ACL_FORENSIC_20261021.md",
+        "test/qa-19-protected-tree-forensic.test.ts",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "head_sha": "81f705faf24c55bf1af38a9b7a0b0bb101a84e97"
+      }
+    },
+    {
+      "pr": 718,
+      "head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9",
+      "base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+      "base_ref": "test/parallel-14-crosshub-revoke-readback-20261021",
+      "ci": {
+        "run_id": 39734543164,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9"
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_691_682_CROSSTEST_20261021.md",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+        "base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+        "head_sha": "2dbb6dfb41699f4ecc1ec3852cdd0462fc0308e9"
+      }
+    },
+    {
+      "pr": 719,
+      "head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+      "base_ref": "feat/04-core-effective-authority-20261021",
+      "ci": {
+        "run_id": 39659394811,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52"
+      },
+      "files": [
+        "docs/NEXOWIRE_ACCESS_QUEUE_CAS_READBACK_NEGATIVES_20261021.md",
+        "src/product/access-queued-job-review.ts",
+        "test/access-queued-job-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "base_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "head_sha": "597191102dabc22e22c7f9822a026bbd12d60c52"
+      }
+    },
+    {
+      "pr": 720,
+      "head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594",
+      "base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+      "base_ref": "test/13-wss-keyrotate-owner-revoke-20261021",
+      "ci": {
+        "run_id": 39659414593,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594"
+      },
+      "files": [
+        "docs/SCALE_V2_S2_WSS_DEVICE_REPLACE_REVOKE_RECONNECT_QA_20261021.md",
+        "test/fixtures/scale-v2-owner-wss-pairing-revision-guard-dev.sql",
+        "test/owner-public-wss-cross-device-pairing-rotation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "status": "ahead",
+        "merge_base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+        "base_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+        "head_sha": "f79b3cce45b9334598ea7acb39873d1231dc1594"
+      }
+    }
+  ]
+}
