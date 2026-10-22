@@ -24,7 +24,21 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f"
-      }
+      },
+      "files": [
+        "docs/qa/LIVE_DAG_DRIFT_GATES_CORE_20261021.md",
+        "docs/qa/p0-integration-dag-open50-20261021.json",
+        "docs/qa/p0-integration-dag-open67-20261021.json",
+        "scripts/qa24-live-dag.ts",
+        "test/qa-24-live-dag.test.ts"
+      ],
+      "compare": {
+        "base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "head_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "merge_base_sha": "65b96fa17b7050685e24dd6a0851da0d80131975",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 665,
@@ -38,7 +52,22 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138"
-      }
+      },
+      "files": [
+        "docs/CORE_BROKER_NATIVE_UNAVAILABLE_20261021.md",
+        "docs/CORE_BROKER_SOURCE_PREFLIGHT_20261021.md",
+        "src/diagnostics/core-broker-native-unavailable.ts",
+        "src/diagnostics/core-broker-readonly-preflight.ts",
+        "test/core-broker-native-unavailable.test.ts",
+        "test/core-broker-readonly-preflight.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "54d5451d38aa3bb008640f9913bdabbd44980138",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 666,
@@ -52,7 +81,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9"
-      }
+      },
+      "files": [
+        "docs/CONNECTION_06_WORKER_JOURNAL_634_REVIEW_20261021.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "head_sha": "748dc6e4e7611b0cbee0d98d5bf7bb728ddd9dc9",
+        "merge_base_sha": "b3e3b7bcd6e73a52c0974fe792898d59c2c269cd",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 667,
@@ -66,7 +107,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458"
-      }
+      },
+      "files": [
+        "docs/ARTIFACT_CANCEL_NATIVE_RACE_20261021.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 668,
@@ -80,7 +133,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "72a4f923d92c1830afa8947852d1557194540b5a"
-      }
+      },
+      "files": [
+        "docs/SCALE_V2_QUOTA_TRUSTED_FENCED_DELETION_20261021.md",
+        "src/ops/scale-v2-artifact-fenced-cleanup-admission.ts",
+        "test/scale-v2-artifact-fenced-cleanup-admission.test.ts"
+      ],
+      "compare": {
+        "base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "head_sha": "72a4f923d92c1830afa8947852d1557194540b5a",
+        "merge_base_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 669,
@@ -94,7 +159,22 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8"
-      }
+      },
+      "files": [
+        "docs/NEXOWIRE_CORE_EFFECTIVE_ACCESS_INTEGRATION_20261021.md",
+        "src/product/access-effective-authority.ts",
+        "src/product/control-plane-contract.ts",
+        "src/product/control-plane-service.ts",
+        "test/access-effective-authority.test.ts",
+        "test/access-effective-dashboard.test.ts"
+      ],
+      "compare": {
+        "base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "head_sha": "99894af2c224d80ce4edeb71c1e98701f6c22ab8",
+        "merge_base_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 670,
@@ -108,7 +188,22 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d"
-      }
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/P0_WINDOWS_BROKER_PROVIDER_ATTESTATION_20261021.md",
+        "scripts/audit-windows-broker-token-provider.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "test/windows-broker-provider-attestation.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts"
+      ],
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 671,
@@ -122,7 +217,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "1e9425c970219834d6488add77d53c1cdade750d"
-      }
+      },
+      "files": [
+        "docs/SCALE_V2_S2_WSS_RECEIPT_REPLAY_ROTATION_20261021.md",
+        "src/product/owner-public-wss-enrollment-lease-proposal.ts",
+        "test/fixtures/scale-v2-owner-wss-device-enrollment-dev.sql",
+        "test/owner-public-wss-enrollment-lease-staging.test.ts",
+        "test/owner-public-wss-receipt-replay-rotation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
     }
   ]
 }
