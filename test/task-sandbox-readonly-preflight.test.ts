@@ -219,3 +219,77 @@ test('unsupported Linux/macOS Windows privilege capabilities never inherit Windo
     neverEffective(r);
   }
 });
+
+
+/**
+ * #786 independent owner QA finds that workspace.snapshot can discover a Git
+ * root outside the allowed task directory. Do NOT duplicate the real Git
+ * worktree fixture here: this is the #10 read-only public/inventory boundary.
+ * "Accessible" is not "confined", Job is not a sandbox, free disk is not
+ * reserved capacity, and an untrusted remote claim is not enrollment.
+ */
+test('accessible workspace and Windows Job with unreserved disk and claimed remote worker never imply sandbox availability', async () => {
+  const base = fixture();
+  const report = await inspect({
+    request: {
+      ...base.request,
+      // Existing executor capability is intentionally NOT integrated into the
+      // #10 approved capability set. Unsupported inputs must fail closed.
+      capability: 'workspace.snapshot' as ReadonlyTaskPreflightInput['request']['capability'],
+      remoteWorkerRequested: true,
+    },
+    root: {
+      ...base.root!,
+      taskSpecificRoot: verified,
+      canonicalRootIdentity: verified,
+      rootRelativePolicy: verified,
+      reparseAndAncestorBoundary: verified,
+      pathFilterOnly: true,
+    },
+    process: {
+      ...base.process!,
+      kind: 'windows-job',
+      osBoundaryVerified: verified,
+      descendantsContained: verified,
+      filesystemIsolated: 'unavailable',
+      networkIsolated: 'unavailable',
+      environmentSecretsIsolated: 'unavailable',
+      gitHooksConstrained: 'unavailable',
+    },
+    disk: {
+      ...base.disk!,
+      freeBytes: 4_000_000,
+      atomicBudgetReservation: 'unavailable',
+    },
+    remote: {
+      workerIdentityEnrolled: verified,
+      ownerDeviceSessionAuthenticated: verified,
+      capabilityScoped: verified,
+      workerOnlineReadback: verified,
+      independentRevocationAndCas: verified,
+      quotaOrBudgetReserved: verified,
+      remoteEndpointAuthenticated: verified,
+    },
+  });
+
+  assert.equal(report.status, 'BLOCKED');
+  assert.equal(report.requestedCapability, 'workspace.snapshot');
+  assert.equal(report.taskRoot, 'REPORTED_UNATTESTED');
+  assert.equal(report.filesystemContainment, 'NOT_PROVEN');
+  assert.equal(report.diskBudget, 'REPORTED_UNATTESTED');
+  assert.equal(report.diskReservation, 'NOT_PROVEN');
+  assert.equal(report.processIsolation, 'NOT_PROVEN');
+  assert.equal(report.remoteWorkerEligibility, 'NOT_PROVEN');
+  assert.equal(report.dispatchAllowed, false);
+  assert.equal(report.effectiveCore, false);
+  for (const reason of [
+    'TASK_REQUEST_INVALID',
+    'PLATFORM_CAPABILITY_NOT_VERIFIED',
+    'PATH_FILTER_NOT_PROCESS_ISOLATION',
+    'WINDOWS_JOB_NOT_FULL_SANDBOX',
+    'DISK_RESERVATION_NOT_VERIFIED',
+    'PROCESS_ISOLATION_NOT_VERIFIED',
+  ] as const) {
+    assert.ok(report.reasons.includes(reason), reason);
+  }
+});
