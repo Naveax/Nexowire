@@ -102,6 +102,7 @@ type Hooks = {
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
   afterPublish?: (job: Readonly<TransferJob>, receipt: FencedFinalReceipt) => Promise<void>;
   beforeFinalVerify?: (job: Readonly<TransferJob>, receipt: FencedFinalReceipt) => Promise<void>;
+  beforeExternalCommit?: (job: Readonly<TransferJob>, receipt: FencedFinalReceipt) => Promise<void>;
 };
 type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage' |
   'lost-publish-ack' | 'forged-second-request-id';
@@ -123,6 +124,8 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {},
   const nativeKey = randomBytes(32);
   const publishedReceipts: SyntheticPublishedReceipt[] = [];
   const finalReceipts: FencedFinalReceipt[] = [];
+  const nativeCommitLedger = new Map<string, string>();
+  let externalCommitCalls = 0;
   const macFor = (claims: Omit<SyntheticPublishedReceipt, 'mac'>) =>
     createHmac('sha256', nativeKey).update(JSON.stringify(claims)).digest('hex');
   const verifyReceipt = (receipt: SyntheticPublishedReceipt) => {
@@ -227,12 +230,49 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {},
       }
     },
   };
+  if (strictFinalReceipt) {
+    // Synthetic rollback-UNSAFE service. The final check+commit section is
+    // synchronous and atomic only WITHIN this test process; no offhost claim.
+    cas.authority.commitPublished = async (job, signedReceipt) => {
+      externalCommitCalls++;
+      await hooks.beforeExternalCommit?.(job, signedReceipt);
+      // Native identity and owner grant are rechecked together at the
+      // *commit* linearization point; earlier prechecks are insufficient.
+      grants.check(job);
+      if (!job.fencing) throw new TransferTrustError('NATIVE_STALE_EPOCH',
+        'Missing current Native epoch.');
+      cas.native(job, signedReceipt.epoch, job.fencing.token);
+      const { proof, ...claims } = signedReceipt;
+      if (!/^[0-9a-f]{64}$/.test(proof) ||
+          !timingSafeEqual(Buffer.from(proof, 'hex'),
+            Buffer.from(finalSigner(claims), 'hex')) ||
+          job.id !== signedReceipt.jobId ||
+          job.accountId !== signedReceipt.accountId ||
+          job.projectId !== signedReceipt.projectId ||
+          job.targetDeviceId !== signedReceipt.targetDeviceId ||
+          job.targetPath !== signedReceipt.targetPath ||
+          job.sha256 !== signedReceipt.sha256 ||
+          job.bytesTotal !== signedReceipt.bytesTotal ||
+          nativeCommitLedger.has(job.id)) {
+        throw new TransferTrustError('EXTERNAL_PUBLICATION_COMMIT_INVALID',
+          'Duplicate, foreign or unauthenticated final Native receipt.');
+      }
+      const durableCommitId = 'SYNTHETIC-COMMIT-NOT-OFFHOST-' +
+        signedReceipt.requestId;
+      nativeCommitLedger.set(job.id, durableCommitId);
+      return { jobId: job.id, requestId: signedReceipt.requestId,
+        epoch: signedReceipt.epoch, sha256: signedReceipt.sha256,
+        durableCommitId };
+    };
+  }
   const hub = (root: string) => new CrossDeviceTransferJobs(root, remote,
     { requireExternalAuthority: true, authority: cas.authority, grants: grants.adapter,
       ...(strictFinalReceipt ? {
         requireAuthenticatedFinalReceipt: true as const, finalReceiptVerifier: finalVerifier,
       } : {}) });
   return { cas, grants, hub, writes, verifyReceipt,
+    get externalCommitCalls() { return externalCommitCalls; },
+    get externalCommits() { return nativeCommitLedger.size; },
     get finalReceipts() { return finalReceipts.map(r => ({ ...r })); },
     get publishedReceipts() { return publishedReceipts.map(r => ({ ...r })); },
     get target() { return target; }, get publications() { return publications; } };
@@ -1200,5 +1240,74 @@ test('#22/#754 P0: revoked CORE after last final-receipt fence must not allow st
     } finally {
       releaseFinalCommit.open();
       await ownerHub.waitForIdle(job.id);
+    }
+  }));
+
+/**
+ * #22 / #768 independent negative: signed final receipt is already
+ * verified; an old Hub waits at external commit admission. The other Hub
+ * observes revoke-start before that authority serializes commit. The mock
+ * must refuse, preserving original typed UNKNOWN + publication intent.
+ * The synthetic ledger is NOT a real rollback-resistant offhost witness.
+ */
+test('#22/#768: two Hub revoke-start before external final commit denies stale signed ACK and replay', async () =>
+  temp(async root => {
+    const atCommit = gate(), releaseCommit = gate();
+    const fx = mock('normal', {
+      beforeExternalCommit: async () => {
+        atCommit.open();
+        await releaseCommit.promise;
+      },
+    }, true);
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const original = await hubA.start(input);
+    try {
+      await expectGate(atCommit.promise, 'synthetic final external CAS reservation');
+      const before = await stored(root, original.id);
+      assert.equal(before.state, 'PUBLISHING');
+      assert.equal(before.bytesConfirmed, bytes.length);
+      assert.equal(before.pending, undefined);
+      assert.equal(before.publication?.dispatched, true);
+      const immutableIntent = structuredClone(before.publication);
+      assert.ok(immutableIntent?.requestId);
+      assert.equal(fx.finalReceipts.length, 1);
+      assert.equal(fx.finalReceipts[0]!.requestId, immutableIntent.requestId);
+      assert.equal(fx.finalReceipts[0]!.sha256, immutableIntent.sha256);
+      assert.equal(fx.finalReceipts[0]!.epoch, immutableIntent.epoch);
+      assert.equal(fx.publications, 1);
+      assert.equal(fx.externalCommitCalls, 1);
+      assert.equal(fx.externalCommits, 0);
+      assert.deepEqual(fx.target, bytes);
+      // Another Hub initiates owner revoke: the final external commit has
+      // NOT linearized. A prior valid signed ACK is not dispatch authority.
+      fx.grants.enabled = false;
+      fx.cas.expireAll();
+      releaseCommit.open();
+      await hubA.waitForIdle(original.id);
+      const after = await stored(root, original.id);
+      assert.equal(after.state, 'MUTATION_UNKNOWN');
+      assert.equal(after.errorCode, 'CORE_OWNER_REVOKED');
+      assert.deepEqual(after.publication, immutableIntent,
+        'durable original requestId/epoch/SHA must not be reset');
+      assert.equal(after.publication?.durableCommitId, undefined);
+      assert.equal(after.bytesConfirmed, bytes.length);
+      assert.equal(fx.externalCommits, 0);
+      assert.equal(fx.publications, 1, 'Native possibly committed, never republish');
+      assert.equal(fx.finalReceipts.length, 1);
+      await assert.rejects(hubB.status(original.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+      await assert.rejects(hubB.start({ ...input, resumeTransferId: original.id }),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+      const reloaded = await stored(root, original.id);
+      assert.equal(reloaded.state, 'MUTATION_UNKNOWN');
+      assert.equal(reloaded.errorCode, 'CORE_OWNER_REVOKED');
+      assert.deepEqual(reloaded.publication, immutableIntent);
+      assert.equal(fx.externalCommitCalls, 1, 'no duplicate external commit');
+      assert.equal(fx.writes.filter(w => w.id === original.id).length, 3);
+      assert.equal(fx.publications, 1);
+    } finally {
+      releaseCommit.open();
+      await hubA.waitForIdle(original.id);
     }
   }));
