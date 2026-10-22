@@ -92,3 +92,19 @@ Expected independent test registrations after prior 12-case extension:
 9 owner-#669 negatives plus 12 native/CAS UI-gate tests = **21**.
 An exact-HEAD hosted Node22/24 result for the wrapper is required before
 claiming the 21 tests PASS. No unrelated workflow or owner source is changed.
+
+## Exact-HEAD CI failure and QA-only syntax repair
+
+Exact `e6e79226c51fc17d1df801e5013d79887db9a45d` workflow
+`39677945795` completed **FAILURE**. Actual hosted Windows/Linux/macOS
+`npm run typecheck` failed on
+`test/qa/core-effective-ui-worker23.test.ts` line 3 because its old
+block comment contained a `*/` terminator within a printed test glob.
+This was a **real source error**, not an inherited Windows Job or
+evidence that the 21 tests ran. No failed tests were skipped.
+
+The discovery entrypoint was rewritten using plain `//` comments.
+Its two import statements and all independent #23 assertions are
+unchanged. A new exact-SHA CI must pass typecheck **and** show the
+test names / count from both suites in actual Node job logs before
+source QA PASS is reported. Production still **NO-GO**.
