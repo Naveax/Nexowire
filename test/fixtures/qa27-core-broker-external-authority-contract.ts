@@ -35,6 +35,9 @@ export interface ProtectedBrokerEvidence {
   readonly transitiveImportsIndependentlyEnumerated: boolean;
   /** #743: native effective low-priv AccessCheck, not DACL ACE enumeration. */
   readonly nativeLowPrivilegeEffectiveAccessCheckCompleted: boolean;
+  /** #756: test-caller TEMP CreateFile is NOT a separate restricted-token
+   * effective AccessCheck against the installed Broker and full import tree. */
+  readonly separateLowPrivilegeTokenAndInstalledTreeAccessCheckVerified: boolean;
   readonly signedReleaseAndRollbackManifest: boolean;
   readonly importedPublishersAndHashesVerified: boolean;
   readonly processPidCreationFiletimeMatches: boolean;
@@ -76,6 +79,15 @@ export interface RemoteDispatchEvidence {
   readonly claimedCapabilityPreapproved: boolean;
   readonly claimExpired: boolean;
   readonly remoteRevokeGenerationCurrent: boolean;
+  /** #747: a signed status readback or process-local gate cannot commit
+   * the native effect atomically against another Hub's revoke-start. */
+  readonly finalNativeDispatchAuthority:
+    'synthetic-external-atomic-commit' | 'signed-status-readback' |
+    'process-local-flag' | 'unavailable';
+  /** Synthetic event order at the exact external native-effect commit. */
+  readonly revokeCommitOrder:
+    'no-revoke' | 'revoke-start-before-commit' |
+    'commit-before-revoke' | 'unknown';
   readonly claimLostAck: boolean;
   readonly possibleNativeWriteStarted: boolean;
 }
@@ -86,6 +98,7 @@ export type MatrixReason =
   | 'ENROLLMENT_IDENTITY_MISMATCH'
   | 'ENROLLMENT_SIGNER_IMAGE_MISMATCH'
   | 'BROKER_EXE_IMPORT_UPDATER_TRUST_INCOMPLETE'
+  | 'BROKER_SEPARATE_LOW_PRIVILEGE_ACCESS_UNVERIFIED'
   | 'BROKER_PROCESS_IDENTITY_UNVERIFIED'
   | 'BROKER_EFFECTIVE_HIGH_TOKEN_UNVERIFIED'
   | 'PHYSICAL_BROKER_NOT_ATTESTED'
@@ -93,6 +106,9 @@ export type MatrixReason =
   | 'CAPABILITY_OR_BROKER_VERSION_DENIED'
   | 'EXTERNAL_AUTHORITY_UNAVAILABLE'
   | 'EXTERNAL_CLAIM_SCOPE_OR_SIGNATURE_INVALID'
+  | 'EXTERNAL_ATOMIC_NATIVE_COMMIT_UNVERIFIED'
+  | 'REVOKE_START_PRECEDES_ATOMIC_COMMIT'
+  | 'COMMIT_ORDER_OR_EFFECT_UNKNOWN_NO_REPLAY'
   | 'DISPATCH_ALREADY_POSSIBLE_UNKNOWN'
   | 'SOURCE_CONTRACT_ONLY';
 export interface CrossBranchOutcome {
@@ -147,6 +163,8 @@ export function classifySourceOnlyCrossBranchCase(c: CrossBranchCase): CrossBran
     !b.signedReleaseAndRollbackManifest ||
     !b.importedPublishersAndHashesVerified)
     return outcome('BLOCKED','BROKER_EXE_IMPORT_UPDATER_TRUST_INCOMPLETE');
+  if (!b.separateLowPrivilegeTokenAndInstalledTreeAccessCheckVerified)
+    return outcome('BLOCKED','BROKER_SEPARATE_LOW_PRIVILEGE_ACCESS_UNVERIFIED');
   if (!b.processPidCreationFiletimeMatches ||
     !b.volumeSerialAndFileIdMatches || !b.runningImageHandleHashMatches ||
     !b.noLowPrivProcessDupHandle)
@@ -178,6 +196,19 @@ export function classifySourceOnlyCrossBranchCase(c: CrossBranchCase): CrossBran
     !r.remoteRevokeGenerationCurrent)
     return outcome('BLOCKED','EXTERNAL_CLAIM_SCOPE_OR_SIGNATURE_INVALID');
 
+  // A pre-revoke Ed25519 permit and fresh nonce are not permission to
+  // dispatch AFTER a different Hub begins revokeAndDrain. Status-only
+  // signed readback is TOCTOU; native-effect commit needs one external
+  // linearizable authority serializing against revoke-start. This is
+  // a TEST-ONLY interface; no real authority is installed here.
+  if (r.finalNativeDispatchAuthority!=='synthetic-external-atomic-commit')
+    return outcome('BLOCKED','EXTERNAL_ATOMIC_NATIVE_COMMIT_UNVERIFIED');
+  if (r.revokeCommitOrder==='revoke-start-before-commit')
+    return outcome('BLOCKED','REVOKE_START_PRECEDES_ATOMIC_COMMIT');
+  if (r.revokeCommitOrder==='commit-before-revoke' ||
+      r.revokeCommitOrder==='unknown')
+    return outcome('UNKNOWN','COMMIT_ORDER_OR_EFFECT_UNKNOWN_NO_REPLAY');
+
   // This branch has no actual OS/remote verifier and never sends dispatch.
   return outcome('CONTRACT_CANDIDATE','SOURCE_CONTRACT_ONLY');
 }
@@ -196,6 +227,7 @@ export const syntheticCrossBranchCase: CrossBranchCase={
     everyImportAndUpdaterAncestorAclVerified:true,independentImportEnumeration:true,
     transitiveImportsIndependentlyEnumerated:true,
     nativeLowPrivilegeEffectiveAccessCheckCompleted:true,
+    separateLowPrivilegeTokenAndInstalledTreeAccessCheckVerified:true,
     signedReleaseAndRollbackManifest:true,importedPublishersAndHashesVerified:true,
     processPidCreationFiletimeMatches:true,volumeSerialAndFileIdMatches:true,
     runningImageHandleHashMatches:true,noLowPrivProcessDupHandle:true,
@@ -216,7 +248,9 @@ export const syntheticCrossBranchCase: CrossBranchCase={
     claimRequestId:'req27',claimFingerprint:'c'.repeat(64),
     claimChallengeNonce:'a'.repeat(64),
     claimedCapabilityPreapproved:true,claimExpired:false,
-    remoteRevokeGenerationCurrent:true,claimLostAck:false,
+    remoteRevokeGenerationCurrent:true,
+    finalNativeDispatchAuthority:'synthetic-external-atomic-commit',
+    revokeCommitOrder:'no-revoke',claimLostAck:false,
     possibleNativeWriteStarted:false,
   },
 };
