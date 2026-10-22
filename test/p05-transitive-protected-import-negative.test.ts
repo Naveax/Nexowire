@@ -12,6 +12,7 @@ import {
 } from '../src/agent/windows-native-protected-import-closure.js';
 import {
   syntheticProtectedBoundary,syntheticSource,syntheticDestination,
+  syntheticNativeHandle,syntheticEffectiveAcl,
 } from './p05-native-boundary-fixtures.js';
 
 const err=(code:string)=>(error:unknown)=>
@@ -204,6 +205,69 @@ test('caller-selected #709 read-only audit booleans cannot substitute for authen
     Object.assign(graph(f),{callerProvidedApproval:true});
     byKey(graph(f),'updater').open.digestAfterReadbackSha256='';
   },'IMPORT_POST_READBACK_SIGNER_OR_BYTES_CHANGED');
+});
+
+test('nested transitive DLL requires both parent handles, per-level ACL and post-read identity',()=>{
+  const nested=(f:VerifiedFilesystemBoundary)=>{
+    const node=byKey(graph(f),'module');
+    const root='C:\\Program Files\\Nexowire\\modules';
+    const vendor=syntheticNativeHandle(root+'\\vendor','vendor-directory');
+    const runtime=syntheticNativeHandle(root+'\\vendor\\runtime','runtime-directory');
+    const full=root+'\\vendor\\runtime\\core.dll';
+    pin(graph(f),'module').path=full;
+    node.parentRelativeChain.steps=[
+      {parentFileId:node.parentRelativeChain.grantRoot.fileId,leaf:'vendor',child:vendor},
+      {parentFileId:vendor.fileId,leaf:'runtime',child:runtime},
+    ];
+    node.parentRelativeChain.destinationLeaf='core.dll';
+    node.intermediateDirectoryAcls=[
+      syntheticEffectiveAcl(vendor.fileId),
+      syntheticEffectiveAcl(runtime.fileId),
+    ];
+    node.handle.openedPath=full;
+    node.handle.finalPath=full;
+    node.open.parentFileId=runtime.fileId;
+  };
+  const valid=syntheticProtectedBoundary();
+  nested(valid);
+  assert.doesNotThrow(()=>check(valid));
+  const failure=(tamper:(f:VerifiedFilesystemBoundary)=>void,code:string)=>{
+    const f=syntheticProtectedBoundary();
+    nested(f);
+    tamper(f);
+    assert.throws(()=>check(f),err(code));
+  };
+  const dll=(f:VerifiedFilesystemBoundary)=>byKey(graph(f),'module');
+  failure(f=>{dll(f).parentRelativeChain.steps[0]!.child.reparseTag=0xA0000003;},
+    'NATIVE_RELATIVE_HANDLE_CHANGED');
+  failure(f=>{dll(f).parentRelativeChain.steps[1]!.child.alternateStream=true;},
+    'NATIVE_RELATIVE_HANDLE_CHANGED');
+  failure(f=>{dll(f).parentRelativeChain.steps[1]!.child.reparseTag=0xA000000C;},
+    'NATIVE_RELATIVE_HANDLE_CHANGED');
+  failure(f=>{dll(f).parentRelativeChain.steps[1]!.child.volumeGuid='foreign-volume';},
+    'NATIVE_RELATIVE_CROSS_VOLUME');
+  failure(f=>{dll(f).parentRelativeChain.steps[1]!.parentFileId='stale-vendor-handle';},
+    'NATIVE_RELATIVE_PARENT_ID_MISMATCH');
+  failure(f=>{dll(f).parentRelativeChain.steps[0]!.child.observedAfter.fileId='renamed-vendor';},
+    'NATIVE_RELATIVE_HANDLE_CHANGED');
+  failure(f=>{dll(f).intermediateDirectoryAcls[0]!.aces=[
+    ...dll(f).intermediateDirectoryAcls[0]!.aces,
+    {sid:'S-1-5-11',type:'allow',accessMask:0x40,inheritOnly:true},
+  ];},'NATIVE_EFFECTIVE_UNTRUSTED_WRITE');
+  failure(f=>{dll(f).intermediateDirectoryAcls[1]!.observedFileId='replaced-runtime';},
+    'NATIVE_EFFECTIVE_ACL_UNVERIFIED');
+  failure(f=>{dll(f).intermediateDirectoryAcls[1]!.provider='unavailable';},
+    'NATIVE_EFFECTIVE_ACL_UNVERIFIED');
+  failure(f=>{dll(f).handle.alternateStream=true;},
+    'IMPORT_FILE_HANDLE_UNVERIFIED');
+  failure(f=>{dll(f).handle.linkCount=2;},
+    'IMPORT_FILE_HANDLE_UNVERIFIED');
+  failure(f=>{dll(f).handle.observedAfter.fileId='replaced-on-disk';},
+    'IMPORT_FILE_HANDLE_UNVERIFIED');
+  failure(f=>{dll(f).open.afterReadback.fileId='post-hash-replaced';},
+    'IMPORT_OPEN_BY_HANDLE_OR_POST_READBACK_UNVERIFIED');
+  failure(f=>{pin(graph(f),'module').path+=':malicious';},
+    'IMPORT_UNSAFE_PATH');
 });
 
 test('hardlink aliases with distinct manifest keys cannot silently reuse same native file identity',()=>{
