@@ -9,6 +9,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync, sign, verify, type KeyObject} from 'node:crypto';
+import {promises as fs} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {AuditLog, type AuditWrite} from '../src/audit/log.js';
 import {
   hash, verifySig, redactAudit, verifyElevatedReceipt, eventDigest, sealBody,
   GENESIS, SEAL_GENESIS, type Signed, type ProcessCreation, type Postcondition,
@@ -605,4 +609,68 @@ test('forged final publication issuer or stale ownerEpoch/grantGeneration cannot
  assert.equal(noNativeEffects,0);
  assert.doesNotMatch(JSON.stringify(good),/token|password|rawPayload|secret/i);
  assert.equal(good.status,'MUTATION_UNKNOWN');
+});
+
+/**
+ * P1 #780 pre-integration NEGATIVE REPRO against the ACTUAL existing
+ * src/audit/log.ts writer/query, NOT a product dashboard that doesn't exist.
+ * A PASS proves current unsigned JSONL can be forged/queried and that
+ * runtime-untyped extra fields leak; it does NOT prove safe storage or trust.
+ * No user data, machine service, Agent, Broker, elevation or VM is accessed.
+ */
+test('real audit JSONL admits synthetic forged success/re-pair-stale row and untyped secret field: dashboard must treat as untrusted',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'nx-qa29-audit-boundary-'));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const file=path.join(root,'audit.jsonl');
+ const x=fixture(),requestId=x.expected.requestId,capability='shell.exec';
+ const log=new AuditLog(file);
+ await log.write({operationId:requestId,status:'unknown',capability,
+  targetId:x.expected.deviceId,errorCode:'MUTATION_STATE_UNKNOWN'});
+ // Simulated appended/rolled-back JSONL entry. This is NOT a signed issuer
+ // and no honest observer should classify it as verified execution.
+ const stale={
+  id:uuid('21'),operationId:requestId,
+  at:'2026-10-22T16:40:00.000Z',status:'succeeded',
+  capability,targetId:x.expected.deviceId,providerId:'fake-native-provider',
+  ownerId:x.expected.ownerId,ownerEpoch:x.expected.ownerEpoch,
+  grantGeneration:x.expected.generation,
+  worktreeId:'synthetic-worktree-1',requestHash:x.expected.fingerprint,
+  durationMs:4,provenance:'claim-only-no-external-signature',
+ };
+ await fs.appendFile(file,JSON.stringify(stale)+'\n','utf8');
+ const result=await new AuditLog(file).query({operationId:requestId,limit:3});
+ assert.equal(result.events.length,2);
+ assert.equal(result.events[0]?.status,'succeeded',
+  'CURRENT SOURCE REPRO: unsigned appended success is returned by audit_query');
+ assert.equal(result.events[1]?.status,'unknown',
+  'the originally UNKNOWN side effect is not disproven by the forged row');
+ const currentSigner=gen(),current=signLocal(currentSigner.privateKey,{
+  kind:'qa29.owner-current.v1',ownerId:x.expected.ownerId,
+  deviceId:x.expected.deviceId,ownerEpoch:x.expected.ownerEpoch+1,
+  grantGeneration:x.expected.generation+1,revoked:false,
+ });
+ assert.equal(verifySig(currentSigner.publicKey,current.payload,current.signature),true);
+ const candidate=result.events[0] as unknown as Record<string,unknown>;
+ assert.notEqual(candidate.ownerEpoch,current.payload.ownerEpoch,
+  'the forged row records a pre-re-pair owner epoch');
+ assert.notEqual(candidate.grantGeneration,current.payload.grantGeneration,
+  'the forged row is from an old grant generation');
+ assert.equal(candidate.issuerSignature,undefined,
+  'existing audit store does not attach authenticated immutable provenance');
+ // A forged success is a query result, never a verified postcondition.
+ const trustVerdict={status:'MUTATION_UNKNOWN' as const,retrySafe:false as const,
+  denialSource:'UNSIGNED_AUDIT_ROW_REPAIR_STALE'};
+ assert.equal(trustVerdict.status,'MUTATION_UNKNOWN');
+ assert.equal(trustVerdict.retrySafe,false);
+ // The runtime API is callable from JS without TS validation. The spread of
+ // ...input currently persists unknown keys: reproduce with FAKE secrets only.
+ const marker='QA29_FAKE_SECRET_DO_NOT_USE';
+ await log.write({operationId:requestId,status:'started',capability,
+  targetId:x.expected.deviceId,
+  rawCommandBody:'echo '+marker,authorization:'Bearer '+marker,
+ } as unknown as AuditWrite);
+ const raw=await fs.readFile(file,'utf8');
+ assert.match(raw,/QA29_FAKE_SECRET_DO_NOT_USE/,
+  'CURRENT SOURCE REPRO: untyped extra keys are not allowlisted at persistence');
+ assert.equal(trustVerdict.denialSource,'UNSIGNED_AUDIT_ROW_REPAIR_STALE');
 });
