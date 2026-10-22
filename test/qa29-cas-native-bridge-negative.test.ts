@@ -494,7 +494,6 @@ test('TEMP DUP_HANDLE ALLOW + co-restorable receipt root + late revoke after Acc
  * #761 already covers native commit-vs-revoke ordering; never simulate it here.
  */
 test('forged final publication issuer or stale ownerEpoch/grantGeneration cannot elevate a #768-shaped commit to COMPLETED',()=>{
- const owner=x=>x; // No owner operation or mutable external state is invoked.
  const native=gen(),external=gen(),highwaterIssuer=gen(),attacker=gen();
  const x=fixture();
  const binding={
@@ -605,5 +604,5 @@ test('forged final publication issuer or stale ownerEpoch/grantGeneration cannot
  const noNativeEffects=0;
  assert.equal(noNativeEffects,0);
  assert.doesNotMatch(JSON.stringify(good),/token|password|rawPayload|secret/i);
- assert.equal(owner(good.status),'MUTATION_UNKNOWN');
+ assert.equal(good.status,'MUTATION_UNKNOWN');
 });
