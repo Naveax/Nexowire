@@ -105,7 +105,7 @@ type Hooks = {
   beforeExternalCommit?: (job: Readonly<TransferJob>, receipt: FencedFinalReceipt) => Promise<void>;
 };
 type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage' |
-  'lost-publish-ack' | 'forged-second-request-id';
+  'lost-publish-ack' | 'forged-second-request-id' | 'forged-final-request-id';
 
 /** Synthetic key-bound receipt. NOT a deployed Agent signer or a production proof. */
 type SyntheticPublishedReceipt = {
@@ -218,7 +218,10 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {},
       if (strictFinalReceipt) {
         assert.ok(requestId, 'the durable publication requestId is passed to Native');
         const signedClaims: Omit<FencedFinalReceipt, 'proof'> = {
-          requestId, jobId: job.id, accountId: job.accountId,
+          requestId: mode === 'forged-final-request-id'
+            ? requestId.replace(/^./, requestId[0] === 'a' ? 'b' : 'a')
+            : requestId,
+          jobId: job.id, accountId: job.accountId,
           projectId: job.projectId, targetDeviceId: job.targetDeviceId,
           targetPath: job.targetPath, bytesTotal: job.bytesTotal,
           sha256: digest(stage), epoch,
@@ -1327,5 +1330,107 @@ test('#22/#768: two Hub revoke-start before external final commit denies stale s
     } finally {
       releaseCommit.open();
       await hubA.waitForIdle(original.id);
+    }
+  }));
+
+/**
+ * #22/#777 vs #776: a final Native receipt can be correctly HMAC-signed
+ * under the configured synthetic issuer yet bind a FOREIGN publication
+ * requestId. Native already made one final side effect; Hub A is paused
+ * before its reply, while Hub B tries to resume the PUBLISHING request.
+ * Fail-closed UNKNOWN must survive after the forged ACK returns and after
+ * Hub B cancel/resume/re-pair. No duplication of #776's forged chunk ACK,
+ * foreign issuer signature, or #764's Broker reserve/commit.
+ *
+ * Synthetic signer/CAS are NOT physical protected offhost proof.
+ */
+test('#22/#777: signed foreign final requestId + concurrent Hub-B resume preserves UNKNOWN and original intent', async () =>
+  temp(async root => {
+    const sentSignedAck = gate(), deliverAck = gate();
+    let stageReads = 0, finalVerifierCalls = 0;
+    const fx = mock('forged-final-request-id', {
+      beforeRead: async device => {
+        if (device === input.targetDeviceId) stageReads++;
+      },
+      beforeFinalVerify: async () => { finalVerifierCalls++; },
+      afterPublish: async () => {
+        sentSignedAck.open();
+        await deliverAck.promise;
+      },
+    }, true);
+    const a = fx.hub(root), b = fx.hub(root);
+    const initial = await a.start(input);
+    try {
+      await expectGate(sentSignedAck.promise, 'one Native effect with wrong signed final requestId');
+      const pending = await stored(root, initial.id);
+      assert.equal(pending.state, 'PUBLISHING');
+      assert.equal(pending.bytesConfirmed, bytes.length);
+      assert.equal(pending.pending, undefined);
+      assert.equal(pending.publication?.dispatched, true);
+      assert.equal(pending.publication?.sha256, digest(bytes));
+      assert.equal(pending.publication?.epoch, pending.fencing?.epoch);
+      const immutable = structuredClone(pending.publication);
+      assert.ok(immutable?.requestId);
+      assert.equal(fx.publications, 1);
+      assert.equal(fx.finalReceipts.length, 1);
+      assert.notEqual(fx.finalReceipts[0]!.requestId, immutable.requestId,
+        'valid synthetic MAC signs a FOREIGN requestId, not the journaled intent');
+      assert.equal(fx.finalReceipts[0]!.sha256, immutable.sha256);
+      assert.equal(fx.finalReceipts[0]!.epoch, immutable.epoch);
+      assert.equal(fx.finalReceipts[0]!.jobId, initial.id);
+      assert.deepEqual(fx.target, bytes);
+      const readsAtAck = stageReads;
+      const writesAtAck = fx.writes.length;
+      // #777 must refuse rescue/requeue before adopting the stale worker,
+      // even though the final Native ACK is currently still in flight.
+      await assert.rejects(b.start({ ...input, resumeTransferId: initial.id }),
+      (e: unknown) => e instanceof Error && 'code' in e &&
+        e.code === 'TRANSFER_PUBLICATION_UNRESOLVED');
+      assert.equal((await stored(root, initial.id)).state, 'PUBLISHING');
+      assert.deepEqual((await stored(root, initial.id)).publication, immutable);
+      assert.equal(stageReads, readsAtAck);
+      assert.equal(fx.writes.length, writesAtAck);
+      deliverAck.open();
+      await a.waitForIdle(initial.id);
+      const unknown = await stored(root, initial.id);
+      assert.equal(unknown.state, 'MUTATION_UNKNOWN');
+      assert.equal(unknown.errorCode, 'FINAL_RECEIPT_MISMATCH');
+      assert.equal(unknown.bytesConfirmed, bytes.length);
+      assert.equal(unknown.pending, undefined);
+      assert.deepEqual(unknown.publication, immutable);
+      assert.equal(unknown.publication?.durableCommitId, undefined);
+      assert.equal(fx.externalCommitCalls, 0,
+        'foreign publication identity rejected BEFORE even invoking CAS');
+      assert.equal(fx.externalCommits, 0);
+      assert.equal(finalVerifierCalls, 0,
+        'wrong requestId must be rejected before verifying a signed-but-foreign claim');
+      assert.equal(fx.publications, 1);
+      // A second Hub may observe/cancel the UNKNOWN but never turn it into
+      // CANCELLED, requeue it, replace its requestId, or credit final proof.
+      const cancelled = await b.cancel(initial.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId);
+      assert.equal(cancelled.state, 'MUTATION_UNKNOWN');
+      await assert.rejects(b.start({ ...input, resumeTransferId: initial.id }),
+      (e: unknown) => e instanceof Error && 'code' in e &&
+        e.code === 'TRANSFER_PUBLICATION_UNRESOLVED');
+      const preserved = await stored(root, initial.id);
+      assert.equal(preserved.errorCode, 'FINAL_RECEIPT_MISMATCH');
+      assert.deepEqual(preserved.publication, immutable);
+      fx.grants.rePair();
+      await assert.rejects(b.start({ ...input, resumeTransferId: initial.id }),
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+      const afterPair = await stored(root, initial.id);
+      assert.equal(afterPair.state, 'MUTATION_UNKNOWN');
+      assert.equal(afterPair.errorCode, 'FINAL_RECEIPT_MISMATCH');
+      assert.deepEqual(afterPair.publication, immutable);
+      assert.equal(stageReads, readsAtAck);
+      assert.equal(fx.writes.length, writesAtAck);
+      assert.equal(fx.publications, 1);
+      assert.equal(fx.externalCommitCalls, 0);
+      assert.equal(fx.externalCommits, 0);
+    } finally {
+      deliverAck.open();
+      await a.waitForIdle(initial.id);
     }
   }));
