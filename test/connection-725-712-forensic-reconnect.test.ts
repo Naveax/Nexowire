@@ -255,3 +255,98 @@ test('ROOT session epoch replacement during readback rejects a new signed permit
   assert.equal(f.worker.errorCode,'FORGED_WRITE_RECEIPT');
   assert.equal(f.checkpoint.offset,0);
 });
+
+
+test('orphaned Native UNKNOWN is never a healthy prefix when BOTH pending envelopes disappear',async()=>{
+  const f=fixture();
+  const requestId=f.worker.pending!.requestId;
+  // Simulate damaged/legacy worker and Connection records after a crash.
+  // The durable forensic status, not equal offsets, controls safety.
+  f.worker.pending=undefined;
+  f.checkpoint.pending=undefined;
+  f.checkpoint.status='unknown';
+  const out=await run(f);
+  assert.equal(out.state,'mutation_unknown');
+  assert.equal(out.automaticallyReplayable,false);
+  assert.equal(out.checkpointAdvanced,false);
+  assert.equal(out.mutationExecuted,false);
+  assert.equal(f.worker.errorCode,'FORGED_WRITE_RECEIPT');
+  assert.equal(f.worker.bytesConfirmed,0);
+  assert.equal(f.checkpoint.offset,0);
+  assert.ok(requestId);
+});
+
+test('orphan status matrix: FAILURE/RECOVERY/PUBLISHING never look dispatchable',async()=>{
+  for(const state of ['MUTATION_UNKNOWN','RECOVERY_REQUIRED','FAILED','PUBLISHING',
+    'CANCELLED','CANCEL_REQUESTED','QUEUED'] as const){
+    const f=fixture();
+    f.worker.state=state;
+    f.worker.pending=undefined;
+    f.checkpoint.pending=undefined;
+    f.checkpoint.status='ready';
+    const out=await run(f);
+    const expected=state==='PUBLISHING' ? 'unverified_completion':
+      (state==='CANCELLED'||state==='CANCEL_REQUESTED')?'cancel_pending':
+      state==='QUEUED'?'prefix_consistent':'mutation_unknown';
+    assert.equal(out.state,expected,state);
+    assert.equal(out.automaticallyReplayable,false);
+    assert.equal(out.mutationExecuted,false);
+    assert.equal(out.checkpointAdvanced,false);
+    assert.equal(out.externalSideEffectProven,false);
+  }
+});
+
+test('SQLite WAL orphan UNKNOWN survives two authenticated reconnect epochs without replay',async t=>{
+  const folder=await fs.mkdtemp(path.join(os.tmpdir(),'nw-06-orphan-742-'));
+  t.after(async()=>fs.rm(folder,{recursive:true,force:true}));
+  const original=fixture();
+  original.worker.pending=undefined;
+  original.checkpoint.pending=undefined;
+  original.checkpoint.status='unknown';
+  const database=path.join(folder,'persisted.sqlite');
+  let db=new DatabaseSync(database);
+  db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE journal(k TEXT PRIMARY KEY,v TEXT NOT NULL)');
+  db.prepare('INSERT INTO journal VALUES (?,?)').run('worker',JSON.stringify(original.worker));
+  db.prepare('INSERT INTO journal VALUES (?,?)').run('connection',JSON.stringify(original.checkpoint));
+  db.close();
+  db=new DatabaseSync(database);
+  const get=(k:string)=>JSON.parse((db.prepare('SELECT v FROM journal WHERE k=?').get(k) as {v:string}).v);
+  const restored={...original,
+    worker:get('worker') as FencedWorkerJournalSnapshot,
+    checkpoint:get('connection') as TransferCheckpoint};
+  db.close();
+  let sessionEpoch=5;
+  let ownerEpoch=original.owner.ownerEpoch;
+  let readbacks=0;
+  const overrides:Partial<Input>={
+    sessionWitness:{currentEpoch:async()=>sessionEpoch},
+    ownerEpochWitness:{assertFresh:async c=>c.ownerEpoch===ownerEpoch &&
+      c.grantGeneration===original.owner.grantGeneration &&
+      c.sessionEpoch===original.owner.sessionEpoch},
+    stageReadback:{inspect:async(w,p)=>{
+      readbacks++;
+      return {kind:'verified' as const,deviceId:w.targetDeviceId,
+        offset:p.offset,length:p.length,sha256:p.sha256};
+    }},
+  };
+  for(const next of [5,6,7]){
+    sessionEpoch=next;
+    // Synthetic authorized re-pair: represents separately accepted CAS;
+    // this read-only module does not change the persisted records itself.
+    if(next!==5){
+      assert.equal((await run(restored,overrides)).state,'epoch_stale');
+      restored.route.epoch=next;
+      restored.checkpoint.epoch=next;
+    }
+    const proof=await run(restored,overrides);
+    assert.equal(proof.state,'mutation_unknown');
+    assert.equal(proof.automaticallyReplayable,false);
+    assert.equal(proof.checkpointAdvanced,false);
+    assert.equal(restored.checkpoint.offset,0);
+    assert.equal(restored.worker.bytesConfirmed,0);
+  }
+  ownerEpoch++;
+  assert.equal((await run(restored,overrides)).state,'authority_blocked');
+  assert.equal(readbacks,0,'orphan cannot reach readback, let alone replay');
+  assert.equal(restored.worker.errorCode,'FORGED_WRITE_RECEIPT');
+});
