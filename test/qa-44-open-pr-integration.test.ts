@@ -103,3 +103,23 @@ test('QA44 divergent merge base and stale main are independent blockers',async()
 test('QA44 duplicated changed filename is rejected, not silently deduplicated',async()=>{
  await assert.rejects(collectOpenPrIntegration(fixture({duplicateFile:true}).api,'Naveax/Nexowire',[2]),/DUPLICATE_CHANGED_FILENAME_2/);
 });
+
+test('QA44 critical parent automatically includes unlabeled test-only descendant even with stale base SHA',async()=>{
+ const f=fixture();
+ // The descendant is an open branch based on an older #718-like parent head.
+ f.old[1]!.b=SHA(88);
+ const result=await collectOpenPrIntegration(f.api,'Naveax/Nexowire',[1]);
+ assert.deepEqual(result.critical_ids,[1,2]);
+ assert.ok(result.blockers.some(x=>x.pr===2&&x.related_pr===1&&x.reason==='STALE_PARENT_SHA'));
+ assert.ok(result.evidence.some(x=>x.ref.pr===2));
+ assert.ok(!result.evidence.some(x=>x.ref.pr===3));
+ assert.deepEqual(result.safe_merge_queue,[]);
+});
+
+test('QA44 red critical parent holds otherwise green test-only descendant',async()=>{
+ const f=fixture();f.old[0]!.ci='failure';
+ const r=await collectOpenPrIntegration(f.api,'Naveax/Nexowire',[1]);
+ assert.ok(r.evidence.some(x=>x.ref.pr===2&&x.ci.some(y=>y.conclusion==='success')));
+ assert.ok(r.blockers.some(x=>x.pr===2&&x.related_pr===1&&x.reason==='RED_OR_UNKNOWN_ANCESTOR'));
+ assert.equal(r.production_merge_authorized,false);
+});
