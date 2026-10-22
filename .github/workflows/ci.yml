@@ -59,6 +59,8 @@ jobs:
       - run: node --test --import tsx test/browser-live.test.ts
       - name: Verify additional private GUI, COM, WMI and UAC broker preflight
         run: node --test --import tsx test/private-desktop-additional-brokers.test.ts
+      - name: Verify CDP micro-scenario source bounds and missing task authority
+        run: node --test --import tsx test/browser-micro-scenario-contract.test.ts
       - name: Verify AI Screen native owner witness before private picker grants
         run: node --test --import tsx test/private-picker-native-owner-failclosed.test.ts
       - name: Verify AI Screen actual runtime launch and emergency stop fail closed
