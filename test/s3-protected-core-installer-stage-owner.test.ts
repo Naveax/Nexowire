@@ -601,6 +601,7 @@ const dispatchFields=['schemaVersion','kind','ownerAccountId','deviceId',
  'processCreationIdentity','externalSequence'];
 function nativeFenceFixture(){
  const f=setup(),b=bootstrap(f),atomic=atomicFixture(f,b),d=dagFixture(f);
+ const prior=oldWitness(f,b);
  const sourcePaths=[...f.manifest.files.map(x=>x.path),b.ownerKey.blobPath];
  const items=new Set<string>();
  for(let p of sourcePaths){
@@ -659,13 +660,13 @@ function nativeFenceFixture(){
   independentlyAuthenticated:true,singleUseReserved:true,
   revoked:false,unknownMutation:false,
  };
- return{f,b,d,atomic,acl,pins,permit,witness,resign:()=>{
+ return{f,b,d,prior,atomic,acl,pins,permit,witness,resign:()=>{
   witness.signatureBase64=signature();
  }};
 }
 function fence(v:ReturnType<typeof nativeFenceFixture>){
  return assessCoreNativeAclAndDispatchSource(
-  v.f.manifest,v.f.pins,v.d.pins,v.b,v.atomic,v.acl,v.pins,v.witness);
+  v.f.manifest,v.f.pins,v.d.pins,v.b,v.atomic,v.prior,v.acl,v.pins,v.witness);
 }
 test('native #709 v2 protected tree plus signed #712 epoch/nonce remain source-only, never privilege',()=>{
  const v=nativeFenceFixture();
@@ -791,4 +792,68 @@ test('signed CORE permit cannot bridge an unresolved atomic cutover or same-hash
   const v=nativeFenceFixture();mutate(v);
   assert.throws(()=>fence(v),/SIGNED_RELEASE_ATOMIC_READBACK_MISMATCH/);
  }
+});
+
+test('native TEMP ACL observations cannot add unsigned imports or omit signed parent closure',()=>{
+ for(const modify of [
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.acl.acceptedInputPaths.push('C:\\ProtectedFixture\\Nexowire\\unsigned-extra.dll');
+    v.acl.inspectedFilesCount++;
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.acl.acceptedInputPaths.push(v.acl.acceptedInputPaths[0]!);
+    v.acl.inspectedFilesCount++;
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.acl.acceptedInputPaths[0]='C:\\ProtectedFixture\\Nexowire\\..\\Nexowire\\runtime\\broker.exe';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.acl.acceptedInputPaths[0]=v.acl.acceptedInputPaths[0]!+':other-stream';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.acl.inspectedFilesCount--;
+  },
+ ]){
+  const v=nativeFenceFixture();modify(v);
+  assert.throws(()=>fence(v),/NATIVE_ACL_V2_UNDECLARED_OR_MISSING_IMPORT/);
+ }
+ for(const extra of [
+  'C:\\ProtectedFixture\\Nexowire\\unsigned-extra.dll',
+  'C:\\ProtectedFixture\\Nexowire\\..\\Nexowire\\runtime',
+ ]){
+  const v=nativeFenceFixture();
+  v.acl.inspectedEntries.push({
+   path:extra,evidenceAvailable:true,
+   broadLowTrustWriteFound:false,reparsePointDetected:false,
+  });
+  assert.throws(()=>fence(v),
+   /NATIVE_ACL_V2_UNDECLARED_INSPECTED_PATH|NATIVE_ACL_V2_INCOMPLETE_OR_UNSAFE/);
+ }
+});
+test('prior offline owner epoch, stopped task and old DPAPI unseal are mandatory at permit handoff',()=>{
+ for(const change of [
+  {previousOwnerEpoch:12},
+  {externalNewOwnerEpoch:11},
+  {previousTaskState:'running'},
+  {previousTaskReadbackVerified:false},
+  {previousOwnerRevoked:false},
+  {previousDpapiKeyUnusable:false},
+  {externalRevokeCommitted:false},
+  {externalReadbackVerified:false},
+  {pendingUnknownMutation:true},
+  {priorRollbackSignatureVerified:false},
+  {previousSignedJournalVerified:false},
+  {previousBrokerVersion:'1.0.3'},
+  {deviceId:'wrong-device'},
+  {previousTransactionId:txn},
+ ]){
+  const v=nativeFenceFixture();
+  Object.assign(v.prior,change);
+  assert.throws(()=>fence(v),
+    /S3_CORE_DELEGATION_OFFLINE_REPAIR_PRIOR_EPOCH_OR_KEY_UNTRUSTED/);
+ }
+ const v=nativeFenceFixture();
+ v.prior.previousDpapiBlobSha256=v.b.ownerKey.blobSha256;
+ assert.throws(()=>fence(v),
+   /S3_CORE_DELEGATION_OFFLINE_REPAIR_PRIOR_EPOCH_OR_KEY_UNTRUSTED/);
 });

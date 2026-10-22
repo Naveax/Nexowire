@@ -589,12 +589,18 @@ const permitFields=['schemaVersion','kind','ownerAccountId','deviceId',
   'rollbackSha256','dpapiBlobSha256','processCreationIdentity',
   'externalSequence'] as const;
 const aclKey=(s:string)=>path.win32.normalize(s).toLowerCase();
+const strictAclInputPath=(s:unknown):s is string=>
+  typeof s==='string'&&s.length<=4096&&/^[a-z]:\\/i.test(s)&&
+  !s.slice(2).includes(':')&&!/[\u0000-\u001f*?]/.test(s)&&
+  !s.split(/[\\/]/).some(part=>part==='.'||part==='..'||
+    part.endsWith(' ')||part.endsWith('.'));
 export function assessCoreNativeAclAndDispatchSource(
   stage:CoreStageManifest,
   stagePins:CoreStagePins,
   dagPins:CoreImportDagPins,
   bootstrap:CoreBootstrapEvidence,
   atomic:CoreAtomicSwitchEvidence,
+  prior:CoreOfflineRePairWitness,
   acl:CoreNativeAclV2Evidence,
   pins:CoreInstallerDispatchPins,
   witness:CoreInstallerPermitWitness,
@@ -619,11 +625,19 @@ export function assessCoreNativeAclAndDispatchSource(
   // by the separately signed stage, never a different subtree report.
   const trustedRoot=aclKey(stagePins.trustedProtectedRoot).replace(/\\+$/,'');
   const underRoot=(p:string)=>aclKey(p).startsWith(trustedRoot+'\\');
-  if(!/^[a-z]:\\/i.test(trustedRoot)||
-    aclKey(acl?.protectedRoot??'').replace(/\\+$/,'')!==trustedRoot||
-    !stage.files.every(f=>underRoot(f.path))||
+  if(!strictAclInputPath(stagePins.trustedProtectedRoot)||
+    !strictAclInputPath(acl?.protectedRoot)||
+    aclKey(acl.protectedRoot).replace(/\\+$/,'')!==trustedRoot||
+    !stage.files.every(f=>strictAclInputPath(f.path)&&underRoot(f.path))||
+    !strictAclInputPath(bootstrap.ownerKey.blobPath)||
     !underRoot(bootstrap.ownerKey.blobPath)){
     refuse('NATIVE_ACL_V2_SIGNED_ROOT_MISMATCH');
+  }
+  const signedFiles=[...stage.files.map(f=>aclKey(f.path)),
+    aclKey(bootstrap.ownerKey.blobPath)];
+  const signedSet=new Set(signedFiles);
+  if(signedSet.size!==signedFiles.length){
+    refuse('NATIVE_ACL_V2_DUPLICATE_SIGNED_FILE');
   }
   if(!acl||acl.kind!=='windows_core_broker_protected_tree_readonly_v2'||
     acl.requestEnvelopeVersion!==1||
@@ -637,10 +651,12 @@ export function assessCoreNativeAclAndDispatchSource(
     !Array.isArray(acl.inspectedEntries)||
     !Array.isArray(acl.acceptedInputPaths)||
     !Number.isSafeInteger(acl.inspectedFilesCount)||
-    acl.inspectedFilesCount<stage.files.length||
-    !stage.files.every(f=>acl.acceptedInputPaths.some(p=>
-      aclKey(p)===aclKey(f.path)))){
-    refuse('NATIVE_ACL_V2_INCOMPLETE_OR_UNSAFE');
+    acl.inspectedFilesCount!==signedFiles.length||
+    acl.acceptedInputPaths.length!==signedFiles.length||
+    !acl.acceptedInputPaths.every(p=>strictAclInputPath(p)&&
+      signedSet.has(aclKey(p)))||
+    new Set(acl.acceptedInputPaths.map(aclKey)).size!==signedSet.size){
+    refuse('NATIVE_ACL_V2_UNDECLARED_OR_MISSING_IMPORT');
   }
   // Bind the exact signed imported files and *every* Windows ancestor to
   // the native provider's inspected evidence. A path-name-only v1 report
@@ -657,7 +673,7 @@ export function assessCoreNativeAclAndDispatchSource(
   }
   const listed=new Set<string>();
   for(const entry of acl.inspectedEntries){
-    if(!entry||typeof entry.path!=='string'||
+    if(!entry||!strictAclInputPath(entry.path)||
       entry.evidenceAvailable!==true||
       entry.broadLowTrustWriteFound!==false||
       entry.reparsePointDetected!==false){
@@ -665,12 +681,41 @@ export function assessCoreNativeAclAndDispatchSource(
     }
     const key=aclKey(entry.path);
     if(listed.has(key))refuse('NATIVE_ACL_V2_DUPLICATE_PATH');
+    if(!required.has(key))refuse('NATIVE_ACL_V2_UNDECLARED_INSPECTED_PATH');
     listed.add(key);
   }
   if([...required].some(p=>!listed.has(p))||
     !listed.has(aclKey(acl.protectedRoot))||
     !acl.acceptedInputPaths.some(p=>aclKey(p)===aclKey(bootstrap.ownerKey.blobPath))){
     refuse('NATIVE_ACL_V2_MISSING_SIGNED_IMPORT_OR_PARENT');
+  }
+  // #756's genuine TEMP current-token probes and #743's named ACL reads
+  // cannot prove a live installed Broker or independent lowpriv denial.
+  // Bind the already-required offline revocation/re-pair ledger to this
+  // facade; previously callers could supply only a later atomic receipt.
+  const priorRollback=stage.files.find(f=>f.role==='rollback');
+  if(!prior||!priorRollback||
+    prior.provider!=='independent-monotonic-owner-witness'||
+    prior.deviceId!==bootstrap.record.deviceId||
+    !ID.test(prior.previousOwnerAccountId)||
+    !Number.isSafeInteger(prior.previousOwnerEpoch)||
+    prior.previousOwnerEpoch<0||
+    prior.externalNewOwnerEpoch!==bootstrap.record.ownerEpoch||
+    prior.previousOwnerEpoch>=bootstrap.record.ownerEpoch||
+    prior.previousTransactionId===bootstrap.record.transactionId||
+    prior.previousDpapiBlobSha256===bootstrap.ownerKey.blobSha256||
+    prior.previousBrokerSha256!==priorRollback.sha256||
+    prior.previousBrokerVersion!==stage.rollbackBrokerVersion||
+    prior.previousTaskReadbackVerified!==true||
+    !['disabled','deleted'].includes(prior.previousTaskState)||
+    prior.previousDpapiKeyUnusable!==true||
+    prior.previousOwnerRevoked!==true||
+    prior.externalReadbackVerified!==true||
+    prior.externalRevokeCommitted!==true||
+    prior.pendingUnknownMutation!==false||
+    prior.priorRollbackSignatureVerified!==true||
+    prior.previousSignedJournalVerified!==true){
+    refuse('OFFLINE_REPAIR_PRIOR_EPOCH_OR_KEY_UNTRUSTED');
   }
   // #714's atomic readback and #712's permit MUST refer to the same
   // immutable signed stage; same SHA with a different file-ID is NOT enough.

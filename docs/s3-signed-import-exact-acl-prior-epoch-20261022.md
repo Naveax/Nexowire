@@ -1,0 +1,20 @@
+# Nexowire #12 owner: exact signed import inventory and prior epoch on ACL/permit handoff
+2026-10-22 | child of PR #755 | SOURCE-ONLY | PRODUCTION NO-GO
+
+## Cross-reviewed exact evidence
+- Parent #755 HEAD 6316643684755f9b4e227de13323aaac26077e4d, full CI 39736251296 SUCCESS.
+- #753 QA HEAD 72ff16a23881c9dfde52f7bb5190bdf6185457e5, full CI 39735984623 SUCCESS and dedicated strict JSON QA 39735984797 SUCCESS. The dedicated QA deliberately observes #743's real PowerShell JSON v1 type-confusion: version string "1" and boolean true get coerced to numeric 1. That is a #03 producer defect, not a production-safe validation pass. We did not modify #03's Windows PowerShell parser or its QA.
+- #756 QA HEAD d4ed32f72701e5157929cbb9d36bdf0a90fc0d57, CI 39736305461 SUCCESS and native Windows TEMP effective ACL/PID job 39736305459 SUCCESS. It genuinely probes CreateFileW/Win32 access and PID creation FILETIME for caller-owned temporary synthetic fixtures; no installed signed HIGH Broker, no independent lower privilege caller, and same-user DUP_HANDLE reports ALLOW. We did not edit #03's physical importer/provider or run those probes on installed/system paths.
+
+## Only own installer owner gap
+Prior #755 source-only signed CORE v2 permit was bound to release stage hash, independently signed import DAG, previous rollback and current SYSTEM-DPAPI blob, but its native ACL acceptance required merely that all expected paths appear; it allowed extra caller-supplied accepted imports, duplicate accepted files and extra inspected paths. A later controller could mistakenly combine an exact signed release proof with a differently scoped physical TEMP native ACL inspection. These reports cannot authorize execution, but the attestation reconciliation was not fail-closed.
+Now `assessCoreNativeAclAndDispatchSource` requires the native report's accepted input list to be an EXACT set of signed stage files PLUS the protected SYSTEM DPAPI blob. No missing/extra/duplicate accepted files, alternate data streams, traversal aliases or unexpected inspected nodes. The report count must be exact; every required ancestor to the filesystem root must have a native ACL entry, with low-trust Modify and reparse still blocked. This is textual/structural reconciliation only; it is NOT proof of native file-ID or independently enumerated loader graph.
+Also requires the existing independent offline owner re-pair witness in this facade, closing a route that previously supplied an apparently current atomic/nonce receipt without the revoked prior owner epoch, disabled/deleted old task, inaccessible old DPAPI blob, correctly signed old rollback and externally committed durable revoke journal. A new transaction and a strictly newer owner epoch are necessary even for source-only compatibility.
+
+## New narrow tests
+1. Inject an unsigned or duplicated import into the native report, forge report file count, inject an ADS path, path traversal alias or unexpected inspected entry. All must refuse source consistency.
+2. Reuse previous owner epoch, old task RUNNING, old DPAPI key, stale independent CAS epoch/transaction or unsigned rollback witness at the permit handoff. All refuse, including a source record with otherwise correct signed Broker SHA and nonce.
+3. Existing full synthetic positive remains executionApproved:false, productionApproved:false, nativeHighTokenAttested:false, ownerOsConsentPhysicallyConfirmed:false.
+
+## Required physical gates
+#271 legacy elevated `C:\ProgramData\NexowireStack` imported code has inherited Authenticated Users Modify. #743 provider is not an independently signed complete native loader/dependency closure or effective low-privilege AccessCheck. #753 proves real JSON v1 coercion in that other-owner producer; #756 native TEMP observations do not prove a protected signed installed Broker. Physical first-party signed installer/HIGH token, full Agent 1.0.5 rollback, OS-owned one-time UAC, native SYSTEM DPAPI, non-restorable off-host CAS, protected PID/FILETIME/DUP_HANDLE, and VM crash restore are missing. Keep NO-GO/DRAFT. Do not install Broker, run UAC, mutate ACL/Agent/service/DPAPI/VM or deploy #596/#608.
