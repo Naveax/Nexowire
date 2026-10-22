@@ -215,7 +215,8 @@ function fixture(){
   // These flags DO NOT attest an installed protected Windows Broker.
   verifyEffectiveBroker:async()=>({
    verified:true,brokerId:id.brokerId,
-   ownerEpoch:cas.ownerEpoch,grantGeneration:cas.generation,
+   ownerEpoch:request.scope.ownerEpoch,
+   grantGeneration:request.scope.expectedGeneration,
    highIntegrityToken:true,signedProtectedImage:true,
    protectedParentAndImports:true,
   }),
