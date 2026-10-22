@@ -297,16 +297,21 @@ export class StagingArtifactByteBudget {
       // the synchronous SQLite transaction, including both inserts.
       return this.transaction(()=>{
         const prior=this.db.prepare(
-          'SELECT logical_operation_id,mutation_sha256,session_id,root_invocation_id FROM budget_artifact_logical_reservations '+
+          'SELECT logical_operation_id,mutation_sha256,session_id,root_invocation_id,device_id,origin_runbook_id,owner_epoch,grant_generation FROM budget_artifact_logical_reservations '+
           'WHERE owner_id=? AND project_id=? AND '+
           '(logical_operation_id=? OR mutation_sha256=?)'
         ).get(x.ownerId,x.projectId,x.logicalOperationId,
           x.logicalMutationSha256) as
           {logical_operation_id:string;mutation_sha256:string;
-           session_id:string;root_invocation_id:string}|undefined;
+           session_id:string;root_invocation_id:string;device_id:string;
+           origin_runbook_id:string;owner_epoch:number;grant_generation:number}|undefined;
         if(prior){
           // Only the exact same session/root is an idempotent retry.
-          if(prior.logical_operation_id!==x.logicalOperationId||
+          if(prior.device_id!==x.deviceId||
+             prior.origin_runbook_id!==x.originRunbookId||
+             prior.owner_epoch!==x.ownerEpoch||
+             prior.grant_generation!==x.grantGeneration||
+             prior.logical_operation_id!==x.logicalOperationId||
              prior.mutation_sha256!==x.logicalMutationSha256||
              prior.session_id!==x.sessionId||
              prior.root_invocation_id!==x.rootInvocationId)return 'DENIED_REPLAY';

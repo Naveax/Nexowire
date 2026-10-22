@@ -193,3 +193,87 @@ test('#791 separate local ledgers are NOT a global CAS, production requires shar
    assert.equal(b.get('SELECT COUNT(*) AS n FROM budget_artifact_sessions'),1);
  }finally{a.close();b.close()}
 });
+
+test('#806 exact idempotent session cannot use a new origin runbook or changed owner grant after re-pair',async()=>{
+ const f=fixture();try{
+   assert.equal(await f.first.beginForLogicalMutation(logical,oracle()),'RESERVED');
+   for(const changed of [
+     {...logical,originRunbookId:'forged-new-origin-806'},
+     {...logical,ownerEpoch:logical.ownerEpoch+1},
+     {...logical,grantGeneration:logical.grantGeneration+1},
+     {...logical,deviceId:'different-device-806'},
+   ]){
+     assert.equal(await f.second.beginForLogicalMutation(changed,oracle()),
+       'DENIED_REPLAY','immutable stored provenance cannot be replaced on retry');
+   }
+   assert.equal(await f.second.beginForLogicalMutation(logical,oracle()),
+     'ALREADY_RESERVED');
+   assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_sessions'),1);
+   assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_logical_reservations'),1);
+ }finally{f.close()}
+});
+
+test('#806 disconnected strict SQLite ledgers with no shared authority both fail closed BEFORE reservation',async()=>{
+ const a=fixture(),b=fixture();try{
+   for(const [ledger,binding] of [
+     [a.first,logical] as const,
+     [b.second,{...logical,sessionId:'clone-in-new-ledger-806',
+       rootInvocationId:'root-clone-in-new-ledger-806'}] as const,
+   ]){
+     await assert.rejects(
+       ()=>ledger.beginForLogicalMutation(binding),
+       /LOGICAL_ADMISSION_EXTERNAL_CAS_REQUIRED/);
+   }
+   for(const f of [a,b]){
+     assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_sessions'),0);
+     assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_logical_reservations'),0);
+     assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_chunks'),0);
+   }
+ }finally{a.close();b.close()}
+});
+
+test('#806 two disconnected ledgers with fake UNSEEN witness are unsafe but PENDING never refunds without stop+deletion',async()=>{
+ const a=fixture(),b=fixture();try{
+   const clone={...logical,sessionId:'different-remote-session-806',
+     rootInvocationId:'different-remote-root-806'};
+   // This is intentionally not a real off-host CAS: two distinct SQLite
+   // stores each accept the same canonical operation under forged UNSEEN.
+   assert.equal(await a.first.beginForLogicalMutation(logical,oracle()),'RESERVED');
+   assert.equal(await b.second.beginForLogicalMutation(clone,oracle()),'RESERVED');
+   for(const [f,x,request] of [
+     [a,logical,'first-pending-request-806'] as const,
+     [b,clone,'clone-pending-request-806'] as const,
+   ]){
+     assert.equal(f.first.stageChunk({
+       ownerId:x.ownerId,deviceId:x.deviceId,projectId:x.projectId,
+       sessionId:x.sessionId,requestId:request,offsetBytes:0,
+       byteCount:CHUNK,chunkSha256:'c'.repeat(64),now:start,
+     }),'CHUNK_PENDING');
+     assert.equal(f.first.requestCancel({
+       ownerId:x.ownerId,deviceId:x.deviceId,projectId:x.projectId,
+       sessionId:x.sessionId,expectedOffsetBytes:0,
+     }),'CANCEL_PENDING');
+     const forged={
+       ownerId:x.ownerId,deviceId:x.deviceId,projectId:x.projectId,
+       sessionId:x.sessionId,durableDeletionVerified:true as const,
+       writersStoppedVerified:true as const,
+     };
+     // Without ANY independent physical verifier, both claimed proofs fail.
+     assert.throws(()=>f.first.acknowledgeDeletionOnce(forged),
+       /TRUSTED_DELETION_EVIDENCE_REQUIRED/);
+     // Even granting a synthetic deletion check, a separate authoritative
+     // writer-stop is still mandatory before refunding CANCEL_PENDING.
+     const onlyDeletion=new StagingArtifactByteBudget(f.one,policy,{
+       verifyChunk:()=>false,verifyFinal:()=>false,
+       verifyDeletion:()=>true,verifyWriterFence:()=>false,
+     },true);
+     assert.throws(()=>onlyDeletion.acknowledgeDeletionOnce(forged),
+       /TRUSTED_WRITER_FENCE_REQUIRED/);
+     assert.equal(f.get("SELECT COUNT(*) AS n FROM budget_artifact_chunks WHERE state='PENDING'"),1);
+     assert.equal(f.get("SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state='CANCEL_PENDING'"),1);
+     assert.equal(f.get("SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state='RELEASED'"),0);
+     assert.equal(f.get('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions'),CHUNK);
+   }
+   // This is NOT evidence of global admission safety. Only no early release.
+ }finally{a.close();b.close()}
+});
