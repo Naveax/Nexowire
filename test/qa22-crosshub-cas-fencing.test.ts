@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { CrossDeviceTransferJobs, type TransferJob, type TransferRemote }
   from '../src/mcp/cross-device-transfer-jobs.js';
+import { ArtifactBridgeStore, ArtifactBridgeError } from '../src/workspace/artifact-bridge.js';
+import { VerifiedTransferCheckpointAdapter } from '../src/workspace/artifact-job-checkpoint.js';
 import { TransferTrustError, type TrustedTransferAuthority,
   type TrustedTransferCoreGrants, type FencedWriteEnvelope,
   type FencedFinalReceipt, type TrustedFinalReceiptVerifier }
@@ -1434,5 +1436,138 @@ test('#22/#777: signed foreign final requestId + concurrent Hub-B resume preserv
     } finally {
       deliverAck.open();
       await a.waitForIdle(initial.id);
+    }
+  }));
+
+/**
+ * Independent #22 P0 vs #785: a cloned/local COMPLETED journal can carry a
+ * plausible signed Native/publication ID but cannot borrow another job's
+ * independently committed receipt. Separately, after BOTH external CAS
+ * readbacks passed, another Hub can revoke ownerEpoch while Hub A is parked
+ * at actual ArtifactBridge.saveCheckpoint admission. This is an intentionally
+ * RED safety acceptance if #785 persists a checkpoint using stale authority.
+ *
+ * The two Hub adapters share disposable ArtifactBridge bytes and a test-only
+ * in-memory owner/CAS oracle. No real Native effect, real signed Agent issuer,
+ * rollback-proof external service, UAC or VM is involved. This is NOT #781's
+ * runbook clone/second callback fixture nor #764 Broker dispatch CAS.
+ */
+test('#22/#785 P0: cloned UNKNOWN cannot borrow final CAS and revoke-start before checkpoint save must fence Hub A', async () =>
+  temp(async root => {
+    const atSave = gate(), releaseSave = gate();
+    let interceptSave = false, nativePublishCalls = 1, externalCommitCalls = 0;
+    let ownerEpoch = 7, readbacks = 0, checkpointSaveCalls = 0;
+    const artifactPath = 'qa22/forensic-artifact.bin';
+    const repository = 'Naveax/Nexowire', commitSha = 'a'.repeat(40);
+    class GuardedBridge extends ArtifactBridgeStore {
+      override async saveCheckpoint(arg: Parameters<ArtifactBridgeStore['saveCheckpoint']>[0]) {
+        checkpointSaveCalls++;
+        if (interceptSave) {
+          atSave.open();
+          await releaseSave.promise;
+        }
+        return super.saveCheckpoint(arg);
+      }
+    }
+    const bridge = new GuardedBridge(path.join(root, 'qa22-checkpoint-store'));
+    const id = randomUUID();
+    const requestId = randomUUID();
+    const commitId = 'SYNTHETIC-OFFHOST-COMMIT-' + randomUUID();
+    const stamp = new Date().toISOString();
+    const publication = { requestId, epoch: 5, sha256: digest(bytes),
+      dispatched: true, durableCommitId: commitId };
+    const original: TransferJob = {
+      version: 1, id, ...input, stagePath: '/synthetic/stage',
+      bytesTotal: bytes.length, bytesConfirmed: bytes.length,
+      sha256: digest(bytes), state: 'COMPLETED',
+      fencing: { epoch: 5, token: 'f'.repeat(64) },
+      publication, createdAt: stamp, updatedAt: stamp,
+    };
+    const scope = { accountId: input.accountId, projectId: input.projectId,
+      deviceId: input.targetDeviceId };
+    // Only the ORIGINAL job was externally committed. Local checkpoint
+    // cloning and a re-signed fake Native ACK must never mint a CAS entry.
+    const independent = new Map([[id, {
+      jobId: id, requestId, epoch: 5, sha256: digest(bytes),
+      durableCommitId: commitId,
+    }]]);
+    const trusted = {
+      assertCurrent: async (_job: Readonly<TransferJob>) => {
+        if (ownerEpoch !== 7) throw new TransferTrustError('CORE_GRANT_EPOCH_STALE',
+          'External owner revoke-start advanced after earlier publication check.');
+      },
+    };
+    const readback = {
+      inspect: async (job: Readonly<TransferJob>) => {
+        readbacks++;
+        return independent.get(job.id) ?? null;
+      },
+    };
+    const hubA = new VerifiedTransferCheckpointAdapter(bridge, trusted, readback);
+    const hubB = new VerifiedTransferCheckpointAdapter(bridge, trusted, readback);
+    const manifest = await bridge.begin({ scope, artifactPath, repository,
+      commitSha, producerOperationId: id, size: bytes.length,
+      sha256: digest(bytes), testStatus: 'unverified', acceptanceStatus: 'pending' });
+    assert.equal(manifest.state, 'OPEN');
+    for (let offset = 0; offset < bytes.length; offset += 65_536) {
+      await bridge.putChunk(scope, manifest.sessionId!, offset,
+        bytes.subarray(offset, offset + 65_536).toString('base64'));
+    }
+    await bridge.commit(scope, manifest.sessionId!);
+    const args = { scope, job: original, workspaceId: 'qa22-real-checkpoint',
+      artifactPath, repository, commitSha };
+    const unknownOriginal: TransferJob = {
+      ...original, state: 'MUTATION_UNKNOWN', errorCode: 'FINAL_RECEIPT_MISMATCH',
+      publication: { ...publication, durableCommitId: undefined },
+    };
+    // Hub B forges a COMPLETED clone of the UNKNOWN journal, reusing
+    // its requestId, old epoch, SHA and a copied durableCommitId.
+    const cloned: TransferJob = {
+      ...unknownOriginal, id: randomUUID(), state: 'COMPLETED',
+      errorCode: unknownOriginal.errorCode, publication: { ...publication },
+    };
+    assert.equal(unknownOriginal.state, 'MUTATION_UNKNOWN');
+    assert.equal(unknownOriginal.errorCode, 'FINAL_RECEIPT_MISMATCH');
+    await assert.rejects(hubB.persist({ ...args,
+      job: cloned, workspaceId: 'qa22-cloned-checkpoint' }),
+    (e: unknown) => e instanceof ArtifactBridgeError &&
+      e.code === 'JOB_PUBLICATION_COMMIT_MISMATCH');
+    assert.equal(await bridge.getCheckpoint(scope, 'qa22-cloned-checkpoint'), null);
+    assert.equal(checkpointSaveCalls, 0,
+      'cloned fake completion must be denied before ArtifactBridge mutation');
+    assert.equal(externalCommitCalls, 0);
+    const readsBefore = readbacks;
+    interceptSave = true;
+    const pending = hubA.persist(args);
+    try {
+      await expectGate(atSave.promise, 'last verified readback to checkpoint save');
+      assert.ok(readbacks >= readsBefore + 2,
+        'Hub A validated both external CAS readbacks before save');
+      assert.equal(checkpointSaveCalls, 1);
+      assert.equal(await bridge.getCheckpoint(scope, args.workspaceId), null);
+      // Hub B advances protected owner epoch AFTER last A-side CAS
+      // readback and BEFORE the real store's durable checkpoint mutation.
+      ownerEpoch = 8;
+      await assert.rejects(hubB.persist({ ...args,
+        job: cloned, workspaceId: 'qa22-cloned-checkpoint' }),
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+      releaseSave.open();
+      await assert.rejects(pending,
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+      assert.equal(await bridge.getCheckpoint(scope, args.workspaceId), null,
+        'NO checkpoint can be saved after revoke-start wins final admission');
+      assert.equal(await bridge.getCheckpoint(scope, 'qa22-cloned-checkpoint'), null);
+      assert.equal(unknownOriginal.errorCode, 'FINAL_RECEIPT_MISMATCH');
+      assert.equal(unknownOriginal.state, 'MUTATION_UNKNOWN');
+      assert.equal(unknownOriginal.publication?.requestId, requestId);
+      assert.equal(nativePublishCalls, 1,
+        'cloned checkpoint must never invoke or replay Native publisher');
+      assert.equal(externalCommitCalls, 0,
+        'checkpoint must not mint a new external CAS publication');
+    } finally {
+      releaseSave.open();
+      await pending.catch(() => undefined);
     }
   }));
