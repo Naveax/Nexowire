@@ -20,7 +20,7 @@ const filesSpecial=new Map<number,string[]>([
     'test/p26-780-git-worktree-root-escape-negative.test.ts']]
 ]);
 type Opt={newOnSecondPass?:boolean;changeHead?:boolean;ciWrongSha?:boolean;
-  incompleteFiles?:boolean;badCompare?:boolean};
+  incompleteFiles?:boolean;badCompare?:boolean;ciFlip?:boolean;filesFlip?:boolean};
 function mock(total:number,opts:Opt={}) {
   let reads=0;
   const calls:string[]=[];
@@ -49,13 +49,15 @@ function mock(total:number,opts:Opt={}) {
       const pr=Number(files[1]),page=Number(url.searchParams.get('page')??1);
       if(page!==1)return [];
       if(opts.incompleteFiles&&pr===811)return [];
-      return (filesSpecial.get(pr)??[`docs/qa/generated-${pr}.md`])
-        .map(filename=>({filename}));
+      const paths=[...(filesSpecial.get(pr)??[`docs/qa/generated-${pr}.md`])];
+      if(opts.filesFlip&&pr===811&&reads>=3)paths.push('src/agent/different-owner.ts');
+      return paths.map(filename=>({filename}));
     }
     if(url.pathname.endsWith('/actions/runs')){
       const head=url.searchParams.get('head_sha');
       const pr=Number.parseInt(head??'',16);
-      const conclusion=ciSpecial.get(pr)??'success';
+      const conclusion=opts.ciFlip&&pr===811&&reads>=3?'failure':
+        ciSpecial.get(pr)??'success';
       const trueHead=opts.ciWrongSha&&pr===811?'f'.repeat(40):head;
       return {total_count:1,workflow_runs:[{id:3000000+pr,name:'CI',
         event:'pull_request',head_sha:trueHead,status:'completed',conclusion}]};
@@ -128,4 +130,12 @@ test('QA24 complete source-green still cannot authorize external CAS or native H
  assert.equal(release.gate,'NO_GO');
  assert.ok(release.issues.filter(x=>x.code==='PHYSICAL_RELEASE_WITNESS_MISSING').length>=4);
  assert.deepEqual(release.current_safe_merge_queue,[]);
+});
+
+
+test('QA24 two full passes reject changing CI/files at same HEAD without re-running CI',async()=>{
+ await assert.rejects(collectQa24FullReview(mock(232,{ciFlip:true}).api,
+   'Naveax/Nexowire'),/FULL_SOURCE_CI_FILES_COMPARE_MOVED_BETWEEN_PASSES/);
+ await assert.rejects(collectQa24FullReview(mock(232,{filesFlip:true}).api,
+   'Naveax/Nexowire'),/FULL_SOURCE_CI_FILES_COMPARE_MOVED_BETWEEN_PASSES/);
 });
