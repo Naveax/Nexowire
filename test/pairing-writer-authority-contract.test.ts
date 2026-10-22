@@ -13,22 +13,28 @@ import {
 const initial={
   version:1 as const,realm:'self-host' as const,kind:'REPAIR' as const,
   ownerAccountId:'owner-example-001',deviceId:'device-example-001',
-  requestId:'immutable-request-001',ownerEpoch:4,pairingEpoch:7,
-  issuerEpoch:3,signerSpkiSha256:'a'.repeat(64),
+  requestId:'immutable-request-001',oauthSessionEpoch:9,ownerEpoch:4,
+  pairingEpoch:7,issuerId:'issuer-example-001',issuerEpoch:3,
+  signerSpkiSha256:'a'.repeat(64),
   nonceSha256:'b'.repeat(64),issuedAtMs:1_800_000_000_000,
   expiresAtMs:1_800_000_120_000,
 };
 const claim={
   version:1 as const,realm:'self-host' as const,
   ownerAccountId:initial.ownerAccountId,deviceId:initial.deviceId,
-  requestId:initial.requestId,ownerEpoch:initial.ownerEpoch,
-  pairingEpoch:initial.pairingEpoch+1,issuerEpoch:initial.issuerEpoch,
+  requestId:initial.requestId,
+  intentFingerprintSha256:pairingMutationFingerprint(initial),
+  oauthSessionEpoch:initial.oauthSessionEpoch,ownerEpoch:initial.ownerEpoch,
+  pairingEpoch:initial.pairingEpoch+1,issuerId:initial.issuerId,
+  issuerEpoch:initial.issuerEpoch,
   signerSpkiSha256:initial.signerSpkiSha256,
   nonceSha256:initial.nonceSha256,
   devicePossessionProofSha256:'c'.repeat(64),
 };
 const read={version:1 as const,realm:'self-host' as const,
-  ownerAccountId:initial.ownerAccountId,deviceId:initial.deviceId};
+  ownerAccountId:initial.ownerAccountId,deviceId:initial.deviceId,
+  requestId:initial.requestId,
+  intentFingerprintSha256:pairingMutationFingerprint(initial)};
 
 test('two independent unbound Hubs cannot enroll, claim or infer an unpaired device',async()=>{
   const hubs=[new UnboundPairingWriter(),new UnboundPairingWriter()];
@@ -49,7 +55,8 @@ test('immutable identity/realm/epochs/SPKI/nonce bind fingerprint; secrets never
   const base=pairingMutationFingerprint(initial);
   assert.equal(base,pairingMutationFingerprint({...initial}));
   for(const override of [
-    {requestId:'immutable-request-002'},{ownerEpoch:5},{pairingEpoch:8},
+    {requestId:'immutable-request-002'},{oauthSessionEpoch:10},
+    {ownerEpoch:5},{pairingEpoch:8},{issuerId:'issuer-example-002'},
     {issuerEpoch:4},{realm:'cloud'},{signerSpkiSha256:'d'.repeat(64)},
     {nonceSha256:'e'.repeat(64)},{kind:'ENROLL'},
   ]){
@@ -60,7 +67,9 @@ test('immutable identity/realm/epochs/SPKI/nonce bind fingerprint; secrets never
     {...initial,password:'DO_NOT_PERSIST'},
     {...initial,nonceSha256:'raw-nonce'},
     {...initial,ownerEpoch:0},
+    {...initial,oauthSessionEpoch:0},
     {...initial,pairingEpoch:-1},
+    {...initial,issuerId:''},
     {...initial,issuerEpoch:0},
     {...initial,kind:'REVOKE',nonceSha256:initial.nonceSha256},
     {...initial,realm:'cloud',cloudBearer:'token'},
@@ -131,4 +140,23 @@ test('REPAIR vs REVOKE, owner rollback and realm substitution all remain BLOCKED
   }
   assert.equal((await hubA.claimEnrollment(claim)).status,'BLOCKED');
   assert.equal((await hubB.claimEnrollment(claim)).status,'BLOCKED');
+});
+
+
+test('original request and intent fingerprint are mandatory read/claim correlation, not a grant',async()=>{
+  const hub=new UnboundPairingWriter();
+  await assert.rejects(hub.readCurrentPairing({
+    ...read,requestId:undefined,
+  }),/PAIRING_READ_INVALID/);
+  await assert.rejects(hub.readCurrentPairing({
+    ...read,intentFingerprintSha256:'forged',
+  }),/PAIRING_READ_INVALID/);
+  await assert.rejects(hub.claimEnrollment({
+    ...claim,oauthSessionEpoch:0,
+  }),/PAIRING_CLAIM_INVALID/);
+  await assert.rejects(hub.claimEnrollment({
+    ...claim,intentFingerprintSha256:'not-sha256',
+  }),/PAIRING_CLAIM_INVALID/);
+  assert.equal((await hub.readCurrentPairing(read)).status,'BLOCKED');
+  assert.equal((await hub.claimEnrollment(claim)).status,'BLOCKED');
 });

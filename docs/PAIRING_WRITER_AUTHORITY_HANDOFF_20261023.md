@@ -79,3 +79,68 @@ original request ID and no replay permission. It is not a CAS implementation.
   owner-bound principal and real two-Hub/restore acceptance are reviewed.
 - No Cloudflare D1 deployment, live Agent, Broker, UAC, VM, user files,
   OS/native rights or main merge in this change.
+
+## NEXT2 exact seam and cross-owner review (2026-10-23)
+
+- #818 previous exact HEAD `8e99588a92098c78df67bb55d9e17d94ddb035a0`, CI
+  `39862502930`: Node22/24 and four other jobs SUCCESS; macOS LaunchAgent
+  lifecycle FAILURE at `src/agent/native-agent-lifecycle.ts:399`,
+  `launchctl bootstrap` error 5. This source path is unchanged by #35;
+  **CI remains FAILURE**, and the job result cannot be called pairing proof.
+- #42 DRAFT #819 exact HEAD `55f1cf7d83c772a1eff5fc52eb6fb09ec002fca2`,
+  CI `39862509470` 7/7 SUCCESS, is a read-only worker reconnect
+  contract. It separately binds `ownerEpoch`, `oauthSessionEpoch`,
+  `pairingEpoch`, `issuerEpoch`, signer digest, originalRequestId and
+  logicalMutationId. It cannot consume WSS pairing or authorize dispatch.
+- #07 DRAFT #792 `authenticateOwnerForExternalWriter` provides a
+  frozen **authentication-only** principal and `oauthSessionEpoch`. That
+  epoch must be checked **in the same authoritative commit ordering as
+  logout/revoke-start**. No cached principal snapshot is enough.
+- #13 DRAFT #720 supplies an opt-in local SQLite revision fixture, not a
+  distributed operator. A signed WSS profile is not a one-use claim.
+
+### Exact intended producer / consumer handoff, NOT a runnable provider
+
+The #35 *unbound* adapter continues to return `BLOCKED` on every operation.
+The intent now has a **separate `oauthSessionEpoch` and `issuerId`**;
+`readCurrentPairing` and `claimEnrollment` require the **original requestId
+and original intent fingerprint**. Their presence is a correlation/schema
+check only. The source cannot compare them against authoritative state.
+
+Required independent authority transaction for `commitPairing`:
+
+1. Pin the trusted operator issuer/configuration and realm (self-host vs
+   cloud), verify strict current #792 owner principal, client and resource;
+   obtain original requestId, fingerprint, exact current ownerEpoch,
+   oauthSessionEpoch, pairingEpoch, issuerId/issuerEpoch and device SPKI.
+2. Under **one non-restorable linearizable authority** compare all expected
+   values against current owner + OAuth logout state + device + issuer +
+   pairing state; require expiry under provider clock, and serialize
+   ENROLL/REPAIR against `REVOKE_START` and logout-start for the same owner
+   and device. A successful revocation fence cannot be followed by an old
+   epoch repair. Store immutable requestId/fingerprint, nonce reservation,
+   monotonic new epoch, and durable outcome under one commit decision.
+3. A one-use `claimEnrollment` must atomically verify the original
+   committed intent, current epochs, signer possession and unused nonce,
+   consume the nonce and publish the authoritative credential-generation
+   activation. **A D1 projection must not activate a credential before
+   this authoritative decision**, or allow older putDevice/putPairing
+   upserts to restore an earlier generation. Distinct self-host/cloud
+   issuer keys and credentials remain separate, with explicit migration.
+4. `readCurrentPairing` must support read-only reconciliation for the
+   exact original requestId and fingerprint and return a verified durable
+   outcome plus independent non-restorable high-water/issuer incarnation.
+   A missing local row, HTTP timeout or provider partition cannot prove
+   that the previous mutation never committed. Lost ACK always `UNKNOWN`;
+   no blind retry even with identical requestId, and never a new requestId.
+5. Worker #42 and native execution separately require task/worktree/source
+   SHA, logicalMutationId, originalRequestId, WSS generation, device owner
+   generation and final externally fenced dispatch-vs-revoke CAS. Pairing
+   success alone grants **no** native capability or Windows HIGH/CORE.
+
+Provider review must demonstrate two distinct Hubs and physical service
+partitions, concurrent REPAIR-vs-REVOKE_START and logout race, nonce double
+claim, owner A->B->A, signer/issuer rotation, lost ACK readback, DB snapshot
+rollback/failover, and deterministic precedence of authority outcomes.
+A client-side `supportsCAS` switch, constructor injection or local SQLite
+transaction is not an admissible implementation. **Production P0 NO-GO.**
