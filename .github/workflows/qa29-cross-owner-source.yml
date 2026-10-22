@@ -1,0 +1,32 @@
+name: QA29 CAS Native Cross-Owner Negative
+on:
+  pull_request:
+    paths:
+      - "test/qa29-cas-native-bridge-negative.test.ts"
+      - "docs/QA29_CROSS_OWNER_CAS_NATIVE_NO_GO_20261022.md"
+      - ".github/workflows/qa29-cross-owner-source.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qa29-cross-owner-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-negative:
+    name: CAS-native bridge Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: All QA29 source-only negative evidence
+        run: node --test --import tsx test/qa29-elevated-command-audit-provenance.test.ts test/qa29-rotated-audit-crosshub-negative.test.ts test/qa29-native-receipt-verifier.test.ts test/qa29-cas-native-bridge-negative.test.ts
