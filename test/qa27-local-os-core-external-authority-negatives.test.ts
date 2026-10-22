@@ -222,6 +222,54 @@ test('QA27 missing #712 nonce barrier: preapproved owner-absent CORE stays eligi
   noPhysicalClaim(revoked);
   assert.equal(productionExplain().windows.uacApproval,'unverified');
 });
+test('QA27 #743 composed gate: inspected DACL is not token-aware AccessCheck and declared imports are not a complete loader graph',()=>{
+  // #741 independently tests signed native/CAS nonce and owner-epoch readback.
+  // #743 tests Windows TEMP native ACL traversal. Neither proves that a
+  // caller-provided import list is a complete loader dependency tree, or
+  // that ACE enumeration is an effective low-priv Windows AccessCheck.
+  const allReadbacksAppearHealthy=caseWith({
+    authority:{
+      ownerPhysicallyPresentNow:false,
+      dispatchChallengeNonce:'f'.repeat(64),
+      revoked:false,
+    },
+    remote:{
+      claimChallengeNonce:'f'.repeat(64),
+      issuerSignatureVerified:true,
+      claimSingleUse:true,
+    },
+  });
+  const syntheticCandidate=classifySourceOnlyCrossBranchCase(allReadbacksAppearHealthy);
+  assert.equal(syntheticCandidate.result,'CONTRACT_CANDIDATE');
+  noPhysicalClaim(syntheticCandidate);
+
+  const discoveredOnlyFirstLevel=classifySourceOnlyCrossBranchCase(caseWith({
+    broker:{
+      exeAndAncestorsAclVerified:true,
+      everyImportAndUpdaterAncestorAclVerified:true,
+      independentImportEnumeration:true,
+      transitiveImportsIndependentlyEnumerated:false,
+    },
+  }));
+  assert.equal(discoveredOnlyFirstLevel.result,'BLOCKED');
+  assert.equal(discoveredOnlyFirstLevel.reason,'BROKER_EXE_IMPORT_UPDATER_TRUST_INCOMPLETE');
+  noPhysicalClaim(discoveredOnlyFirstLevel);
+
+  const aclRulesObservedButNoAccessCheck=classifySourceOnlyCrossBranchCase(caseWith({
+    broker:{
+      exeAndAncestorsAclVerified:true,
+      everyImportAndUpdaterAncestorAclVerified:true,
+      transitiveImportsIndependentlyEnumerated:true,
+      nativeLowPrivilegeEffectiveAccessCheckCompleted:false,
+    },
+  }));
+  assert.equal(aclRulesObservedButNoAccessCheck.result,'BLOCKED');
+  assert.equal(aclRulesObservedButNoAccessCheck.reason,'BROKER_EXE_IMPORT_UPDATER_TRUST_INCOMPLETE');
+  noPhysicalClaim(aclRulesObservedButNoAccessCheck);
+  // These booleans are synthetic assertions, never an actual native
+  // publisher/AccessCheck provider or permit to dispatch.
+  assert.equal(productionExplain().operation.elevatedExecutionProven,false);
+});
 test('no UAC auto-click, secure-desktop bypass or arbitrary Broker dispatch capability appeared',()=>{
   const win=capabilitiesForPlatform('win32');
   assert.equal(isReadOnlyCapability('windows.uac.status'),true);
