@@ -295,6 +295,13 @@ export class ProgressRuntimePostconditionAdapter {
         this.expected.sessionId,this.request,permit);
       if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(verified.status!=='verified'){
+        // After an already independently committed Native effect, a
+        // reboot with no authenticated live sample, a local CORE revoke,
+        // or generation race is not a retryable proof mismatch. #781:
+        // cloned checkpoint/runbook IDs MUST NOT mask UNKNOWN and replay.
+        if(['NO_TRUSTED_LIVE_SAMPLE','OWNER_GRANT_REVOKED',
+            'PROOF_RACE_REVERIFY'].includes(verified.reason??''))
+          return this.blockUnknown();
         this.lastResult='PROOF_UNVERIFIED';return this.lastResult;
       }
       // Guard last mutation window across local disk inspection too.

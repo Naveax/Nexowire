@@ -895,3 +895,59 @@ fixtures are not physical task-step attestations. #08 Artifact Store,
 #03 Job owner, #780 actual task agent/checkpoint code, live Agent/VM/
 UAC and user files are untouched. The only modifications belong
 to #575 Progress source/tests/docs on its existing DRAFT PR.
+
+
+### 2026-10-22 #11 replay/cloned-runbook Progress-only QA (#781 / #785)
+
+Exact previous #575 HEAD `0e694e0e8484071ed6815f9e0e25cb7aee5220d4`:
+GitHub CI `39816972153` **SUCCESS**, Release Readiness
+`39816972160` **SUCCESS**. This is source CI, not physical
+completion authority.
+
+Cross-reviewed #781
+`89a865363829c8c30a74de1516e53a697549c05b`:
+its *deliberately unsafe* read-only QA proves
+`executeDurableRunbook` maps lost native `MUTATION_STATE_UNKNOWN`
+to FAILED and re-executes an unchanged logical operation under
+a new `runbook_id` without a trusted owner-epoch/semantic-effect
+readback. A PASS for that negative is proof of risk, **not**
+production readiness. Cross-reviewed #785
+`e7e46b970dd9123ea3d827f4f6bb4f60cb91b209`:
+the Artifact Bridge checkpoint owner requires an independent
+#768 publication CAS readback before checkpoint persistence.
+Neither owner implementation was changed.
+
+**Narrow Progress-only source gap reproduced RED first:**
+after a signed and externally committed Native receipt already
+existed, a newly reconstructed Progress supervisor with recovered
+`exited` PID state but **no authenticated live worker sample**,
+or a previously completed session whose CORE grant had been revoked
+with stale `ACTIVE` readback on a cloned adapter, produced
+retryable `PROOF_UNVERIFIED` rather than sticky
+`MUTATION_UNKNOWN`. Three new source negatives had
+**39 PASS / 2 FAIL** on the original exact head.
+
+**Fix:** when an independently committed external mutation reaches
+local disk-proof verification and `ProgressSupervisor` reports
+`NO_TRUSTED_LIVE_SAMPLE`, `OWNER_GRANT_REVOKED`, or
+`PROOF_RACE_REVERIFY`, the runtime makes the result **sticky
+MUTATION_UNKNOWN**, clears cached digest and grant proof, and
+refuses subsequent status polling/replay. It cannot classify
+an old signed `COMPLETED` as a verified new run by substituting
+a cloned run ID; the worker result's original signed run/request/
+session, immutable SHA, current owner grant and external commit
+must all match. Rebooted fake stdout/PID alone cannot promote
+the checkpoint. Existing valid source proof remains accepted
+only when all five independent synthetic authorities and local
+disk/progress evidence actually match.
+
+**Owner boundary:** Progress does NOT provide a durable semantic
+logical-effect identity across runbook_id clones, repair
+`executeDurableRunbook` state transitions, or enforce
+runbook pre-dispatch authority. **#781 unsafe re-dispatch remains
+a separate P0 work item for the runbook/journal owner**.
+No #08 Artifact Store or #03 Job owner files were touched;
+no live Agent/VM, Broker, UAC or user file mutation occurred.
+Missing protected Native issuer, real independently immutable
+off-host output SHA-256 readback, external #587 CAS and physical
+owner-epoch readback still make **production NO-GO**.

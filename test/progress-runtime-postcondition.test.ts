@@ -718,3 +718,73 @@ test('#780 revoked CORE with old owner_epoch plus forged COMPLETED never revives
   assert.equal(f.adapter.taskStepCheckpointView().attestations.length,0);
   assert.equal(f.adapter.taskStepCheckpointView().automaticReplayAllowed,false);
 }));
+
+test('#781 cloned runbook/run ID cannot adopt previous immutable dispatch receipt',()=>scenario(async f=>{
+  const clonedRunId='qa18-cloned-runbook';
+  const keys={
+    issuer:issuer.publicKey,immutableStorage:storage.publicKey,
+    publication:publication.publicKey,monotonicCommit:monotonicCommit.publicKey,
+    postcondition:witness.publicKey,
+  };
+  const clone=new ProgressRuntimePostconditionAdapter(f.p,{
+    ...f.request,scope:{...f.request.scope,runId:clonedRunId},
+  },{...f.expected,runId:clonedRunId},keys,f.ports,f.now);
+  assert.equal(clone.taskStepCheckpointView().attestations.length,0);
+  assert.equal(await clone.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  assert.equal(clone.taskStepCheckpointView().immutableOutputSha256,null);
+  assert.equal(clone.taskStepCheckpointView().automaticReplayAllowed,false);
+  assert.equal(await clone.reconcile(f.signed),'MUTATION_UNKNOWN');
+}));
+
+test('#781 rebooted Progress with forged PID/stdout and old signed COMPLETED stays UNKNOWN',()=>scenario(async f=>{
+  const rebooted=new ProgressSupervisor({now:f.now,stallAfterMs:1000});
+  rebooted.register(sessionId);
+  assert.equal(rebooted.bindTrustedRequest(sessionId,requestId),true);
+  rebooted.recover([{sessionId,status:'exited',exitCode:0}]);
+  // Replayed/forged stdout after a reboot is not an observed live
+  // process exit/result hash on this new supervisor instance.
+  rebooted.observeProcessEvent({topic:'process.output',data:{
+    sessionId,stream:'stdout',text:
+      'NEXOWIRE_PROGRESS:{"completed_count":2,"pending_count":0,"failure_count":0}\n',
+  }});
+  const keys={
+    issuer:issuer.publicKey,immutableStorage:storage.publicKey,
+    publication:publication.publicKey,monotonicCommit:monotonicCommit.publicKey,
+    postcondition:witness.publicKey,
+  };
+  const projected=new ProgressRuntimePostconditionAdapter(rebooted,
+    f.request,{...f.expected},keys,f.ports,f.now);
+  assert.equal(projected.taskStepCheckpointView().attestations.length,0);
+  assert.equal(await projected.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(projected.taskStepCheckpointView().status,'UNKNOWN_NO_REPLAY');
+  assert.equal(projected.taskStepCheckpointView().immutableOutputSha256,null);
+  const reads=f.mutable.transferReads;
+  assert.equal(await projected.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.mutable.transferReads,reads,'no replay or repeated status poll');
+  assert.equal(rebooted.snapshot(sessionId).completionAttested,false);
+}));
+
+test('#781 owner revoked then cloned adapter with stale ACTIVE readback cannot renew COMPLETED',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  f.p.invalidateOwnerGrant(sessionId);
+  // A cloned *checkpoint ID* cannot replace immutable dispatch identity;
+  // stale cached remote grant is adversarially still ACTIVE at old epoch.
+  f.mutable.grantState='ACTIVE';
+  f.mutable.epoch=9;
+  const keys={
+    issuer:issuer.publicKey,immutableStorage:storage.publicKey,
+    publication:publication.publicKey,monotonicCommit:monotonicCommit.publicKey,
+    postcondition:witness.publicKey,
+  };
+  const clone=new ProgressRuntimePostconditionAdapter(f.p,f.request,
+    {...f.expected},keys,f.ports,f.now);
+  assert.equal(clone.taskStepCheckpointView().attestations.length,0);
+  assert.equal(await clone.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(clone.taskStepCheckpointView().receiptStatus,'MUTATION_UNKNOWN');
+  assert.equal(clone.taskStepCheckpointView().immutableOutputSha256,null);
+  const reads=f.mutable.transferReads;
+  assert.equal(await clone.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.mutable.transferReads,reads);
+  assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+}));
