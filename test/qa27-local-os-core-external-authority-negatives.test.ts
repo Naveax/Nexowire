@@ -391,6 +391,76 @@ test('QA27 #756/#747/#757: real low-token Broker boundary and external atomic co
   }
   assert.equal(productionExplain().operation.elevatedExecutionProven,false);
 });
+
+test('QA27 #795/#726: preference-only CORE and ROOT exactly T+900000ms never become native elevated dispatch proof',()=>{
+  // Independent real read-only policy projection, NOT the #23 web/app.js
+  // DOM renderer regression. Its UI owner must separately fix stale badges.
+  const issuedAt=Date.parse('2026-10-22T12:00:00.000Z');
+  const expiresAt=issuedAt+900_000;
+  const factsAt=(when:number):DeviceAuthorizationFacts=>({
+    deviceId:'device27',ownerAccountId:'owner27',
+    requesterAccountId:'owner27',requesterRole:'user',
+    accessMode:'full',online:true,privilegeMode:'broker',
+    adminBridgeReady:true,
+    rootLease:{
+      ownerAccountId:'owner27',expiresAt:new Date(expiresAt).toISOString(),
+    },
+    // A recorded UI/owner preference is NOT physical OS-approved enrollment.
+    corePreference:{
+      ownerAccountId:'owner27',enabled:true,
+      updatedAt:new Date(issuedAt).toISOString(),
+    },
+    bridgePreference:{
+      ownerAccountId:'owner27',desiredMode:'on',
+      updatedAt:new Date(issuedAt).toISOString(),
+    },
+    now:new Date(when),
+  });
+  const before=explainDeviceAuthorization(
+    factsAt(expiresAt-1),'windows.service.control');
+  const atBoundary=explainDeviceAuthorization(
+    factsAt(expiresAt),'windows.service.control');
+
+  // Diagnostic ROOT time can still be positive 1 ms before expiration,
+  // but the legacy record has no independent session-bound root authority.
+  assert.equal(before.root.leaseUnexpired,true);
+  assert.equal(before.root.policyActive,false);
+  assert.equal(before.root.sessionBound,false);
+  assert.equal(atBoundary.root.leaseUnexpired,false);
+  assert.equal(atBoundary.root.expiresAt,null);
+  assert.ok(atBoundary.operation.reasons.includes(
+    'ROOT_LEASE_EXPIRED_OR_REVOKED'));
+
+  // Neither preference approval, Broker readiness telemetry nor a ROOT
+  // countdown authorizes actual OS HIGH or native external CAS dispatch.
+  // 'not-proven' MUST be treated as DENY by the UI/dispatch owner.
+  for(const source of [before,atBoundary]){
+    assert.equal(source.core.enabled,true);
+    assert.equal(source.core.state,'PAUSED_UNVERIFIED');
+    assert.equal(source.adminBridge.preferenceApplied,false);
+    assert.equal(source.adminBridge.authenticatedBrokerHealth,'unverified');
+    assert.equal(source.windows.adminToken,'unverified');
+    assert.equal(source.windows.uacApproval,'unverified');
+    assert.equal(source.operation.privilegeRequirement,'elevated');
+    assert.equal(source.operation.decision,'not-proven');
+    assert.equal(source.operation.elevatedExecutionProven,false);
+    assert.equal(source.operation.providerAuthorizationProven,false);
+  }
+
+  // The #27 separate source oracle also refuses attempted promotion when
+  // a claimed preapproved CORE has no genuine independent OS bootstrap.
+  const unverified=classifySourceOnlyCrossBranchCase(caseWith({
+    enrollment:{
+      independentOsResultVerified:false,
+      localOsHumanApprovalRecorded:false,
+    },
+    authority:{ownerPhysicallyPresentNow:false,coreEnabled:true},
+  }));
+  assert.equal(unverified.result,'BLOCKED');
+  assert.equal(unverified.reason,'OS_ENROLLMENT_NOT_AUTHENTICATED');
+  noPhysicalClaim(unverified);
+});
+
 test('no UAC auto-click, secure-desktop bypass or arbitrary Broker dispatch capability appeared',()=>{
   const win=capabilitiesForPlatform('win32');
   assert.equal(isReadOnlyCapability('windows.uac.status'),true);
