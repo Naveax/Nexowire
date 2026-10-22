@@ -68,10 +68,11 @@ test('QA30 only a witnessed parser close opens a single quiet-gzip admission slo
       listening=true;
       const addr=server.address();
       assert.ok(addr&&typeof addr!=='string');
-      const url='http://'+HOST+':'+addr.port+'/mcp';
+      const port=addr.port; // narrow AddressInfo before capture by hold()
+      const url='http://'+HOST+':'+port+'/mcp';
       function hold(id:string,tenant:string):Slot{
         const s=slot(id);slots.set(id,s);
-        const client=request({host:HOST,port:addr.port,method:'POST',path:'/mcp',
+        const client=request({host:HOST,port,method:'POST',path:'/mcp',
           headers:{'content-type':'application/json','content-encoding':'gzip',
             'content-length':String(compressed.byteLength),
             'x-qa30-held':id,'x-qa30-tenant':tenant}},
