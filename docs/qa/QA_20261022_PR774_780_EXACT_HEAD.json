@@ -1,0 +1,155 @@
+{
+  "schema": "nexowire.qa16.pr774-780.v1",
+  "capturedDate": "2026-10-22",
+  "pinnedMain": "754cc4364822be5fda528f54042fb22a84f19924",
+  "parentQa": {
+    "pr": 779,
+    "headSha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+    "runId": 39808685776,
+    "fullCi": "FAILURE",
+    "statusDiscovery": "Initial HEAD workflow query was empty, subsequent same-SHA GitHub Actions exact CI found and verified FAILED; never claim green/no-run after later verification"
+  },
+  "totals": {
+    "fullCiSuccess": 3,
+    "fullCiFailure": 3,
+    "issueNotPr": 1
+  },
+  "prs": [
+    {
+      "number": 774,
+      "headSha": "5e432c26072d82e89069fc702e634a80d2d02534",
+      "baseSha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+      "runId": 39806480924,
+      "fullCi": "SUCCESS",
+      "scope": "test-only child of #768 external publication commit; quota UNKNOWN writer-stop/deletion release negative; 7/7 hosted checks success, not physical writer-stop evidence",
+      "mergedMain": false,
+      "physicalCore": "BLOCKED"
+    },
+    {
+      "number": 775,
+      "headSha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955",
+      "baseSha": "6967cc92ae85e5d1034591940d273615c4056e00",
+      "runId": 39806640003,
+      "fullCi": "SUCCESS",
+      "scope": "signed final Access CAS binds installed FileID/native witness time in source fixtures; real signed installed HIGH Broker still missing",
+      "mergedMain": false,
+      "physicalCore": "BLOCKED"
+    },
+    {
+      "number": 776,
+      "headSha": "a427e3d127d2a83b3485bae573d4117161221e96",
+      "baseSha": "3247ed65133a548730c77330b795a5a1e05d28f3",
+      "runId": 39816348613,
+      "fullCi": "FAILURE",
+      "scope": "NEW HEAD exact CI FAILURE: Node24 four source negatives (3 unchanged #762 final receipt tests cannot start without independent monotonic publication CAS; 1 cancel test expected CANCELLED but got MUTATION_UNKNOWN with transfer cancel-after-mutation provenance); browser-live Windows now SUCCESS. Historical prior head 7e360388 Windows Job fast-exit iteration4 FAIL retained separately.",
+      "mergedMain": false,
+      "physicalCore": "BLOCKED"
+    },
+    {
+      "number": 777,
+      "headSha": "c41e441a87f5d22101b8d256b1b64047a551cc0e",
+      "baseSha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+      "runId": 39807272228,
+      "fullCi": "FAILURE",
+      "scope": "source guard for unresolved Native publication resume; Node22/24 PASS, browser-live Windows Job fast-exit iteration8 FAIL; no physical end-to-end publisher",
+      "mergedMain": false,
+      "physicalCore": "BLOCKED"
+    },
+    {
+      "number": 778,
+      "headSha": "540770c173a820060f84ab1370e633aa5b064e79",
+      "baseSha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+      "runId": 39807830909,
+      "fullCi": "SUCCESS",
+      "scope": "QA24 incremental DAG source for 175 open at snapshot, 173 identified, 2 unresolved; not a complete live dependency graph or approval to merge",
+      "mergedMain": false,
+      "physicalCore": "BLOCKED"
+    },
+    {
+      "number": 779,
+      "headSha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+      "baseSha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+      "runId": 39808685776,
+      "fullCi": "FAILURE",
+      "scope": "mandatory 7 true P0 red plus Windows ProcessManager restart NW_DURABLE_READY timeout; Node24 fails mandatory gate and Node22 cancelled",
+      "mergedMain": false,
+      "physicalCore": "BLOCKED"
+    }
+  ],
+  "issue780": {
+    "number": 780,
+    "type": "ISSUE_P1_PRODUCT_EPIC",
+    "url": "https://github.com/Naveax/Nexowire/issues/780",
+    "state": "OPEN",
+    "ciRunId": null,
+    "notP0Regression": true,
+    "requiresInventoryBeforeImplementation": true,
+    "acceptance": "SEPARATE_P1_NOT_TESTED"
+  },
+  "failureEvidence": {
+    "pr776": {
+      "runId": 39816348613,
+      "node24Job": 119955780908,
+      "negativeCount": 4,
+      "negativeTests": [
+        "test/qa21-final-native-owner-rollback-and-receipt.test.ts",
+        "test/artifact-588-cross-device-worker.test.ts"
+      ],
+      "reason": "Three original #762 negative scenarios cannot start: Independent monotonic final publication CAS is not configured; fourth prior cancellation semantics mismatch: expected CANCELLED but actual MUTATION_UNKNOWN after a confirmed chunk with TRANSFER_CANCEL_AFTER_MUTATION.",
+      "windowsJob": 119955781543,
+      "windowsStatus": "SUCCESS",
+      "sourceStatus": "FAILURE",
+      "historical": {
+        "headSha": "7e360388adc2a1c4e923eb4c8336bf49f3fbac04",
+        "runId": 39809339319,
+        "windowsJob": 119931526971,
+        "windowsIteration": 4,
+        "node24Job": 119931527857,
+        "negativeCount": 3
+      }
+    },
+    "pr777": {
+      "runId": 39807272228,
+      "windowsJob": 119923726560,
+      "windowsIteration": 8,
+      "node22And24": "SUCCESS",
+      "fullCi": "FAILURE"
+    },
+    "pr779": {
+      "runId": 39808685776,
+      "mandatoryJob": 119928712888,
+      "mandatorySourceFailures": 7,
+      "mandatoryTestsSkipped": 0,
+      "originalTestsModified": false,
+      "windowsJob": 119928712954,
+      "windowsFailure": "durable ProcessManager restart output /NW_DURABLE_READY/ timed out ~27.1s",
+      "node24Job": 119928712863,
+      "kind": "P0 mandatory source failures, separate hosted Windows durable process"
+    }
+  },
+  "productionNoGo": {
+    "realSignedInstalledHighCore": "BLOCKED",
+    "typedHypervElevatedVmGuid": "BLOCKED",
+    "acl271": "BLOCKED",
+    "signedBrokerBootstrap551": "BLOCKED",
+    "independentNonRestorableCas587": "BLOCKED",
+    "durableOnecallPublisher588": "BLOCKED",
+    "physicalVmStateReadback": "BLOCKED",
+    "liveReVoltVpnUbuntuLab": "UNTOUCHED"
+  },
+  "governance": {
+    "qaDocsAndProvenanceTestsOnly": true,
+    "priorP0NegativeTestsUnchanged": true,
+    "mainMerge": false
+  },
+  "historicalSupersededHeads": [
+    {
+      "pr": 776,
+      "headSha": "7e360388adc2a1c4e923eb4c8336bf49f3fbac04",
+      "runId": 39809339319,
+      "ci": "FAILURE",
+      "node24": "three unchanged #762 no-monotonic-CAS negatives",
+      "windows": "Windows Job fast-exit stdout-before-exited iteration4"
+    }
+  ]
+}
