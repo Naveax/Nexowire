@@ -110,3 +110,17 @@ Production remains **NO-GO** until all of:
 
 Separate Windows full-suite failures / #553 filesystem security are not
 waived by the focused connection tests.
+
+
+## 2026-10-21 narrow Connection Core hardening
+
+On #596 HEAD 335046569a38f3a1a3fc82bf851f9b7df7640fdb, the
+connection-only adapter now binds project ID, exact source/target/stage
+paths, and checks a current trusted owner/device grant callback at every
+checkpoint transition and again immediately before journal CAS. If the
+callback is absent, revoked or unavailable the adapter fails closed.
+Two new negative tests cover mid-readback owner revocation, missing
+authority, wrong project and stale/duplicate epochs (9 new tests total).
+See CONNECTION_06_596_33504656_INTEGRATION_20261021.md for exact #08 ABI
+mapping, scratch-only worker revoke reproduction, and the production
+integration blocker. Original source CI pass does not cover this new SHA.
