@@ -10,7 +10,13 @@ import * as z from 'zod';
 const uuid = z.string().uuid();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const gitSha = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
-const boundedId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+// Identifiers are not free-text secret containers. This intentionally only
+// catches high-confidence credential shapes; callers must still supply
+// trusted opaque IDs instead of copying private material into metadata.
+const credentialId = /^(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16})$/;
+const boundedId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/)
+  .refine(value => !credentialId.test(value), 'CREDENTIAL_SHAPED_ID_FORBIDDEN');
+const errorCode = z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/);
 const count = z.number().int().nonnegative().safe();
 const positive = z.number().int().positive().safe();
 const scopeSchema = z.strictObject({
@@ -23,7 +29,7 @@ const mutationSchema = z.strictObject({
   state: z.enum(['PLANNED', 'RESERVED', 'DISPATCH_MAY_HAVE_OCCURRED',
     'RECONCILE_REQUIRED', 'LOCAL_TERMINAL_NEEDS_PROOF']),
   pendingUnknown: z.boolean(),
-  originalErrorCode: boundedId.optional(),
+  originalErrorCode: errorCode.optional(),
 });
 const budgetSchema = z.strictObject({
   maxSteps: positive, stepsUsed: count, maxTools: positive, toolsUsed: count,
@@ -185,10 +191,23 @@ export class SecureTaskCheckpointStore {
     const {ownerId, deviceId, taskId} = scopeSchema.parse(scope);
     return path.join(this.directory, sha(AD + ownerId + '/' + deviceId + '/' + taskId) + '.enc');
   }
+  /** Canonical AAD is independent of object key order and binds the complete
+   * expected identity, epoch and grant digest before any plaintext is parsed.
+   * Changing even one worktree/source/grant field invalidates the GCM tag.
+   * The actual encrypted metadata remains independently schema-validated.
+   */
+  private aad(scope: TrustedCheckpointScope): Buffer {
+    const s = scopeSchema.parse(scope);
+    return Buffer.from(JSON.stringify([
+      AD, this.file(s), s.ownerId, s.deviceId, s.taskId,
+      s.worktreeId, s.sourceSha, s.ownerEpoch, s.grantGeneration,
+      s.signedGrantScopeDigest,
+    ]));
+  }
   private encrypt(cp: SecureTaskCheckpoint): string {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
-    cipher.setAAD(Buffer.from(AD + this.file(cp.scope)));
+    cipher.setAAD(this.aad(cp.scope));
     const ciphertext = Buffer.concat([cipher.update(JSON.stringify(cp)), cipher.final()]);
     return JSON.stringify({version: 1, iv: iv.toString('hex'),
       tag: cipher.getAuthTag().toString('hex'), ciphertext: ciphertext.toString('base64')});
@@ -197,7 +216,7 @@ export class SecureTaskCheckpointStore {
     if (Buffer.byteLength(raw) > 262144) fail('OVERSIZED');
     const e = envelopeSchema.parse(JSON.parse(raw));
     const decipher = createDecipheriv('aes-256-gcm', this.key, Buffer.from(e.iv, 'hex'));
-    decipher.setAAD(Buffer.from(AD + this.file(scope)));
+    decipher.setAAD(this.aad(scope));
     decipher.setAuthTag(Buffer.from(e.tag, 'hex'));
     return SecureTaskCheckpointSchema.parse(JSON.parse(
       Buffer.concat([decipher.update(Buffer.from(e.ciphertext, 'base64')), decipher.final()])
