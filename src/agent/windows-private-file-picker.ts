@@ -13,7 +13,11 @@ import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import * as z from 'zod';
 import type {PathPolicy} from './path-policy.js';
-import {executeWindowsPrivateDesktopCapability} from './windows-private-desktop.js';
+import {
+  executeWindowsPrivateDesktopCapability,
+  assertPrivateDesktopMutationNotCancelled,
+} from './windows-private-desktop.js';
+import {requireProtectedPrivateDesktopOwner} from './private-desktop-runtime-owner-gate.js';
 
 const Hwnd=z.string().min(1).max(32).regex(/^(?:0x[0-9a-fA-F]+|[0-9]+)$/);
 const Control=z.object({
@@ -100,12 +104,22 @@ export function createPrivateFilePickerAdapter(
   newId:()=>string=randomUUID,
 ){
   const permits=new Map<string,Permit>();
+  // The production adapter must never mint a real UIA grant from
+  // user-writable state.json.launchedPids or a self-claimed signed CORE
+  // receipt. Synthetic injected dispatches remain test fixtures only.
+  const assertProductionOwner=async()=>{
+    if(dispatch===executeWindowsPrivateDesktopCapability){
+      await assertPrivateDesktopMutationNotCancelled();
+      await requireProtectedPrivateDesktopOwner('picker');
+    }
+  };
   const prune=()=>{
     for(const [id,p] of permits){
       if(now()>=p.expiresAt && !p.used)permits.delete(id);
     }
   };
   const preflight=async(input:PrepareInput)=>{
+    await assertProductionOwner();
     const status=data<Status>(await dispatch('windows.private_desktop.status',{}));
     if(!status.running||status.desktopName!=='NexowirePrivate'||
       status.inputDesktop!=='Default')
@@ -173,6 +187,7 @@ export function createPrivateFilePickerAdapter(
       };
       try{
         check();await preflight(input);check();
+        await assertProductionOwner();check();
         const common={
           hwnd:input.hwnd,
           expected_process_id:input.expected_process_id,
@@ -188,6 +203,7 @@ export function createPrivateFilePickerAdapter(
           edit.sessionId!==input.expected_session_id||edit.inputDesktop!=='Default')
           reject('PICKER_EDIT_RESULT_UNVERIFIED','File-picker text update result failed identity verification.');
         check();await preflight(input);check();
+        await assertProductionOwner();check();
         // The action helper independently revalidates HWND, owner PID, session,
         // unique on-screen button and input desktop immediately before Invoke.
         invokeStarted=true;

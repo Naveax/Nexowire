@@ -78,7 +78,7 @@ export async function assertNoPrivateDesktopEmergencyStop(root:string):Promise<v
  * may supply it, but such tests do not confer OS authority.
  */
 export async function requireProtectedPrivateDesktopOwner(
-  operation:'launch'|'stop',
+  operation:'launch'|'stop'|'picker',
   original?:PrivateDesktopLaunchIdentity,
   protectedRead?:()=>Promise<PrivateDesktopKernelWitness>,
 ):Promise<Readonly<{pid:number;creationTime100ns:string}>>{
@@ -90,7 +90,7 @@ export async function requireProtectedPrivateDesktopOwner(
     );
   }
   const result=await verifyPrivateDesktopOwnerFence(
-    original,protectedRead,operation==='stop'?'stop':'read',
+    original,protectedRead,operation==='stop'?'stop':operation==='picker'?'private-uia':'read',
   );
   return Object.freeze({
     pid:result.pid,creationTime100ns:result.creationTime100ns,
