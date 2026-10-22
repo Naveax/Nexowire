@@ -24,7 +24,11 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "91f1426f5378bc2eaf3a680a7f7e067f8d4eba73"
-      }
+      },
+      "files": [
+        "test/artifact-588-cancel-read-race.qa.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 641,
@@ -38,7 +42,11 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf"
-      }
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 642,
@@ -52,7 +60,13 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "87644090113d21544f42a738d919d5422ed200c0"
-      }
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_STATUS_UI_QA_20261021.md",
+        "src/diagnostics/core-effective-ui-status.ts",
+        "test/core-effective-ui-status.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 643,
@@ -66,7 +80,12 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49"
-      }
+      },
+      "files": [
+        "docs/CORE_OWNER_REVOKE_MID_EXECUTION_QA_20261021.md",
+        "test/core-owner-revoke-mid-execution.adversarial.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 644,
@@ -80,7 +99,13 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "669e0779562e15f8b5f22306eb0d5c4f06eca71f"
-      }
+      },
+      "files": [
+        "docs/s3-worker28-crash-rollback-independent-qa-20261021.md",
+        "test/fixtures/s3-worker28-runner.test.ts",
+        "test/s3-broker-crash-rollback-independent-qa.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 645,
@@ -94,7 +119,13 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "f7c36309bf5486ed26cc357f14e5aa703109e9b4"
-      }
+      },
+      "files": [
+        "docs/QA_UAC_REMOTE_APPROVAL_MATRIX_20261021.md",
+        "test/fixtures/uac-remote-approval-matrix.ts",
+        "test/qa-uac-remote-approval-capability.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 646,
@@ -108,7 +139,14 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "65b96fa17b7050685e24dd6a0851da0d80131975"
-      }
+      },
+      "files": [
+        "docs/qa/INTEGRATION_DAG_CORE_CRITICAL_PATH_20261021.md",
+        "docs/qa/p0-integration-dag-20261021.json",
+        "scripts/qa24-integration-dag.ts",
+        "test/qa-24-integration-dag.test.ts"
+      ],
+      "files_complete": true
     },
     {
       "pr": 647,
@@ -122,7 +160,12 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "3b3f26d068f169b941383308a1763124e3a3feef"
-      }
+      },
+      "files": [
+        "docs/security/p0-native-handle-provenance-w26.md",
+        "test/p0-native-handle-provenance-w26.test.ts"
+      ],
+      "files_complete": true
     }
   ]
 }
