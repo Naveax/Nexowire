@@ -1,0 +1,106 @@
+{
+  "nodes": [
+    {
+      "pr": 739,
+      "head_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "head_ref": "fix/12-native-acl-dispatch-permit-source-20261022",
+      "base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "base_ref": "fix/12-atomic-switch-repair-20261021",
+      "ci": {
+        "run_id": 39677691555,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde"
+      },
+      "files": [
+        "docs/s3-native-acl-dispatch-fence-owner-20261022.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+        "head_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "merge_base_sha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 740,
+      "head_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+      "head_ref": "test/25-two-hub-cas-revoke-readback-20261022",
+      "base_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "base_ref": "test/25-crash-ack-root-readback-20261021",
+      "ci": {
+        "run_id": 39677694668,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "8b17168e610268aba30ac94213befba406a41cf2"
+      },
+      "files": [
+        "docs/CORE_TWO_HUB_CAS_REVOKE_READBACK_QA_20261022.md",
+        "test/core-two-hub-owner-revoke-cas-postcondition.qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+        "head_sha": "8b17168e610268aba30ac94213befba406a41cf2",
+        "merge_base_sha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 741,
+      "head_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+      "head_ref": "feat/04-nonce-native-cas-readback-20261022",
+      "base_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "base_ref": "feat/04-active-job-auth-fence-20261021",
+      "ci": {
+        "run_id": 39677981833,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8"
+      },
+      "files": [
+        "docs/NEXOWIRE_ACCESS_NATIVE_NONCE_RECONNECT_20261022.md",
+        "src/product/access-native-broker-proof.ts",
+        "src/product/access-queued-job-review.ts",
+        "test/access-queued-job-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+        "head_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+        "merge_base_sha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 742,
+      "head_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "head_ref": "test/06-725-712-double-reconnect-20261022",
+      "base_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "base_ref": "test/06-691-predispatch-reopen-20261021",
+      "ci": {
+        "run_id": 39678274991,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b93ee12a7737085050768261bff9b4fc71019b65"
+      },
+      "files": [
+        "docs/CONNECTION_06_725_712_FORENSIC_RECONNECT_20261022.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-691-predispatch-reopen.qa.test.ts",
+        "test/connection-725-712-forensic-reconnect.test.ts",
+        "test/cross-device-worker-journal-link.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+        "head_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "merge_base_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+        "status": "ahead"
+      }
+    }
+  ]
+}
