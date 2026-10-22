@@ -3,9 +3,11 @@
  * No fetch(), storage, shell, dispatch, elevated execution or UI fallback truth.
  */
 const SHA=/^[a-f0-9]{64}$/;
+const GIT_SHA=/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const ID=/^[a-zA-Z0-9._:@-]{1,160}$/;
 const KEYS=['ownerId','deviceId','taskId','logicalMutationId','requestId',
-  'worktreeIdentitySha256','preimageSha256','baseSha256','sourceSha256',
+  'gitBaseSha','gitSourceSha','worktreeIdentitySha256','preimageSha256',
+  'baseSha256','sourceSha256',
   'diffSha256','semanticEffectSha256','deviceEpoch','sessionEpoch',
   'ownerEpoch','grantGeneration'];
 const HASHES=new Set(['worktreeIdentitySha256','preimageSha256','baseSha256',
@@ -15,7 +17,9 @@ const MAX_FILES=80;
 const MAX_INTENT_MS=300000;
 const scalar=(x)=>typeof x==='string'&&ID.test(x);
 const validField=(key,value)=>HASHES.has(key)?typeof value==='string'&&SHA.test(value)
-  :key==='ownerEpoch'||key==='grantGeneration'
+  :key==='gitBaseSha'||key==='gitSourceSha'
+    ?typeof value==='string'&&GIT_SHA.test(value)
+    :key==='ownerEpoch'||key==='grantGeneration'
     ?Number.isSafeInteger(value)&&value>0
     :scalar(value);
 const equalScope=(a,b)=>KEYS.every(key=>a[key]===b[key]);
@@ -150,6 +154,7 @@ export function mountTaskReview(root,input,{now=()=>Date.now(),onIntent}={}){
   button.type='button';
   button.disabled=!view.canRecordIntent||typeof onIntent!=='function';
   button.addEventListener('click',()=>{
+    if(button.disabled)return;
     // Re-check the view data and deadline at click; still never a native grant.
     const intent=makeReviewIntent(input,now());
     if(!intent||typeof onIntent!=='function'){

@@ -10,6 +10,7 @@ function fixture(){
   const scope={
     ownerId:'owner-A',deviceId:'device-A',taskId:'task-A',
     logicalMutationId:'mutation-original',requestId:'request-original',
+    gitBaseSha:'1'.repeat(40),gitSourceSha:'2'.repeat(40),
     worktreeIdentitySha256:H,preimageSha256:J,
     baseSha256:C,sourceSha256:D,diffSha256:E,semanticEffectSha256:F,
     deviceEpoch:'device-epoch-1',sessionEpoch:'session-epoch-1',
@@ -56,11 +57,11 @@ test('#48 forged signed/native/CAS/physical flags cannot flip physical verified'
   assert.equal(makeReviewIntent(f,NOW),null);
 });
 test('#48 changed source/diff/base/worktree/preimage and cloned request block intent',()=>{
-  for(const key of ['sourceSha256','diffSha256','baseSha256','worktreeIdentitySha256',
+  for(const key of ['gitBaseSha','gitSourceSha','sourceSha256','diffSha256','baseSha256','worktreeIdentitySha256',
     'preimageSha256','logicalMutationId','requestId','ownerId','deviceId']){
     const f=fixture();
     const scope=f.current.scope as Record<string,string|number>;
-    scope[key]=key.endsWith('Sha256')?H:'cloned-or-stale';
+    scope[key]=key.endsWith('Sha256')?H:key.startsWith('git')?'3'.repeat(40):'cloned-or-stale';
     if(scope[key]===f.proposed.scope[key as keyof typeof f.proposed.scope])
       scope[key]=J;
     const v=projectTaskReview(f,NOW);
