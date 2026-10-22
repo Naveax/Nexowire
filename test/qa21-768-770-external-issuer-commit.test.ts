@@ -34,7 +34,8 @@ const req = {
 };
 type Mode = 'current' | 'revoke-before-external-commit' |
   'foreign-native-issuer' | 'lost-destination-readback' |
-  'forged-second-write-ack';
+  'forged-second-write-ack' | 'owner-revoked-during-final-verification' |
+  'correctly-signed-foreign-final-sha';
 type Ledger = {
   ownerEpoch: number; grantGeneration: number; sessionEpoch: string;
   committed?: {
@@ -67,10 +68,14 @@ function rig(file: string, mode: Mode) {
   const initialEpoch = 71, initialGeneration = 9;
   let stage = Buffer.alloc(0), target: Buffer | undefined;
   let writes = 0, publishes = 0, verifies = 0, commitAttempts = 0;
+  let finalHashReadbacks = 0;
   let receipt: FencedFinalReceipt | undefined;
   let entered!: () => void, release!: () => void;
   const atCommit = new Promise<void>(r => { entered = r; });
   const allowCommit = new Promise<void>(r => { release = r; });
+  let enteredVerifier!: () => void, releaseVerifier!: () => void;
+  const atVerifier = new Promise<void>(r => { enteredVerifier = r; });
+  const allowVerifier = new Promise<void>(r => { releaseVerifier = r; });
   const ledger = async (): Promise<Ledger> =>
     JSON.parse(await fs.readFile(file, 'utf8')) as Ledger;
   const domain = (claims: Omit<FencedFinalReceipt, 'proof'>, owner: Ledger) =>
@@ -80,14 +85,23 @@ function rig(file: string, mode: Mode) {
       claims.sha256, claims.epoch]);
   const mac = (claims: Omit<FencedFinalReceipt, 'proof'>, current: Ledger, key = legitimateKey) =>
     createHmac('sha256', key).update(domain(claims, current)).digest('hex');
-  const matches = async (value: FencedFinalReceipt) => {
-    const current = await ledger();
-    if (current.ownerEpoch !== initialEpoch ||
-        current.grantGeneration !== initialGeneration) return false;
+  const authenticateIssuedReceipt = (value: FencedFinalReceipt) => {
+    // Cryptographic issuer authenticity is distinct from a FRESH owner
+    // epoch. A valid old receipt MUST NOT resurrect a revoked CORE grant.
     const { proof, ...claims } = value;
     if (!/^[0-9a-f]{64}$/.test(proof)) return false;
+    const issuance: Ledger = {
+      ownerEpoch: initialEpoch, grantGeneration: initialGeneration,
+      sessionEpoch: 'issue-time-authenticated-session',
+    };
     return timingSafeEqual(Buffer.from(proof, 'hex'),
-      Buffer.from(mac(claims, current), 'hex'));
+      Buffer.from(mac(claims, issuance), 'hex'));
+  };
+  const matches = async (value: FencedFinalReceipt) => {
+    const current = await ledger();
+    return current.ownerEpoch === initialEpoch &&
+      current.grantGeneration === initialGeneration &&
+      authenticateIssuedReceipt(value);
   };
   const authority: TrustedTransferAuthority = {
     acquire: async () => ({
@@ -142,6 +156,14 @@ function rig(file: string, mode: Mode) {
   const verifier: TrustedFinalReceiptVerifier = {
     verify: async (_job, signed) => {
       verifies++;
+      if (mode === 'owner-revoked-during-final-verification') {
+        // Pause AFTER a real synthetic Native final side effect and a
+        // correctly HMAC-signed receipt; change external owner authority
+        // during this await, not before publication dispatch.
+        enteredVerifier();
+        await allowVerifier;
+        return authenticateIssuedReceipt(signed);
+      }
       return matches(signed);
     },
   };
@@ -153,6 +175,8 @@ function rig(file: string, mode: Mode) {
       return { type: 'file', size: data.length };
     },
     hash: async (dev, filename) => {
+      if (dev === req.targetDeviceId && filename === req.targetPath)
+        finalHashReadbacks++;
       if (mode === 'lost-destination-readback' &&
           dev === req.targetDeviceId && filename === req.targetPath)
         throw Error('SIMULATED_INDEPENDENT_FINAL_READBACK_UNAVAILABLE');
@@ -195,7 +219,9 @@ function rig(file: string, mode: Mode) {
         requestId, jobId: job.id, accountId: job.accountId,
         projectId: job.projectId, targetDeviceId: job.targetDeviceId,
         targetPath: job.targetPath, bytesTotal: job.bytesTotal,
-        sha256: job.sha256, epoch,
+        sha256: mode === 'correctly-signed-foreign-final-sha'
+          ? '0'.repeat(64) : job.sha256,
+        epoch,
       };
       receipt = { ...claims, proof: mac(claims, a,
         mode === 'foreign-native-issuer' ? untrustedKey : legitimateKey) };
@@ -253,7 +279,10 @@ function rig(file: string, mode: Mode) {
       },
     });
   };
-  return { hub, ledger, observe, atCommit, release: () => release(),
+  return {
+    hub, ledger, observe, atCommit, release: () => release(),
+    atVerifier, releaseVerifier: () => releaseVerifier(),
+    authenticateIssuedReceipt,
     revoke: async () => {
       const old = await ledger();
       await persist(file, { ...old, ownerEpoch: old.ownerEpoch + 1,
@@ -262,6 +291,7 @@ function rig(file: string, mode: Mode) {
     },
     get publishes() { return publishes; }, get writes() { return writes; },
     get verifies() { return verifies; }, get commitAttempts() { return commitAttempts; },
+    get finalHashReadbacks() { return finalHashReadbacks; },
     get receipt() { return receipt; }, get target() { return target; },
   };
 }
@@ -400,6 +430,8 @@ test('#21 #768+#770: forged second Native chunk ACK keeps dispatched UNKNOWN and
     assert.equal(unknown.pending?.length, bytes.length - 65_536);
     assert.equal(unknown.pending?.dispatched, true);
     assert.equal(unknown.pending?.sha256, digest(bytes.subarray(65_536)));
+    assert.equal(unknown.sha256, digest(bytes), 'forged ACK never modifies original full SHA');
+    assert.equal(unknown.pending?.epoch, unknown.fencing?.epoch);
     assert.ok(unknown.pending?.requestId);
     assert.equal(unknown.publication, undefined, 'no final request may be reserved');
     assert.equal(f.writes, 2, 'both Native chunk effects were simulated exactly once');
@@ -417,4 +449,107 @@ test('#21 #768+#770: forged second Native chunk ACK keeps dispatched UNKNOWN and
     assert.equal(f.writes, 2, 'another Hub must not replay the unknown side effect');
     assert.equal(f.publishes, 0);
     assert.equal(f.commitAttempts, 0);
+  }));
+
+
+test('#21 CAS-aware #762: signed final receipt remains authentic but owner revoke during verifier forbids completion and replay',
+  { timeout: 20_000 }, async () => isolated(async (root, authorityFile) => {
+    const fx = rig(authorityFile, 'owner-revoked-during-final-verification');
+    const firstHub = fx.hub(root);
+    const started = await firstHub.start(req);
+    const filename = path.join(root, started.id + '.json');
+    let snapshot: TransferJob | undefined;
+    try {
+      await fx.atVerifier;
+      const publishing = await jobRecord(root, started.id);
+      assert.equal(publishing.state, 'PUBLISHING');
+      assert.equal(publishing.publication?.dispatched, true);
+      assert.equal(publishing.publication?.epoch, 5);
+      assert.equal(publishing.publication?.sha256, digest(bytes));
+      assert.equal(publishing.bytesConfirmed, bytes.length);
+      assert.ok(fx.receipt);
+      assert.equal(fx.receipt?.requestId, publishing.publication?.requestId);
+      assert.equal(fx.authenticateIssuedReceipt(fx.receipt!), true,
+        'Native receipt MAC remains cryptographically authentic at issue time');
+      assert.equal(fx.publishes, 1, 'synthetic destination mutation already occurred');
+      assert.deepEqual(fx.target, bytes);
+      snapshot = structuredClone(publishing);
+      await fx.revoke();
+    } finally {
+      fx.releaseVerifier();
+      await firstHub.waitForIdle(started.id);
+    }
+    const unknown = await jobRecord(root, started.id);
+    assert.equal(unknown.state, 'MUTATION_UNKNOWN');
+    assert.equal(unknown.errorCode, 'CORE_GRANT_EPOCH_STALE');
+    assert.equal(unknown.bytesConfirmed, bytes.length);
+    assert.equal(unknown.publication?.dispatched, true);
+    assert.equal(unknown.publication?.requestId, snapshot?.publication?.requestId);
+    assert.equal(unknown.publication?.sha256, digest(bytes));
+    assert.equal(unknown.publication?.durableCommitId, undefined);
+    assert.equal(fx.verifies, 1);
+    assert.equal(fx.finalHashReadbacks, 0, 'owner revoked before final destination credit');
+    assert.equal(fx.commitAttempts, 0);
+    assert.equal((await fx.ledger()).committed, undefined);
+    assert.equal(fx.writes, 2);
+    assert.equal(fx.publishes, 1);
+
+    // Restore ONLY the rollbackable local worker journal. External owner
+    // high-water remains revoked, so a second Hub must not resume/publish.
+    assert.ok(snapshot);
+    await persist(filename, snapshot);
+    const reopened = await jobRecord(root, started.id);
+    assert.equal(reopened.state, 'PUBLISHING');
+    assert.equal(reopened.publication?.requestId, unknown.publication?.requestId);
+    const secondHub = fx.hub(root);
+    await assert.rejects(secondHub.start({ ...req, resumeTransferId: started.id }),
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+    await assert.rejects(secondHub.status(started.id,
+      req.accountId, req.sourceDeviceId, req.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+    assert.equal(fx.publishes, 1);
+    assert.equal(fx.commitAttempts, 0);
+    assert.equal((await fx.ledger()).committed, undefined);
+  }));
+
+test('#21 CAS-aware #762: authentically signed FOREIGN final SHA preserves immutable publication and UNKNOWN',
+  { timeout: 15_000 }, async () => isolated(async (root, authorityFile) => {
+    const fx = rig(authorityFile, 'correctly-signed-foreign-final-sha');
+    const firstHub = fx.hub(root);
+    const started = await firstHub.start(req);
+    await firstHub.waitForIdle(started.id);
+    const result = await jobRecord(root, started.id);
+    assert.ok(fx.receipt);
+    assert.equal(fx.authenticateIssuedReceipt(fx.receipt!), true,
+      'this is a valid HMAC over the WRONG immutable full SHA, not a bad MAC');
+    assert.equal(fx.receipt?.requestId, result.publication?.requestId);
+    assert.equal(fx.receipt?.sha256, '0'.repeat(64));
+    assert.equal(result.sha256, digest(bytes));
+    assert.equal(result.publication?.sha256, digest(bytes),
+      'journal original full SHA cannot be replaced by the foreign receipt');
+    assert.equal(result.state, 'MUTATION_UNKNOWN');
+    assert.equal(result.errorCode, 'FINAL_RECEIPT_MISMATCH');
+    assert.equal(result.bytesConfirmed, bytes.length);
+    assert.equal(result.publication?.dispatched, true);
+    assert.equal(result.publication?.durableCommitId, undefined);
+    assert.deepEqual(fx.target, bytes, 'Native synthetic side effect occurred');
+    assert.equal(fx.verifies, 0, 'immutable SHA mismatch precedes MAC verifier');
+    assert.equal(fx.finalHashReadbacks, 0);
+    assert.equal(fx.commitAttempts, 0);
+    assert.equal((await fx.ledger()).committed, undefined);
+    assert.equal(fx.publishes, 1);
+
+    const secondHub = fx.hub(root);
+    const afterCancel = await secondHub.cancel(started.id,
+      req.accountId, req.sourceDeviceId, req.targetDeviceId);
+    assert.equal(afterCancel.state, 'MUTATION_UNKNOWN');
+    const retained = await jobRecord(root, started.id);
+    assert.equal(retained.errorCode, 'FINAL_RECEIPT_MISMATCH');
+    assert.equal(retained.publication?.requestId, result.publication?.requestId);
+    assert.equal(retained.publication?.sha256, result.publication?.sha256);
+    assert.equal(fx.writes, 2);
+    assert.equal(fx.publishes, 1, 'no second Native publication permitted');
+    assert.equal(fx.commitAttempts, 0);
   }));
