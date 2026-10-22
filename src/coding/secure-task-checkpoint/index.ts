@@ -1,4 +1,4 @@
-import {createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual} from 'node:crypto';
+import {createCipheriv, createDecipheriv, createHash, randomBytes} from 'node:crypto';
 import {mkdir, open, readFile, rename, unlink} from 'node:fs/promises';
 import path from 'node:path';
 import * as z from 'zod';
@@ -62,6 +62,11 @@ export const SecureTaskCheckpointSchema = z.strictObject({
        c.mutation.state === 'RECONCILE_REQUIRED' ||
        c.events.some(e => e.outcome === 'UNKNOWN')) && !c.mutation.pendingUnknown)
     ctx.addIssue({code: 'custom', message: 'UNKNOWN_PROVENANCE_REQUIRED'});
+  if (c.ciWitnesses.some(w => w.sourceSha !== c.scope.sourceSha))
+    ctx.addIssue({code: 'custom', message: 'CI_SOURCE_SHA_MISMATCH'});
+  if (c.approvals.some(a => a.grantScopeDigest !== c.scope.signedGrantScopeDigest ||
+      a.approvalEpoch !== c.scope.ownerEpoch))
+    ctx.addIssue({code: 'custom', message: 'APPROVAL_GRANT_SCOPE_MISMATCH'});
   if (c.mutation.pendingUnknown && !c.mutation.originalErrorCode)
     ctx.addIssue({code: 'custom', message: 'ORIGINAL_ERROR_REQUIRED'});
   if (new Set(c.approvals.map(a => a.approvalId)).size !== c.approvals.length)
@@ -106,6 +111,9 @@ function preserve(previous: SecureTaskCheckpoint, next: SecureTaskCheckpoint): v
       n.toolsUsed < p.toolsUsed || n.elapsedMs < p.elapsedMs)
     fail('BUDGET_RESET');
   if (previous.cancelled && !next.cancelled) fail('CANCELLATION_ERASED');
+  if (previous.mutation.originalErrorCode &&
+      next.mutation.originalErrorCode !== previous.mutation.originalErrorCode)
+    fail('ORIGINAL_ERROR_ERASED');
   if (previous.mutation.pendingUnknown && (!next.mutation.pendingUnknown ||
       next.mutation.originalErrorCode !== previous.mutation.originalErrorCode ||
       next.mutation.state !== previous.mutation.state))
@@ -116,9 +124,12 @@ function preserve(previous: SecureTaskCheckpoint, next: SecureTaskCheckpoint): v
     fail('CI_WITNESS_ERASED');
   // Events may be folded ONLY through compactTaskContext(), which is an
   // explicit operation and retains a chained digest, never approval/UNKNOWN.
-  if (!same(next.foldedEvents, previous.foldedEvents) ||
-      !same(next.events.slice(0, previous.events.length), previous.events))
-    fail('EVENT_HISTORY_CHANGED');
+  const appended = same(next.foldedEvents, previous.foldedEvents) &&
+    same(next.events.slice(0, previous.events.length), previous.events);
+  const compacted = compactTaskContext(previous);
+  const folded = same(next.foldedEvents, compacted.foldedEvents) &&
+    same(next.events, compacted.events);
+  if (!appended && !folded) fail('EVENT_HISTORY_CHANGED');
 }
 
 /** Only bounded codes, hashes, IDs and counters: no freeform text or output. */
@@ -143,7 +154,8 @@ export function inspectRestoredCheckpoint(
   if (!same(snapshot.scope, scopeSchema.parse(expected)))
     return verdict('STOP', 'SCOPE_OR_GRANT_STALE');
   if (!grantActive) return verdict('STOP', 'GRANT_REVOKED');
-  if (snapshot.cancelled) return verdict('STOP', 'CANCELLED');
+  if (snapshot.cancelled || snapshot.approvals.some(a => a.decision === 'REVOKED'))
+    return verdict('STOP', 'CANCELLED');
   if (snapshot.budget.stepsUsed >= snapshot.budget.maxSteps ||
       snapshot.budget.toolsUsed >= snapshot.budget.maxTools ||
       snapshot.budget.elapsedMs >= snapshot.budget.maxElapsedMs)
