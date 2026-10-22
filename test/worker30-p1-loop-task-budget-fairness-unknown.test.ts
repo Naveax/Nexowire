@@ -205,6 +205,13 @@ test('QA30 #780 task step/time/token/memory/transfer budgets retain native UNKNO
         expectedOffsetBytes:0,
       }),'CANCEL_PENDING');
       assert.equal(budget.markUnknown(OWNER_NOISY,id),'MUTATION_UNKNOWN');
+      // The real staging source rejects a claimed deletion receipt unless
+      // the *trusted adapter* supplied a verified stopped-writer witness.
+      assert.throws(()=>stage.acknowledgeDeletion({
+        ownerId:OWNER_NOISY,deviceId:'device-noisy',
+        projectId:'qa30-loop-project',sessionId:'session-qa30-noisy',
+        durableDeletionVerified:true,
+      }),/WRITER_FENCE_REQUIRED/);
       assert.equal(budget.admit(OWNER_NOISY,task,'native30-next',CHUNK_SHA,
         NOW.getTime()+1,{tokens:1,memoryBytes:0,transferBytes:0}),
         'RECONCILE_REQUIRED');
