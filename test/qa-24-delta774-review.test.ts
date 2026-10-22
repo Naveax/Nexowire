@@ -25,18 +25,31 @@ test('QA24 160+15+6 overlays 179 IDs, P1 #780 is NOT an open P0 PR',()=>{
   assert.equal(r.current_safe_merge_candidates.length,0);
 });
 
-test('QA24 red and missing CI are not manufactured into primary CI SUCCESS',()=>{
+test('QA24 exact primary CI preserves green and red outcomes, not specialist green',()=>{
   const {graph,delta,newDelta,census}=fresh();
   const r=reconcile774779(graph,delta,newDelta,census);
   assert.deepEqual(r.delta_status.map(x=>x.pr),[774,775,776,777,778,779]);
-  assert.equal(r.delta_status.find(x=>x.pr===774)?.primary_ci_conclusion,'success');
-  assert.equal(r.delta_status.find(x=>x.pr===778)?.primary_ci_conclusion,'success');
-  assert.equal(r.delta_status.find(x=>x.pr===777)?.primary_ci_conclusion,'failure');
-  for(const pr of [775,776,779]){
+  const expected=new Map([
+    [774,['success',39806480924]],[775,['success',39806640003]],
+    [776,['failure',39809339319]],[777,['failure',39807272228]],
+    [778,['success',39807830909]],[779,['failure',39808685776]]
+  ]);
+  for(const [pr,[conclusion,run]] of expected){
     const x=r.delta_status.find(z=>z.pr===pr);assert.ok(x);
-    assert.equal(x.primary_ci_run,null);assert.equal(x.primary_ci_conclusion,null);
-    assert.ok(r.unverified_ci.some(z=>z.prs.includes(pr)));
+    assert.equal(x.primary_ci_conclusion,conclusion,String(pr));
+    assert.equal(x.primary_ci_run,run,String(pr));
   }
+  assert.equal(r.production_p0_merge_authorized,false);
+});
+
+test('QA24 missing exact main CI stays UNKNOWN and blocks previous green claims',()=>{
+  const {graph,delta,newDelta,census}=fresh();
+  const x=one(newDelta,775);
+  x.ci={run_id:null,status:'unknown',conclusion:null,queried_head_sha:x.head_sha};
+  const r=reconcile774779(graph,delta,newDelta,census);
+  assert.ok(r.unverified_ci.some(z=>z.prs.includes(775)));
+  assert.equal(r.delta_status.find(z=>z.pr===775)?.primary_ci_conclusion,null);
+  assert.equal(r.current_safe_merge_candidates.length,0);
 });
 
 test('QA24 owner collisions #776 with #762 and #779 workflow are detected',()=>{
