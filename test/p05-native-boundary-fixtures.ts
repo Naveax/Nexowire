@@ -54,6 +54,7 @@ export function syntheticImportGraph(
       signerCertificateSha256:'f'.repeat(64),imports:[]},
   ];
   return {
+    schemaVersion:1,
     manifestProvider:'protected-installed-manifest',
     manifestSignatureVerified:true,
     rootKey:'root',

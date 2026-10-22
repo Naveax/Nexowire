@@ -270,6 +270,45 @@ test('nested transitive DLL requires both parent handles, per-level ACL and post
     'IMPORT_UNSAFE_PATH');
 });
 
+test('native import manifest rejects JSON schema version type confusion and coerced authority booleans',()=>{
+  for(const bad of ['1',true,false,2,0,null,undefined]){
+    mutation(f=>{graph(f).schemaVersion=bad as never;},
+      'IMPORT_MANIFEST_OR_INVENTORY_UNAVAILABLE');
+  }
+  for(const bad of ['true',1,{},null,undefined]){
+    mutation(f=>{graph(f).manifestSignatureVerified=bad as never;},
+      'IMPORT_MANIFEST_OR_INVENTORY_UNAVAILABLE');
+    mutation(f=>{byKey(graph(f),'updater').importInventoryComplete=bad as never;},
+      'IMPORT_DISCOVERED_GRAPH_MISMATCH');
+  }
+});
+
+test('retained native per-DLL and ancestor witnesses reject truthy flags and omitted false',()=>{
+  for(const key of ['root','updater','module']){
+    for(const bad of [1,'true',{},undefined]){
+      mutation(f=>{byKey(graph(f),key).handle.noFollowVerified=bad as never;},
+        'IMPORT_FILE_HANDLE_UNVERIFIED');
+      mutation(f=>{byKey(graph(f),key).open.noReparseTraversal=bad as never;},
+        'IMPORT_OPEN_BY_HANDLE_OR_POST_READBACK_UNVERIFIED');
+      mutation(f=>{byKey(graph(f),key).open.retainedUntilVerified=bad as never;},
+        'IMPORT_OPEN_BY_HANDLE_OR_POST_READBACK_UNVERIFIED');
+    }
+    mutation(f=>{byKey(graph(f),key).handle.alternateStream=undefined as never;},
+      'IMPORT_FILE_HANDLE_UNVERIFIED');
+    mutation(f=>{byKey(graph(f),key).parentRelativeChain.grantRoot.alternateStream=undefined as never;},
+      'IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+  }
+  for(const bad of [1,'true',{},undefined]){
+    // Missing/falsy no-follow evidence is already denied by the lower-level
+    // relative-handle gate. Truthy wrong types must be denied at import gate.
+    mutation(f=>{byKey(graph(f),'root').parentRelativeChain.steps[0]!.child.noFollowVerified=bad as never;},
+      bad===undefined?'NATIVE_RELATIVE_HANDLE_CHANGED':
+        'IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+  }
+  mutation(f=>{byKey(graph(f),'root').parentRelativeChain.steps[0]!.child.alternateStream=undefined as never;},
+    'IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+});
+
 test('hardlink aliases with distinct manifest keys cannot silently reuse same native file identity',()=>{
   mutation(f=>{
     const module=byKey(graph(f),'module'),updater=byKey(graph(f),'updater');

@@ -55,6 +55,8 @@ export interface ObservedImport {
   discoveredImports:readonly string[];
 }
 export interface ProtectedImportGraph {
+  /** Exact numeric schema version; JSON '1' and true are not valid v1. */
+  schemaVersion:1;
   manifestProvider:'protected-installed-manifest'|'unavailable';
   /** OS provider proved manifest bytes bound to installed signed release. */
   manifestSignatureVerified:boolean;
@@ -114,8 +116,9 @@ export function assertProtectedImportClosure(
   pinnedSource:string,source:NativeHandleEvidence,
   protectedRoots:Readonly<Record<ProtectedRole,ProtectedAclEvidence>>,
 ):{importsVerified:number;verifiedFileIds:readonly string[]}{
-  if(!graph||graph.manifestProvider!=='protected-installed-manifest'||
-     !graph.manifestSignatureVerified||
+  if(!graph||graph.schemaVersion!==1||
+     graph.manifestProvider!=='protected-installed-manifest'||
+     graph.manifestSignatureVerified!==true||
      !Array.isArray(graph.pinned)||!Array.isArray(graph.observed)||
      !graph.rootKey||graph.pinned.length<1||graph.pinned.length>128||
      graph.observed.length!==graph.pinned.length){
@@ -176,7 +179,7 @@ export function assertProtectedImportClosure(
   const usedFileIds=new Set<string>();
   for(const [key,pin] of expected){
     const observed=actual.get(key);
-    if(!observed||!observed.importInventoryComplete||
+    if(!observed||observed.importInventoryComplete!==true||
        !Array.isArray(observed.discoveredImports)||
        !refsEqual(pin.imports,observed.discoveredImports)){
       deny('IMPORT_DISCOVERED_GRAPH_MISMATCH');
@@ -202,6 +205,15 @@ export function assertProtectedImportClosure(
     // checks, including inherited future writes and delete-child rights.
     assertEffectiveNativeAcl(anchor.effectiveAcl,anchor.handle);
     const steps=observed.parentRelativeChain.steps;
+    if(!Array.isArray(steps)||steps.some(step=>
+       !step||step.child?.noFollowVerified!==true||
+       step.child?.alternateStream!==false)){
+      deny('IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+    }
+    if(observed.parentRelativeChain.grantRoot.noFollowVerified!==true||
+       observed.parentRelativeChain.grantRoot.alternateStream!==false){
+      deny('IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+    }
     if(!Array.isArray(observed.intermediateDirectoryAcls)||
        observed.intermediateDirectoryAcls.length!==steps.length){
       deny('IMPORT_ANCESTOR_ACL_INCOMPLETE');
@@ -211,8 +223,8 @@ export function assertProtectedImportClosure(
         steps[index]!.child);
     }
     const handle=observed.handle;
-    if(!handle||handle.objectType!=='file'||!handle.noFollowVerified||
-       handle.reparseTag!==null||handle.alternateStream||
+    if(!handle||handle.objectType!=='file'||handle.noFollowVerified!==true||
+       handle.reparseTag!==null||handle.alternateStream!==false||
        handle.linkCount!==1||
        clean(handle.openedPath)!==clean(pin.path)||
        clean(handle.finalPath)!==clean(pin.path)||
@@ -223,7 +235,8 @@ export function assertProtectedImportClosure(
     const nativeOpen=observed.open;
     if(!nativeOpen||nativeOpen.provider!=='native-retained-handle'||
        !['NtCreateFile.RootDirectory','OpenFileById'].includes(nativeOpen.api)||
-       !nativeOpen.noReparseTraversal||!nativeOpen.retainedUntilVerified||
+       nativeOpen.noReparseTraversal!==true||
+       nativeOpen.retainedUntilVerified!==true||
        nativeOpen.parentFileId!==relative.parent.fileId||
        nativeOpen.openedFileId!==handle.fileId||
        !sameNativeId(handle,nativeOpen.afterReadback)){

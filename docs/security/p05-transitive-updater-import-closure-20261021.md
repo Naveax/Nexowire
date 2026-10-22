@@ -27,6 +27,14 @@ The #707 closure now additionally requires a **separate effective ACL witness fo
 
 Native file ID remaining unchanged is NOT evidence that a writable file's contents remained unchanged after the first hash. For each DLL, source policy now demands a second SHA-256 digest and signer-cert fingerprint bound explicitly to the retained native image *after* readback; missing, changed or unbound receipts deny, even when observedAfter.fileId matches. This is a **contract**, not a real kernel-backed data-integrity or Authenticode implementation.
 
+## 2026-10-22: #753 strict JSON version and #756 native kernel ACL/PID evidence cross-check
+
+Independent #26 #753 (HEAD 72ff16a23881c9dfde52f7bb5190bdf6185457e5, hosted CI SUCCESS) found that #743 PowerShell JSON `version: "1"` and `version: true` were accepted as version 1. That is a distinct #03 legacy/envelope parser bug, NOT a reason for #05 to modify #743 or duplicate #753 native QA. The #05 source graph now demands **exact numeric schemaVersion 1**, manifestSignatureVerified===true and every per-import inventory/retained-handle/no-reparse attribute exactly equal to true/false as declared. Missing, string, numeric truthy or object flags deny: no loose Boolean coercion from serialized native-witness envelopes. These tests do not implement the external authenticated witness issuer.
+
+Independent #03 #756 (HEAD d4ed32f72701e5157929cbb9d36bdf0a90fc0d57, exact-head CI SUCCESS) demonstrates *real TEMP-only same-caller* Win32 effective write/create/delete access and read-only native process PID+FILETIME/PROCESS_DUP_HANDLE probes. Their own output explicitly leaves installed high-integrity Broker, separate lowpriv caller token, owner epoch, protected Job/handle rights, complete signed DLL inventory and physical native importer unverified. #05 must not replace source native per-DLL retained-handle/ACL/Authenticode proof with those fixture outputs, and must not claim physical Windows protected importer or actual AccessCheck is integrated.
+
+Existing per-DLL signer/hash, ancestor effective ACL, reparse/junction/ADS, volume, readback identity and scoped grant tests are retained; no duplicate native QA PR created. Production high-integrity issuer and independent Windows native protected import/provider/writer acceptance remain BLOCKED (#271/#551).
+
 ## Production block
 
 #271 protected runtime and effective parent ACL, #551 installer/rollback/signed owner high-token Broker, independent Windows native protected witness producer and handle-relative atomic writer remain NO-GO. Existing production elevated files capabilities remain unsupported. No live Agent/Broker/UAC/ACL/USB/VM or user files, no #08 transfer store, and no physical 1 GiB fixture are touched.
