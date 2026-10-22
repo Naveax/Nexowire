@@ -26,6 +26,13 @@ const target={
 };
 const untrusted=(e:unknown)=>e instanceof PrivateDesktopRuntimeGateError&&
   e.code===PRIVATE_DESKTOP_OWNER_WITNESS_UNAVAILABLE;
+// The production picker is Windows-only. On other operating systems the
+// earlier platform rejection is the expected safe outcome, not a forged
+// protected Job witness. Keep the Windows-specific owner check strict.
+const platformOrOwnerReject=(e:unknown)=>{
+  if(process.platform==='win32')return untrusted(e);
+  return e instanceof Error&&'code'in e&&e.code==='WINDOWS_REQUIRED';
+};
 
 test('production picker refuses forged tracked PID before querying any real UIA',async()=>{
   // No native Job/HANDLE collector is installed. Forged state.launchedPids
@@ -33,11 +40,15 @@ test('production picker refuses forged tracked PID before querying any real UIA'
   await assert.rejects(
     executeWindowsPrivateFilePickerCapability(
       'windows.private_desktop.file_picker.prepare',target,new PathPolicy(['*'])),
-    untrusted,
+    platformOrOwnerReject,
   );
   const realAdapter=createPrivateFilePickerAdapter();
-  await assert.rejects(realAdapter.prepare(target),untrusted);
+  await assert.rejects(realAdapter.prepare(target),platformOrOwnerReject);
+  // The OS-agnostic protected owner gate itself always rejects when no
+  // authenticated retained Job/HANDLE collector was installed by #03.
   await assert.rejects(requireProtectedPrivateDesktopOwner('picker'),untrusted);
+  await assert.rejects(requireProtectedPrivateDesktopOwner('launch'),untrusted);
+  await assert.rejects(requireProtectedPrivateDesktopOwner('stop'),untrusted);
 });
 
 test('production picker respects emergency stop marker before owner read or UIA',{
