@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { executeCapability } from '../src/agent/executors.js';
 import { PathDeniedError, PathPolicy } from '../src/agent/path-policy.js';
@@ -13,7 +12,7 @@ import { PathDeniedError, PathPolicy } from '../src/agent/path-policy.js';
 test('W26 Git commit-graph file nested symlink outside allowed root must deny before Git log', {
   timeout: 45_000,
 }, async t => {
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-w26-commitgraph-'));
+  const temp = await fs.mkdtemp(path.join(process.cwd(), '.nexowire-w26-commitgraph-'));
   t.after(async () => fs.rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const root = path.join(temp, 'allowed-repository');
   const outside = path.join(temp, 'outside-root');
@@ -40,6 +39,10 @@ test('W26 Git commit-graph file nested symlink outside allowed root must deny be
       '-c', 'user.email=w26-temp@example.invalid',
       'commit', '--quiet', '--allow-empty', '-m', 'temporary-commit-' + i]);
   }
+  const policy = new PathPolicy([root]);
+  const healthy = (await executeCapability('workspace.snapshot', { path: root }, policy)) as { data: { root: string } };
+  assert.equal(path.resolve(healthy.data.root).toLowerCase(), path.resolve(root).toLowerCase(),
+    'healthy in-scope Git workspace MUST pass before testing nested symlink');
   git(['-C', root, 'commit-graph', 'write', '--reachable']);
   const graph = path.join(root, '.git', 'objects', 'info', 'commit-graph');
   const external = path.join(outside, 'commit-graph');
@@ -75,7 +78,6 @@ test('W26 Git commit-graph file nested symlink outside allowed root must deny be
   }
   assert.equal(git(['-C', root, 'log', '-1', '--format=%H']), head);
 
-  const policy = new PathPolicy([root]);
   assert.equal(await policy.resolveExisting(root), await fs.realpath(root));
   await assert.rejects(
     () => executeCapability('workspace.snapshot', { path: root }, policy),
