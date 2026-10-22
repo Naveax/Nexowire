@@ -1526,6 +1526,7 @@ test('#22/#785 P0: cloned UNKNOWN cannot borrow final CAS and revoke-start befor
       ...unknownOriginal, id: randomUUID(), state: 'COMPLETED',
       errorCode: unknownOriginal.errorCode, publication: { ...publication },
     };
+    const immutableUnknownSnapshot = JSON.stringify(unknownOriginal);
     assert.equal(unknownOriginal.state, 'MUTATION_UNKNOWN');
     assert.equal(unknownOriginal.errorCode, 'FINAL_RECEIPT_MISMATCH');
     await assert.rejects(hubB.persist({ ...args,
@@ -1562,6 +1563,8 @@ test('#22/#785 P0: cloned UNKNOWN cannot borrow final CAS and revoke-start befor
       assert.equal(unknownOriginal.errorCode, 'FINAL_RECEIPT_MISMATCH');
       assert.equal(unknownOriginal.state, 'MUTATION_UNKNOWN');
       assert.equal(unknownOriginal.publication?.requestId, requestId);
+      assert.equal(JSON.stringify(unknownOriginal), immutableUnknownSnapshot,
+        'forged COMPLETED clone and revoked checkpoint must not alter UNKNOWN forensic journal');
       assert.equal(nativePublishCalls, 1,
         'cloned checkpoint must never invoke or replay Native publisher');
       assert.equal(externalCommitCalls, 0,
