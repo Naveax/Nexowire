@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
@@ -64,6 +64,16 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
     },
   };
   let sourceCount = 0, destCount = 0, publishCount = 0;
+  const fixtureSigningKey = randomBytes(32);
+  // The synthetic verifier holds its own key; the actual Agent v1.0.5 does
+  // NOT produce this authenticated final receipt or host a protected oracle.
+  const artifactTransferFinalReceiptVerifier = {
+    verify: async (_job: unknown, receipt: { proof: string; [key: string]: unknown }) => {
+      const {proof, ...claims} = receipt;
+      return typeof proof === 'string' && proof === createHmac('sha256',fixtureSigningKey)
+        .update(JSON.stringify(claims)).digest('hex');
+    },
+  };
   // Simulated fenced Native writer, NOT Agent 1.0.5's actual files.write.
   const artifactTransferNativeWriter = {
     writeFenced: async (job: { id: string; stagePath: string },
@@ -91,8 +101,9 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
       return { requestId: env.requestId, epoch: env.epoch,
         offset: env.offset, length: env.length, sha256: env.sha256 };
     },
-    publishFenced: async (job: { id: string; stagePath: string; targetPath: string },
-      epoch: number, token: string) => {
+    publishFenced: async (job: { id: string; accountId: string; projectId: string;
+      targetDeviceId: string; stagePath: string; targetPath: string; bytesTotal: number;
+      sha256: string }, epoch: number, token: string, requestId?: string) => {
       if (epochs.get(job.id) !== epoch ||
           token !== 'staging-only-' + job.id + '-' + epoch.toString().padStart(10, '0')) {
         throw Error('STALE_AGENT_PUBLISH_FENCE');
@@ -102,11 +113,19 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
         recursive: false, atomic_no_overwrite: true, create_parents: false,
       }, new PathPolicy([dstRoot]));
       publishCount++;
+      if (!requestId) throw Error('MISSING_PUBLISH_REQUEST_ID');
+      const claims = { requestId, jobId: job.id, accountId: job.accountId,
+        projectId: job.projectId, targetDeviceId: job.targetDeviceId,
+        targetPath: job.targetPath, bytesTotal: job.bytesTotal,
+        sha256: job.sha256, epoch };
+      return {...claims, proof: createHmac('sha256',fixtureSigningKey)
+        .update(JSON.stringify(claims)).digest('hex')};
     },
   };
   const server = createNexowireMcpServer({
     broker, providers, workspaces, artifactTransferAuthority,
     artifactTransferCoreGrants, artifactTransferNativeWriter,
+    artifactTransferFinalReceiptVerifier,
     skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
     toolAuthorization: { kind: 'control-plane', scope: 'mcp',
       accountId: 'synthetic-e2e-account', role: 'admin',
@@ -213,7 +232,8 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
   async function restricted(accountId: string, grants: string[]) {
     const mcp = createNexowireMcpServer({
       broker, providers, workspaces, artifactTransferAuthority,
-      artifactTransferCoreGrants, artifactTransferNativeWriter, skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
+      artifactTransferCoreGrants, artifactTransferNativeWriter,
+    artifactTransferFinalReceiptVerifier, skills: new SkillRegistry(path.join(process.cwd(), 'skills')),
       toolAuthorization: { kind: 'control-plane', scope: 'mcp', accountId,
         role: 'admin', allowedDeviceIds: grants },
     });

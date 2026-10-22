@@ -18,6 +18,21 @@ export interface FencedWriteReceipt {
 }
 
 
+/** Receipt is only a CLAIM until independently authenticated against the
+ * protected Native publisher. The caller and Hub worker cannot assert it.
+ */
+export interface FencedFinalReceipt {
+  requestId: string;
+  jobId: string; accountId: string; projectId: string;
+  targetDeviceId: string; targetPath: string;
+  bytesTotal: number; sha256: string; epoch: number;
+  /** Opaque signed attestation, verified outside the Agent ACK channel. */
+  proof: string;
+}
+export interface TrustedFinalReceiptVerifier {
+  verify(job: Readonly<TransferJob>, receipt: Readonly<FencedFinalReceipt>): Promise<boolean>;
+}
+
 /** #587: MUST be served by rollback-independent monotonic CAS.
  * A local SQLite file, PID lock, or another folder is NOT a trust root.
  * Only trusted Hub bootstrap may inject it; no MCP tool argument may set it.
@@ -59,5 +74,6 @@ export function requireMonotonicLease(
 export interface TrustedNativeTransferWriter {
   writeFenced(job: Readonly<TransferJob>, envelope: Readonly<FencedWriteEnvelope>,
     contentBase64: string, createExclusive: boolean): Promise<FencedWriteReceipt>;
-  publishFenced(job: Readonly<TransferJob>, epoch: number, token: string): Promise<void>;
+  publishFenced(job: Readonly<TransferJob>, epoch: number, token: string,
+    requestId?: string): Promise<FencedFinalReceipt | void>;
 }

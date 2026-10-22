@@ -7,6 +7,7 @@ import * as z from 'zod';
 import { requireTrustedAuthority, requireMonotonicLease,
   type TrustedTransferAuthority, type TrustedTransferCoreGrants,
   type FencedWriteEnvelope, type FencedWriteReceipt,
+  type FencedFinalReceipt, type TrustedFinalReceiptVerifier,
   TransferTrustError } from '../workspace/artifact-job-trust.js';
 
 // Source/destination interaction must go through existing authorized native
@@ -25,7 +26,8 @@ export interface TransferRemote {
    */
   writeFenced?(job: Readonly<TransferJob>, envelope: Readonly<FencedWriteEnvelope>,
     base64: string, first: boolean): Promise<FencedWriteReceipt>;
-  publishFenced?(job: Readonly<TransferJob>, epoch: number, token: string): Promise<void>;
+  publishFenced?(job: Readonly<TransferJob>, epoch: number, token: string,
+    requestId?: string): Promise<FencedFinalReceipt | void>;
 }
 export class TransferJobError extends Error {
   constructor(readonly code: string, message: string) {
@@ -57,6 +59,11 @@ const jobSchema = z.object({
      * journals means UNKNOWN and must be treated as possibly dispatched. */
     dispatched: z.boolean().optional(),
   }).strict().optional(),
+  /** Exact Native publish dispatch identity; never re-issue on lost ACK. */
+  publication: z.object({
+    requestId: z.string().uuid(), epoch: z.number().int().positive(),
+    sha256: hex, dispatched: z.boolean(),
+  }).strict().optional(),
   state: stateSchema, errorCode: z.string().optional(),
   createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
 }).strict();
@@ -83,6 +90,9 @@ export class CrossDeviceTransferJobs {
       /** Hosted production must set true; disabling is only for isolated legacy fixtures. */
       requireExternalAuthority: true;
       grants?: TrustedTransferCoreGrants;
+      /** Hosted path MUST use authenticated receipt, never mere Native ACK. */
+      requireAuthenticatedFinalReceipt?: true;
+      finalReceiptVerifier?: TrustedFinalReceiptVerifier;
     },
   ) {}
   private async assertCurrentCore(job: TransferJob,
@@ -409,6 +419,10 @@ export class CrossDeviceTransferJobs {
       state: 'QUEUED', createdAt: now, updatedAt: now,
     });
     await this.assertCurrentCore(job, 'START');
+    if (this.trust?.requireAuthenticatedFinalReceipt && !this.trust.finalReceiptVerifier) {
+      throw new TransferTrustError('FINAL_RECEIPT_VERIFIER_REQUIRED',
+        'Independent signed Native final receipt verifier is not configured.');
+    }
     if (this.trust && (!this.remote.writeFenced || !this.remote.publishFenced)) {
       throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED',
         'Agent has no signed atomic writer epoch/offset fence.');
@@ -580,6 +594,70 @@ export class CrossDeviceTransferJobs {
     });
   }
 
+  /** Hosted only: one durable publication requestId, independently authenticated
+   * receipt and final destination readback. A lost ACK remains UNKNOWN and is
+   * never converted into COMPLETED by a copied payload or a local bool.
+   */
+  private async publishWithAuthenticatedReceipt(job: TransferJob): Promise<void> {
+    if (!this.trust?.finalReceiptVerifier || !job.fencing || !this.remote.publishFenced) {
+      throw new TransferTrustError('FINAL_RECEIPT_VERIFIER_REQUIRED',
+        'Trusted final publication attestation is unavailable.');
+    }
+    const requestId = randomUUID();
+    await this.update(job.id, current => {
+      if (current.state !== 'PUBLISHING' || current.publication) {
+        throw new TransferTrustError('PUBLISH_ALREADY_DISPATCHED',
+          'Cannot dispatch a second Native publish for an existing intent.');
+      }
+      current.publication = { requestId, epoch: job.fencing!.epoch,
+        sha256: job.sha256, dispatched: false };
+    });
+    await this.assertCurrentCore(job, 'PUBLISH');
+    await this.assertFence(job, 'PUBLISH', job.bytesTotal);
+    await this.update(job.id, current => {
+      if (current.state !== 'PUBLISHING' || current.publication?.requestId !== requestId ||
+          current.publication.dispatched !== false) {
+        throw new TransferTrustError('PUBLISH_ALREADY_DISPATCHED',
+          'Durable publication intent was superseded.');
+      }
+      current.publication.dispatched = true;
+    });
+    const receipt = await this.remote.publishFenced(
+      job, job.fencing.epoch, job.fencing.token, requestId);
+    if (!receipt || receipt.requestId !== requestId || receipt.jobId !== job.id ||
+        receipt.accountId !== job.accountId || receipt.projectId !== job.projectId ||
+        receipt.targetDeviceId !== job.targetDeviceId ||
+        receipt.targetPath !== job.targetPath || receipt.bytesTotal !== job.bytesTotal ||
+        receipt.sha256 !== job.sha256 || receipt.epoch !== job.fencing.epoch ||
+        typeof receipt.proof !== 'string' || receipt.proof.length < 32) {
+      throw new TransferTrustError('FINAL_RECEIPT_MISMATCH',
+        'Missing or foreign Native publication receipt, cannot credit completion.');
+    }
+    if (!(await this.trust.finalReceiptVerifier.verify(job, receipt))) {
+      throw new TransferTrustError('FINAL_RECEIPT_UNAUTHENTICATED',
+        'Independent protected Native attestation rejected the final receipt.');
+    }
+    await this.assertCurrentCore(job, 'PUBLISH');
+    await this.assertFence(job, 'PUBLISH', job.bytesTotal);
+    const target = await this.remote.stat(job.targetDeviceId, job.targetPath);
+    if (target.type !== 'file' || target.size !== job.bytesTotal ||
+        (await this.remote.hash(job.targetDeviceId, job.targetPath, MAX_NATIVE_HASH))
+          .toLowerCase() !== job.sha256) {
+      throw new TransferTrustError('FINAL_DESTINATION_UNVERIFIED',
+        'Authenticated receipt is not matched by destination bytes.');
+    }
+    await this.assertCurrentCore(job, 'PUBLISH');
+    await this.assertFence(job, 'PUBLISH', job.bytesTotal);
+    await this.update(job.id, current => {
+      if (current.state !== 'PUBLISHING' ||
+          current.publication?.requestId !== requestId ||
+          !current.publication.dispatched) {
+        throw new TransferTrustError('PUBLISH_FINAL_CAS_CONFLICT',
+          'Native publication completion no longer owns the current journal.');
+      }
+    });
+  }
+
   private async run(id: string): Promise<void> {
     let job = await this.update(id, current => {
       if (current.state === 'CANCEL_REQUESTED') this.settleCancellation(current);
@@ -706,7 +784,11 @@ export class CrossDeviceTransferJobs {
     try {
       await this.assertCurrentCore(before, 'PUBLISH');
       await this.assertFence(before, 'PUBLISH', before.bytesTotal);
-      if (this.trust) {
+      if (this.trust?.requireAuthenticatedFinalReceipt) {
+        await this.publishWithAuthenticatedReceipt(before);
+      } else if (this.trust) {
+        // Direct store fixtures retain the original test-only contract;
+        // hosted MCP always requires the independently verified receipt.
         if (!before.fencing || !this.remote.publishFenced) {
           throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED', 'Missing fenced publication.');
         }

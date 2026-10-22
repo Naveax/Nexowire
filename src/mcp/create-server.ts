@@ -5,7 +5,7 @@ import {transferCrossDeviceFile,CROSS_DEVICE_MAX_BYTES} from './cross-device-fil
 import { resolveOwnerDeviceTarget } from '../product/device-target-resolution.js';
 import { registerArtifactBridgeTools } from './artifact-bridge-tools.js';
 import { registerCrossDeviceTransferJobTools } from './cross-device-transfer-job-tools.js';
-import type { TrustedTransferAuthority, TrustedTransferCoreGrants, TrustedNativeTransferWriter } from '../workspace/artifact-job-trust.js';
+import type { TrustedTransferAuthority, TrustedTransferCoreGrants, TrustedNativeTransferWriter, TrustedFinalReceiptVerifier } from '../workspace/artifact-job-trust.js';
 import { TransferJobError } from './cross-device-transfer-jobs.js';
 import { performance } from 'node:perf_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -74,6 +74,7 @@ export interface McpContext {
   /** Owner CORE / source + target device and project CURRENT grant source. */
   artifactTransferCoreGrants?: TrustedTransferCoreGrants;
   artifactTransferNativeWriter?: TrustedNativeTransferWriter;
+  artifactTransferFinalReceiptVerifier?: TrustedFinalReceiptVerifier;
   skills: SkillRegistry;
 }
 
@@ -6711,7 +6712,8 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
       writeFenced: ctx.artifactTransferNativeWriter.writeFenced.bind(ctx.artifactTransferNativeWriter),
       publishFenced: ctx.artifactTransferNativeWriter.publishFenced.bind(ctx.artifactTransferNativeWriter),
     } : {}),
-  }, ctx.artifactTransferAuthority, ctx.artifactTransferCoreGrants);
+  }, ctx.artifactTransferAuthority, ctx.artifactTransferCoreGrants,
+    ctx.artifactTransferFinalReceiptVerifier);
 
   server.registerTool(
     'audit_recent',
