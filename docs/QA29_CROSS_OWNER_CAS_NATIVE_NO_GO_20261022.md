@@ -30,3 +30,16 @@ node --test --import tsx test/qa29-elevated-command-audit-provenance.test.ts tes
 Dedicated Node 22/24 workflow runs 56 inherited source-only cases plus 12 new source contract negative tests. GitHub exact-HEAD CI is required before reporting PASS.
 
 **Production NO-GO**: no physically trusted Windows HIGH token provider, import closure, signed protected broker installer, handle/DACL witness, independently durable external CAS or actual postcondition canary is proven here. No live shell, UAC, ACL mutation, Agent, Broker or VM. Keep DRAFT and let integrator #00 reconcile owner PR branches without overwriting them.
+
+
+## 22 October cross-review: #756 / #757 / #747 (single new combined negative)
+
+- **#756**, HEAD `d4ed32f72701e5157929cbb9d36bdf0a90fc0d57`: real kernel access probes are restricted to marked TEMP process/ACL fixtures, and same-user `OpenProcess(PROCESS_DUP_HANDLE)` observed **ALLOW**. Its current-token integrity reading is NOT an installed signed HIGH Broker, and does not establish an independently restricted lower-token boundary, protected Job handle DACL, full signed imported tree or native immutable process identity.
+- **#757**, HEAD `93acbb7a4e830485ce94015b3c76837a3fcdad34`: signed Access permit and before/after signed CAS fence readbacks can return `CURRENT_SOURCE_ONLY_NO_EXECUTION`; even both `revoking:false` do not guarantee atomicity at the later OS/native effect.
+- **#747**, HEAD `13acf85b063cd87e5bcf7a43e4fb650f63a30f42`: the late pre-revoke signed permit and hypothetical final atomic guard are already independently tested; this QA does NOT duplicate their two-Hub barrier or claim the guard is installed.
+
+One new negative in the **existing** `qa29-cas-native-bridge-negative.test.ts` exercises this cross-trust gap: source-only #712 permit and #699 Ed25519 OS/readback/rotated audit all validate (the synthetic receipt oracle returns `COMPLETED_VERIFIED`), but the alleged OS PID/FILETIME points only to a TEMP fixture, same-user `PROCESS_DUP_HANDLE` is `ALLOW`, the signing/public root may share the Hub's rollback domain and hence is NOT an independently immutable state witness, and revoke can begin **after** two signed Access readbacks but before actual effect commit. Its staged *forged in-memory true flags* expose each missing acceptance boundary; none are trusted OS observations or authorization. Every stage denies: `MUTATION_UNKNOWN`, `retrySafe:false`, no native effect.
+
+This exposes a **semantic integration failure risk**, not an exploit of an installed Nexowire Broker: accepting valid fixture signatures as physical attestation is unsound. Source-only QA neither authenticates protected OS signer provenance nor proves that its "fresh" signed audit root survives concurrent rollback or third-party signer compromise. An independently protected issuer/readback and externally linearizable native reserve→commit-fenced-against-revoke must be implemented and physically tested by the appropriate owners.
+
+**Unchanged release verdict:** #617/#587/#271/#551/#576 P0 physical CORE HIGH acceptance **NO-GO**. No production files, privileged shell, installed service, UAC, VM, or user ACL touched.
