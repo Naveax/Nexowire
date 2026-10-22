@@ -35,6 +35,10 @@ function syncFolders(folders) {
 }
 
 function getDeviceTier(device) {
+  // P0 physical-acceptance latch: there is no deployed signed installed
+  // Windows HIGH + external atomic native-effect verification readback.
+  // A browser snapshot (even with every flag set to true) is not proof.
+  const physicalCoreStatusVerifierInstalled = false;
   const core = device.persistentMaintenance;
   // CORE requested/active is not EFFECTIVE. Mirror the exact render gate
   // below; missing independently accepted native+CAS or current epoch fails.
@@ -52,7 +56,8 @@ function getDeviceTier(device) {
       Number.isSafeInteger(device.currentGrantGeneration) &&
       device.currentGrantGeneration > 0 &&
       core.ownerEpoch === device.currentOwnerEpoch &&
-      core.grantGeneration === device.currentGrantGeneration) return 'persistent';
+      core.grantGeneration === device.currentGrantGeneration &&
+      physicalCoreStatusVerifierInstalled) return 'persistent';
   if (device.rootMode?.active === true &&
       Date.parse(device.rootMode.expiresAt ?? '') > Date.now()) return 'root';
   return device.accessMode === 'full' ? 'full' : 'safe';
@@ -598,6 +603,11 @@ function render(snapshot) {
       // fields, never preference, cached UI or a source-only CAS receipt.
       // Until the deployed HIGH Broker + atomic native grant readback exists,
       // missing fields deliberately keep this display PAUSED_UNVERIFIED.
+      // The positive branch is physically DISABLED until an independently
+      // reviewed, server-verified signed installed HIGH Broker and atomic
+      // external CAS/native effect integration replaces this release latch.
+      // Journal, Audit and browser consent are never such proof.
+      const physicalCoreStatusVerifierInstalled = false;
       const coreEffective = core.effective === true &&
         core.enabled === true &&
         core.active === true &&
@@ -613,7 +623,8 @@ function render(snapshot) {
         Number.isSafeInteger(device.currentGrantGeneration) &&
         device.currentGrantGeneration > 0 &&
         core.ownerEpoch === device.currentOwnerEpoch &&
-        core.grantGeneration === device.currentGrantGeneration;
+        core.grantGeneration === device.currentGrantGeneration &&
+        physicalCoreStatusVerifierInstalled;
       coreContainer.classList.toggle('active', coreEffective);
       coreShortcut.classList.toggle('active', coreEffective);
       coreShortcut.setAttribute('aria-pressed', String(coreEffective));
