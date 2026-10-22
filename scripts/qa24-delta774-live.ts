@@ -4,7 +4,8 @@
  * Prior 173 heads are NOT refreshed, so this NEVER proves complete merge safety.
  */
 import {fileURLToPath} from 'node:url';
-import {GithubRead,githubRestRead,parseExactCi} from './qa24-live-dag.js';
+import {githubRestRead,parseExactCi} from './qa24-live-dag.js';
+import type {GithubRead} from './qa24-live-dag.js';
 import type {Pr,Census} from './qa24-partitioned-dag-review.js';
 
 const sha=/^[0-9a-f]{40}$/;
@@ -14,9 +15,9 @@ const filters=[
  'created:2026-10-21T18:00:00Z..2026-10-21T23:59:59Z',
  'created:>=2026-10-22'
 ] as const;
-const record=(x:unknown):Record<string,any>=>{
+const record=(x:unknown):Record<string,unknown>=>{
  if(!x||typeof x!=='object'||Array.isArray(x))throw new Error('INVALID_GITHUB_OBJECT');
- return x as Record<string,any>;
+ return x as Record<string,unknown>;
 };
 const list=(x:unknown):unknown[]=>{
  if(!Array.isArray(x))throw new Error('INVALID_GITHUB_ARRAY');
@@ -98,7 +99,7 @@ export async function collect774779(api:GithubRead,repo:string) {
     const ci=parseExactCi(head_sha,runs);
     const comparison=record(await api(`${pre}/compare/${base_sha}...${head_sha}`));
     const merge_sha=str(record(comparison.merge_base_commit).sha);
-    if(!sha.test(merge_sha)||!str(comparison.status))
+    if(!sha.test(merge_sha)||merge_sha!==base_sha||str(comparison.status)!=='ahead')
       throw new Error(`INVALID_COMPARE_${pr}`);
     nodes.push({pr,head_sha,head_ref,base_sha,base_ref,files,files_complete:true,
       compare:{base_sha,head_sha,merge_base_sha:merge_sha,status:str(comparison.status)},
