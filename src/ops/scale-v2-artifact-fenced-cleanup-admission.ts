@@ -16,6 +16,11 @@ export interface ServerBoundArtifactCleanup extends ServerBoundQuotaJob {
   readonly dispatchedWriterEpoch:number;
   /** Authenticated durable predispatch journal, never caller JSON. */
   readonly pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
+  /** From protected Native dispatch journal, NOT returned ACK / client JSON.
+   * Both null only for independently witnessed zero-dispatch cancellation.
+   */
+  readonly lastDispatchedRequestId:string|null;
+  readonly lastDispatchedChunkSha256:string|null;
 }
 export interface IndependentFencedDeletionWitness {
   readonly ownerId:string;readonly deviceId:string;
@@ -23,6 +28,10 @@ export interface IndependentFencedDeletionWitness {
   readonly rootInvocationId:string;readonly ownerEpoch:number;
   readonly deviceEpoch:number;
   readonly writerStoppedThroughEpoch:number;
+  readonly pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
+  /** Immutable Native dispatch identity, not a possibly forged ACK. */
+  readonly lastDispatchedRequestId:string|null;
+  readonly lastDispatchedChunkSha256:string|null;
   readonly deletionEpoch:number;readonly fencingEpoch:number;
   readonly receiptId:string;
 }
@@ -42,6 +51,9 @@ export interface CurrentFencedDeletionReadback {
   readonly nativeDispatchHighWaterEpoch:number;
   /** Trusted persisted dispatch intent, distinguishes #691 from #682. */
   readonly pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
+  /** Independent protected write-journal readback; must match BOTH sources. */
+  readonly lastDispatchedRequestId:string|null;
+  readonly lastDispatchedChunkSha256:string|null;
   readonly deletionEpoch:number;readonly fencingEpoch:number;
   readonly receiptId:string;
   readonly inFlightNativeWriters:number;
@@ -62,6 +74,13 @@ export interface TrustedFencedDeletionAuthority {
 const validId=(x:string)=>typeof x==='string'&&
   /^[A-Za-z0-9_.:@-]{8,128}$/.test(x);
 const epoch=(x:number)=>Number.isSafeInteger(x)&&x>0;
+const chunkSha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+const dispatchedIdentity=(x:{
+  pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
+  lastDispatchedRequestId:string|null;lastDispatchedChunkSha256:string|null;
+})=>x.pendingDispatchState==='NEVER_DISPATCHED'
+  ? x.lastDispatchedRequestId===null&&x.lastDispatchedChunkSha256===null
+  : validId(x.lastDispatchedRequestId as string)&&chunkSha(x.lastDispatchedChunkSha256);
 function validCore(
   lease:VerifiedCoreArtifactLease,scope:ServerBoundArtifactCleanup,
 ):boolean{
@@ -84,6 +103,9 @@ function validWitness(
     proof.rootInvocationId===scope.rootInvocationId&&
     proof.ownerEpoch===scope.ownerEpoch&&
     proof.deviceEpoch===scope.deviceEpoch&&
+    dispatchedIdentity(proof)&&
+    proof.lastDispatchedRequestId===scope.lastDispatchedRequestId&&
+    proof.lastDispatchedChunkSha256===scope.lastDispatchedChunkSha256&&
     Number.isSafeInteger(proof.writerStoppedThroughEpoch)&&
     proof.writerStoppedThroughEpoch>=0&&
     epoch(proof.deletionEpoch)&&epoch(proof.fencingEpoch)&&
@@ -110,6 +132,7 @@ export class StagingArtifactFencedCleanupAdmission {
       !epoch(scope.deviceEpoch)||
       !Number.isSafeInteger(scope.dispatchedWriterEpoch)||
       scope.dispatchedWriterEpoch<0||
+      !dispatchedIdentity(scope)||
       (scope.dispatchedWriterEpoch===0&&
        scope.pendingDispatchState!=='NEVER_DISPATCHED')||
       (scope.dispatchedWriterEpoch>0&&
@@ -139,6 +162,11 @@ export class StagingArtifactFencedCleanupAdmission {
         !Number.isSafeInteger(current.nativeDispatchHighWaterEpoch)||
         current.nativeDispatchHighWaterEpoch!==scope.dispatchedWriterEpoch||
         current.pendingDispatchState!==scope.pendingDispatchState||
+        !dispatchedIdentity(current)||
+        current.lastDispatchedRequestId!==scope.lastDispatchedRequestId||
+        current.lastDispatchedChunkSha256!==scope.lastDispatchedChunkSha256||
+        current.lastDispatchedRequestId!==witness.lastDispatchedRequestId||
+        current.lastDispatchedChunkSha256!==witness.lastDispatchedChunkSha256||
         (scope.dispatchedWriterEpoch===0&&
           (current.nativeDispatchHighWaterEpoch!==0||
            current.pendingDispatchState!=='NEVER_DISPATCHED'))||

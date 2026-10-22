@@ -30,6 +30,8 @@ const scope:ServerBoundArtifactCleanup={
   rootInvocationId:'root-alpha-01',ownerEpoch:31,deviceEpoch:19,
   dispatchedWriterEpoch:71,
   pendingDispatchState:'DISPATCHED_OR_UNKNOWN',
+  lastDispatchedRequestId:'native-request-0001',
+  lastDispatchedChunkSha256:'b'.repeat(64),
 };
 const started=new Date('2026-10-21T15:59:59.900Z');
 const advanced=new Date('2026-10-21T16:00:00.100Z');
@@ -57,6 +59,10 @@ function fixture(){
     nativeDispatchHighWaterEpoch:scope.dispatchedWriterEpoch,
     nativeDispatchState:'DISPATCHED_OR_UNKNOWN' as
       'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN',
+    lastDispatchedRequestId:scope.lastDispatchedRequestId,
+    lastDispatchedChunkSha256:scope.lastDispatchedChunkSha256,
+    immutableReceiptId:'authoritative-receipt-001',
+    forgedReceiptId:false,
     activeWriters:0,staleReadback:false,readbackUnavailable:false,
     actualDeletion:false,writerStopped:false,
     corruptProof:false,
@@ -106,11 +112,14 @@ function fixture(){
         writerRevokeEpoch:evidence.revokeEpoch,
         nativeDispatchHighWaterEpoch:evidence.nativeDispatchHighWaterEpoch,
         pendingDispatchState:evidence.nativeDispatchState,
+        lastDispatchedRequestId:evidence.lastDispatchedRequestId,
+        lastDispatchedChunkSha256:evidence.lastDispatchedChunkSha256,
         writerStoppedThroughEpoch:evidence.stoppedThrough,
         deletionEpoch:evidence.deletedAt,
         fencingEpoch:evidence.staleReadback
           ? witness.fencingEpoch+1 : evidence.fencingEpoch,
-        receiptId:witness.receiptId,
+        // Independent protected store readback, not a reflected ACK.
+        receiptId:evidence.immutableReceiptId,
         inFlightNativeWriters:evidence.activeWriters,
         deletionState:'VERIFIED_ABSENT' as const,
       };
@@ -128,7 +137,8 @@ function fixture(){
           ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
           writerStoppedThroughEpoch:evidence.stoppedThrough,
           deletionEpoch:evidence.deletedAt,fencingEpoch:evidence.fencingEpoch,
-          receiptId:'authoritative-receipt-001',
+          receiptId:evidence.forgedReceiptId
+            ?'client-forged-receipt-9999':evidence.immutableReceiptId,
         };
         return await apply(evidence.corruptProof
           ? {...witness,projectId:'forged-project'} : witness);
@@ -377,7 +387,8 @@ test('#691 reserved native intent with dispatched=false can clean zero-byte rese
  const f=fixture();try{
    reserve(f);
    const pre={...scope,dispatchedWriterEpoch:0,
-     pendingDispatchState:'NEVER_DISPATCHED' as const};
+     pendingDispatchState:'NEVER_DISPATCHED' as const,
+     lastDispatchedRequestId:null,lastDispatchedChunkSha256:null};
    // No native write or quota byte admission occurred.
    assert.equal(f.stats().admittedBytes,0);
    assert.equal(await f.cancel.cancel(pre,0),'CANCEL_PENDING');
@@ -387,6 +398,8 @@ test('#691 reserved native intent with dispatched=false can clean zero-byte rese
    // External independent CAS attests no write was ever dispatched.
    f.evidence.nativeDispatchHighWaterEpoch=0;
    f.evidence.nativeDispatchState='NEVER_DISPATCHED';
+   f.evidence.lastDispatchedRequestId=null;
+   f.evidence.lastDispatchedChunkSha256=null;
    f.evidence.stoppedThrough=0;
    f.evidence.revokeEpoch=1;
    f.evidence.deletedAt=2;
@@ -404,7 +417,8 @@ test('#691 false dispatched=false claim cannot hide actual persisted dispatch hi
  const f=fixture();try{
    reserve(f);pending(f);await cancel(f);f.verifiedDelete();
    const forgedPre={...scope,dispatchedWriterEpoch:0,
-     pendingDispatchState:'NEVER_DISPATCHED' as const};
+     pendingDispatchState:'NEVER_DISPATCHED' as const,
+     lastDispatchedRequestId:null,lastDispatchedChunkSha256:null};
    // External CAS *independently* remembers Native may already have written.
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forgedPre),
      /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
@@ -472,5 +486,98 @@ test('journal absent dispatched flag is UNKNOWN, not the no-dispatch fast path',
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
      /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
    assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+
+test('#725 forged Native ACK requestId cannot become immutable deletion proof or disk refund',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   // Original write request belongs to protected dispatch journal. A forged
+   // ACK with a different ID cannot replace it, even if flags are true.
+   f.evidence.lastDispatchedRequestId='forged-native-ack-request-999';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   f.evidence.lastDispatchedRequestId=scope.lastDispatchedRequestId;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+ }finally{f.close()}
+});
+
+test('#708 newer Hub writer SHA from forged second-chunk receipt invalidates old cleanup witness',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   // Hub B's disputed Native write must be authenticated against persisted
+   // request ID and chunk SHA, not against an arbitrary client ACK.
+   f.evidence.lastDispatchedChunkSha256='0'.repeat(64);
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+   f.evidence.lastDispatchedChunkSha256=scope.lastDispatchedChunkSha256;
+   f.evidence.staleReadback=true; // newer Hub owns a different CAS generation
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('immutable deletion receipt ID must come from independent durable issuer, never echoed user ACK',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.forgedReceiptId=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup({
+     ...scope,durableDeletionVerified:true,writersStoppedVerified:true,
+   } as typeof scope),/CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+   f.evidence.forgedReceiptId=false;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+ }finally{f.close()}
+});
+
+test('#708 old Hub leased cleanup after CORE re-pair stays DENIED; only one disk release',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);
+   f.evidence.source='WRITE_UNKNOWN';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.verifiedDelete();
+   f.evidence.deviceEpoch=scope.deviceEpoch+1; // re-pair after pending write
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   f.evidence.deviceEpoch=scope.deviceEpoch;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   // Hub B duplicates a previously acknowledged disposal; cannot turn
+   // RELEASED_ALREADY into a second release or refund admitted traffic.
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   f.evidence.ownerEpoch=scope.ownerEpoch+1;
+   await assert.rejects(()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+ }finally{f.close()}
+});
+
+test('missing pending Native request ID/hash and fabricated predispatch flags must fail closed',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   for(const forged of [
+     {...scope,lastDispatchedRequestId:null},
+     {...scope,lastDispatchedChunkSha256:null},
+     {...scope,lastDispatchedChunkSha256:'F'.repeat(64)},
+     {...scope,pendingDispatchState:'NEVER_DISPATCHED' as const},
+     {...scope,lastDispatchedRequestId:'client-new-request-123'},
+   ]){
+     await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forged),
+       /CLEANUP_SERVER_BINDING_INVALID|CLEANUP_INDEPENDENT_WITNESS_INVALID|CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   }
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
  }finally{f.close()}
 });
