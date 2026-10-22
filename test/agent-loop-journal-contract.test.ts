@@ -16,7 +16,7 @@ function example(){
     originalErrorCode:'MUTATION_STATE_UNKNOWN',
   };
 }
-function record(cp:ReturnType<typeof example>,
+function record(cp:{requestId:string;fingerprint:string;capability:string},
   status:'in_progress'|'unknown'|'succeeded'|'failed'='unknown'){
   return {
     requestId:cp.requestId,fingerprint:cp.fingerprint,
