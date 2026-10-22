@@ -254,3 +254,30 @@ test('strict issuer checks resource before calling trusted atomic refresher',asy
   }
   assert.equal(touched,0);
 });
+
+
+test('issuer accepts both valid refresh scope orders from a trusted atomic authority',async()=>{
+  const store=new MemoryMcpOAuthStore();
+  const service=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{
+      async rotate(){
+        return {
+          access_token:'nwx_mcp_'+('X'.repeat(44)),
+          refresh_token:'nwx_refresh_'+('Y'.repeat(44)),
+          token_type:'Bearer',expires_in:3600,
+          scope:'offline_access mcp',
+        };
+      },
+    },
+  });
+  const grant=await service.token(new URLSearchParams({
+    grant_type:'refresh_token',
+    refresh_token:'nwx_refresh_'+('Z'.repeat(44)),
+    client_id:client,resource,
+  }));
+  assert.equal(grant.scope,'offline_access mcp');
+  // The delegated authority is the only possible issuer in strict mode.
+  assert.equal((await store.getRefreshToken(digest('nwx_refresh_'+('Z'.repeat(44))))),null);
+});
