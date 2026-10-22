@@ -9,6 +9,7 @@ import { ProgressSupervisor } from '../src/agent/progress-supervisor.js';
 import { verifyResultFiles } from '../src/agent/progress-proof-verifier.js';
 import {
   canonicalCompletionStatement,canonicalImmutableSeal,
+  canonicalFinalPublicationWitness,
   type OwnerGrantView,type CompletionStatement,
   type SignedCompletion,type TransferView,
 } from '../src/agent/trusted-worker-completion.js';
@@ -26,6 +27,7 @@ const ownerAccountId='owner-fixture', deviceId='device-fixture',
 const scope={ownerAccountId,deviceId,projectId,runId,sessionId};
 const issuer=generateKeyPairSync('ed25519');
 const storage=generateKeyPairSync('ed25519');
+const publication=generateKeyPairSync('ed25519');
 const witness=generateKeyPairSync('ed25519');
 
 type Fixtures=Awaited<ReturnType<typeof setup>>;
@@ -68,6 +70,14 @@ async function setup() {
     targetPath:s.targetPath,jobId,ownerGrantEpoch:9,
     immutableObjectSha256:s.immutableObjectSha256,sealedAt:s.committedAt,
   };
+  const publishedPayload={version:1 as const,
+    publicationRequestId:'550e8400-e29b-41d4-a716-446655440004',
+    jobId,ownerAccountId,projectId,targetDeviceId:s.targetDeviceId,
+    targetPath:s.targetPath,bytesTotal:offhost.length,sha256:s.immutableObjectSha256,
+    writerEpoch:7,publishedAt:new Date(now).toISOString(),
+  };
+  const publishedSignature=sign(null,canonicalFinalPublicationWitness(publishedPayload),
+    publication.privateKey).toString('base64');
   const witnessPayload={
     version:1 as const,requestId,jobId,ownerAccountId,projectId,
     targetDeviceId:s.targetDeviceId,targetPath:s.targetPath,
@@ -85,6 +95,8 @@ async function setup() {
     transferState:'COMPLETED',transferReads:0,
     transferChangeAt:0,raiseTransport:false,raiseAfterReads:0,
     tamperOffhost:false,truncated:false,missingRead:false,
+    missingNativePublication:false,forgedNativePublication:false,
+    foreignNativePublication:false,latePublicationLoss:false,
     witness:trustedPostcondition,
   };
   const ports:RuntimeCompletionPorts={
@@ -118,6 +130,14 @@ async function setup() {
           mutable.truncated?1:maxBytes));
       return {offset,totalBytes:content.length,contentBase64:read.toString('base64')};
     },
+    readFinalPublicationWitness:async()=>{
+      if(mutable.missingNativePublication || mutable.latePublicationLoss)
+        throw Error('INDEPENDENT_NATIVE_PUBLICATION_UNAVAILABLE');
+      return {...publishedPayload,
+        ...(mutable.foreignNativePublication?{publicationRequestId:requestId}:{}),
+        signatureBase64:mutable.forgedNativePublication?
+          Buffer.alloc(64).toString('base64'):publishedSignature};
+    },
     readImmutableSeal:async()=>({
       ...sealPayload,
       signatureBase64:sign(null,canonicalImmutableSeal(sealPayload),
@@ -127,13 +147,14 @@ async function setup() {
   };
   const expected={
     ...scope,requestId,grantId:s.grantId,ownerGrantEpoch:9,
+    publicationRequestId:publishedPayload.publicationRequestId,writerEpoch:7,
     sourceDeviceId:deviceId,targetDeviceId:s.targetDeviceId,targetPath:s.targetPath,
     resultSetSha256:s.resultSetSha256,outputProofSha256:s.outputProofSha256,
     completedCount:2,exitObservedAt:s.exitObservedAt,
   };
   const adapter=new ProgressRuntimePostconditionAdapter(p,proofRequest,expected,{
     issuer:issuer.publicKey,immutableStorage:storage.publicKey,
-    postcondition:witness.publicKey,
+    publication:publication.publicKey,postcondition:witness.publicKey,
   },ports,()=>now);
   return {adapter,p,ports,signed,mutable,expected,offhost,request:proofRequest,
     setNow:(next:number)=>{now=next;},now:()=>now,
@@ -519,3 +540,57 @@ test('reconnect invalidates cached signed output snapshot before any new RPC',()
   assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
+
+test('#754 forged COMPLETED status with missing or forged final Native publication is UNKNOWN',async()=>{
+  for(const kind of ['missing','forged','foreign'] as const)await scenario(async f=>{
+    if(kind==='missing')f.mutable.missingNativePublication=true;
+    if(kind==='forged')f.mutable.forgedNativePublication=true;
+    if(kind==='foreign')f.mutable.foreignNativePublication=true;
+    // Native status and independently rehashed metadata both appear
+    // correct. They cannot substitute final publication authorization.
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN',kind);
+    f.ports.readTransfer=async()=>{throw Error('NO_REPOLL_AFTER_UNKNOWN');};
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+    assert.equal(f.adapter.snapshot().postconditionSha256,null);
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+  });
+});
+
+test('#754 signed final receipt with stale durable publication ID or lease epoch rejects',async()=>{
+  await scenario(async f=>{
+    f.expected.publicationRequestId='550e8400-e29b-41d4-a716-446655440099';
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+  });
+  await scenario(async f=>{
+    f.expected.writerEpoch=8; // #754 writer epoch is not CORE owner epoch
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  });
+});
+
+test('#752 reconnect orphan and #757 CORE revoke during final publication deny completion',async()=>{
+  await scenario(async f=>{
+    const read=f.ports.readFinalPublicationWitness;
+    f.ports.readFinalPublicationWitness=async()=>{
+      const proof=await read();
+      f.p.invalidateOnReconnect();
+      return proof;
+    };
+    assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+    assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  });
+  await scenario(async f=>{
+    const read=f.ports.readFinalPublicationWitness;
+    f.ports.readFinalPublicationWitness=async()=>{
+      const proof=await read();
+      f.mutable.grantState='REVOKED';
+      return proof;
+    };
+    assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+    assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+    assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
+  });
+});

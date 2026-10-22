@@ -718,3 +718,63 @@ Job owner, live Agent/VM/UAC, user files or production workloads
 were modified. **Production remains NO-GO** pending genuine signed
 immutable off-host output SHA readback, physical owner-epoch
 attestation and independent durable monotonic grant/cancel CAS.
+
+
+### 2026-10-22 #11 reconciliation: #754 final Native publication vs #752 Connection and #757 CORE
+
+Exact reviewed PR heads: #754 `3a5bf392109d17dbf2650a18398917d5501fd488`
+GitHub CI `39736052869` **FAILURE** (Windows `browser-live`
+physical Job fast-exit stdout/stderr drain before exited; iteration 6).
+Its Node22/24, Linux, WSL2, macOS and security jobs succeeded.
+The native publication source contract independently verifies exact
+job/owner/project/device/path, published bytes SHA-256 and length,
+**durable publication requestId**, writer epoch, and protected final
+receipt before marking COMPLETED; the real Agent v1.0.5 does NOT
+provide this signer. #752 `95bea58abf5be7e0fb4a3c8d7798285423e97573`
+CI `39735641942` 7/7 SUCCESS preserves orphaned UNKNOWN and no-replay
+through reconnect. #757 `93acbb7a4e830485ce94015b3c76837a3fcdad34`
+CI `39736445337` 7/7 SUCCESS provides source-level late CORE
+revokeAndDrain acceptance, NOT a deployed physical CAS.
+
+**Real independent Progress proof gap fixed (source-only):** a
+`readTransfer().state === COMPLETED` and even a previously signed
+metadata object + independent metadata SHA readback did not establish
+#754's separately authenticated *final Native publication*. The
+`verifyOffhostCompletion` cryptographic permit gate now REQUIRES a
+fourth, DISTINCT pinned Ed25519 key for a
+`SignedFinalPublicationWitness`, injected only via trusted
+`readFinalPublicationWitness()`. No local bool, worker stdout or
+Hub ACK is equivalent. The signed witness binds the independently
+pinned **durable Native publication requestId**, transfer job ID,
+owner account/project, target device/path, exact full object SHA,
+confirmed length, separate monotonic **writerEpoch**, and publication
+timestamp. The worker-result, immutable storage, publication and
+postcondition verifier keys must all be distinct. Missing, stale,
+wrong-epoch/requestId, forged or foreign native publication witness
+FAILS CLOSED. The lower-level permit issuer also enforces this new
+requirement, preventing bypass by calling `verifyOffhostCompletion`
+directly rather than through the runtime adapter.
+
+The ProgressSupervisor now exposes **read-only proofGenerationOf()**.
+The runtime pins the generation at reconciliation start and rechecks
+it across authenticated grant/transfer/status, independent off-host
+readback and local disk verification, so a #752 reconnect or changed
+worker evidence mid-readback cannot become a retryable
+`PROOF_UNVERIFIED` or a fabricated `COMPLETED_VERIFIED`. It instead
+stays sticky `MUTATION_UNKNOWN` with `automaticReplayAllowed=false`.
+#757 owner CORE revoke still fails closed independently, never
+confusing grant epoch with Artifact writer lease epoch.
+
+The positive tests use **ephemeral independent Ed25519 keys and
+synthetic source-only off-host/Native verifier fixtures**; no real
+#754 signer, external CAS, physical device readback, Agent/Hub, UAC,
+VM or user files were accessed. This is a new source-level *acceptance
+contract*, **not a deployed native publication/verifier**. The
+hosted Native path must keep the receipt provider unset (and therefore
+deny completion) until #05 native signing, #587 rollback-independent
+CAS, #613/#752 authenticated connection epoch, #757 physical CORE,
+true off-host immutable digest custody and two-device QA are proven.
+
+Scope restricted to existing #575 Progress code/tests/docs.
+No #08 Artifact Store, #03 Job owner, #754, #752 or #757
+owner implementation was modified. **Production NO-GO.**

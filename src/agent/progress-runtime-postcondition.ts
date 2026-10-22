@@ -46,6 +46,7 @@ export interface RuntimeCompletionPorts extends TrustedCompletionPorts {
 export interface RuntimeCompletionKeys {
   issuer:KeyObject;
   immutableStorage:KeyObject;
+  publication:KeyObject;
   postcondition:KeyObject;
 }
 export type RuntimeCompletionStatus=
@@ -121,9 +122,13 @@ export class ProgressRuntimePostconditionAdapter {
        expected.runId!==request.scope.runId||
        expected.completedCount!==request.expectedCount||
        !keyOk(keys.issuer)||!keyOk(keys.immutableStorage)||
-       !keyOk(keys.postcondition)||!distinct(keys.issuer,keys.immutableStorage)||
+       !keyOk(keys.postcondition)||!keyOk(keys.publication)||
+       !distinct(keys.issuer,keys.immutableStorage)||
        !distinct(keys.issuer,keys.postcondition)||
-       !distinct(keys.immutableStorage,keys.postcondition))
+       !distinct(keys.immutableStorage,keys.postcondition)||
+       !distinct(keys.publication,keys.issuer)||
+       !distinct(keys.publication,keys.postcondition)||
+       !distinct(keys.publication,keys.immutableStorage))
       throw new Error('RUNTIME_TRUST_BOUNDARY_INVALID');
   }
   private blockUnknown():RuntimeCompletionStatus{
@@ -171,6 +176,10 @@ export class ProgressRuntimePostconditionAdapter {
     if(this.sourceProcessUnknown())return this.blockUnknown();
     if(this.pending)return this.blockUnknown();
     this.pending=true;
+    const proofGeneration=this.supervisor.proofGenerationOf(this.expected.sessionId);
+    if(proofGeneration===null){this.pending=false;return this.blockUnknown();}
+    const proofChanged=()=>this.supervisor.proofGenerationOf(
+      this.expected.sessionId)!==proofGeneration;
     try{
       let grant:OwnerGrantView,transfer:TransferView;
       try{
@@ -178,7 +187,7 @@ export class ProgressRuntimePostconditionAdapter {
           this.ports.readGrant(),this.ports.readTransfer(),
         ]);
       }catch{return this.blockUnknown();}
-      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
+      if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(!grantMatches(grant,this.expected))return this.cancel();
       if(!transferMatches(transfer,signed)){
         // #725: a forensic Native error survives cancel/reconnect. Never
@@ -210,8 +219,9 @@ export class ProgressRuntimePostconditionAdapter {
         return this.blockUnknown();
       }
       const permit=await verifyOffhostCompletion(signed,this.expected,
-        this.keys.issuer,this.keys.immutableStorage,this.ports,this.now);
-      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
+        this.keys.issuer,this.keys.immutableStorage,
+        this.keys.publication,this.ports,this.now);
+      if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(!permit){
         // An in-flight CORE revoke can make the lower-level verifier fail
         // after its second grant check. Reconcile the grant once more so a
@@ -233,12 +243,12 @@ export class ProgressRuntimePostconditionAdapter {
       try{[g2,t2]=await Promise.all([
         this.ports.readGrant(),this.ports.readTransfer(),
       ]);}catch{return this.blockUnknown();}
-      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
+      if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(!grantMatches(g2,this.expected))return this.cancel();
       if(!transferMatches(t2,signed))return this.blockUnknown();
       const verified=await this.supervisor.verifySessionFromDisk(
         this.expected.sessionId,this.request,permit);
-      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
+      if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(verified.status!=='verified'){
         this.lastResult='PROOF_UNVERIFIED';return this.lastResult;
       }
@@ -246,7 +256,7 @@ export class ProgressRuntimePostconditionAdapter {
       const [g3,t3]=await Promise.all([
         this.ports.readGrant(),this.ports.readTransfer(),
       ]).catch(()=>[null,null] as const);
-      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
+      if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(!g3||!t3)return this.blockUnknown();
       if(!grantMatches(g3,this.expected))return this.cancel();
       if(!transferMatches(t3,signed))return this.blockUnknown();
@@ -257,7 +267,7 @@ export class ProgressRuntimePostconditionAdapter {
       const {signatureBase64:_signature,...body}=witness;
       this.lastWitnessDigest=createHash('sha256').update(
         canonicalPostconditionWitness(body)).digest('hex');
-      if(this.blocked||this.sourceProcessUnknown())return this.blockUnknown();
+      if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       this.lastResult='COMPLETED_VERIFIED';
       return this.lastResult;
     }catch{

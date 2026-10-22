@@ -144,6 +144,12 @@ export class ProgressSupervisor {
 
   get trackedSessionCount(): number { return this.sessions.size; }
 
+  /** Read-only generation used by Progress-owned off-host verification to
+   * fence a reconnect or new worker report racing immutable readback. */
+  proofGenerationOf(sessionId: string): number | null {
+    return this.sessions.get(sessionId)?.proofGeneration ?? null;
+  }
+
   register(sessionId: string, startedMs = this.now()): void {
     if (this.sessions.has(sessionId)) return;
     // Evict only terminal records, never a running job. On saturation, refuse

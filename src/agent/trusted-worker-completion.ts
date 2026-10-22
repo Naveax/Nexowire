@@ -53,7 +53,25 @@ export function canonicalImmutableSeal(seal:Omit<SignedImmutableSeal,'signatureB
       seal.targetDeviceId,seal.targetPath,seal.jobId,seal.ownerGrantEpoch,
       seal.immutableObjectSha256,seal.sealedAt])+'\n','utf8');
 }
+/** #754 final publication proof, obtained ONLY after an independently
+ * protected verifier authenticates the Native publisher's original receipt.
+ * This staging format is not a shipped Agent v1.0.5 signing protocol. */
+export interface SignedFinalPublicationWitness {
+  version:1; publicationRequestId:string; jobId:string;
+  ownerAccountId:string;projectId:string;targetDeviceId:string;
+  targetPath:string;bytesTotal:number;sha256:string;
+  writerEpoch:number;publishedAt:string;signatureBase64:string;
+}
+export function canonicalFinalPublicationWitness(
+  p:Omit<SignedFinalPublicationWitness,'signatureBase64'>):Buffer {
+  return Buffer.from('NEXOWIRE_VERIFIED_FINAL_NATIVE_PUBLICATION_V1\\n'+
+    JSON.stringify([p.version,p.publicationRequestId,p.jobId,
+      p.ownerAccountId,p.projectId,p.targetDeviceId,p.targetPath,
+      p.bytesTotal,p.sha256,p.writerEpoch,p.publishedAt])+'\\n','utf8');
+}
 export interface TrustedCompletionPorts {
+  /** Only independently authenticated and witnessed #754 final Native publish. */
+  readFinalPublicationWitness():Promise<SignedFinalPublicationWitness>;
   /** Signed by independently pinned immutable off-host storage authority. */
   readImmutableSeal():Promise<SignedImmutableSeal>;
   /** Trusted authority separate from worker and from mutable result files. */
@@ -66,6 +84,8 @@ export interface TrustedCompletionPorts {
 export interface CompletionExpected {
   ownerAccountId:string;deviceId:string;projectId:string;runId:string;
   sessionId:string;requestId:string;grantId:string;ownerGrantEpoch:number;
+  /** Pinned from authenticated durable #754 journal, NOT a worker ACK. */
+  publicationRequestId:string;writerEpoch:number;
   sourceDeviceId:string;targetDeviceId:string;targetPath:string;
   resultSetSha256:string;outputProofSha256:string;completedCount:number;
   exitObservedAt:string;
@@ -118,6 +138,7 @@ export async function verifyOffhostCompletion(
   expected:CompletionExpected,
   pinnedPublicKey:KeyObject,
   pinnedStoragePublicKey:KeyObject,
+  pinnedPublicationPublicKey:KeyObject,
   ports:TrustedCompletionPorts,
   now:()=>number=Date.now,
 ):Promise<VerifiedCompletionPermit|null>{
@@ -127,8 +148,14 @@ export async function verifyOffhostCompletion(
        pinnedPublicKey.asymmetricKeyType!=='ed25519'||
        pinnedStoragePublicKey?.type!=='public'||
        pinnedStoragePublicKey.asymmetricKeyType!=='ed25519'||
+       pinnedPublicationPublicKey?.type!=='public'||
+       pinnedPublicationPublicKey.asymmetricKeyType!=='ed25519'||
        pinnedPublicKey.export({type:'spki',format:'der'}).equals(
-         pinnedStoragePublicKey.export({type:'spki',format:'der'})))return refuse();
+         pinnedStoragePublicKey.export({type:'spki',format:'der'}))||
+       pinnedPublicationPublicKey.export({type:'spki',format:'der'}).equals(
+         pinnedStoragePublicKey.export({type:'spki',format:'der'}))||
+       pinnedPublicationPublicKey.export({type:'spki',format:'der'}).equals(
+         pinnedPublicKey.export({type:'spki',format:'der'})))return refuse();
     const s=parsed.data;
     const keys=['ownerAccountId','deviceId','projectId','runId','sessionId',
       'requestId','grantId','ownerGrantEpoch','sourceDeviceId','targetDeviceId',
@@ -191,6 +218,31 @@ export async function verifyOffhostCompletion(
          jobId:seal.jobId,ownerGrantEpoch:seal.ownerGrantEpoch,
          immutableObjectSha256:seal.immutableObjectSha256,sealedAt:seal.sealedAt,
        }),pinnedStoragePublicKey,sealSig))return refuse();
+    // Metadata seal is NOT the final Native publication ACK. #754 requires
+    // another independent, cryptographically authenticated publisher witness.
+    const final=await ports.readFinalPublicationWitness();
+    if(!final||final.version!==1||
+       !z.string().uuid().safeParse(final.publicationRequestId).success||
+       final.jobId!==s.jobId||final.ownerAccountId!==s.ownerAccountId||
+       final.projectId!==s.projectId||final.targetDeviceId!==s.targetDeviceId||
+       final.publicationRequestId!==expected.publicationRequestId||
+       final.writerEpoch!==expected.writerEpoch||
+       final.targetPath!==s.targetPath||
+       final.sha256!==s.immutableObjectSha256||final.bytesTotal!==wholeSize||
+       !Number.isSafeInteger(final.writerEpoch)||final.writerEpoch<1||
+       typeof final.publishedAt!=='string'||
+       !Number.isFinite(Date.parse(final.publishedAt))||
+       Date.parse(final.publishedAt)<commit-2000||
+       Date.parse(final.publishedAt)>now()+2000||
+       now()-Date.parse(final.publishedAt)>30000||
+       typeof final.signatureBase64!=='string'||
+       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(final.signatureBase64))return refuse();
+    const publicationSig=Buffer.from(final.signatureBase64,'base64');
+    const {signatureBase64:_signature,...finalBody}=final;
+    if(publicationSig.length!==64||
+       publicationSig.toString('base64')!==final.signatureBase64||
+       !verify(null,canonicalFinalPublicationWitness(finalBody),
+         pinnedPublicationPublicKey,publicationSig))return refuse();
     // Recheck owner epoch/cancellation and remote final state AFTER readback.
     const [g1,t1]=await Promise.all([ports.readGrant(),ports.readTransfer()]);
     if(!matchesGrant(g1,s)||!matchesTransfer(t1,s)||now()-t>30000)return refuse();
