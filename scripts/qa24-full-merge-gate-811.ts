@@ -91,7 +91,7 @@ export function qa24ReleaseGate(snapshot:LiveSnapshot,expectedOpenIds?:number[])
    if(!by.has(n))add('CRITICAL_OWNER_PR_MISSING',[n],'No current HEAD witness');
  }
  for(const [a,b,filename] of [
-   [811,786,keyPaths[2]],[811,800,keyPaths[1]],[801,802,keyPaths[0]] ] as const) {
+   [811,786,keyPaths[2]!],[811,800,keyPaths[1]!],[801,802,keyPaths[0]!] ] as const) {
    if(by.get(a)?.files.includes(filename)&&by.get(b)?.files.includes(filename))
      add('MATERIAL_OWNER_PATH_OVERLAP',[a,b],filename);
    else add('OWNER_PATH_WITNESS_MOVED_OR_MISSING',[a,b],filename);
