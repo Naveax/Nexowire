@@ -120,9 +120,25 @@ export function qa24ReleaseGate(snapshot:LiveSnapshot,expectedOpenIds?:number[])
  };
 }
 export async function collectQa24FullReview(api:GithubRead,repo:string) {
+ // TWO full rounds, not merely two reads of the open PR list. Every round
+ // fetches HEAD/base, all files, SHA-bound CI and Git merge-base for every PR.
+ // A changed run/conclusion or path set without HEAD movement is still torn.
+ const first=await collectLiveSnapshot(api,repo);
  const source=await collectLiveSnapshot(api,repo);
+ const stable=(s:LiveSnapshot)=>JSON.stringify({
+   main:s.main_head,ids:s.nodes.map(n=>n.pr),
+   nodes:s.nodes.map(n=>({
+     pr:n.pr,head:n.head_sha,base:n.base_sha,base_ref:n.base_ref,
+     head_ref:n.head_ref,files:n.files.slice().sort(),
+     ci_run:n.ci.run_id,ci_head:n.ci.run_head_sha,ci_status:n.ci.status,
+     ci_workflow_status:n.ci.workflow_status,ci_conclusion:n.ci.conclusion,
+     merge:n.merge_base_sha,compare:n.compare_status
+   }))
+ });
+ if(stable(first)!==stable(source))
+   throw new Error('FULL_SOURCE_CI_FILES_COMPARE_MOVED_BETWEEN_PASSES');
  const review=qa24ReleaseGate(source);
- return {source,review};
+ return {source,review,full_source_passes:2 as const};
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
  const repo=process.argv[2]??'';
