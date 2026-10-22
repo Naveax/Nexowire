@@ -1,0 +1,56 @@
+{
+  "nodes": [
+    {
+      "pr": 708,
+      "head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+      "head_ref": "test/22-691-crosshub-dispatch-20261021",
+      "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "base_ref": "fix/08-checkpoint-external-commit-20261022",
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "status": "diverged"
+      },
+      "ci": {
+        "run_id": 39824007092,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1"
+      },
+      "files_complete": true
+    },
+    {
+      "pr": 726,
+      "head_sha": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+      "head_ref": "qa/23-ui-native-cas-reconnect-20261021",
+      "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "base_ref": "qa/23-effective-owner669-negative-20261021",
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_702_700_CROSS_QA_20261021.md",
+        "src/diagnostics/core-effective-native-cas-ui-gate.ts",
+        "test/core-effective-native-cas-ui-gate.test.ts",
+        "test/qa/core-card-approval-pref-only.test.ts",
+        "test/qa/core-effective-ui-worker23.test.ts"
+      ],
+      "compare": {
+        "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "head_sha": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+        "merge_base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823764746,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "50491525249bcc1f5c47b90f23890b2b3062e33d"
+      },
+      "files_complete": true
+    }
+  ],
+  "observation": "2026-10-22",
+  "note": "Cross-owner changed HEAD and CI. #708 merge-base DIVERGED even though SHA exact; do not call safe."
+}
