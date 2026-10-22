@@ -10,8 +10,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync, sign, verify, type KeyObject} from 'node:crypto';
 import {
-  hash, verifySig, redactAudit, type Signed, type ProcessCreation,
-  type Postcondition,
+  hash, verifySig, redactAudit, verifyElevatedReceipt, eventDigest, sealBody,
+  GENESIS, SEAL_GENESIS, type Signed, type ProcessCreation, type Postcondition,
+  type Intent, type OsExit, type AuditKind, type AuditEvent, type Seal,
+  type Segment, type ReceiptBundle, type Authorities, type CurrentAuthority,
+  type CurrentRoot,
 } from './qa29-native-receipt-verifier.js';
 
 const gen=()=>generateKeyPairSync('ed25519');
@@ -84,7 +87,7 @@ const unknown=(reason:string):CrossResult=>({
 });
 type Sample={
  expected:Permit;claim:CasClaim;permitKey:KeyObject;
- osReceipt:Signed<ProcessCreation>;osKey:KeyObject;
+ osReceipt:Signed<ProcessCreation>;osKey:KeyObject;osIssuerPrivateKey:KeyObject;
  postReceipt:Signed<Postcondition>;postKey:KeyObject;
  tree:Tree709; ownerEpochNow:number;grantGenerationNow:number;
  coreEpochAtApproval:number;currentCoreEpoch:number;
@@ -160,6 +163,7 @@ function fixture():Sample{
  };
  return {expected,claim:signCas(ca.privateKey,expected),permitKey:ca.publicKey,
   osReceipt:signLocal(osKeys.privateKey,process),osKey:osKeys.publicKey,
+  osIssuerPrivateKey:osKeys.privateKey,
   postReceipt:signLocal(readKeys.privateKey,readback),postKey:readKeys.publicKey,
   tree:{...tree709},ownerEpochNow:expected.ownerEpoch,
   grantGenerationNow:expected.generation,
@@ -263,4 +267,119 @@ test('credential in user payload never appears in audit projection or denial res
  assert.doesNotMatch(JSON.stringify(output)+JSON.stringify(result),/SUPER_PRIVATE|Bearer|SECRET/);
  assert.deepEqual(Object.keys(output).sort(),
   ['kind','requestId','ownerEpoch','coreEpoch','evidenceHash'].sort());
+});
+
+/**
+ * Single combined contract path: reuse #699's REAL source verifier, including
+ * independent readback issuer and authenticated rotating audit. This is STILL
+ * a synthetic fixture, and #709 remains a physical HIGH-token NO-GO.
+ */
+function sealedReceiptFixture(x:Sample):{bundle:ReceiptBundle;trust:Authorities}{
+ const external=gen(),p=x.osReceipt.payload,r=x.postReceipt.payload;
+ const exit:OsExit={
+  kind:'os-exit-v1',requestId:x.expected.requestId,
+  reservationNonce:p.reservationNonce,pid:p.pid,
+  creationFiletime:p.creationFiletime,machineBootId:p.machineBootId,
+  launchNonce:p.launchNonce,exitCode:0,exitedAtMs:x.now-250,
+  stdoutHash:hash('untrusted-stdout-success'),stderrHash:hash(''),
+  stdoutComplete:true,stderrComplete:true,
+ };
+ const signedExit=signLocal(x.osIssuerPrivateKey,exit);
+ const intent:Intent={
+  requestId:x.expected.requestId,ownerId:x.expected.ownerId,
+  deviceId:x.expected.deviceId,sessionId:x.expected.sessionEpoch,
+  ownerEpoch:x.expected.ownerEpoch,coreEpoch:x.coreEpochAtApproval,
+  intentHash:x.expected.fingerprint,targetId:r.targetId,
+  targetGeneration:r.targetGeneration,expectedStateHash:r.observedStateHash,
+ };
+ let seq=0,head=GENESIS,sealHead=SEAL_GENESIS;
+ const events:AuditEvent[]=[];
+ const entry=(kind:AuditKind,evidenceHash:string):void=>{
+  const body:Omit<AuditEvent,'hash'>={
+   seq:++seq,kind,requestId:intent.requestId,
+   ownerEpoch:intent.ownerEpoch,coreEpoch:intent.coreEpoch,
+   evidenceHash,previousHash:head,
+  };
+  const event={...body,hash:eventDigest(body)};
+  head=event.hash;events.push(event);
+ };
+ entry('reserve',hash('synthetic-reservation'));
+ entry('dispatch',hash(JSON.stringify(x.osReceipt)));
+ entry('exit',hash(JSON.stringify(signedExit)));
+ entry('postcondition',hash(JSON.stringify(x.postReceipt)));
+ const groups=[events.slice(0,2),events.slice(2,3),events.slice(3)];
+ const segments:Segment[]=groups.map((group,index)=>{
+  const body:Omit<Seal,'signature'>={
+   index,startSeq:group[0]!.seq,endSeq:group.at(-1)!.seq,
+   previousSealHash:sealHead,
+   firstPreviousHash:group[0]!.previousHash,
+   endHash:group.at(-1)!.hash,
+  };
+  const seal:Seal={...body,signature:sign(null,utf8(sealBody({
+   ...body,signature:'',
+  })),external.privateKey).toString('base64')};
+  sealHead=hash(JSON.stringify(seal));
+  return {index,events:group,seal};
+ });
+ const latest:CurrentRoot={
+  kind:'external-log-head-v1',index:2,seq,headHash:head,
+  sealHash:sealHead,
+ };
+ const state:CurrentAuthority={
+  kind:'external-current-state-v1',requestId:intent.requestId,
+  deviceId:intent.deviceId,ownerId:intent.ownerId,
+  ownerEpoch:intent.ownerEpoch,coreEpoch:intent.coreEpoch,
+  reservationNonce:p.reservationNonce,intentHash:intent.intentHash,
+  targetId:intent.targetId,targetGeneration:intent.targetGeneration,
+  expectedStateHash:intent.expectedStateHash,state:'dispatched',
+  dispatchCount:1,auditSeq:latest.seq,auditHeadHash:latest.headHash,
+ };
+ return {
+  bundle:{intent,process:x.osReceipt,exit:signedExit,
+   readback:x.postReceipt,segments},
+  trust:{
+   osPublicKey:x.osKey,readbackPublicKey:x.postKey,
+   externalPublicKey:external.publicKey,
+   getLatest:()=>signLocal(external.privateKey,state),
+   getLogRoot:()=>signLocal(external.privateKey,latest),
+   pinnedImageHash:p.imageHash,pinnedPublisherHash:p.publisherHash,
+   nowMs:x.now,
+  },
+ };
+}
+function reconcileSignedReceiptAndCas(x:Sample,
+ proof:{bundle:ReceiptBundle;trust:Authorities}):CrossResult{
+ // Both a valid #712 signed permit and full #699 audit/readback must agree.
+ // Do NOT treat the source oracle's COMPLETED_VERIFIED as physical approval.
+ if(!validPermit(x.claim,x.permitKey,x.expected,x.now))
+  return unknown('CAS_PERMIT_INVALID_OR_OLD_NONCE');
+ if(x.ownerEpochNow!==x.expected.ownerEpoch||
+    x.grantGenerationNow!==x.expected.generation||
+    x.currentCoreEpoch!==x.coreEpochAtApproval)
+  return unknown('CORE_REVOKED_OR_OWNER_REPAIRED');
+ if(x.commandPossibleUnknown)return unknown('POSSIBLE_EFFECT_NO_REPLAY');
+ if(verifyElevatedReceipt(proof.bundle,proof.trust).status!=='COMPLETED_VERIFIED')
+  return unknown('AUDIT_OR_INDEPENDENT_RECEIPT_UNTRUSTED');
+ return crossCheck(x); // Native #709 cannot supply production HIGH evidence
+}
+test('one source path binds signed CAS, separate OS/readback issuers, PID FILETIME and rotating audit; still native NO-GO',()=>{
+ const x=fixture(),proof=sealedReceiptFixture(x);
+ assert.notEqual(x.osKey,x.postKey);
+ assert.equal(verifyElevatedReceipt(proof.bundle,proof.trust).status,
+  'COMPLETED_VERIFIED'); // test fixture only, never physical Windows proof
+ const source=reconcileSignedReceiptAndCas(x,proof);
+ assert.equal(source.reason,'NATIVE_709_SOURCE_ONLY_NOT_PHYSICAL_HIGH_TOKEN');
+ assert.equal(source.status,'MUTATION_UNKNOWN');
+ assert.equal(source.retrySafe,false);
+ const tampered=structuredClone(proof.bundle.segments) as Segment[];
+ Object.assign(tampered[1]!.events[0]!,{evidenceHash:hash('forged-exit')});
+ assert.equal(reconcileSignedReceiptAndCas(x,{
+  ...proof,bundle:{...proof.bundle,segments:tampered},
+ }).reason,'AUDIT_OR_INDEPENDENT_RECEIPT_UNTRUSTED');
+ const revoked={...x,currentCoreEpoch:x.coreEpochAtApproval+1};
+ assert.equal(reconcileSignedReceiptAndCas(revoked,proof).reason,
+  'CORE_REVOKED_OR_OWNER_REPAIRED');
+ assert.equal(reconcileSignedReceiptAndCas({
+  ...x,expected:{...x.expected,challengeNonce:'b'.repeat(64)},
+ },proof).reason,'CAS_PERMIT_INVALID_OR_OLD_NONCE');
 });
