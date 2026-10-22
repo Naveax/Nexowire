@@ -47,9 +47,9 @@
         "status": "ahead"
       },
       "ci": {
-        "run_id": null,
-        "status": "unknown",
-        "conclusion": null,
+        "run_id": 39806640003,
+        "status": "completed",
+        "conclusion": "success",
         "queried_head_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955"
       }
     },
@@ -71,9 +71,9 @@
         "status": "ahead"
       },
       "ci": {
-        "run_id": null,
-        "status": "unknown",
-        "conclusion": null,
+        "run_id": 39809339319,
+        "status": "completed",
+        "conclusion": "failure",
         "queried_head_sha": "7e360388adc2a1c4e923eb4c8336bf49f3fbac04"
       }
     }
