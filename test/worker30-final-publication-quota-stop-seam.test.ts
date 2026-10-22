@@ -195,8 +195,7 @@ for(const mode of ['native-published-ack-lost',
       assert.equal(memory.reserve(OWNER_B,'lease30-native-b',CHUNK_SHA),'RESERVED');
       const start=await jobs.start(INPUT);
       await jobs.waitForIdle(start.id);
-      const durable=JSON.parse(await readFile(path.join(dir,start.id+'.json'),'utf8'))
-        as TransferJob;
+      const durable=JSON.parse(await readFile(path.join(dir,start.id+'.json'),'utf8')) as TransferJob;
       assert.equal(rig.published,1);
       assert.equal(rig.wrote,2);
       assert.equal(durable.publication?.dispatched,true);
