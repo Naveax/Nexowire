@@ -546,8 +546,9 @@ export interface CoreNativeAclV2Evidence {
 }
 /** Mirrors #712 scope attributes, without claiming the actual CAS is deployed. */
 export interface CoreInstallerDispatchPermit {
-  schemaVersion:1;
-  kind:'core_installer_dispatch_permit_source_v1';
+  // Source v2 is intentionally incompatible with v1 (no signed DAG/DPAPI).
+  schemaVersion:2;
+  kind:'core_installer_dispatch_permit_source_v2';
   ownerAccountId:string;
   deviceId:string;
   transactionId:string;
@@ -555,6 +556,10 @@ export interface CoreInstallerDispatchPermit {
   grantGeneration:number;
   challengeNonce:string;
   brokerSha256:string;
+  stageManifestSha256:string;
+  signedImportDagSha256:string;
+  rollbackSha256:string;
+  dpapiBlobSha256:string;
   processCreationIdentity:string;
   externalSequence:number;
 }
@@ -566,6 +571,8 @@ export interface CoreInstallerDispatchPins {
   ownerEpoch:number;
   grantGeneration:number;
   expectedChallengeNonce:string;
+  independentlyPinnedStageManifestSha256:string;
+  independentlyPinnedImportDagSha256:string;
   minimumExternalSequence:number;
 }
 export interface CoreInstallerPermitWitness {
@@ -578,10 +585,14 @@ export interface CoreInstallerPermitWitness {
 }
 const permitFields=['schemaVersion','kind','ownerAccountId','deviceId',
   'transactionId','ownerEpoch','grantGeneration','challengeNonce',
-  'brokerSha256','processCreationIdentity','externalSequence'] as const;
+  'brokerSha256','stageManifestSha256','signedImportDagSha256',
+  'rollbackSha256','dpapiBlobSha256','processCreationIdentity',
+  'externalSequence'] as const;
 const aclKey=(s:string)=>path.win32.normalize(s).toLowerCase();
 export function assessCoreNativeAclAndDispatchSource(
   stage:CoreStageManifest,
+  stagePins:CoreStagePins,
+  dagPins:CoreImportDagPins,
   bootstrap:CoreBootstrapEvidence,
   atomic:CoreAtomicSwitchEvidence,
   acl:CoreNativeAclV2Evidence,
@@ -593,8 +604,26 @@ export function assessCoreNativeAclAndDispatchSource(
   ownerOsConsentPhysicallyConfirmed:false;
   executionApproved:false;productionApproved:false;
 }{
-  if(!stage?.files||!bootstrap?.ownerKey||!atomic){
-    refuse('NATIVE_ACL_V2_INCOMPLETE_OR_UNSAFE');
+  if(!stage?.files||!bootstrap?.ownerKey||!atomic||
+    !stagePins?.trustedProtectedRoot||!dagPins||!pins||
+    !H.test(stagePins.manifestSha256)||
+    !H.test(dagPins.independentGraphSha256)||
+    stagePins.ownerAccountId!==bootstrap.record.ownerAccountId||
+    stagePins.deviceId!==bootstrap.record.deviceId||
+    stagePins.transactionId!==bootstrap.record.transactionId||
+    stagePins.manifestSha256!==pins.independentlyPinnedStageManifestSha256||
+    dagPins.independentGraphSha256!==pins.independentlyPinnedImportDagSha256){
+    refuse('SIGNED_IMPORT_RELEASE_SCOPE_MISMATCH');
+  }
+  // #743's native ACL inspection is useful only for the EXACT root pinned
+  // by the separately signed stage, never a different subtree report.
+  const trustedRoot=aclKey(stagePins.trustedProtectedRoot).replace(/\\+$/,'');
+  const underRoot=(p:string)=>aclKey(p).startsWith(trustedRoot+'\\');
+  if(!/^[a-z]:\\/i.test(trustedRoot)||
+    aclKey(acl?.protectedRoot??'').replace(/\\+$/,'')!==trustedRoot||
+    !stage.files.every(f=>underRoot(f.path))||
+    !underRoot(bootstrap.ownerKey.blobPath)){
+    refuse('NATIVE_ACL_V2_SIGNED_ROOT_MISMATCH');
   }
   if(!acl||acl.kind!=='windows_core_broker_protected_tree_readonly_v2'||
     acl.requestEnvelopeVersion!==1||
@@ -643,12 +672,38 @@ export function assessCoreNativeAclAndDispatchSource(
     !acl.acceptedInputPaths.some(p=>aclKey(p)===aclKey(bootstrap.ownerKey.blobPath))){
     refuse('NATIVE_ACL_V2_MISSING_SIGNED_IMPORT_OR_PARENT');
   }
+  // #714's atomic readback and #712's permit MUST refer to the same
+  // immutable signed stage; same SHA with a different file-ID is NOT enough.
+  // Without this, calling only the v2/permit facade could combine evidence
+  // from different cutovers, including a crash still marked UNKNOWN.
+  const broker=stage.files.find(f=>f.role==='broker');
+  const rollback=stage.files.find(f=>f.role==='rollback');
+  const updater=stage.files.find(f=>f.role==='updater');
+  if(!broker||!rollback||!updater||
+    atomic.phase!=='post-cutover-readback'||
+    atomic.noPendingUnknownNativeMutation!==true||
+    atomic.writeAheadJournalDurable!==true||
+    atomic.journalAuthenticatedByExternalAuthority!==true||
+    atomic.postconditionWitnessVerified!==true||
+    atomic.installedAfterCutover.sha256!==broker.sha256||
+    atomic.installedAfterCutover.volumeIdentity!==broker.volumeIdentity||
+    atomic.installedAfterCutover.fileIdentity!==broker.fileIdentity||
+    atomic.previousRollbackAfter.sha256!==rollback.sha256||
+    atomic.previousRollbackAfter.volumeIdentity!==rollback.volumeIdentity||
+    atomic.previousRollbackAfter.fileIdentity!==rollback.fileIdentity||
+    atomic.postUpdater.sha256!==updater.sha256||
+    atomic.postUpdater.volumeIdentity!==updater.volumeIdentity||
+    atomic.postUpdater.fileIdentity!==updater.fileIdentity||
+    bootstrap.ownerKey.blobSha256!==bootstrap.record.dpapiBlobSha256||
+    bootstrap.ownerKey.independentEpoch!==bootstrap.record.ownerEpoch){
+    refuse('SIGNED_RELEASE_ATOMIC_READBACK_MISMATCH');
+  }
   const p=witness?.signedPermit;
   if(!p||!pins||!witness||
     witness.independentlyAuthenticated!==true||
     witness.singleUseReserved!==true||
     witness.revoked!==false||witness.unknownMutation!==false||
-    p.schemaVersion!==1||p.kind!=='core_installer_dispatch_permit_source_v1'||
+    p.schemaVersion!==2||p.kind!=='core_installer_dispatch_permit_source_v2'||
     !ID.test(p.ownerAccountId)||!ID.test(p.deviceId)||
     p.ownerAccountId!==pins.ownerAccountId||
     p.deviceId!==pins.deviceId||
@@ -665,6 +720,12 @@ export function assessCoreNativeAclAndDispatchSource(
     p.externalSequence<pins.minimumExternalSequence||
     p.externalSequence!==atomic.externalSequence||
     p.brokerSha256!==atomic.installedAfterCutover.sha256||
+    p.stageManifestSha256!==stagePins.manifestSha256||
+    p.signedImportDagSha256!==dagPins.independentGraphSha256||
+    p.rollbackSha256!==stage.files.find(f=>f.role==='rollback')?.sha256||
+    p.rollbackSha256!==atomic.previousRollbackAfter.sha256||
+    p.dpapiBlobSha256!==bootstrap.ownerKey.blobSha256||
+    p.dpapiBlobSha256!==bootstrap.record.dpapiBlobSha256||
     p.processCreationIdentity!==atomic.nativeTaskCreationIdentity||
     atomic.ownerEpoch!==p.ownerEpoch||
     atomic.transactionId!==p.transactionId){
