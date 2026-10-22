@@ -309,3 +309,56 @@ test('issuer accepts both valid refresh scope orders from a trusted atomic autho
   // The delegated authority is the only possible issuer in strict mode.
   assert.equal((await store.getRefreshToken(digest('nwx_refresh_'+('Z'.repeat(44))))),null);
 });
+
+
+test('epoch-atomic issuer validates trusted owner-session proof and never reads legacy access on denied or unavailable verifier',async()=>{
+  const store=new MemoryMcpOAuthStore();
+  const raw='nwx_mcp_'+('C'.repeat(44));
+  await store.putAccessToken({
+    tokenHash:digest(raw),clientId:client,accountId:ownerA,resource,
+    scopes:['mcp','offline_access'],
+    expiresAt:new Date(at.getTime()+3600_000).toISOString(),
+    createdAt:at.toISOString(),
+  });
+  const plain=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+  });
+  assert.equal((await plain.authenticateAccessToken(raw))?.accountId,ownerA,
+    'legacy store alone would accept this non-epoch-bound row');
+
+  const trusted={accountId:ownerA,clientId:client,resource,
+    scopes:['mcp','offline_access'],sessionEpoch:0};
+  const make=(verify:()=>Promise<typeof trusted|null>)=>
+    new McpOAuthService(store,{
+      issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+      refreshMode:'epoch-atomic',
+      epochAtomicRefresh:{async rotate(){throw Error('unreachable')}},
+      epochAccessVerifier:{authenticateAccessToken:async()=>verify()},
+    });
+  assert.equal(await make(async()=>null).authenticateAccessToken(raw),null);
+  for(const denied of [
+    {...trusted,resource:'https://foreign.invalid/mcp'},
+    {...trusted,clientId:''},
+    {...trusted,accountId:''},
+    {...trusted,sessionEpoch:-1},
+    {...trusted,scopes:['offline_access']},
+    {...trusted,scopes:['mcp','admin']},
+  ]) {
+    assert.equal(await make(async()=>denied).authenticateAccessToken(raw),null);
+  }
+  assert.deepEqual(await make(async()=>trusted).authenticateAccessToken(raw),{
+    accountId:ownerA,clientId:client,resource,scopes:['mcp','offline_access'],
+  });
+  const unavailable=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{async rotate(){throw Error('unreachable')}},
+    epochAccessVerifier:{
+      async authenticateAccessToken(){throw Error('SYNTHETIC_EPOCH_VERIFIER_UNAVAILABLE')},
+    },
+  });
+  await assert.rejects(unavailable.authenticateAccessToken(raw),
+    /SYNTHETIC_EPOCH_VERIFIER_UNAVAILABLE/);
+  assert.equal((await store.getAccessToken(digest(raw)))?.accountId,ownerA,
+    'provider outage must not cause an implicit legacy fallback');
+});
