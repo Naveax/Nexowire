@@ -24,6 +24,23 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23"
+      },
+      "files": [
+        "cloudflare/migrations/0020_core_admin_delegations.sql",
+        "docs/NEXOWIRE_CORE_REAL_DELEGATION_20261021.md",
+        "src/security/core-admin-delegation.ts",
+        "src/security/core-elevated-admission.ts",
+        "test/core-admin-delegation-d1.test.ts",
+        "test/core-effective-ui-truth.test.ts",
+        "test/core-elevated-admission.test.ts",
+        "web/app.js"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+        "head_sha": "f5545741902c15d7b51e98b73d0f4e5ec63daf23",
+        "merge_base_sha": "2adf0e29fd41914a842cafd7fdadef25d24da103",
+        "status": "ahead"
       }
     },
     {
@@ -38,6 +55,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701"
+      },
+      "files": [
+        "docs/QA_02_HYPERV_617_DENIAL_AUDIT_20261021.md",
+        "test/qa-02-hyperv-denial-provenance.test.ts",
+        "test/qa-02-hyperv-unknown-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+        "head_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "merge_base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+        "status": "ahead"
       }
     },
     {
@@ -52,6 +81,19 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_CORE_BROKER_PRIVATE_DESKTOP_MATRIX_20261021.md",
+        "test/private-core-broker-boundary-negative.test.ts",
+        "test/private-desktop-additional-brokers.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "head_sha": "26cfad8228bdb24147a746c0dde44e4c8f78a709",
+        "merge_base_sha": "ec2f0039e6b7f60d2a2f40d8934dfc6b380fe497",
+        "status": "ahead"
       }
     },
     {
@@ -66,6 +108,18 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8"
+      },
+      "files": [
+        "docs/SCALE_V2_CORE_ARTIFACT_CANCEL_QUOTA_ACCEPTANCE.md",
+        "src/ops/scale-v2-core-artifact-cancel-staging.ts",
+        "test/scale-v2-core-artifact-cancel-authority-staging.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "head_sha": "2ae3f0c94b1c3afd3fa3b5e70a5c8dca56a798a8",
+        "merge_base_sha": "3064acdf18b0817ecf3650ec7d61f9233d36a009",
+        "status": "ahead"
       }
     },
     {
@@ -80,6 +134,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "fed460da0e80af191b6663f146890ec6fd33824c"
+      },
+      "files": [
+        "docs/CORE_PHYSICAL_READINESS_EVIDENCE_20261021.md",
+        "src/diagnostics/core-physical-readiness.ts",
+        "test/core-physical-readiness.test.ts",
+        "test/fixtures/core-medium-untrusted-fixture.json"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "head_sha": "fed460da0e80af191b6663f146890ec6fd33824c",
+        "merge_base_sha": "4c5c810134c020cd04a5ef2be5c1138ea1954ad0",
+        "status": "ahead"
       }
     },
     {
@@ -94,6 +161,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256"
+      },
+      "files": [
+        "docs/SCALE_S5_38MIB_LEASE_REVIEW_20261021.md",
+        "docs/reports/s5-http-9-5mib-loopback-20261021.json",
+        "test/s5-lease-fairness-chunk-contract.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "head_sha": "a0ebd60117fb79bfe41c14bbf134efdf15309256",
+        "merge_base_sha": "a1c65587730a1eaf331337b9b3422aa93541ee30",
+        "status": "ahead"
       }
     },
     {
@@ -108,6 +187,40 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/process-manager-tree-cleanup.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "head_sha": "19ac7fc42f482c4cd3c019f46ac7af1db05ec626",
+        "merge_base_sha": "943eba329b75fe3b6a0b72a8688dfac2da577701",
+        "status": "ahead"
       }
     },
     {
@@ -122,6 +235,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_WITNESS_DELEGATION_EPOCH_20261021.md",
+        "sql/agent-witness-delegation.sql",
+        "src/agent/postgres-monotonic-witness.ts",
+        "src/agent/witness-delegation.ts",
+        "src/agent/witness-signed-provenance.ts",
+        "test/witness-delegation.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "head_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "merge_base_sha": "ef1e3b23b01300e5f3bfe3769701b5b1446db5bd",
+        "status": "ahead"
       }
     }
   ]
