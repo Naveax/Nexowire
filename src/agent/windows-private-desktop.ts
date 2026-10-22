@@ -1905,6 +1905,12 @@ export async function requestPrivateDesktopEmergencyStopFence():Promise<void>{
   await recordPrivateDesktopEmergencyStop(paths().root);
 }
 
+/** Shared production mutation preflight for picker and private worker. */
+export async function assertPrivateDesktopMutationNotCancelled():Promise<void>{
+  assertWindows();
+  await assertNoPrivateDesktopEmergencyStop(paths().root);
+}
+
 // These operations use a shared state.json/.tmp and persistent desktop
 // host. Without serialization, parallel shell workers may race during host
 // startup or overwrite each other's launchedPids, allowing orphan windows.
