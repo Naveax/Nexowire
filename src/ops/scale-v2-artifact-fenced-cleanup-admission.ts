@@ -22,6 +22,16 @@ export interface ServerBoundArtifactCleanup extends ServerBoundQuotaJob {
   readonly lastDispatchedRequestId:string|null;
   readonly lastDispatchedChunkSha256:string|null;
 }
+/** Protected external journal outcome. A Hub CANCELLED status or a client
+ * boolean must NEVER mint these values. Pending Native effects and forged
+ * receipts require independent reconciliation before quota disk release.
+ */
+export type FencedNativeResolution=
+  'NEVER_DISPATCHED_CLEANUP_VERIFIED'|
+  'DISPATCHED_CLEANUP_VERIFIED'|
+  'MUTATION_UNKNOWN_PENDING'|
+  'FORGED_ACK_PENDING'|
+  'OWNER_REPAIR_PENDING';
 export interface IndependentFencedDeletionWitness {
   readonly ownerId:string;readonly deviceId:string;
   readonly projectId:string;readonly sessionId:string;
@@ -33,6 +43,11 @@ export interface IndependentFencedDeletionWitness {
   readonly lastDispatchedRequestId:string|null;
   readonly lastDispatchedChunkSha256:string|null;
   readonly deletionEpoch:number;readonly fencingEpoch:number;
+  /** Trusted durable reconciliation event AFTER cross-Hub writer revoke.
+   * Must be independently witnessed, not derived from user/job.status.
+   */
+  readonly reconciliationEpoch:number;
+  readonly nativeResolution:FencedNativeResolution;
   readonly receiptId:string;
 }
 /** Readback is from a rollback-independent external CAS + protected disk
@@ -55,6 +70,9 @@ export interface CurrentFencedDeletionReadback {
   readonly lastDispatchedRequestId:string|null;
   readonly lastDispatchedChunkSha256:string|null;
   readonly deletionEpoch:number;readonly fencingEpoch:number;
+  readonly reconciliationEpoch:number;
+  readonly nativeResolution:FencedNativeResolution;
+  readonly unresolvedNativeMutations:number;
   readonly receiptId:string;
   readonly inFlightNativeWriters:number;
   readonly deletionState:'VERIFIED_ABSENT';
@@ -109,6 +127,11 @@ function validWitness(
     Number.isSafeInteger(proof.writerStoppedThroughEpoch)&&
     proof.writerStoppedThroughEpoch>=0&&
     epoch(proof.deletionEpoch)&&epoch(proof.fencingEpoch)&&
+    epoch(proof.reconciliationEpoch)&&
+    proof.reconciliationEpoch<=proof.deletionEpoch&&
+    (scope.dispatchedWriterEpoch===0
+      ?proof.nativeResolution==='NEVER_DISPATCHED_CLEANUP_VERIFIED'
+      :proof.nativeResolution==='DISPATCHED_CLEANUP_VERIFIED')&&
     proof.writerStoppedThroughEpoch>=scope.dispatchedWriterEpoch&&
     proof.deletionEpoch>=proof.writerStoppedThroughEpoch&&
     proof.fencingEpoch>=proof.deletionEpoch&&
@@ -175,6 +198,12 @@ export class StagingArtifactFencedCleanupAdmission {
         current.writerStoppedThroughEpoch<scope.dispatchedWriterEpoch||
         current.writerStoppedThroughEpoch!==witness.writerStoppedThroughEpoch||
         current.deletionEpoch!==witness.deletionEpoch||
+        !epoch(current.reconciliationEpoch)||
+        current.reconciliationEpoch<=current.writerRevokeEpoch||
+        current.reconciliationEpoch>current.deletionEpoch||
+        current.reconciliationEpoch!==witness.reconciliationEpoch||
+        current.nativeResolution!==witness.nativeResolution||
+        current.unresolvedNativeMutations!==0||
         current.fencingEpoch!==witness.fencingEpoch||
         current.receiptId!==witness.receiptId||
         current.fencingEpoch<current.writerRevokeEpoch||

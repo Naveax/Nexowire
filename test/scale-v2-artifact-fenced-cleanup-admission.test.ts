@@ -64,6 +64,13 @@ function fixture(){
     immutableReceiptId:'authoritative-receipt-001',
     forgedReceiptId:false,
     activeWriters:0,staleReadback:false,readbackUnavailable:false,
+    reconciliationEpoch:0,unresolvedNativeMutations:1,
+    nativeResolution:'MUTATION_UNKNOWN_PENDING' as
+      'NEVER_DISPATCHED_CLEANUP_VERIFIED'|'DISPATCHED_CLEANUP_VERIFIED'|
+      'MUTATION_UNKNOWN_PENDING'|'FORGED_ACK_PENDING'|'OWNER_REPAIR_PENDING',
+    receiptNativeResolution:'MUTATION_UNKNOWN_PENDING' as
+      'NEVER_DISPATCHED_CLEANUP_VERIFIED'|'DISPATCHED_CLEANUP_VERIFIED'|
+      'MUTATION_UNKNOWN_PENDING'|'FORGED_ACK_PENDING'|'OWNER_REPAIR_PENDING',
     actualDeletion:false,writerStopped:false,
     corruptProof:false,
   };
@@ -116,6 +123,9 @@ function fixture(){
         lastDispatchedChunkSha256:evidence.lastDispatchedChunkSha256,
         writerStoppedThroughEpoch:evidence.stoppedThrough,
         deletionEpoch:evidence.deletedAt,
+        reconciliationEpoch:evidence.reconciliationEpoch,
+        nativeResolution:evidence.nativeResolution,
+        unresolvedNativeMutations:evidence.unresolvedNativeMutations,
         fencingEpoch:evidence.staleReadback
           ? witness.fencingEpoch+1 : evidence.fencingEpoch,
         // Independent protected store readback, not a reflected ACK.
@@ -137,6 +147,8 @@ function fixture(){
           ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
           writerStoppedThroughEpoch:evidence.stoppedThrough,
           deletionEpoch:evidence.deletedAt,fencingEpoch:evidence.fencingEpoch,
+          reconciliationEpoch:evidence.reconciliationEpoch,
+          nativeResolution:evidence.receiptNativeResolution,
           receiptId:evidence.forgedReceiptId
             ?'client-forged-receipt-9999':evidence.immutableReceiptId,
         };
@@ -165,6 +177,9 @@ function fixture(){
       evidence.source='DELETED';evidence.writerStopped=true;
       evidence.actualDeletion=true;evidence.stoppedThrough=71;
       evidence.revokeEpoch=72;evidence.deletedAt=73;evidence.fencingEpoch=74;
+      evidence.reconciliationEpoch=73;evidence.unresolvedNativeMutations=0;
+      evidence.nativeResolution='DISPATCHED_CLEANUP_VERIFIED';
+      evidence.receiptNativeResolution='DISPATCHED_CLEANUP_VERIFIED';
     },
     close(){other.close();db.close();rmSync(folder,{recursive:true,force:true})},
   };
@@ -402,8 +417,11 @@ test('#691 reserved native intent with dispatched=false can clean zero-byte rese
    f.evidence.lastDispatchedChunkSha256=null;
    f.evidence.stoppedThrough=0;
    f.evidence.revokeEpoch=1;
+   f.evidence.reconciliationEpoch=2;
    f.evidence.deletedAt=2;
    f.evidence.fencingEpoch=3;
+   f.evidence.nativeResolution='NEVER_DISPATCHED_CLEANUP_VERIFIED';
+   f.evidence.receiptNativeResolution='NEVER_DISPATCHED_CLEANUP_VERIFIED';
    assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(pre),
      'RELEASED_FIRST');
    assert.deepEqual(f.stats(),{admittedBytes:0,occupiedBytes:0,
@@ -421,7 +439,7 @@ test('#691 false dispatched=false claim cannot hide actual persisted dispatch hi
      lastDispatchedRequestId:null,lastDispatchedChunkSha256:null};
    // External CAS *independently* remembers Native may already have written.
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forgedPre),
-     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED|CLEANUP_INDEPENDENT_WITNESS_INVALID/);
    assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
       totalSessions:1,releasedSessions:0});
  }finally{f.close()}
@@ -576,6 +594,98 @@ test('missing pending Native request ID/hash and fabricated predispatch flags mu
    ]){
      await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forged),
        /CLEANUP_SERVER_BINDING_INVALID|CLEANUP_INDEPENDENT_WITNESS_INVALID|CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   }
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#708 unknown pending: independently deleted-looking stage cannot refund before durable native reconciliation',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);
+   f.verifiedDelete();
+   // A Hub reports CANCELLED and plausible deletion, but Native ACK/side
+   // effect is still unresolved in protected external journal.
+   f.evidence.nativeResolution='MUTATION_UNKNOWN_PENDING';
+   f.evidence.unresolvedNativeMutations=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup({
+     ...scope,durableDeletionVerified:true,writersStoppedVerified:true,
+   } as typeof scope),/CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   // Only protected independent reconciliation after irrevocable writer
+   // revoke and real deletion allows the first disk release.
+   f.evidence.nativeResolution='DISPATCHED_CLEANUP_VERIFIED';
+   f.evidence.unresolvedNativeMutations=0;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   assert.equal(f.stats().admittedBytes,CHUNK);
+ }finally{f.close()}
+});
+
+test('#725 forged Native ACK retains immutable pending provenance even when client claims deletion',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.nativeResolution='FORGED_ACK_PENDING';
+   f.evidence.unresolvedNativeMutations=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   // Even if a signed-looking receipt is supplied by Hub A, the independent
+   // protected witness still declares the forged ACK unresolved.
+   f.evidence.receiptNativeResolution='FORGED_ACK_PENDING';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#708 two-Hub CORE re-pair pending cannot permit first release or second quota credit',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.nativeResolution='OWNER_REPAIR_PENDING';
+   f.evidence.unresolvedNativeMutations=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   f.evidence.nativeResolution='DISPATCHED_CLEANUP_VERIFIED';
+   f.evidence.unresolvedNativeMutations=0;
+   f.evidence.deviceEpoch=scope.deviceEpoch+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.deviceEpoch=scope.deviceEpoch;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   f.evidence.ownerEpoch=scope.ownerEpoch+1;
+   await assert.rejects(()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+ }finally{f.close()}
+});
+
+test('cleanup reconciliation receipt must be after durable revoke and before physical deletion',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.reconciliationEpoch=f.evidence.revokeEpoch;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   f.evidence.reconciliationEpoch=f.evidence.deletedAt+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('missing or negative unresolved mutation counters never count as independently reconciled',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   for(const invalid of [undefined,-1,1,NaN]){
+     f.evidence.unresolvedNativeMutations=invalid as number;
+     await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+       /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
    }
    assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
      totalSessions:1,releasedSessions:0});
