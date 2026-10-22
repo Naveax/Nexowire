@@ -235,6 +235,19 @@ export class ReviewedGitPatch {
     ticket: string,
   ): Promise<PatchResult> {
     const fingerprint = reviewed.fingerprint;
+    if (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint)) {
+      return { state: 'DENIED', fingerprint: String(fingerprint) };
+    }
+    // Check this *before* reading the potentially changed file: an old PENDING
+    // record means the previous attempt may have changed bytes before ACK loss.
+    // Stale content must never erase UNKNOWN provenance on retry.
+    try {
+      if (await this.ports.journal.get(operationKey('APPLY', fingerprint))) {
+        return { state: 'MUTATION_STATE_UNKNOWN', fingerprint };
+      }
+    } catch {
+      return { state: 'MUTATION_STATE_UNKNOWN', fingerprint };
+    }
     let observed: Awaited<ReturnType<ReviewedGitPatch['observe']>>;
     try {
       observed = await this.observe(request);
@@ -300,6 +313,14 @@ export class ReviewedGitPatch {
     ticket: string;
   }): Promise<PatchResult> {
     const { identity, file, fingerprint, ticket } = input;
+    // An earlier undo may have changed the file before its ACK was lost.
+    try {
+      if (await this.ports.journal.get(operationKey('UNDO', fingerprint))) {
+        return { state: 'MUTATION_STATE_UNKNOWN', fingerprint };
+      }
+    } catch {
+      return { state: 'MUTATION_STATE_UNKNOWN', fingerprint };
+    }
     try {
       validateIdentity(identity);
       validateFile(file);
