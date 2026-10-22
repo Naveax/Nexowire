@@ -293,3 +293,60 @@ test('accessible workspace and Windows Job with unreserved disk and claimed remo
     assert.ok(report.reasons.includes(reason), reason);
   }
 });
+
+
+/** #786 + #800 are separate real executor defects, not synthetic Git fixtures here. */
+test('reported Git availability without root/fsmonitor verification is BLOCKED despite positive path, disk and Windows Job', async () => {
+  const base = fixture();
+  const input: Partial<ReadonlyTaskPreflightInput> = {
+    request: { ...base.request, capability: 'git.status' },
+    // All path and disk measurements are optimistic, but still untrusted.
+    root: { ...base.root!, pathFilterOnly: false },
+    disk: { ...base.disk!, atomicBudgetReservation: verified },
+    platform: { ...base.platform!, git: verified, windowsJob: verified },
+    process: {
+      ...base.process!, kind: 'windows-job',
+      osBoundaryVerified: verified, descendantsContained: verified,
+      gitHooksConstrained: verified,
+    },
+    // A git executable being present gives no root or fsmonitor protection.
+    git: {
+      discoveredRootWithinScopedGrant: 'unavailable',
+      linkedWorktreeGitdirAndCommonDirScoped: 'unverified',
+      fsmonitorAndHookExecutionDisabled: 'unavailable',
+      gitConfigAndEnvironmentSanitized: 'unverified',
+      gitSubprocessesContained: 'unavailable',
+    },
+  };
+  const report = await inspect(input);
+  assert.equal(report.requestedCapability, 'git.status');
+  assert.equal(report.taskRoot, 'REPORTED_UNATTESTED');
+  assert.equal(report.diskBudget, 'REPORTED_UNATTESTED');
+  assert.equal(report.platformCapabilities, 'REPORTED_UNATTESTED');
+  assert.equal(report.status, 'BLOCKED');
+  assert.ok(report.reasons.includes('GIT_DISCOVERED_ROOT_NOT_VERIFIED'));
+  assert.ok(report.reasons.includes('GIT_SUBPROCESS_SANITIZATION_NOT_VERIFIED'));
+  assert.ok(report.reasons.includes('WINDOWS_JOB_NOT_FULL_SANDBOX'));
+  assert.equal(report.gitRootScope, 'NOT_PROVEN');
+  assert.equal(report.safeGitExecution, 'NOT_PROVEN');
+  assert.equal(report.filesystemContainment, 'NOT_PROVEN');
+  assert.equal(report.diskReservation, 'NOT_PROVEN');
+  assert.equal(report.processIsolation, 'NOT_PROVEN');
+  assert.equal(report.remoteWorkerEligibility, 'NOT_PROVEN');
+  assert.equal(report.dispatchAllowed, false);
+  // Reported "verified" booleans are not a source of execution authority.
+  const forgedGreen = await inspect({
+    ...input,
+    git: {
+      discoveredRootWithinScopedGrant: verified,
+      linkedWorktreeGitdirAndCommonDirScoped: verified,
+      fsmonitorAndHookExecutionDisabled: verified,
+      gitConfigAndEnvironmentSanitized: verified,
+      gitSubprocessesContained: verified,
+    },
+  });
+  assert.equal(forgedGreen.gitRootScope, 'NOT_PROVEN');
+  assert.equal(forgedGreen.safeGitExecution, 'NOT_PROVEN');
+  assert.equal(forgedGreen.dispatchAllowed, false);
+  assert.equal(forgedGreen.effectiveCore, false);
+});
