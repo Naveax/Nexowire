@@ -37,6 +37,8 @@ export class PathDeniedError extends Error {
         ? 'Approve a short-lived grant for the verified USB volume and exact target on the physical device.'
         : reason === 'UNSANDBOXED_EXECUTION_DENIED'
           ? 'Use scoped file tools, or explicitly authorize an unrestricted execution session on the physical device.'
+          : reason === 'TASK_OS_SANDBOX_MUTATION_UNAVAILABLE'
+            ? 'Task file mutations require a separately verified OS sandbox and atomic native handle-relative filesystem executor; path checks and external grants are insufficient.'
           : reason === 'WINDOWS_NATIVE_HANDLE_GUARD_REQUIRED'
             ? 'No verified atomic native Windows handle-based mutation executor is connected. Do not mutate this target until that native security gate is independently accepted.'
           : 'Choose a verified allowed root or request an owner-approved, target-scoped permission.',
@@ -65,6 +67,11 @@ export interface PathPolicyOptions {
   volumeResolver?: VolumeResolver;
   platform?: NodeJS.Platform;
   defaultScopes?: readonly FileScope[];
+  // Trusted local task-worktree scope, never loaded from a remote tool payload.
+  // This is PATH POLICY ONLY, not a kernel/child-process sandbox. Until an
+  // independently verified OS handle-relative executor exists, mutations and
+  // unrestricted child execution are denied in task mode on every platform.
+  taskRoot?: string;
   // The native Agent supplies a grant registry and is always strict.
   // Legacy library-only PathPolicy instances retain existing test semantics.
   enforceExecutionBoundary?: boolean;
@@ -89,6 +96,7 @@ export class PathPolicy {
   private readonly volumeResolver: VolumeResolver;
   private readonly now: () => number;
   private readonly defaultScopes: readonly FileScope[];
+  private readonly taskRoot: string | undefined;
   private readonly approvedExecutionUntil: number | undefined;
 
   constructor(
@@ -99,6 +107,15 @@ export class PathPolicy {
     this.volumeResolver = options.volumeResolver ?? resolveWindowsVolumeIdentity;
     this.now = options.now ?? Date.now;
     this.defaultScopes = options.defaultScopes ?? LEGACY_ROOT_SCOPES;
+    if (options.taskRoot !== undefined) {
+      const taskRoot = options.taskRoot;
+      if (typeof taskRoot !== 'string' || !path.isAbsolute(taskRoot) ||
+          (this.platform === 'win32' && unsafeWindowsPath(taskRoot)) ||
+          path.resolve(taskRoot) === path.parse(taskRoot).root) {
+        throw new PathDeniedError(String(taskRoot), 'TASK_ROOT_INVALID');
+      }
+      this.taskRoot = path.resolve(taskRoot);
+    }
     const remaining = (options.unrestrictedExecutionUntil ?? 0) - this.now();
     this.approvedExecutionUntil = remaining > 0 && remaining <= 15 * 60_000
       ? options.unrestrictedExecutionUntil : undefined;
@@ -110,11 +127,30 @@ export class PathPolicy {
     if (reason) throw new PathDeniedError(requested, reason);
   }
 
+  private defaultRoots(): readonly string[] {
+    // A task root always narrows even an inherited wildcard/home allowlist.
+    return this.taskRoot ? [this.taskRoot] : this.roots;
+  }
+
+  private async assertTaskRootNotReparse(): Promise<void> {
+    if (!this.taskRoot) return;
+    // Reject a symlink/junction passed as the task root itself. This check
+    // still cannot protect ancestor changes after observation; only an OS
+    // retained-directory-handle sandbox could guarantee that property.
+    let st: import('node:fs').Stats;
+    try { st = await fs.lstat(this.taskRoot); }
+    catch { throw new PathDeniedError(this.taskRoot, 'TASK_ROOT_UNVERIFIED'); }
+    if (!st.isDirectory() || st.isSymbolicLink()) {
+      throw new PathDeniedError(this.taskRoot, 'TASK_ROOT_REPARSE_UNVERIFIED');
+    }
+  }
+
   resolve(requestedPath: string, cwd = process.cwd()): string {
     this.assertSafeSyntax(requestedPath);
     const resolved = path.resolve(cwd, requestedPath);
-    if (this.roots.includes('*')) return resolved;
-    if (!this.isWithinAnyRoot(resolved, this.roots.map((root) => path.resolve(root)))) {
+    const roots = this.defaultRoots();
+    if (roots.includes('*')) return resolved;
+    if (!this.isWithinAnyRoot(resolved, roots.map((root) => path.resolve(root)))) {
       throw new PathDeniedError(resolved);
     }
     return resolved;
@@ -124,7 +160,8 @@ export class PathPolicy {
     requestedPath: string,
     cwd = process.cwd(),
   ): Promise<string> {
-    return this.resolveExistingWithRoots(requestedPath, cwd, this.roots);
+    await this.assertTaskRootNotReparse();
+    return this.resolveExistingWithRoots(requestedPath, cwd, this.defaultRoots());
   }
 
   private async resolveExistingWithRoots(
@@ -149,7 +186,8 @@ export class PathPolicy {
     requestedPath: string,
     cwd = process.cwd(),
   ): Promise<string> {
-    return this.resolveForCreateWithRoots(requestedPath, cwd, this.roots);
+    await this.assertTaskRootNotReparse();
+    return this.resolveForCreateWithRoots(requestedPath, cwd, this.defaultRoots());
   }
 
   private async resolveForCreateWithRoots(
@@ -192,7 +230,7 @@ export class PathPolicy {
   private availableRoots(requestedPath: string, cwd: string): readonly string[] {
     const candidate = path.resolve(cwd, requestedPath);
     return [
-      ...this.roots,
+      ...this.defaultRoots(),
       ...(this.options.grants && this.options.ownerId && this.options.deviceId
         ? this.options.grants.active(this.options.ownerId, this.options.deviceId)
           .map(grant => mapVolumeGrantRoot(grant, candidate))
@@ -205,6 +243,7 @@ export class PathPolicy {
     scope: FileScope,
     cwd = process.cwd(),
   ): Promise<string> {
+    await this.assertTaskRootNotReparse();
     const roots = this.availableRoots(requestedPath, cwd);
     const target = await this.resolveExistingWithRoots(requestedPath, cwd, roots);
     await this.assertScope(target, scope);
@@ -217,6 +256,7 @@ export class PathPolicy {
     scope: FileScope,
     cwd = process.cwd(),
   ): Promise<string> {
+    await this.assertTaskRootNotReparse();
     const roots = this.availableRoots(requestedPath, cwd);
     const target = await this.resolveForCreateWithRoots(requestedPath, cwd, roots);
     await this.assertScope(target, scope);
@@ -255,8 +295,9 @@ export class PathPolicy {
     if (MUTATIONS.has(scope) && this.isVolumeRoot(target)) {
       throw new PathDeniedError(target, 'VOLUME_ROOT_MUTATION_DENIED', scope);
     }
-    const rootAllowed = this.roots.includes('*') ||
-      await this.withinRealRoots(target, this.roots);
+    const roots = this.defaultRoots();
+    const rootAllowed = roots.includes('*') ||
+      await this.withinRealRoots(target, roots);
     const defaultAllowed = rootAllowed && this.defaultScopes.includes(scope);
     const activeGrants = this.options.grants && this.options.ownerId &&
       this.options.deviceId
@@ -268,6 +309,13 @@ export class PathPolicy {
     // A denied scope must not spawn an expensive disk identity lookup.
     if (!defaultAllowed && !candidateGrant) {
       throw new PathDeniedError(target, 'SCOPE_NOT_GRANTED', scope);
+    }
+    // No OS task sandbox / native parent-handle-relative mutation writer is
+    // currently connected. A pathname-only task root cannot secure creates,
+    // renames, deletes or writes against a post-check junction/volume race.
+    // Keep task mutation DENIED even if an external local grant exists.
+    if (this.taskRoot && MUTATIONS.has(scope)) {
+      throw new PathDeniedError(target, 'TASK_OS_SANDBOX_MUTATION_UNAVAILABLE', scope);
     }
     let volume: VolumeIdentity | null = null;
     if (this.platform === 'win32' && MUTATIONS.has(scope)) {
@@ -338,6 +386,9 @@ export class PathPolicy {
   }
 
   assertUnrestrictedExecution(): void {
+    if (this.taskRoot) {
+      throw new PathDeniedError('<task child process>', 'UNSANDBOXED_EXECUTION_DENIED');
+    }
     if (this.platform === 'win32' && this.options.enforceWindowsNativeHandleBoundary) {
       // A startup environment lease cannot sandbox arbitrary Windows processes.
       // Any shell/WSL/process may mutate USB files outside scoped file tools,
