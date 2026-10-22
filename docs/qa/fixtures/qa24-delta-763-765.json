@@ -1,0 +1,79 @@
+{
+  "nodes": [
+    {
+      "pr": 763,
+      "head_sha": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c",
+      "head_ref": "fix/03-strict-json-v1-native-boundary-20261022",
+      "base_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+      "base_ref": "fix/03-native-effective-acl-pid-dup-20261022",
+      "files": [
+        ".github/workflows/qa03-strict-json-native.yml",
+        "docs/qa/QA03_STRICT_JSON_V1_NATIVE_BOUNDARY_20261022.md",
+        "scripts/audit-core-broker-protected-tree.ps1",
+        "test/core-broker-strict-json-v1-schema.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+        "head_sha": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c",
+        "merge_base_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39803136306,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c"
+      }
+    },
+    {
+      "pr": 764,
+      "head_sha": "12137946976c6cbcf70740e2a3b3737aed427d0c",
+      "head_ref": "qa/18-external-commit-cas-linearization-20261022",
+      "base_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+      "base_ref": "qa/18-final-dispatch-check-crosshub-20261022",
+      "files": [
+        "docs/QA_18_FINAL_EXTERNAL_COMMIT_CAS_20261022.md",
+        "test/qa-18-reserve-commit-dispatch-linearization.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+        "head_sha": "12137946976c6cbcf70740e2a3b3737aed427d0c",
+        "merge_base_sha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "12137946976c6cbcf70740e2a3b3737aed427d0c"
+      }
+    },
+    {
+      "pr": 765,
+      "head_sha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+      "head_ref": "fix/12-import-ancestor-inventory-exact-20261022",
+      "base_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+      "base_ref": "fix/12-signed-release-dag-permit-v2-20261022",
+      "files": [
+        "docs/s3-signed-import-exact-acl-prior-epoch-20261022.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+        "head_sha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+        "merge_base_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f"
+      }
+    }
+  ]
+}
