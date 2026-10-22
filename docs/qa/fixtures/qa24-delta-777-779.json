@@ -82,9 +82,9 @@
         "status": "ahead"
       },
       "ci": {
-        "run_id": null,
-        "status": "unknown",
-        "conclusion": null,
+        "run_id": 39808685776,
+        "status": "completed",
+        "conclusion": "failure",
         "queried_head_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe"
       }
     }
