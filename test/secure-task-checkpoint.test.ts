@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes, randomUUID} from 'node:crypto';
+import {createCipheriv, randomBytes, randomUUID} from 'node:crypto';
 import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -184,4 +184,111 @@ test('crash-created partial primary remains corrupt and never auto-replaced', as
   await writeFile(path.join(d.dir, files[0]!), '{"version":1');
   assert.equal((await d.open().restore(cp.scope, true)).verdict, 'STOP');
   await assert.rejects(d.open().create(cp), {code: 'EEXIST'});
+});
+
+test('full AAD refuses a legacy path-only ciphertext for changed source/worktree/grant', async t => {
+  const d = await disposable(t);
+  const cp = fixture();
+  await d.open().create(cp);
+  const [name] = await (await import('node:fs/promises')).readdir(d.dir);
+  const file = path.join(d.dir, name!);
+  // Adversarial test-only legacy envelope: the old AAD bound ONLY the file
+  // path, so a correctly tagged payload with a different source/worktree or
+  // epoch could be opened before the post-decryption scope comparison.
+  // NEW AAD binds the exact expected identity BEFORE plaintext parsing.
+  for (const modify of [
+    (c: SecureTaskCheckpoint) => {c.scope.worktreeId = randomUUID()},
+    (c: SecureTaskCheckpoint) => {c.scope.sourceSha = 'f'.repeat(40); c.ciWitnesses[0]!.sourceSha = c.scope.sourceSha},
+    (c: SecureTaskCheckpoint) => {c.scope.ownerEpoch++; c.approvals[0]!.approvalEpoch++},
+    (c: SecureTaskCheckpoint) => {c.scope.signedGrantScopeDigest = hash('f'); c.approvals[0]!.grantScopeDigest = hash('f')},
+  ]) {
+    const alternative = structuredClone(cp);
+    modify(alternative);
+    assert.equal(SecureTaskCheckpointSchema.safeParse(alternative).success, true);
+    const iv = Buffer.alloc(12, 4);
+    const cipher = createCipheriv('aes-256-gcm', d.key, iv);
+    cipher.setAAD(Buffer.from('Nexowire/secure-task-checkpoint/v1/' + file));
+    const ciphertext = Buffer.concat([
+      cipher.update(JSON.stringify(alternative)), cipher.final(),
+    ]);
+    await writeFile(file, JSON.stringify({version: 1, iv: iv.toString('hex'),
+      tag: cipher.getAuthTag().toString('hex'), ciphertext: ciphertext.toString('base64')}));
+    const denied = await d.open().restore(alternative.scope, true);
+    assert.equal(denied.verdict, 'STOP');
+    assert.equal(denied.reason, 'CORRUPT_OR_MISSING');
+    assert.equal(denied.mayDispatch, false);
+    assert.equal(denied.mayReplay, false);
+  }
+});
+
+test('well-formed AEAD envelope with corrupted tag fails closed', async t => {
+  const d = await disposable(t);
+  const cp = fixture();
+  await d.open().create(cp);
+  const [name] = await (await import('node:fs/promises')).readdir(d.dir);
+  const file = path.join(d.dir, name!);
+  const envelope = JSON.parse(await readFile(file, 'utf8')) as {
+    version: number; iv: string; tag: string; ciphertext: string;
+  };
+  envelope.tag = (envelope.tag[0] === 'a' ? 'b' : 'a') + envelope.tag.slice(1);
+  await writeFile(file, JSON.stringify(envelope));
+  const result = await d.open().restore(cp.scope, true);
+  assert.equal(result.verdict, 'STOP');
+  assert.equal(result.reason, 'CORRUPT_OR_MISSING');
+  await assert.rejects(d.open().create(cp), {code: 'EEXIST'});
+});
+
+test('approval/CI metadata reject accidental private output and token-shaped IDs', () => {
+  const cp = fixture();
+  const cases: unknown[] = [
+    {...cp, approvals: [{...cp.approvals[0], rawDiff: 'private diff'}]},
+    {...cp, approvals: [{...cp.approvals[0], token: 'PRIVATE_TOKEN'}]},
+    {...cp, approvals: [{...cp.approvals[0], justification: 'PRIVATE_TEXT'}]},
+    {...cp, ciWitnesses: [{...cp.ciWitnesses[0], stdout: 'PRIVATE_STDOUT'}]},
+    {...cp, ciWitnesses: [{...cp.ciWitnesses[0], stderr: 'PRIVATE_STDERR'}]},
+    {...cp, ciWitnesses: [{...cp.ciWitnesses[0], secret: 'PRIVATE_SECRET'}]},
+    {...cp, scope: {...cp.scope, taskId: 'ghp_' + 'Z'.repeat(36)}},
+    {...cp, scope: {...cp.scope, taskId: 'github_pat_' + 'Z'.repeat(30)}},
+    {...cp, events: [{...cp.events[0], stepId: 'sk-' + 'Z'.repeat(30)}]},
+    {...cp, mutation: {...cp.mutation, originalErrorCode: 'ghp_' + 'Z'.repeat(36)}},
+  ];
+  for (const candidate of cases) {
+    assert.equal(SecureTaskCheckpointSchema.safeParse(candidate).success, false);
+  }
+});
+
+test('UNKNOWN and CI/approval lineage remain sticky after repeated compaction', async t => {
+  const d = await disposable(t);
+  const cp = fixture();
+  cp.mutation.state = 'RECONCILE_REQUIRED';
+  cp.mutation.pendingUnknown = true;
+  cp.mutation.originalErrorCode = 'MUTATION_STATE_UNKNOWN';
+  cp.events[0]!.outcome = 'UNKNOWN';
+  await d.open().create(cp);
+  let prior = cp;
+  let revision = (await d.open().restore(cp.scope, true)).revision!;
+  for (let cycle = 0; cycle < 3; cycle++) {
+    const folded = compactTaskContext(prior);
+    revision = await d.open().update(prior, folded, revision);
+    const resumed = await d.open().restore(cp.scope, true);
+    assert.equal(resumed.verdict, 'RECONCILE_REQUIRED');
+    assert.equal(resumed.mayReplay, false);
+    assert.equal(resumed.snapshot?.mutation.requestId, cp.mutation.requestId);
+    assert.deepEqual(resumed.snapshot?.approvals, cp.approvals);
+    assert.deepEqual(resumed.snapshot?.ciWitnesses, cp.ciWitnesses);
+    const erased = structuredClone(folded);
+    erased.mutation.pendingUnknown = false;
+    erased.mutation.state = 'PLANNED';
+    delete erased.mutation.originalErrorCode;
+    await assert.rejects(d.open().update(folded, erased, revision));
+    if (cycle === 2) break;
+    const appended = structuredClone(folded);
+    appended.events.push({stepId: 'step-' + (cycle + 2), phase: 'OBSERVE',
+      outcome: 'UNKNOWN', fingerprint: hash('e')});
+    revision = await d.open().update(folded, appended, revision);
+    prior = appended;
+  }
+  const snapshot = (await d.open().restore(cp.scope, true)).snapshot!;
+  assert.equal(snapshot.foldedEvents?.count, 3);
+  assert.equal(snapshot.mutation.pendingUnknown, true);
 });
