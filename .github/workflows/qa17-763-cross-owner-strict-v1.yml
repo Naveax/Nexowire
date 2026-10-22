@@ -1,0 +1,29 @@
+name: QA17 unchanged strict JSON v1 on owner #763
+on:
+  push:
+    branches:
+      - test/qa17-763-unchanged-strict-json-replay-20261022
+permissions:
+  contents: read
+jobs:
+  qa17-cross-owner-strict-json:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install without repository lifecycle hooks
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Source and imported QA typecheck
+        run: npm run typecheck
+      - name: Unchanged QA26 #753 hard string/bool/shape rejection and QA17 RED-to-GREEN
+        run: node --test --import tsx --test-concurrency=1 test/p26-743-strict-envelope-version-type-negative.test.ts test/p26-753-envelope-malformed-legacy-negative.test.ts test/qa-17-753-hard-json-v1-type-rejection.test.ts
+      - name: Unchanged original QA17 signed provider, forgery, DLL, PID FILETIME negatives
+        run: node --test --import tsx --test-concurrency=1 test/qa-17-700-native-red-preservation.test.ts
+      - name: Unchanged #709 protected ancestry and #756 kernel TEMP witnesses
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-protected-tree.test.ts test/core-broker-transitive-import-negative.test.ts test/core-broker-native-effective-access.test.ts test/core-broker-native-pid-dup-access.test.ts
+      - name: #03 owner exact source strict v1 native QA
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-strict-json-v1-schema.test.ts
