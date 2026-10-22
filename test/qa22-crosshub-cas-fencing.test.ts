@@ -1304,6 +1304,24 @@ test('#22/#768: two Hub revoke-start before external final commit denies stale s
       assert.equal(reloaded.errorCode, 'CORE_OWNER_REVOKED');
       assert.deepEqual(reloaded.publication, immutableIntent);
       assert.equal(fx.externalCommitCalls, 1, 'no duplicate external commit');
+      // A subsequent re-pair cannot revive a correctly signed pre-revoke
+      // final ACK or the old worker's publication requestId.
+      fx.grants.enabled = true;
+      fx.grants.rePair();
+      await assert.rejects(hubB.start({ ...input, resumeTransferId: original.id }),
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+      await assert.rejects(hubB.cancel(original.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError &&
+        e.code === 'CORE_GRANT_EPOCH_STALE');
+      const persistedAfterRePair = await stored(root, original.id);
+      assert.equal(persistedAfterRePair.state, 'MUTATION_UNKNOWN');
+      assert.equal(persistedAfterRePair.errorCode, 'CORE_OWNER_REVOKED',
+        'do not rewrite the original verified failure provenance');
+      assert.deepEqual(persistedAfterRePair.publication, immutableIntent);
+      assert.equal(fx.externalCommitCalls, 1);
+      assert.equal(fx.externalCommits, 0);
       assert.equal(fx.writes.filter(w => w.id === original.id).length, 3);
       assert.equal(fx.publications, 1);
     } finally {
