@@ -3,7 +3,7 @@
   "capturedAt": "2026-10-22",
   "baselineSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "QA16 exact #747–#758 6 full CI SUCCESS, 4 FAILED, 2 no exact HEAD workflow verified. #758 seven mandatory P0 source RED and independent Windows durable timeout. R01–R22 source 6 PASS/6 FAIL/9 BLOCKED/1 NOT_TESTED, all 22 staging/production/original incident BLOCKED. Physical CORE real high token NO-GO.",
+  "meaning": "QA16 exact #759-773 8 full CI SUCCESS, 3 FAIL, 2 IN_PROGRESS, 2 no verified runs; mandatory #769 P0 RED and separate Windows durable failure, #271 #551 #587 #588 real HIGH CORE NO-GO; all physical levels BLOCKED.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#729 necessary source negative error contract red; #704 two real forged ACK/next-chunk cancel failures on old #691 branch; #725 correction source CI SUCCESS only in separate head. Authenticated late ACK/postcondition and no auto replay needed.\n[QA16 exact-head #730-#745, 2026-10-22]: QA #730 same #725 cancel/forged ACK regression fixture full CI SUCCESS, source only; real post-effect signed ACK independent provider and no blind retry not demonstrated.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 orphaned Native intent remains UNKNOWN after two reconnects, branch source CI SUCCESS; #754 final publication authenticated SHA receipt full CI FAILURE Windows Job fast-exit; cannot mark physical publication COMPLETED without independent readback."
+          "evidence": "#729 necessary source negative error contract red; #704 two real forged ACK/next-chunk cancel failures on old #691 branch; #725 correction source CI SUCCESS only in separate head. Authenticated late ACK/postcondition and no auto replay needed.\n[QA16 exact-head #730-#745, 2026-10-22]: QA #730 same #725 cancel/forged ACK regression fixture full CI SUCCESS, source only; real post-effect signed ACK independent provider and no blind retry not demonstrated.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 orphaned Native intent remains UNKNOWN after two reconnects, branch source CI SUCCESS; #754 final publication authenticated SHA receipt full CI FAILURE Windows Job fast-exit; cannot mark physical publication COMPLETED without independent readback.\n[QA16 759-773 exact-head 22 Oct]: #762 forged ACK/final signed SHA source CI green, #766 completion vs writer-stop source green; #769 lost actual durable READY and no independently authenticated physical Native mutation readback."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 restored old SQLite journal admits prior completed requestId (verified #729 independent negative job 119437584894); #712/#710 external permit/fence source CI SUCCESS, independent physically rollback-proof CAS not deployed.\n[QA16 exact-head #730-#745, 2026-10-22]: #731/#740 external signed CAS revoked owner and stalled permit race source CI SUCCESS; #587 restored old journal+authority still re-admits completed requestId without real independent monotonic non-co-restorable witness.\n[QA16 #747–#758 exact-head 2026-10-22]: #757 late signed permit dual CAS source CI SUCCESS, but read-only checks do not guarantee atomic external grant vs revokeAndDrain. #587 co-restored journal/authority re-admits completed requestId, #758 mandated RED; #747/#749 no exact-head workflow verified."
+          "evidence": "#587 restored old SQLite journal admits prior completed requestId (verified #729 independent negative job 119437584894); #712/#710 external permit/fence source CI SUCCESS, independent physically rollback-proof CAS not deployed.\n[QA16 exact-head #730-#745, 2026-10-22]: #731/#740 external signed CAS revoked owner and stalled permit race source CI SUCCESS; #587 restored old journal+authority still re-admits completed requestId without real independent monotonic non-co-restorable witness.\n[QA16 #747–#758 exact-head 2026-10-22]: #757 late signed permit dual CAS source CI SUCCESS, but read-only checks do not guarantee atomic external grant vs revokeAndDrain. #587 co-restored journal/authority re-admits completed requestId, #758 mandated RED; #747/#749 no exact-head workflow verified.\n[QA16 759-773 exact-head 22 Oct]: #761/#764 source CAS reserve/commit vs revoke, signed owner epoch source CI green. #587 restored local journal+authority still re-admits a completed requestId in #769 mandatory P0 RED; real external non-restorable CAS not deployed. #768 final monotonic commit has no exact workflow."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#703 journal reopen UNKNOWN source CI green, but Windows durable process reattach READY timed out on #729 browser-live, genuine physical Native postcondition still unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #742 reconnect forensic UNKNOWN source CI SUCCESS, but #744 Windows durable ProcessManager reattach /NW_DURABLE_READY/ 27.3s timeout FAIL; no authenticated physical postcondition readback.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 double reconnect orphan Native UNKNOWN source CI SUCCESS. #758 Windows durable process reattach still times out on /NW_DURABLE_READY/. No independent on-device final readback."
+          "evidence": "#703 journal reopen UNKNOWN source CI green, but Windows durable process reattach READY timed out on #729 browser-live, genuine physical Native postcondition still unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #742 reconnect forensic UNKNOWN source CI SUCCESS, but #744 Windows durable ProcessManager reattach /NW_DURABLE_READY/ 27.3s timeout FAIL; no authenticated physical postcondition readback.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 double reconnect orphan Native UNKNOWN source CI SUCCESS. #758 Windows durable process reattach still times out on /NW_DURABLE_READY/. No independent on-device final readback.\n[QA16 759-773 exact-head 22 Oct]: #770 signed Native reconnect receipt exact-head CI 39804271245 SUCCESS source only; #769 Windows durable READY timeout and physical independent Native effect witness still absent."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Broad CORE REAL signed HIGH executor missing, #729 independent core P0 negatives remain intentionally RED; #719 source Access queued revoke green does not imply actual high token or one-time approved local UAC.\n[QA16 exact-head #730-#745, 2026-10-22]: #733/#734/#739/#741/#743 protected Broker FILETIME, imported signed DLL, nonce/CORE epoch source CIs SUCCESS. #744 mandatory HIGH CORE executable endpoint absent; real local-approved signed Broker high token unverified.\n[QA16 #747–#758 exact-head 2026-10-22]: #756 OS TEMP PID FILETIME/ACL QA and main CI source SUCCESS, #755 signed importer source SUCCESS, #757 dual CAS read-only success. But #758 mandatory broad real signed HIGH CORE shell/Broker endpoint and authentic max900s ROOT lease fail. Must not substitute SAFE alias."
+          "evidence": "Broad CORE REAL signed HIGH executor missing, #729 independent core P0 negatives remain intentionally RED; #719 source Access queued revoke green does not imply actual high token or one-time approved local UAC.\n[QA16 exact-head #730-#745, 2026-10-22]: #733/#734/#739/#741/#743 protected Broker FILETIME, imported signed DLL, nonce/CORE epoch source CIs SUCCESS. #744 mandatory HIGH CORE executable endpoint absent; real local-approved signed Broker high token unverified.\n[QA16 #747–#758 exact-head 2026-10-22]: #756 OS TEMP PID FILETIME/ACL QA and main CI source SUCCESS, #755 signed importer source SUCCESS, #757 dual CAS read-only success. But #758 mandatory broad real signed HIGH CORE shell/Broker endpoint and authentic max900s ROOT lease fail. Must not substitute SAFE alias.\n[QA16 759-773 exact-head 22 Oct]: #767 installed signed Broker and final CAS negative CI source green, but #771 public CORE status provider/CAS/source reason test FAIL; #769 mandatory signed HIGH broad CORE endpoint/ROOT max 15m FAIL. Synthetic token cannot certify physical Windows HIGH."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#690/#694 Windows TEMP handle alias and effective ACL source CI green but user-file protected module import publisher and live ACL/USB not verified.\n[QA16 exact-head #730-#745, 2026-10-22]: #737 closed QA source branch exact CI FAIL separate Windows Job stdin/stdout/stderr, despite other protected-tree branches green; immutable module/transitive importer native handles and ACL not physically accepted.\n[QA16 #747–#758 exact-head 2026-10-22]: No new #747-#758 authenticated physical filesystem/USB import signer admission; #756 TEMP effective ACL negative success is NOT protected installed production Broker/DLL/updater ancestor proof."
+          "evidence": "#690/#694 Windows TEMP handle alias and effective ACL source CI green but user-file protected module import publisher and live ACL/USB not verified.\n[QA16 exact-head #730-#745, 2026-10-22]: #737 closed QA source branch exact CI FAIL separate Windows Job stdin/stdout/stderr, despite other protected-tree branches green; immutable module/transitive importer native handles and ACL not physically accepted.\n[QA16 #747–#758 exact-head 2026-10-22]: No new #747-#758 authenticated physical filesystem/USB import signer admission; #756 TEMP effective ACL negative success is NOT protected installed production Broker/DLL/updater ancestor proof.\n[QA16 759-773 exact-head 22 Oct]: #763 QA03 strict JSON typed schema dedicated workflow green but full CI in progress; no independent installed Windows high-token importer effective ACL and source handle proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -145,19 +145,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Main connection/WSS source PASS; #701 signer/owner WSS pairing rotation CI green, cannot substitute independent CAS or CORE HIGH token.\n[QA16 exact-head #730-#745, 2026-10-22]: #742 connection double reconnect epoch and forensic UNKNOWN CI SUCCESS on feature branch; physical Agent reconnect and owner epoch independent witness not demonstrated.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 reconnect and owner epoch source green, no external physically independent signed owner CAS or Native postcondition."
+          "evidence": "Main connection/WSS source PASS; #701 signer/owner WSS pairing rotation CI green, cannot substitute independent CAS or CORE HIGH token.\n[QA16 exact-head #730-#745, 2026-10-22]: #742 connection double reconnect epoch and forensic UNKNOWN CI SUCCESS on feature branch; physical Agent reconnect and owner epoch independent witness not demonstrated.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 reconnect and owner epoch source green, no external physically independent signed owner CAS or Native postcondition.\n[QA16 759-773 exact-head 22 Oct]: #760 OAuth epoch-bound refresh full CI in progress; source OAuth web identity cannot grant native Windows CORE privileges."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#705/#717 native Windows signer+import/ancestor ACL CI FAIL though dedicated QA workflow green, #709 alternative fix source green. #729 browser-live Windows durable READY timeout separate actual CI blocker.\n[QA16 exact-head #730-#745, 2026-10-22]: #737 CI FAIL Windows Job missing WINJOB_STDOUT in separate pipes; #745 CI FAIL exit before stdout captured iteration5; #744 browser-live durable restart READY timeout FAIL. Source QA Windows host/red distinct from expected P0 absence.\n[QA16 #747–#758 exact-head 2026-10-22]: #751 Windows Job stdout-before-exited iteration 5 full CI FAIL; #754 iteration 6 FAIL. #758 separate durable ProcessManager NW_DURABLE_READY timeout. #756 TEMP Windows QA SUCCESS does not cure installed high-token Broker."
+          "evidence": "#705/#717 native Windows signer+import/ancestor ACL CI FAIL though dedicated QA workflow green, #709 alternative fix source green. #729 browser-live Windows durable READY timeout separate actual CI blocker.\n[QA16 exact-head #730-#745, 2026-10-22]: #737 CI FAIL Windows Job missing WINJOB_STDOUT in separate pipes; #745 CI FAIL exit before stdout captured iteration5; #744 browser-live durable restart READY timeout FAIL. Source QA Windows host/red distinct from expected P0 absence.\n[QA16 #747–#758 exact-head 2026-10-22]: #751 Windows Job stdout-before-exited iteration 5 full CI FAIL; #754 iteration 6 FAIL. #758 separate durable ProcessManager NW_DURABLE_READY timeout. #756 TEMP Windows QA SUCCESS does not cure installed high-token Broker.\n[QA16 759-773 exact-head 22 Oct]: #771 separate native Windows signed surrogate attestation negative fails in browser-live and CORE public source reason red; #772 Windows Job fast-exit stdout lost at iteration1. #769 independent Windows durable ProcessManager READY timeout."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -197,19 +197,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Generic shell exit code/source receipt interpretation accepted; reported Start-VM access denied exit4 does NOT demonstrate VM state or privileged authority.\n[QA16 exact-head #730-#745, 2026-10-22]: No new PR #730-#745 changes to existing shell/WSL source classification. Preserve historical source-only PASS, no production claim.\n[QA16 #747–#758 exact-head 2026-10-22]: Shell outcome source baseline PASS; new QA source HEADs do not establish real elevated CORE broad shell or physical native launch."
+          "evidence": "Generic shell exit code/source receipt interpretation accepted; reported Start-VM access denied exit4 does NOT demonstrate VM state or privileged authority.\n[QA16 exact-head #730-#745, 2026-10-22]: No new PR #730-#745 changes to existing shell/WSL source classification. Preserve historical source-only PASS, no production claim.\n[QA16 #747–#758 exact-head 2026-10-22]: Shell outcome source baseline PASS; new QA source HEADs do not establish real elevated CORE broad shell or physical native launch.\n[QA16 759-773 exact-head 22 Oct]: Main source shell outcome baseline PASS; #769 broad signed HIGH CORE shell remains missing, this does not become physical elevation."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#722 local OS/UAC Broker denial source full CI inherited Windows Job red, #728 safe emergency-stop source only, never automate Secure Desktop.\n[QA16 exact-head #730-#745, 2026-10-22]: #736 AI Screen emergency stop source CI SUCCESS, no live private desktop or elevated UAC interaction.\n[QA16 #747–#758 exact-head 2026-10-22]: #750 forged tracked PID private desktop fail on Linux with requires-Windows error, not valid UAC/GUI security attestation. No Secure Desktop authorized physical consent."
+          "evidence": "#722 local OS/UAC Broker denial source full CI inherited Windows Job red, #728 safe emergency-stop source only, never automate Secure Desktop.\n[QA16 exact-head #730-#745, 2026-10-22]: #736 AI Screen emergency stop source CI SUCCESS, no live private desktop or elevated UAC interaction.\n[QA16 #747–#758 exact-head 2026-10-22]: #750 forged tracked PID private desktop fail on Linux with requires-Windows error, not valid UAC/GUI security attestation. No Secure Desktop authorized physical consent.\n[QA16 759-773 exact-head 22 Oct]: #759 picker Linux platform negative fix source full CI green; #773 physical private desktop STOP fix has no exact workflow. No authorized local Windows UAC or UIA interaction."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -249,19 +249,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Hash and checkpoint source; #616 stacked cross-Hub/Artifact worker source CI success but no physical signed multi-device proof.\n[QA16 exact-head #730-#745, 2026-10-22]: No new SHA checkpoint issue from #730-#745 tested in this QA slice; source PASS retained, physical signed transfer remains BLOCKED.\n[QA16 #747–#758 exact-head 2026-10-22]: Git artifact SHA source baseline PASS; #754 authenticated publication digest cannot assert COMPLETED without independently durable signed external publisher receipt."
+          "evidence": "Hash and checkpoint source; #616 stacked cross-Hub/Artifact worker source CI success but no physical signed multi-device proof.\n[QA16 exact-head #730-#745, 2026-10-22]: No new SHA checkpoint issue from #730-#745 tested in this QA slice; source PASS retained, physical signed transfer remains BLOCKED.\n[QA16 #747–#758 exact-head 2026-10-22]: Git artifact SHA source baseline PASS; #754 authenticated publication digest cannot assert COMPLETED without independently durable signed external publisher receipt.\n[QA16 759-773 exact-head 22 Oct]: #762 authenticated final SHA source tests full CI green; #768 monotonic final external commit unknown, no real durable signed publisher COMPLETED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -275,19 +275,19 @@
       "levels": {
         "source": {
           "status": "NOT_TESTED",
-          "evidence": "Consolidated Reliability Doctor real operator UI and original physical incident acceptance not independently run.\n[QA16 exact-head #730-#745, 2026-10-22]: No independent reliability Doctor UI acceptance in #730-#745; stays NOT_TESTED.\n[QA16 #747–#758 exact-head 2026-10-22]: Reliability Doctor UI remains not independently tested in #747-#758."
+          "evidence": "Consolidated Reliability Doctor real operator UI and original physical incident acceptance not independently run.\n[QA16 exact-head #730-#745, 2026-10-22]: No independent reliability Doctor UI acceptance in #730-#745; stays NOT_TESTED.\n[QA16 #747–#758 exact-head 2026-10-22]: Reliability Doctor UI remains not independently tested in #747-#758.\n[QA16 759-773 exact-head 22 Oct]: No relevant independent reliability Doctor QA in #759–#773, status remains not tested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#711 seeded gzip parser success is source performance only; #724 fairness branch Windows fast-exit CI red, no 100+ real WSS scale proof.\n[QA16 exact-head #730-#745, 2026-10-22]: #735 PRIOR head 5a2d1c TS18047/TS2339 TypeScript line74 CI FAIL; CURRENT d4c35e2a full CI 39735083325 SUCCESS source only. #738 compressed fairness green not production capacity.\n[QA16 #747–#758 exact-head 2026-10-22]: No new real 100+ WSS or 1GiB production resource acceptance in #747-#758; all source capacity improvements staged."
+          "evidence": "#711 seeded gzip parser success is source performance only; #724 fairness branch Windows fast-exit CI red, no 100+ real WSS scale proof.\n[QA16 exact-head #730-#745, 2026-10-22]: #735 PRIOR head 5a2d1c TS18047/TS2339 TypeScript line74 CI FAIL; CURRENT d4c35e2a full CI 39735083325 SUCCESS source only. #738 compressed fairness green not production capacity.\n[QA16 #747–#758 exact-head 2026-10-22]: No new real 100+ WSS or 1GiB production resource acceptance in #747-#758; all source capacity improvements staged.\n[QA16 759-773 exact-head 22 Oct]: #766 final publication uncertainty vs quota writer-stop release source green, not physical Cloudflare/native resource/1GiB stress."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -327,19 +327,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #565 classified upstream error without inventing hidden cause; provider production refusal provenance not tested.\n[QA16 exact-head #730-#745, 2026-10-22]: No new provider safety issue in #730-#745, previous source PASS retained without production promotion.\n[QA16 #747–#758 exact-head 2026-10-22]: Provider safety source PASS from previous baseline; current named failures are native CORE, CAS/rollback, final publisher, Windows Job."
+          "evidence": "Merged #565 classified upstream error without inventing hidden cause; provider production refusal provenance not tested.\n[QA16 exact-head #730-#745, 2026-10-22]: No new provider safety issue in #730-#745, previous source PASS retained without production promotion.\n[QA16 #747–#758 exact-head 2026-10-22]: Provider safety source PASS from previous baseline; current named failures are native CORE, CAS/rollback, final publisher, Windows Job.\n[QA16 759-773 exact-head 22 Oct]: No new provider baseline acceptance for this interval, source safety status retained."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -353,19 +353,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Current main existing OAuth CI source baseline PASS. #675 browser cookie-bound one-time GitHub state CAS CI SUCCESS branch only; D1 schema and BOTH redirect/callback store injections not deployed; may fail closed if merged unwired. No Windows CORE elevation from OAuth.\n[QA16 exact-head #730-#745, 2026-10-22]: No new OAuth/OIDC HEAD in #730-#745; source PASS retained, OAuth identity does not prove Windows admin.\n[QA16 #747–#758 exact-head 2026-10-22]: #748 issuer/browser OAuth epoch-atomic refresh CI SUCCESS, but real D1/issuer not deployed and OAuth session is not Windows HIGH CORE credential."
+          "evidence": "Current main existing OAuth CI source baseline PASS. #675 browser cookie-bound one-time GitHub state CAS CI SUCCESS branch only; D1 schema and BOTH redirect/callback store injections not deployed; may fail closed if merged unwired. No Windows CORE elevation from OAuth.\n[QA16 exact-head #730-#745, 2026-10-22]: No new OAuth/OIDC HEAD in #730-#745; source PASS retained, OAuth identity does not prove Windows admin.\n[QA16 #747–#758 exact-head 2026-10-22]: #748 issuer/browser OAuth epoch-atomic refresh CI SUCCESS, but real D1/issuer not deployed and OAuth session is not Windows HIGH CORE credential.\n[QA16 759-773 exact-head 22 Oct]: #760 issuer OAuth refresh full CI in progress and cannot imply high Windows signed owner token, web login remains separate."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#588 authenticated one-call durable transfer_start/status/cancel not advertised on exact main (required #729 RED). #704 two true wrong-ACK/extra read failures; #725 source branch corrected but no physical 1GiB end-to-end acceptance.\n[QA16 exact-head #730-#745, 2026-10-22]: #730 tests earlier #640/#651/#677/#704 against #725 source CI SUCCESS, but exact main #588 durable authenticated onecall transfer_start/status/cancel still unadvertised per #744 required RED.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 pending orphan no-replay source green and #754 final publisher receipt implementation full CI red. #588 main onecall transfer API still unadvertised; 1GiB signed physical durable final COMPLETED not proven."
+          "evidence": "#588 authenticated one-call durable transfer_start/status/cancel not advertised on exact main (required #729 RED). #704 two true wrong-ACK/extra read failures; #725 source branch corrected but no physical 1GiB end-to-end acceptance.\n[QA16 exact-head #730-#745, 2026-10-22]: #730 tests earlier #640/#651/#677/#704 against #725 source CI SUCCESS, but exact main #588 durable authenticated onecall transfer_start/status/cancel still unadvertised per #744 required RED.\n[QA16 #747–#758 exact-head 2026-10-22]: #752 pending orphan no-replay source green and #754 final publisher receipt implementation full CI red. #588 main onecall transfer API still unadvertised; 1GiB signed physical durable final COMPLETED not proven.\n[QA16 759-773 exact-head 22 Oct]: #766 no quota release on UNKNOWN source tests full CI green; #588 durable authenticated onecall start/status/cancel still absent on current main according to #769 required red. #768 external final commit no exact-run proof."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -405,19 +405,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Private file picker native UIA and owner focus physical negative acceptance not done.\n[QA16 exact-head #730-#745, 2026-10-22]: No new native Windows UIA acceptance in #730-#745; physical GUI not tested.\n[QA16 #747–#758 exact-head 2026-10-22]: #750 private picker Linux test FAIL returns Windows platform error before forged PID witness, so GUI/UAC actual physical acceptance stays BLOCKED."
+          "evidence": "Private file picker native UIA and owner focus physical negative acceptance not done.\n[QA16 exact-head #730-#745, 2026-10-22]: No new native Windows UIA acceptance in #730-#745; physical GUI not tested.\n[QA16 #747–#758 exact-head 2026-10-22]: #750 private picker Linux test FAIL returns Windows platform error before forged PID witness, so GUI/UAC actual physical acceptance stays BLOCKED.\n[QA16 759-773 exact-head 22 Oct]: #759 picker Linux negative source full CI green but actual Windows secure desktop and native owner PID token physical proof missing; #773 physical STOP source unverified."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -431,19 +431,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Environment Doctor source checks PASS, but vmms/vmcompute Running and Medium deny-only token cannot prove Hyper-V VM access/state.\n[QA16 exact-head #730-#745, 2026-10-22]: No new diagnostic release proof in #730-#745, source-only PASS retained.\n[QA16 #747–#758 exact-head 2026-10-22]: Diagnostic source baseline PASS, no authenticated physical Broker high token execution evidence."
+          "evidence": "Environment Doctor source checks PASS, but vmms/vmcompute Running and Medium deny-only token cannot prove Hyper-V VM access/state.\n[QA16 exact-head #730-#745, 2026-10-22]: No new diagnostic release proof in #730-#745, source-only PASS retained.\n[QA16 #747–#758 exact-head 2026-10-22]: Diagnostic source baseline PASS, no authenticated physical Broker high token execution evidence.\n[QA16 759-773 exact-head 22 Oct]: #771 public CORE EFFECTIVE explanation source negative FAIL: must distinguish unavailable provider, real installed signed HIGH and external CAS, not cached consent/401 shortcut."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -457,19 +457,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Independent external Progress Watchdog runtime postcondition and cancellation/revoked epoch not signed physical; #648 audit provenance source green not real worker completion proof.\n[QA16 exact-head #730-#745, 2026-10-22]: #736 AI Screen child emergency stop launch ordering source CI SUCCESS; no live GUI/privileged process effects.\n[QA16 #747–#758 exact-head 2026-10-22]: #750 private picker forged PID acceptance full CI red on Linux platform mismatch, safety not demonstrably satisfied in production GUI."
+          "evidence": "Independent external Progress Watchdog runtime postcondition and cancellation/revoked epoch not signed physical; #648 audit provenance source green not real worker completion proof.\n[QA16 exact-head #730-#745, 2026-10-22]: #736 AI Screen child emergency stop launch ordering source CI SUCCESS; no live GUI/privileged process effects.\n[QA16 #747–#758 exact-head 2026-10-22]: #750 private picker forged PID acceptance full CI red on Linux platform mismatch, safety not demonstrably satisfied in production GUI.\n[QA16 759-773 exact-head 22 Oct]: #759 source emergency/picker owner negative green, #773 exact CI not found, no live private desktop physical stop readback."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#705/#717 inherited protected Broker importer ACL native red, #709/#707/#723 source green but #271 live legacy Modify and #551 first-party signed native installer/full rollback/once local UAC unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #732 PRIOR head ea5f1f required macOS lifecycle CANCELLED full CI FAIL; CURRENT head 9014449e run 39735234697 SUCCESS source only. #739 signed CORE importer/epoch also source green but #271 real ACL, #551 genuine signed full rollback and local UAC remain production NO-GO; #745 Windows Job red.\n[QA16 #747–#758 exact-head 2026-10-22]: #753 strict JSON type negative source QA+full CI SUCCESS, #755 signed importer and #756 TEMP Windows ACL tests green; #271 legacy untrusted Modify ACL #551 first-party signed Broker bootstrap/UAC/complete rollback physical missing."
+          "evidence": "#705/#717 inherited protected Broker importer ACL native red, #709/#707/#723 source green but #271 live legacy Modify and #551 first-party signed native installer/full rollback/once local UAC unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #732 PRIOR head ea5f1f required macOS lifecycle CANCELLED full CI FAIL; CURRENT head 9014449e run 39735234697 SUCCESS source only. #739 signed CORE importer/epoch also source green but #271 real ACL, #551 genuine signed full rollback and local UAC remain production NO-GO; #745 Windows Job red.\n[QA16 #747–#758 exact-head 2026-10-22]: #753 strict JSON type negative source QA+full CI SUCCESS, #755 signed importer and #756 TEMP Windows ACL tests green; #271 legacy untrusted Modify ACL #551 first-party signed Broker bootstrap/UAC/complete rollback physical missing.\n[QA16 759-773 exact-head 22 Oct]: #763 dedicated QA03 source SUCCESS, full CI in progress; #765 signed importer and SYSTEM DPAPI latest CI 39803342678 SUCCESS source only; #271 ACL and #551 actual signed full rollback/local UAC NO-GO."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 independent monotonic receipt and stale owner/re-pair/revoke external witness physically unavailable; #712/#719 signed nonce/owner readback source green, not non-restorable CAS or physical high token; no UNKNOWN replay.\n[QA16 exact-head #730-#745, 2026-10-22]: #731/#740 signed CAS permit/revoke and readback UNKNOWN source green; #744 #587 required anti-rollback RED remains, independent non-co-restorable CAS and after-effect proof unavailable.\n[QA16 #747–#758 exact-head 2026-10-22]: #751 external durable owner witness branch CI FAIL Windows Job ordering, #757 late permit dual check source CI SUCCESS but no final authoritative atomic dispatch CAS. #587 independently hosted monotonic non-restorable epoch witness absent."
+          "evidence": "#587 independent monotonic receipt and stale owner/re-pair/revoke external witness physically unavailable; #712/#719 signed nonce/owner readback source green, not non-restorable CAS or physical high token; no UNKNOWN replay.\n[QA16 exact-head #730-#745, 2026-10-22]: #731/#740 signed CAS permit/revoke and readback UNKNOWN source green; #744 #587 required anti-rollback RED remains, independent non-co-restorable CAS and after-effect proof unavailable.\n[QA16 #747–#758 exact-head 2026-10-22]: #751 external durable owner witness branch CI FAIL Windows Job ordering, #757 late permit dual check source CI SUCCESS but no final authoritative atomic dispatch CAS. #587 independently hosted monotonic non-restorable epoch witness absent.\n[QA16 759-773 exact-head 22 Oct]: #761/#764 two Hub atomic reserve/revoke source green, #767 launch signed Broker/final CAS source green only; no independent deployed non-restorable #587 epoch authority or final native authenticated immutable readback (#588)."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#729 scope Hyper-V vm.start incorrectly standard on main, typed Broker allowlist absent; actual physical VMId Running/Off and signed high token UAC unknown.\n[QA16 exact-head #730-#745, 2026-10-22]: #744 dedicated required P0 source test shows hyperv.vm.start wrongly STANDARD and typed signed Broker allowlist absent; no ReVoltVPN-Ubuntu-Lab Start-VM or Running readback performed.\n[QA16 #747–#758 exact-head 2026-10-22]: #758 source mandatory hyperv.vm.start incorrectly STANDARD and scoped signed Broker VM GUID allowlist absent. No actual HIGH token or independent ReVoltVPN-Ubuntu-Lab Running readback (VM untouched)."
+          "evidence": "#729 scope Hyper-V vm.start incorrectly standard on main, typed Broker allowlist absent; actual physical VMId Running/Off and signed high token UAC unknown.\n[QA16 exact-head #730-#745, 2026-10-22]: #744 dedicated required P0 source test shows hyperv.vm.start wrongly STANDARD and typed signed Broker allowlist absent; no ReVoltVPN-Ubuntu-Lab Start-VM or Running readback performed.\n[QA16 #747–#758 exact-head 2026-10-22]: #758 source mandatory hyperv.vm.start incorrectly STANDARD and scoped signed Broker VM GUID allowlist absent. No actual HIGH token or independent ReVoltVPN-Ubuntu-Lab Running readback (VM untouched).\n[QA16 759-773 exact-head 22 Oct]: #769 mandatory typed hyperv.vm.start elevated GUID Broker acceptance RED; actual ReVoltVPN-Ubuntu-Lab Start-VM blocked and no independently signed exact VMId Running readback."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#729 exact full CI 39662119627 FAILURE: deliberate 7 P0 negatives in dedicated job; Node22 general required gate FAIL and Node24 cancelled; independently browser-live durable-process READY timeout. #721 new exact HEAD queued, cannot claim old green/red.\n[QA16 exact-head #730-#745, 2026-10-22]: CURRENT 13 exact-head full CI SUCCESS / 3 FAIL (#737 separate stdout streams, #744 seven mandatory P0 RED plus independent Windows durable READY, #745 fast-exit iteration5) / zero pending. Historical initial 11 SUCCESS/5 FAIL and intermediate 12/3/1 belonged to older SHA/run states; #732 and #735 new HEAD full CIs SUCCESS. None is physical CORE approval.\n[QA16 #747–#758 exact-head 2026-10-22]: Current exact #747-#758 six full CI SUCCESS, four FAIL (#750 Linux platform false negative, #751/#754 Windows stdout ordering, #758 seven mandatory P0 RED plus real Windows durable timeout), two no exact-head workflows (#747/#749). No stale green, no false whole CI pass."
+          "evidence": "#729 exact full CI 39662119627 FAILURE: deliberate 7 P0 negatives in dedicated job; Node22 general required gate FAIL and Node24 cancelled; independently browser-live durable-process READY timeout. #721 new exact HEAD queued, cannot claim old green/red.\n[QA16 exact-head #730-#745, 2026-10-22]: CURRENT 13 exact-head full CI SUCCESS / 3 FAIL (#737 separate stdout streams, #744 seven mandatory P0 RED plus independent Windows durable READY, #745 fast-exit iteration5) / zero pending. Historical initial 11 SUCCESS/5 FAIL and intermediate 12/3/1 belonged to older SHA/run states; #732 and #735 new HEAD full CIs SUCCESS. None is physical CORE approval.\n[QA16 #747–#758 exact-head 2026-10-22]: Current exact #747-#758 six full CI SUCCESS, four FAIL (#750 Linux platform false negative, #751/#754 Windows stdout ordering, #758 seven mandatory P0 RED plus real Windows durable timeout), two no exact-head workflows (#747/#749). No stale green, no false whole CI pass.\n[QA16 759-773 exact-head 22 Oct]: LATEST PR759-773 exact full CI 8 SUCCESS, 3 FAIL (#769 mandatory P0+durable timeout, #771 CORE status source and native surrogate, #772 Windows stdout order), 2 IN_PROGRESS (#760/#763), 2 no run (#768/#773). QA03 #763 green is not full CI green."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "QA16 latest pinned main 754cc4364822be5fda528f54042fb22a84f19924: #747–#758 feature source is not production signed high-token CORE. #271 live ACL, #551 signed native install/UAC full rollback, #587 rollback-resistant independent atomic CAS, #588 independently authenticated durable publication and typed Hyper-V Running readback remain NO-GO; ReVoltVPN-Ubuntu-Lab untouched."
+          "evidence": "Main 754cc4364822be5fda528f54042fb22a84f19924 source-only. No real native first-party signed protected HIGH CORE/ROOT token, typed elevated Hyper-V GUID authorization and Running readback, #271 ACL #551 installer/UAC/rollback #587 independent rollback-resistant final dispatch CAS #588 final authenticated durable publisher/onecall. ReVoltVPN-Ubuntu-Lab untouched. Exact PR #759-#773 statuses in QA_20261022_PR759_773_EXACT_HEAD.json."
         }
       }
     }
@@ -769,18 +769,22 @@
     "scope": "source only, not native elevated physical deployment"
   },
   "qa16LatestReview": {
-    "snapshot": "docs/qa/QA_20261022_PR747_758_EXACT_HEAD.json",
-    "report": "docs/qa/INDEPENDENT_QA_PR747_758_20261022.md",
+    "snapshot": "docs/qa/QA_20261022_PR759_773_EXACT_HEAD.json",
+    "report": "docs/qa/INDEPENDENT_QA_PR759_773_20261022.md",
     "currentMain": "754cc4364822be5fda528f54042fb22a84f19924",
     "fullCi": {
-      "success": 6,
-      "failed": 4,
-      "unverified": 2
+      "success": 8,
+      "failed": 3,
+      "inProgress": 2,
+      "noRunVerified": 2
     },
-    "staging": "BLOCKED",
-    "production": "BLOCKED",
-    "originalIncident": "BLOCKED",
+    "qa763Dedicated": {
+      "run": 39803137184,
+      "conclusion": "SUCCESS",
+      "notFullCi": true
+    },
     "requiredNegativeTestsStillEnabled": true,
+    "physicalRelease": "NO_GO",
     "ReVoltVPNUbuntuLab": "UNTOUCHED"
   }
 }
