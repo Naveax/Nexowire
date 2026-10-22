@@ -17,7 +17,7 @@ jobs:
           cache: npm
       - name: Dependencies (without installation hooks)
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: QA26 strictly scoped TEMP JSON version-type reproduction
-        run: node --test --import tsx test/p26-743-strict-envelope-version-type-negative.test.ts
       - name: Source typecheck
         run: npm run typecheck
+      - name: QA26 TEMP strict-version fail-closed acceptance and legacy/malformed-shape controls
+        run: node --test --import tsx test/p26-743-strict-envelope-version-type-negative.test.ts test/p26-753-envelope-malformed-legacy-negative.test.ts
