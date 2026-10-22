@@ -7,7 +7,8 @@ import path from 'node:path';
 import { CrossDeviceTransferJobs, type TransferJob, type TransferRemote }
   from '../src/mcp/cross-device-transfer-jobs.js';
 import { TransferTrustError, type TrustedTransferAuthority,
-  type TrustedTransferCoreGrants, type FencedWriteEnvelope }
+  type TrustedTransferCoreGrants, type FencedWriteEnvelope,
+  type FencedFinalReceipt, type TrustedFinalReceiptVerifier }
   from '../src/workspace/artifact-job-trust.js';
 
 /** #22 test-only CAS/NATIVE emulator. NOT physical Agent 1.0.5 or rollback-external proof. */
@@ -99,6 +100,8 @@ type Hooks = {
   beforeWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   afterWrite?: (job: Readonly<TransferJob>, env: Readonly<FencedWriteEnvelope>) => Promise<void>;
   beforePublish?: (job: Readonly<TransferJob>) => Promise<void>;
+  afterPublish?: (job: Readonly<TransferJob>, receipt: FencedFinalReceipt) => Promise<void>;
+  beforeFinalVerify?: (job: Readonly<TransferJob>, receipt: FencedFinalReceipt) => Promise<void>;
 };
 type Mode = 'normal' | 'lost-ack' | 'forged-receipt' | 'corrupt-stage' |
   'lost-publish-ack' | 'forged-second-request-id';
@@ -109,7 +112,8 @@ type SyntheticPublishedReceipt = {
   targetDeviceId: string; targetPath: string; sha256: string;
   epoch: number; grantGeneration: number; mac: string;
 };
-function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
+function mock(mode: Mode = 'normal', hooks: Hooks = {},
+  strictFinalReceipt = false) {
   const cas = new Cas(), grants = new Grants();
   const stages = new Map<string, Buffer>();
   const writes: Array<{ id: string; offset: number; epoch: number }> = [];
@@ -126,6 +130,19 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
     const actual = Buffer.from(mac, 'hex');
     const expected = Buffer.from(macFor(claims), 'hex');
     return timingSafeEqual(actual, expected);
+  };
+  // Test-only synthetic attestation oracle, bound to FULL publication identity.
+  // It is injected from the Hub fixture, not accepted from a tool caller.
+  const finalSigner = (claims: Omit<FencedFinalReceipt, 'proof'>) =>
+    createHmac('sha256', nativeKey).update(JSON.stringify(claims)).digest('hex');
+  const finalVerifier: TrustedFinalReceiptVerifier = {
+    verify: async (job, receipt) => {
+      await hooks.beforeFinalVerify?.(job, receipt);
+      const { proof, ...claims } = receipt;
+      if (!/^[0-9a-f]{64}$/.test(proof)) return false;
+      return timingSafeEqual(Buffer.from(proof, 'hex'),
+        Buffer.from(finalSigner(claims), 'hex'));
+    },
   };
   const fileContent = (device: string, file: string) =>
     device === input.sourceDeviceId ? bytes :
@@ -180,7 +197,7 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
         length: env.length, sha256: mode === 'forged-receipt' && env.offset === 0
           ? '0'.repeat(64) : env.sha256 };
     },
-    publishFenced: async (job, epoch, token) => {
+    publishFenced: async (job, epoch, token, requestId) => {
       await hooks.beforePublish?.(job);
       cas.native(job, epoch, token);
       grants.check(job);
@@ -194,10 +211,25 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {}) {
         grantGeneration: grants.generation };
       publishedReceipts.push({ ...claims, mac: macFor(claims) });
       if (mode === 'lost-publish-ack') throw Error('NATIVE_PUBLISHED_BUT_ACK_LOST');
+      if (strictFinalReceipt) {
+        assert.ok(requestId, 'the durable publication requestId is passed to Native');
+        const signedClaims: Omit<FencedFinalReceipt, 'proof'> = {
+          requestId, jobId: job.id, accountId: job.accountId,
+          projectId: job.projectId, targetDeviceId: job.targetDeviceId,
+          targetPath: job.targetPath, bytesTotal: job.bytesTotal,
+          sha256: digest(stage), epoch,
+        };
+        const receipt = { ...signedClaims, proof: finalSigner(signedClaims) };
+        await hooks.afterPublish?.(job, receipt);
+        return receipt;
+      }
     },
   };
   const hub = (root: string) => new CrossDeviceTransferJobs(root, remote,
-    { requireExternalAuthority: true, authority: cas.authority, grants: grants.adapter });
+    { requireExternalAuthority: true, authority: cas.authority, grants: grants.adapter,
+      ...(strictFinalReceipt ? {
+        requireAuthenticatedFinalReceipt: true as const, finalReceiptVerifier: finalVerifier,
+      } : {}) });
   return { cas, grants, hub, writes, verifyReceipt,
     get publishedReceipts() { return publishedReceipts.map(r => ({ ...r })); },
     get target() { return target; }, get publications() { return publications; } };
@@ -983,5 +1015,113 @@ test('#22/#725 late valid Native ACK after verified first chunk, Hub-B cancel an
     } finally {
       releaseAck.open();
       await hubA.waitForIdle(running.id);
+    }
+  }));
+
+/**
+ * #22 / #754 hosted-final-ACK after Native commit:
+ * The synthetic Native mock signs EXACT requestId + scope + epoch + SHA,
+ * mutates the target once, then waits at a Promise barrier before returning
+ * the real MAC-authenticated receipt. CORE revoked after physical-possible
+ * side effect must deny completion; publication intent stays journaled and
+ * its typed CORE error is not replaced by a later generic ACK/UNKNOWN.
+ *
+ * Does NOT constitute a real protected Agent signature, offhost CAS or
+ * durable physical publication witness.
+ */
+test('#22/#754: revoked CORE after Native publish side effect rejects late authentic final ACK', async () =>
+  temp(async root => {
+    const nativePublished = gate(), releaseReceipt = gate();
+    const fx = mock('normal', {
+      afterPublish: async () => {
+        nativePublished.open();
+        await releaseReceipt.promise;
+      },
+    }, true);
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const job = await hubA.start(input);
+    try {
+      await expectGate(nativePublished.promise, 'Native final side effect before valid ACK');
+      const before = await stored(root, job.id);
+      assert.equal(before.state, 'PUBLISHING');
+      assert.equal(before.bytesConfirmed, bytes.length);
+      assert.equal(before.pending, undefined, 'all writes read back before final publication');
+      assert.equal(before.publication?.dispatched, true);
+      assert.equal(before.publication?.sha256, digest(bytes));
+      assert.equal(before.publication?.epoch, before.fencing?.epoch);
+      const originalIntent = structuredClone(before.publication);
+      assert.ok(originalIntent?.requestId);
+      assert.equal(fx.publications, 1);
+      assert.equal(fx.publishedReceipts.length, 1);
+      assert.deepEqual(fx.target, bytes);
+      // The mock signing key is independent of the Hub ACK; authenticated
+      // synthetic receipt exists but cannot grant an already-revoked CORE.
+      fx.grants.enabled = false;
+      releaseReceipt.open();
+      await hubA.waitForIdle(job.id);
+      const after = await stored(root, job.id);
+      assert.equal(after.state, 'MUTATION_UNKNOWN');
+      assert.equal(after.errorCode, 'CORE_OWNER_REVOKED');
+      assert.deepEqual(after.publication, originalIntent);
+      assert.equal(after.pending, undefined);
+      assert.equal(after.bytesConfirmed, bytes.length);
+      assert.equal(fx.publications, 1, 'no retry of potentially committed publish');
+      assert.equal(fx.publishedReceipts.length, 1);
+      await assert.rejects(hubB.status(job.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+      await assert.rejects(hubB.start({ ...input, resumeTransferId: job.id }),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+      assert.equal((await stored(root, job.id)).errorCode, 'CORE_OWNER_REVOKED');
+      assert.deepEqual((await stored(root, job.id)).publication, originalIntent);
+      assert.equal(fx.publications, 1);
+    } finally {
+      releaseReceipt.open();
+      await hubA.waitForIdle(job.id);
+    }
+  }));
+
+test('#22/#754: CORE revoke during independent final verification refuses authenticated stale receipt', async () =>
+  temp(async root => {
+    const verifying = gate(), releaseVerification = gate();
+    const fx = mock('normal', {
+      beforeFinalVerify: async () => {
+        verifying.open();
+        await releaseVerification.promise;
+      },
+    }, true);
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const job = await hubA.start(input);
+    try {
+      await expectGate(verifying.promise, 'synthetic final receipt verifier');
+      const before = await stored(root, job.id);
+      assert.equal(before.state, 'PUBLISHING');
+      assert.equal(before.bytesConfirmed, bytes.length);
+      assert.equal(before.publication?.dispatched, true);
+      assert.equal(before.publication?.sha256, digest(bytes));
+      const intent = structuredClone(before.publication);
+      assert.ok(intent?.requestId);
+      assert.equal(fx.publications, 1);
+      assert.equal(fx.publishedReceipts.length, 1);
+      fx.grants.enabled = false;
+      releaseVerification.open();
+      await hubA.waitForIdle(job.id);
+      const after = await stored(root, job.id);
+      assert.equal(after.state, 'MUTATION_UNKNOWN');
+      assert.equal(after.errorCode, 'CORE_OWNER_REVOKED');
+      assert.deepEqual(after.publication, intent,
+        'identity and dispatched bit remain durable despite verified stale receipt');
+      assert.equal(after.bytesConfirmed, bytes.length);
+      assert.equal(after.pending, undefined);
+      assert.equal(fx.publications, 1);
+      await assert.rejects(hubB.status(job.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+      assert.equal((await stored(root, job.id)).state, 'MUTATION_UNKNOWN');
+      assert.deepEqual((await stored(root, job.id)).publication, intent);
+      assert.equal(fx.publications, 1);
+    } finally {
+      releaseVerification.open();
+      await hubA.waitForIdle(job.id);
     }
   }));
