@@ -14,6 +14,14 @@ import os from 'node:os';
 import path from 'node:path';
 import {AuditLog, type AuditWrite} from '../src/audit/log.js';
 import {AgentOperationJournal} from '../src/agent/operation-journal.js';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js';
+import {AgentBroker} from '../src/core/agent-broker.js';
+import {ProviderRegistry} from '../src/core/provider-registry.js';
+import {createNexowireMcpServer} from '../src/mcp/create-server.js';
+import {SkillRegistry} from '../src/skills/registry.js';
+import {WorkspaceStore} from '../src/workspace/store.js';
+import type {BearerAuthorization} from '../src/security/auth.js';
 import {
   hash, verifySig, redactAudit, verifyElevatedReceipt, eventDigest, sealBody,
   GENESIS, SEAL_GENESIS, type Signed, type ProcessCreation, type Postcondition,
@@ -736,4 +744,78 @@ test('actual AuditLog accepts conflicting same requestId fingerprints while Agen
   denialSource:'AUDIT_DUPLICATE_REQUEST_FINGERPRINT_SCOPE_CONFLICT'};
  assert.equal(verdict.retrySafe,false);
  assert.equal(verdict.status,'MUTATION_UNKNOWN');
+});
+
+/**
+ * #29 ACTUAL MCP READ-HANDLER SCOPE NEGATIVE. Only disposable JSONL,
+ * a source MCP server and its in-memory SDK client are used. The operator
+ * has a FIRST-PARTY authenticated control-plane grant limited to device A.
+ * A green negative means device B's operational audit metadata was leaked
+ * through actual audit_recent/audit_query handlers, NOT secured/redacted.
+ *
+ * Unlike prior QA, this does not forge JSONL, mutate requestId fingerprints,
+ * manufacture a native signed receipt, claim CORE EFFECTIVE or execute tools.
+ */
+test('scoped operator can read foreign-device audit rows via actual MCP audit_recent and audit_query handlers: unsafe NEGATIVE',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'nx-qa29-audit-read-scope-'));
+ const owned='qa29-allowed-device',foreign='qa29-foreign-device';
+ const ownedRequest=uuid('71'),foreignRequest=uuid('72');
+ const audit=new AuditLog(path.join(root,'audit.jsonl'));
+ await audit.write({operationId:ownedRequest,status:'started',
+  capability:'files.read',targetId:owned,providerId:'synthetic-fixture'});
+ await audit.write({operationId:foreignRequest,status:'unknown',
+  capability:'files.read',targetId:foreign,providerId:'synthetic-fixture',
+  errorCode:'MUTATION_STATE_UNKNOWN'});
+ const operator:BearerAuthorization={
+  kind:'control-plane',scope:'mcp',role:'operator',
+  accountId:'qa29-operator-scope',allowedDeviceIds:[owned],
+  ownerDevices:[{id:owned,name:'QA29 synthetic A',folderId:null}],
+  autoSelectDevices:false,
+ };
+ const server=createNexowireMcpServer({
+  broker:new AgentBroker(),providers:new ProviderRegistry(),
+  toolAuthorization:operator,audit,
+  workspaces:new WorkspaceStore(root),
+  skills:new SkillRegistry(path.join(process.cwd(),'skills')),
+ });
+ const client=new Client({name:'qa29-audit-scope-negative',version:'1.0.0'});
+ const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();
+ t.after(async()=>{
+  await client.close();
+  await server.close();
+  await fs.rm(root,{recursive:true,force:true});
+ });
+ await Promise.all([server.connect(serverTransport),client.connect(clientTransport)]);
+ const discovered=await client.listTools();
+ const names=new Set(discovered.tools.map(x=>x.name));
+ assert.equal(names.has('audit_recent'),true);
+ assert.equal(names.has('audit_query'),true);
+ assert.equal(names.has('policy_profile_set'),false,
+  'operator permission is effective at tool level');
+ const read=async(name:'audit_recent'|'audit_query',args:Record<string,unknown>)=>{
+  const response=await client.callTool({name,arguments:args});
+  assert.equal(response.isError===true,false,name);
+  const value=response.structuredContent as {events?:Array<{
+   operationId:string;targetId?:string;status:string;
+  }>};
+  assert.ok(value&&Array.isArray(value.events),name);
+  return value.events;
+ };
+ const recent=await read('audit_recent',{limit:10});
+ assert.ok(recent.some(e=>e.operationId===ownedRequest&&e.targetId===owned));
+ assert.ok(recent.some(e=>e.operationId===foreignRequest&&e.targetId===foreign),
+  'CURRENT SOURCE NEGATIVE: audit_recent returns forbidden-device row');
+ const unfiltered=await read('audit_query',{limit:10});
+ assert.ok(unfiltered.some(e=>e.operationId===foreignRequest&&e.targetId===foreign),
+  'CURRENT SOURCE NEGATIVE: default audit_query returns forbidden-device row');
+ const targeted=await read('audit_query',{target_id:foreign,operation_id:foreignRequest});
+ assert.equal(targeted.length,1);
+ assert.equal(targeted[0]?.targetId,foreign,
+  'CURRENT SOURCE NEGATIVE: caller-supplied target_id bypasses allowedDeviceIds');
+ const allowedOnly=await read('audit_query',{target_id:owned});
+ assert.equal(allowedOnly.length,1);
+ assert.equal(allowedOnly[0]?.targetId,owned);
+ // This is a disclosure of synthetic METADATA, never an OS/native effect.
+ assert.equal(targeted[0]?.status,'unknown');
+ assert.equal(targeted.some(e=>e.status==='COMPLETED_VERIFIED'),false);
 });
