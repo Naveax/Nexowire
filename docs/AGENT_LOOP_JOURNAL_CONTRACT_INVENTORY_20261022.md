@@ -79,3 +79,35 @@ should consume `retry_unknown` as a mutation replay permission.
 
 **Release:** #780 P1 inventory only. #587 P0 OPEN, production NO-GO;
 no installed signed HIGH Broker or off-host CAS claim.
+
+## #781 independent cloned-runbook adversarial finding (22 October)
+
+#18 independent DRAFT PR #781 HEAD `89a865363829c8c30a74de1516e53a697549c05b`,
+exact GitHub CI `39816363122` **7/7 SUCCESS**, reproduces an **UNSAFE
+NEGATIVE** in actual `executeDurableRunbook` source. An injected synthetic
+OS-effect callback raises `MUTATION_STATE_UNKNOWN` after acting once;
+`runbooks.ts` catches it, records step `failed` with original errorCode,
+not `unknown`. A cloned `runbook_id` derives another graph ID;
+a source-only second callback is dispatched, even with `retry_unknown:false`.
+This is not a claim of two physical Native dispatches.
+
+The #01 advisory checkpoint now requires stable `logicalMutationId`
+(UUID) **in addition to** stable original `requestId`, fingerprint,
+capability, owner/device/session and grant epoch. Optional `runbookId`
+is a mutable organizational alias, NEVER the logical mutation key.
+The pure `reviewAgentLoopContinuation` requires the original binding
+from a future independently verified authority. Missing original mapping
+returns RECONCILE_REQUIRED; cloned alias with a new requestId or logical ID
+returns SCOPE_MISMATCH/STOP; clearing original
+`MUTATION_STATE_UNKNOWN` returns STOP with original provenance preserved.
+All decisions are read-only, mayReplay:false, mayDispatch:false.
+
+**Important:** This does NOT patch `RunbookStore`, `TaskGraphStore`,
+`executeDurableRunbook`, or their runtime dispatch. Their
+`retry_unknown` and cloned-ID unsafe paths remain as tested by #781;
+#08 and the Agent loop runtime owners must enforce original logical
+identity and independent outcome readback before any resumed mutating job.
+Even immutable local checkpoint fields can be rolled back together; a
+fresh minted logical ID after total rollback is undetectable without
+real independent non-restorable authority (#587). No physical Broker or
+external service deployment. The prohibited atomic CAS patch is not retried.

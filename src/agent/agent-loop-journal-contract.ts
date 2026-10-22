@@ -12,6 +12,9 @@ export const AgentLoopCheckpointV1Schema=z.strictObject({
   version:z.literal(1),
   taskId:z.string().min(1).max(128),
   stepId:z.string().min(1).max(128),
+  // Logical mutation identity must outlive any runbook/graph alias.
+  logicalMutationId:uuid,
+  runbookId:z.string().min(1).max(128).optional(),
   requestId:uuid,
   fingerprint:sha256,
   capability:z.string().min(1).max(128),
@@ -33,6 +36,7 @@ export type AgentLoopCheckpointV1=Readonly<
   z.infer<typeof AgentLoopCheckpointV1Schema>
 >;
 export type AgentLoopReadOnlyDecision=Readonly<{
+  logicalMutationId:string;
   requestId:string;
   state:'RECONCILE_REQUIRED'|'READ_ONLY_INSPECTION'|'SCOPE_MISMATCH';
   reason:
@@ -41,7 +45,9 @@ export type AgentLoopReadOnlyDecision=Readonly<{
     | 'JOURNAL_ROW_MISSING'
     | 'UNKNOWN_OR_POSSIBLY_DISPATCHED'
     | 'LOCAL_TERMINAL_NOT_INDEPENDENT_PROOF'
-    | 'AUTHORITY_CHECK_REQUIRED';
+    | 'AUTHORITY_CHECK_REQUIRED'
+    | 'ORIGINAL_LOGICAL_BINDING_MISSING'
+    | 'ORIGINAL_UNKNOWN_PROVENANCE_LOST';
   originalErrorCode?:string;
   nextAction:'READ_ONLY_RECONCILIATION'|'READ_ONLY_INSPECTION'|'STOP';
   mayReplay:false;
@@ -50,7 +56,7 @@ export type AgentLoopReadOnlyDecision=Readonly<{
 }>;
 
 const immutableFields=[
-  'taskId','stepId','requestId','fingerprint','capability','ownerId',
+  'taskId','stepId','logicalMutationId','requestId','fingerprint','capability','ownerId',
   'deviceId','deviceEpoch','sessionEpoch','ownerEpoch','grantGeneration',
 ] as const;
 
@@ -73,6 +79,7 @@ export function reviewAgentLoopCheckpoint(
     reason:AgentLoopReadOnlyDecision['reason'],
     nextAction:AgentLoopReadOnlyDecision['nextAction'],
   ):AgentLoopReadOnlyDecision=>Object.freeze({
+    logicalMutationId:cp.logicalMutationId,
     requestId:cp.requestId,state,reason,nextAction,
     ...(cp.originalErrorCode?
       {originalErrorCode:cp.originalErrorCode}:{}),
@@ -81,6 +88,14 @@ export function reviewAgentLoopCheckpoint(
   });
   if(previous && immutableFields.some(key=>previous[key]!==cp[key]))
     return result('SCOPE_MISMATCH','IMMUTABLE_REQUEST_SCOPE_CHANGED','STOP');
+  // A clone/restart cannot erase UNKNOWN provenance or silently declare
+  // a different local state terminal. Reconciliation needs external proof.
+  if(previous?.originalErrorCode==='MUTATION_STATE_UNKNOWN' &&
+     (cp.originalErrorCode!==previous.originalErrorCode||
+      cp.state!==previous.state))
+    return Object.freeze({...result('SCOPE_MISMATCH',
+      'ORIGINAL_UNKNOWN_PROVENANCE_LOST','STOP'),
+      originalErrorCode:previous.originalErrorCode});
   if(journal && (journal.requestId!==cp.requestId||
       journal.fingerprint!==cp.fingerprint||
       journal.capability!==cp.capability))
@@ -100,4 +115,31 @@ export function reviewAgentLoopCheckpoint(
       'LOCAL_TERMINAL_NOT_INDEPENDENT_PROOF','READ_ONLY_INSPECTION');
   return result('READ_ONLY_INSPECTION',
     'AUTHORITY_CHECK_REQUIRED','READ_ONLY_INSPECTION');
+}
+
+/**
+ * Use this read-only guard for a resumed or cloned runbook. The original
+ * binding MUST be supplied from independently verified history by the
+ * future owner implementation; absence is never proof of a new mutation.
+ * Both this object and the provided 'original' are untrusted local metadata:
+ * this function cannot discover reissued logical IDs after full rollback.
+ */
+export function reviewAgentLoopContinuation(
+  candidate:unknown,
+  original:AgentLoopCheckpointV1|undefined,
+  journal?:Pick<AgentOperationRecord,
+    'requestId'|'fingerprint'|'capability'|'status'|'dispatchedAt'|
+    'evidenceVerified'>,
+):AgentLoopReadOnlyDecision{
+  const current=AgentLoopCheckpointV1Schema.parse(candidate);
+  if(!original){
+    const assessed=reviewAgentLoopCheckpoint(current,journal);
+    if(assessed.state==='SCOPE_MISMATCH')return assessed;
+    return Object.freeze({...assessed,
+      state:'RECONCILE_REQUIRED' as const,
+      reason:'ORIGINAL_LOGICAL_BINDING_MISSING' as const,
+      nextAction:'READ_ONLY_RECONCILIATION' as const});
+  }
+  return reviewAgentLoopCheckpoint(current,journal,
+    AgentLoopCheckpointV1Schema.parse(original));
 }

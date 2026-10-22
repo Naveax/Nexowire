@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {AgentLoopCheckpointV1Schema,reviewAgentLoopCheckpoint}
+import {AgentLoopCheckpointV1Schema,reviewAgentLoopCheckpoint,
+  reviewAgentLoopContinuation}
   from '../src/agent/agent-loop-journal-contract.js';
 
 function example(){
   return {
     version:1 as const,taskId:'coding-task-01',stepId:'run-shell-01',
+    logicalMutationId:randomUUID(),
     requestId:randomUUID(),fingerprint:'f'.repeat(64),
     capability:'shell.exec',ownerId:randomUUID(),deviceId:randomUUID(),
     deviceEpoch:randomUUID(),sessionEpoch:randomUUID(),
@@ -107,4 +109,68 @@ test('read-only classifier returns a frozen decision, not a mutation grant',()=>
   assert.equal(Object.isFrozen(r),true);
   assert.equal('execute' in r,false);
   assert.equal('token' in r,false);
+});
+
+test('cloned runbook alias cannot mint a new requestId for same logical mutation',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse({...example(),
+    runbookId:'first-runbook'});
+  const cloned={...original,runbookId:'copy-runbook',requestId:randomUUID()};
+  const result=reviewAgentLoopContinuation(cloned,original);
+  assert.equal(result.state,'SCOPE_MISMATCH');
+  assert.equal(result.reason,'IMMUTABLE_REQUEST_SCOPE_CHANGED');
+  assert.equal(result.logicalMutationId,original.logicalMutationId);
+  assert.equal(result.nextAction,'STOP');
+  assert.equal(result.mayDispatch,false);
+});
+test('cloned runbook cannot change logicalMutationId while keeping requestId',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse(example());
+  const result=reviewAgentLoopContinuation({...original,
+    runbookId:'cloned',logicalMutationId:randomUUID()},original);
+  assert.equal(result.state,'SCOPE_MISMATCH');
+  assert.equal(result.mayReplay,false);
+});
+test('same logicalMutationId and requestId survive a changed runbook alias but UNKNOWN persists',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse({
+    ...example(),runbookId:'original-runbook'});
+  const result=reviewAgentLoopContinuation({
+    ...original,runbookId:'renamed-runbook'},original,
+    record(original,'failed')); // #781 synthetic lost ACK misclassified FAILED
+  assert.equal(result.state,'RECONCILE_REQUIRED');
+  assert.equal(result.originalErrorCode,'MUTATION_STATE_UNKNOWN');
+  assert.equal(result.requestId,original.requestId);
+  assert.equal(result.mayReplay,false);
+  assert.equal(result.completedVerified,false);
+});
+test('cloned runbook without verified original binding cannot assume a fresh logical mutation',()=>{
+  const candidate=AgentLoopCheckpointV1Schema.parse({
+    ...example(),runbookId:'cloned-unknown',state:'PLANNED'});
+  const result=reviewAgentLoopContinuation(candidate,undefined,
+    record(candidate,'failed'));
+  assert.equal(result.state,'RECONCILE_REQUIRED');
+  assert.equal(result.reason,'ORIGINAL_LOGICAL_BINDING_MISSING');
+  assert.equal(result.mayDispatch,false);
+});
+test('clone cannot erase original UNKNOWN errorCode or downgrade reconciliation state',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse(example());
+  for(const changed of [
+    {...original,originalErrorCode:undefined},
+    {...original,originalErrorCode:'TASK_GRAPH_NOT_OK'},
+    {...original,state:'PLANNED'},
+  ]){
+    const result=reviewAgentLoopContinuation(changed,original,
+      record(original,'failed'));
+    assert.equal(result.state,'SCOPE_MISMATCH');
+    assert.equal(result.reason,'ORIGINAL_UNKNOWN_PROVENANCE_LOST');
+    assert.equal(result.originalErrorCode,'MUTATION_STATE_UNKNOWN');
+    assert.equal(result.nextAction,'STOP');
+  }
+});
+test('pure loop contract refuses cloned raw commands, fresh fake success and unscoped checkpoints',()=>{
+  const cp=example();
+  assert.equal(AgentLoopCheckpointV1Schema.safeParse({
+    ...cp,rawCommand:'sensitive'}).success,false);
+  assert.equal(AgentLoopCheckpointV1Schema.safeParse({
+    ...cp,logicalMutationId:undefined}).success,false);
+  assert.equal(AgentLoopCheckpointV1Schema.safeParse({
+    ...cp,state:'COMPLETED_VERIFIED'}).success,false);
 });
