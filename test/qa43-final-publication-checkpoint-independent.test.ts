@@ -9,7 +9,8 @@ import path from 'node:path';
 import { ArtifactBridgeStore, ArtifactBridgeError } from '../src/workspace/artifact-bridge.js';
 import { VerifiedTransferCheckpointAdapter } from '../src/workspace/artifact-job-checkpoint.js';
 import type { TransferJob } from '../src/mcp/cross-device-transfer-jobs.js';
-import { TransferTrustError } from '../src/workspace/artifact-job-trust.js';
+import { TransferTrustError, type TrustedPublicationCommit }
+  from '../src/workspace/artifact-job-trust.js';
 import { StagingArtifactByteBudget, initArtifactBudgetFixture }
   from '../src/ops/scale-v2-artifact-byte-budget-staging.js';
 import { StagingJobBudgetGate } from '../src/workspace/artifact-job-budget-staging.js';
@@ -67,6 +68,18 @@ async function seeded(root: string) {
 function hasCode(code: string) {
   return (e: unknown) => e instanceof ArtifactBridgeError && e.code === code;
 }
+// The synthetic publication oracle is never an always-true CAS provider:
+// every field is fixed to the original irreversible publication identity.
+function exactCommitted(job: Readonly<TransferJob>, proof: TrustedPublicationCommit) {
+  return job.id === proof.jobId && job.state === 'COMPLETED' &&
+    job.publication?.dispatched === true &&
+    job.publication.requestId === proof.requestId &&
+    job.publication.epoch === proof.epoch &&
+    job.fencing?.epoch === proof.epoch &&
+    job.publication.sha256 === proof.sha256 &&
+    job.sha256 === proof.sha256 &&
+    job.publication.durableCommitId === proof.durableCommitId;
+}
 
 test('#43: copied job/request/SHA/CAS, foreign issuer or fake signed final ACK cannot mint checkpoint',
   async () => temp(async root => {
@@ -86,9 +99,12 @@ test('#43: copied job/request/SHA/CAS, foreign issuer or fake signed final ACK c
       {
         // Independent test oracle: a caller-controlled final HMAC/ACK does not
         // create an external commit; issuer identity is checked by the oracle.
-        inspect: async j => issuer === trustedIssuer && j.id === witness.jobId
+        inspect: async j => issuer === trustedIssuer && exactCommitted(j, witness)
           ? witness : null,
-        saveIfCurrent: async (_job, write) => {
+        saveIfCurrent: async (j, write) => {
+          if (issuer !== trustedIssuer || !exactCommitted(j, witness))
+            throw new TransferTrustError('EXTERNAL_PUBLICATION_COMMIT_INVALID',
+              'Synthetic oracle denies a different publisher or publication ID');
           admissions++;
           return write();
         },
@@ -159,6 +175,8 @@ test('#43: two Hub readers cannot observe checkpoint after revoke wins before sa
         throw new TransferTrustError('CORE_GRANT_EPOCH_STALE',
           'Synthetic owner revoked before checkpoint admission');
     };
+    const inspect = async (j: Readonly<TransferJob>) =>
+      ownerEpoch === 19 && exactCommitted(j, witness) ? witness : null;
     class CountedStore extends ArtifactBridgeStore {
       override async saveCheckpoint(arg: Parameters<ArtifactBridgeStore['saveCheckpoint']>[0]) {
         saveCalls++;
@@ -168,8 +186,11 @@ test('#43: two Hub readers cannot observe checkpoint after revoke wins before sa
     const adapterA = new VerifiedTransferCheckpointAdapter(
       new CountedStore(path.join(root, 'artifact')),
       { assertCurrent: async () => current() }, {
-        inspect: async () => witness,
-        saveIfCurrent: async (_j, write) => {
+        inspect,
+        saveIfCurrent: async (j, write) => {
+          if (!exactCommitted(j, witness))
+            throw new TransferTrustError('EXTERNAL_PUBLICATION_COMMIT_INVALID',
+              'Checkpoint must bind original publication identity');
           entered();
           await continueAdmission;
           await current(); // test-only admission, NOT off-host CAS
@@ -178,7 +199,7 @@ test('#43: two Hub readers cannot observe checkpoint after revoke wins before sa
       });
     const adapterB = new VerifiedTransferCheckpointAdapter(
       independentReader, { assertCurrent: async () => current() },
-      { inspect: async () => witness });
+      { inspect });
     const pending = adapterA.persist(input);
     try {
       await atAdmission;
@@ -218,11 +239,14 @@ test('#43: concurrent/reentrant admission must not dispatch a second durable che
       new CountedStore(path.join(root, 'artifact')),
       { assertCurrent: async () => undefined },
       {
-        inspect: async () => witness,
+        inspect: async j => exactCommitted(j, witness) ? witness : null,
         // Hostile provider violates single-use callback semantics by invoking
         // two writes concurrently. A source-local guard must not *dispatch*
         // both. This is a guard regression, NOT real off-host CAS validation.
-        saveIfCurrent: async (_job, write) => {
+        saveIfCurrent: async (j, write) => {
+          if (!exactCommitted(j, witness))
+            throw new TransferTrustError('EXTERNAL_PUBLICATION_COMMIT_INVALID',
+              'Hostile test callback still requires immutable publication identity');
           const first = write(), second = write();
           const both = await Promise.allSettled([first, second]);
           const rejected = both.find(x => x.status === 'rejected');
@@ -232,12 +256,21 @@ test('#43: concurrent/reentrant admission must not dispatch a second durable che
           return both[0].value;
         },
       });
-    await assert.rejects(adapter.persist(input),
-      (e: unknown) => e instanceof ArtifactBridgeError &&
-        e.code === 'JOB_CHECKPOINT_WRITE_REPLAY',
-      'second invocation should be rejected deterministically');
+    // Observe BOTH the API rejection and the actual number of store calls.
+    // A late ADMISSION_INVALID after two writes is NOT safe fail-closed:
+    // the extra durable mutation has already been dispatched.
+    let observedError: unknown;
+    try { await adapter.persist(input); }
+    catch (e) { observedError = e; }
+    const code = observedError instanceof ArtifactBridgeError
+      ? observedError.code : observedError instanceof Error
+        ? observedError.name : 'RESOLVED';
     assert.equal(durableWrites, 1,
-      'reentrant protected callback may invoke physical save at most once');
+      'duplicate store.saveCheckpoint dispatches occurred BEFORE the late ' +
+      'error/return; observedCalls=' + durableWrites + ', result=' + code);
+    assert.ok(observedError instanceof ArtifactBridgeError &&
+      observedError.code === 'JOB_CHECKPOINT_WRITE_REPLAY',
+      'the second callback must be rejected BEFORE any duplicate write; observed=' + code);
   }));
 
 test('#43: quota cancellation never releases reserved bytes until BOTH trusted writer stop and deletion',
@@ -269,12 +302,22 @@ test('#43: quota cancellation never releases reserved bytes until BOTH trusted w
         'lost ACK or revoke must retain escrow until verified writer stop');
       await assert.rejects(noAttestation.reserve(job),
         /BUDGET_FAIL_CLOSED_DENIED_STATE/);
+      let writerStopped = false, deletionPersisted = false;
       const verified = new StagingJobBudgetGate(budget,
         async () => 8 * 1024 ** 3, now, {
-          attest: async () => ({
-            durableDeletionVerified: true, writersStoppedVerified: true,
-          }),
+          attest: async asserted => {
+            assert.equal(asserted.id, job.id,
+              'writer stop/deletion witness cannot certify a foreign job');
+            return {
+              durableDeletionVerified: deletionPersisted,
+              writersStoppedVerified: writerStopped,
+            } as never; // intentionally synthetic boolean oracle
+          },
         });
+      writerStopped = true;
+      await assert.rejects(verified.acknowledgeVerifiedDeletion(job),
+        /WRITER_FENCE_REQUIRED/, 'writer stop alone cannot refund escrow');
+      deletionPersisted = true;
       await verified.acknowledgeVerifiedDeletion(job);
       const released = db.prepare('SELECT state FROM budget_artifact_sessions').get() as { state: string };
       assert.equal(released.state, 'RELEASED',
