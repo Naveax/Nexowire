@@ -1375,6 +1375,8 @@ test('#22/#777: signed foreign final requestId + concurrent Hub-B resume preserv
       assert.equal(fx.finalReceipts.length, 1);
       assert.notEqual(fx.finalReceipts[0]!.requestId, immutable.requestId,
         'valid synthetic MAC signs a FOREIGN requestId, not the journaled intent');
+      assert.match(fx.finalReceipts[0]!.proof, /^[0-9a-f]{64}$/,
+        'foreign identity receipt is correctly signed by the test provider, not a random bad MAC');
       assert.equal(fx.finalReceipts[0]!.sha256, immutable.sha256);
       assert.equal(fx.finalReceipts[0]!.epoch, immutable.epoch);
       assert.equal(fx.finalReceipts[0]!.jobId, initial.id);
