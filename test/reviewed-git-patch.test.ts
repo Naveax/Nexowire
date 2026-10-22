@@ -181,7 +181,7 @@ test('#32 authorized apply verifies postimage and exact-only filesystem undo', a
     assert.equal((await x.patch.undo({
       identity: x.request.identity, file: 'a.txt',
       fingerprint: preview.fingerprint, ticket: 'human-undo',
-    })).state, 'CONFLICT');
+    })).state, 'MUTATION_STATE_UNKNOWN');
   } finally { await x.clean(); }
 });
 
@@ -222,7 +222,7 @@ test('#32 lost ACK after mutation is UNKNOWN and cannot retry or blind undo', as
     assert.equal(first.state, 'MUTATION_STATE_UNKNOWN');
     assert.equal(x.port.casCount, 1);
     assert.equal(await fs.readFile(path.join(x.root, 'a.txt'), 'utf8'), 'after\n');
-    assert.equal((await x.patch.apply(x.request, preview, 'human-apply')).state, 'CONFLICT');
+    assert.equal((await x.patch.apply(x.request, preview, 'human-apply')).state, 'MUTATION_STATE_UNKNOWN');
     assert.equal((await x.patch.undo({
       identity: x.request.identity, file: 'a.txt',
       fingerprint: preview.fingerprint, ticket: 'human-undo',
