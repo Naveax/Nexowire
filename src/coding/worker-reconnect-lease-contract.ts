@@ -7,6 +7,7 @@
 export interface WorkerMutationIdentity {
   readonly ownerAccountId: string;
   readonly deviceId: string;
+  readonly pairingRealm: 'self-host' | 'cloud';
   readonly deviceSignerSpkiSha256: string;
   readonly ownerEpoch: number;
   readonly oauthSessionEpoch: number;
@@ -35,6 +36,7 @@ export interface WorkerLeaseCheckpoint {
 export interface WorkerAuthorityReadback {
   readonly ownerAccountId: string;
   readonly deviceId: string;
+  readonly pairingRealm: 'self-host' | 'cloud';
   readonly deviceSignerSpkiSha256: string;
   readonly ownerEpoch: number;
   readonly oauthSessionEpoch: number;
@@ -67,23 +69,27 @@ export interface WorkerLeaseDecision {
   readonly mayDispatch: false;
   readonly mayReplayMutation: false;
   readonly mayLaunchNativeTool: false;
+  /** A stale authority STOP does not settle a previously uncertain mutation. */
+  readonly reconciliationRequired: boolean;
   readonly state: 'STOP' | 'RECONCILE_REQUIRED' | 'BLOCKED';
   readonly originalLogicalMutationId: string | null;
   readonly originalRequestId: string | null;
+  readonly originalSourceSha: string | null;
 }
 
 const identityKeys = [
-  'ownerAccountId', 'deviceId', 'deviceSignerSpkiSha256', 'ownerEpoch',
+  'ownerAccountId', 'deviceId', 'pairingRealm', 'deviceSignerSpkiSha256', 'ownerEpoch',
   'oauthSessionEpoch', 'pairingEpoch', 'issuerEpoch', 'taskId',
   'worktreeId', 'sourceSha', 'stepId', 'logicalMutationId', 'originalRequestId',
 ] as const satisfies readonly (keyof WorkerMutationIdentity)[];
 const authorityKeys = [
-  'ownerAccountId', 'deviceId', 'deviceSignerSpkiSha256', 'ownerEpoch',
+  'ownerAccountId', 'deviceId', 'pairingRealm', 'deviceSignerSpkiSha256', 'ownerEpoch',
   'oauthSessionEpoch', 'pairingEpoch', 'issuerEpoch',
 ] as const satisfies readonly (keyof WorkerMutationIdentity & keyof WorkerAuthorityReadback)[];
 const isId = (value: unknown): value is string =>
   typeof value === 'string' && value.length >= 1 && value.length <= 256 &&
   /^[A-Za-z0-9_.:@/-]+$/.test(value);
+const isPairingRealm = (v: unknown): v is 'self-host' | 'cloud' => v === 'self-host' || v === 'cloud';
 const isEpoch = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 const isSha = (value: unknown): value is string =>
@@ -95,6 +101,7 @@ function validIdentity(v: WorkerMutationIdentity): boolean {
   if (!v || typeof v !== 'object') return false;
   return identityKeys.every(k => {
     const value = v[k];
+    if (k === 'pairingRealm') return isPairingRealm(value);
     if (k === 'sourceSha') return isSha(value);
     if (k === 'deviceSignerSpkiSha256') return isDigest(value);
     if (k.endsWith('Epoch')) return isEpoch(value);
@@ -106,11 +113,13 @@ const decision = (
   reason: LeaseFenceReason,
   state: WorkerLeaseDecision['state'],
   identity?: WorkerMutationIdentity,
+  reconciliationRequired = false,
 ): WorkerLeaseDecision => Object.freeze({
-  reason, state, mayDispatch: false as const, mayReplayMutation: false as const,
+  reason, state, reconciliationRequired, mayDispatch: false as const, mayReplayMutation: false as const,
   mayLaunchNativeTool: false as const,
   originalLogicalMutationId: isId(identity?.logicalMutationId) ? identity.logicalMutationId : null,
   originalRequestId: isId(identity?.originalRequestId) ? identity.originalRequestId : null,
+  originalSourceSha: isSha(identity?.sourceSha) ? identity.sourceSha : null,
 });
 
 /**
@@ -125,44 +134,54 @@ export function reviewWorkerLeaseReconnect(input: {
   readonly nowMs: number;
 }): WorkerLeaseDecision {
   const {checkpoint: cp, attemptedIdentity: attempt, current: a, nowMs} = input;
-  if (!cp || !validIdentity(cp.identity) || !validIdentity(attempt) ||
-      !isId(cp.leaseId) || !isId(cp.localSessionId) ||
-      !isEpoch(cp.connectionEpoch) || !isEpoch(cp.wssSessionGeneration) ||
-      !Number.isSafeInteger(cp.expiresAtMs) || cp.expiresAtMs <= 0 ||
-      !Number.isSafeInteger(nowMs) || nowMs < 0 ||
+  // Preserve reported ACK-loss across revoke, reconnect and lease expiry.
+  // This is forensic metadata, not an authenticated durable journal.
+  if (!cp || !validIdentity(cp.identity) ||
       !['not_sent', 'dispatch_pending', 'ack_lost', 'journal_unknown'].includes(cp.mutationState)) {
     return decision('INVALID_OR_MISSING_PROVENANCE', 'STOP');
   }
-  if (identityKeys.some(k => cp.identity[k] !== attempt[k])) {
-    return decision('IMMUTABLE_MUTATION_IDENTITY_CHANGED', 'STOP', cp.identity);
+  const needsReconciliation = cp.mutationState !== 'not_sent';
+  const fenced = (reason: LeaseFenceReason, state: WorkerLeaseDecision['state']) =>
+    decision(reason, state, cp.identity, needsReconciliation);
+  if (!validIdentity(attempt) ||
+      !isId(cp.leaseId) || !isId(cp.localSessionId) ||
+      !isEpoch(cp.connectionEpoch) || !isEpoch(cp.wssSessionGeneration) ||
+      !Number.isSafeInteger(cp.expiresAtMs) || cp.expiresAtMs <= 0 ||
+      !Number.isSafeInteger(nowMs) || nowMs < 0) {
+    return fenced('INVALID_OR_MISSING_PROVENANCE', 'STOP');
   }
-  if (!a || !a.readbackVerified || !a.online ||
+  if (identityKeys.some(k => cp.identity[k] !== attempt[k])) {
+    return fenced('IMMUTABLE_MUTATION_IDENTITY_CHANGED', 'STOP');
+  }
+  if (!a || a.readbackVerified !== true || a.online !== true ||
+      !isPairingRealm(a.pairingRealm) ||
       !isId(a.localSessionId) || !isEpoch(a.connectionEpoch) ||
       !isEpoch(a.wssSessionGeneration) ||
       authorityKeys.some(k => typeof a[k] === 'undefined')) {
-    return decision('OFFLINE_OR_UNVERIFIED_READBACK', 'BLOCKED', cp.identity);
+    return fenced('OFFLINE_OR_UNVERIFIED_READBACK', 'BLOCKED');
   }
   if (authorityKeys.some(k => cp.identity[k] !== a[k])) {
-    return decision('OWNER_DEVICE_AUTHORITY_CHANGED', 'STOP', cp.identity);
+    return fenced('OWNER_DEVICE_AUTHORITY_CHANGED', 'STOP');
   }
-  if (!a.oauthActive || a.ownerRevoked || a.pairingRevoked || a.leaseRevoked) {
-    return decision('OWNER_LOGOUT_OR_REVOCATION', 'STOP', cp.identity);
+  if (a.oauthActive !== true || a.ownerRevoked !== false ||
+      a.pairingRevoked !== false || a.leaseRevoked !== false) {
+    return fenced('OWNER_LOGOUT_OR_REVOCATION', 'STOP');
   }
   if (nowMs >= cp.expiresAtMs) {
-    return decision('EXPIRED_LEASE', 'STOP', cp.identity);
+    return fenced('EXPIRED_LEASE', 'STOP');
   }
   // UNKNOWN takes precedence even when a new socket/Hub claims healthy.
   if (cp.mutationState !== 'not_sent') {
-    return decision('RECONCILE_REQUIRED', 'RECONCILE_REQUIRED', cp.identity);
+    return fenced('RECONCILE_REQUIRED', 'RECONCILE_REQUIRED');
   }
   if (a.localSessionId !== cp.localSessionId ||
       a.connectionEpoch !== cp.connectionEpoch ||
       a.wssSessionGeneration !== cp.wssSessionGeneration) {
-    return decision('RECONNECT_REQUIRES_NEW_EXTERNAL_COMMIT', 'BLOCKED', cp.identity);
+    return fenced('RECONNECT_REQUIRES_NEW_EXTERNAL_COMMIT', 'BLOCKED');
   }
   // Even same-session NOT_SENT is just a local assertion. A real external
   // atomic CAS, signer/key/nonce proof and protected OS effect gate are absent.
-  return decision('BLOCKED_EXTERNAL_CAS_UNAVAILABLE', 'BLOCKED', cp.identity);
+  return fenced('BLOCKED_EXTERNAL_CAS_UNAVAILABLE', 'BLOCKED');
 }
 
 /** Proposed integration only: NOT implemented or injectable into dispatch. */

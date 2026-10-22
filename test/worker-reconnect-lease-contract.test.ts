@@ -7,7 +7,7 @@ import {
   type WorkerAuthorityReadback,
 } from '../src/coding/worker-reconnect-lease-contract.js';
 const id: WorkerMutationIdentity = Object.freeze({
-  ownerAccountId:'tenant-a', deviceId:'device-a',
+  ownerAccountId:'tenant-a', deviceId:'device-a',pairingRealm:'self-host',
   deviceSignerSpkiSha256:'a'.repeat(64), ownerEpoch:7, oauthSessionEpoch:9,
   pairingEpoch:4, issuerEpoch:3, taskId:'task-1',worktreeId:'wt-1',
   sourceSha:'b'.repeat(40), stepId:'step-1',
@@ -19,7 +19,7 @@ const cp: WorkerLeaseCheckpoint = {
   mutationState:'not_sent',
 };
 const current: WorkerAuthorityReadback = {
-  ownerAccountId:id.ownerAccountId,deviceId:id.deviceId,
+  ownerAccountId:id.ownerAccountId,deviceId:id.deviceId,pairingRealm:id.pairingRealm,
   deviceSignerSpkiSha256:id.deviceSignerSpkiSha256,
   ownerEpoch:id.ownerEpoch,oauthSessionEpoch:id.oauthSessionEpoch,
   pairingEpoch:id.pairingEpoch,issuerEpoch:id.issuerEpoch,
@@ -101,4 +101,40 @@ test('unknown stays UNKNOWN after renewal even if authority claims a fully new l
   const second=check({checkpoint:{mutationState:'ack_lost'}, current:{localSessionId:'session-3',connectionEpoch:4}});
   assert.equal(first.state,'RECONCILE_REQUIRED');
   assert.deepEqual(first,second);
+});
+
+test('self-host/cloud pairing realm is immutable across same-ID WSS reconnect',()=>{
+  deny('IMMUTABLE_MUTATION_IDENTITY_CHANGED',check({attemptedIdentity:{pairingRealm:'cloud'}}));
+  deny('OWNER_DEVICE_AUTHORITY_CHANGED',check({current:{pairingRealm:'cloud'}}));
+  deny('INVALID_OR_MISSING_PROVENANCE',check({attemptedIdentity:{pairingRealm:'invalid' as 'self-host'}}));
+});
+test('ACK-loss reconciliation survives stale owner/issuer/pairing, logout, offline, expiry, cloned task',()=>{
+  const cases=[
+    {checkpoint:{mutationState:'ack_lost' as const},current:{ownerEpoch:8}},
+    {checkpoint:{mutationState:'journal_unknown' as const},current:{issuerEpoch:4}},
+    {checkpoint:{mutationState:'dispatch_pending' as const},current:{pairingEpoch:5}},
+    {checkpoint:{mutationState:'ack_lost' as const},current:{pairingRealm:'cloud' as const}},
+    {checkpoint:{mutationState:'ack_lost' as const},current:{oauthActive:false}},
+    {checkpoint:{mutationState:'ack_lost' as const},current:{online:false}},
+    {checkpoint:{mutationState:'ack_lost' as const},nowMs:1000},
+    {checkpoint:{mutationState:'ack_lost' as const},attemptedIdentity:{taskId:'task-clone'}},
+    {checkpoint:{mutationState:'ack_lost' as const},current:{localSessionId:'session-2',wssSessionGeneration:15}},
+    {checkpoint:{mutationState:'ack_lost' as const},nowMs:Number.NaN},
+  ];
+  for(const c of cases){
+    const o=check(c);
+    assert.equal(o.reconciliationRequired,true);
+    assert.equal(o.originalLogicalMutationId,id.logicalMutationId);
+    assert.equal(o.originalRequestId,id.originalRequestId);
+    assert.equal(o.originalSourceSha,id.sourceSha);
+    assert.equal(o.mayDispatch,false);
+    assert.equal(o.mayReplayMutation,false);
+  }
+});
+test('clean NOT_SENT denial is not counterfeit UNKNOWN forensic evidence',()=>{
+  for(const o of [check(),check({current:{ownerRevoked:true}}),
+    check({current:{pairingRealm:'cloud'}}),check({current:{localSessionId:'new'}})]){
+    assert.equal(o.reconciliationRequired,false);
+    assert.equal(o.mayLaunchNativeTool,false);
+  }
 });

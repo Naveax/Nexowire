@@ -32,3 +32,24 @@ A regular SQLite database, generated/mock monotonic counter, JWT/WSS receipt, in
 `test/worker-reconnect-lease-contract.test.ts` contains 10 pure negative/contract cases: same-session no-CAS, local reconnect without logical-ID change, pending/lost OS ACK, cloned task/worktree/Git/request, owner/OAuth/pairing/issuer epoch or signer rotation, logout/revoke, offline/forged readback, expired/invalid lease, malformed identity and repeated reconnect after ACK loss.
 
 Handoff state: **BLOCKED_external CAS/Native dispatch**. Do not merge the module into a runnable worker until independent signed authority, non-restorable CAS, cross-Hub adversarial test and physical Broker/Agent acceptance exist.
+
+## NEXT2 #35 pairing authority and durable UNKNOWN cross-review
+
+#35 DRAFT #818 distinguishes `self-host` / `cloud` pairing authority realms.
+The original #42 worker identity omitted this discriminator, permitting a
+foreign realm with otherwise matching device, signer and epochs to reach the
+generic CAS blocker rather than an explicit identity STOP. Now identity and
+authority readback require matching `pairingRealm`. The worker never issues,
+stores or redeems #35's one-use nonce or imports its unmerged source.
+
+The original #42 source returned STOP/BLOCKED for owner revoke, OAuth logout,
+pairing/issuer rotation, offline WSS or expiry **before** preserving whether
+an already-sent mutation had lost its OS ACK. The projection now carries
+`reconciliationRequired:true` plus original logicalMutationId/requestId/
+sourceSha through all those denial reasons. STOP denies the next mutation,
+not proof an earlier OS side effect never ran. This is checkpoint-derived
+forensic metadata only, NOT a physically durable journal or CAS. A rollback
+to `not_sent` cannot be detected without independent #01/#587 authority.
+
+Three new regressions, ten original tests retained. No Native dispatch,
+pairing writer, live Agent/WSS/D1/OAuth/Broker/VM or main merge.
