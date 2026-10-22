@@ -207,3 +207,53 @@ test('strict hosted start rejects a verifier without an atomic external final co
    assert.equal(fx.writes,0);
    assert.equal(fx.publishes,0);
  }));
+
+test('P0: lost final Native ACK publication UNKNOWN cannot be requeued by explicit new-Hub resume',
+  async()=>fixture(async root=>{
+    const f=rig('lost-publish-ack');
+    let leaseAcquires=0,stageReads=0;
+    const authority={
+      ...f.authority,
+      acquire:async (_job:unknown,mode:'new'|'resume')=>{
+        leaseAcquires++;
+        return {epoch:mode==='resume'?2:1,
+          token:'SYNTHETIC-ONLY-EXTERNAL-LEASE-XXXXXXXXXXXX'};
+      },
+    };
+    const remote={
+      ...f.remote,
+      read:async (...args:Parameters<typeof f.remote.read>)=>{
+        stageReads++;
+        return f.remote.read(...args);
+      },
+    };
+    const create=()=>new CrossDeviceTransferJobs(root,remote,{
+      requireExternalAuthority:true,authority,grants:f.grants,
+      requireAuthenticatedFinalReceipt:true,finalReceiptVerifier:f.verifier,
+    });
+    const first=create();
+    const started=await first.start(input);
+    await first.waitForIdle(started.id);
+    const old=await state(root,started.id);
+    assert.equal(old.state,'MUTATION_UNKNOWN');
+    assert.equal(old.errorCode,'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+    assert.equal(old.publication?.dispatched,true);
+    assert.equal(old.publication?.durableCommitId,undefined);
+    assert.equal(f.publishes,1);
+    const leaseBefore=leaseAcquires,readsBefore=stageReads;
+    const second=create();
+    await assert.rejects(second.start({...input,resumeTransferId:started.id}),
+      (err:unknown)=>err instanceof Error && 'code' in err &&
+        err.code==='TRANSFER_PUBLICATION_UNRESOLVED');
+    await second.waitForIdle(started.id);
+    const after=await state(root,started.id);
+    assert.equal(after.state,'MUTATION_UNKNOWN');
+    assert.equal(after.errorCode,old.errorCode);
+    assert.deepEqual(after.publication,old.publication);
+    assert.equal(after.bytesConfirmed,old.bytesConfirmed);
+    assert.equal((await second.status(started.id,input.accountId,
+      input.sourceDeviceId,input.targetDeviceId)).state,'MUTATION_UNKNOWN');
+    assert.equal(leaseAcquires,leaseBefore,'no new epoch used to restart an already dispatched publication');
+    assert.equal(stageReads,readsBefore,'no new source or stage readback');
+    assert.equal(f.publishes,1,'Native final effect may not be replayed');
+  }));

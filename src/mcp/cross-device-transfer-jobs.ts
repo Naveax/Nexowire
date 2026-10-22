@@ -352,6 +352,16 @@ export class CrossDeviceTransferJobs {
       if (job.sourcePath !== input.sourcePath || job.targetPath !== input.targetPath) {
         return fail('TRANSFER_RESUME_MISMATCH', 'Resume path identity does not match durable job.');
       }
+      // A Native publication request can have completed while its final ACK,
+      // external commit acknowledgement or local journal write was lost.
+      // Even an independently verified staged prefix does NOT authorize
+      // another dispatch or re-queue. Preserve the exact publication intent,
+      // forensic error and UNKNOWN state until an authoritative operator/
+      // external-commit reconciliation proves the original outcome.
+      if (job.publication && job.state !== 'COMPLETED') {
+        return fail('TRANSFER_PUBLICATION_UNRESOLVED',
+          'Native publication intent is unresolved; explicit prefix resume cannot replay it.');
+      }
       if (this.workers.has(job.id)) return this.public(job);
       if (job.state === 'COMPLETED' || job.state === 'CANCELLED' ||
           job.state === 'CANCEL_REQUESTED' || job.state === 'PUBLISHING') return this.public(job);
