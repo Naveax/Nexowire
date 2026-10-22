@@ -8,14 +8,21 @@
   "sourceSha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
   "parentQaPr": 744,
   "sourceCiCounts": {
-    "success": 12,
+    "success": 13,
     "failure": 3,
-    "pending": 1,
+    "pending": 0,
     "historical": {
-      "success": 11,
-      "failure": 5,
-      "pending": 0,
-      "reason": "#732 and #735 changed HEAD"
+      "initial": {
+        "success": 11,
+        "failure": 5,
+        "pending": 0
+      },
+      "intermediate": {
+        "success": 12,
+        "failure": 3,
+        "pending": 1
+      },
+      "reason": "#732/#735 rebased new HEADs and both latest CI have since completed SUCCESS"
     }
   },
   "baselineHistoricalLedgerCount": 138,
@@ -61,14 +68,14 @@
       "headSha": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
       "baseSha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
       "runId": 39735234697,
-      "status": "PENDING",
+      "status": "PASS",
       "prState": "OPEN_DRAFT",
       "requirements": [
         "R04",
         "R19",
         "R22"
       ],
-      "limitation": "CURRENT new HEAD CI IN_PROGRESS; PRIOR ea5f1f macOS cancelled full CI FAILURE belongs to superseded HEAD.",
+      "limitation": "CURRENT exact HEAD 9014449e complete full CI 39735234697 SUCCESS, signed Agent 1.0.5 rollback source only. Prior ea5f1f macOS job CANCELLED full CI FAILED is historical and not current.",
       "staging": "BLOCKED",
       "production": "BLOCKED",
       "originalIncident": "BLOCKED"
@@ -416,7 +423,9 @@
       "runId": 39677044173,
       "conclusion": "FAIL",
       "failure": "required macOS lifecycle CANCELLED",
-      "newHead": "9014449ef9f3513064d0cd42cb016e53a705fc6c"
+      "newHead": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+      "newRunId": 39735234697,
+      "newConclusion": "SUCCESS"
     },
     {
       "pr": 735,
@@ -432,7 +441,5 @@
     744,
     745
   ],
-  "currentPending": [
-    732
-  ]
+  "currentPending": []
 }

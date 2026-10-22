@@ -4,13 +4,13 @@
 
 ## Exact HEAD and CI review
 
-Latest exact SHA: 12 full CI SUCCESS / 3 FAILURE / 1 IN_PROGRESS (#732). The earlier 11 SUCCESS / 5 FAILURE / 0 pending snapshot belongs to superseded #732 and #735 heads. Each branch HEAD is distinct from main and other owners. One PR (#737) is CLOSED with its last exact-head CI FAILURE; closed is not automatically merged or green. Earlier #744 CI cannot be cleared from #743 independent source jobs.
+Latest exact SHA: **13 full CI SUCCESS / 3 FAILURE / zero pending**. Earlier 11 SUCCESS/5 FAIL and then 12 SUCCESS/3 FAIL/1 pending snapshots belonged to earlier #732/#735 HEAD or workflow states. Each branch HEAD is distinct from main and other owners. One PR (#737) is CLOSED with its last exact-head CI FAILURE; closed is not automatically merged or green. Earlier #744 CI cannot be cleared from #743 independent source jobs.
 
 | PR | Exact HEAD | Base HEAD | Run | Overall | Detail |
 |---|---|---|---|---|---|
 | #730 | 7da9f0619ff4 | 09c3dcaf2310 | 39676785591 | PASS | Replays unchanged #640/#651/#677/#704 against #725 Artifact cancel source; whole CI SUCCESS, but real native write/ACK physically unverified |
 | #731 | df239ce88f4b | 1d78a7a9174e | 39676999169 | PASS | Two-Hub revokeAndDrain late signed permit and external CAS fixture source success, not independently deployed monotonic witness |
-| #732 | 9014449ef9f3 | aec8a331ab6e | 39735234697 | PENDING | CURRENT new HEAD CI IN_PROGRESS; PRIOR ea5f1f macOS cancelled full CI FAILURE belongs to superseded HEAD. |
+| #732 | 9014449ef9f3 | aec8a331ab6e | 39735234697 | PASS | CURRENT exact HEAD 9014449e complete full CI 39735234697 SUCCESS, signed Agent 1.0.5 rollback source only. Prior ea5f1f macOS job CANCELLED full CI FAILED is historical and not current. |
 | #733 | 0f7c6af824c2 | b083004b9ab8 | 39677163113 | PASS | Protected-tree #709 Broker FILETIME/CAS hostile source checks green, not running physical signed HIGH Broker |
 | #734 | 5e2482bfe7cc | b083004b9ab8 | 39677224071 | PASS | Full CI SUCCESS plus independent QA19 Windows workflow 39677224212 SUCCESS; protected-tree fixture/100cycle source only |
 | #735 | d4c35e2a7ade | f730943fb239 | 39735083325 | PASS | CURRENT exact-head CI SUCCESS; PRIOR 5a2d1c TS18047/TS2339 full CI FAIL historical only. |
@@ -27,7 +27,7 @@ Latest exact SHA: 12 full CI SUCCESS / 3 FAILURE / 1 IN_PROGRESS (#732). The ear
 
 ## Three current FULL CI failures, and two superseded historical failures
 
-- **#732 superseded historical macOS cancellation:** OLD HEAD ea5f1f / CI 39677044173 overall FAILURE because required macOS job 119489514974 CANCELLED. NEW HEAD 9014449ef9f35 / CI 39735234697 remains IN_PROGRESS at last check, not failure or success yet. Do not transfer old cancelled status to new SHA.
+- **#732 new HEAD SUCCESS; prior macOS cancellation historical:** OLD ea5f1f CI 39677044173 FAILED when required macOS lifecycle job CANCELLED. NEW HEAD 9014449e CI 39735234697 SUCCESS source only. No production signed installer/rollback or high token proof.
 - **#735 superseded historical TypeScript regression:** OLD HEAD 5a2d1c / CI 39677340744 FAILED TS18047 (addr null) and TS2339 (AddressInfo.port) at single-slot-close-admission.test.ts:74. NEW HEAD d4c35e2a7a / CI 39735083325 SUCCESS source only. The historical bug is recorded, not attributed to current commit.
 - **#737 Windows separate streams:** CLOSED draft last CI 39677569353 FAIL. Windows Job separate stdin/stdout/stderr pipe test expected WINJOB_STDOUT but observed empty; source issue remains on that exact branch.
 - **#744 mandatory P0 RED plus Windows reattach:** run 39678517442 FAILURE: dedicated qa-independent-negative-acceptance job 119494574854 correctly FAILS seven source production contracts. They remain NONOPTIONAL: ROOT 15-minute signed lease issue-time bound, broad REAL Windows HIGH signed CORE executor, separately privileged authenticated signed Broker shell registration, typed Hyper-V vm.start currently STANDARD and absent scoped VM GUID Broker permit, #587 restored old journal accepts already-completed requestId, #588 onecall durable transfer start/status/cancel not advertised on main. Separately browser-live job 119494574903 fails Windows durable ProcessManager /NW_DURABLE_READY/ readback in 27.3sec; Node24 generic suite also fails required gates, Node22 cancelled. Do not call this all intentional or all an infrastructure flake.

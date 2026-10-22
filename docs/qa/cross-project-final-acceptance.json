@@ -3,7 +3,7 @@
   "capturedAt": "2026-10-22",
   "baselineSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "QA16 pinned main 754cc436; latest #730-745 exact head 12 CI SUCCESS, 3 FAIL, 1 IN_PROGRESS (#732). Initial 11/5 historical superseded by two changing heads. Real CORE HIGH token, #271/#551/#587 physical NO-GO, all 22 stage/production/incidents BLOCKED.",
+  "meaning": "QA16 pinned main 754cc436 exact PR #730-745 latest 13 full CI SUCCESS / 3 FAIL / 0 pending. Historical initial 11/5 and intermediate 12/3/1 superseded by changed #732/#735 heads. #744 seven mandatory P0 source gates and Windows durable READY real CI FAIL, #737/#745 Windows red. All physical acceptance 22/22 BLOCKED.",
   "requirements": [
     {
       "id": "R01",
@@ -483,7 +483,7 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#705/#717 inherited protected Broker importer ACL native red, #709/#707/#723 source green but #271 live legacy Modify and #551 first-party signed native installer/full rollback/once local UAC unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #732 PRIOR head ea5f1f required macOS lifecycle CANCELLED CI FAIL; CURRENT 9014449e run 39735234697 IN_PROGRESS. #739 source signed importer only, #551 signed actual rollback and #271 ACL remain NO-GO; #745 Windows Job red."
+          "evidence": "#705/#717 inherited protected Broker importer ACL native red, #709/#707/#723 source green but #271 live legacy Modify and #551 first-party signed native installer/full rollback/once local UAC unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #732 PRIOR head ea5f1f required macOS lifecycle CANCELLED full CI FAIL; CURRENT head 9014449e run 39735234697 SUCCESS source only. #739 signed CORE importer/epoch also source green but #271 real ACL, #551 genuine signed full rollback and local UAC remain production NO-GO; #745 Windows Job red."
         },
         "staging": {
           "status": "BLOCKED",
@@ -561,7 +561,7 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#729 exact full CI 39662119627 FAILURE: deliberate 7 P0 negatives in dedicated job; Node22 general required gate FAIL and Node24 cancelled; independently browser-live durable-process READY timeout. #721 new exact HEAD queued, cannot claim old green/red.\n[QA16 exact-head #730-#745, 2026-10-22]: CURRENT 12 full CI SUCCESS / 3 FAIL (#737 separate streams, #744 mandatory seven P0 negatives plus durable READY, #745 fast-exit iteration5) / 1 IN_PROGRESS (#732). Historical 11 SUCCESS/5 FAIL occurred before #732 and #735 changed HEAD; do not carry old results."
+          "evidence": "#729 exact full CI 39662119627 FAILURE: deliberate 7 P0 negatives in dedicated job; Node22 general required gate FAIL and Node24 cancelled; independently browser-live durable-process READY timeout. #721 new exact HEAD queued, cannot claim old green/red.\n[QA16 exact-head #730-#745, 2026-10-22]: CURRENT 13 exact-head full CI SUCCESS / 3 FAIL (#737 separate stdout streams, #744 seven mandatory P0 RED plus independent Windows durable READY, #745 fast-exit iteration5) / zero pending. Historical initial 11 SUCCESS/5 FAIL and intermediate 12/3/1 belonged to older SHA/run states; #732 and #735 new HEAD full CIs SUCCESS. None is physical CORE approval."
         },
         "staging": {
           "status": "BLOCKED",
@@ -777,13 +777,20 @@
     ],
     "exactHeads": 16,
     "sourceFullCi": {
-      "success": 12,
+      "success": 13,
       "failed": 3,
-      "pending": 1,
-      "initialHistorical": {
-        "success": 11,
-        "failed": 5,
-        "pending": 0
+      "pending": 0,
+      "historical": {
+        "initial": {
+          "success": 11,
+          "failed": 5,
+          "pending": 0
+        },
+        "intermediate": {
+          "success": 12,
+          "failed": 3,
+          "pending": 1
+        }
       }
     },
     "historicalLedgerEntriesUnchanged": 138,
