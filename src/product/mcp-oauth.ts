@@ -650,7 +650,7 @@ export class McpOAuthService {
           typeof issued.refresh_token !== 'string' ||
           !/^nwx_refresh_[A-Za-z0-9_-]{20,200}$/.test(issued.refresh_token) ||
           issued.access_token === issued.refresh_token ||
-          issued.scope !== 'mcp offline_access'
+          !['mcp offline_access', 'offline_access mcp'].includes(issued.scope)
         ) {
           // Unknown/partial receipts must NEVER cause fallback or replay.
           throw new Error('OAUTH_ATOMIC_REFRESH_RESPONSE_UNVERIFIED');
