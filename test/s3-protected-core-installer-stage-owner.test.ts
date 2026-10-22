@@ -596,9 +596,11 @@ test('missing independent sequence, forged provenance and stale task create time
 const authorityKey=generateKeyPairSync('ed25519');
 const dispatchFields=['schemaVersion','kind','ownerAccountId','deviceId',
  'transactionId','ownerEpoch','grantGeneration','challengeNonce',
- 'brokerSha256','processCreationIdentity','externalSequence'];
+ 'brokerSha256','stageManifestSha256','signedImportDagSha256',
+ 'rollbackSha256','dpapiBlobSha256',
+ 'processCreationIdentity','externalSequence'];
 function nativeFenceFixture(){
- const f=setup(),b=bootstrap(f),atomic=atomicFixture(f,b);
+ const f=setup(),b=bootstrap(f),atomic=atomicFixture(f,b),d=dagFixture(f);
  const sourcePaths=[...f.manifest.files.map(x=>x.path),b.ownerKey.blobPath];
  const items=new Set<string>();
  for(let p of sourcePaths){
@@ -629,15 +631,22 @@ function nativeFenceFixture(){
   authorityPublicKeyPem:authorityKey.publicKey.export({format:'pem',type:'spki'}).toString(),
   ownerAccountId:b.record.ownerAccountId,deviceId:b.record.deviceId,
   ownerEpoch:b.record.ownerEpoch,grantGeneration:4,
-  expectedChallengeNonce:'a'.repeat(64),minimumExternalSequence:50,
+  expectedChallengeNonce:'a'.repeat(64),
+  independentlyPinnedStageManifestSha256:f.pins.manifestSha256,
+  independentlyPinnedImportDagSha256:d.pins.independentGraphSha256,
+  minimumExternalSequence:50,
  };
  const permit:CoreInstallerDispatchPermit={
-  schemaVersion:1,kind:'core_installer_dispatch_permit_source_v1',
+  schemaVersion:2,kind:'core_installer_dispatch_permit_source_v2',
   ownerAccountId:b.record.ownerAccountId,deviceId:b.record.deviceId,
   transactionId:b.record.transactionId,
   ownerEpoch:b.record.ownerEpoch,grantGeneration:4,
   challengeNonce:pins.expectedChallengeNonce,
   brokerSha256:atomic.installedAfterCutover.sha256,
+  stageManifestSha256:f.pins.manifestSha256,
+  signedImportDagSha256:d.pins.independentGraphSha256,
+  rollbackSha256:atomic.previousRollbackAfter.sha256,
+  dpapiBlobSha256:b.ownerKey.blobSha256,
   processCreationIdentity:atomic.nativeTaskCreationIdentity,
   externalSequence:atomic.externalSequence,
  };
@@ -650,13 +659,13 @@ function nativeFenceFixture(){
   independentlyAuthenticated:true,singleUseReserved:true,
   revoked:false,unknownMutation:false,
  };
- return{f,b,atomic,acl,pins,permit,witness,resign:()=>{
+ return{f,b,d,atomic,acl,pins,permit,witness,resign:()=>{
   witness.signatureBase64=signature();
  }};
 }
 function fence(v:ReturnType<typeof nativeFenceFixture>){
  return assessCoreNativeAclAndDispatchSource(
-  v.f.manifest,v.b,v.atomic,v.acl,v.pins,v.witness);
+  v.f.manifest,v.f.pins,v.d.pins,v.b,v.atomic,v.acl,v.pins,v.witness);
 }
 test('native #709 v2 protected tree plus signed #712 epoch/nonce remain source-only, never privilege',()=>{
  const v=nativeFenceFixture();
@@ -701,4 +710,85 @@ test('signed external #712 ownerEpoch/grantGeneration/nonce and replay barrier r
  forged.witness.signedPermit.grantGeneration=4;
  forged.witness.signatureBase64=sign(null,Buffer.from('attacker'),authorityKey.privateKey).toString('base64');
  assert.throws(()=>fence(forged),/S3_CORE_DELEGATION_SIGNATURE_INVALID/);
+});
+
+
+test('signed installer root cannot be swapped for another #743 native protected-tree report',()=>{
+ const mutations=[
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.acl.protectedRoot='C:\\DifferentProtectedRoot';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.f.pins.trustedProtectedRoot='C:\\AnotherTrustedRoot';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.b.ownerKey.blobPath='C:\\Users\\Public\\old-dpapi-blob.bin';
+  },
+ ];
+ for(const mutation of mutations){
+  const v=nativeFenceFixture();mutation(v);
+  assert.throws(()=>fence(v),/NATIVE_ACL_V2_SIGNED_ROOT_MISMATCH/);
+ }
+});
+test('valid old CORE nonce permit cannot authorize a newly signed importer DAG or release manifest',()=>{
+ for(const mutate of [
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.f.pins.manifestSha256=H('re-signed-next-manifest');
+    v.pins.independentlyPinnedStageManifestSha256=v.f.pins.manifestSha256;
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.d.pins.independentGraphSha256=H('next-dll-import-closure');
+    v.pins.independentlyPinnedImportDagSha256=v.d.pins.independentGraphSha256;
+  },
+ ]){
+  const v=nativeFenceFixture();mutate(v);
+  assert.throws(()=>fence(v),/DISPATCH_PERMIT_OWNER_NONCE_EPOCH_STALE/);
+ }
+ const v=nativeFenceFixture();
+ v.pins.independentlyPinnedImportDagSha256=H('attacker-untrusted-dag-pin');
+ assert.throws(()=>fence(v),/SIGNED_IMPORT_RELEASE_SCOPE_MISMATCH/);
+ const legacy=nativeFenceFixture();
+ legacy.permit.schemaVersion=1 as 2;
+ legacy.permit.kind='core_installer_dispatch_permit_source_v1' as CoreInstallerDispatchPermit['kind'];
+ legacy.resign();
+ assert.throws(()=>fence(legacy),/DISPATCH_PERMIT_OWNER_NONCE_EPOCH_STALE/);
+});
+test('source permit rejects stale revoked SYSTEM DPAPI blob and mismatched signed rollback after cutover',()=>{
+ for(const mutate of [
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.permit.dpapiBlobSha256=H('revoked-previous-owner-dpapi-blob');
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.permit.rollbackSha256=H('unsigned-replacement-old-agent-image');
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.atomic.previousRollbackAfter.sha256=H('torn-rollback-after-atomic-replace');
+  },
+ ]){
+  const v=nativeFenceFixture();mutate(v);v.resign();
+  assert.throws(()=>fence(v),/DISPATCH_PERMIT_OWNER_NONCE_EPOCH_STALE|SIGNED_RELEASE_ATOMIC_READBACK_MISMATCH/);
+ }
+});
+
+test('signed CORE permit cannot bridge an unresolved atomic cutover or same-hash file-ID replacement',()=>{
+ for(const mutate of [
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.atomic.phase='write-dispatched-unknown';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.atomic.noPendingUnknownNativeMutation=false;
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.atomic.installedAfterCutover.fileIdentity='DIFFERENT_NATIVE_FILE_ID';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.atomic.previousRollbackAfter.fileIdentity='REPLACED_SIGNED_OLD_AGENT_ID';
+  },
+  (v:ReturnType<typeof nativeFenceFixture>)=>{
+    v.b.ownerKey.independentEpoch=v.b.record.ownerEpoch-1;
+  },
+ ]){
+  const v=nativeFenceFixture();mutate(v);
+  assert.throws(()=>fence(v),/SIGNED_RELEASE_ATOMIC_READBACK_MISMATCH/);
+ }
 });
