@@ -62,6 +62,9 @@ test('W26 Git commit-graph file nested symlink outside allowed root must deny be
   // Prove Git log actually parses the outside file, rather than simply
   // accepting a dangling link: corrupt and restore TEST-OWNED bytes.
   const original = await fs.readFile(external);
+  // Windows Git writes commit-graph with the read-only file attribute;
+  // clear it ONLY on this disposable graph for the transient parse witness.
+  await fs.chmod(external, 0o666);
   try {
     await fs.writeFile(external, 'W26_INVALID_SYNTHETIC_COMMIT_GRAPH');
     const witness = rawGit(['-C', root, 'log', '-1', '--format=%H']);
