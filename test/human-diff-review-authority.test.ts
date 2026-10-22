@@ -255,3 +255,46 @@ test('UNKNOWN logical mutation blocks re-review regardless of cloned request ID'
   assert.equal(d.status,'DENIED');
   assert.equal(d.canApply,false);
 });
+
+test('NEXT2: same-phase replay is SOURCE-ONLY, not durable one-use proof or patch admission',async()=>{
+  const h=harness();
+  // #795's isApprovalConsumed is a read-only dependency and #40 has no
+  // durable atomic consume operation. Deliberately demonstrate that source
+  // verification can be repeated with an unchanged ticket and snapshot.
+  const first=await inspect(h,'APPLY');
+  const repeated=await inspect(h,'APPLY');
+  assert.equal(first.status,'SOURCE_REVIEWED_NO_DISPATCH');
+  assert.equal(repeated.status,'SOURCE_REVIEWED_NO_DISPATCH');
+  assert.equal(h.accessCalls(),2);
+  for(const verdict of [first,repeated]){
+    assert.equal(verdict.canApply,false);
+    assert.equal(verdict.canUndo,false);
+    assert.equal(verdict.canLaunchElevated,false);
+    assert.equal(verdict.canBypassBroker,false);
+    assert.equal(verdict.effectiveElevatedPrivilege,false);
+  }
+  // Re-labeling the same signed APPLY source as #32 UNDO is denied BEFORE
+  // invoking the #04 source verifier, independent of UI review preferences.
+  const opposite=await inspect(h,'UNDO');
+  assert.equal(opposite.status,'DENIED');
+  assert.equal(opposite.reason,'INVALID_OR_FORGED_HUMAN_CONSENT');
+  assert.equal(h.accessCalls(),2);
+});
+
+test('NEXT2: #32 opaque approval ticket cannot be synthesized from #48 review intent',async()=>{
+  const h=harness();
+  const uiIntent={
+    kind:'NEXOWIRE_CODING_REVIEW_INTENT_REQUEST_V1',
+    requestedAction:'REVIEW_PATCH',signedApproval:false,
+    consumedApproval:false,canApply:false,canRollback:false,
+  };
+  const denied=await reviewHumanDiffConsent40(h.s.preview.identity.taskId,
+    'APPLY',{statement:uiIntent,signature:'signed-by-browser-preference'},
+    uiIntent,h.ports);
+  assert.equal(denied.status,'DENIED');
+  assert.equal(denied.sourceConsentVerified,false);
+  assert.equal(denied.canApply,false);
+  assert.equal(denied.canUndo,false);
+  assert.equal(denied.canLaunchElevated,false);
+  assert.equal(h.accessCalls(),0);
+});
