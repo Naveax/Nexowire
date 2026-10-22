@@ -235,3 +235,120 @@ test('ROOT T+900000ms: correctly signed T-1 permit cannot commit at deadline, ir
     'MUTATION_UNKNOWN','ROOT expiry/revoke cannot undo launched effect');
   assert.equal(cas2.syntheticNativeEffects.length,1);
 });
+
+
+test('#780 checkpoint stop: readback required after ambiguous commit and current owner epoch required before any resume or requestId substitution',()=>{
+  // TEST-ONLY loop acceptance; #780 is a P1 epic, not an implemented runner.
+  // This uses the same durable in-memory journal as the prior CAS tests.
+  // ACK, pid exit, release and publisher receipts are NOT immutable effect proof.
+  type Checkpoint={
+    taskId:string;requestId:string;ownerId:string;ownerEpoch:number;
+    grantGeneration:number;sessionEpoch:string;deviceId:string;
+    capability:string;effectFingerprint:string;nextStep:number;
+  };
+  type Stop={
+    state:'RECONCILE_REQUIRED';reason:
+      'READBACK_REQUIRED'|'CURRENT_OWNER_EPOCH_REQUIRED'|
+      'IMMUTABLE_REQUEST_ID_MISMATCH';
+    mayRetry:false;mayAdvanceCheckpoint:false;mayRefundQuota:false;
+    readbackRequired:true;
+  };
+  const task='qa25-synthetic-coding-task';
+  const fingerprint='e'.repeat(64);
+  function checkpoint(s:Scope):Checkpoint{
+    return {
+      taskId:task,requestId:s.requestId,ownerId:s.ownerId,
+      ownerEpoch:s.ownerEpoch,grantGeneration:s.grantGeneration,
+      sessionEpoch:s.sessionEpoch,deviceId:s.deviceId,
+      capability:'core.process.start',effectFingerprint:fingerprint,
+      nextStep:4,
+    };
+  }
+  function stopForResume(
+    cas:SharedExternalCommitOracle,staged:Checkpoint,
+    immutable:Checkpoint,readback:'UNAVAILABLE'|'BROKER_ACK_ONLY',
+  ):Stop{
+    const base={state:'RECONCILE_REQUIRED' as const,mayRetry:false as const,
+      mayAdvanceCheckpoint:false as const,mayRefundQuota:false as const,
+      readbackRequired:true as const};
+    const immutableKeys=[
+      'taskId','requestId','ownerId','ownerEpoch','grantGeneration',
+      'sessionEpoch','deviceId','capability','effectFingerprint',
+    ] as const;
+    const history=cas.history.get(immutable.requestId);
+    if(!history||immutableKeys.some(k=>staged[k]!==immutable[k])||
+       staged.nextStep!==immutable.nextStep||
+       staged.requestId!==history.scope.requestId||
+       staged.ownerId!==history.scope.ownerId||
+       staged.deviceId!==history.scope.deviceId||
+       staged.ownerEpoch!==history.scope.ownerEpoch||
+       staged.grantGeneration!==history.scope.grantGeneration||
+       staged.sessionEpoch!==history.scope.sessionEpoch){
+      return {...base,reason:'IMMUTABLE_REQUEST_ID_MISMATCH'};
+    }
+    // Reauthorization must be current from the independent epoch authority.
+    // A restored checkpoint itself is NOT an owner-epoch authority.
+    if(cas.ownerId!==immutable.ownerId||
+       cas.ownerEpoch!==immutable.ownerEpoch||
+       cas.generation!==immutable.grantGeneration||
+       cas.sessionEpoch!==immutable.sessionEpoch||
+       cas.revoking||cas.revoked){
+      return {...base,reason:'CURRENT_OWNER_EPOCH_REQUIRED'};
+    }
+    assert.ok(readback==='UNAVAILABLE'||readback==='BROKER_ACK_ONLY');
+    // Both reserved/never-sent-unproven and committed/ACK-lost states
+    // need an authenticated independent immutable readback before resume.
+    assert.ok(history.state==='MUTATION_UNKNOWN'||
+      history.state==='RESERVED_UNPROVEN_NO_EFFECT');
+    return {...base,reason:'READBACK_REQUIRED'};
+  }
+
+  assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
+  const when=ROOT_START+42_000;
+
+  // Revocation wins after reserve: ZERO effect; without independent no-send
+  // proof, the coding loop still must not claim cancellation or resume.
+  const first=new SharedExternalCommitOracle(),s=older();
+  const stalePermit=first.reserve(s,when);
+  assert.ok(stalePermit);
+  const firstCheckpoint=checkpoint(s);
+  assert.equal(stopForResume(first,firstCheckpoint,firstCheckpoint,'UNAVAILABLE').reason,
+    'READBACK_REQUIRED');
+  first.atomicRevokeStart();
+  assert.equal(first.atomicCommitAtEffectBoundary(stalePermit,when+1),false);
+  assert.equal(first.syntheticNativeEffects.length,0);
+  assert.equal(stopForResume(first,firstCheckpoint,firstCheckpoint,'BROKER_ACK_ONLY').reason,
+    'CURRENT_OWNER_EPOCH_REQUIRED');
+  assert.equal(first.getState(s),'RESERVED_UNPROVEN_NO_EFFECT');
+
+  // Other linearization: effect committed, then ACK lost and independent
+  // readback unavailable. A restored checkpoint must stop, never replay.
+  const second=new SharedExternalCommitOracle();
+  const p=second.reserve(s,when);
+  assert.ok(p);
+  const durable=checkpoint(s);
+  assert.equal(second.atomicCommitAtEffectBoundary(p,when+1),true);
+  const originalEffectCount=second.syntheticNativeEffects.length;
+  for(const witness of ['UNAVAILABLE','BROKER_ACK_ONLY'] as const){
+    const decision=stopForResume(second,durable,durable,witness);
+    assert.deepEqual(decision,{
+      state:'RECONCILE_REQUIRED',reason:'READBACK_REQUIRED',
+      mayRetry:false,mayAdvanceCheckpoint:false,mayRefundQuota:false,
+      readbackRequired:true,
+    });
+  }
+  second.atomicRevokeStart();
+  second.drainAckLost(); // Drain receipt != OS postcondition.
+  second.rePairOtherOwner();
+  assert.equal(stopForResume(second,durable,durable,'UNAVAILABLE').reason,
+    'CURRENT_OWNER_EPOCH_REQUIRED');
+  assert.equal(stopForResume(second,{
+    ...durable,ownerId:'owner-B',ownerEpoch:26,grantGeneration:9,
+    sessionEpoch:'session-B',requestId:NEW_REQUEST,nextStep:5,
+  },durable,'UNAVAILABLE').reason,'IMMUTABLE_REQUEST_ID_MISMATCH');
+  assert.equal(second.readImmutablePostcondition(s,'UNAVAILABLE'),'MUTATION_UNKNOWN');
+  assert.equal(second.atomicCommitAtEffectBoundary(p,when+2),false);
+  assert.equal(second.syntheticNativeEffects.length,originalEffectCount);
+  assert.equal(second.history.size,1,'resume created no replacement request or checkpoint');
+  assert.equal(second.getState(s),'MUTATION_UNKNOWN');
+});
