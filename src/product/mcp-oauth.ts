@@ -48,6 +48,16 @@ export interface McpOAuthServiceOptions {
       requestedResource: string;
     }): Promise<McpOAuthTokenResponse>;
   };
+  /**
+   * Mandatory alongside epoch-atomic refresh: joined owner-session epoch
+   * verification for access tokens. No legacy getAccessToken fallback.
+   * This is server-side OAuth identity, NEVER Windows CORE authority.
+   */
+  epochAccessVerifier?: {
+    authenticateAccessToken(
+      token: string,
+    ): Promise<(McpAccessIdentity & { sessionEpoch: number }) | null>;
+  };
 }
 
 export interface McpOAuthTokenResponse {
@@ -276,6 +286,7 @@ export class McpOAuthService {
   readonly resource: string;
   private readonly now: () => Date;
   private readonly epochAtomicRefresh?: McpOAuthServiceOptions['epochAtomicRefresh'];
+  private readonly epochAccessVerifier?: McpOAuthServiceOptions['epochAccessVerifier'];
 
   constructor(
     private readonly store: McpOAuthStore,
@@ -296,8 +307,10 @@ export class McpOAuthService {
     );
     this.now = options.now ?? (() => new Date());
     if (
-      (options.refreshMode === 'epoch-atomic' && !options.epochAtomicRefresh) ||
-      (options.refreshMode !== 'epoch-atomic' && options.epochAtomicRefresh) ||
+      (options.refreshMode === 'epoch-atomic' &&
+        (!options.epochAtomicRefresh || !options.epochAccessVerifier)) ||
+      (options.refreshMode !== 'epoch-atomic' &&
+        (options.epochAtomicRefresh || options.epochAccessVerifier)) ||
       (options.refreshMode !== undefined &&
         options.refreshMode !== 'legacy' &&
         options.refreshMode !== 'epoch-atomic')
@@ -305,6 +318,7 @@ export class McpOAuthService {
       throw new Error('OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED');
     }
     this.epochAtomicRefresh = options.epochAtomicRefresh;
+    this.epochAccessVerifier = options.epochAccessVerifier;
   }
 
   protectedResourceMetadata(): Record<string, unknown> {
@@ -498,6 +512,36 @@ export class McpOAuthService {
       /[\r\n\0]/.test(value)
     ) {
       return null;
+    }
+
+    if (this.epochAccessVerifier) {
+      // This trusted verifier joins the access row to the CURRENT owner's
+      // unlocked session generation. An unexpired legacy/stale access token
+      // must not survive owner logout, re-pair or epoch rollover.
+      // Provider failure is an infrastructure error, not a license to try
+      // the legacy store. Verify the client/resource/scope shape as well.
+      const identity = await this.epochAccessVerifier.authenticateAccessToken(value);
+      if (
+        !identity ||
+        typeof identity.accountId !== 'string' ||
+        !identity.accountId ||
+        typeof identity.clientId !== 'string' ||
+        !identity.clientId ||
+        identity.resource !== this.resource ||
+        !Number.isSafeInteger(identity.sessionEpoch) ||
+        identity.sessionEpoch < 0 ||
+        !Array.isArray(identity.scopes) ||
+        !identity.scopes.includes('mcp') ||
+        identity.scopes.some(
+          (scope) => typeof scope !== 'string' || !ALLOWED_SCOPES.has(scope),
+        )
+      ) return null;
+      return {
+        accountId: identity.accountId,
+        clientId: identity.clientId,
+        resource: this.resource,
+        scopes: [...identity.scopes],
+      };
     }
 
     const record = await this.store.getAccessToken(
