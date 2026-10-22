@@ -67,6 +67,9 @@ export const SecureTaskCheckpointSchema = z.strictObject({
   if (c.approvals.some(a => a.grantScopeDigest !== c.scope.signedGrantScopeDigest ||
       a.approvalEpoch !== c.scope.ownerEpoch))
     ctx.addIssue({code: 'custom', message: 'APPROVAL_GRANT_SCOPE_MISMATCH'});
+  if (c.mutation.originalErrorCode === 'MUTATION_STATE_UNKNOWN' &&
+      !c.mutation.pendingUnknown)
+    ctx.addIssue({code: 'custom', message: 'UNKNOWN_ORIGINAL_ERROR_MUST_STICK'});
   if (c.mutation.pendingUnknown && !c.mutation.originalErrorCode)
     ctx.addIssue({code: 'custom', message: 'ORIGINAL_ERROR_REQUIRED'});
   if (new Set(c.approvals.map(a => a.approvalId)).size !== c.approvals.length)
@@ -111,13 +114,13 @@ function preserve(previous: SecureTaskCheckpoint, next: SecureTaskCheckpoint): v
       n.toolsUsed < p.toolsUsed || n.elapsedMs < p.elapsedMs)
     fail('BUDGET_RESET');
   if (previous.cancelled && !next.cancelled) fail('CANCELLATION_ERASED');
-  if (previous.mutation.originalErrorCode &&
-      next.mutation.originalErrorCode !== previous.mutation.originalErrorCode)
-    fail('ORIGINAL_ERROR_ERASED');
   if (previous.mutation.pendingUnknown && (!next.mutation.pendingUnknown ||
       next.mutation.originalErrorCode !== previous.mutation.originalErrorCode ||
       next.mutation.state !== previous.mutation.state))
     fail('UNKNOWN_PROVENANCE_ERASED');
+  if (previous.mutation.originalErrorCode &&
+      next.mutation.originalErrorCode !== previous.mutation.originalErrorCode)
+    fail('ORIGINAL_ERROR_ERASED');
   if (!same(next.approvals.slice(0, previous.approvals.length), previous.approvals))
     fail('APPROVAL_HISTORY_ERASED');
   if (!same(next.ciWitnesses.slice(0, previous.ciWitnesses.length), previous.ciWitnesses))
