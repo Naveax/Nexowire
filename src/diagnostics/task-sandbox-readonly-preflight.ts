@@ -71,6 +71,14 @@ export interface ProcessBoundaryReadback {
   readonly environmentSecretsIsolated: Evidence;
   readonly gitHooksConstrained: Evidence;
 }
+/** Advisory only: even positive injected claims do NOT attest safe Git execution. */
+export interface GitReadback {
+  readonly discoveredRootWithinScopedGrant: Evidence;
+  readonly linkedWorktreeGitdirAndCommonDirScoped: Evidence;
+  readonly fsmonitorAndHookExecutionDisabled: Evidence;
+  readonly gitConfigAndEnvironmentSanitized: Evidence;
+  readonly gitSubprocessesContained: Evidence;
+}
 export interface RemoteWorkerReadback {
   readonly workerIdentityEnrolled: Evidence;
   readonly ownerDeviceSessionAuthenticated: Evidence;
@@ -87,6 +95,7 @@ export interface ReadonlyTaskPreflightInput {
   readonly platform?: PlatformReadback;
   readonly process?: ProcessBoundaryReadback;
   readonly remote?: RemoteWorkerReadback;
+  readonly git?: GitReadback;
   /** The existing #733 OS-high evidence comparer, not another signature verifier. */
   readonly broker?: ReadonlyEvidenceProviders;
   readonly expectedBroker: BrokerExpectation;
@@ -107,6 +116,8 @@ export type PreflightReason =
   | 'PATH_FILTER_NOT_PROCESS_ISOLATION'
   | 'WINDOWS_JOB_NOT_FULL_SANDBOX'
   | 'PROCESS_ISOLATION_NOT_VERIFIED'
+  | 'GIT_DISCOVERED_ROOT_NOT_VERIFIED'
+  | 'GIT_SUBPROCESS_SANITIZATION_NOT_VERIFIED'
   | 'REMOTE_WORKER_PROVIDER_UNAVAILABLE'
   | 'REMOTE_WORKER_ELIGIBILITY_NOT_VERIFIED'
   | 'INSTALLED_HIGH_BROKER_NOT_PROVEN'
@@ -127,6 +138,10 @@ export interface ReadonlyTaskPreflight {
   readonly diskReservation: 'NOT_PROVEN';
   readonly diskBudget: 'UNAVAILABLE' | 'INSUFFICIENT' | 'REPORTED_UNATTESTED';
   readonly platformCapabilities: 'NOT_VERIFIED' | 'REPORTED_UNATTESTED';
+  /** In-scope cwd cannot attest Git-discovered root, linked gitdir or commondir. */
+  readonly gitRootScope: 'NOT_PROVEN';
+  /** Git status may execute fsmonitor/config subprocesses without sanitization. */
+  readonly safeGitExecution: 'NOT_PROVEN';
   readonly processIsolation: 'NOT_PROVEN';
   readonly remoteWorkerEligibility: 'NOT_PROVEN';
   readonly installedHighBroker: 'NOT_PROVEN';
@@ -223,6 +238,25 @@ export async function inspectReadonlyTaskSandboxPreflight(
     add('PLATFORM_CAPABILITY_NOT_VERIFIED');
   }
 
+  // The existing workspace.snapshot executor currently expands scope via
+  // git --show-toplevel and can run repository-controlled core.fsmonitor.
+  // Neither PathPolicy nor a platform "git" flag proves these side effects safe.
+  // workspace.snapshot is deliberately NOT an approved capability here.
+  const gitRelevant = req.capability === 'git.status' ||
+    String(req.capability) === 'workspace.snapshot';
+  if (gitRelevant) {
+    const git = input.git;
+    if (!git || !verified(git.discoveredRootWithinScopedGrant) ||
+        !verified(git.linkedWorktreeGitdirAndCommonDirScoped)) {
+      add('GIT_DISCOVERED_ROOT_NOT_VERIFIED');
+    }
+    if (!git || !verified(git.fsmonitorAndHookExecutionDisabled) ||
+        !verified(git.gitConfigAndEnvironmentSanitized) ||
+        !verified(git.gitSubprocessesContained)) {
+      add('GIT_SUBPROCESS_SANITIZATION_NOT_VERIFIED');
+    }
+  }
+
   const proc = input.process;
   if (!proc) add('PROCESS_BOUNDARY_PROVIDER_UNAVAILABLE');
   else {
@@ -286,6 +320,8 @@ export async function inspectReadonlyTaskSandboxPreflight(
     platformCapabilities: p && p.platform !== 'unknown' &&
       verified(platformFlag(p, req.capability))
         ? 'REPORTED_UNATTESTED' : 'NOT_VERIFIED',
+    gitRootScope: 'NOT_PROVEN',
+    safeGitExecution: 'NOT_PROVEN',
     processIsolation: 'NOT_PROVEN',
     remoteWorkerEligibility: 'NOT_PROVEN',
     installedHighBroker: 'NOT_PROVEN',
