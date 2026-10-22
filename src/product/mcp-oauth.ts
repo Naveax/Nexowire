@@ -34,6 +34,20 @@ export interface McpOAuthServiceOptions {
   issuer: string;
   resource: string;
   now?: () => Date;
+  /**
+   * Explicit, trusted issuer-side opt-in only. When enabled, refresh MUST
+   * be handled by one durable owner-epoch-aware atomic authority; a missing
+   * authority fails startup rather than falling back to legacy issuance.
+   * Production Worker wiring and D1 migration are NOT changed here.
+   */
+  refreshMode?: 'legacy' | 'epoch-atomic';
+  epochAtomicRefresh?: {
+    rotate(input: {
+      refreshToken: string;
+      clientId: string;
+      requestedResource: string;
+    }): Promise<McpOAuthTokenResponse>;
+  };
 }
 
 export interface McpOAuthTokenResponse {
@@ -261,6 +275,7 @@ export class McpOAuthService {
   readonly issuer: string;
   readonly resource: string;
   private readonly now: () => Date;
+  private readonly epochAtomicRefresh?: McpOAuthServiceOptions['epochAtomicRefresh'];
 
   constructor(
     private readonly store: McpOAuthStore,
@@ -280,6 +295,16 @@ export class McpOAuthService {
       },
     );
     this.now = options.now ?? (() => new Date());
+    if (
+      (options.refreshMode === 'epoch-atomic' && !options.epochAtomicRefresh) ||
+      (options.refreshMode !== 'epoch-atomic' && options.epochAtomicRefresh) ||
+      (options.refreshMode !== undefined &&
+        options.refreshMode !== 'legacy' &&
+        options.refreshMode !== 'epoch-atomic')
+    ) {
+      throw new Error('OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED');
+    }
+    this.epochAtomicRefresh = options.epochAtomicRefresh;
   }
 
   protectedResourceMetadata(): Record<string, unknown> {
@@ -603,6 +628,53 @@ export class McpOAuthService {
         'invalid_grant',
         'Refresh token is invalid.',
       );
+    }
+
+    if (this.epochAtomicRefresh) {
+      // This is the same McpOAuthService used by /oauth/token. In opt-in
+      // mode do NOT read/consume the legacy store or mint tokens separately.
+      // The injected authority must atomically consume old refresh, check
+      // owner epoch and insert the replacement token pair in shared storage.
+      const clientId = requireClientId(form.get('client_id'));
+      const resource = requireResource(form.get('resource'), this.resource);
+      try {
+        const issued = await this.epochAtomicRefresh.rotate({
+          refreshToken, clientId, requestedResource: resource,
+        });
+        if (
+          !issued ||
+          issued.token_type !== 'Bearer' ||
+          issued.expires_in !== ACCESS_TTL_SECONDS ||
+          typeof issued.access_token !== 'string' ||
+          !/^nwx_mcp_[A-Za-z0-9_-]{20,200}$/.test(issued.access_token) ||
+          typeof issued.refresh_token !== 'string' ||
+          !/^nwx_refresh_[A-Za-z0-9_-]{20,200}$/.test(issued.refresh_token) ||
+          issued.access_token === issued.refresh_token ||
+          !['mcp offline_access', 'offline_access mcp'].includes(issued.scope)
+        ) {
+          // Unknown/partial receipts must NEVER cause fallback or replay.
+          throw new Error('OAUTH_ATOMIC_REFRESH_RESPONSE_UNVERIFIED');
+        }
+        return issued;
+      } catch (error) {
+        if (error instanceof McpOAuthError) throw error;
+        // These are the three *explicit* denial messages from the reviewed
+        // source-level epoch CAS. Do not reclassify an unknown DB outage,
+        // missing ACK or malformed receipt as a user grant rejection.
+        if (
+          error instanceof Error &&
+          [
+            'Invalid OAuth refresh grant',
+            'OAuth refresh credential unavailable',
+            'OAuth refresh session epoch unavailable',
+          ].includes(error.message)
+        ) {
+          throw new McpOAuthError(
+            'invalid_grant', 'Refresh grant is unavailable.',
+          );
+        }
+        throw error;
+      }
     }
 
     const record = await this.store.getRefreshToken(

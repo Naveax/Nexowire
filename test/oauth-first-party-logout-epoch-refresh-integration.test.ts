@@ -10,7 +10,8 @@ import {
 } from '../src/product/d1-control-plane-store.js';
 import {ControlPlaneService} from '../src/product/control-plane-service.js';
 import {D1McpOAuthStore} from '../src/product/d1-mcp-oauth-store.js';
-import {McpOAuthService} from '../src/product/mcp-oauth.js';
+import {McpOAuthService,McpOAuthError} from '../src/product/mcp-oauth.js';
+import {MemoryMcpOAuthStore} from '../src/product/memory-mcp-oauth-store.js';
 import {FirstPartyMcpOAuthLogoutBoundary} from '../src/product/mcp-oauth-first-party-logout.js';
 import {ProposedMcpOAuthSessionEpoch} from '../src/product/mcp-oauth-session-epoch-proposal.js';
 import {ProposedMcpOAuthEpochAtomicRefresh} from '../src/product/mcp-oauth-atomic-epoch-refresh-proposal.js';
@@ -151,17 +152,26 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
       'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
     ).get(ownerA) as {n:number}).n;
     const rotator=new ProposedMcpOAuthEpochAtomicRefresh({db,resource,now:()=>at});
-    const rotate=(refresh:string)=>rotator.rotate({
-      refreshToken:refresh,clientId:client,requestedResource:resource,
+    // Exercise the *actual* McpOAuthService.token() routing, not just the
+    // staging proposal directly. A selected epoch-atomic authority cannot
+    // fall back to legacy consumeRefreshToken/issueTokens on denial.
+    const strictIssuer=new McpOAuthService(new D1McpOAuthStore(db),{
+      issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+      refreshMode:'epoch-atomic',epochAtomicRefresh:rotator,
     });
+    const rotate=(refresh:string)=>strictIssuer.token(new URLSearchParams({
+      grant_type:'refresh_token',refresh_token:refresh,
+      client_id:client,resource,
+    }));
     // Concurrent retries of an already revoked refresh may never mint a
     // new token or unlock the session. This is an expected fail-closed path.
     const replay=await Promise.allSettled(Array.from({length:8},()=>rotate(a.refresh)));
     assert.equal(replay.filter(x=>x.status==='fulfilled').length,0);
     for(const denial of replay) {
       assert.equal(denial.status,'rejected');
-      assert.match(String((denial as PromiseRejectedResult).reason),
-        /OAuth refresh credential unavailable/);
+      const reason=(denial as PromiseRejectedResult).reason;
+      assert.equal(reason instanceof McpOAuthError,true);
+      assert.equal((reason as McpOAuthError).code,'invalid_grant');
     }
     assert.equal((sqlite.prepare(
       'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
@@ -169,10 +179,105 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
     assert.equal(refreshRow(a.refresh).revoked_at,at.toISOString());
     const unrelated=await rotate(b.refresh);
     assert.match(unrelated.access_token,/^nwx_mcp_/);
+    assert.ok(unrelated.refresh_token,'atomic refresh must issue the next refresh grant');
     assert.match(unrelated.refresh_token,/^nwx_refresh_/);
     const row=sqlite.prepare(
       'SELECT account_id FROM mcp_oauth_access_tokens WHERE token_hash=?'
     ).get(digest(unrelated.access_token)) as {account_id:string};
     assert.equal(row.account_id,ownerB);
   } finally {sqlite.close()}
+});
+
+
+test('strict issuer refresh refuses missing authority, unknown DB failure and any legacy fallback',async()=>{
+  const store=new MemoryMcpOAuthStore();
+  const options={issuer:'https://mcp-issuer.invalid',resource,now:()=>at};
+  assert.throws(()=>new McpOAuthService(store,{
+    ...options,refreshMode:'epoch-atomic',
+  }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
+  assert.throws(()=>new McpOAuthService(store,{
+    ...options,epochAtomicRefresh:{rotate:async()=>{throw Error('unreachable')}},
+  }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
+
+  const old='nwx_refresh_'+('Z'.repeat(43));
+  await store.putRefreshToken({
+    tokenHash:digest(old),clientId:client,accountId:ownerA,resource,
+    scopes:['mcp','offline_access'],
+    expiresAt:new Date(at.getTime()+3600_000).toISOString(),
+    revokedAt:null,createdAt:at.toISOString(),
+  });
+  let calls=0;
+  const strict=new McpOAuthService(store,{
+    ...options,refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{
+      async rotate(){calls++;throw Error('SYNTHETIC_D1_UNAVAILABLE')},
+    },
+  });
+  const form=new URLSearchParams({
+    grant_type:'refresh_token',refresh_token:old,client_id:client,resource,
+  });
+  await assert.rejects(strict.token(form),/SYNTHETIC_D1_UNAVAILABLE/);
+  assert.equal(calls,1);
+  // The inserted legacy refresh is still unused. Never mint a fallback
+  // token pair or retry a possibly committed remote atomic mutation.
+  assert.equal((await store.getRefreshToken(digest(old)))?.revokedAt,null);
+  assert.equal(await store.getAccessToken(digest('synthetic-new-access')),null);
+
+  const forged=new McpOAuthService(store,{
+    ...options,refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{async rotate(){return {
+      access_token:'invalid',
+      refresh_token:'invalid',
+      token_type:'Bearer' as const,expires_in:3600,scope:'mcp offline_access',
+    }}},
+  });
+  await assert.rejects(forged.token(form),/OAUTH_ATOMIC_REFRESH_RESPONSE_UNVERIFIED/);
+  assert.equal((await store.getRefreshToken(digest(old)))?.revokedAt,null);
+});
+
+test('strict issuer checks resource before calling trusted atomic refresher',async()=>{
+  const store=new MemoryMcpOAuthStore();
+  let touched=0;
+  const strict=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{async rotate(){touched++;throw Error('unreachable')}},
+  });
+  for(const fields of [
+    {client_id:client,resource:'https://other.invalid/mcp'},
+    {client_id:'',resource},
+  ]) {
+    await assert.rejects(strict.token(new URLSearchParams({
+      grant_type:'refresh_token',refresh_token:'nwx_refresh_'+('A'.repeat(44)),
+      ...fields,
+    })),(error:unknown)=>error instanceof McpOAuthError);
+  }
+  assert.equal(touched,0);
+});
+
+
+test('issuer accepts both valid refresh scope orders from a trusted atomic authority',async()=>{
+  const store=new MemoryMcpOAuthStore();
+  const service=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{
+      async rotate(){
+        return {
+          access_token:'nwx_mcp_'+('X'.repeat(44)),
+          refresh_token:'nwx_refresh_'+('Y'.repeat(44)),
+          token_type:'Bearer',expires_in:3600,
+          scope:'offline_access mcp',
+        };
+      },
+    },
+  });
+  const grant=await service.token(new URLSearchParams({
+    grant_type:'refresh_token',
+    refresh_token:'nwx_refresh_'+('Z'.repeat(44)),
+    client_id:client,resource,
+  }));
+  assert.equal(grant.scope,'offline_access mcp');
+  // The delegated authority is the only possible issuer in strict mode.
+  assert.equal((await store.getRefreshToken(digest('nwx_refresh_'+('Z'.repeat(44))))),null);
 });
