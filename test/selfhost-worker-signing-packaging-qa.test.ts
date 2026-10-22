@@ -193,9 +193,16 @@ test('#41 rejects path traversal, case collision, symlink and directory in packa
   assert.equal(verifyFixturePackage(dir,pkg,key.publicKey,7),false);
   pkg.manifest.files.pop();resign(pkg,key);
   rmSync(path.join(dir,'engine.dll'));
-  symlinkSync(path.join(dir,'coding-worker.exe'),path.join(dir,'engine.dll'));
-  assert.equal(verifyFixturePackage(dir,pkg,key.publicKey,7),false);
-  rmSync(path.join(dir,'engine.dll'));
+  // On Windows, a normal test-user may not have symlink creation privileges.
+  // A directory substitute must still be rejected without needing that right.
+  try {
+    symlinkSync(path.join(dir,'coding-worker.exe'),path.join(dir,'engine.dll'));
+    assert.equal(verifyFixturePackage(dir,pkg,key.publicKey,7),false);
+    rmSync(path.join(dir,'engine.dll'));
+  } catch (error) {
+    const code=(error as NodeJS.ErrnoException).code;
+    if (process.platform !== 'win32' || !['EPERM','EACCES'].includes(code || '')) throw error;
+  }
   mkdirSync(path.join(dir,'engine.dll'));
   assert.equal(verifyFixturePackage(dir,pkg,key.publicKey,7),false);
 }));
