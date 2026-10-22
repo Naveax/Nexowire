@@ -121,6 +121,10 @@ export interface ReadonlyTaskPreflight {
   readonly requiredPrivilege: TaskRequest['requiredPrivilege'];
   readonly status: 'BLOCKED' | 'REVIEW_ONLY';
   readonly taskRoot: 'NOT_VERIFIED' | 'REPORTED_UNATTESTED';
+  /** A reported in-scope path is not OS-backed filesystem confinement. */
+  readonly filesystemContainment: 'NOT_PROVEN';
+  /** Free bytes or an injected reservation flag never proves a durable lease. */
+  readonly diskReservation: 'NOT_PROVEN';
   readonly diskBudget: 'UNAVAILABLE' | 'INSUFFICIENT' | 'REPORTED_UNATTESTED';
   readonly platformCapabilities: 'NOT_VERIFIED' | 'REPORTED_UNATTESTED';
   readonly processIsolation: 'NOT_PROVEN';
@@ -276,6 +280,8 @@ export async function inspectReadonlyTaskSandboxPreflight(
     requiredPrivilege: req.requiredPrivilege,
     status: reasons.size === 1 ? 'REVIEW_ONLY' : 'BLOCKED',
     taskRoot,
+    filesystemContainment: 'NOT_PROVEN',
+    diskReservation: 'NOT_PROVEN',
     diskBudget,
     platformCapabilities: p && p.platform !== 'unknown' &&
       verified(platformFlag(p, req.capability))
