@@ -33,7 +33,8 @@ const req = {
   sourcePath: '/synthetic/source-21', targetPath: '/synthetic/final-21',
 };
 type Mode = 'current' | 'revoke-before-external-commit' |
-  'foreign-native-issuer' | 'lost-destination-readback';
+  'foreign-native-issuer' | 'lost-destination-readback' |
+  'forged-second-write-ack';
 type Ledger = {
   ownerEpoch: number; grantGeneration: number; sessionEpoch: string;
   committed?: {
@@ -176,8 +177,14 @@ function rig(file: string, mode: Mode) {
       assert.equal(env.offset, stage.length);
       assert.equal(env.sha256, digest(chunk));
       stage = Buffer.concat([stage, chunk]); writes++;
-      return { requestId: env.requestId, epoch: env.epoch,
-        offset: env.offset, length: env.length, sha256: env.sha256 };
+      return {
+        // The second Native mutation may have happened, but this signed-
+        // looking ACK must NOT be credited to its immutable pending intent.
+        requestId: mode === 'forged-second-write-ack' && env.offset === 65_536
+          ? randomUUID() : env.requestId,
+        epoch: env.epoch, offset: env.offset,
+        length: env.length, sha256: env.sha256,
+      };
     },
     publishFenced: async (job, epoch, _token, requestId) => {
       assert.ok(requestId);
@@ -377,4 +384,37 @@ test('#21 #768+#770: lost independently readable final target effect means UNKNO
     assert.equal((await jobRecord(root, started.id)).publication?.requestId,
       failed.publication?.requestId);
     assert.equal(f.publishes, 1, 'the possibly completed Native effect must never be replayed');
+  }));
+
+
+test('#21 #768+#770: forged second Native chunk ACK keeps dispatched UNKNOWN and never starts final CAS',
+  { timeout: 15_000 }, async () => isolated(async (root, authorityFile) => {
+    const f = rig(authorityFile, 'forged-second-write-ack'), firstHub = f.hub(root);
+    const started = await firstHub.start(req);
+    await firstHub.waitForIdle(started.id);
+    const unknown = await jobRecord(root, started.id);
+    assert.equal(unknown.state, 'MUTATION_UNKNOWN');
+    assert.equal(unknown.errorCode, 'FORGED_WRITE_RECEIPT');
+    assert.equal(unknown.bytesConfirmed, 65_536, 'forged second ACK must not be credited');
+    assert.equal(unknown.pending?.offset, 65_536);
+    assert.equal(unknown.pending?.length, bytes.length - 65_536);
+    assert.equal(unknown.pending?.dispatched, true);
+    assert.equal(unknown.pending?.sha256, digest(bytes.subarray(65_536)));
+    assert.ok(unknown.pending?.requestId);
+    assert.equal(unknown.publication, undefined, 'no final request may be reserved');
+    assert.equal(f.writes, 2, 'both Native chunk effects were simulated exactly once');
+    assert.equal(f.publishes, 0);
+    assert.equal(f.verifies, 0);
+    assert.equal(f.commitAttempts, 0);
+    assert.equal((await f.ledger()).committed, undefined);
+    const secondHub = f.hub(root);
+    assert.equal((await secondHub.cancel(started.id, req.accountId,
+      req.sourceDeviceId, req.targetDeviceId)).state, 'MUTATION_UNKNOWN');
+    const preserved = await jobRecord(root, started.id);
+    assert.equal(preserved.errorCode, 'FORGED_WRITE_RECEIPT');
+    assert.equal(preserved.pending?.requestId, unknown.pending?.requestId);
+    assert.equal(preserved.pending?.sha256, unknown.pending?.sha256);
+    assert.equal(f.writes, 2, 'another Hub must not replay the unknown side effect');
+    assert.equal(f.publishes, 0);
+    assert.equal(f.commitAttempts, 0);
   }));
