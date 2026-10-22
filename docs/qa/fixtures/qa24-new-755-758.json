@@ -1,0 +1,109 @@
+{
+  "nodes": [
+    {
+      "pr": 755,
+      "head_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+      "head_ref": "fix/12-signed-release-dag-permit-v2-20261022",
+      "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "base_ref": "fix/12-native-acl-dispatch-permit-source-20261022",
+      "ci": {
+        "run_id": 39736251296,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6316643684755f9b4e227de13323aaac26077e4d"
+      },
+      "files": [
+        "docs/s3-signed-importer-repair-owner-permit-20261022.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "head_sha": "6316643684755f9b4e227de13323aaac26077e4d",
+        "merge_base_sha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 756,
+      "head_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+      "head_ref": "fix/03-native-effective-acl-pid-dup-20261022",
+      "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "base_ref": "test/03-709-qa17-qa19-integration-20261022",
+      "ci": {
+        "run_id": 39736305461,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57"
+      },
+      "files": [
+        ".github/workflows/qa03-native-effective-pid.yml",
+        "docs/qa/QA03_NATIVE_EFFECTIVE_ACL_PID_DUP_20261022.md",
+        "scripts/audit-core-broker-fixture-effective-access.ps1",
+        "scripts/audit-core-broker-fixture-pid-handle.ps1",
+        "test/core-broker-native-effective-access.test.ts",
+        "test/core-broker-native-pid-dup-access.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "head_sha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+        "merge_base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 757,
+      "head_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+      "head_ref": "feat/04-late-permit-effective-20261022",
+      "base_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+      "base_ref": "feat/04-nonce-native-cas-readback-20261022",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34"
+      },
+      "files": [
+        "docs/NEXOWIRE_ACCESS_LATE_PERMIT_EFFECTIVE_20261022.md",
+        "src/product/access-late-permit-review.ts",
+        "src/product/access-queued-job-review.ts",
+        "test/access-late-permit-review.test.ts",
+        "test/access-queued-job-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+        "head_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+        "merge_base_sha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 758,
+      "head_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+      "head_ref": "test/qa16-pr730-745-docsonly-20261022",
+      "base_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+      "base_ref": "test/qa16-pr703-729-exact-ci-20261022",
+      "ci": {
+        "run_id": 39736944182,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "74917540d8977c50430b103f32c872ce800bf86e"
+      },
+      "files": [
+        "docs/qa/INDEPENDENT_QA_PR730_745_20261022.md",
+        "docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json",
+        "docs/qa/cross-project-final-acceptance.json"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+        "head_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+        "merge_base_sha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+        "status": "ahead"
+      }
+    }
+  ]
+}
