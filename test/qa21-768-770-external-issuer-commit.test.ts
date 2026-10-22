@@ -317,7 +317,9 @@ test('#21 #768+#770: owner revoked DURING external final CAS, old receipt plus l
     assert.equal(f.publishes, 1);
 
     // Old local WAL cannot roll back independently held owner/grant epoch.
-    await persist(localFile, rollbackSnapshot);
+    // persist() serializes its argument; restore the parsed JSON object,
+    // never double-encode the captured journal JSON string.
+    await persist(localFile, JSON.parse(rollbackSnapshot) as TransferJob);
     const oldJournal = await jobRecord(root, started.id);
     assert.equal(oldJournal.state, 'PUBLISHING');
     assert.equal(oldJournal.publication?.requestId, after.publication?.requestId);
