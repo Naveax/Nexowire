@@ -1,0 +1,308 @@
+﻿{
+  "schema": "nexowire.qa16.pr747-758.v1",
+  "observedAt": "2026-10-22",
+  "pinnedMain": "754cc4364822be5fda528f54042fb22a84f19924",
+  "parentQa": {
+    "pr": 758,
+    "head": "74917540d8977c50430b103f32c872ce800bf86e",
+    "exactCiRunId": 39736944182,
+    "conclusion": "FAILURE"
+  },
+  "totals": {
+    "fullCiSuccess": 6,
+    "fullCiFail": 4,
+    "noVerifiedRun": 2
+  },
+  "prs": [
+    {
+      "number": 747,
+      "headSha": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+      "baseSha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+      "ciRunId": null,
+      "ciStatus": "NOT_VERIFIED",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "scope": "No workflow returned at exact HEAD; late signed permit final authority CAS negative must not be marked green",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 748,
+      "headSha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+      "baseSha": "aa16d3e0fc2627960be9a51ad7bba30f0e9ac87d",
+      "ciRunId": 39735987704,
+      "ciStatus": "PASS",
+      "requirements": [
+        "R04",
+        "R14",
+        "R20"
+      ],
+      "scope": "OAuth epoch atomic refresh source CI SUCCESS, not native Windows CORE token nor deployed D1",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 749,
+      "headSha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+      "baseSha": "8b17168e610268aba30ac94213befba406a41cf2",
+      "ciRunId": null,
+      "ciStatus": "NOT_VERIFIED",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "scope": "No workflow returned at exact HEAD; source unknown after late permit and revoke cannot be claimed verified",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 750,
+      "headSha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+      "baseSha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+      "ciRunId": 39735615243,
+      "ciStatus": "FAIL",
+      "requirements": [
+        "R07",
+        "R09",
+        "R18",
+        "R22"
+      ],
+      "scope": "Node24 private picker refuses forged tracked PID test FAIL because PrivateDesktopError requires Windows on Linux; separate from mandatory P0 gate",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 751,
+      "headSha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19",
+      "baseSha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "ciRunId": 39735623362,
+      "ciStatus": "FAIL",
+      "requirements": [
+        "R02",
+        "R07",
+        "R20",
+        "R22"
+      ],
+      "scope": "Hosted Windows Job fast-exit stdout not captured before exited iteration5; external durable owner witness source not full CI green",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 752,
+      "headSha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+      "baseSha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "ciRunId": 39735641942,
+      "ciStatus": "PASS",
+      "requirements": [
+        "R01",
+        "R03",
+        "R15",
+        "R20"
+      ],
+      "scope": "Reconnection orphan native intent UNKNOWN across double reconnect source CI SUCCESS, no automatic replay; final publication receipt physical unknown",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 753,
+      "headSha": "72ff16a23881c9dfde52f7bb5190bdf6185457e5",
+      "baseSha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "ciRunId": 39735984623,
+      "ciStatus": "PASS",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "scope": "Strict JSON v1 input version type confusion negative source CI and QA26 39735984797 SUCCESS, no installed high-token Broker signer proof",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 754,
+      "headSha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "baseSha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "ciRunId": 39736052869,
+      "ciStatus": "FAIL",
+      "requirements": [
+        "R01",
+        "R02",
+        "R07",
+        "R15",
+        "R20",
+        "R22"
+      ],
+      "scope": "Native independently authenticated final publication SHA/requestId/owner epoch source change, full CI Windows Job fast-exit iteration6 FAIL; not proof of physical durable final receipt",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 755,
+      "headSha": "6316643684755f9b4e227de13323aaac26077e4d",
+      "baseSha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "ciRunId": 39736251296,
+      "ciStatus": "PASS",
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "scope": "Signed CORE permit import DAG SYSTEM DPAPI and rollback source CI SUCCESS, no installed verified first-party signed Broker",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 756,
+      "headSha": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+      "baseSha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "ciRunId": 39736305461,
+      "ciStatus": "PASS",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "scope": "Dedicated Windows PID FILETIME/AccessCheck QA39736305459 and full CI SUCCESS; physical installed protected Broker effective ACL and high token not attested",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 757,
+      "headSha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+      "baseSha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+      "ciRunId": 39736445337,
+      "ciStatus": "PASS",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "scope": "Late signed permit read-only double CAS verify source success, not atomic external dispatch grant vs revoke-start across Hubs",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "number": 758,
+      "headSha": "74917540d8977c50430b103f32c872ce800bf86e",
+      "baseSha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+      "ciRunId": 39736944182,
+      "ciStatus": "FAIL",
+      "requirements": [
+        "R02",
+        "R03",
+        "R04",
+        "R07",
+        "R15",
+        "R19",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "scope": "MANDATORY seven P0 native source acceptance RED plus independent Windows durable READY timeout; generic Node24 fails required source negatives, Node22 cancelled",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    }
+  ],
+  "independent": {
+    "qa753": {
+      "runId": 39735984797,
+      "conclusion": "SUCCESS",
+      "scope": "source strict JSON negative"
+    },
+    "qa756": {
+      "runId": 39736305459,
+      "conclusion": "SUCCESS",
+      "scope": "TEMP Windows OS ACL PID FILETIME negative"
+    }
+  },
+  "failures": {
+    "node750": {
+      "jobId": 119680469716,
+      "runId": 39735615243,
+      "kind": "HOST_PLATFORM_TEST_ERROR",
+      "message": "PrivateDesktopError Nexowire private desktop requires Windows; Linux test expected forged tracked PID rejection",
+      "physicalClaim": false
+    },
+    "windowsJob751": {
+      "jobId": 119680496494,
+      "runId": 39735623362,
+      "kind": "WIN_JOB_STDOUT_ORDER",
+      "iteration": 5
+    },
+    "windowsJob754": {
+      "jobId": 119681862315,
+      "runId": 39736052869,
+      "kind": "WIN_JOB_STDOUT_ORDER",
+      "iteration": 6
+    },
+    "qa758": {
+      "ciRunId": 39736944182,
+      "p0Acceptance": {
+        "jobId": 119685142704,
+        "status": "FAILURE",
+        "pass": 10,
+        "fail": 7,
+        "skip": 0,
+        "mandatory": true,
+        "missing": [
+          "Real broad signed Windows HIGH CORE executor",
+          "ROOT exact 900s issued-time max",
+          "Authenticated registered signed Broker elevated endpoint",
+          "hyperv.vm.start wrongly STANDARD, requires elevated privilege",
+          "Signed Broker typed VM GUID allowlist missing",
+          "#587 restored old journal accepts completed requestId",
+          "#588 public durable onecall transfer start/status/cancel unadvertised"
+        ]
+      },
+      "windowsDurable": {
+        "jobId": 119685142763,
+        "status": "FAILURE",
+        "kind": "DURABLE_REATTACH_TIMEOUT",
+        "condition": "NW_DURABLE_READY missing after ProcessManager restart, 26.7s"
+      },
+      "node24": {
+        "jobId": 119685142671,
+        "status": "FAILURE",
+        "kind": "REQUIRED_NEGATIVE_GATES"
+      },
+      "node22": {
+        "jobId": 119685142896,
+        "status": "CANCELLED"
+      }
+    }
+  },
+  "noGo": {
+    "coreHighToken": "BLOCKED",
+    "vmTypedPrivilege": "FAIL",
+    "acl271": "BLOCKED",
+    "signedBroker551": "BLOCKED",
+    "externalRollbackResistantCas587": "BLOCKED",
+    "finalAuthenticatedPublisher588": "BLOCKED",
+    "authorizedHypervRunningReadback": "BLOCKED",
+    "ReVoltVPNUbuntuLab": "UNTOUCHED"
+  },
+  "guardrails": {
+    "redTestsUnmodified": true,
+    "noLiveVm": true,
+    "noLiveUac": true,
+    "mainUnchanged": true
+  }
+}
