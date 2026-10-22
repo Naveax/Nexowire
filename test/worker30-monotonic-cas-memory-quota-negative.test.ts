@@ -165,8 +165,7 @@ for(const mode of ['lost-native-ack','externally-committed-final'] as const){
       const jobs=new CrossDeviceTransferJobs(root,native.remote,native.trust);
       const started=await jobs.start(input);
       await jobs.waitForIdle(started.id);
-      const persisted=JSON.parse(await readFile(path.join(root,started.id+'.json'),'utf8'))
-        as TransferJob;
+      const persisted=JSON.parse(await readFile(path.join(root,started.id+'.json'),'utf8')) as TransferJob;
       assert.equal(native.writes,2);
       assert.equal(native.publishes,1);
       assert.deepEqual(native.target,BYTES);
