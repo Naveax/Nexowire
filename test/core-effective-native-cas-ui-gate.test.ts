@@ -14,6 +14,7 @@ const ckey=generateKeyPairSync('ed25519');
 const foreign=generateKeyPairSync('ed25519');
 const hash='a'.repeat(64),cred='b'.repeat(64),session='c'.repeat(64);
 const owner='owner',device='device',deviceEpoch='de-17',sessionEpoch='se-8';
+const nonce='d'.repeat(64);
 const access:AccessStatusLike={requestedMode:'CORE',state:'EFFECTIVE',effective:true,
   verifiedNativeHighToken:true,actualElevatedTokenVerified:true,
   brokerSourceAclVerified:true,authoritySource:'independent-protected-windows-broker',
@@ -23,10 +24,15 @@ const current700:NativeRuntimeAssessmentLike={actualHighIntegrityBrokerAccepted:
   productionReady:false,reason:'PRODUCTION_EXECUTOR_NOT_INSTALLED'};
 // Hypothetical physically accepted runtime is synthetic only; never observed on #700.
 const hypothetical:NativeRuntimeAssessmentLike={actualHighIntegrityBrokerAccepted:true,
-  productionReady:true,reason:'EXTERNALLY_VERIFIED'};
+  productionReady:true,reason:'SYNTHETIC_ONLY',
+  installedBrokerProcessAttested:true,fullTransitiveImportInventoryVerified:true,
+  separateLowPrivilegeTokenBoundaryVerified:true,
+  protectedJobHandleInheritanceAndDaclVerified:true,
+  signedReleaseAndRollbackManifestVerified:true,
+  nativeEffectiveLowPrivilegeAccessCheckCompleted:true};
 const native:NativeUiReceiptV2={schema:'nexowire.qa.ui.native-effective-v2',
   ownerId:owner,deviceId:device,credentialHash:cred,sessionHash:session,
-  deviceEpoch,sessionEpoch,ownerEpoch:4,grantGeneration:8,
+  deviceEpoch,sessionEpoch,challengeNonce:nonce,ownerEpoch:4,grantGeneration:8,
   brokerImageSha256:hash,brokerVersion:'1.0.5',brokerPid:412,
   creationFiletime:'134041932000000000',volumeSerialHex:'a1b2c3d4',
   fileIdHex:'1111111122222222',observedAt:at.toISOString(),
@@ -35,11 +41,15 @@ const native:NativeUiReceiptV2={schema:'nexowire.qa.ui.native-effective-v2',
   protectedProcessHandleBoundary:true,authenticatedNativeBroker:true,
   localBootstrapApproved:true};
 const cas:ExternalUiEpochV2={schema:'nexowire.qa.ui.external-epoch-v2',
-  ownerId:owner,deviceId:device,deviceEpoch,sessionEpoch,
-  ownerEpoch:4,grantGeneration:8,revoked:false,observedAt:at.toISOString()};
+  ownerId:owner,deviceId:device,deviceEpoch,sessionEpoch,challengeNonce:nonce,
+  ownerEpoch:4,grantGeneration:8,revoked:false,revoking:false,
+  observedAt:at.toISOString()};
 const pins:UiTrustedPinsV2={nativeKey:nkey.publicKey,externalCasKey:ckey.publicKey,
   ownerId:owner,deviceId:device,credentialHash:cred,sessionHash:session,
   currentDeviceEpoch:deviceEpoch,currentSessionEpoch:sessionEpoch,
+  currentReadbackNonce:nonce,
+  installedNativeSignerPhysicallyAccepted:true,
+  externalCasMonotonicAuthorityPhysicallyAccepted:true,
   currentOwnerEpoch:4,currentGrantGeneration:8,installedImageSha256:hash,
   installedVersion:'1.0.5',currentBrokerPid:412,
   currentBrokerCreationFiletime:'134041932000000000',
@@ -156,4 +166,55 @@ test('#719 signed queued CAS readback is not CORE UI witness; 1ms old owner epoc
   assert.equal(denied(access,hypothetical,signed(),advanced).reason,
     'SIGNED_NATIVE_OR_CAS_INVALID');
   assert.equal(evaluate(access,hypothetical,signed(),pins).canDispatch,false);
+});
+
+test('#756 TEMP OS witness cannot promote mocked native flags to installed HIGH / complete import truth',()=>{
+  const absent={...hypothetical};
+  for(const key of [
+    'installedBrokerProcessAttested',
+    'fullTransitiveImportInventoryVerified',
+    'separateLowPrivilegeTokenBoundaryVerified',
+    'protectedJobHandleInheritanceAndDaclVerified',
+    'signedReleaseAndRollbackManifestVerified',
+    'nativeEffectiveLowPrivilegeAccessCheckCompleted',
+  ] as const){
+    denied(access,{...absent,[key]:false});
+    const unknown={...absent} as Record<string,unknown>;
+    delete unknown[key];
+    denied(access,unknown as unknown as NativeRuntimeAssessmentLike);
+    denied(access,{...absent,[key]:'true'} as unknown as NativeRuntimeAssessmentLike);
+  }
+});
+test('source-green #757 nonce, native signature and #712 CAS cannot replace physical trust anchors',()=>{
+  assert.equal(denied(access,hypothetical,signed(),{
+    ...pins,installedNativeSignerPhysicallyAccepted:false,
+  }).reason,'INDEPENDENT_PHYSICAL_AUTHORITIES_UNVERIFIED');
+  assert.equal(denied(access,hypothetical,signed(),{
+    ...pins,externalCasMonotonicAuthorityPhysicallyAccepted:false,
+  }).reason,'INDEPENDENT_PHYSICAL_AUTHORITIES_UNVERIFIED');
+  assert.equal(denied(access,hypothetical,signed(),{
+    ...pins,externalCasMonotonicAuthorityPhysicallyAccepted:'true',
+  } as unknown as UiTrustedPinsV2).effective,false);
+});
+test('#757 fresh per-review nonce and in-progress revoke fence stale signed receipt within 1ms',()=>{
+  const fresh=new Date(at.getTime()+1);
+  const newNonce='e'.repeat(64);
+  denied(access,hypothetical,signed(),{...pins,now:fresh,currentReadbackNonce:newNonce});
+  denied(access,hypothetical,signed(native,{...cas,revoking:true}));
+  denied(access,hypothetical,signed({...native,challengeNonce:newNonce},cas),
+    {...pins,currentReadbackNonce:newNonce,now:fresh});
+  denied(access,hypothetical,signed(native,{...cas,challengeNonce:newNonce}),
+    {...pins,currentReadbackNonce:newNonce,now:fresh});
+  const n={...native,challengeNonce:newNonce,observedAt:fresh.toISOString()};
+  const c={...cas,challengeNonce:newNonce,observedAt:fresh.toISOString()};
+  assert.equal(evaluate(access,hypothetical,signed(n,c),
+    {...pins,currentReadbackNonce:newNonce,now:fresh}).state,'EFFECTIVE');
+});
+test('#753 wrong-type JSON booleans/epochs do not manufacture UI EFFECTIVE',()=>{
+  denied(access,hypothetical,signed({...native,localBootstrapApproved:'true'} as unknown as NativeUiReceiptV2));
+  denied(access,hypothetical,signed(native,{...cas,revoking:'false'} as unknown as ExternalUiEpochV2));
+  denied(access,hypothetical,signed(native,{...cas,ownerEpoch:'4'} as unknown as ExternalUiEpochV2));
+  denied(access,hypothetical,signed(),{
+    ...pins,currentOwnerEpoch:'4',
+  } as unknown as UiTrustedPinsV2);
 });

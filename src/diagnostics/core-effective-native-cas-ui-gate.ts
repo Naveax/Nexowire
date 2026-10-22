@@ -17,11 +17,19 @@ export interface NativeRuntimeAssessmentLike {
   productionReady: boolean;
   reason: string;
   pendingEffectUnknown?: boolean;
+  /** #756 TEMP-only OS probes explicitly leave these false. */
+  installedBrokerProcessAttested?: boolean;
+  fullTransitiveImportInventoryVerified?: boolean;
+  separateLowPrivilegeTokenBoundaryVerified?: boolean;
+  protectedJobHandleInheritanceAndDaclVerified?: boolean;
+  signedReleaseAndRollbackManifestVerified?: boolean;
+  nativeEffectiveLowPrivilegeAccessCheckCompleted?: boolean;
 }
 export interface NativeUiReceiptV2 {
   schema: 'nexowire.qa.ui.native-effective-v2';
   ownerId: string; deviceId: string; credentialHash: string; sessionHash: string;
   deviceEpoch: string; sessionEpoch: string;
+  challengeNonce: string;
   ownerEpoch: number; grantGeneration: number;
   brokerImageSha256: string; brokerVersion: string;
   brokerPid: number; creationFiletime: string;
@@ -39,7 +47,9 @@ export interface NativeUiReceiptV2 {
 export interface ExternalUiEpochV2 {
   schema: 'nexowire.qa.ui.external-epoch-v2';
   ownerId: string; deviceId: string; deviceEpoch: string; sessionEpoch: string;
-  ownerEpoch: number; grantGeneration: number; revoked: boolean; observedAt: string;
+  challengeNonce: string;
+  ownerEpoch: number; grantGeneration: number;
+  revoked: boolean; revoking: boolean; observedAt: string;
 }
 export interface SignedReceipt<T> {statement:T; signature:string}
 export interface UiEvidenceV2 {
@@ -51,6 +61,11 @@ export interface UiTrustedPinsV2 {
   /** Trusted server readbacks, never browser snapshot claims. */
   ownerId:string; deviceId:string; credentialHash:string; sessionHash:string;
   currentDeviceEpoch:string; currentSessionEpoch:string;
+  /** Fresh 256-bit per-readback challenge provisioned by independent server. */
+  currentReadbackNonce:string;
+  /** Physically provisioned out of band: booleans from UI/request are NOT proof. */
+  installedNativeSignerPhysicallyAccepted:boolean;
+  externalCasMonotonicAuthorityPhysicallyAccepted:boolean;
   currentOwnerEpoch:number; currentGrantGeneration:number;
   installedImageSha256:string; installedVersion:string;
   currentBrokerPid:number; currentBrokerCreationFiletime:string;
@@ -61,7 +76,7 @@ export interface EffectiveUiGateResult {
   state:'PAUSED_UNVERIFIED'|'EFFECTIVE';
   effective:false|true;
   reason:'ACCESS_NOT_EFFECTIVE'|'NATIVE_RUNTIME_NOT_PHYSICALLY_ACCEPTED'|
-    'SIGNED_NATIVE_OR_CAS_UNAVAILABLE'|'SIGNED_NATIVE_OR_CAS_INVALID'|'INDEPENDENT_PROOF_ACCEPTED';
+    'INDEPENDENT_PHYSICAL_AUTHORITIES_UNVERIFIED'|'SIGNED_NATIVE_OR_CAS_UNAVAILABLE'|'SIGNED_NATIVE_OR_CAS_INVALID'|'INDEPENDENT_PROOF_ACCEPTED';
   canDispatch:false;
   uacProvenByAppearance:false;
 }
@@ -72,7 +87,7 @@ const filetime=/^[1-9][0-9]{9,19}$/;
 const MAX_AGE_MS=5000;
 const keysNative=(s:NativeUiReceiptV2)=>[
   s.schema,s.ownerId,s.deviceId,s.credentialHash,s.sessionHash,
-  s.deviceEpoch,s.sessionEpoch,s.ownerEpoch,s.grantGeneration,
+  s.deviceEpoch,s.sessionEpoch,s.challengeNonce,s.ownerEpoch,s.grantGeneration,
   s.brokerImageSha256,s.brokerVersion,s.brokerPid,s.creationFiletime,
   s.volumeSerialHex,s.fileIdHex,s.observedAt,
   s.highTokenWithEnabledAdministrators,s.protectedPublisherAndRelease,
@@ -81,7 +96,7 @@ const keysNative=(s:NativeUiReceiptV2)=>[
 ];
 const keysCas=(s:ExternalUiEpochV2)=>[
   s.schema,s.ownerId,s.deviceId,s.deviceEpoch,s.sessionEpoch,
-  s.ownerEpoch,s.grantGeneration,s.revoked,s.observedAt,
+  s.challengeNonce,s.ownerEpoch,s.grantGeneration,s.revoked,s.revoking,s.observedAt,
 ];
 export const nativeUiSigningBytes=(s:NativeUiReceiptV2):Buffer=>
   Buffer.from(JSON.stringify(keysNative(s)),'utf8');
@@ -121,8 +136,18 @@ export function projectVerifiedCoreUi(
      access.authoritySource!=='independent-protected-windows-broker'||
      access.canDispatch!==false)return deny('ACCESS_NOT_EFFECTIVE');
   if(!runtime||runtime.actualHighIntegrityBrokerAccepted!==true||
-     runtime.productionReady!==true||runtime.pendingEffectUnknown===true){
+     runtime.productionReady!==true||runtime.pendingEffectUnknown===true||
+     runtime.installedBrokerProcessAttested!==true||
+     runtime.fullTransitiveImportInventoryVerified!==true||
+     runtime.separateLowPrivilegeTokenBoundaryVerified!==true||
+     runtime.protectedJobHandleInheritanceAndDaclVerified!==true||
+     runtime.signedReleaseAndRollbackManifestVerified!==true||
+     runtime.nativeEffectiveLowPrivilegeAccessCheckCompleted!==true){
     return deny('NATIVE_RUNTIME_NOT_PHYSICALLY_ACCEPTED');
+  }
+  if(pins.installedNativeSignerPhysicallyAccepted!==true||
+     pins.externalCasMonotonicAuthorityPhysicallyAccepted!==true){
+    return deny('INDEPENDENT_PHYSICAL_AUTHORITIES_UNVERIFIED');
   }
   if(!evidence)return deny('SIGNED_NATIVE_OR_CAS_UNAVAILABLE');
   try {
@@ -141,9 +166,13 @@ export function projectVerifiedCoreUi(
        b.credentialHash!==pins.credentialHash||b.sessionHash!==pins.sessionHash||
        b.deviceEpoch!==pins.currentDeviceEpoch||c.deviceEpoch!==pins.currentDeviceEpoch||
        b.sessionEpoch!==pins.currentSessionEpoch||c.sessionEpoch!==pins.currentSessionEpoch||
+       !hex64.test(pins.currentReadbackNonce)||
+       b.challengeNonce!==pins.currentReadbackNonce||
+       c.challengeNonce!==pins.currentReadbackNonce||
        b.ownerEpoch!==pins.currentOwnerEpoch||c.ownerEpoch!==pins.currentOwnerEpoch||
        b.grantGeneration!==pins.currentGrantGeneration||
-       c.grantGeneration!==pins.currentGrantGeneration||c.revoked!==false||
+       c.grantGeneration!==pins.currentGrantGeneration||
+       c.revoked!==false||c.revoking!==false||
        !hex64.test(b.brokerImageSha256)||
        b.brokerImageSha256!==pins.installedImageSha256||
        b.brokerVersion!==pins.installedVersion||
