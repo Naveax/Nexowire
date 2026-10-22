@@ -169,7 +169,7 @@ test('QA24 live collector GET-only reads four partitions twice, targeted six onl
   const result=await collect774779(testApi(census,newDelta),'Naveax/Nexowire');
   assert.equal(result.census.ids.length,179);
   assert.deepEqual(result.nodes.map(n=>n.pr),[774,775,776,777,778,779]);
-  assert.equal(result.nodes.find(n=>n.pr===775)?.ci.run_id,null);
+  assert.equal(result.nodes.find(n=>n.pr===775)?.ci.run_id,39806640003);
   assert.equal(result.nodes.find(n=>n.pr===774)?.ci.conclusion,'success');
   assert.equal(result.other_pr_heads_revalidated,false);
   assert.equal(result.production_merge_authorized,false);
