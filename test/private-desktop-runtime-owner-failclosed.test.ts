@@ -79,6 +79,26 @@ test('viewer and native input worker check emergency before unsafe async dispatc
   assert.ok(worker.split('await assertNoPrivateDesktopEmergencyStop(p.root)').length>=3,
     'helper must check cancellation before and after integrity I/O');
 });
+test('missing state after emergency STOP cannot claim physical running=false',{
+  skip:process.platform!=='win32',
+},async t=>{
+  const root=await fixture(t);
+  await fs.rm(path.join(root,'state.json'));
+  // A user-writable missing state is not a protected native Job close
+  // receipt. An unrelated/private child might still be running.
+  await assert.rejects(desktop('windows.private_desktop.stop',{}),
+    e=>e instanceof Error&&'code'in e&&
+      e.code==='PRIVATE_DESKTOP_STOP_UNVERIFIED');
+  assert.equal((await fs.readFile(path.join(root,'emergency-stop.pending'),'utf8'))
+    .includes('STOP_REQUESTED'),true);
+  await assert.rejects(desktop('windows.private_desktop.launch',{
+    executable:'notepad.exe',args:[],
+  }),check(PRIVATE_DESKTOP_EMERGENCY_STOP_PENDING));
+  // Repeat STOP must never 'complete' based solely on missing JSON.
+  await assert.rejects(desktop('windows.private_desktop.stop',{}),
+    e=>e instanceof Error&&'code'in e&&
+      e.code==='PRIVATE_DESKTOP_STOP_UNVERIFIED');
+});
 test('real desktop STOP persists cancellation but never taskkills forged state PIDs',{
   skip:process.platform!=='win32',
 },async t=>{

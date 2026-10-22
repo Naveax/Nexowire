@@ -1289,8 +1289,15 @@ async function stop():Promise<{data:unknown}>{
   // A corrupt state cannot justify any new GUI input or owner PID kill.
   await recordPrivateDesktopEmergencyStop(p.root);
   const s=await readState();
+  // An absent, user-writable state.json is NOT an OS Job/HANDLE receipt.
+  // Private descendants might remain alive even without any persisted PID.
+  // Never report a physical running=false/stopped outcome in this case.
+  if(!s)throw new PrivateDesktopError(
+    'PRIVATE_DESKTOP_STOP_UNVERIFIED',
+    'Emergency stop was requested, but native private process termination '+
+      'cannot be verified without a protected Job owner receipt.',
+  );
   // This never claims a PID has exited or revokes protected #03 Job authority.
-  if(!s)return{data:{running:false,stopped:false,desktopName:DESKTOP_NAME}};
   // The persisted host/shell/child PIDs have no signed parent creationTime
   // or protected kernel Job witness. Never send taskkill against an unproven
   // owner, even when a PID happens to be currently alive. The native #03
