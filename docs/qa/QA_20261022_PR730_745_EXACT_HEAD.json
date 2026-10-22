@@ -1,0 +1,445 @@
+{
+  "schema": "nexowire.qa16.pr730-745.v1",
+  "observedDate": "2026-10-22",
+  "pinnedMain": {
+    "sha": "754cc4364822be5fda528f54042fb22a84f19924",
+    "scope": "current main source only, not physical signed CORE"
+  },
+  "sourceSha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+  "parentQaPr": 744,
+  "sourceCiCounts": {
+    "success": 13,
+    "failure": 3,
+    "pending": 0,
+    "historical": {
+      "initial": {
+        "success": 11,
+        "failure": 5,
+        "pending": 0
+      },
+      "intermediate": {
+        "success": 12,
+        "failure": 3,
+        "pending": 1
+      },
+      "reason": "#732/#735 rebased new HEADs and both latest CI have since completed SUCCESS"
+    }
+  },
+  "baselineHistoricalLedgerCount": 138,
+  "openPrCount": "UNKNOWN",
+  "prs": [
+    {
+      "number": 730,
+      "headSha": "7da9f0619ff491ba9c29fd89faf989bf98cacdb4",
+      "baseSha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "runId": 39676785591,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "limitation": "Replays unchanged #640/#651/#677/#704 against #725 Artifact cancel source; whole CI SUCCESS, but real native write/ACK physically unverified",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 731,
+      "headSha": "df239ce88f4b98ba97f29e48495fee86049f8856",
+      "baseSha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "runId": 39676999169,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "limitation": "Two-Hub revokeAndDrain late signed permit and external CAS fixture source success, not independently deployed monotonic witness",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 732,
+      "headSha": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+      "baseSha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "runId": 39735234697,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R22"
+      ],
+      "limitation": "CURRENT exact HEAD 9014449e complete full CI 39735234697 SUCCESS, signed Agent 1.0.5 rollback source only. Prior ea5f1f macOS job CANCELLED full CI FAILED is historical and not current.",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 733,
+      "headSha": "0f7c6af824c282764cdb594d0fba474686683062",
+      "baseSha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "runId": 39677163113,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R20"
+      ],
+      "limitation": "Protected-tree #709 Broker FILETIME/CAS hostile source checks green, not running physical signed HIGH Broker",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 734,
+      "headSha": "5e2482bfe7ccd2dc9cbbaca040710affa90f74d6",
+      "baseSha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "runId": 39677224071,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "limitation": "Full CI SUCCESS plus independent QA19 Windows workflow 39677224212 SUCCESS; protected-tree fixture/100cycle source only",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 735,
+      "headSha": "d4c35e2a7adec3b845b03886f314772a65473d63",
+      "baseSha": "f730943fb2392cbc9b55c11e41750c43802c3482",
+      "runId": 39735083325,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R12",
+        "R22"
+      ],
+      "limitation": "CURRENT exact-head CI SUCCESS; PRIOR 5a2d1c TS18047/TS2339 full CI FAIL historical only.",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 736,
+      "headSha": "c68c561dae9a19b5bae5136675c6418f7ae235a6",
+      "baseSha": "52d13f4327094196ee882cbec50806cd7db6ea60",
+      "runId": 39677383239,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R09",
+        "R18"
+      ],
+      "limitation": "AI Screen child emergency-stop source fix green, no live GUI or privileged UAC",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 737,
+      "headSha": "ea016f7d6165710fa3de4843096f1724df29245d",
+      "baseSha": "1ef44efc7b143b152ad178ddd0eef9cd627bade2",
+      "runId": 39677569353,
+      "status": "FAIL",
+      "prState": "CLOSED_DRAFT",
+      "requirements": [
+        "R05",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "limitation": "Windows Job stdout/stderr independent pipes fixture FAIL: WINJOB_STDOUT not captured; PR now CLOSED, do not claim merged or green",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 738,
+      "headSha": "ce85d257c2f005156175a4d14a65ec81565575fc",
+      "baseSha": "38dfb89a9a756c42a75ccea9d4a0160067b39110",
+      "runId": 39677587592,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R12",
+        "R15"
+      ],
+      "limitation": "Four 9.5MiB gzip parser vs 64 quiet tenant and pending receipt source; no actual production WSS capacity",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 739,
+      "headSha": "aec8a331ab6e3b673ffe59abcb98134e46dfebde",
+      "baseSha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "runId": 39677691555,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "limitation": "Signed owner epoch and nonce permit binds CORE importer ACL source, no physical first-party installer or protected live tree",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 740,
+      "headSha": "8b17168e610268aba30ac94213befba406a41cf2",
+      "baseSha": "0ca5903fae851bed44ddc14e4c2c464c769d6723",
+      "runId": 39677694668,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "limitation": "Two-Hub external CAS Access revoke/readback UNKNOWN QA source, not rollback-independent physically provisioned storage",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 741,
+      "headSha": "5c2b39530937f7a929044f1be3f6fb9ad89d8ff8",
+      "baseSha": "597191102dabc22e22c7f9822a026bbd12d60c52",
+      "runId": 39677981833,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R20",
+        "R22"
+      ],
+      "limitation": "Nonce-bound protected Broker and owner CAS epoch under CORE/ROOT source, cannot attest actual HIGH token",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 742,
+      "headSha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "baseSha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+      "runId": 39678274991,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R01",
+        "R03",
+        "R06",
+        "R20"
+      ],
+      "limitation": "Connection double reconnect forensic UNKNOWN and epoch fence source PASS; no live Agent or independent effect readback",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 743,
+      "headSha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "baseSha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+      "runId": 39678489196,
+      "status": "PASS",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "limitation": "CI SUCCESS + QA17 39678489203 and QA03 Windows integration 39678489269 SUCCESS, replays protected tree source only, not production Broker",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 744,
+      "headSha": "c9e0e93a9b8a9deb8a4fbaede30d53cde9e54fa1",
+      "baseSha": "064e59b2640d73579714c03fe2d9e0c17d898eb9",
+      "runId": 39678517442,
+      "status": "FAIL",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R02",
+        "R03",
+        "R04",
+        "R07",
+        "R15",
+        "R19",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "limitation": "Dedicated mandatory P0 RED 7 true source gates, separate Windows durable /NW_DURABLE_READY/ reattach timeout, generic Node24 required gate failure and Node22 CANCELLED; do not delete tests",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    },
+    {
+      "number": 745,
+      "headSha": "8a4722341355ee2edd680a35321f9f946c175657",
+      "baseSha": "d7e5f98b5b286d9884381edc6bb38eae036a8449",
+      "runId": 39733783135,
+      "status": "FAIL",
+      "prState": "OPEN_DRAFT",
+      "requirements": [
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "limitation": "Windows Job stdout/stderr drained before exited FAIL at iteration5; other 6 sibling jobs green, signed installer rollback source not physical",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED"
+    }
+  ],
+  "failureClasses": {
+    "cancelledRequiredJob": {
+      "pr": 732,
+      "runId": 39677044173,
+      "jobId": 119489514974,
+      "job": "macos-agent-lifecycle-live",
+      "conclusion": "CANCELLED",
+      "overall": "FAILURE",
+      "historical": true,
+      "supersededByHead": "9014449ef9f3513064d0cd42cb016e53a705fc6c"
+    },
+    "typeScriptCompile": {
+      "pr": 735,
+      "runId": 39677340744,
+      "jobId": 119490512186,
+      "position": "test/worker30-single-slot-close-admission.test.ts:74",
+      "errors": [
+        "TS18047 addr may be null",
+        "TS2339 port missing on string | AddressInfo"
+      ],
+      "overall": "FAILURE",
+      "historical": true,
+      "supersededByHead": "d4c35e2a7adec3b845b03886f314772a65473d63"
+    },
+    "winJobSeparateStreams": {
+      "pr": 737,
+      "runId": 39677569353,
+      "jobId": 119491295083,
+      "case": "Windows Job preserves separate stdin/stdout/stderr pipes",
+      "observed": "WINJOB_STDOUT absent",
+      "state": "PR_CLOSED_CI_FAIL"
+    },
+    "qa744": {
+      "pr": 744,
+      "runId": 39678517442,
+      "overall": "FAILURE",
+      "mandatoryNegative": {
+        "jobId": 119494574854,
+        "conclusion": "FAILURE",
+        "sourceContractsFailing": 7,
+        "doNotDeleteOrSkip": true,
+        "contracts": [
+          "ROOT 15 minute signed issuedAt max cannot accept stale lease",
+          "CORE real broad HIGH-integrity shell executor requirement unimplemented",
+          "signed CORE Broker elevated endpoint not registered",
+          "typed hyperv.vm.start incorrectly STANDARD, must be elevated",
+          "typed Hyper-V signed Broker VM GUID allowlist missing",
+          "#587 old rollback journal re-admits completed requestId",
+          "#588 durable onecall transfer start/status/cancel missing in main"
+        ]
+      },
+      "unrelatedCIFailures": [
+        {
+          "jobId": 119494574903,
+          "name": "browser-live",
+          "failure": "test/durable-process.test.ts /NW_DURABLE_READY/ missing after reattach 27.3s timeout"
+        },
+        {
+          "jobId": 119494575006,
+          "name": "Node24 npm run check",
+          "failure": "required P0 acceptance tests red in broad test suite"
+        },
+        {
+          "jobId": 119494574947,
+          "name": "Node22 npm run check",
+          "failure": "CANCELLED"
+        }
+      ]
+    },
+    "windowsExitDrain": {
+      "pr": 745,
+      "runId": 39733783135,
+      "jobId": 119674644929,
+      "case": "Windows Job fast-exit stdout/stderr before exited",
+      "iteration": 5,
+      "overall": "FAILURE"
+    }
+  },
+  "successIsSourceOnly": [
+    730,
+    731,
+    733,
+    734,
+    736,
+    738,
+    739,
+    740,
+    741,
+    742,
+    743
+  ],
+  "noGo": {
+    "realSignedHighTokenCore": "BLOCKED",
+    "hyperVTypedElevation": "FAIL",
+    "physicalLocalUAC": "NOT_VERIFIED",
+    "acl271": "BLOCKED",
+    "signedBootstrap551": "BLOCKED",
+    "externalWitness587": "BLOCKED",
+    "durableOnecall588": "FAIL",
+    "revoltVpnUbuntuLab": "UNTOUCHED",
+    "staging": "BLOCKED",
+    "production": "BLOCKED",
+    "incident": "BLOCKED",
+    "qaDocsOnly": true
+  },
+  "historicalSupersededHeads": [
+    {
+      "pr": 732,
+      "headSha": "ea5f1f736f47114e68e3a8c765727613315aa2b4",
+      "runId": 39677044173,
+      "conclusion": "FAIL",
+      "failure": "required macOS lifecycle CANCELLED",
+      "newHead": "9014449ef9f3513064d0cd42cb016e53a705fc6c",
+      "newRunId": 39735234697,
+      "newConclusion": "SUCCESS"
+    },
+    {
+      "pr": 735,
+      "headSha": "5a2d1c26409ed8248f3a25ade6e1b2c423c57fc7",
+      "runId": 39677340744,
+      "conclusion": "FAIL",
+      "failure": "TS18047 TS2339 at single-slot-close-admission.test.ts line74",
+      "newHead": "d4c35e2a7adec3b845b03886f314772a65473d63"
+    }
+  ],
+  "currentFailures": [
+    737,
+    744,
+    745
+  ],
+  "currentPending": []
+}

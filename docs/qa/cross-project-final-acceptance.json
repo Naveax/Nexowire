@@ -3,7 +3,7 @@
   "capturedAt": "2026-10-22",
   "baselineSha": "754cc4364822be5fda528f54042fb22a84f19924",
   "branch": "test/parallel-16-independent-qa-20261018",
-  "meaning": "QA16 #703-729 exact head 17 CI SUCCESS/9 FAILED/1 QUEUED; #729 red deliberately tests absent signed high CORE/HyperV/rollback/onecall while browser durable-process independently red. All staging/production/incident BLOCKED.",
+  "meaning": "QA16 pinned main 754cc436 exact PR #730-745 latest 13 full CI SUCCESS / 3 FAIL / 0 pending. Historical initial 11/5 and intermediate 12/3/1 superseded by changed #732/#735 heads. #744 seven mandatory P0 source gates and Windows durable READY real CI FAIL, #737/#745 Windows red. All physical acceptance 22/22 BLOCKED.",
   "requirements": [
     {
       "id": "R01",
@@ -15,19 +15,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#729 necessary source negative error contract red; #704 two real forged ACK/next-chunk cancel failures on old #691 branch; #725 correction source CI SUCCESS only in separate head. Authenticated late ACK/postcondition and no auto replay needed."
+          "evidence": "#729 necessary source negative error contract red; #704 two real forged ACK/next-chunk cancel failures on old #691 branch; #725 correction source CI SUCCESS only in separate head. Authenticated late ACK/postcondition and no auto replay needed.\n[QA16 exact-head #730-#745, 2026-10-22]: QA #730 same #725 cancel/forged ACK regression fixture full CI SUCCESS, source only; real post-effect signed ACK independent provider and no blind retry not demonstrated."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -41,19 +41,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 restored old SQLite journal admits prior completed requestId (verified #729 independent negative job 119437584894); #712/#710 external permit/fence source CI SUCCESS, independent physically rollback-proof CAS not deployed."
+          "evidence": "#587 restored old SQLite journal admits prior completed requestId (verified #729 independent negative job 119437584894); #712/#710 external permit/fence source CI SUCCESS, independent physically rollback-proof CAS not deployed.\n[QA16 exact-head #730-#745, 2026-10-22]: #731/#740 external signed CAS revoked owner and stalled permit race source CI SUCCESS; #587 restored old journal+authority still re-admits completed requestId without real independent monotonic non-co-restorable witness."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -67,19 +67,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#703 journal reopen UNKNOWN source CI green, but Windows durable process reattach READY timed out on #729 browser-live, genuine physical Native postcondition still unverified."
+          "evidence": "#703 journal reopen UNKNOWN source CI green, but Windows durable process reattach READY timed out on #729 browser-live, genuine physical Native postcondition still unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #742 reconnect forensic UNKNOWN source CI SUCCESS, but #744 Windows durable ProcessManager reattach /NW_DURABLE_READY/ 27.3s timeout FAIL; no authenticated physical postcondition readback."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -93,19 +93,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "Broad CORE REAL signed HIGH executor missing, #729 independent core P0 negatives remain intentionally RED; #719 source Access queued revoke green does not imply actual high token or one-time approved local UAC."
+          "evidence": "Broad CORE REAL signed HIGH executor missing, #729 independent core P0 negatives remain intentionally RED; #719 source Access queued revoke green does not imply actual high token or one-time approved local UAC.\n[QA16 exact-head #730-#745, 2026-10-22]: #733/#734/#739/#741/#743 protected Broker FILETIME, imported signed DLL, nonce/CORE epoch source CIs SUCCESS. #744 mandatory HIGH CORE executable endpoint absent; real local-approved signed Broker high token unverified."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -119,19 +119,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#690/#694 Windows TEMP handle alias and effective ACL source CI green but user-file protected module import publisher and live ACL/USB not verified."
+          "evidence": "#690/#694 Windows TEMP handle alias and effective ACL source CI green but user-file protected module import publisher and live ACL/USB not verified.\n[QA16 exact-head #730-#745, 2026-10-22]: #737 closed QA source branch exact CI FAIL separate Windows Job stdin/stdout/stderr, despite other protected-tree branches green; immutable module/transitive importer native handles and ACL not physically accepted."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -145,19 +145,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Main connection/WSS source PASS; #701 signer/owner WSS pairing rotation CI green, cannot substitute independent CAS or CORE HIGH token."
+          "evidence": "Main connection/WSS source PASS; #701 signer/owner WSS pairing rotation CI green, cannot substitute independent CAS or CORE HIGH token.\n[QA16 exact-head #730-#745, 2026-10-22]: #742 connection double reconnect epoch and forensic UNKNOWN CI SUCCESS on feature branch; physical Agent reconnect and owner epoch independent witness not demonstrated."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -171,19 +171,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#705/#717 native Windows signer+import/ancestor ACL CI FAIL though dedicated QA workflow green, #709 alternative fix source green. #729 browser-live Windows durable READY timeout separate actual CI blocker."
+          "evidence": "#705/#717 native Windows signer+import/ancestor ACL CI FAIL though dedicated QA workflow green, #709 alternative fix source green. #729 browser-live Windows durable READY timeout separate actual CI blocker.\n[QA16 exact-head #730-#745, 2026-10-22]: #737 CI FAIL Windows Job missing WINJOB_STDOUT in separate pipes; #745 CI FAIL exit before stdout captured iteration5; #744 browser-live durable restart READY timeout FAIL. Source QA Windows host/red distinct from expected P0 absence."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -197,19 +197,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Generic shell exit code/source receipt interpretation accepted; reported Start-VM access denied exit4 does NOT demonstrate VM state or privileged authority."
+          "evidence": "Generic shell exit code/source receipt interpretation accepted; reported Start-VM access denied exit4 does NOT demonstrate VM state or privileged authority.\n[QA16 exact-head #730-#745, 2026-10-22]: No new PR #730-#745 changes to existing shell/WSL source classification. Preserve historical source-only PASS, no production claim."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -223,19 +223,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#722 local OS/UAC Broker denial source full CI inherited Windows Job red, #728 safe emergency-stop source only, never automate Secure Desktop."
+          "evidence": "#722 local OS/UAC Broker denial source full CI inherited Windows Job red, #728 safe emergency-stop source only, never automate Secure Desktop.\n[QA16 exact-head #730-#745, 2026-10-22]: #736 AI Screen emergency stop source CI SUCCESS, no live private desktop or elevated UAC interaction."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -249,19 +249,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Hash and checkpoint source; #616 stacked cross-Hub/Artifact worker source CI success but no physical signed multi-device proof."
+          "evidence": "Hash and checkpoint source; #616 stacked cross-Hub/Artifact worker source CI success but no physical signed multi-device proof.\n[QA16 exact-head #730-#745, 2026-10-22]: No new SHA checkpoint issue from #730-#745 tested in this QA slice; source PASS retained, physical signed transfer remains BLOCKED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -275,19 +275,19 @@
       "levels": {
         "source": {
           "status": "NOT_TESTED",
-          "evidence": "Consolidated Reliability Doctor real operator UI and original physical incident acceptance not independently run."
+          "evidence": "Consolidated Reliability Doctor real operator UI and original physical incident acceptance not independently run.\n[QA16 exact-head #730-#745, 2026-10-22]: No independent reliability Doctor UI acceptance in #730-#745; stays NOT_TESTED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -301,19 +301,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#711 seeded gzip parser success is source performance only; #724 fairness branch Windows fast-exit CI red, no 100+ real WSS scale proof."
+          "evidence": "#711 seeded gzip parser success is source performance only; #724 fairness branch Windows fast-exit CI red, no 100+ real WSS scale proof.\n[QA16 exact-head #730-#745, 2026-10-22]: #735 PRIOR head 5a2d1c TS18047/TS2339 TypeScript line74 CI FAIL; CURRENT d4c35e2a full CI 39735083325 SUCCESS source only. #738 compressed fairness green not production capacity."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -327,19 +327,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Merged #565 classified upstream error without inventing hidden cause; provider production refusal provenance not tested."
+          "evidence": "Merged #565 classified upstream error without inventing hidden cause; provider production refusal provenance not tested.\n[QA16 exact-head #730-#745, 2026-10-22]: No new provider safety issue in #730-#745, previous source PASS retained without production promotion."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -353,19 +353,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Current main existing OAuth CI source baseline PASS. #675 browser cookie-bound one-time GitHub state CAS CI SUCCESS branch only; D1 schema and BOTH redirect/callback store injections not deployed; may fail closed if merged unwired. No Windows CORE elevation from OAuth."
+          "evidence": "Current main existing OAuth CI source baseline PASS. #675 browser cookie-bound one-time GitHub state CAS CI SUCCESS branch only; D1 schema and BOTH redirect/callback store injections not deployed; may fail closed if merged unwired. No Windows CORE elevation from OAuth.\n[QA16 exact-head #730-#745, 2026-10-22]: No new OAuth/OIDC HEAD in #730-#745; source PASS retained, OAuth identity does not prove Windows admin."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -379,19 +379,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#588 authenticated one-call durable transfer_start/status/cancel not advertised on exact main (required #729 RED). #704 two true wrong-ACK/extra read failures; #725 source branch corrected but no physical 1GiB end-to-end acceptance."
+          "evidence": "#588 authenticated one-call durable transfer_start/status/cancel not advertised on exact main (required #729 RED). #704 two true wrong-ACK/extra read failures; #725 source branch corrected but no physical 1GiB end-to-end acceptance.\n[QA16 exact-head #730-#745, 2026-10-22]: #730 tests earlier #640/#651/#677/#704 against #725 source CI SUCCESS, but exact main #588 durable authenticated onecall transfer_start/status/cancel still unadvertised per #744 required RED."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -405,19 +405,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Private file picker native UIA and owner focus physical negative acceptance not done."
+          "evidence": "Private file picker native UIA and owner focus physical negative acceptance not done.\n[QA16 exact-head #730-#745, 2026-10-22]: No new native Windows UIA acceptance in #730-#745; physical GUI not tested."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -431,19 +431,19 @@
       "levels": {
         "source": {
           "status": "PASS",
-          "evidence": "Environment Doctor source checks PASS, but vmms/vmcompute Running and Medium deny-only token cannot prove Hyper-V VM access/state."
+          "evidence": "Environment Doctor source checks PASS, but vmms/vmcompute Running and Medium deny-only token cannot prove Hyper-V VM access/state.\n[QA16 exact-head #730-#745, 2026-10-22]: No new diagnostic release proof in #730-#745, source-only PASS retained."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -457,19 +457,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "Independent external Progress Watchdog runtime postcondition and cancellation/revoked epoch not signed physical; #648 audit provenance source green not real worker completion proof."
+          "evidence": "Independent external Progress Watchdog runtime postcondition and cancellation/revoked epoch not signed physical; #648 audit provenance source green not real worker completion proof.\n[QA16 exact-head #730-#745, 2026-10-22]: #736 AI Screen child emergency stop launch ordering source CI SUCCESS; no live GUI/privileged process effects."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -483,19 +483,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#705/#717 inherited protected Broker importer ACL native red, #709/#707/#723 source green but #271 live legacy Modify and #551 first-party signed native installer/full rollback/once local UAC unverified."
+          "evidence": "#705/#717 inherited protected Broker importer ACL native red, #709/#707/#723 source green but #271 live legacy Modify and #551 first-party signed native installer/full rollback/once local UAC unverified.\n[QA16 exact-head #730-#745, 2026-10-22]: #732 PRIOR head ea5f1f required macOS lifecycle CANCELLED full CI FAIL; CURRENT head 9014449e run 39735234697 SUCCESS source only. #739 signed CORE importer/epoch also source green but #271 real ACL, #551 genuine signed full rollback and local UAC remain production NO-GO; #745 Windows Job red."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -509,19 +509,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#587 independent monotonic receipt and stale owner/re-pair/revoke external witness physically unavailable; #712/#719 signed nonce/owner readback source green, not non-restorable CAS or physical high token; no UNKNOWN replay."
+          "evidence": "#587 independent monotonic receipt and stale owner/re-pair/revoke external witness physically unavailable; #712/#719 signed nonce/owner readback source green, not non-restorable CAS or physical high token; no UNKNOWN replay.\n[QA16 exact-head #730-#745, 2026-10-22]: #731/#740 signed CAS permit/revoke and readback UNKNOWN source green; #744 #587 required anti-rollback RED remains, independent non-co-restorable CAS and after-effect proof unavailable."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -535,19 +535,19 @@
       "levels": {
         "source": {
           "status": "BLOCKED",
-          "evidence": "#729 scope Hyper-V vm.start incorrectly standard on main, typed Broker allowlist absent; actual physical VMId Running/Off and signed high token UAC unknown."
+          "evidence": "#729 scope Hyper-V vm.start incorrectly standard on main, typed Broker allowlist absent; actual physical VMId Running/Off and signed high token UAC unknown.\n[QA16 exact-head #730-#745, 2026-10-22]: #744 dedicated required P0 source test shows hyperv.vm.start wrongly STANDARD and typed signed Broker allowlist absent; no ReVoltVPN-Ubuntu-Lab Start-VM or Running readback performed."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     },
@@ -561,19 +561,19 @@
       "levels": {
         "source": {
           "status": "FAIL",
-          "evidence": "#729 exact full CI 39662119627 FAILURE: deliberate 7 P0 negatives in dedicated job; Node22 general required gate FAIL and Node24 cancelled; independently browser-live durable-process READY timeout. #721 new exact HEAD queued, cannot claim old green/red."
+          "evidence": "#729 exact full CI 39662119627 FAILURE: deliberate 7 P0 negatives in dedicated job; Node22 general required gate FAIL and Node24 cancelled; independently browser-live durable-process READY timeout. #721 new exact HEAD queued, cannot claim old green/red.\n[QA16 exact-head #730-#745, 2026-10-22]: CURRENT 13 exact-head full CI SUCCESS / 3 FAIL (#737 separate stdout streams, #744 seven mandatory P0 RED plus independent Windows durable READY, #745 fast-exit iteration5) / zero pending. Historical initial 11 SUCCESS/5 FAIL and intermediate 12/3/1 belonged to older SHA/run states; #732 and #735 new HEAD full CIs SUCCESS. None is physical CORE approval."
         },
         "staging": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "production": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         },
         "incident": {
           "status": "BLOCKED",
-          "evidence": "Exact main 754cc4364822be5fda528f54042fb22a84f19924 source-only. Real protected signed elevated CORE high token, one-time local UAC, #271 native ACL #551 signed rollback and #587 independent external witness, physical VMId Running and onecall mutation postcondition not verified."
+          "evidence": "BLOCKED at exact pinned main 754cc4364822be5fda528f54042fb22a84f19924: test-only feature branches do not prove actual signed high-integrity persistent CORE Broker and owner epoch, protected #271 full importer ACL, genuine local one-time UAC and #551 complete signed rollback, #587 independently hosted monotonic witness, #588 physical onecall, authorized Hyper-V GUID Running readback. ReVoltVPN-Ubuntu-Lab untouched. #730-#745 exact source details in docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json."
         }
       }
     }
@@ -767,5 +767,35 @@
     "runId": 39622251466,
     "conclusion": "PASS",
     "scope": "source only, not native elevated physical deployment"
+  },
+  "qa16LatestReview": {
+    "snapshot": "docs/qa/QA_20261022_PR730_745_EXACT_HEAD.json",
+    "report": "docs/qa/INDEPENDENT_QA_PR730_745_20261022.md",
+    "reviewedPrRange": [
+      730,
+      745
+    ],
+    "exactHeads": 16,
+    "sourceFullCi": {
+      "success": 13,
+      "failed": 3,
+      "pending": 0,
+      "historical": {
+        "initial": {
+          "success": 11,
+          "failed": 5,
+          "pending": 0
+        },
+        "intermediate": {
+          "success": 12,
+          "failed": 3,
+          "pending": 1
+        }
+      }
+    },
+    "historicalLedgerEntriesUnchanged": 138,
+    "reason": "Docs-only QA branch: historical ledger intentionally remains immutable to preserve existing source regression assertions; new 16 heads are an additive SHA-scoped snapshot.",
+    "physicalRelease": "NO_GO",
+    "liveReVoltVpnUbuntuLab": "UNTOUCHED"
   }
 }
