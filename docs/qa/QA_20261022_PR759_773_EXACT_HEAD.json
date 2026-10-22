@@ -1,0 +1,323 @@
+{
+  "schema": "nexowire.qa16.pr759-773.v1",
+  "capturedDate": "2026-10-22",
+  "main": "754cc4364822be5fda528f54042fb22a84f19924",
+  "priorQa": {
+    "pr": 769,
+    "head": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+    "run": 39803688568,
+    "conclusion": "FAILURE",
+    "requiredP0": {
+      "jobId": 119911125445,
+      "conclusion": "FAILURE",
+      "missingContracts": 7,
+      "originalNegativeSuiteUnmodified": true
+    },
+    "windowsDurable": {
+      "jobId": 119911125386,
+      "conclusion": "FAILURE",
+      "reason": "ProcessManager reattach NW_DURABLE_READY timeout 26.85s"
+    }
+  },
+  "fullCi": {
+    "success": 8,
+    "failed": 3,
+    "inProgress": 2,
+    "noRunVerified": 2,
+    "historical": {
+      "success": 6,
+      "failed": 3,
+      "inProgress": 4,
+      "noRunVerified": 2,
+      "reason": "Earlier #765/#770 still running on same SHA"
+    }
+  },
+  "prs": [
+    {
+      "pr": 759,
+      "head": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+      "base": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+      "run": 39802773499,
+      "status": "PASS",
+      "requirements": [
+        "R09",
+        "R18"
+      ],
+      "scope": "Private picker Linux forged PID QA correction source green; no physical secure desktop",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 760,
+      "head": "1e41df6cfc60a57e6d0b50344731136705f37030",
+      "base": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+      "run": 39802818096,
+      "status": "IN_PROGRESS",
+      "requirements": [
+        "R04",
+        "R14",
+        "R20"
+      ],
+      "scope": "OAuth epoch/refresh source CI in progress, browser issuer session cannot attest Windows HIGH token",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 761,
+      "head": "a19b1e698273a9417c8c8a054de4e56753a937cf",
+      "base": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+      "run": 39802972334,
+      "status": "PASS",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "scope": "Two-Hub native final commit/revoke linearization tests green source, external authority deployment unknown",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 762,
+      "head": "9709bfe2250dd2fec6a65937dd2059ee66be39f3",
+      "base": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "run": 39803019258,
+      "status": "PASS",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "scope": "External rollback and signed SHA/forged ACK negative QA source success only, no actual final writer immutable receipt",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 763,
+      "head": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c",
+      "base": "d4ed32f72701e5157929cbb9d36bdf0a90fc0d57",
+      "run": 39803136306,
+      "status": "IN_PROGRESS",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19"
+      ],
+      "scope": "Dedicated QA03 39803137184 SUCCESS on strict JSON schema, full CI remains in progress; input parser not installed Broker attestation",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 764,
+      "head": "12137946976c6cbcf70740e2a3b3737aed427d0c",
+      "base": "13acf85b063cd87e5bcf7a43e4fb650f63a30f42",
+      "run": 39803317749,
+      "status": "PASS",
+      "requirements": [
+        "R02",
+        "R04",
+        "R20"
+      ],
+      "scope": "External reserve-to-commit CAS against revoke-start and lost readback source green, not independent installed CAS",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 765,
+      "head": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+      "base": "6316643684755f9b4e227de13323aaac26077e4d",
+      "run": 39803342678,
+      "status": "PASS",
+      "requirements": [
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "scope": "Signed importer ACL closure SYSTEM DPAPI rollback source in-progress, no physical signed install [Later same exact-head full CI SUCCESS; source only.]",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 766,
+      "head": "4b2f9c1941000a93919913a6e0c06c8008dc35bf",
+      "base": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "run": 39803836141,
+      "status": "PASS",
+      "requirements": [
+        "R01",
+        "R12",
+        "R15",
+        "R20"
+      ],
+      "scope": "Final publish receipt vs unknown writer-stop and quota release source QA green, no authentic production publication",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 767,
+      "head": "6967cc92ae85e5d1034591940d273615c4056e00",
+      "base": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+      "run": 39803417079,
+      "status": "PASS",
+      "requirements": [
+        "R02",
+        "R04",
+        "R19",
+        "R20"
+      ],
+      "scope": "Require installed signed Broker and final CAS grant source negative test CI green; actual installed HIGH still missing",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 768,
+      "head": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+      "base": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "run": null,
+      "status": "NOT_VERIFIED",
+      "requirements": [
+        "R01",
+        "R02",
+        "R15",
+        "R20"
+      ],
+      "scope": "No exact-head workflow returned for external monotonic final publication commit; no green claim",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 769,
+      "head": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+      "base": "74917540d8977c50430b103f32c872ce800bf86e",
+      "run": 39803688568,
+      "status": "FAIL",
+      "requirements": [
+        "R02",
+        "R03",
+        "R04",
+        "R07",
+        "R15",
+        "R19",
+        "R20",
+        "R21",
+        "R22"
+      ],
+      "scope": "Mandatory 7 P0 source negatives plus independent Windows NW_DURABLE_READY process reattach timeout; no test skip",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 770,
+      "head": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+      "base": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+      "run": 39804271245,
+      "status": "PASS",
+      "requirements": [
+        "R01",
+        "R03",
+        "R15",
+        "R20"
+      ],
+      "scope": "Cross-reconnect Native final receipt exact CI in progress, cannot infer authenticated physical postcondition [Later same exact-head full CI SUCCESS; source only.]",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 771,
+      "head": "84856d5474f1f6177610e7a7e53da62135cc7bcb",
+      "base": "0f7c6af824c282764cdb594d0fba474686683062",
+      "run": 39804391279,
+      "status": "FAIL",
+      "requirements": [
+        "R04",
+        "R07",
+        "R19",
+        "R22"
+      ],
+      "scope": "Real Node24 public CORE status provider/CAS missing negative RED; Windows native surrogate attestation test FAIL ~20s, independent separate",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 772,
+      "head": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+      "base": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+      "run": 39804484972,
+      "status": "FAIL",
+      "requirements": [
+        "R07",
+        "R22"
+      ],
+      "scope": "QA DAG 160-PR partition full CI FAILURE browser-live Windows Job fast-exit stdout-before-exited iteration1; source DAG cannot claim latest open count verified",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    },
+    {
+      "pr": 773,
+      "head": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "base": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+      "run": null,
+      "status": "NOT_VERIFIED",
+      "requirements": [
+        "R09",
+        "R18"
+      ],
+      "scope": "No exact-head workflow returned for private desktop physical STOP correction; no live UIA/UAC",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "incident": "BLOCKED"
+    }
+  ],
+  "otherWorkflows": {
+    "qa763": {
+      "run": 39803137184,
+      "result": "SUCCESS",
+      "scope": "QA03 strict Windows schema, not full CI green"
+    }
+  },
+  "actualFailEvidence": {
+    "pr771": {
+      "run": 39804391279,
+      "sourceJob": 119913589035,
+      "sourceFailure": "PUBLIC_CORE_STATUS_CONTRACT_GAP: native provider absent, signed installed HIGH evidence and external CAS dispatch distinctions missing",
+      "windowsJob": 119913589085,
+      "windowsFailure": "signed Windows surrogate native provider attestation timeout ~20s, null !== 0"
+    },
+    "pr772": {
+      "run": 39804484972,
+      "job": 119913921496,
+      "reason": "Windows Job fast-exit exited before stdout captured iteration 1"
+    }
+  },
+  "releaseGates": {
+    "coreSignedInstalledHighExecutor": "BLOCKED",
+    "typedHypervElevatedGuidPrivilege": "FAIL",
+    "acl271": "BLOCKED",
+    "signedInstaller551": "BLOCKED",
+    "rollbackResistantExternalCas587": "BLOCKED",
+    "durableOnecallAndIndependentFinalPublisher588": "BLOCKED",
+    "physicalVmRunningReadback": "BLOCKED",
+    "ReVoltVpnUbuntuLab": "UNTOUCHED"
+  },
+  "governance": {
+    "sourceOnly": true,
+    "fullCiGreenNotDedicatedQa": true,
+    "originalNegativeTestsPreserved": true,
+    "productionMerge": false
+  }
+}

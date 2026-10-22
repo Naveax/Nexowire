@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -49,5 +49,6 @@ test('R01-R22 layer statuses never promote source green to production acceptance
  assert.equal(m.inspectedMainSha,'754cc4364822be5fda528f54042fb22a84f19924');
  assert.deepEqual(m.requirements.reduce((o:any,r:any)=>(o[r.levels.source.status]=(o[r.levels.source.status]||0)+1,o),{}),{BLOCKED:9,FAIL:6,PASS:6,NOT_TESTED:1});
  assert.ok(m.requirements.every((r:any)=>['staging','production','incident'].every(k=>r.levels[k].status==='BLOCKED')));
- assert.deepEqual(m.qa16LatestReview.fullCi,{success:6,failed:4,unverified:2});
+ const historical=rd('QA_20261022_PR747_758_EXACT_HEAD.json');
+ assert.deepEqual(historical.totals,{fullCiSuccess:6,fullCiFail:4,noVerifiedRun:2});
 });
