@@ -129,11 +129,25 @@ export async function collectOpenPrIntegration(api:GithubRead,repo:string,explic
  const byId=new Map(before.map(x=>[x.pr,x]));
  const byBranch=new Map<string,number[]>();for(const p of before)byBranch.set(p.head_ref,[...(byBranch.get(p.head_ref)||[]),p.pr]);
  const criticalIds=new Set<number>([...explicitCritical,...before.filter(p=>p.labels.some(l=>/^(p0|p1|priority[:/ -]?(0|1))$/i.test(l))).map(p=>p.pr)]);
- for(const id of [...criticalIds]){
-  if(!byId.has(id))throw Error(`CRITICAL_NOT_OPEN_${id}`);
-  for(const ancestor of ancestorIds(id,byId,byBranch))criticalIds.add(ancestor);
- }
+ for(const id of criticalIds)if(!byId.has(id))throw Error(`CRITICAL_NOT_OPEN_${id}`);
  if(criticalIds.size===0)throw Error('CRITICAL_SCOPE_REQUIRED');
+ // Critical parents pull in every open test-only child, even when its base SHA
+ // still points to an older parent HEAD. Then include ancestors as well.
+ // This is a branch-identity DAG witness, not a claim of human code ownership.
+ let changed=true;
+ while(changed){
+  changed=false;
+  for(const id of [...criticalIds]){
+   for(const ancestor of ancestorIds(id,byId,byBranch))
+    if(!criticalIds.has(ancestor)){criticalIds.add(ancestor);changed=true;}
+  }
+  for(const child of before){
+   const parents=byBranch.get(child.base_ref)||[];
+   if(parents.length===1&&criticalIds.has(parents[0]!)&&!criticalIds.has(child.pr)){
+    criticalIds.add(child.pr);changed=true;
+   }
+  }
+ }
  const evidence:NodeEvidence[]=[];
  for(const id of [...criticalIds].sort((a,b)=>a-b))evidence.push(await loadNode(api,root,byId.get(id)!));
  const after=await openSnapshot(api,root),mainAfter=await readMain(api,root);
