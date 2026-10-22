@@ -116,7 +116,9 @@ function mockApi(count:number,opt?:{moved?:boolean;ciMoved?:boolean}):{
   }
   if(u.pathname.endsWith('/actions/runs')){
    stats.ciReads++;
-   const sha=u.searchParams.get('head_sha'),n=rows.find(x=>x.head_sha===sha);
+   const sha=u.searchParams.get('head_sha');
+   const n=rows.find(x=>x.head_sha===sha)||
+     (opt?.moved&&sha==='a'.repeat(40)?rows.find(x=>x.pr===811):undefined);
    if(!n)throw Error('UNKNOWN_CI_SHA');
    const count=(ciReadsBySha.get(sha!)||0)+1;ciReadsBySha.set(sha!,count);
    const altered=opt?.ciMoved&&n.pr===811&&count>=2;
@@ -129,7 +131,8 @@ function mockApi(count:number,opt?:{moved?:boolean;ciMoved?:boolean}):{
   const comp=u.pathname.match(/\/compare\/([a-f0-9]{40})\.\.\.([a-f0-9]{40})$/);
   if(comp){
    stats.compares++;
-   const n=rows.find(x=>x.base_sha===comp[1]&&x.head_sha===comp[2]);
+   const n=rows.find(x=>x.base_sha===comp[1]&&x.head_sha===comp[2])||
+     (opt?.moved&&comp[2]==='a'.repeat(40)?rows.find(x=>x.pr===811):undefined);
    if(!n)throw Error('UNKNOWN_COMPARE_SHA');
    return {status:n.compare_status,merge_base_commit:{sha:n.merge_base_sha}};
   }
