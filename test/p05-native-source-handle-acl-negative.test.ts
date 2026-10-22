@@ -167,6 +167,33 @@ test('two independent destination parent witnesses must match full volume serial
   }
 });
 
+test('approved native grant root FileID and volume serial cannot be silently rebound on stable path',()=>{
+  // These two mutation cases preserve every existing retained-handle
+  // before/after comparison and the pinned requested pathname. Without
+  // separately recorded ORIGINAL grant-root identity, source currently
+  // treats a replacement object or changed volume serial as authorized.
+  for(const modify of [
+    (x:VerifiedFilesystemBoundary)=>{
+      for(const handle of [x.destinationRelativeChain.grantRoot,x.destinationParent]){
+        handle.fileId='replacement-dir-same-path';
+        handle.observedAfter.fileId='replacement-dir-same-path';
+      }
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      for(const handle of [x.destinationRelativeChain.grantRoot,x.destinationParent]){
+        handle.volumeSerial='other-volume-serial-same-path';
+        handle.observedAfter.volumeSerial='other-volume-serial-same-path';
+      }
+    },
+  ]){
+    const evidence=syntheticProtectedBoundary();
+    modify(evidence);
+    assert.throws(()=>verify(evidence),
+      denied('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED'),
+      'Native grant root approval must bind the exact root FileID and volume serial');
+  }
+});
+
 test('native retained-handle and owner-epoch witnesses reject truthy but unverified fields',()=>{
   // This is the original protected FILE boundary, not the already-strict
   // transitive imported-DLL graph. Missing and stringified Win32 evidence

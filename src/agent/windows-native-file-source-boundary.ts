@@ -64,6 +64,10 @@ export interface NativeGrantEvidence {
   deviceId:string;
   scopes:readonly FileScope[];
   root:string;
+  /** Immutable FileID from the independently approved grant-root handle. */
+  rootFileId:string;
+  /** Independently approved native volume serial. */
+  volumeSerial:string;
   expiresAtMonotonic:number;
   observedAtMonotonic:number;
   approvalEpoch:number;
@@ -216,7 +220,12 @@ export function assertNativeProtectedFileBoundary(
      grant.currentOwnerEpoch<0 ||
      grant.approvalEpoch!==grant.currentOwnerEpoch ||
      !inside(grant.root,requestedDestination) ||
+     // FileId and volume serial of approved ROOT must survive rename/recreate.
+     !grant.rootFileId || !grant.volumeSerial ||
+     evidence.destinationRelativeChain.grantRoot.fileId!==grant.rootFileId ||
+     evidence.destinationRelativeChain.grantRoot.volumeSerial!==grant.volumeSerial ||
      !idMatches(evidence.destinationParent,evidence.destinationParent.observedAfter) ||
+     evidence.destinationParent.volumeSerial!==grant.volumeSerial ||
      evidence.destinationParent.volumeGuid!==grant.volumeGuid ||
      evidence.destinationParent.diskId!==grant.diskId ||
      evidence.destinationParent.partitionNumber!==grant.partitionNumber ||

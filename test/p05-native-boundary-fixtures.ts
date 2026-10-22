@@ -141,6 +141,7 @@ export function syntheticProtectedBoundary():VerifiedFilesystemBoundary{
       ownerId:'trusted-owner',deviceId:'trusted-device',
       scopes:['read','write','delete','move'],
       root:'C:\\Protected\\owner',
+      rootFileId:'dest-parent-id',volumeSerial:volumeId.volumeSerial,
       expiresAtMonotonic:1000,observedAtMonotonic:500,
       approvalEpoch:4,currentOwnerEpoch:4,
       volumeGuid:volumeId.volumeGuid,diskId:volumeId.diskId,
