@@ -295,18 +295,18 @@ test('retained native per-DLL and ancestor witnesses reject truthy flags and omi
     }
     mutation(f=>{byKey(graph(f),key).handle.alternateStream=undefined as never;},
       'IMPORT_FILE_HANDLE_UNVERIFIED');
+    // Strict low-level native relative-handle gate now rejects this first.
     mutation(f=>{byKey(graph(f),key).parentRelativeChain.grantRoot.alternateStream=undefined as never;},
-      'IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+      'NATIVE_RELATIVE_HANDLE_CHANGED');
   }
   for(const bad of [1,'true',{},undefined]){
-    // Missing/falsy no-follow evidence is already denied by the lower-level
-    // relative-handle gate. Truthy wrong types must be denied at import gate.
+    // All wrong types, including truthy values, now deny at the lower-level
+    // relative-handle gate rather than arriving at the import fallback.
     mutation(f=>{byKey(graph(f),'root').parentRelativeChain.steps[0]!.child.noFollowVerified=bad as never;},
-      bad===undefined?'NATIVE_RELATIVE_HANDLE_CHANGED':
-        'IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+      'NATIVE_RELATIVE_HANDLE_CHANGED');
   }
   mutation(f=>{byKey(graph(f),'root').parentRelativeChain.steps[0]!.child.alternateStream=undefined as never;},
-    'IMPORT_ANCESTOR_HANDLE_FLAGS_UNVERIFIED');
+    'NATIVE_RELATIVE_HANDLE_CHANGED');
 });
 
 test('hardlink aliases with distinct manifest keys cannot silently reuse same native file identity',()=>{

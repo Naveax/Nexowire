@@ -123,8 +123,8 @@ export function authorizeNativeRelativeChain(
   let current=root;
   let previous=chain.grantRoot;
   const check=(handle:NativeHandleEvidence,expected:string)=>{
-    if(!handle||handle.objectType!=='directory'||!handle.noFollowVerified||
-      handle.reparseTag!==null||handle.alternateStream||
+    if(!handle||handle.objectType!=='directory'||handle.noFollowVerified!==true||
+      handle.reparseTag!==null||handle.alternateStream!==false||
       !Number.isSafeInteger(handle.linkCount)||handle.linkCount<1||
       canonical(handle.openedPath)!==canonical(expected)||
       canonical(handle.finalPath)!==canonical(expected)||

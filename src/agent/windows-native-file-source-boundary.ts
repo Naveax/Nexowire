@@ -122,8 +122,8 @@ function idMatches(a:NativeFileId,b:NativeFileId):boolean{
 export function assertNativeHandleIdentity(
   handle:NativeHandleEvidence,expected:string,kind:'file'|'directory',
 ):void{
-  if(!handle||!handle.noFollowVerified || handle.objectType!==kind ||
-     handle.alternateStream || handle.reparseTag!==null ||
+  if(!handle||handle.noFollowVerified!==true || handle.objectType!==kind ||
+     handle.alternateStream!==false || handle.reparseTag!==null ||
      !Number.isSafeInteger(handle.linkCount)||handle.linkCount<1 ||
      (kind==='file' && handle.linkCount!==1) ||
      canonical(handle.openedPath)!==canonical(expected) ||
@@ -204,13 +204,16 @@ export function assertNativeProtectedFileBoundary(
   if(!idMatches(verified.parent,evidence.destinationParent)){
     deny('FILE_NATIVE_PARENT_HANDLE_NOT_PINNED');
   }
-  if(!grant.ownerApprovalVerified ||
+  if(grant.ownerApprovalVerified!==true ||
      grant.ownerId!==ownerId||grant.deviceId!==deviceId||
      !grant.scopes.includes(scope) ||
      !Number.isFinite(grant.expiresAtMonotonic) ||
      !Number.isFinite(grant.observedAtMonotonic)||
      grant.expiresAtMonotonic<=grant.observedAtMonotonic ||
      !Number.isSafeInteger(grant.approvalEpoch) ||
+     grant.approvalEpoch<0 ||
+     !Number.isSafeInteger(grant.currentOwnerEpoch) ||
+     grant.currentOwnerEpoch<0 ||
      grant.approvalEpoch!==grant.currentOwnerEpoch ||
      !inside(grant.root,requestedDestination) ||
      !idMatches(evidence.destinationParent,evidence.destinationParent.observedAfter) ||

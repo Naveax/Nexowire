@@ -167,6 +167,36 @@ test('two independent destination parent witnesses must match full volume serial
   }
 });
 
+test('native retained-handle and owner-epoch witnesses reject truthy but unverified fields',()=>{
+  // This is the original protected FILE boundary, not the already-strict
+  // transitive imported-DLL graph. Missing and stringified Win32 evidence
+  // must NOT promote a caller-supplied object into retained-handle authority.
+  for(const mutate of [
+    (x:VerifiedFilesystemBoundary)=>{x.source.noFollowVerified='true' as never;},
+    (x:VerifiedFilesystemBoundary)=>{x.source.alternateStream=undefined as never;},
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.noFollowVerified=1 as never;
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.alternateStream=undefined as never;
+    },
+    (x:VerifiedFilesystemBoundary)=>{x.grant.ownerApprovalVerified='true' as never;},
+    (x:VerifiedFilesystemBoundary)=>{
+      x.grant.approvalEpoch=-1;
+      x.grant.currentOwnerEpoch=-1;
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      x.grant.approvalEpoch=4;
+      x.grant.currentOwnerEpoch=4.5;
+    },
+  ]){
+    const fixture=syntheticProtectedBoundary(); mutate(fixture);
+    assert.throws(()=>verify(fixture),
+      (error:unknown)=>error instanceof NativeFileBoundaryError,
+      'Wrong type or impossible ownerEpoch must not authorize native access');
+  }
+});
+
 test('destination never leaves granted root even for path-prefix sibling, ADS, traversal or junction parent',()=>{
   for(const destination of [
     'C:\\Protected\\owner-other\\stage.tmp',
