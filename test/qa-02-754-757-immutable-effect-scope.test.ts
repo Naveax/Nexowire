@@ -172,6 +172,60 @@ test('QA02 #776/#777/#780 preserves original UNKNOWN code against duplicate sign
   assert.equal(invalid.automaticallyRetryable,false);
 });
 
+test('QA02 #785/#781 post-effect cancellation keeps its original error across issuer and epoch forgery',()=>{
+  // #776 observed a staged Native effect before cancellation. This original
+  // cancellation error is not the same as a clean pre-dispatch CANCELLED.
+  const cancelledAfterEffect={
+    ...expected(),originalErrorCode:'TRANSFER_CANCEL_AFTER_MUTATION',
+  };
+  const foreignIssuer={
+    ...obs(),nativeIssuer:'foreign-signed-publisher',
+    durableCommitId:'attested-looking-'+id.requestId,
+  };
+  const forged=reconcileElevatedOutcomeEvidence(
+    cancelledAfterEffect,foreignIssuer,gates());
+  assert.equal(forged.reason,'FORGED_OR_INVALID_OBSERVATION');
+  assert.equal(forged.originalErrorCode,'TRANSFER_CANCEL_AFTER_MUTATION');
+  assert.equal(forged.code,'MUTATION_STATE_UNKNOWN');
+  assert.equal(forged.status,'unknown');
+  assert.equal(forged.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(forged.retrySafety,'reconcile_first');
+  assert.equal(forged.requestId,id.requestId);
+  assert.equal(forged.operationId,id.operationId);
+  assert.equal(forged.effectVerified,false);
+  assert.equal(forged.automaticallyRetryable,false);
+
+  // A matching SHA-shaped candidate from an earlier owner epoch cannot
+  // attest publication/VM effect, even when a later ACK reports exitCode=0.
+  const stale=reconcileElevatedOutcomeEvidence(cancelledAfterEffect,{
+    ...obs(),immutableVmEffect:{...immutableClaim(),ownerEpoch:id.ownerEpoch-1},
+  },gates());
+  assert.equal(stale.reason,'POSTCONDITION_IDENTITY_MISMATCH');
+  assert.equal(stale.originalErrorCode,'TRANSFER_CANCEL_AFTER_MUTATION');
+  assert.equal(stale.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(stale.automaticallyRetryable,false);
+
+  // #785 external publication checkpoint proof is a different authority,
+  // and #781's cloned runbook ID cannot transform uncertain effect into
+  // PASSED. Even internally matching ACK+readback remains unauthenticated.
+  const apparentlyComplete=reconcileElevatedOutcomeEvidence(
+    cancelledAfterEffect,obs(),gates());
+  assert.equal(apparentlyComplete.reason,'POSTCONDITION_NATIVE_ATTESTATION_MISSING');
+  assert.equal(apparentlyComplete.originalErrorCode,'TRANSFER_CANCEL_AFTER_MUTATION');
+  assert.equal(apparentlyComplete.code,'MUTATION_STATE_UNKNOWN');
+  assert.equal(apparentlyComplete.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(apparentlyComplete.effectVerified,false);
+  assert.equal(apparentlyComplete.automaticallyRetryable,false);
+
+  const clone=reconcileElevatedOutcomeEvidence(cancelledAfterEffect,{
+    ...obs(),runbook_id:'qa18-cloned-task',
+  },gates());
+  assert.equal(clone.reason,'FORGED_OR_INVALID_OBSERVATION');
+  assert.equal(clone.originalErrorCode,'TRANSFER_CANCEL_AFTER_MUTATION');
+  assert.equal(clone.code,'MUTATION_STATE_UNKNOWN');
+  assert.equal(clone.automaticallyRetryable,false);
+});
+
 test('QA02 #757 revoke and capability scope: VM state is inapplicable to shell, late permit never creates success',()=>{
   const shell=expected('core.shell.exec');
   assert.equal(check(shell).reason,'POSTCONDITION_NOT_APPLICABLE');
