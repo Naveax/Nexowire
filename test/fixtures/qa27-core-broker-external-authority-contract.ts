@@ -31,6 +31,10 @@ export interface ProtectedBrokerEvidence {
   readonly exeAndAncestorsAclVerified: boolean;
   readonly everyImportAndUpdaterAncestorAclVerified: boolean;
   readonly independentImportEnumeration: boolean;
+  /** #743: independently complete second-level/loader dependency closure. */
+  readonly transitiveImportsIndependentlyEnumerated: boolean;
+  /** #743: native effective low-priv AccessCheck, not DACL ACE enumeration. */
+  readonly nativeLowPrivilegeEffectiveAccessCheckCompleted: boolean;
   readonly signedReleaseAndRollbackManifest: boolean;
   readonly importedPublishersAndHashesVerified: boolean;
   readonly processPidCreationFiletimeMatches: boolean;
@@ -137,7 +141,10 @@ export function classifySourceOnlyCrossBranchCase(c: CrossBranchCase): CrossBran
     return outcome('BLOCKED','ENROLLMENT_SIGNER_IMAGE_MISMATCH');
   if (!b.signedPinnedPublisher || !b.exeAndAncestorsAclVerified ||
     !b.everyImportAndUpdaterAncestorAclVerified ||
-    !b.independentImportEnumeration || !b.signedReleaseAndRollbackManifest ||
+    !b.independentImportEnumeration ||
+    !b.transitiveImportsIndependentlyEnumerated ||
+    !b.nativeLowPrivilegeEffectiveAccessCheckCompleted ||
+    !b.signedReleaseAndRollbackManifest ||
     !b.importedPublishersAndHashesVerified)
     return outcome('BLOCKED','BROKER_EXE_IMPORT_UPDATER_TRUST_INCOMPLETE');
   if (!b.processPidCreationFiletimeMatches ||
@@ -187,6 +194,8 @@ export const syntheticCrossBranchCase: CrossBranchCase={
   broker:{
     signedPinnedPublisher:true,exeAndAncestorsAclVerified:true,
     everyImportAndUpdaterAncestorAclVerified:true,independentImportEnumeration:true,
+    transitiveImportsIndependentlyEnumerated:true,
+    nativeLowPrivilegeEffectiveAccessCheckCompleted:true,
     signedReleaseAndRollbackManifest:true,importedPublishersAndHashesVerified:true,
     processPidCreationFiletimeMatches:true,volumeSerialAndFileIdMatches:true,
     runningImageHandleHashMatches:true,noLowPrivProcessDupHandle:true,
