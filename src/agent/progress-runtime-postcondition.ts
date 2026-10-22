@@ -47,6 +47,7 @@ export interface RuntimeCompletionKeys {
   issuer:KeyObject;
   immutableStorage:KeyObject;
   publication:KeyObject;
+  monotonicCommit:KeyObject;
   postcondition:KeyObject;
 }
 export type RuntimeCompletionStatus=
@@ -123,12 +124,17 @@ export class ProgressRuntimePostconditionAdapter {
        expected.completedCount!==request.expectedCount||
        !keyOk(keys.issuer)||!keyOk(keys.immutableStorage)||
        !keyOk(keys.postcondition)||!keyOk(keys.publication)||
+       !keyOk(keys.monotonicCommit)||
        !distinct(keys.issuer,keys.immutableStorage)||
        !distinct(keys.issuer,keys.postcondition)||
        !distinct(keys.immutableStorage,keys.postcondition)||
        !distinct(keys.publication,keys.issuer)||
        !distinct(keys.publication,keys.postcondition)||
-       !distinct(keys.publication,keys.immutableStorage))
+       !distinct(keys.publication,keys.immutableStorage)||
+       !distinct(keys.monotonicCommit,keys.issuer)||
+       !distinct(keys.monotonicCommit,keys.immutableStorage)||
+       !distinct(keys.monotonicCommit,keys.publication)||
+       !distinct(keys.monotonicCommit,keys.postcondition))
       throw new Error('RUNTIME_TRUST_BOUNDARY_INVALID');
   }
   private blockUnknown():RuntimeCompletionStatus{
@@ -220,7 +226,7 @@ export class ProgressRuntimePostconditionAdapter {
       }
       const permit=await verifyOffhostCompletion(signed,this.expected,
         this.keys.issuer,this.keys.immutableStorage,
-        this.keys.publication,this.ports,this.now);
+        this.keys.publication,this.keys.monotonicCommit,this.ports,this.now);
       if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
       if(!permit){
         // An in-flight CORE revoke can make the lower-level verifier fail

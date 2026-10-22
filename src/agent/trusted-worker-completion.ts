@@ -69,7 +69,26 @@ export function canonicalFinalPublicationWitness(
       p.ownerAccountId,p.projectId,p.targetDeviceId,p.targetPath,
       p.bytesTotal,p.sha256,p.writerEpoch,p.publishedAt])+'\\n','utf8');
 }
+/** Source-only #768 rollback-external atomic publication commit attestation.
+ * Native final receipt and local WAL COMPLETED do not supply this proof. */
+export interface SignedMonotonicPublicationCommit {
+  version:1; durableCommitId:string; publicationRequestId:string;
+  jobId:string;ownerAccountId:string;projectId:string;
+  targetDeviceId:string;targetPath:string;sha256:string;
+  bytesTotal:number;writerEpoch:number;ownerGrantEpoch:number;
+  committedAt:string;signatureBase64:string;
+}
+export function canonicalMonotonicPublicationCommit(
+  c:Omit<SignedMonotonicPublicationCommit,'signatureBase64'>):Buffer {
+  return Buffer.from('NEXOWIRE_EXTERNAL_MONOTONIC_PUBLISH_COMMIT_V1\n'+
+    JSON.stringify([c.version,c.durableCommitId,c.publicationRequestId,
+      c.jobId,c.ownerAccountId,c.projectId,c.targetDeviceId,c.targetPath,
+      c.sha256,c.bytesTotal,c.writerEpoch,c.ownerGrantEpoch,c.committedAt])+
+      '\n','utf8');
+}
 export interface TrustedCompletionPorts {
+  /** Independently authenticated readback from rollback-external #768 CAS. */
+  readMonotonicPublicationCommit():Promise<SignedMonotonicPublicationCommit>;
   /** Only independently authenticated and witnessed #754 final Native publish. */
   readFinalPublicationWitness():Promise<SignedFinalPublicationWitness>;
   /** Signed by independently pinned immutable off-host storage authority. */
@@ -139,6 +158,7 @@ export async function verifyOffhostCompletion(
   pinnedPublicKey:KeyObject,
   pinnedStoragePublicKey:KeyObject,
   pinnedPublicationPublicKey:KeyObject,
+  pinnedMonotonicCommitPublicKey:KeyObject,
   ports:TrustedCompletionPorts,
   now:()=>number=Date.now,
 ):Promise<VerifiedCompletionPermit|null>{
@@ -150,12 +170,17 @@ export async function verifyOffhostCompletion(
        pinnedStoragePublicKey.asymmetricKeyType!=='ed25519'||
        pinnedPublicationPublicKey?.type!=='public'||
        pinnedPublicationPublicKey.asymmetricKeyType!=='ed25519'||
+       pinnedMonotonicCommitPublicKey?.type!=='public'||
+       pinnedMonotonicCommitPublicKey.asymmetricKeyType!=='ed25519'||
        pinnedPublicKey.export({type:'spki',format:'der'}).equals(
          pinnedStoragePublicKey.export({type:'spki',format:'der'}))||
        pinnedPublicationPublicKey.export({type:'spki',format:'der'}).equals(
          pinnedStoragePublicKey.export({type:'spki',format:'der'}))||
        pinnedPublicationPublicKey.export({type:'spki',format:'der'}).equals(
-         pinnedPublicKey.export({type:'spki',format:'der'})))return refuse();
+         pinnedPublicKey.export({type:'spki',format:'der'}))||
+       [pinnedPublicKey,pinnedStoragePublicKey,pinnedPublicationPublicKey].some(
+         k=>pinnedMonotonicCommitPublicKey.export({type:'spki',format:'der'}).equals(
+           k.export({type:'spki',format:'der'}))))return refuse();
     const s=parsed.data;
     const keys=['ownerAccountId','deviceId','projectId','runId','sessionId',
       'requestId','grantId','ownerGrantEpoch','sourceDeviceId','targetDeviceId',
@@ -243,6 +268,36 @@ export async function verifyOffhostCompletion(
        publicationSig.toString('base64')!==final.signatureBase64||
        !verify(null,canonicalFinalPublicationWitness(finalBody),
          pinnedPublicationPublicKey,publicationSig))return refuse();
+    // Signed Native publication is only a side-effect receipt. #768 requires
+    // independently durable, monotonic commitPublished before COMPLETED.
+    const commitWitness=await ports.readMonotonicPublicationCommit();
+    if(!commitWitness||commitWitness.version!==1||
+       !z.string().uuid().safeParse(commitWitness.durableCommitId).success||
+       commitWitness.publicationRequestId!==final.publicationRequestId||
+       commitWitness.publicationRequestId!==expected.publicationRequestId||
+       commitWitness.jobId!==s.jobId||commitWitness.ownerAccountId!==s.ownerAccountId||
+       commitWitness.projectId!==s.projectId||
+       commitWitness.targetDeviceId!==s.targetDeviceId||
+       commitWitness.targetPath!==s.targetPath||
+       commitWitness.sha256!==s.immutableObjectSha256||
+       commitWitness.bytesTotal!==wholeSize||
+       commitWitness.writerEpoch!==expected.writerEpoch||
+       commitWitness.writerEpoch!==final.writerEpoch||
+       commitWitness.ownerGrantEpoch!==s.ownerGrantEpoch||
+       commitWitness.ownerGrantEpoch!==expected.ownerGrantEpoch||
+       typeof commitWitness.committedAt!=='string'||
+       !Number.isFinite(Date.parse(commitWitness.committedAt))||
+       Date.parse(commitWitness.committedAt)<Date.parse(final.publishedAt)-2000||
+       Date.parse(commitWitness.committedAt)>now()+2000||
+       now()-Date.parse(commitWitness.committedAt)>30000||
+       typeof commitWitness.signatureBase64!=='string'||
+       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(commitWitness.signatureBase64))return refuse();
+    const commitSig=Buffer.from(commitWitness.signatureBase64,'base64');
+    const {signatureBase64:_commitSignature,...commitBody}=commitWitness;
+    if(commitSig.length!==64||
+       commitSig.toString('base64')!==commitWitness.signatureBase64||
+       !verify(null,canonicalMonotonicPublicationCommit(commitBody),
+         pinnedMonotonicCommitPublicKey,commitSig))return refuse();
     // Recheck owner epoch/cancellation and remote final state AFTER readback.
     const [g1,t1]=await Promise.all([ports.readGrant(),ports.readTransfer()]);
     if(!matchesGrant(g1,s)||!matchesTransfer(t1,s)||now()-t>30000)return refuse();

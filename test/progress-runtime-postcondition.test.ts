@@ -9,7 +9,7 @@ import { ProgressSupervisor } from '../src/agent/progress-supervisor.js';
 import { verifyResultFiles } from '../src/agent/progress-proof-verifier.js';
 import {
   canonicalCompletionStatement,canonicalImmutableSeal,
-  canonicalFinalPublicationWitness,
+  canonicalFinalPublicationWitness,canonicalMonotonicPublicationCommit,
   type OwnerGrantView,type CompletionStatement,
   type SignedCompletion,type TransferView,
 } from '../src/agent/trusted-worker-completion.js';
@@ -28,6 +28,7 @@ const scope={ownerAccountId,deviceId,projectId,runId,sessionId};
 const issuer=generateKeyPairSync('ed25519');
 const storage=generateKeyPairSync('ed25519');
 const publication=generateKeyPairSync('ed25519');
+const monotonicCommit=generateKeyPairSync('ed25519');
 const witness=generateKeyPairSync('ed25519');
 
 type Fixtures=Awaited<ReturnType<typeof setup>>;
@@ -78,6 +79,14 @@ async function setup() {
   };
   const publishedSignature=sign(null,canonicalFinalPublicationWitness(publishedPayload),
     publication.privateKey).toString('base64');
+  const commitContents={version:1 as const,
+    durableCommitId:'550e8400-e29b-41d4-a716-446655440005',
+    publicationRequestId:publishedPayload.publicationRequestId,
+    jobId,ownerAccountId,projectId,targetDeviceId:s.targetDeviceId,
+    targetPath:s.targetPath,sha256:s.immutableObjectSha256,
+    bytesTotal:offhost.length,writerEpoch:7,ownerGrantEpoch:9,
+    committedAt:new Date(now).toISOString(),
+  };
   const witnessPayload={
     version:1 as const,requestId,jobId,ownerAccountId,projectId,
     targetDeviceId:s.targetDeviceId,targetPath:s.targetPath,
@@ -97,6 +106,7 @@ async function setup() {
     tamperOffhost:false,truncated:false,missingRead:false,
     missingNativePublication:false,forgedNativePublication:false,
     foreignNativePublication:false,latePublicationLoss:false,
+    noMonotonicCommit:false,staleCommitOwnerEpoch:false,
     witness:trustedPostcondition,
   };
   const ports:RuntimeCompletionPorts={
@@ -130,6 +140,14 @@ async function setup() {
           mutable.truncated?1:maxBytes));
       return {offset,totalBytes:content.length,contentBase64:read.toString('base64')};
     },
+    readMonotonicPublicationCommit:async()=>{
+      if(mutable.noMonotonicCommit)throw Error('EXTERNAL_COMMIT_UNAVAILABLE');
+      const body={...commitContents,
+        ...(mutable.staleCommitOwnerEpoch?{ownerGrantEpoch:8}:{})};
+      return {...body,signatureBase64:sign(null,
+        canonicalMonotonicPublicationCommit(body),monotonicCommit.privateKey)
+        .toString('base64')};
+    },
     readFinalPublicationWitness:async()=>{
       if(mutable.missingNativePublication || mutable.latePublicationLoss)
         throw Error('INDEPENDENT_NATIVE_PUBLICATION_UNAVAILABLE');
@@ -154,7 +172,8 @@ async function setup() {
   };
   const adapter=new ProgressRuntimePostconditionAdapter(p,proofRequest,expected,{
     issuer:issuer.publicKey,immutableStorage:storage.publicKey,
-    publication:publication.publicKey,postcondition:witness.publicKey,
+    publication:publication.publicKey,
+    monotonicCommit:monotonicCommit.publicKey,postcondition:witness.publicKey,
   },ports,()=>now);
   return {adapter,p,ports,signed,mutable,expected,offhost,request:proofRequest,
     setNow:(next:number)=>{now=next;},now:()=>now,
@@ -594,3 +613,43 @@ test('#752 reconnect orphan and #757 CORE revoke during final publication deny c
     assert.notEqual(f.p.snapshot(sessionId).state,'completed_verified');
   });
 });
+
+test('#768 Native signed final receipt without monotonic external commit is UNKNOWN',()=>scenario(async f=>{
+  // A signed Native publication and matching transfer full SHA are NOT
+  // the rollback-independent commitPublished authority in #768.
+  f.mutable.noMonotonicCommit=true;
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('#768 stale signed external commit from prior owner epoch cannot complete',()=>scenario(async f=>{
+  f.mutable.staleCommitOwnerEpoch=true;
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('#770 orphan UNKNOWN after signed final publish but before external commit cannot replay',()=>scenario(async f=>{
+  const read=f.ports.readMonotonicPublicationCommit;
+  f.ports.readMonotonicPublicationCommit=async()=>{
+    await read();
+    throw Error('CONNECTION_ORPHAN_NO_EXTERNAL_COMMIT_ACK');
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  f.ports.readTransfer=async()=>{throw Error('MUST_NOT_REPOLL_ORPHAN');};
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));
+
+test('#767 signed durable commit with CORE revoked before final readback is denied',()=>scenario(async f=>{
+  const read=f.ports.readMonotonicPublicationCommit;
+  f.ports.readMonotonicPublicationCommit=async()=>{
+    const signed=await read();
+    f.mutable.grantState='REVOKED';
+    return signed;
+  };
+  assert.equal(await f.adapter.reconcile(f.signed),'CANCELLED_OR_STALE_CORE');
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
+}));

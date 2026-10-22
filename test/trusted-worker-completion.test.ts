@@ -7,7 +7,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   canonicalCompletionStatement, canonicalImmutableSeal,
-  canonicalFinalPublicationWitness, verifyOffhostCompletion,
+  canonicalFinalPublicationWitness,canonicalMonotonicPublicationCommit,
+  verifyOffhostCompletion,
   type CompletionStatement, type TrustedCompletionPorts, type OwnerGrantView,
 } from '../src/agent/trusted-worker-completion.js';
 import { ProgressSupervisor } from '../src/agent/progress-supervisor.js';
@@ -23,6 +24,7 @@ const jobId='550e8400-e29b-41d4-a716-446655440002';
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');
 const {privateKey:storagePrivateKey,publicKey:storagePublicKey}=generateKeyPairSync('ed25519');
 const {privateKey:publishPrivateKey,publicKey:publishPublicKey}=generateKeyPairSync('ed25519');
+const {privateKey:commitPrivateKey,publicKey:commitPublicKey}=generateKeyPairSync('ed25519');
 function makeEvidence(now=Date.now()) {
   const s:CompletionStatement={
     version:1,...scope,requestId,grantId:'grant-core-fixture',
@@ -48,7 +50,9 @@ function mockPorts(
     cancelOnRead?:boolean;partialRead?:boolean;
     transferChangesOnSecondRead?:boolean;epochChangesOnSecondRead?:boolean;
     forgedImmutableSeal?:boolean;missingFinal?:boolean;
-    forgedFinal?:boolean;foreignFinal?:boolean;badWriterEpoch?:boolean}={},
+    forgedFinal?:boolean;foreignFinal?:boolean;badWriterEpoch?:boolean;
+    missingCommit?:boolean;forgedCommit?:boolean;
+    staleCommitEpoch?:boolean;wrongCommitRequest?:boolean}={},
 ):TrustedCompletionPorts {
   let grantRead=0;
   let transferRead=0;
@@ -71,6 +75,15 @@ function mockPorts(
   };
   const publicationSignature=sign(null,
     canonicalFinalPublicationWitness(publicationContents),publishPrivateKey).toString('base64');
+  const commitContents={version:1 as const,
+    durableCommitId:'550e8400-e29b-41d4-a716-446655440005',
+    publicationRequestId:publicationContents.publicationRequestId,
+    jobId:statement.jobId,ownerAccountId:statement.ownerAccountId,
+    projectId:statement.projectId,targetDeviceId:statement.targetDeviceId,
+    targetPath:statement.targetPath,bytesTotal:body.length,
+    sha256:statement.immutableObjectSha256,writerEpoch:2,
+    ownerGrantEpoch:statement.ownerGrantEpoch,committedAt:statement.committedAt,
+  };
   const getGrant=():OwnerGrantView=>{
     grantRead++;
     return {
@@ -83,6 +96,16 @@ function mockPorts(
     };
   };
   return {
+    readMonotonicPublicationCommit:async()=>{
+      if(overrides.missingCommit)throw Error('COMMIT_CAS_UNAVAILABLE');
+      const c={...commitContents,
+        ...(overrides.staleCommitEpoch?{ownerGrantEpoch:statement.ownerGrantEpoch-1}:{}),
+        ...(overrides.wrongCommitRequest?{publicationRequestId:requestId}:{})};
+      return {...c,signatureBase64:overrides.forgedCommit?
+        Buffer.alloc(64).toString('base64'):
+        sign(null,canonicalMonotonicPublicationCommit(c),commitPrivateKey)
+          .toString('base64')};
+    },
     readFinalPublicationWitness:async()=>{
       if(overrides.missingFinal)throw Error('FINAL_NATIVE_RECEIPT_UNAVAILABLE');
       return {...publicationContents,
@@ -123,7 +146,7 @@ test('signed Ed25519 + independent CORE epoch and off-host rehashed object issue
   const base=makeEvidence();
   const {receipt,body}=signedFixture(base);
   const proof=await verifyOffhostCompletion(receipt,expected(receipt.statement),
-    publicKey,storagePublicKey,publishPublicKey,mockPorts(receipt.statement,body));
+    publicKey,storagePublicKey,publishPublicKey,commitPublicKey,mockPorts(receipt.statement,body));
   assert.ok(proof);
   assert.equal(proof.statement.ownerGrantEpoch,21);
   assert.equal(proof.statement.immutableObjectSha256,sha(body));
@@ -132,34 +155,36 @@ test('fake signature, object hash, owner grant epoch, revoked CORE, and cancella
   const {receipt,body}=signedFixture(makeEvidence());
   const e=expected(receipt.statement);
   assert.equal(await verifyOffhostCompletion({...receipt,signatureBase64:Buffer.alloc(64,0).toString('base64')},
-    e,publicKey,storagePublicKey,publishPublicKey,mockPorts(receipt.statement,body)),null);
+    e,publicKey,storagePublicKey,publishPublicKey,commitPublicKey,mockPorts(receipt.statement,body)),null);
   for(const overrides of [
     {grant:{epoch:22}}, {grant:{state:'REVOKED'}},
     {grant:{role:'ROOT'}},{cancelOnRead:true},
     {transferState:'MUTATION_UNKNOWN'},{transferState:'CANCEL_REQUESTED'},
     {transferChangesOnSecondRead:true},{epochChangesOnSecondRead:true},
     {forgedImmutableSeal:true},{missingFinal:true},
-    {forgedFinal:true},{foreignFinal:true},{badWriterEpoch:true},{corrupt:true},
+    {forgedFinal:true},{foreignFinal:true},{badWriterEpoch:true},
+    {missingCommit:true},{forgedCommit:true},{staleCommitEpoch:true},
+    {wrongCommitRequest:true},{corrupt:true},
   ] as Parameters<typeof mockPorts>[2][]){
-    assert.equal(await verifyOffhostCompletion(receipt,e,publicKey,storagePublicKey,publishPublicKey,
+    assert.equal(await verifyOffhostCompletion(receipt,e,publicKey,storagePublicKey,publishPublicKey,commitPublicKey,
       mockPorts(receipt.statement,body,overrides)),null,
       'untrusted grant/mutation/cancel/disk content must fail closed');
   }
-  assert.equal(await verifyOffhostCompletion(receipt,e,publicKey,publicKey,publishPublicKey,
+  assert.equal(await verifyOffhostCompletion(receipt,e,publicKey,publicKey,publishPublicKey,commitPublicKey,
     mockPorts(receipt.statement,body)),null,
     'same signer cannot authorize both worker result and immutable storage');
   assert.equal(await verifyOffhostCompletion(receipt,{...e,ownerGrantEpoch:22},
-    publicKey,storagePublicKey,publishPublicKey,mockPorts(receipt.statement,body)),null);
+    publicKey,storagePublicKey,publishPublicKey,commitPublicKey,mockPorts(receipt.statement,body)),null);
 });
 test('replayed ancient receipt, foreign offhost target, and dropped chunk fail closed',async()=>{
   const old=makeEvidence(Date.now()-60000);
   const {receipt:ancient,body}=signedFixture(old);
   assert.equal(await verifyOffhostCompletion(ancient,expected(ancient.statement),
-    publicKey,storagePublicKey,publishPublicKey,mockPorts(ancient.statement,body)),null);
+    publicKey,storagePublicKey,publishPublicKey,commitPublicKey,mockPorts(ancient.statement,body)),null);
   const {receipt,body:current}=signedFixture(makeEvidence());
   assert.equal(await verifyOffhostCompletion(receipt,
     {...expected(receipt.statement),targetDeviceId:'wrong'},
-    publicKey,storagePublicKey,publishPublicKey,mockPorts(receipt.statement,current)),null);
+    publicKey,storagePublicKey,publishPublicKey,commitPublicKey,mockPorts(receipt.statement,current)),null);
   const truncated:TrustedCompletionPorts={
     ...mockPorts(receipt.statement,current),
     readOffhost:async(offset,maxBytes)=>{
@@ -168,7 +193,7 @@ test('replayed ancient receipt, foreign offhost target, and dropped chunk fail c
     },
   };
   assert.equal(await verifyOffhostCompletion(receipt,expected(receipt.statement),
-    publicKey,storagePublicKey,publishPublicKey,truncated),null);
+    publicKey,storagePublicKey,publishPublicKey,commitPublicKey,truncated),null);
 });
 test('only authenticated permit enables completed_verified; raw RPC receipts fail; CORE revoke erases result',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-trusted-complete-'));
@@ -199,7 +224,7 @@ test('only authenticated permit enables completed_verified; raw RPC receipts fai
     assert.equal(raw.status,'unverified');
     assert.notEqual(p.snapshot(scope.sessionId).state,'completed_verified');
     const permit=await verifyOffhostCompletion(receipt,expected(receipt.statement),
-      publicKey,storagePublicKey,publishPublicKey,mockPorts(receipt.statement,body),()=>clock.now);
+      publicKey,storagePublicKey,publishPublicKey,commitPublicKey,mockPorts(receipt.statement,body),()=>clock.now);
     assert.ok(permit);
     const accepted=await p.verifySessionFromDisk(scope.sessionId,request,permit);
     assert.equal(accepted.status,'verified');

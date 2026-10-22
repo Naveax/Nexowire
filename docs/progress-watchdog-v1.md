@@ -778,3 +778,69 @@ true off-host immutable digest custody and two-device QA are proven.
 Scope restricted to existing #575 Progress code/tests/docs.
 No #08 Artifact Store, #03 Job owner, #754, #752 or #757
 owner implementation was modified. **Production NO-GO.**
+
+
+### 2026-10-22 #11: #768 external monotonic publication commit, #770 orphan, #767 revoke (source only)
+
+Cross-verified exact source heads: #768
+`00ad9a4f061a4da2a0215e470b302f1e25950e4e` (external
+`TrustedTransferAuthority.commitPublished`; initial hosted CI
+`39803672615` not yet overall green), #770
+`131d96cdab40a68f0b12c6991d330e9d62573bf0` (read-only
+`publication_verified_not_committed`; initial CI
+`39804271245` not yet overall green), and #767
+`6967cc92ae85e5d1034591940d273615c4056e00`
+(hosted CI `39803417079` 7/7 SUCCESS, source-only CORE/ROOT
+final-grant denial, never physical dispatch). On #575 prior exact HEAD
+`4fc801f22c6b8d80b86ca29b207607b9424b9cda` hosted
+CI `39804254748` and Release `39804254745` were
+not overall completed on initial review; do not reuse older green.
+
+**Actual RED source vulnerability:** even with all independent worker,
+storage, postcondition and final Native receipt signatures, a
+cryptographically authentic final publisher ACK with no
+#768 rollback-independent `commitPublished` was incorrectly
+classified `COMPLETED_VERIFIED` by Progress. The two added
+adversarial cases were 31 PASS / 2 FAIL pre-fix:
+signed Native final receipt **without external commit**, and a
+synthetic **validly signed prior owner-grant epoch** commit despite
+matching transfer SHA. No source owner elsewhere was changed.
+
+**Fixed Progress-only contract:** the lower-level
+`verifyOffhostCompletion` permit minting now REQUIRES a fifth
+distinct externally pinned Ed25519 verification key and trusted
+`readMonotonicPublicationCommit()` read-only provider, not an
+MCP argument, unsigned ACK, WAL boolean or ordinary progress
+receipt. The signed, independently read back #768 commit binds
+`durableCommitId` (opaque UUID), exact durable publication
+`requestId`, job/owner/project/target, immutable SHA-256/byte
+length, *separate* writer epoch, owner CORE grant epoch and fresh
+commit time. Result issuer, immutable store, final publisher,
+external commit witness and postcondition all have separate
+pinned keys. A missing, forged, wrong-owner, wrong-request,
+stale-epoch, stale-timestamp or conflicting commit **denies
+COMPLETED_VERIFIED**; runtime makes the uncertain potentially
+dispatched side effect sticky `MUTATION_UNKNOWN` and
+`automaticReplayAllowed=false`. The trusted CORE grant and
+transfer remain checked again after commit readback and after local
+disk verification, and Progress proofGeneration fences reconnect.
+
+**New source-only negatives:** missing independently signed
+monotonic commit after seemingly valid final signed publication,
+validly signed old owner epoch commit, missing/forged/foreign
+commit attestations and wrong publication request ID,
+#770 orphaned Connection after signed final publish but with lost
+external commit ACK (UNKNOWN no replay), #767 owner CORE revoke
+after commit but before final trusted readback (denied), plus
+existing forged Native ACK, lost PID/stall/ACK, returned forensic
+errorCode, stale reconnect and partial file checks.
+
+**Important production gate:** this is a *required contract*, NOT an
+implementation or installation of #587 external monotonic CAS,
+protected #05 Native signer, #768 physical `commitPublished`,
+real immutable off-host artifact witness or physically attested
+#767 CORE/Broker grant. The test signers and commit authority are
+synthetic in-process fixtures. Source CI cannot make production GO.
+Only Progress-owned code/tests/docs changed; no #08/#03/#06/#04
+owners, live Agent/VM/UAC, native device transfers or user files
+modified. Remain DRAFT and **production NO-GO**.
