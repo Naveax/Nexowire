@@ -22,16 +22,8 @@
     "total": 160,
     "missing": [],
     "extras": [],
-    "missing_refs": [
-      722,
-      726,
-      727
-    ],
-    "stale_or_inconsistent": [
-      722,
-      726,
-      727
-    ],
+    "missing_refs": [],
+    "stale_or_inconsistent": [],
     "stale_parent": [
       609,
       622
@@ -46,6 +38,9 @@
       709,
       710,
       718,
+      722,
+      726,
+      727,
       732,
       735,
       746,
@@ -3569,14 +3564,15 @@
     },
     {
       "pr": 722,
-      "head_sha": "d4bd3e23bb37154284dee1745593afc92f37bec0",
+      "head_sha": "78e6494e06bc97b97caa27f4a8028a2bdbce235b",
+      "head_ref": "test/qa27-local-broker-external-core-matrix-20261021",
       "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
       "base_ref": "test/qa27-windows-approval-native-witness-20261021",
       "ci": {
-        "run_id": 39676971419,
-        "status": "completed",
-        "conclusion": "failure",
-        "queried_head_sha": "d4bd3e23bb37154284dee1745593afc92f37bec0"
+        "run_id": 39803430794,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "78e6494e06bc97b97caa27f4a8028a2bdbce235b"
       },
       "files": [
         "docs/QA27_LOCAL_OS_BROKER_EXTERNAL_CORE_MATRIX_20261021.md",
@@ -3585,12 +3581,11 @@
       ],
       "files_complete": true,
       "compare": {
-        "status": "ahead",
-        "merge_base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
         "base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
-        "head_sha": "d4bd3e23bb37154284dee1745593afc92f37bec0"
-      },
-      "ref_stale": true
+        "head_sha": "78e6494e06bc97b97caa27f4a8028a2bdbce235b",
+        "merge_base_sha": "50632ee93b12b59b07da4dc16f9360687ae6ad60",
+        "status": "ahead"
+      }
     },
     {
       "pr": 723,
@@ -3668,14 +3663,15 @@
     },
     {
       "pr": 726,
-      "head_sha": "e6e79226c51fc17d1df801e5013d79887db9a45d",
+      "head_sha": "ea0df4788b9efb1d457f941f70024a60e9b4c815",
+      "head_ref": "qa/23-ui-native-cas-reconnect-20261021",
       "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
       "base_ref": "qa/23-effective-owner669-negative-20261021",
       "ci": {
-        "run_id": 39677945795,
-        "status": "completed",
-        "conclusion": "failure",
-        "queried_head_sha": "e6e79226c51fc17d1df801e5013d79887db9a45d"
+        "run_id": 39802783523,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "ea0df4788b9efb1d457f941f70024a60e9b4c815"
       },
       "files": [
         "docs/CORE_EFFECTIVE_UI_669_702_700_CROSS_QA_20261021.md",
@@ -3685,40 +3681,43 @@
       ],
       "files_complete": true,
       "compare": {
-        "status": "ahead",
-        "merge_base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
         "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
-        "head_sha": "e6e79226c51fc17d1df801e5013d79887db9a45d"
-      },
-      "ref_stale": true
+        "head_sha": "ea0df4788b9efb1d457f941f70024a60e9b4c815",
+        "merge_base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "status": "ahead"
+      }
     },
     {
       "pr": 727,
-      "head_sha": "c0fb307fe9198dff1a85b5f375524a5b6107fe7a",
+      "head_sha": "297d5e51f7603e2abda4a53b84e2868c7e930c67",
+      "head_ref": "test/02-dpapi-683-failclosed-isolation-20261021",
       "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
       "base_ref": "test/02-broker-native-truth-negative-20261021",
       "ci": {
-        "run_id": 39677239175,
-        "status": "completed",
-        "conclusion": "failure",
-        "queried_head_sha": "c0fb307fe9198dff1a85b5f375524a5b6107fe7a"
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "297d5e51f7603e2abda4a53b84e2868c7e930c67"
       },
       "files": [
         ".github/workflows/qa-02-dpapi-isolated.yml",
         "docs/QA_02_683_DPAPI_HOSTED_ISOLATION_20261021.md",
+        "docs/QA_02_741_743_712_CROSS_OWNER_NEGATIVES_20261022.md",
+        "docs/QA_02_754_RECEIPT_757_REVOKE_SCOPE_20261022.md",
         "docs/QA_02_ELEVATED_OUTCOME_RECONCILIATION_20261022.md",
         "src/protocol/elevated-outcome-error-contract.ts",
         "test/qa-02-683-dpapi-timeout-negative.test.ts",
+        "test/qa-02-754-757-immutable-effect-scope.test.ts",
+        "test/qa-02-access-native-cas-cross-owner-negative.test.ts",
         "test/qa-02-elevated-outcome-error-contract.test.ts"
       ],
       "files_complete": true,
       "compare": {
-        "status": "ahead",
-        "merge_base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
         "base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
-        "head_sha": "c0fb307fe9198dff1a85b5f375524a5b6107fe7a"
-      },
-      "ref_stale": true
+        "head_sha": "297d5e51f7603e2abda4a53b84e2868c7e930c67",
+        "merge_base_sha": "0eaa23a4401499279b0c9afeb8854be5a6ab7f49",
+        "status": "ahead"
+      }
     },
     {
       "pr": 728,
@@ -5219,5 +5218,6 @@
       "to": 760,
       "stale": false
     }
-  ]
+  ],
+  "observation_notes": "Sources may change at any time. #722 #726 #727 were refreshed after initial evidence; zero CI assumed UNKNOWN."
 }
