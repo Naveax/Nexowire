@@ -16,7 +16,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,sign,verify} from 'node:crypto';
+import {createHash,generateKeyPairSync,sign,verify} from 'node:crypto';
 import {CORE_EXECUTOR_DISPATCH_ENABLED} from
   '../src/security/core-broker-executor-contract.js';
 
@@ -351,4 +351,163 @@ test('#780 checkpoint stop: readback required after ambiguous commit and current
   assert.equal(second.syntheticNativeEffects.length,originalEffectCount);
   assert.equal(second.history.size,1,'resume created no replacement request or checkpoint');
   assert.equal(second.getState(s),'MUTATION_UNKNOWN');
+});
+
+
+test('#781 cross-Hub restart: semantic mutation identity survives signed journal serialization, stale epoch and ACK loss without replay',()=>{
+  // Independent SPECIFICATION ONLY: the real executeDurableRunbook unsafe
+  // duplicate found in #781 remains RED at the production-source boundary.
+  // This test does not replace or patch that implementation.
+  type PersistentEffect={
+    schema:'qa25.mock-independent-journal.v1';
+    semanticMutationSha:string;originalRequestId:string;
+    ownerId:string;ownerEpoch:number;grantGeneration:number;
+    sessionEpoch:string;deviceId:string;effectState:EffectState;
+    committedAt:number|null;
+  };
+  type SignedSnapshot={payload:PersistentEffect;signature:string};
+  type CurrentAuthority={
+    ownerId:string;ownerEpoch:number;grantGeneration:number;
+    sessionEpoch:string;revoking:boolean;
+  };
+  type ResumeDisposition=
+    'READBACK_REQUIRED'|'CURRENT_OWNER_EPOCH_REQUIRED'|
+    'IMMUTABLE_REQUEST_ID_CONFLICT'|'FORENSIC_SNAPSHOT_UNTRUSTED';
+
+  // The semantic SHA intentionally EXCLUDES runbook_id and graph_id. A
+  // cloned runbook naming the same native mutation cannot mint new identity.
+  const operation={
+    deviceId:'device-25',capability:'core.process.start',
+    payloadSha256:'d'.repeat(64),stableStepId:'native-effect-4',
+  };
+  const semanticSha=createHash('sha256')
+    .update(JSON.stringify(operation)).digest('hex');
+  const journalSigner=generateKeyPairSync('ed25519');
+  const at=ROOT_START+43_000;
+  const s=older();
+  const originalRunbook='runbook-before-crash';
+  const clonedRunbook='runbook-cloned-after-crash';
+  assert.notEqual(originalRunbook,clonedRunbook);
+
+  function save(cas:SharedExternalCommitOracle):string{
+    const e=cas.history.get(s.requestId);
+    assert.ok(e,'an independently journaled reservation is mandatory');
+    const payload:PersistentEffect={
+      schema:'qa25.mock-independent-journal.v1',
+      semanticMutationSha:semanticSha,originalRequestId:e.scope.requestId,
+      ownerId:e.scope.ownerId,ownerEpoch:e.scope.ownerEpoch,
+      grantGeneration:e.scope.grantGeneration,
+      sessionEpoch:e.scope.sessionEpoch,deviceId:e.scope.deviceId,
+      effectState:e.state,committedAt:e.committedAt,
+    };
+    const signature=sign(null,Buffer.from(JSON.stringify(payload)),
+      journalSigner.privateKey).toString('base64url');
+    return JSON.stringify({payload,signature} satisfies SignedSnapshot);
+  }
+  function restart(serialized:string):SignedSnapshot{
+    // Fresh object after an explicit JSON serialization boundary; never
+    // trust a checkpoint field as current owner-epoch authority.
+    const saved=JSON.parse(serialized) as SignedSnapshot;
+    assert.ok(saved!==null&&typeof saved==='object');
+    return saved;
+  }
+  function forensicValid(j:SignedSnapshot):boolean{
+    if(j.payload?.schema!=='qa25.mock-independent-journal.v1'||
+       typeof j.signature!=='string'||!(/^[A-Za-z0-9_-]{86}$/).test(j.signature))
+      return false;
+    const sig=Buffer.from(j.signature,'base64url');
+    return sig.length===64&&sig.toString('base64url')===j.signature&&
+      verify(null,Buffer.from(JSON.stringify(j.payload)),
+        journalSigner.publicKey,sig);
+  }
+  function tryResume(
+    saved:SignedSnapshot,logicalSha:string,
+    proposedRequestId:string,proposedOwnerEpoch:number,
+    current:CurrentAuthority,
+    independentReadback:'UNAVAILABLE'|'BROKER_ACK_ONLY',
+  ):ResumeDisposition{
+    if(!forensicValid(saved)||saved.payload.semanticMutationSha!==logicalSha)
+      return 'FORENSIC_SNAPSHOT_UNTRUSTED';
+    if(proposedRequestId!==saved.payload.originalRequestId)
+      return 'IMMUTABLE_REQUEST_ID_CONFLICT';
+    if(proposedOwnerEpoch!==current.ownerEpoch||
+       saved.payload.ownerEpoch!==current.ownerEpoch||
+       saved.payload.ownerId!==current.ownerId||
+       saved.payload.grantGeneration!==current.grantGeneration||
+       saved.payload.sessionEpoch!==current.sessionEpoch||
+       current.revoking)
+      return 'CURRENT_OWNER_EPOCH_REQUIRED';
+    assert.ok(independentReadback==='UNAVAILABLE'||
+      independentReadback==='BROKER_ACK_ONLY');
+    assert.ok(saved.payload.effectState==='MUTATION_UNKNOWN'||
+      saved.payload.effectState==='RESERVED_UNPROVEN_NO_EFFECT');
+    return 'READBACK_REQUIRED';
+  }
+  const currentOld:CurrentAuthority={
+    ownerId:'owner-A',ownerEpoch:25,grantGeneration:7,
+    sessionEpoch:'session-A',revoking:false,
+  };
+  const currentRevoked:CurrentAuthority={
+    ...currentOld,revoking:true,
+  };
+  const currentNew:CurrentAuthority={
+    ownerId:'owner-B',ownerEpoch:26,grantGeneration:9,
+    sessionEpoch:'session-B',revoking:false,
+  };
+  const clonedId=NEW_REQUEST;
+
+  // Order A: independently recognized revoke-start wins after reserve;
+  // a still signed permit must never become a native effect on a new Hub.
+  const before=new SharedExternalCommitOracle();
+  const oldPermit=before.reserve(s,at);
+  assert.ok(oldPermit);
+  before.atomicRevokeStart();
+  assert.equal(before.atomicCommitAtEffectBoundary(oldPermit,at+1),false);
+  const firstSnapshot=restart(save(before));
+  assert.equal(forensicValid(firstSnapshot),true);
+  assert.equal(tryResume(firstSnapshot,semanticSha,s.requestId,25,
+    currentRevoked,'UNAVAILABLE'),'CURRENT_OWNER_EPOCH_REQUIRED');
+  assert.equal(tryResume(firstSnapshot,semanticSha,clonedId,26,
+    currentNew,'UNAVAILABLE'),'IMMUTABLE_REQUEST_ID_CONFLICT');
+  assert.equal(firstSnapshot.payload.effectState,
+    'RESERVED_UNPROVEN_NO_EFFECT');
+  assert.equal(before.syntheticNativeEffects.length,0);
+
+  // Order B: native effect commit wins, OS ACK is LOST; Hub B revokes,
+  // then a *different process/Hub* reloads the journal and changes runbook
+  // name. No readback, no status change, no second effect or quota refund.
+  const committed=new SharedExternalCommitOracle();
+  const p=committed.reserve(s,at);
+  assert.ok(p);
+  assert.equal(committed.atomicCommitAtEffectBoundary(p,at+1),true);
+  const effectCount=committed.syntheticNativeEffects.length;
+  const signedArchive=save(committed);
+  committed.atomicRevokeStart();
+  committed.drainAckLost();
+  committed.rePairOtherOwner();
+  const restored=restart(signedArchive);
+  assert.equal(restored.payload.originalRequestId,s.requestId);
+  assert.equal(restored.payload.semanticMutationSha,semanticSha);
+  assert.equal(restored.payload.effectState,'MUTATION_UNKNOWN');
+  assert.equal(tryResume(restored,semanticSha,s.requestId,25,
+    currentOld,'UNAVAILABLE'),'READBACK_REQUIRED',
+  'the original current epoch would still require immutable readback');
+  assert.equal(tryResume(restored,semanticSha,s.requestId,25,
+    currentNew,'BROKER_ACK_ONLY'),'CURRENT_OWNER_EPOCH_REQUIRED');
+  assert.equal(tryResume(restored,semanticSha,clonedId,26,
+    currentNew,'UNAVAILABLE'),'IMMUTABLE_REQUEST_ID_CONFLICT',
+  'a new runbook_id and requestId do not define a new logical mutation');
+  assert.equal(tryResume(restored,'0'.repeat(64),s.requestId,25,
+    currentOld,'UNAVAILABLE'),'FORENSIC_SNAPSHOT_UNTRUSTED');
+  const forged=restart(signedArchive);
+  forged.payload.originalRequestId=clonedId; // invalidates signature
+  assert.equal(forensicValid(forged),false);
+  assert.equal(tryResume(forged,semanticSha,clonedId,26,
+    currentNew,'UNAVAILABLE'),'FORENSIC_SNAPSHOT_UNTRUSTED');
+  assert.equal(committed.readImmutablePostcondition(s,'UNAVAILABLE'),
+    'MUTATION_UNKNOWN');
+  assert.equal(committed.atomicCommitAtEffectBoundary(p,at+2),false);
+  assert.equal(committed.syntheticNativeEffects.length,effectCount);
+  assert.equal(committed.history.size,1,
+    'no cloned or replacement requestId inserted into durable ledger');
 });
