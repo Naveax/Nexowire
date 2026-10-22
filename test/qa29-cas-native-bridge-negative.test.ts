@@ -485,3 +485,125 @@ test('TEMP DUP_HANDLE ALLOW + co-restorable receipt root + late revoke after Acc
  assert.equal(nativeEffects,0,'no synthetic or actual native effect dispatched');
  assert.equal(JSON.stringify(verdict).includes('password'),false);
 });
+
+/**
+ * #768 returned TrustedPublicationCommit has no independent signature or
+ * ownerEpoch/grantGeneration fields. This is a REQUIRED, NOT IMPLEMENTED
+ * cross-owner acceptance contract: #757 signed Access high-water must be
+ * current and publisher/external-commit issuers must be independently pinned.
+ * #761 already covers native commit-vs-revoke ordering; never simulate it here.
+ */
+test('forged final publication issuer or stale ownerEpoch/grantGeneration cannot elevate a #768-shaped commit to COMPLETED',()=>{
+ const owner=x=>x; // No owner operation or mutable external state is invoked.
+ const native=gen(),external=gen(),highwaterIssuer=gen(),attacker=gen();
+ const x=fixture();
+ const binding={
+  jobId:uuid('12'),requestId:x.expected.requestId,
+  ownerId:x.expected.ownerId,deviceId:x.expected.deviceId,
+  ownerEpoch:x.expected.ownerEpoch,grantGeneration:x.expected.generation,
+  epoch:73,sha256:hash('synthetic-target-bytes'),
+ };
+ const readbackBody={
+  kind:'qa29.current-publication-highwater.v1',
+  ownerId:binding.ownerId,deviceId:binding.deviceId,
+  ownerEpoch:binding.ownerEpoch,grantGeneration:binding.grantGeneration,
+  revoking:false,revoked:false,
+ };
+ const nativeBody={
+  kind:'qa29.native-final-publication.v1',
+  ...binding,proofNonce:'c'.repeat(64),
+ };
+ const signedNative=signLocal(native.privateKey,nativeBody);
+ const commitBody={
+  kind:'qa29.monotonic-final-publication-commit.v1',
+  ...binding,durableCommitId:'EXTERNAL-ONLY-'+hash('one-atomic-publication'),
+  receiptDigest:hash(JSON.stringify(signedNative)),
+ };
+ const signedCommit=signLocal(external.privateKey,commitBody);
+ const signedCurrent=signLocal(highwaterIssuer.privateKey,readbackBody);
+ const legacy768={
+  jobId:binding.jobId,requestId:binding.requestId,epoch:binding.epoch,
+  sha256:binding.sha256,durableCommitId:commitBody.durableCommitId,
+ };
+ // Match #768's current *source type*, not a claim about deployed authority.
+ assert.deepEqual(Object.keys(legacy768).sort(),
+  ['jobId','requestId','epoch','sha256','durableCommitId'].sort());
+ type SignedStatement=Signed<Record<string,unknown>>;
+ const reject=(reason:string)=>({
+  status:'MUTATION_UNKNOWN' as const,reason,retrySafe:false as const,
+ });
+ const trust={
+  nativePublicKey:native.publicKey,commitPublicKey:external.publicKey,
+  accessHighwaterPublicKey:highwaterIssuer.publicKey,
+ };
+ const verifyFinal=(receipt:SignedStatement|undefined,
+  commit:SignedStatement|undefined,
+  current:SignedStatement|undefined,
+  expected:typeof binding)=>{
+  // Cannot trust a success-looking durable ID or the issuer key supplied
+  // in a receipt; trust anchors are provisioned independently.
+  if(!receipt||!verifySig(trust.nativePublicKey,receipt.payload,receipt.signature)||
+     receipt.payload.kind!=='qa29.native-final-publication.v1')
+   return reject('NATIVE_FINAL_RECEIPT_ISSUER_UNTRUSTED');
+  if(!commit||!verifySig(trust.commitPublicKey,commit.payload,commit.signature)||
+     commit.payload.kind!=='qa29.monotonic-final-publication-commit.v1')
+   return reject('EXTERNAL_MONOTONIC_COMMIT_ISSUER_UNTRUSTED');
+  if(!current||!verifySig(trust.accessHighwaterPublicKey,
+      current.payload,current.signature)||
+     current.payload.kind!=='qa29.current-publication-highwater.v1')
+   return reject('CURRENT_OWNER_HIGHWATER_UNVERIFIED');
+  const scope=['jobId','requestId','ownerId','deviceId',
+   'ownerEpoch','grantGeneration','epoch','sha256'] as const;
+  if(scope.some(k=>receipt.payload[k]!==expected[k]||
+     commit.payload[k]!==expected[k])||
+     !Number.isSafeInteger(expected.ownerEpoch)||
+     !Number.isSafeInteger(expected.grantGeneration)||
+     current.payload.ownerId!==expected.ownerId||
+     current.payload.deviceId!==expected.deviceId||
+     current.payload.ownerEpoch!==expected.ownerEpoch||
+     current.payload.grantGeneration!==expected.grantGeneration||
+     current.payload.revoking!==false||current.payload.revoked!==false)
+   return reject('FINAL_RECEIPT_OWNER_EPOCH_OR_GRANT_GENERATION_STALE');
+  if(commit.payload.receiptDigest!==hash(JSON.stringify(receipt))||
+     typeof commit.payload.durableCommitId!=='string'||
+     commit.payload.durableCommitId.length<32)
+   return reject('FINAL_RECEIPT_AND_EXTERNAL_COMMIT_NOT_BOUND');
+  // Even authentic *synthetic* proofs cannot authorize real native/high
+  // process execution or attest a deployed immutable monotonic CAS.
+  return reject('SOURCE_SIGNED_ONLY_NO_PHYSICAL_PUBLISHER_OR_CAS');
+ };
+ const good=verifyFinal(signedNative,signedCommit,signedCurrent,binding);
+ assert.equal(good.reason,'SOURCE_SIGNED_ONLY_NO_PHYSICAL_PUBLISHER_OR_CAS');
+ assert.equal(good.retrySafe,false);
+ // Current #768-shaped response has no independently signed final issuer
+ // or owner/grant version, so its default is UNKNOWN even with plausible ID.
+ assert.equal(verifyFinal(signedNative,legacy768 as unknown as SignedStatement,
+  signedCurrent,binding).reason,
+  'EXTERNAL_MONOTONIC_COMMIT_ISSUER_UNTRUSTED');
+ assert.equal(verifyFinal(signLocal(attacker.privateKey,nativeBody),
+  signedCommit,signedCurrent,binding).reason,
+  'NATIVE_FINAL_RECEIPT_ISSUER_UNTRUSTED');
+ assert.equal(verifyFinal(signedNative,
+  signLocal(attacker.privateKey,commitBody),signedCurrent,binding).reason,
+  'EXTERNAL_MONOTONIC_COMMIT_ISSUER_UNTRUSTED');
+ // A genuine old signed receipt/commit is not current after owner re-pair or
+ // grant generation rollover, even with unchanged artifact SHA/requestId.
+ const newerOwner=signLocal(highwaterIssuer.privateKey,{
+  ...readbackBody,ownerEpoch:readbackBody.ownerEpoch+1,
+ });
+ const newerGrant=signLocal(highwaterIssuer.privateKey,{
+  ...readbackBody,grantGeneration:readbackBody.grantGeneration+1,
+ });
+ for(const newer of [newerOwner,newerGrant]){
+  const verdict=verifyFinal(signedNative,signedCommit,newer,binding);
+  assert.equal(verdict.reason,'FINAL_RECEIPT_OWNER_EPOCH_OR_GRANT_GENERATION_STALE');
+  assert.equal(verdict.retrySafe,false);
+ }
+ assert.equal(verifyFinal(signedNative,signedCommit,
+  signLocal(attacker.privateKey,readbackBody),binding).reason,
+  'CURRENT_OWNER_HIGHWATER_UNVERIFIED');
+ const noNativeEffects=0;
+ assert.equal(noNativeEffects,0);
+ assert.doesNotMatch(JSON.stringify(good),/token|password|rawPayload|secret/i);
+ assert.equal(owner(good.status),'MUTATION_UNKNOWN');
+});
