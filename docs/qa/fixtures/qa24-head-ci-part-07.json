@@ -24,7 +24,19 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb"
-      }
+      },
+      "files": [
+        ".github/workflows/qa29-elevated-audit-source.yml",
+        "docs/QA29_ELEVATED_COMMAND_AUDIT_PROVENANCE_617.md",
+        "test/qa29-elevated-command-audit-provenance.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "9d9d11b9326df49d4d1288b24c823f15367bf3eb",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 649,
@@ -38,7 +50,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135"
-      }
+      },
+      "files": [
+        "docs/SCALE_P1_WORKER30_BOUNDED_FAIRNESS_QA_20261021.md",
+        "test/worker30-mcp-parser-admission.test.ts",
+        "test/worker30-staging-tenant-byte-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "955cf289b4b0375ab37c4bcda82cd8706a414135",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 650,
@@ -52,7 +76,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "5a76c826de58d906c430153488d96912e0d1827e"
-      }
+      },
+      "files": [
+        "docs/QA_17_WINDOWS_BROKER_UNAVAILABLE_AND_REVOKE_617.md",
+        "test/qa-17-provider-unavailable-queued-revoke.test.ts"
+      ],
+      "compare": {
+        "base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "head_sha": "5a76c826de58d906c430153488d96912e0d1827e",
+        "merge_base_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 651,
@@ -66,7 +101,17 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9"
-      }
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "head_sha": "260f19b6eba4460f3a3c20cc8e77e811f37680f9",
+        "merge_base_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 652,
@@ -80,7 +125,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd"
-      }
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-provider-truth.yml",
+        "docs/qa/QA19_WINDOWS_PROVIDER_TRUTH_20261021.md",
+        "test/qa-19-windows-provider-truth.test.ts"
+      ],
+      "compare": {
+        "base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "head_sha": "6dd516086be145d8b0b3876cde22fe40e101acbd",
+        "merge_base_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 653,
@@ -94,7 +151,17 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "1eabf9040120acfe173cef4121541c67d66fc499"
-      }
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "head_sha": "1eabf9040120acfe173cef4121541c67d66fc499",
+        "merge_base_sha": "a6906b4f45c3ba285a733dda689f799e696ec2bf",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 654,
@@ -108,7 +175,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "f369683a0c164d9cb3ef679956062298b021feb1"
-      }
+      },
+      "files": [
+        "docs/CORE_POSTLAUNCH_REVOKE_UNKNOWN_QA_20261021.md",
+        "test/core-owner-postlaunch-unknown.adversarial.test.ts"
+      ],
+      "compare": {
+        "base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "head_sha": "f369683a0c164d9cb3ef679956062298b021feb1",
+        "merge_base_sha": "3e5117abbc449607ecfa3c727c56815d719f4d49",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 655,
@@ -122,7 +200,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07"
-      }
+      },
+      "files": [
+        "docs/s3-worker20-install-manifest-chain-acceptance-20261021.md",
+        "scripts/s3-worker20-install-manifest-chain-qa.ts",
+        "test/s3-worker20-install-manifest-chain-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "head_sha": "e258e8eb8a8132f75d350a820da816dfd3f0fa07",
+        "merge_base_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "status": "ahead"
+      },
+      "files_complete": true
     }
   ]
 }
