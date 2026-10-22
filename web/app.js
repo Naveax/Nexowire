@@ -35,7 +35,24 @@ function syncFolders(folders) {
 }
 
 function getDeviceTier(device) {
-  if (device.persistentMaintenance?.active === true) return 'persistent';
+  const core = device.persistentMaintenance;
+  // CORE requested/active is not EFFECTIVE. Mirror the exact render gate
+  // below; missing independently accepted native+CAS or current epoch fails.
+  if (core?.enabled === true && core.active === true &&
+      core.effective === true &&
+      core.authoritySource === 'independent-protected-windows-broker' &&
+      core.localEnrollmentVerified === true &&
+      core.actualElevatedTokenVerified === true &&
+      core.brokerSourceAclVerified === true &&
+      core.brokerVersionVerified === true &&
+      core.finalNativeEffectVerified === true &&
+      core.externalCasAtomicCommitVerified === true &&
+      Number.isSafeInteger(device.currentOwnerEpoch) &&
+      device.currentOwnerEpoch > 0 &&
+      Number.isSafeInteger(device.currentGrantGeneration) &&
+      device.currentGrantGeneration > 0 &&
+      core.ownerEpoch === device.currentOwnerEpoch &&
+      core.grantGeneration === device.currentGrantGeneration) return 'persistent';
   if (device.rootMode?.active === true &&
       Date.parse(device.rootMode.expiresAt ?? '') > Date.now()) return 'root';
   return device.accessMode === 'full' ? 'full' : 'safe';
@@ -577,12 +594,26 @@ function render(snapshot) {
       const coreContainer = row.querySelector('.core-access');
       // Agent readiness and CORE preference cannot attest an elevated Windows token.
       // No independent protected Broker provenance is available to this dashboard yet.
+      // These must be server-attested, independently current authority
+      // fields, never preference, cached UI or a source-only CAS receipt.
+      // Until the deployed HIGH Broker + atomic native grant readback exists,
+      // missing fields deliberately keep this display PAUSED_UNVERIFIED.
       const coreEffective = core.effective === true &&
+        core.enabled === true &&
+        core.active === true &&
         core.authoritySource === 'independent-protected-windows-broker' &&
         core.localEnrollmentVerified === true &&
         core.actualElevatedTokenVerified === true &&
         core.brokerSourceAclVerified === true &&
-        core.brokerVersionVerified === true;
+        core.brokerVersionVerified === true &&
+        core.finalNativeEffectVerified === true &&
+        core.externalCasAtomicCommitVerified === true &&
+        Number.isSafeInteger(device.currentOwnerEpoch) &&
+        device.currentOwnerEpoch > 0 &&
+        Number.isSafeInteger(device.currentGrantGeneration) &&
+        device.currentGrantGeneration > 0 &&
+        core.ownerEpoch === device.currentOwnerEpoch &&
+        core.grantGeneration === device.currentGrantGeneration;
       coreContainer.classList.toggle('active', coreEffective);
       coreShortcut.classList.toggle('active', coreEffective);
       coreShortcut.setAttribute('aria-pressed', String(coreEffective));
