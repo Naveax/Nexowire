@@ -21,3 +21,20 @@ Dedicated tests use ephemeral Node Ed25519 keys and a fake #04 boundary returnin
 ## Strict ownership
 
 New standalone `src/coding/human-diff-review-authority.ts` and `test/human-diff-review-authority.test.ts` only; documentation here. No edits to #04 Access, `web/app.js`, #32 patch source, #31 Git executor, native Broker, Agent, UAC/ACL, VM, D1 or billing; no main merge. Do **not** substitute these tests for independent Git workspace sandbox and end-to-end native acceptance.
+
+
+## NEXT2 exact source/CI and replay truth (2026-10-23)
+
+| DRAFT PR | Exact reviewed HEAD | Exact hosted run | Result |
+| --- | --- | --- | --- |
+| #833 (prior #40 baseline) | `906fe0b97f4101f1f6eb774a6d0987e6232a1e37` | `39863705836` | **7/7 SUCCESS** before these NEXT2 test/docs commits |
+| #813 (#32 reviewed patch) | `4570568c8bc28a061aa29578449eb7e5251480f4` | `39862100139` | **6/7 SUCCESS**, `browser-live` FAILURE; not production approval |
+| #828 (#48 source-only UI) | `c092b925b02c7e6a5f4f397896d62473653f2667` | `39863006280` | **7/7 SUCCESS**; browser intent, not cryptographic approval |
+
+**Actual #32 API:** `ReviewedPatchPorts.verifyApproval({identity,file,fingerprint,phase,ticket})` receives no typed `approvalId` or `reviewNonce` and has no installed verifier. #40 matches these fields in the separately signed #04 Access receipt, but a **server adapter** must decode the opaque ticket and invoke the actual #40 + #04 validators. Never treat a #48 `makeReviewIntent` callback, a browser-supplied consent flag, or a bare #32 `verifyApproval:true` stub as that adapter.
+
+**Actual #40 replay gap:** The domain-separated Ed25519 statement binds each APPLY or UNDO phase, the exact #32 preview fingerprint, file generation, Git base/source OID, task/worktree, owner/device/session and live epochs; changing these between the two readbacks denies. An APPLY ticket cannot become an UNDO ticket. However, **replaying the same valid ticket for the same phase within its 30-second lifetime can repeat the successful SOURCE review** as long as the provider reports unchanged state. Neither #40 nor #04's read-only `isApprovalConsumed` provides an atomic one-use consume. Two fresh NEXT2 tests demonstrate this distinction and ensure both repeated results have **zero** native/effect permissions and that a #48 UI-only intent is denied. This is a real unclosed replay *authorization* gap, not evidence of a filesystem mutation.
+
+**Required interface handoff (#01/#04/#32):** locally protected explicit-human signer with verifiable enrollment; externally durable **atomic** claim/consume of `(approvalId,nonce,phase,owner/device/task,worktree,diffFingerprint,ownerEpoch)` across clones/restarts/hubs; real #04 signature and task witness verification; external revoke-before-effect admission; #32 trusted scoped OS-atomic CAS writer and journal. A memory Set, client localStorage, pre-check of consumed status or two readbacks cannot satisfy this requirement. If any provider is absent, retain `SOURCE_REVIEWED_NO_DISPATCH`, `canApply=false`, `canUndo=false`, `canLaunchElevated=false` and **P0 physical NO-GO**. No owner #32 source, #04 Access source, #48 UI, Broker/Agent, UAC/ACL, D1, real filesystem or VM changed.
+
+**CI provenance:** Historical 7/7 applies ONLY to old #833 SHA. New NEXT2 branch HEAD and new GitHub Actions checks must be reported separately; never inherit the old result or rerun queued/running same-SHA jobs.
