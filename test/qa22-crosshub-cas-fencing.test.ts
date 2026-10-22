@@ -406,7 +406,7 @@ test('#22 next: two publishers race; one commits, CORE revoke denies other Nativ
       assert.equal(loser.state, 'MUTATION_UNKNOWN');
       assert.equal(loser.bytesConfirmed, bytes.length);
       // The outer worker retains the more specific trusted CORE revoke provenance.
-      assert.equal(loser.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+      assert.equal(loser.errorCode, 'CORE_OWNER_REVOKED');
       assert.equal(fx.publications, 1);
       assert.deepEqual(fx.target, bytes);
       assert.equal(fx.writes.filter(w => w.id === first.id).length, 3);
@@ -562,7 +562,7 @@ test('#22 gate: lease expiry while PUBLISHING fences old Hub, only new job signs
       const rejected = await stored(root, old.id);
       assert.equal(rejected.state, 'MUTATION_UNKNOWN');
       assert.equal(rejected.bytesConfirmed, bytes.length);
-      assert.equal(rejected.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+      assert.equal(rejected.errorCode, 'NATIVE_LEASE_EXPIRED');
       assert.equal(fx.publications, 0);
       assert.equal(fx.publishedReceipts.length, 0);
       const hubB = fx.hub(root);
@@ -602,7 +602,7 @@ test('#22 gate: CORE re-pair during pending Native publish cannot authenticate s
       await a.waitForIdle(old.id);
       const rejected = await stored(root, old.id);
       assert.equal(rejected.state, 'MUTATION_UNKNOWN');
-      assert.equal(rejected.errorCode, 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+      assert.equal(rejected.errorCode, 'CORE_GRANT_EPOCH_STALE');
       assert.equal(fx.publications, 0);
       assert.equal(fx.publishedReceipts.length, 0);
       await assert.rejects(b.status(old.id, input.accountId,
@@ -912,5 +912,76 @@ test('#22/#725: post-first-verified-chunk cancel plus CORE revoke preserves forg
     } finally {
       releaseAck.open();
       await hubA.waitForIdle(started.id);
+    }
+  }));
+
+/**
+ * #22 independent vs #725: a *valid* delayed ACK is still stale after the
+ * owner CORE revoke. The injected Native provider already changed stage
+ * bytes, and a second Hub has asked to cancel. No signed claim from #712
+ * is asserted or reused as Transfer authority. No physical durability proof.
+ */
+test('#22/#725 late valid Native ACK after verified first chunk, Hub-B cancel and CORE revoke stays UNKNOWN', async () =>
+  temp(async root => {
+    const secondSideEffect = gate(), releaseAck = gate();
+    let forbiddenRead = 0;
+    const fx = mock('normal', {
+      beforeRead: async (device, _path, offset) => {
+        if (device === input.sourceDeviceId && offset === 2 * 65_536)
+          forbiddenRead++;
+      },
+      afterWrite: async (_job, env) => {
+        if (env.offset === 65_536) {
+          secondSideEffect.open();
+          await releaseAck.promise;
+        }
+      },
+    });
+    const hubA = fx.hub(root), hubB = fx.hub(root);
+    const running = await hubA.start(input);
+    try {
+      await expectGate(secondSideEffect.promise, 'second Native write performed before late valid ACK');
+      const journal = await stored(root, running.id);
+      assert.equal(journal.state, 'RUNNING');
+      assert.equal(journal.bytesConfirmed, 65_536);
+      assert.equal(journal.pending?.offset, 65_536);
+      assert.equal(journal.pending?.length, 65_536);
+      assert.equal(journal.pending?.dispatched, true);
+      assert.equal(journal.pending?.sha256, digest(bytes.subarray(65_536, 2 * 65_536)));
+      const originalRequestId = journal.pending!.requestId;
+      assert.equal(fx.writes.length, 2, 'Native stage may already have been modified');
+      const pendingCancel = await hubB.cancel(running.id,
+        input.accountId, input.sourceDeviceId, input.targetDeviceId);
+      assert.equal(pendingCancel.state, 'CANCEL_REQUESTED');
+      fx.grants.enabled = false;
+      releaseAck.open();
+      await hubA.waitForIdle(running.id);
+      const state = await stored(root, running.id);
+      assert.equal(state.state, 'MUTATION_UNKNOWN');
+      assert.equal(state.errorCode, 'CORE_OWNER_REVOKED',
+        'valid delayed ACK cannot override revoked effective CORE');
+      assert.equal(state.bytesConfirmed, 65_536,
+        'second Native effect is not verified after owner revoke');
+      assert.equal(state.pending?.requestId, originalRequestId);
+      assert.equal(state.pending?.offset, 65_536);
+      assert.equal(state.pending?.dispatched, true);
+      assert.deepEqual(fx.writes.map(w => w.offset), [0, 65_536]);
+      assert.equal(forbiddenRead, 0);
+      assert.equal(fx.publications, 0);
+      assert.equal(fx.publishedReceipts.length, 0);
+      await assert.rejects(hubB.status(running.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (error: unknown) =>
+        error instanceof TransferTrustError && error.code === 'CORE_OWNER_REVOKED');
+      await assert.rejects(hubB.start({ ...input, resumeTransferId: running.id }),
+      (error: unknown) =>
+        error instanceof TransferTrustError && error.code === 'CORE_OWNER_REVOKED');
+      assert.equal((await stored(root, running.id)).state, 'MUTATION_UNKNOWN',
+        'failed second-Hub re-open must not replay or clear uncertain outcome');
+      assert.equal(fx.writes.length, 2);
+      assert.equal(fx.publications, 0);
+    } finally {
+      releaseAck.open();
+      await hubA.waitForIdle(running.id);
     }
   }));
