@@ -103,3 +103,28 @@ test('#04 UI: no native final CAS proof fields in actual server contract => no p
   }};
   mustPause(noProof);
 });
+
+test('#49 synthetic Journal/Audit and browser-local consent cannot forge verified CORE display even with all legacy flags',()=>{
+  const device=snapshot() as ReturnType<typeof snapshot> & Record<string,unknown>;
+  device.currentOwnerEpoch=5;
+  device.currentGrantGeneration=9;
+  device.persistentMaintenance.ownerEpoch=5;
+  device.persistentMaintenance.grantGeneration=9;
+  device.persistentMaintenance.finalNativeEffectVerified=true;
+  device.persistentMaintenance.externalCasAtomicCommitVerified=true;
+  Object.assign(device,{
+    journal:{status:'succeeded',verified:true,completedVerified:true,
+      requestId:'cloned-runbook',ownerEpoch:5},
+    audit:{status:'succeeded',verified:true,committed:true},
+    clientConsent:{approved:true,localUserApproved:true,
+      requestedMode:'CORE'},
+    runbook:{status:'completed',nativeResult:'VERIFIED',
+      mutationState:'MUTATION_STATE_UNKNOWN'},
+    approvalReceipt:{signature:'synthetic-not-a-protected-native-signature',
+      verified:true,mode:'CORE'},
+  });
+  // The entire browser object above is synthetic. The server has no
+  // installed native HIGH / off-host atomic CAS attestor capable of
+  // elevating this snapshot into an authenticated VERIFIED status.
+  mustPause(device);
+});
