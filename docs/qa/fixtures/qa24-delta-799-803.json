@@ -1,0 +1,135 @@
+{
+  "nodes": [
+    {
+      "pr": 799,
+      "head_sha": "7e3d1df52a0d3f55350030622a929b7c3fbe78e3",
+      "head_ref": "test/21-785-checkpoint-readback-races-20261022",
+      "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "base_ref": "fix/08-checkpoint-external-commit-20261022",
+      "files": [
+        "test/qa21-785-checkpoint-cas-epoch-races.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "head_sha": "7e3d1df52a0d3f55350030622a929b7c3fbe78e3",
+        "merge_base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823529140,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "7e3d1df52a0d3f55350030622a929b7c3fbe78e3"
+      }
+    },
+    {
+      "pr": 800,
+      "head_sha": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8",
+      "head_ref": "test/20-780-git-fsmonitor-hook-escape-20261022",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "files": [
+        "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823730640,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8"
+      }
+    },
+    {
+      "pr": 801,
+      "head_sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1",
+      "head_ref": "test/09-cdp-micro-scenario-contract-20261022",
+      "base_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "base_ref": "fix/09-759-stop-missing-state-unknown-20261022",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_780_CDP_MICRO_SCENARIO_CONTRACT_20261022.md",
+        "src/agent/browser-micro-scenario-contract.ts",
+        "test/browser-micro-scenario-contract.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+        "head_sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1",
+        "merge_base_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823885977,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1"
+      }
+    },
+    {
+      "pr": 802,
+      "head_sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+      "head_ref": "test/qa16-pr779-790-ci-provenance-20261022",
+      "base_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "base_ref": "test/qa16-pr774-780-p1-checklist-20261022",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR779_790_CI_FAILURE_AUDIT_20261022.md",
+        "docs/qa/QA_20261022_P1_ISSUE780_FEATURE_MATRIX.json",
+        "docs/qa/QA_20261022_PR779_790_FAILED_STEPS.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-779-790-failed-step-provenance.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+        "head_sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+        "merge_base_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39824624827,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe"
+      }
+    },
+    {
+      "pr": 803,
+      "head_sha": "7fa4bdc65c5f59c09179d3afa3fb896c4280aa87",
+      "head_ref": "test/24-delta-781-790-source-20261022",
+      "base_sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+      "base_ref": "test/24-delta-774-779-source-20261022",
+      "files": [
+        "docs/qa/QA24_DELTA_781_790_20261022.md",
+        "docs/qa/fixtures/qa24-delta-781-785.json",
+        "docs/qa/fixtures/qa24-delta-786-790.json",
+        "docs/qa/fixtures/qa24-open-census-781-790.json",
+        "docs/qa/fixtures/qa24-owner718-current-ci-20261022.json",
+        "scripts/qa24-delta781-live.ts",
+        "scripts/qa24-delta781-review.ts",
+        "test/qa-24-delta781-live.test.ts",
+        "test/qa-24-delta781-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+        "head_sha": "7fa4bdc65c5f59c09179d3afa3fb896c4280aa87",
+        "merge_base_sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39824845400,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7fa4bdc65c5f59c09179d3afa3fb896c4280aa87"
+      }
+    }
+  ]
+}
