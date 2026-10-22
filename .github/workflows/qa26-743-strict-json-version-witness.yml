@@ -1,0 +1,23 @@
+name: QA26 strict protected-tree JSON type witness
+on:
+  pull_request:
+    branches:
+      - test/03-709-qa17-qa19-integration-20261022
+permissions:
+  contents: read
+jobs:
+  qa26-json-version-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Dependencies (without installation hooks)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Source typecheck
+        run: npm run typecheck
+      - name: QA26 TEMP strict-version fail-closed acceptance and legacy/malformed-shape controls
+        run: node --test --import tsx test/p26-743-strict-envelope-version-type-negative.test.ts test/p26-753-envelope-malformed-legacy-negative.test.ts
