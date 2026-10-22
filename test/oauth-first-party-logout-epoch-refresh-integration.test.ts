@@ -179,6 +179,7 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
     assert.equal(refreshRow(a.refresh).revoked_at,at.toISOString());
     const unrelated=await rotate(b.refresh);
     assert.match(unrelated.access_token,/^nwx_mcp_/);
+    assert.ok(unrelated.refresh_token,'atomic refresh must issue the next refresh grant');
     assert.match(unrelated.refresh_token,/^nwx_refresh_/);
     const row=sqlite.prepare(
       'SELECT account_id FROM mcp_oauth_access_tokens WHERE token_hash=?'
