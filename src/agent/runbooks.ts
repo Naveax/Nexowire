@@ -206,6 +206,19 @@ function summarize(
   };
 }
 
+/**
+ * P0 #587: installed native HIGH Broker and rollback-external atomic
+ * commit-for-dispatch admission are not available to this executor.
+ * Never infer authorization from local runbook state or a callback.
+ */
+export class RunbookAdmissionRequiredError extends Error {
+  readonly code='RECONCILE_REQUIRED';
+  constructor(){
+    super('Trusted external native admission unavailable; reconcile the original mutation without replay.');
+    this.name='RunbookAdmissionRequiredError';
+  }
+}
+
 function errorCode(error: unknown): string {
   return typeof error === 'object' &&
     error !== null &&
@@ -230,6 +243,13 @@ export async function executeDurableRunbook(
         'retry_failed/retry_unknown require resume=true.',
       );
     }
+  }
+  // The old prepare({retryUnknown/retryFailed}) erases the original
+  // UNKNOWN/FAILED errorCode before any independent side-effect readback.
+  // Do not mutate that checkpoint when the task may invoke native tools.
+  if(parsed.resume && (parsed.retry_unknown || parsed.retry_failed) &&
+     parsed.steps.some(step=>step.kind==='task_graph')){
+    throw new RunbookAdmissionRequiredError();
   }
 
   const normalizedSpec = {
@@ -391,27 +411,13 @@ export async function executeDurableRunbook(
       try {
         let raw: unknown;
         if (spec.kind === 'task_graph') {
-          const remainingMs = Math.max(
-            100,
-            deadline - Date.now(),
-          );
-          const innerInput = {
-            ...spec.task_graph,
-            // Force every command step onto the runbook's explicit private
-            // desktop, regardless of an unsafe nested graph override.
-            ...(uiTarget==='private_desktop'?{ui_target:'private_desktop'}:{}),
-            graph_id: step.taskGraphId,
-            resume: step.attempts > 1 || parsed.resume,
-            retry_failed: parsed.retry_failed,
-            retry_unknown: parsed.retry_unknown,
-            total_timeout_ms: Math.min(
-              remainingMs,
-              typeof spec.task_graph.total_timeout_ms === 'number'
-                ? spec.task_graph.total_timeout_ms
-                : remainingMs,
-            ),
-          };
-          raw = await callbacks.runTaskGraph(innerInput);
+          // An immutable local logicalMutationId/requestId/sourceSha/
+          // worktreeId and the CURRENT owner epoch must be checked by a
+          // separately operated rollback-external atomic admission provider
+          // at this exact boundary, ordered against revoke-start.
+          // No such trusted provider is wired here; fail closed before
+          // invoking even a nested task graph or synthetic callback.
+          throw new RunbookAdmissionRequiredError();
         } else {
           raw = await callbacks.runAssertions(
             spec.assertions,
@@ -430,8 +436,11 @@ export async function executeDurableRunbook(
               : 'ASSERTIONS_NOT_OK';
         }
       } catch (error) {
-        step.status = 'failed';
-        step.errorCode = errorCode(error);
+        const code=errorCode(error);
+        // Lost native ACK and missing authority are UNKNOWN, not FAILED.
+        step.status=code==='MUTATION_STATE_UNKNOWN' ||
+          code==='RECONCILE_REQUIRED' ? 'unknown' : 'failed';
+        step.errorCode=code;
         step.result = {
           message:
             error instanceof Error
