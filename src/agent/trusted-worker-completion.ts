@@ -127,6 +127,8 @@ const proofBrand:unique symbol=Symbol('verified-offhost-completion');
 export interface VerifiedCompletionPermit {
   readonly [proofBrand]:true;
   readonly statement:CompletionStatement;
+  /** Independently authenticated #768 external commit, NOT a Native ACK. */
+  readonly durableCommitId:string;
   readonly verifiedAt:number;
 }
 export function isVerifiedCompletionPermit(value:unknown):value is VerifiedCompletionPermit {
@@ -302,7 +304,8 @@ export async function verifyOffhostCompletion(
     const [g1,t1]=await Promise.all([ports.readGrant(),ports.readTransfer()]);
     if(!matchesGrant(g1,s)||!matchesTransfer(t1,s)||now()-t>30000)return refuse();
     const permit=Object.freeze({
-      [proofBrand]:true as const,statement:Object.freeze({...s}),verifiedAt:now(),
+      [proofBrand]:true as const,statement:Object.freeze({...s}),
+      durableCommitId:commitWitness.durableCommitId,verifiedAt:now(),
     });
     validProofs.add(permit);
     return permit;

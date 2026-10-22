@@ -9,6 +9,7 @@ import { ProgressSupervisor } from './progress-supervisor.js';
 import type { ProgressProofRequest } from './progress-proof-verifier.js';
 import {
   verifyOffhostCompletion, type CompletionExpected, type SignedCompletion,
+  type VerifiedCompletionPermit,
   type TrustedCompletionPorts, type OwnerGrantView, type TransferView,
 } from './trusted-worker-completion.js';
 
@@ -107,6 +108,7 @@ export class ProgressRuntimePostconditionAdapter {
   private blocked:RuntimeCompletionStatus|null=null;
   private lastResult:RuntimeCompletionStatus='REPORTED_ONLY';
   private lastWitnessDigest:string|null=null;
+  private acceptedPermit:VerifiedCompletionPermit|null=null;
   private pending=false;
   constructor(
     private readonly supervisor:ProgressSupervisor,
@@ -139,6 +141,7 @@ export class ProgressRuntimePostconditionAdapter {
   }
   private blockUnknown():RuntimeCompletionStatus{
     this.lastWitnessDigest=null;
+    this.acceptedPermit=null;
     this.blocked='MUTATION_UNKNOWN';
     this.supervisor.invalidateOwnerGrant(this.expected.sessionId);
     this.lastResult=this.blocked;
@@ -146,6 +149,7 @@ export class ProgressRuntimePostconditionAdapter {
   }
   private cancel():RuntimeCompletionStatus{
     this.lastWitnessDigest=null;
+    this.acceptedPermit=null;
     this.blocked='CANCELLED_OR_STALE_CORE';
     this.supervisor.invalidateOwnerGrant(this.expected.sessionId);
     this.lastResult=this.blocked;
@@ -175,6 +179,41 @@ export class ProgressRuntimePostconditionAdapter {
       pending:this.pending,
       postconditionSha256:invalidated?null:this.lastWitnessDigest,
       automaticReplayAllowed:false,productionAuthorityConnected:false};
+  }
+  /** #780 read-only bounded snapshot for exactly this signed RUN/step.
+   * Not a durable checkpoint store, task-graph runner or physical attestor.
+   * No PID/stdout/progress percentage can populate an attestation. */
+  taskStepCheckpointView(){
+    const current=this.snapshot();
+    const permit=current.status==='COMPLETED_VERIFIED'?
+      this.acceptedPermit:null;
+    const s=permit?.statement;
+    const runId=typeof this.expected.runId==='string' &&
+      Buffer.byteLength(this.expected.runId,'utf8')<=128?
+      this.expected.runId:null;
+    const attestations=s&&runId===s.runId?[Object.freeze({
+      taskStepRunId:s.runId,sessionId:s.sessionId,requestId:s.requestId,
+      ownerGrantEpoch:s.ownerGrantEpoch,
+      immutableOutputSha256:s.immutableObjectSha256,
+      resultSetSha256:s.resultSetSha256,
+      durableCommitId:permit!.durableCommitId,
+      verifiedAt:new Date(permit!.verifiedAt).toISOString(),
+    })]:[];
+    const receipt=current.status==='COMPLETED_VERIFIED'&&attestations.length===1?
+      'SOURCE_VERIFIED_STEP':'UNKNOWN_NO_REPLAY';
+    const view=Object.freeze({version:1 as const,taskStepRunId:runId,
+      status:receipt,attestations:Object.freeze(attestations),
+      immutableOutputSha256:attestations[0]?.immutableOutputSha256??null,
+      receiptStatus:receipt==='SOURCE_VERIFIED_STEP'?'VERIFIED':'MUTATION_UNKNOWN',
+      maximumAttestedSteps:1 as const,checkpointPersisted:false as const,
+      productionAuthorityConnected:false as const,
+      automaticReplayAllowed:false as const});
+    // Explicit size bound rather than persisting arbitrary worker output.
+    if(Buffer.byteLength(JSON.stringify(view),'utf8')>4096)
+      return Object.freeze({...view,status:'UNKNOWN_NO_REPLAY' as const,
+        attestations:Object.freeze([]),immutableOutputSha256:null,
+        receiptStatus:'MUTATION_UNKNOWN' as const});
+    return view;
   }
   async reconcile(signed:SignedCompletion):Promise<RuntimeCompletionStatus>{
     if(this.blocked)return this.blocked;
@@ -274,6 +313,7 @@ export class ProgressRuntimePostconditionAdapter {
       this.lastWitnessDigest=createHash('sha256').update(
         canonicalPostconditionWitness(body)).digest('hex');
       if(this.blocked||this.sourceProcessUnknown()||proofChanged())return this.blockUnknown();
+      this.acceptedPermit=permit;
       this.lastResult='COMPLETED_VERIFIED';
       return this.lastResult;
     }catch{

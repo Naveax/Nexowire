@@ -844,3 +844,54 @@ synthetic in-process fixtures. Source CI cannot make production GO.
 Only Progress-owned code/tests/docs changed; no #08/#03/#06/#04
 owners, live Agent/VM/UAC, native device transfers or user files
 modified. Remain DRAFT and **production NO-GO**.
+
+
+### 2026-10-22 #11 source-only bounded task-step evidence for #780
+
+Cross-reviewed GitHub [#780](https://github.com/Naveax/Nexowire/issues/780):
+the durable coding loop, checkpoint replay, cancel/UNKNOWN and exact
+owner epoch remain separate product work. #11 Progress is NOT the
+task-loop journal owner and must never treat process PID, 100%-reported
+counters, stdout or untrusted tool `COMPLETED` as step success.
+
+`ProgressRuntimePostconditionAdapter.taskStepCheckpointView()` now
+exposes a **read-only, nonpersistent, at-most-one-run-step** summary
+of the existing five-key authenticated final proof. It presents
+`taskStepRunId` (the existing cryptographically signed run ID,
+NOT an invented arbitrary tool step), session/request identity,
+immutable object SHA-256, result-set SHA-256, the protected signed
+ownerGrantEpoch and the independently verified #768
+`durableCommitId`, with a maximum serialized size of **4096 bytes**.
+The underlying `VerifiedCompletionPermit` carries that authenticated
+commit ID only after full independent publisher, storage, postcondition,
+and rollback-external monotonic readbacks succeed. This view does NOT
+persist a durable checkpoint, create a task graph, enable resume or
+provide physically deployed step-attestation keys; the new visible
+`SOURCE_VERIFIED_STEP` indicates **source-contract evidence only**.
+
+Without an accepted, current ProgressSupervisor
+`completed_verified` state, including on lost ACK, lost PID,
+progress stalls, missing external commit, reconnect, revoke or
+expired proof, this read-only view exposes **zero attested steps,
+no immutable SHA, `UNKNOWN_NO_REPLAY` and
+`automaticReplayAllowed:false`**. There is no automatic RPC retry.
+The view also states `checkpointPersisted:false` and
+`productionAuthorityConnected:false` unconditionally.
+
+**Independent negative QA:** claimed `COMPLETED` with running
+worker/fake progress and no monotonic commit => UNKNOWN/zero
+attestations; full synthetic signed off-host proof => one bounded
+run-scoped summary and verified SHA; after a previously accepted
+result, authoritative CORE revoke followed by old owner epoch,
+forged signature/COMPLETED and attempted replay => UNKNOWN, no
+cached SHA or step attestation and **zero extra transfer polls**.
+The suite tests the 4096-byte bound and immutable presentation.
+
+**Release remains NO-GO:** no authenticated native #05 signer,
+rollback-independent #587/#768 CAS service, independently protected
+physical owner grant/revoke witness, installed task worker or
+durable checkpoint. Source-only synthetic Ed25519 and single-run
+fixtures are not physical task-step attestations. #08 Artifact Store,
+#03 Job owner, #780 actual task agent/checkpoint code, live Agent/VM/
+UAC and user files are untouched. The only modifications belong
+to #575 Progress source/tests/docs on its existing DRAFT PR.

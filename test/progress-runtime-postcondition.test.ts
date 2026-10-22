@@ -653,3 +653,68 @@ test('#767 signed durable commit with CORE revoked before final readback is deni
   assert.equal(f.p.snapshot(sessionId).completionAttested,false);
   assert.equal(f.adapter.snapshot().automaticReplayAllowed,false);
 }));
+
+test('#780 task-step checkpoint never attests running PID, counters or raw COMPLETED RPC',()=>scenario(async f=>{
+  const before=f.adapter.taskStepCheckpointView();
+  assert.equal(before.status,'UNKNOWN_NO_REPLAY');
+  assert.equal(before.attestations.length,0);
+  assert.equal(before.immutableOutputSha256,null);
+  assert.equal(before.receiptStatus,'MUTATION_UNKNOWN');
+  assert.equal(before.automaticReplayAllowed,false);
+  assert.equal(before.checkpointPersisted,false);
+  assert.ok(Buffer.byteLength(JSON.stringify(before),'utf8')<=4096);
+
+  // Even all worker counters and a claimed transfer COMPLETED cannot attest
+  // a durable task step without independently signed off-host proof.
+  f.mutable.noMonotonicCommit=true;
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  const after=f.adapter.taskStepCheckpointView();
+  assert.equal(after.attestations.length,0);
+  assert.equal(after.immutableOutputSha256,null);
+  assert.equal(after.receiptStatus,'MUTATION_UNKNOWN');
+  assert.ok(Buffer.byteLength(JSON.stringify(after),'utf8')<=4096);
+}));
+
+test('#780 verified run-step exposes only bounded SHA/commit evidence from signed authorities',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  const checkpoint=f.adapter.taskStepCheckpointView();
+  assert.equal(checkpoint.status,'SOURCE_VERIFIED_STEP');
+  assert.equal(checkpoint.attestations.length,1);
+  const step=checkpoint.attestations[0];
+  assert.ok(step);
+  assert.equal(step.taskStepRunId,runId);
+  assert.equal(step.sessionId,sessionId);
+  assert.equal(step.immutableOutputSha256,f.signed.statement.immutableObjectSha256);
+  assert.equal(step.ownerGrantEpoch,9);
+  assert.equal(step.durableCommitId,'550e8400-e29b-41d4-a716-446655440005');
+  assert.equal(checkpoint.immutableOutputSha256,f.signed.statement.immutableObjectSha256);
+  assert.equal(checkpoint.checkpointPersisted,false);
+  assert.equal(checkpoint.productionAuthorityConnected,false);
+  assert.equal(checkpoint.automaticReplayAllowed,false);
+  assert.ok(Buffer.byteLength(JSON.stringify(checkpoint),'utf8')<=4096);
+  assert.ok(Object.isFrozen(checkpoint.attestations));
+}));
+
+test('#780 revoked CORE with old owner_epoch plus forged COMPLETED never revives checkpoint',()=>scenario(async f=>{
+  assert.equal(await f.adapter.reconcile(f.signed),'COMPLETED_VERIFIED');
+  assert.equal(f.adapter.taskStepCheckpointView().attestations.length,1);
+  // An authoritative owner-revoke event invalidates a previously signed
+  // result even if stale Native/Hub status still says COMPLETED.
+  f.p.invalidateOwnerGrant(sessionId);
+  f.mutable.grantState='ACTIVE';
+  f.mutable.epoch=9;
+  const stale=f.adapter.taskStepCheckpointView();
+  assert.equal(stale.status,'UNKNOWN_NO_REPLAY');
+  assert.equal(stale.attestations.length,0);
+  assert.equal(stale.immutableOutputSha256,null);
+  assert.equal(stale.receiptStatus,'MUTATION_UNKNOWN');
+  let called=0;
+  f.ports.readTransfer=async()=>{called++;throw Error('MUST_NOT_REPLAY');};
+  const forged={...f.signed,signatureBase64:Buffer.alloc(64).toString('base64')};
+  assert.equal(await f.adapter.reconcile(forged),'MUTATION_UNKNOWN');
+  assert.equal(await f.adapter.reconcile(f.signed),'MUTATION_UNKNOWN');
+  assert.equal(called,0);
+  assert.equal(f.p.snapshot(sessionId).completionAttested,false);
+  assert.equal(f.adapter.taskStepCheckpointView().attestations.length,0);
+  assert.equal(f.adapter.taskStepCheckpointView().automaticReplayAllowed,false);
+}));
