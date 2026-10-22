@@ -35,7 +35,7 @@ const req = {
 type Mode = 'current' | 'revoke-before-external-commit' |
   'foreign-native-issuer' | 'lost-destination-readback' |
   'forged-second-write-ack' | 'owner-revoked-during-final-verification' |
-  'correctly-signed-foreign-final-sha';
+  'correctly-signed-foreign-final-sha' | 'forged-second-write-ack-cancel-race';
 type Ledger = {
   ownerEpoch: number; grantGeneration: number; sessionEpoch: string;
   committed?: {
@@ -76,6 +76,9 @@ function rig(file: string, mode: Mode) {
   let enteredVerifier!: () => void, releaseVerifier!: () => void;
   const atVerifier = new Promise<void>(r => { enteredVerifier = r; });
   const allowVerifier = new Promise<void>(r => { releaseVerifier = r; });
+  let enteredSecondWrite!: () => void, releaseSecondWrite!: () => void;
+  const atSecondWrite = new Promise<void>(r => { enteredSecondWrite = r; });
+  const allowSecondWrite = new Promise<void>(r => { releaseSecondWrite = r; });
   const ledger = async (): Promise<Ledger> =>
     JSON.parse(await fs.readFile(file, 'utf8')) as Ledger;
   const domain = (claims: Omit<FencedFinalReceipt, 'proof'>, owner: Ledger) =>
@@ -201,10 +204,17 @@ function rig(file: string, mode: Mode) {
       assert.equal(env.offset, stage.length);
       assert.equal(env.sha256, digest(chunk));
       stage = Buffer.concat([stage, chunk]); writes++;
+      if (mode === 'forged-second-write-ack-cancel-race' && env.offset === 65_536) {
+        // Actual synthetic Native mutation is already applied. Another Hub
+        // cancels while its (forged) receipt is in flight. No timing sleeps.
+        enteredSecondWrite();
+        await allowSecondWrite;
+      }
       return {
         // The second Native mutation may have happened, but this signed-
         // looking ACK must NOT be credited to its immutable pending intent.
-        requestId: mode === 'forged-second-write-ack' && env.offset === 65_536
+        requestId: (mode === 'forged-second-write-ack' ||
+          mode === 'forged-second-write-ack-cancel-race') && env.offset === 65_536
           ? randomUUID() : env.requestId,
         epoch: env.epoch, offset: env.offset,
         length: env.length, sha256: env.sha256,
@@ -282,6 +292,7 @@ function rig(file: string, mode: Mode) {
   return {
     hub, ledger, observe, atCommit, release: () => release(),
     atVerifier, releaseVerifier: () => releaseVerifier(),
+    atSecondWrite, releaseSecondWrite: () => releaseSecondWrite(),
     authenticateIssuedReceipt,
     revoke: async () => {
       const old = await ledger();
@@ -551,5 +562,69 @@ test('#21 CAS-aware #762: authentically signed FOREIGN final SHA preserves immut
     assert.equal(retained.publication?.sha256, result.publication?.sha256);
     assert.equal(fx.writes, 2);
     assert.equal(fx.publishes, 1, 'no second Native publication permitted');
+    assert.equal(fx.commitAttempts, 0);
+  }));
+
+
+test('#21 final ACK QA: concurrent cancel AFTER second Native write preserves forged requestId cause, UNKNOWN, no CAS',
+  { timeout: 20_000 }, async () => isolated(async (root, authorityFile) => {
+    const fx = rig(authorityFile, 'forged-second-write-ack-cancel-race');
+    const firstHub = fx.hub(root), secondHub = fx.hub(root);
+    const started = await firstHub.start(req);
+    let originalPending: NonNullable<TransferJob['pending']> | undefined;
+    try {
+      // Promise barrier is reached only AFTER 64KiB verified and the second
+      // Native stage mutation applied. No fixed millisecond scheduling.
+      await fx.atSecondWrite;
+      const beforeCancel = await jobRecord(root, started.id);
+      assert.equal(beforeCancel.state, 'RUNNING');
+      assert.equal(beforeCancel.bytesConfirmed, 65_536);
+      assert.equal(beforeCancel.pending?.offset, 65_536);
+      assert.equal(beforeCancel.pending?.length, bytes.length - 65_536);
+      assert.equal(beforeCancel.pending?.dispatched, true);
+      assert.equal(beforeCancel.pending?.epoch, beforeCancel.fencing?.epoch);
+      assert.equal(beforeCancel.pending?.sha256, digest(bytes.subarray(65_536)));
+      assert.ok(beforeCancel.pending?.requestId);
+      originalPending = structuredClone(beforeCancel.pending);
+      assert.equal(fx.writes, 2, 'the second Native side effect has happened');
+      assert.equal(fx.publishes, 0);
+      assert.equal(fx.commitAttempts, 0);
+
+      const response = await secondHub.cancel(started.id, req.accountId,
+        req.sourceDeviceId, req.targetDeviceId);
+      assert.equal(response.state, 'CANCEL_REQUESTED',
+        'other Hub records cancel but cannot call a real dispatched mutation no-effect');
+      const pendingCancel = await jobRecord(root, started.id);
+      assert.equal(pendingCancel.pending?.requestId, originalPending?.requestId);
+      assert.equal(pendingCancel.pending?.dispatched, true);
+    } finally {
+      fx.releaseSecondWrite();
+      await firstHub.waitForIdle(started.id);
+    }
+    const final = await jobRecord(root, started.id);
+    assert.equal(final.state, 'MUTATION_UNKNOWN', 'post-effect cancellation never clean CANCELLED');
+    assert.equal(final.errorCode, 'FORGED_WRITE_RECEIPT',
+      'precise forged Native ACK takes precedence over generic cancel marker');
+    assert.equal(final.bytesConfirmed, 65_536);
+    assert.equal(final.sha256, digest(bytes), 'original immutable full source SHA retained');
+    assert.equal(final.pending?.requestId, originalPending?.requestId);
+    assert.equal(final.pending?.sha256, originalPending?.sha256);
+    assert.equal(final.pending?.offset, originalPending?.offset);
+    assert.equal(final.pending?.epoch, originalPending?.epoch);
+    assert.equal(final.pending?.dispatched, true);
+    assert.equal(final.publication, undefined);
+    assert.equal(fx.verifies, 0);
+    assert.equal(fx.publishes, 0);
+    assert.equal(fx.commitAttempts, 0);
+    assert.equal((await fx.ledger()).committed, undefined);
+
+    const laterCancel = await secondHub.cancel(started.id, req.accountId,
+      req.sourceDeviceId, req.targetDeviceId);
+    assert.equal(laterCancel.state, 'MUTATION_UNKNOWN');
+    const retained = await jobRecord(root, started.id);
+    assert.equal(retained.errorCode, 'FORGED_WRITE_RECEIPT');
+    assert.equal(retained.pending?.requestId, originalPending?.requestId);
+    assert.equal(fx.writes, 2, 'reopened cancellation cannot replay either write');
+    assert.equal(fx.publishes, 0);
     assert.equal(fx.commitAttempts, 0);
   }));
