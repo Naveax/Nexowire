@@ -60,13 +60,13 @@ test('PR779 seven real P0 gate reds remain, Windows durable reattach independent
  assert.match(c.windowsFailure,/NW_DURABLE_READY/);
  assert.equal(e.prs.find((p:any)=>p.number===779).fullCi,'FAILURE');
 });
-test('P1 inventory diff rollback sandbox bounded loop and checkpoint are a separate NOT_TESTED acceptance',()=>{
+test('P1 inventory and feature rows stay separate; sandbox newly FAIL after PR800 while other four are NOT_TESTED',()=>{
  const e=rd('QA_20261022_PR774_780_EXACT_HEAD.json'),m=rd('cross-project-final-acceptance.json');
  const f=m.qa16P1FeatureAcceptance;
  assert.equal(f.issue,780);
  assert.equal(f.scope,'P1_PRODUCT_EPIC_SEPARATE_FROM_R01_R22');
  assert.deepEqual(f.featureIds,['P1-INV','P1-DIFF','P1-SANDBOX','P1-LOOP','P1-CKPT']);
- assert.equal(f.source,'NOT_TESTED');
+ assert.equal(f.source,'MIXED_1_FAIL_4_NOT_TESTED');
  assert.equal(f.staging,'BLOCKED');
  assert.equal(f.production,'BLOCKED');
  assert.equal(f.p0OverridesAllowed,false);
@@ -82,7 +82,7 @@ test('R01-R22 original P0 states and physical blocker cases remain intact',()=>{
  assert.equal(m.requirements.length,22);
  assert.deepEqual(m.requirements.reduce((x:any,r:any)=>(x[r.levels.source.status]=(x[r.levels.source.status]||0)+1,x),{}),{BLOCKED:9,FAIL:6,PASS:6,NOT_TESTED:1});
  assert.ok(m.requirements.every((r:any)=>['staging','production','incident'].every(k=>r.levels[k].status==='BLOCKED')));
- assert.deepEqual(m.qa16LatestReview.fullCi,{success:3,failed:3,issueNotPr:1});
+ assert.deepEqual(e.prs.reduce((a:any,p:any)=>(a[p.fullCi]=(a[p.fullCi]||0)+1,a),{}),{SUCCESS:3,FAILURE:3});
  assert.equal(e.productionNoGo.liveReVoltVpnUbuntuLab,'UNTOUCHED');
  for(const k of ['realSignedInstalledHighCore','typedHypervElevatedVmGuid','acl271','signedBrokerBootstrap551','independentNonRestorableCas587','durableOnecallPublisher588','physicalVmStateReadback']){
   assert.equal(e.productionNoGo[k],'BLOCKED',k);

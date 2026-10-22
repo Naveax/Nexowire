@@ -1,0 +1,232 @@
+﻿{
+  "schema": "nexowire.qa16.pr791-803-exact-v1",
+  "reviewedDate": "2026-10-22",
+  "main": "754cc4364822be5fda528f54042fb22a84f19924",
+  "sourceQa802": {
+    "head": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+    "ci": 39824624827,
+    "conclusion": "FAILURE",
+    "requiredP0Seven": true,
+    "node24JobId": 119984527868,
+    "negativeJobId": 119984527813,
+    "windowsJobId": 119984527847,
+    "windowsTimeoutMs": 27884,
+    "node22": "CANCELLED",
+    "siblingSuccess": 4
+  },
+  "prs": [
+    {
+      "pr": 791,
+      "headSha": "22eec6de24264ed1b8a70f5dfbf4bd5375c3ae39",
+      "baseSha": "89a865363829c8c30a74de1516e53a697549c05b",
+      "runId": 39821808832,
+      "conclusion": "FAILURE",
+      "classification": "WINDOWS_JOB_STDOUT_ORDER",
+      "evidence": "Windows browser-live 119975219942: fast-exit stdout lost before exited, iteration 6. Cloned UNKNOWN double-charge dedicated acceptance not independently failed in this run.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 792,
+      "headSha": "11ac2b320b4b1843d3f39b1b7e50c72add469b46",
+      "baseSha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+      "runId": 39822548339,
+      "conclusion": "FAILURE",
+      "classification": "WINDOWS_JOB_STDOUT_ORDER",
+      "evidence": "Windows browser-live 119978909279: stdout-before-exited iteration 11. OAuth principal source branch not full green.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 793,
+      "headSha": "9f24e7e11301ca9b8e4b8bd59f232f3eb2163d5c",
+      "baseSha": "7927adefbbefb33e578cf85471a2e516544a91da",
+      "runId": 39822912875,
+      "conclusion": "SUCCESS",
+      "classification": "QA_DOC_SOURCE_GREEN",
+      "evidence": "P1 Windows Job vs restricted-token task sandbox acceptance DOCS. No actual OS isolation or production acceptance.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 794,
+      "headSha": "765f59f1d7c5a0137fe2fd5c4515016ab4bdcd55",
+      "baseSha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+      "runId": 39823178271,
+      "conclusion": "SUCCESS",
+      "classification": "SOURCE_NEGATIVE_QA_GREEN",
+      "evidence": "Cloned worktree immutable source SHA drift/UNKNOWN and owner revoke P0 test source green. Does not prove external CAS.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 795,
+      "headSha": "70e9735007b648db83c2a6fa891ad624a8ef224f",
+      "baseSha": "3fe56ef39ab604a472974946dd31b4e016287f46",
+      "runId": 39823364109,
+      "conclusion": "SUCCESS",
+      "classification": "SOURCE_NEGATIVE_QA_GREEN",
+      "evidence": "Diff approval bound to worktree and durable UNKNOWN source test green; no actual privilege installation.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 796,
+      "headSha": "8feda580d3390a1d72f32d782c086485bf476da1",
+      "baseSha": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+      "runId": 39823465153,
+      "conclusion": "SUCCESS",
+      "classification": "SOURCE_NEGATIVE_QA_GREEN",
+      "evidence": "Reconnect cloned runbook UNKNOWN correlation source QA green on this branch; no immutable physical owner receipt.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 797,
+      "headSha": "9e75943adc869528839a99339e1852cc15693f66",
+      "baseSha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "runId": 39823465809,
+      "conclusion": "SUCCESS",
+      "classification": "SOURCE_FIX_CI_GREEN_ONLY",
+      "evidence": "Artifact checkpoint original durable mutation UUID/external CAS source fix green, no deployed independently rollback-resistant authority.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 798,
+      "headSha": "825bca693d025b839bc2d4c4a1c1998ded590e53",
+      "baseSha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+      "runId": 39823472405,
+      "conclusion": "SUCCESS",
+      "classification": "QA_DOC_SOURCE_GREEN",
+      "evidence": "Separate worker identity and restricted recovery P1 docs; source CI green not product deployed.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 799,
+      "headSha": "7e3d1df52a0d3f55350030622a929b7c3fbe78e3",
+      "baseSha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "runId": 39823529140,
+      "conclusion": "FAILURE",
+      "classification": "WINDOWS_JOB_STDOUT_ORDER",
+      "evidence": "Windows browser-live 119980694018: stdout-before-exited iteration 10. High-water CAS adversarial fixture does not prove global production.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 800,
+      "headSha": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "runId": 39823730640,
+      "conclusion": "FAILURE",
+      "classification": "REPRODUCED_REAL_P1_SANDBOX_DEFECT",
+      "evidence": "Node24 119981387012: REAL workspace.snapshot ran repository-controlled Git core.fsmonitor and wrote outside approved PathPolicy root. Negative test reproduced unsafe source behavior. Node22 cancelled.",
+      "defectReproduced": true,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 801,
+      "headSha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1",
+      "baseSha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "runId": 39823885977,
+      "conclusion": "SUCCESS",
+      "classification": "SOURCE_QA_GREEN_NOT_FEATURE_ACCEPTED",
+      "evidence": "CDP bounded micro-scenario dispatch-denied source QA green; not full P1 worker sandbox.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 802,
+      "headSha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+      "baseSha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "runId": 39824624827,
+      "conclusion": "FAILURE",
+      "classification": "SEVEN_MANDATORY_P0_PLUS_DURABLE",
+      "evidence": "Dedicated original P0 7 FAIL, Node24 general npm check same P0 gates, Windows browser-live durable ProcessManager restart NW_DURABLE_READY timeout ~27.884 seconds. Node22 cancelled; four hosted siblings success. Not a distinct TypeScript syntax diagnosis.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    },
+    {
+      "pr": 803,
+      "headSha": "7fa4bdc65c5f59c09179d3afa3fb896c4280aa87",
+      "baseSha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+      "runId": 39824845400,
+      "conclusion": "SUCCESS",
+      "classification": "QA_DAG_SOURCE_GREEN_NO_MERGE",
+      "evidence": "QA24 paginated census and DAG negatives full CI SUCCESS only on own head, not authoritative safe main merge or close blockers.",
+      "defectReproduced": false,
+      "prodGate": "BLOCKED"
+    }
+  ],
+  "fullCi": {
+    "success": 8,
+    "failed": 5,
+    "queued": 0,
+    "unknown": 0
+  },
+  "focusedExternalNegativeRuns": [
+    {
+      "pr": 708,
+      "headSha": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+      "runId": 39824007092,
+      "conclusion": "FAILURE",
+      "jobId": 119982616074,
+      "job": "test (22)",
+      "test": "test/qa22-crosshub-cas-fencing.test.ts:1560",
+      "failure": "Missing expected rejection: cloned UNKNOWN borrowed final CAS across Hub A and revoke-start before checkpoint save",
+      "classification": "REPRODUCED_REAL_P0_CAS_FENCING_NEGATIVE"
+    },
+    {
+      "pr": 726,
+      "headSha": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+      "runId": 39823764746,
+      "conclusion": "FAILURE",
+      "jobId": 119981513248,
+      "job": "test (24)",
+      "test": "test/qa/core-card-approval-pref-only.test.ts",
+      "failure": "#787 stale owner epoch/early all-green snapshot incorrectly renders CORE effective/persistent without current epoch and physical HIGH/native CAS",
+      "classification": "REPRODUCED_REAL_P0_UI_STATUS_NEGATIVE"
+    },
+    {
+      "pr": 800,
+      "headSha": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8",
+      "runId": 39823730640,
+      "conclusion": "FAILURE",
+      "jobId": 119981387012,
+      "job": "test (24)",
+      "test": "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts:96",
+      "failure": "workspace.snapshot executes repository controlled core.fsmonitor hook and writes outside scoped taskRoot",
+      "classification": "REPRODUCED_REAL_P1_SANDBOX_DEFECT"
+    }
+  ],
+  "truthPolicy": {
+    "fullCiGreenDoesNotAuthorizeMerge": true,
+    "redMeansDefectReproducedOnlyWhenAdversarialAssertionShowsUnsafeSource": true,
+    "redDueToUnrelatedHostedFailureDoesNotProvePRFeatureBroken": true,
+    "noGreenFromDedicatedQAOnly": true,
+    "noPhysicalCoreElevatedProof": true,
+    "noOriginalP0NegativeTestRemoved": true
+  },
+  "physicalNoGo": {
+    "signedHighCore": "BLOCKED",
+    "hypervGuidPrivilege": "BLOCKED",
+    "acl271": "BLOCKED",
+    "signedBootstrap551": "BLOCKED",
+    "externalCas587": "BLOCKED",
+    "durablePublisher588": "BLOCKED",
+    "vmRunningReadback": "BLOCKED",
+    "ReVoltVPNUbuntuLab": "UNTOUCHED"
+  },
+  "sourceOutcome": {
+    "originalR01R22": {
+      "PASS": 6,
+      "FAIL": 6,
+      "BLOCKED": 9,
+      "NOT_TESTED": 1
+    },
+    "p1Sandbox": "FAIL",
+    "p1OtherFour": "NOT_TESTED",
+    "stagingProductionIncident": "BLOCKED"
+  }
+}
