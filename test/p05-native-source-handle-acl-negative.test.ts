@@ -147,6 +147,26 @@ test('destination grants are scoped to immutable parent handle and actual volume
   }
 });
 
+test('two independent destination parent witnesses must match full volume serial and partition FileId identity',()=>{
+  // Native file ID alone is only scoped to its physical volume. The relative
+  // chain root may not be silently substituted for the separately verified
+  // destination-parent/grant handle by keeping just fileId/GUID/disk equal.
+  for(const mutate of [
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.volumeSerial='OTHER-VOLUME-SERIAL';
+      x.destinationRelativeChain.grantRoot.observedAfter.volumeSerial='OTHER-VOLUME-SERIAL';
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.partitionNumber=9;
+      x.destinationRelativeChain.grantRoot.observedAfter.partitionNumber=9;
+    },
+  ]){
+    const fixture=syntheticProtectedBoundary();
+    mutate(fixture);
+    assert.throws(()=>verify(fixture),denied('FILE_NATIVE_PARENT_HANDLE_NOT_PINNED'));
+  }
+});
+
 test('destination never leaves granted root even for path-prefix sibling, ADS, traversal or junction parent',()=>{
   for(const destination of [
     'C:\\Protected\\owner-other\\stage.tmp',

@@ -199,9 +199,9 @@ export function assertNativeProtectedFileBoundary(
   }
   const parentPath=path.win32.dirname(canonical(verified.derivedDestination));
   assertNativeHandleIdentity(evidence.destinationParent,parentPath,'directory');
-  if(verified.parent.fileId!==evidence.destinationParent.fileId ||
-     verified.parent.volumeGuid!==evidence.destinationParent.volumeGuid ||
-     verified.parent.diskId!==evidence.destinationParent.diskId){
+  // File IDs are volume-scoped; two independently retained handles must
+  // agree on the FULL native identity, including volume serial/partition.
+  if(!idMatches(verified.parent,evidence.destinationParent)){
     deny('FILE_NATIVE_PARENT_HANDLE_NOT_PINNED');
   }
   if(!grant.ownerApprovalVerified ||
