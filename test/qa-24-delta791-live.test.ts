@@ -95,7 +95,7 @@ test('QA24 failed path pagination denies evidence; missing exact CI remains unkn
  await assert.rejects(collect791803Live(mock({loseFiles:true}).api,'Naveax/Nexowire'),
    /INCOMPLETE_CHANGED_FILES_793/);
  const r=await collect791803Live(mock({loseCi:true}).api,'Naveax/Nexowire');
- assert.ok(r.blocked.some(x=>x.pr===793&&x.ci==='completed'===false));
+ assert.ok(r.blocked.some(x=>x.pr===793&&x.ci==='unknown'));
  assert.equal(r.delta.find(n=>n.pr===793)?.ci.run_id,null);
  assert.equal(r.delta.find(n=>n.pr===793)?.ci.conclusion,null);
 });
