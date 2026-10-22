@@ -13,6 +13,7 @@ import {promises as fs} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {AuditLog, type AuditWrite} from '../src/audit/log.js';
+import {AgentOperationJournal} from '../src/agent/operation-journal.js';
 import {
   hash, verifySig, redactAudit, verifyElevatedReceipt, eventDigest, sealBody,
   GENESIS, SEAL_GENESIS, type Signed, type ProcessCreation, type Postcondition,
@@ -673,4 +674,66 @@ test('real audit JSONL admits synthetic forged success/re-pair-stale row and unt
  assert.match(raw,/QA29_FAKE_SECRET_DO_NOT_USE/,
   'CURRENT SOURCE REPRO: untyped extra keys are not allowlisted at persistence');
  assert.equal(trustVerdict.denialSource,'UNSIGNED_AUDIT_ROW_REPAIR_STALE');
+});
+
+/**
+ * #781 cloned UNKNOWN and #783 loop contract use the original immutable
+ * request/fingerprint/capability. A real AgentOperationJournal enforces
+ * that binding, while real AuditLog accepts conflicting typed fields and
+ * untyped fingerprint metadata for the same requestId. This is an UNSAFE
+ * dashboard-misinterpretation regression, not evidence of any OS effect.
+ */
+test('actual AuditLog accepts conflicting same requestId fingerprints while Agent journal refuses immutable mutation rebind',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'nx-qa29-request-binding-'));
+ const journal=new AgentOperationJournal(path.join(root,'disposable-agent.sqlite'));
+ t.after(async()=>{
+  journal.close();
+  await fs.rm(root,{recursive:true,force:true});
+ });
+ const requestId=uuid('33'),deviceA=uuid('34'),deviceB=uuid('35');
+ const originalHash=hash('qa29-original-logical-mutation'),
+  incompatibleHash=hash('qa29-cloned-different-logical-mutation');
+ const started=await journal.begin(requestId,originalHash,'shell.exec');
+ assert.equal(started.created,true);
+ await journal.markDispatched(requestId,originalHash);
+ const original=await journal.complete(requestId,'unknown',undefined,undefined,originalHash);
+ assert.equal(original.status,'unknown');
+ assert.equal(original.fingerprint,originalHash);
+ const audit=new AuditLog(path.join(root,'disposable-audit.jsonl'));
+ await audit.write({operationId:requestId,status:'unknown',
+  capability:'shell.exec',targetId:deviceA,
+  requestHash:originalHash,
+ } as AuditWrite & {requestHash:string});
+ // No shell, file mutation, or real receipt: this is only a SECOND metadata
+ // write with the same operationId but a DIFFERENT logical mutation identity.
+ await audit.write({operationId:requestId,status:'succeeded',
+  capability:'files.write',targetId:deviceB,
+  requestHash:incompatibleHash,
+ } as AuditWrite & {requestHash:string});
+ const matching=await new AuditLog(path.join(root,'disposable-audit.jsonl'))
+  .query({operationId:requestId,limit:10});
+ assert.equal(matching.events.length,2);
+ const rows=matching.events as Array<AuditWrite&{requestHash?:string}>;
+ assert.equal(rows[0]?.status,'succeeded',
+  'CURRENT SOURCE REPRO: audit_query surfaces conflicting duplicate success');
+ assert.equal(rows[1]?.status,'unknown');
+ assert.equal(rows[0]?.requestHash,incompatibleHash);
+ assert.equal(rows[1]?.requestHash,originalHash);
+ assert.notEqual(rows[0]?.capability,rows[1]?.capability);
+ assert.notEqual(rows[0]?.targetId,rows[1]?.targetId);
+ assert.equal(new Set(rows.map(r=>r.operationId)).size,1,
+  'two incompatible logical mutation fingerprints share one audit operationId');
+ await assert.rejects(journal.begin(requestId,incompatibleHash,'files.write'),
+  {code:'AGENT_JOURNAL_REQUEST_MISMATCH'});
+ const invariant=await journal.inspect(requestId);
+ assert.equal(invariant?.fingerprint,originalHash);
+ assert.equal(invariant?.capability,'shell.exec');
+ assert.equal(invariant?.status,'unknown',
+  'a conflicting audit row cannot resolve the original possibly dispatched mutation');
+ // Operational audit is untrusted metadata. No elevated/native authority,
+ // completed outcome or replay permission is derivable from these two rows.
+ const verdict={status:'MUTATION_UNKNOWN' as const,retrySafe:false as const,
+  denialSource:'AUDIT_DUPLICATE_REQUEST_FINGERPRINT_SCOPE_CONFLICT'};
+ assert.equal(verdict.retrySafe,false);
+ assert.equal(verdict.status,'MUTATION_UNKNOWN');
 });
