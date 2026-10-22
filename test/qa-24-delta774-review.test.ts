@@ -190,9 +190,6 @@ test('QA24 torn open set/head and mismatched compare cannot return live approval
     'Naveax/Nexowire'),/OPEN_SET_MOVED/);
   await assert.rejects(collect774779(testApi(census,newDelta,{moveHead:true}),
     'Naveax/Nexowire'),/PR_HEAD_MOVED/);
-  const c=await collect774779(testApi(census,newDelta,{badCompare:true}),
-    'Naveax/Nexowire');
-  assert.notEqual(c.nodes.find(x=>x.pr===774)?.compare?.merge_base_sha,
-    c.nodes.find(x=>x.pr===774)?.base_sha);
-  assert.equal(c.production_merge_authorized,false);
+  await assert.rejects(collect774779(testApi(census,newDelta,{badCompare:true}),
+    'Naveax/Nexowire'),/INVALID_COMPARE_774/);
 });
