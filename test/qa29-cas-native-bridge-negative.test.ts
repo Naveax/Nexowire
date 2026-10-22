@@ -87,6 +87,7 @@ type Sample={
  osReceipt:Signed<ProcessCreation>;osKey:KeyObject;
  postReceipt:Signed<Postcondition>;postKey:KeyObject;
  tree:Tree709; ownerEpochNow:number;grantGenerationNow:number;
+ coreEpochAtApproval:number;currentCoreEpoch:number;
  commandPossibleUnknown:boolean;now:number;
 };
 function crossCheck(x:Sample):CrossResult {
@@ -95,7 +96,8 @@ function crossCheck(x:Sample):CrossResult {
  if(!validPermit(x.claim,x.permitKey,x.expected,x.now))
    return unknown('CAS_PERMIT_INVALID_OR_OLD_NONCE');
  if(x.ownerEpochNow!==x.expected.ownerEpoch||
-    x.grantGenerationNow!==x.expected.generation)
+    x.grantGenerationNow!==x.expected.generation||
+    x.currentCoreEpoch!==x.coreEpochAtApproval)
    return unknown('CORE_REVOKED_OR_OWNER_REPAIRED');
  if(x.commandPossibleUnknown)return unknown('POSSIBLE_EFFECT_NO_REPLAY');
  const p=x.osReceipt.payload,r=x.postReceipt.payload;
@@ -107,7 +109,7 @@ function crossCheck(x:Sample):CrossResult {
     p.ownerId!==x.expected.ownerId||r.ownerId!==x.expected.ownerId||
     p.deviceId!==x.expected.deviceId||r.deviceId!==x.expected.deviceId||
     p.ownerEpoch!==x.expected.ownerEpoch||r.ownerEpoch!==x.expected.ownerEpoch||
-    p.coreEpoch!==x.expected.generation||r.coreEpoch!==x.expected.generation||
+    p.coreEpoch!==x.coreEpochAtApproval||r.coreEpoch!==x.coreEpochAtApproval||
     p.intentHash!==x.expected.fingerprint||r.intentHash!==x.expected.fingerprint||
     p.pid!==r.pid||p.creationFiletime!==r.creationFiletime||
     p.machineBootId!==r.machineBootId||p.launchNonce!==r.launchNonce||
@@ -137,7 +139,7 @@ function fixture():Sample{
   kind:'os-process-created-v1',requestId:expected.requestId,
   ownerId:expected.ownerId,deviceId:expected.deviceId,
   sessionId:expected.sessionEpoch,ownerEpoch:expected.ownerEpoch,
-  coreEpoch:expected.generation,intentHash:expected.fingerprint,
+  coreEpoch:7,intentHash:expected.fingerprint,
   reservationNonce:'synthetic-reserve',pid:4211,
   creationFiletime:'134092000001239777',machineBootId:'boot-fixture',
   launchNonce:'launch-fixture',createdAtMs:now-1000,
@@ -149,7 +151,7 @@ function fixture():Sample{
   kind:'independent-postcondition-v1',requestId:expected.requestId,
   ownerId:expected.ownerId,deviceId:expected.deviceId,
   sessionId:expected.sessionEpoch,ownerEpoch:expected.ownerEpoch,
-  coreEpoch:expected.generation,intentHash:expected.fingerprint,
+  coreEpoch:7,intentHash:expected.fingerprint,
   reservationNonce:process.reservationNonce,targetId:'target',
   targetGeneration:12,observedStateHash:hash('expected-state'),
   pid:process.pid,creationFiletime:process.creationFiletime,
@@ -161,6 +163,7 @@ function fixture():Sample{
   postReceipt:signLocal(readKeys.privateKey,readback),postKey:readKeys.publicKey,
   tree:{...tree709},ownerEpochNow:expected.ownerEpoch,
   grantGenerationNow:expected.generation,
+  coreEpochAtApproval:7,currentCoreEpoch:7,
   commandPossibleUnknown:false,now};
 }
 test('source cross-owner baseline never upgrades #709 read-only audit into physical Broker',()=>{
@@ -205,7 +208,7 @@ test('expired signed permit, future issuance and excessive TTL reject',()=>{
  }
 });
 test('CORE revoke or owner re-pair after signed permit refuses admission',()=>{
- for(const patch of [{ownerEpochNow:9},{grantGenerationNow:13}]){
+ for(const patch of [{ownerEpochNow:9},{grantGenerationNow:13},{currentCoreEpoch:8}]){
   const x=fixture();
   assert.equal(crossCheck({...x,...patch}).reason,'CORE_REVOKED_OR_OWNER_REPAIRED');
  }
