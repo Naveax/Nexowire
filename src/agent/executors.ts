@@ -396,13 +396,21 @@ export async function runProcess(
   });
 }
 
-function hasExecutable(command: string): boolean {
+function executablePath(command: string): string | null {
   const result = spawnSync(
     process.platform === 'win32' ? 'where.exe' : 'which',
     [command],
-    { windowsHide: true, stdio: 'ignore' },
+    { encoding: 'utf8', windowsHide: true, timeout: 5000 },
   );
-  return result.status === 0;
+  if (result.error || result.status !== 0) return null;
+  return result.stdout.split(/\r?\n/u).map((file) => file.trim())
+    .find((file) => path.isAbsolute(file) &&
+      (process.platform !== 'win32' ||
+       /\.(?:exe|cmd|bat)$/iu.test(file))) ?? null;
+}
+
+function hasExecutable(command: string): boolean {
+  return executablePath(command) !== null;
 }
 
 function shellCommand(
@@ -1134,14 +1142,10 @@ async function findScopedGitWorkspace(
 }
 
 function scopedGitExecutable(): string | null {
-  const found = spawnSync(
-    process.platform === 'win32' ? 'where.exe' : 'which', ['git'],
-    { encoding: 'utf8', windowsHide: true, timeout: 5000 },
-  );
-  if (found.error || found.status !== 0) return null;
-  return found.stdout.split(/\r?\n/u).map((line) => line.trim())
-    .find((file) => path.isAbsolute(file) &&
-      (process.platform !== 'win32' || /\.exe$/iu.test(file))) ?? null;
+  const resolved = executablePath('git');
+  if (process.platform === 'win32' && resolved &&
+      !/\.exe$/iu.test(resolved)) return null;
+  return resolved;
 }
 
 async function runScopedGit(
