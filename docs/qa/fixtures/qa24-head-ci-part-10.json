@@ -24,7 +24,20 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975"
-      }
+      },
+      "files": [
+        "docs/s3-signed-bootstrap-owner-inventory-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "scripts/s3-core-broker-install-gate.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 673,
@@ -38,7 +51,22 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449"
-      }
+      },
+      "files": [
+        "docs/security/p0-filesystem-source-handle-acl-20261021.md",
+        "src/agent/broker-filesystem-preflight.ts",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "test/broker-filesystem-preflight-negative.test.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-native-source-handle-acl-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+        "head_sha": "2c78cedc6ee9ce6ebc0f5de635de47a6bcdcc449",
+        "merge_base_sha": "fddbdfea8d3b034105e198e7fc0489e3c6ee466e",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 674,
@@ -52,7 +80,21 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401"
-      }
+      },
+      "files": [
+        "docs/SCALE_S5_598_FIXED_SEED_SOURCE_20261021.md",
+        "docs/reports/s5-598-real-parser-seeded-256kib-20261021.json",
+        "scripts/bench-s5-real-598-seeded.ts",
+        "scripts/report-s5-real-598-seeded.ts",
+        "test/s5-real-598-seeded-parser.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "head_sha": "9dc676ac793ca16233d98c934c46e08d6ead1401",
+        "merge_base_sha": "cf58e6882e44968698f3f548b353287ba1698747",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 675,
@@ -66,7 +108,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5"
-      }
+      },
+      "files": [
+        "docs/MCP_GITHUB_OAUTH_STATE_CAS_20261021.md",
+        "src/product/github-oauth-browser-state.ts",
+        "src/product/github-oauth.ts",
+        "test/github-oauth-browser-state-negative.test.ts",
+        "test/github-oauth.test.ts"
+      ],
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 676,
@@ -80,7 +136,22 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07"
-      }
+      },
+      "files": [
+        "docs/AGENT_P0_EXTERNAL_GRANT_ATOMIC_RECONCILIATION_20261021.md",
+        "src/agent/https-external-grant-cas.ts",
+        "src/agent/postgres-bound-grant-cas.ts",
+        "src/agent/witness-revoke-coordinator.ts",
+        "test/https-external-grant-cas.integration.test.ts",
+        "test/postgres-bound-grant-cas.integration.test.ts"
+      ],
+      "compare": {
+        "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "head_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "merge_base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 677,
@@ -94,7 +165,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209"
-      }
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+        "test/artifact-588-cancel-read-race.qa.test.ts",
+        "test/qa21-artifact-unknown-reopen-idempotency.test.ts"
+      ],
+      "compare": {
+        "base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "head_sha": "3e58751b103b0f61a13301396dbb7537f8f77209",
+        "merge_base_sha": "8cbf5c06dfe7677e38f896f90a8dac63eae04458",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 678,
@@ -108,7 +191,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "807725eadece998fc4928a0a3898e71afa828da8"
-      }
+      },
+      "files": [
+        "docs/s3-worker20-owner-stage-repair-crash-qa-20261021.md",
+        "test/s3-worker20-owner-stage-repair-crash-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "head_sha": "807725eadece998fc4928a0a3898e71afa828da8",
+        "merge_base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 679,
@@ -122,7 +216,20 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350"
-      }
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-native-crosshead.yml",
+        "docs/qa/QA19_WINDOWS_NATIVE_PROVIDER_CROSSHEAD_20261021.md",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts",
+        "test/qa-19-windows-native-provider-crosshead.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "b0b556b4cb2ee396ce699c356fb0515db529f350",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
     }
   ]
 }
