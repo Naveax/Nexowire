@@ -131,7 +131,8 @@ test('QA30 RED-SOURCE: cloned UNKNOWN runbook double-reserves staging, quiet str
     assert.equal(first.data.steps[0]?.errorCode,'MUTATION_STATE_UNKNOWN');
     assert.equal(first.data.steps[0]?.status,'failed',
       'existing source incorrectly classifies lost Native ACK as FAILED');
-    assert.deepEqual(first.data.summary,{failed:1,unknown:0});
+    assert.equal(first.data.summary.failed,1);
+    assert.equal(first.data.summary.unknown,0);
     assert.equal(quota.requestCancel({
       ownerId:NOISY,deviceId:DEVICE,projectId:PROJECT,
       sessionId:sourceSessionIds[0]!,expectedOffsetBytes:0,
