@@ -24,7 +24,20 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "0b43332289a478a3285673f43f6bb54da5325459"
-      }
+      },
+      "files": [
+        "docs/s3-core-import-dag-repair-evidence-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "scripts/s3-core-broker-install-gate.ts",
+        "test/s3-protected-core-installer-stage-owner.test.ts"
+      ],
+      "compare": {
+        "base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "head_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "merge_base_sha": "84714bb77ec00a8e79ebb732c1070dda1a331975",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 697,
@@ -38,7 +51,18 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934"
-      }
+      },
+      "files": [
+        "docs/OAUTH_GITHUB_CSRF_MULTI_SESSION_ROTATION_QA_20261021.md",
+        "test/github-oauth-cross-session-hostile-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "head_sha": "5daa0da17d2d8db93394cd512d2bf80ab2376934",
+        "merge_base_sha": "257d89e168c53cbe4aafafb74e4b236ed7f9dfa5",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 698,
@@ -52,7 +76,20 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c"
-      }
+      },
+      "files": [
+        "docs/qa/INTEGRATION_DAG_77_SAFE_REVIEW_20261021.md",
+        "docs/qa/p0-integration-dag-open77-20261021.json",
+        "scripts/qa24-safe-merge-review.ts",
+        "test/qa-24-safe-merge-review.test.ts"
+      ],
+      "compare": {
+        "base_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "head_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+        "merge_base_sha": "60ece49f695a57c1d1d09f87b12c322c80d45b2f",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 699,
@@ -66,7 +103,20 @@
         "status": "in_progress",
         "conclusion": null,
         "queried_head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8"
-      }
+      },
+      "files": [
+        ".github/workflows/qa29-native-receipt-verifier.yml",
+        "docs/QA29_NATIVE_RECEIPT_PROVENANCE_NO_GO_617.md",
+        "test/qa29-native-receipt-verifier.test.ts",
+        "test/qa29-native-receipt-verifier.ts"
+      ],
+      "compare": {
+        "base_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+        "head_sha": "c7c868edfa788ded1990a6c03c2a7d527a3b66d8",
+        "merge_base_sha": "5b2047d6a0e0caf880800f13a36e2432d98c90d6",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 700,
@@ -80,7 +130,25 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f"
-      }
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/P0_CORE_BROKER_PROTECTED_TREE_PID_CAS_20261021.md",
+        "scripts/audit-core-broker-protected-tree.ps1",
+        "scripts/audit-windows-broker-token-provider.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "src/security/core-broker-process-witness.ts",
+        "test/core-broker-process-witness.test.ts",
+        "test/core-broker-protected-tree.test.ts",
+        "test/windows-broker-provider-attestation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "head_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "merge_base_sha": "cc5f3db53ec38224a1c632bee96d1cf98095b89d",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 701,
@@ -94,7 +162,19 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa"
-      }
+      },
+      "files": [
+        "docs/SCALE_V2_S2_PAIRING_KEY_ROTATION_FOREIGN_OWNER_NONCE_QA_20261021.md",
+        "test/fixtures/scale-v2-owner-wss-pairing-revision-guard-dev.sql",
+        "test/owner-public-wss-cross-device-pairing-rotation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "head_sha": "61ef8373ab98904b4aef4b9d44d1c5bd4ccc0afa",
+        "merge_base_sha": "1e9425c970219834d6488add77d53c1cdade750d",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 702,
@@ -108,7 +188,21 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190"
-      }
+      },
+      "files": [
+        "docs/AGENT_P0_EXTERNAL_BROKER_DISPATCH_FENCE_20261021.md",
+        "src/agent/broker-external-dispatch-fence.ts",
+        "src/agent/https-broker-dispatch-authority.ts",
+        "test/broker-external-dispatch-fence.test.ts",
+        "test/https-broker-dispatch-authority.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "head_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "merge_base_sha": "b935a594a68c2ba3e043b0731e5eb6d01081fa07",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 703,
@@ -122,7 +216,18 @@
         "status": "in_progress",
         "conclusion": null,
         "queried_head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d"
-      }
+      },
+      "files": [
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-691-predispatch-reopen.qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+        "head_sha": "13cef903130d36a4b9c37aff571b80e273a2c87d",
+        "merge_base_sha": "da37dcc034adc10db7149917a6af557d7770d8b5",
+        "status": "ahead"
+      },
+      "files_complete": true
     }
   ]
 }
