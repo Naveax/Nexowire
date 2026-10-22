@@ -11,6 +11,8 @@ const identity=z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const guid=z.string().uuid();
 const stamp=z.string().datetime({offset:true});
 const sha256=z.string().regex(/^[a-f0-9]{64}$/);
+// Historical durable error code is forensic evidence, NOT a new outcome.
+const diagnosticCode=z.string().regex(/^[A-Z][A-Z0-9_]{0,95}$/);
 
 export const ElevatedExpectedOperationSchema=z.strictObject({
   requestId:guid,
@@ -19,6 +21,8 @@ export const ElevatedExpectedOperationSchema=z.strictObject({
   ownerAccountId:identity,
   ownerEpoch:z.number().int().positive(),
   action:z.enum(['core.shell.exec','hyperv.vm.start','hyperv.vm.stop']),
+  /** Preserve the original durable error across reconnect/reconciliation. */
+  originalErrorCode:diagnosticCode.optional(),
   vmId:guid.optional(),
   issuedAt:stamp,
 }).superRefine((v,ctx)=>{
@@ -76,11 +80,19 @@ export type ElevatedReconciliationReason=
   | 'POSTCONDITION_CAPABILITY_MISMATCH' | 'POSTCONDITION_RECEIPT_INCONSISTENT'
   | 'POSTCONDITION_STATE_MISMATCH' | 'POSTCONDITION_NATIVE_ATTESTATION_MISSING';
 
+/** Proposed #780 tool-loop taxonomy; no loop or replay is implemented here. */
+export type ToolLoopOutcome =
+  | 'PASSED' | 'DENIED' | 'UNKNOWN' | 'RECONCILE_REQUIRED' | 'ROLLBACK_CONFLICT';
+
 export interface ElevatedReconciliationResult {
   contractVersion:2;
   // Even matching data is only an unattested candidate, NOT physical proof.
   status:'unknown';
   code:'MUTATION_STATE_UNKNOWN';
+  /** Original journal/owner error, never overwritten by this projection. */
+  originalErrorCode:string|null;
+  /** Possible dispatch plus missing physical effect needs human/source readback. */
+  loopOutcome:Extract<ToolLoopOutcome,'RECONCILE_REQUIRED'>;
   denialSource:'undetermined';
   reason:ElevatedReconciliationReason;
   observedAt:'task_verification';
@@ -103,6 +115,8 @@ export function reconcileElevatedOutcomeEvidence(
   const req=expected.success?expected.data:null;
   const base=(reason:ElevatedReconciliationReason):ElevatedReconciliationResult=>({
     contractVersion:2,status:'unknown',code:'MUTATION_STATE_UNKNOWN',
+    originalErrorCode:req?.originalErrorCode??null,
+    loopOutcome:'RECONCILE_REQUIRED',
     denialSource:'undetermined',reason,observedAt:'task_verification',
     retrySafety:'reconcile_first',dispatchState:'unknown',
     effectVerified:false,automaticallyRetryable:false,

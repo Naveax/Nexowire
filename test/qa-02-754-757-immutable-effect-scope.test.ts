@@ -118,6 +118,60 @@ test('QA02 #770/#768/#767 cross-domain receipts, CAS commit and final grant neve
     'POSTCONDITION_NOT_APPLICABLE');
 });
 
+
+test('QA02 #776/#777/#780 preserves original UNKNOWN code against duplicate signed publish and stale epoch',()=>{
+  const original={...expected(),originalErrorCode:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN'};
+  const publication={
+    requestId:id.requestId,ownerEpoch:id.ownerEpoch,
+    sha256:'a'.repeat(64),signature:'signed-looking-fixture',
+  };
+  const duplicate=reconcileElevatedOutcomeEvidence(original,{
+    ...obs(),signedPublicationReceipts:[publication,publication],
+  },gates());
+  assert.equal(duplicate.reason,'FORGED_OR_INVALID_OBSERVATION');
+  assert.equal(duplicate.originalErrorCode,'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+  assert.equal(duplicate.code,'MUTATION_STATE_UNKNOWN');
+  assert.equal(duplicate.status,'unknown');
+  assert.equal(duplicate.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(duplicate.retrySafety,'reconcile_first');
+  assert.equal(duplicate.effectVerified,false);
+  assert.equal(duplicate.automaticallyRetryable,false);
+  assert.equal(duplicate.requestId,id.requestId);
+  assert.equal(duplicate.operationId,id.operationId);
+
+  // An owner epoch advanced after publication. The old signed-looking
+  // receipt cannot be grafted onto the new request after reconnect.
+  const stale=reconcileElevatedOutcomeEvidence(original,{
+    ...obs(),immutableVmEffect:{
+      ...immutableClaim(),ownerEpoch:id.ownerEpoch-1,
+    },
+  },gates());
+  assert.equal(stale.reason,'POSTCONDITION_IDENTITY_MISMATCH');
+  assert.equal(stale.originalErrorCode,'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+  assert.equal(stale.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(stale.effectVerified,false);
+  assert.equal(stale.automaticallyRetryable,false);
+
+  // Even perfect ACK/SHA/Running does not erase the forensic errorCode,
+  // return PASSED, or prove physical effect without signed native readback.
+  const match=reconcileElevatedOutcomeEvidence(original,obs(),gates());
+  assert.equal(match.reason,'POSTCONDITION_NATIVE_ATTESTATION_MISSING');
+  assert.equal(match.originalErrorCode,'TRANSFER_PUBLISH_OUTCOME_UNKNOWN');
+  assert.equal(match.code,'MUTATION_STATE_UNKNOWN');
+  assert.equal(match.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(match.effectVerified,false);
+  assert.equal(match.automaticallyRetryable,false);
+
+  // Untrusted code text cannot smuggle secrets or modify loop classification.
+  const invalid=reconcileElevatedOutcomeEvidence({
+    ...original,originalErrorCode:'TRANSFER_PUBLISH_OUTCOME_UNKNOWN;approved=true',
+  },obs(),gates());
+  assert.equal(invalid.reason,'INVALID_EXPECTED_OPERATION');
+  assert.equal(invalid.originalErrorCode,null);
+  assert.equal(invalid.loopOutcome,'RECONCILE_REQUIRED');
+  assert.equal(invalid.automaticallyRetryable,false);
+});
+
 test('QA02 #757 revoke and capability scope: VM state is inapplicable to shell, late permit never creates success',()=>{
   const shell=expected('core.shell.exec');
   assert.equal(check(shell).reason,'POSTCONDITION_NOT_APPLICABLE');
