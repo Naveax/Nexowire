@@ -1,0 +1,107 @@
+{
+  "nodes": [
+    {
+      "pr": 751,
+      "head_sha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19",
+      "head_ref": "test/21-external-witness-rollback-742-20261022",
+      "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "base_ref": "test/06-725-712-double-reconnect-20261022",
+      "ci": {
+        "run_id": 39735623362,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19"
+      },
+      "files": [
+        "test/qa21-independent-witness-local-rollback.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "head_sha": "2530ccaf6baa03596c3b07a5c192510ea4ab4c19",
+        "merge_base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 752,
+      "head_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+      "head_ref": "test/06-742-orphan-status-no-replay-20261022",
+      "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+      "base_ref": "test/06-725-712-double-reconnect-20261022",
+      "ci": {
+        "run_id": 39735641942,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573"
+      },
+      "files": [
+        "docs/CONNECTION_06_725_EXACT_FAILURE_ORPHAN_20261022.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-725-712-forensic-reconnect.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "head_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+        "merge_base_sha": "b93ee12a7737085050768261bff9b4fc71019b65",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 753,
+      "head_sha": "66a3bb1018a4bf2d71b53972f14a2a1d1a9231a6",
+      "head_ref": "qa/w26-743-json-version-type-20261022",
+      "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "base_ref": "test/03-709-qa17-qa19-integration-20261022",
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "66a3bb1018a4bf2d71b53972f14a2a1d1a9231a6"
+      },
+      "files": [
+        ".github/workflows/qa26-743-strict-json-version-witness.yml",
+        "docs/security/p26-743-strict-json-type-native-gap.md",
+        "test/p26-743-strict-envelope-version-type-negative.test.ts",
+        "test/p26-753-envelope-malformed-legacy-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "head_sha": "66a3bb1018a4bf2d71b53972f14a2a1d1a9231a6",
+        "merge_base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "status": "ahead"
+      }
+    },
+    {
+      "pr": 754,
+      "head_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "head_ref": "feat/08-publish-receipt-20261022",
+      "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+      "base_ref": "fix/08-forged-receipt-late-cancel-20261021",
+      "ci": {
+        "run_id": 39736052869,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "3a5bf392109d17dbf2650a18398917d5501fd488"
+      },
+      "files": [
+        "docs/ARTIFACT_FINAL_RECEIPT_20261022.md",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-08-final-native-receipt.test.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "head_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "merge_base_sha": "09c3dcaf23103b429780c2862c846956058bdcb8",
+        "status": "ahead"
+      }
+    }
+  ]
+}
