@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "repo": "Naveax/Nexowire",
+  "captured_date": "2026-10-22",
+  "scope": "INCREMENTAL ONLY: #774-#779",
+  "nodes": [
+    {
+      "pr": 774,
+      "head_sha": "5e432c26072d82e89069fc702e634a80d2d02534",
+      "head_ref": "qa/worker30-monotonic-publish-quota-hold-20261022",
+      "base_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+      "base_ref": "fix/08-final-monotonic-20261022",
+      "files": [
+        "docs/SCALE_WORKER30_EXTERNAL_CAS_QUOTA_SEAM_20261022.md",
+        "test/worker30-monotonic-cas-memory-quota-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+        "head_sha": "5e432c26072d82e89069fc702e634a80d2d02534",
+        "merge_base_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39806480924,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5e432c26072d82e89069fc702e634a80d2d02534"
+      }
+    },
+    {
+      "pr": 775,
+      "head_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955",
+      "head_ref": "feat/04-final-identity-binding-20261022",
+      "base_sha": "6967cc92ae85e5d1034591940d273615c4056e00",
+      "base_ref": "feat/04-final-dispatch-grant-20261022",
+      "files": [
+        "docs/NEXOWIRE_ACCESS_FINAL_IMAGE_IDENTITY_20261022.md",
+        "src/product/access-final-dispatch-authority.ts",
+        "test/access-late-permit-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "6967cc92ae85e5d1034591940d273615c4056e00",
+        "head_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955",
+        "merge_base_sha": "6967cc92ae85e5d1034591940d273615c4056e00",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955"
+      }
+    },
+    {
+      "pr": 776,
+      "head_sha": "7e360388adc2a1c4e923eb4c8336bf49f3fbac04",
+      "head_ref": "test/21-qa-768-770-issuer-cas-20261022",
+      "base_sha": "3247ed65133a548730c77330b795a5a1e05d28f3",
+      "base_ref": "test/21-isolated-integration-768-770-20261022",
+      "files": [
+        "test/qa21-768-770-external-issuer-commit.test.ts",
+        "test/qa21-final-native-owner-rollback-and-receipt.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3247ed65133a548730c77330b795a5a1e05d28f3",
+        "head_sha": "7e360388adc2a1c4e923eb4c8336bf49f3fbac04",
+        "merge_base_sha": "3247ed65133a548730c77330b795a5a1e05d28f3",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "7e360388adc2a1c4e923eb4c8336bf49f3fbac04"
+      }
+    }
+  ]
+}
