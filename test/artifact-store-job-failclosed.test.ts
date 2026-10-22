@@ -175,10 +175,19 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
   fixture(async root => {
     const bridge = new ArtifactBridgeStore(path.join(root, 'verified-store'));
     let grantActive = true;
+    const authoritativeRequestId = randomUUID();
+    const authoritativeCommitId = 'independent-monotonic-commit-'+randomUUID();
     const adapter = new VerifiedTransferCheckpointAdapter(bridge, {
       assertCurrent: async () => {
         if (!grantActive) throw new TransferTrustError('CORE_OWNER_REVOKED','CORE grant revoked');
       },
+    }, {
+      // Isolated TEST-ONLY off-host readback. Never derive these fields from
+      // the mutable job, MCP caller JSON or local COMPLETED journal.
+      inspect: async () => ({
+        jobId: job.id, requestId: authoritativeRequestId, epoch: 5,
+        sha256: digest, durableCommitId: authoritativeCommitId,
+      }),
     });
     const job = mockJob();
     const scope = { accountId: job.accountId, projectId: job.projectId,
@@ -188,7 +197,10 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
       repository: 'Naveax/Nexowire', commitSha: 'a'.repeat(40) };
     await assert.rejects(adapter.persist(input),
       (e: unknown) => e instanceof ArtifactBridgeError && e.code === 'JOB_NOT_VERIFIED');
-    const done: TransferJob = { ...job, state: 'COMPLETED', bytesConfirmed: bytes.length };
+    const done: TransferJob = { ...job, state: 'COMPLETED',
+      bytesConfirmed: bytes.length, fencing: { epoch: 5, token: 'f'.repeat(64) },
+      publication: {requestId: authoritativeRequestId,epoch: 5,
+        sha256:digest,dispatched:true,durableCommitId: authoritativeCommitId} };
     await assert.rejects(adapter.persist({ ...input, job: done }),
       (e: unknown) => e instanceof ArtifactBridgeError &&
         e.code === 'JOB_ARTIFACT_ATTESTATION_MISSING');
@@ -204,10 +216,16 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
     await bridge.commit(scope, staged.sessionId!);
     const checkpoint = await adapter.persist({ ...input, job: done });
     assert.equal(checkpoint.artifacts[0]?.sha256, digest);
+    // A plausible local commit ID is not a trusted off-host attestation.
+    await assert.rejects(adapter.persist({ ...input,
+      job: { ...done, publication: { ...done.publication!,
+        durableCommitId: 'f'.repeat(64) } } }),
+      (e: unknown) => e instanceof ArtifactBridgeError &&
+        e.code === 'JOB_PUBLICATION_COMMIT_MISMATCH');
     await assert.rejects(adapter.persist({ ...input,
       job: { ...done, sha256: 'f'.repeat(64) } }),
       (e: unknown) => e instanceof ArtifactBridgeError &&
-        e.code === 'JOB_ARTIFACT_ATTESTATION_MISSING');
+        e.code === 'JOB_PUBLICATION_COMMIT_REQUIRED');
     await assert.rejects(adapter.persist({ ...input,
       job: done, scope: { ...scope, accountId: 'foreign-owner' } }),
       (e: unknown) => e instanceof ArtifactBridgeError &&
@@ -283,4 +301,31 @@ test('externally revoked lease stops the next bounded native write and never pub
     assert.equal(status.errorCode, 'STALE_EXTERNAL_FENCE');
     assert.equal(stage.writes, 1);
     assert.equal(stage.published, 0);
+  }));
+
+test('P0 checkpoint cannot accept local COMPLETED+manifest without external publication CAS',
+  async()=>fixture(async root=>{
+    const bridge=new ArtifactBridgeStore(path.join(root,'verified-store'));
+    const job:TransferJob={...mockJob(),state:'COMPLETED',bytesConfirmed:bytes.length};
+    const scope={accountId:job.accountId,projectId:job.projectId,
+      deviceId:job.targetDeviceId};
+    const artifactPath='transfer/forensic.bin';
+    const repository='Naveax/Nexowire',commitSha='a'.repeat(40);
+    const session=await bridge.begin({scope,artifactPath,repository,commitSha,
+      producerOperationId:job.id,size:bytes.length,sha256:digest,
+      testStatus:'unverified',acceptanceStatus:'pending'});
+    for(let at=0;at<bytes.length;at+=65_536){
+      await bridge.putChunk(scope,session.sessionId!,at,
+        bytes.subarray(at,at+65_536).toString('base64'));
+    }
+    await bridge.commit(scope,session.sessionId!);
+    const adapter=new VerifiedTransferCheckpointAdapter(bridge,{
+      assertCurrent:async()=>undefined,
+    });
+    await assert.rejects(adapter.persist({
+      scope,job,workspaceId:'no-false-complete',artifactPath,
+      repository,commitSha,
+    }),(e:unknown)=>e instanceof ArtifactBridgeError &&
+      e.code==='JOB_PUBLICATION_COMMIT_REQUIRED');
+    assert.equal(await bridge.getCheckpoint(scope,'no-false-complete'),null);
   }));
