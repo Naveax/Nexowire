@@ -191,6 +191,21 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
     assert.ok(await oauth.authenticateAccessToken(a.access));
     assert.equal(await strictIssuer.authenticateAccessToken(a.access),null);
     assert.equal((await strictIssuer.authenticateAccessToken(b.access))?.accountId,ownerB);
+    // Real issuer→writer callback: revoked owner A cannot create even an
+    // owner-only evidence snapshot after a hostile expiry resurrection.
+    const forWriter=(accessToken:string)=>strictIssuer.authenticateOwnerForExternalWriter({
+      accessToken,expectedClientId:client,expectedResource:resource,
+    });
+    assert.equal(await forWriter(a.access),null);
+    const currentOwnerB=await forWriter(b.access);
+    assert.ok(currentOwnerB);
+    assert.equal(currentOwnerB.accountId,ownerB);
+    assert.equal(currentOwnerB.oauthSessionEpoch,0);
+    assert.equal(currentOwnerB.authority,'owner-authentication-only');
+    assert.equal((currentOwnerB as unknown as Record<string,unknown>).deviceId,undefined);
+    assert.equal((currentOwnerB as unknown as Record<string,unknown>).worktreeId,undefined);
+    assert.equal(JSON.stringify(currentOwnerB).includes(b.access),false,
+      'no Bearer token may be returned to WSS or stored in a checkpoint');
     const unrelated=await rotate(b.refresh);
     assert.match(unrelated.access_token,/^nwx_mcp_/);
     assert.ok(unrelated.refresh_token,'atomic refresh must issue the next refresh grant');
@@ -361,4 +376,85 @@ test('epoch-atomic issuer validates trusted owner-session proof and never reads 
     /SYNTHETIC_EPOCH_VERIFIER_UNAVAILABLE/);
   assert.equal((await store.getAccessToken(digest(raw)))?.accountId,ownerA,
     'provider outage must not cause an implicit legacy fallback');
+});
+
+
+test('strict OAuth writer principal never upgrades a Bearer to WSS/device/worktree or Windows CORE',async()=>{
+  const store=new MemoryMcpOAuthStore();
+  const raw='nwx_mcp_'+('V'.repeat(44));
+  await store.putAccessToken({
+    tokenHash:digest(raw),clientId:client,accountId:ownerA,resource,
+    scopes:['mcp','offline_access'],
+    expiresAt:new Date(at.getTime()+3600_000).toISOString(),
+    createdAt:at.toISOString(),
+  });
+  const legacy=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+  });
+  await assert.rejects(legacy.authenticateOwnerForExternalWriter({
+    accessToken:raw,expectedClientId:client,expectedResource:resource,
+  }),/OAUTH_EPOCH_BOUND_AUTHORITY_REQUIRED/,
+  'a valid legacy access token is NOT epoch-bound owner evidence');
+  const verified={accountId:ownerA,clientId:client,resource,
+    scopes:['mcp','offline_access'],sessionEpoch:4};
+  let verifierCalls=0;
+  const strict=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{async rotate(){throw Error('NO_REFRESH_DISPATCH')}},
+    epochAccessVerifier:{async authenticateAccessToken(){
+      verifierCalls++;return verified;
+    }},
+  });
+  const callback=(accessToken=raw,expectedClientId=client,expectedResource=resource)=>
+    strict.authenticateOwnerForExternalWriter({
+      accessToken,expectedClientId,expectedResource,
+    });
+  assert.equal(await callback(raw,'foreign-client'),null);
+  assert.equal(await callback(raw,client,'https://different.invalid/mcp'),null);
+  assert.equal(verifierCalls,1,
+    'invalid server-pinned resource must deny before any access verification');
+  const principal=await callback();
+  assert.ok(principal);
+  assert.deepEqual(principal,{
+    accountId:ownerA,clientId:client,issuer:'https://mcp-issuer.invalid',
+    resource,scopes:['mcp','offline_access'],oauthSessionEpoch:4,
+    authority:'owner-authentication-only',
+  });
+  assert.equal(Object.isFrozen(principal),true);
+  assert.equal(Object.isFrozen(principal.scopes),true);
+  assert.equal('bearerToken' in principal,false);
+  assert.equal('refresh_token' in principal,false);
+  assert.equal('deviceId' in principal,false);
+  assert.equal('worktreeId' in principal,false);
+  assert.equal('sessionGeneration' in principal,false,
+    'OAuth session epoch and WSS sessionGeneration MUST remain independent');
+  assert.equal('windowsIntegrity' in principal,false);
+
+  const stale=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{async rotate(){throw Error('NO_REFRESH_DISPATCH')}},
+    epochAccessVerifier:{
+      async authenticateAccessToken(){return null},
+    },
+  });
+  assert.equal(await stale.authenticateOwnerForExternalWriter({
+    accessToken:raw,expectedClientId:client,expectedResource:resource,
+  }),null,'revoked/locked owner must NOT fall back to the legacy row');
+
+  const unavailable=new McpOAuthService(store,{
+    issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
+    refreshMode:'epoch-atomic',
+    epochAtomicRefresh:{async rotate(){throw Error('NO_REFRESH_DISPATCH')}},
+    epochAccessVerifier:{
+      async authenticateAccessToken(){
+        throw Error('SYNTHETIC_ISSUER_EPOCH_READBACK_UNAVAILABLE');
+      },
+    },
+  });
+  await assert.rejects(unavailable.authenticateOwnerForExternalWriter({
+    accessToken:raw,expectedClientId:client,expectedResource:resource,
+  }),/SYNTHETIC_ISSUER_EPOCH_READBACK_UNAVAILABLE/,
+  'unknown issuer result must never become a successful writer admission');
 });
