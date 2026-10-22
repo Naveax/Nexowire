@@ -2229,20 +2229,25 @@ async function workspaceSnapshot(
     runScopedGit(executable, scoped, ['rev-parse', '--abbrev-ref', 'HEAD']),
     runScopedGit(executable, scoped, ['log', '-1', '--format=%H%x09%s']),
   ]);
-  if ([statusResult, headResult].some((result) =>
-    result.exitCode !== 0 || result.timedOut || result.truncated) ||
-    logResult.timedOut || logResult.truncated) {
+  if (statusResult.exitCode !== 0 || statusResult.timedOut ||
+      statusResult.truncated || headResult.timedOut || headResult.truncated ||
+      logResult.timedOut || logResult.truncated) {
     throw new Error('WORKSPACE_GIT_READ_FAILED');
   }
-  if (logResult.exitCode !== 0) {
-    // A newly initialized repository legitimately has an unborn HEAD.
-    // Distinguish it from failures reading an existing commit.
-    const commit = await runScopedGit(
-      executable, scoped, ['rev-parse', '--verify', '--quiet', 'HEAD'],
-    );
-    if (commit.exitCode === 0 || commit.timedOut || commit.truncated) {
+  let branch = headResult.stdout.trim();
+  if (headResult.exitCode !== 0 || logResult.exitCode !== 0) {
+    // In an empty Git repository both rev-parse --abbrev-ref HEAD and log
+    // may exit 128. Accept ONLY the verified unborn symbolic branch case.
+    const [symbolic, commit] = await Promise.all([
+      runScopedGit(executable, scoped, ['symbolic-ref', '--quiet', '--short', 'HEAD']),
+      runScopedGit(executable, scoped, ['rev-parse', '--verify', '--quiet', 'HEAD']),
+    ]);
+    if (commit.exitCode === 0 || commit.timedOut || commit.truncated ||
+        symbolic.exitCode !== 0 || symbolic.timedOut || symbolic.truncated ||
+        !symbolic.stdout.trim()) {
       throw new Error('WORKSPACE_GIT_READ_FAILED');
     }
+    branch = symbolic.stdout.trim();
   }
   await policy.resolveExisting(root);
 
@@ -2267,7 +2272,7 @@ async function workspaceSnapshot(
     data: {
       requestedPath: cwd,
       root,
-      branch: headResult.stdout.trim(),
+      branch,
       status: statusResult.stdout.trimEnd(),
       lastCommit: logResult.stdout.trim(),
       projectMarkers,
