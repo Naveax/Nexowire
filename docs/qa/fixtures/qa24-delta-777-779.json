@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "repo": "Naveax/Nexowire",
+  "captured_date": "2026-10-22",
+  "scope": "INCREMENTAL ONLY: #774-#779",
+  "nodes": [
+    {
+      "pr": 777,
+      "head_sha": "c41e441a87f5d22101b8d256b1b64047a551cc0e",
+      "head_ref": "fix/08-unresolved-publish-resume-20261022",
+      "base_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+      "base_ref": "fix/08-final-monotonic-20261022",
+      "files": [
+        "docs/ARTIFACT_UNKNOWN_PUBLICATION_RESUME_20261022.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "test/artifact-08-final-native-receipt.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+        "head_sha": "c41e441a87f5d22101b8d256b1b64047a551cc0e",
+        "merge_base_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39807272228,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "c41e441a87f5d22101b8d256b1b64047a551cc0e"
+      }
+    },
+    {
+      "pr": 778,
+      "head_sha": "540770c173a820060f84ab1370e633aa5b064e79",
+      "head_ref": "test/24-delta-759-773-exact-20261022",
+      "base_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+      "base_ref": "test/24-full-open-dag-104-sha-20261021",
+      "files": [
+        "docs/qa/QA24_DELTA_759_773_20261022.md",
+        "docs/qa/fixtures/qa24-delta-759-762.json",
+        "docs/qa/fixtures/qa24-delta-763-765.json",
+        "docs/qa/fixtures/qa24-delta-766-768.json",
+        "docs/qa/fixtures/qa24-delta-769-771.json",
+        "docs/qa/fixtures/qa24-delta-772-773.json",
+        "docs/qa/fixtures/qa24-open-census-delta-20261022.json",
+        "scripts/qa24-delta-review.ts",
+        "test/qa-24-delta-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+        "head_sha": "540770c173a820060f84ab1370e633aa5b064e79",
+        "merge_base_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39807830909,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "540770c173a820060f84ab1370e633aa5b064e79"
+      }
+    },
+    {
+      "pr": 779,
+      "head_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+      "head_ref": "test/qa16-pr759-773-exact-evidence-20261022",
+      "base_sha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+      "base_ref": "test/qa16-pr747-758-exact-ci-20261022",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR759_773_20261022.md",
+        "docs/qa/QA_20261022_PR759_773_EXACT_HEAD.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-747-758-exact-head-evidence.test.ts",
+        "test/qa-759-773-exact-head-evidence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+        "head_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+        "merge_base_sha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39808685776,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe"
+      }
+    }
+  ]
+}
