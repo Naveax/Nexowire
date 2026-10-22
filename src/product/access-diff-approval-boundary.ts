@@ -15,6 +15,11 @@ const diffApproval=z.strictObject({
   kind:z.literal('nexowire.access.reviewed-diff-approval.v1'),
   scope:z.literal('LOCAL_USER_REVIEW_ONLY'),
   approvalId:uuid,requestId:uuid,reviewNonce:sha,
+  taskId:uuid,logicalMutationId:uuid,
+  /** Derived from the logical effect, never cloned runbook ID alone. */
+  semanticEffectSha256:sha,
+  /** Trusted worktree identity, not just the Git base commit SHA. */
+  worktreeIdentitySha256:sha,preimageSha256:sha,
   action:z.enum(['apply','rollback']),
   ownerId:z.string().min(1).max(128),deviceId:z.string().min(1).max(128),
   deviceEpoch:uuid,sessionEpoch:uuid,
@@ -32,6 +37,8 @@ export const diffApprovalSigningBytes=(x:DiffApprovalReceipt):Buffer=>{
   const r=diffApproval.parse(x);
   return Buffer.from(JSON.stringify([
     r.kind,r.scope,r.approvalId,r.requestId,r.reviewNonce,
+    r.taskId,r.logicalMutationId,r.semanticEffectSha256,
+    r.worktreeIdentitySha256,r.preimageSha256,
     r.action,r.ownerId,r.deviceId,r.deviceEpoch,r.sessionEpoch,
     r.ownerEpoch,r.grantGeneration,r.requestedMode,r.baseSha256,
     r.diffSha256,r.previousNativeEffectId,r.issuedAtMs,r.expiresAtMs,
@@ -44,6 +51,8 @@ export interface SignedDiffApprovalReceipt{
 export interface ReviewedDiffRequest{
   action:'preview'|'apply'|'rollback';
   requestId:string;ownerId:string;deviceId:string;
+  taskId:string;logicalMutationId:string;semanticEffectSha256:string;
+  worktreeIdentitySha256:string;preimageSha256:string;
   deviceEpoch:string;sessionEpoch:string;
   ownerEpoch:number;grantGeneration:number;
   requestedMode:'SAFE'|'FULL'|'ROOT'|'CORE';
@@ -71,6 +80,27 @@ export interface AccessDiffApprovalDependencies{
     ownerEpoch:number;grantGeneration:number;
     revoking:boolean;revoked:boolean;
   }>;
+  /**
+   * Authenticated owner/workspace provider: canonical worktree identity,
+   * Git-discovered root AND gitdir/commondir must independently pass scoped
+   * PathPolicy. The currently vulnerable #786 workspace.snapshot is not
+   * such a provider. Durable semantic effect state must be keyed by stable
+   * owner/device/semantic operation, not cloned runbook ID.
+   * An absent/unavailable provider always denies approval source validity.
+   */
+  readonly readAuthenticatedTaskBinding:(taskId:string,semanticEffectSha256:string)=>
+    Promise<{
+      taskId:string;logicalMutationId:string;
+      ownerId:string;deviceId:string;deviceEpoch:string;sessionEpoch:string;
+      ownerEpoch:number;grantGeneration:number;
+      semanticEffectSha256:string;
+      worktreeIdentitySha256:string;preimageSha256:string;
+      baseSha256:string;diffSha256:string;
+      gitRootWithinApprovedScope:boolean;
+      gitMetadataWithinApprovedScope:boolean;
+      mutationState:'NOT_DISPATCHED_VERIFIED'|'MUTATION_STATE_UNKNOWN'|
+        'COMPLETED_VERIFIED'|'UNVERIFIED';
+    }>;
   /** Durable one-time approval ledger, not an in-memory UI flag. */
   readonly isApprovalConsumed:(approvalId:string)=>Promise<boolean>;
   /** Rollback requires an independent authenticated prior EFFECT receipt. */
@@ -103,6 +133,22 @@ const deny=(x:ReviewedDiffRequest,reason:string,status:DiffAccessReview['status'
     nativeEffectVerified:false,canApply:false,canRollback:false,
     canLaunchElevated:false,needsPerCommandWindowsUac:false,
   });
+type TaskBinding=Awaited<ReturnType<
+  AccessDiffApprovalDependencies['readAuthenticatedTaskBinding']
+>>;
+function taskCurrent(t:TaskBinding|undefined,r:ReviewedDiffRequest):boolean{
+  return !!t&&t.gitRootWithinApprovedScope===true&&
+    t.gitMetadataWithinApprovedScope===true&&
+    t.mutationState==='NOT_DISPATCHED_VERIFIED'&&
+    t.taskId===r.taskId&&t.logicalMutationId===r.logicalMutationId&&
+    t.semanticEffectSha256===r.semanticEffectSha256&&
+    t.worktreeIdentitySha256===r.worktreeIdentitySha256&&
+    t.preimageSha256===r.preimageSha256&&
+    t.baseSha256===r.baseSha256&&t.diffSha256===r.diffSha256&&
+    t.ownerId===r.ownerId&&t.deviceId===r.deviceId&&
+    t.deviceEpoch===r.deviceEpoch&&t.sessionEpoch===r.sessionEpoch&&
+    t.ownerEpoch===r.ownerEpoch&&t.grantGeneration===r.grantGeneration;
+}
 function isSigned(x:SignedDiffApprovalReceipt,key:KeyObject):DiffApprovalReceipt|null{
   try{
     const r=diffApproval.safeParse(x?.statement);
@@ -137,6 +183,11 @@ export async function reviewAccessDiffApproval(
       dev.id!==request.deviceId||dev.ownerAccountId!==request.ownerId||
       session.ownerAccountId!==request.ownerId||
       !uuid.safeParse(request.requestId).success||
+      !uuid.safeParse(request.taskId).success||
+      !uuid.safeParse(request.logicalMutationId).success||
+      !sha.safeParse(request.semanticEffectSha256).success||
+      !sha.safeParse(request.worktreeIdentitySha256).success||
+      !sha.safeParse(request.preimageSha256).success||
       !uuid.safeParse(request.deviceEpoch).success||
       !uuid.safeParse(request.sessionEpoch).success||
       !sha.safeParse(request.baseSha256).success||
@@ -148,6 +199,11 @@ export async function reviewAccessDiffApproval(
     const grant=isSigned(signedApproval!,dependencies.trustedReviewPublicKey);
     if(!grant||grant.action!==request.action||
       grant.requestId!==request.requestId||
+      grant.taskId!==request.taskId||
+      grant.logicalMutationId!==request.logicalMutationId||
+      grant.semanticEffectSha256!==request.semanticEffectSha256||
+      grant.worktreeIdentitySha256!==request.worktreeIdentitySha256||
+      grant.preimageSha256!==request.preimageSha256||
       grant.ownerId!==request.ownerId||grant.deviceId!==request.deviceId||
       grant.deviceEpoch!==request.deviceEpoch||
       grant.sessionEpoch!==request.sessionEpoch||
@@ -163,6 +219,11 @@ export async function reviewAccessDiffApproval(
     }
     if(await dependencies.isApprovalConsumed(grant.approvalId)){
       return deny(request,'APPROVAL_ALREADY_CONSUMED');
+    }
+    const originalTask=await dependencies.readAuthenticatedTaskBinding(
+      request.taskId,request.semanticEffectSha256);
+    if(!taskCurrent(originalTask,request)){
+      return deny(request,'TASK_WORKTREE_SCOPE_OR_UNKNOWN_MUTATION_STALE');
     }
     // Correctly signed review grant is NOT a rollback postcondition.
     if(request.action==='rollback'){
@@ -219,6 +280,12 @@ export async function reviewAccessDiffApproval(
     // Catch remote revoke that begins while native/effective checks are
     // pending; still not an atomic effect fence (production stays blocked).
     const last=await dependencies.readCurrentEpoch(request.deviceId);
+    const lastTask=await dependencies.readAuthenticatedTaskBinding(
+      request.taskId,request.semanticEffectSha256);
+    if(!taskCurrent(lastTask,request)){
+      return deny(request,'TASK_CHANGED_OR_UNKNOWN_DURING_APPROVAL_REVIEW',
+        undefined,true);
+    }
     if(!last||last.revoking!==false||last.revoked!==false||
       last.ownerId!==request.ownerId||last.deviceEpoch!==request.deviceEpoch||
       last.sessionEpoch!==request.sessionEpoch||
