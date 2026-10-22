@@ -346,6 +346,7 @@ export async function runProcess(
     cwd?: string;
     timeoutMs?: number;
     maxOutputBytes?: number;
+    env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<ProcessResult> {
   const timeoutMs = options.timeoutMs ?? 60_000;
@@ -355,7 +356,7 @@ export async function runProcess(
     const child = spawn(executable, [...args], {
       ...(options.cwd ? { cwd: options.cwd } : {}),
       windowsHide: true,
-      env: process.env,
+      env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -1038,25 +1039,157 @@ interface WorkspaceDetection {
   checkSpecs: WorkspaceCheckSpec[];
 }
 
-async function resolveWorkspaceRoot(cwd: string): Promise<{
-  root: string;
-  gitRoot: boolean;
-}> {
-  if (!hasExecutable('git')) return { root: cwd, gitRoot: false };
 
-  try {
-    const result = await runProcess(
-      'git',
-      ['-C', cwd, 'rev-parse', '--show-toplevel'],
-      { timeoutMs: 10_000, maxOutputBytes: 131_072 },
-    );
-    if (result.exitCode === 0 && result.stdout.trim()) {
-      return { root: result.stdout.trim(), gitRoot: true };
-    }
-  } catch {
-    // Non-Git workspaces are still valid workspaces.
+/** Read-only Git is not inert: local fsmonitor can launch executable code.
+ * First locate and authorize ALL Git metadata, without running Git.
+ * These checks are source policy only, not an OS process sandbox.
+ */
+interface ScopedGitWorkspace { root: string; gitDir: string; commonDir: string }
+
+async function readScopedGitFile(
+  file: string, policy: PathPolicy,
+): Promise<string | undefined> {
+  let stat;
+  try { stat = await fs.lstat(file); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
   }
-  return { root: cwd, gitRoot: false };
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new PathDeniedError(file);
+  await policy.resolveExisting(file);
+  return await fs.readFile(file, 'utf8');
+}
+
+async function findScopedGitWorkspace(
+  cwd: string, policy: PathPolicy,
+): Promise<ScopedGitWorkspace | null> {
+  let root = cwd;
+  for (;;) {
+    const marker = path.join(root, '.git');
+    let stat;
+    try { stat = await fs.lstat(marker); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (stat) {
+      if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) {
+        throw new PathDeniedError(marker);
+      }
+      await policy.resolveExisting(marker);
+      let gitDir = marker;
+      if (stat.isFile()) {
+        const match = /^gitdir:\s*(.+)$/iu.exec(
+          (await fs.readFile(marker, 'utf8')).trim(),
+        );
+        if (!match) throw new PathDeniedError(marker);
+        gitDir = await policy.resolveExisting(path.resolve(root, match[1]!));
+      }
+      if (!(await fs.stat(gitDir)).isDirectory()) throw new PathDeniedError(gitDir);
+      const commonFile = await readScopedGitFile(path.join(gitDir, 'commondir'), policy);
+      const commonDir = commonFile
+        ? await policy.resolveExisting(path.resolve(gitDir, commonFile.trim()))
+        : gitDir;
+      if (!(await fs.stat(commonDir)).isDirectory()) {
+        throw new PathDeniedError(commonDir);
+      }
+
+      for (const dir of new Set([gitDir, commonDir])) {
+        for (const name of ['config', 'config.worktree']) {
+          const config = await readScopedGitFile(path.join(dir, name), policy);
+          if (config && (
+            /^\s*\[\s*include(?:if)?(?:\s|\])/imu.test(config) ||
+            /^\s*worktree\s*=/imu.test(config)
+          )) throw new PathDeniedError(path.join(dir, name));
+        }
+        for (const name of ['objects/info/alternates', 'objects/info/http-alternates']) {
+          const file = path.join(dir, name);
+          try { await fs.lstat(file); throw new PathDeniedError(file); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+        }
+        for (const name of [
+          'HEAD', 'index', 'packed-refs', 'objects', 'refs',
+          'info/attributes', 'info/exclude',
+        ]) {
+          const file = path.join(dir, name);
+          try { await fs.lstat(file); await policy.resolveExisting(file); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+        }
+      }
+      return { root, gitDir, commonDir };
+    }
+
+    const parent = path.dirname(root);
+    if (parent === root) return null;
+    try { policy.resolve(parent); }
+    catch (error) {
+      if (error instanceof PathDeniedError) return null;
+      throw error;
+    }
+    root = await policy.resolveExisting(parent);
+  }
+}
+
+function scopedGitExecutable(): string | null {
+  const found = spawnSync(
+    process.platform === 'win32' ? 'where.exe' : 'which', ['git'],
+    { encoding: 'utf8', windowsHide: true, timeout: 5000 },
+  );
+  if (found.error || found.status !== 0) return null;
+  return found.stdout.split(/\r?\n/u).map((line) => line.trim())
+    .find((file) => path.isAbsolute(file) &&
+      (process.platform !== 'win32' || /\.exe$/iu.test(file))) ?? null;
+}
+
+async function runScopedGit(
+  executable: string, scoped: ScopedGitWorkspace, args: readonly string[],
+): Promise<ProcessResult> {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (/^(?:GIT_|GCM_|LD_|DYLD_|SSH_ASKPASS$|BASH_ENV$|ENV$)/iu.test(name)) continue;
+    env[name] = value;
+  }
+  env.GIT_CONFIG_NOSYSTEM = '1';
+  env.GIT_CONFIG_GLOBAL = os.devNull;
+  env.GIT_CONFIG_SYSTEM = os.devNull;
+  env.GIT_OPTIONAL_LOCKS = '0';
+  env.GIT_TERMINAL_PROMPT = '0';
+  env.GIT_NO_REPLACE_OBJECTS = '1';
+  env.GIT_ATTR_NOSYSTEM = '1';
+  env.GIT_EXTERNAL_DIFF = '0';
+  env.GIT_PAGER = 'cat';
+  env.HOME = scoped.root;
+  env.XDG_CONFIG_HOME = scoped.root;
+  const overrides = [
+    'core.fsmonitor=false', 'core.hooksPath=' + os.devNull,
+    'core.externalDiff=', 'diff.external=',
+    'core.untrackedCache=false', 'submodule.recurse=false',
+    'status.submoduleSummary=false',
+    'core.attributesFile=' + path.join(scoped.commonDir, 'info', 'attributes'),
+    'core.excludesFile=' + path.join(scoped.commonDir, 'info', 'exclude'),
+  ];
+  return await runProcess(executable, [
+    '--no-pager', ...overrides.flatMap((flag) => ['-c', flag]),
+    '-C', scoped.root, ...args,
+  ], { timeoutMs: 10_000, maxOutputBytes: 131_072, env });
+}
+
+async function resolveWorkspaceRoot(
+  cwd: string, policy: PathPolicy,
+): Promise<{ root: string; gitRoot: boolean }> {
+  const executable = scopedGitExecutable();
+  if (!executable) return { root: cwd, gitRoot: false };
+  const scoped = await findScopedGitWorkspace(cwd, policy);
+  if (!scoped) return { root: cwd, gitRoot: false };
+  const result = await runScopedGit(executable, scoped, ['rev-parse', '--show-toplevel']);
+  if (result.exitCode !== 0 ||
+      path.resolve(result.stdout.trim()) !== scoped.root) {
+    throw new PathDeniedError(scoped.root);
+  }
+  return { root: await policy.resolveExisting(scoped.root), gitRoot: true };
 }
 
 function commandDisplay(executable: string, args: readonly string[]): string {
@@ -1096,7 +1229,7 @@ async function detectWorkspaceInternal(
     throw new Error('Workspace path is not a directory.');
   }
 
-  const resolved = await resolveWorkspaceRoot(requestedPath);
+  const resolved = await resolveWorkspaceRoot(requestedPath, policy);
   const root = await policy.resolveExisting(resolved.root);
   const entries = await fs.readdir(root, { withFileTypes: true });
   const names = new Set(entries.map((entry) => entry.name));
@@ -1117,7 +1250,7 @@ async function detectWorkspaceInternal(
   if (names.has('package.json')) {
     kinds.push('node');
     manifests.push('package.json');
-    const raw = await fs.readFile(path.join(root, 'package.json'), 'utf8');
+    const raw = await fs.readFile(await policy.resolveExisting(path.join(root, 'package.json')), 'utf8');
     const pkg = JSON.parse(raw) as {
       packageManager?: unknown;
       scripts?: unknown;
@@ -2066,24 +2199,29 @@ async function workspaceSnapshot(
 ): Promise<unknown> {
   const parsed = WorkspaceSnapshotInputSchema.parse(input);
   const cwd = await policy.resolveExisting(parsed.path);
-  const [rootResult, statusResult, headResult, logResult] = await Promise.all([
-    runProcess('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
-      timeoutMs: 10_000,
-    }),
-    runProcess('git', ['-C', cwd, 'status', '--short', '--branch'], {
-      timeoutMs: 10_000,
-    }),
-    runProcess('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], {
-      timeoutMs: 10_000,
-    }),
-    runProcess('git', ['-C', cwd, 'log', '-1', '--format=%H%x09%s'], {
-      timeoutMs: 10_000,
-    }),
-  ]);
-
-  if (rootResult.exitCode !== 0) {
-    throw new Error(rootResult.stderr.trim() || 'Not a Git workspace.');
+  const executable = scopedGitExecutable();
+  if (!executable) throw new Error('Git executable unavailable.');
+  const scoped = await findScopedGitWorkspace(cwd, policy);
+  if (!scoped) throw new Error('WORKSPACE_ROOT_NOT_AUTHORIZED');
+  // Validate the discovered root before Git status, log or directory reads.
+  const rootResult = await runScopedGit(executable, scoped, ['rev-parse', '--show-toplevel']);
+  if (rootResult.exitCode !== 0 ||
+      path.resolve(rootResult.stdout.trim()) !== scoped.root) {
+    throw new PathDeniedError(scoped.root);
   }
+  const root = await policy.resolveExisting(scoped.root);
+  const [statusResult, headResult, logResult] = await Promise.all([
+    runScopedGit(executable, scoped, [
+      'status', '--short', '--branch', '--ignore-submodules=all',
+    ]),
+    runScopedGit(executable, scoped, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    runScopedGit(executable, scoped, ['log', '-1', '--format=%H%x09%s']),
+  ]);
+  if ([statusResult, headResult, logResult].some((result) =>
+    result.exitCode !== 0 || result.timedOut || result.truncated)) {
+    throw new Error('WORKSPACE_GIT_READ_FAILED');
+  }
+  await policy.resolveExisting(root);
 
   const markerNames = [
     'package.json',
@@ -2092,7 +2230,6 @@ async function workspaceSnapshot(
     'requirements.txt',
     'go.mod',
   ];
-  const root = rootResult.stdout.trim();
   const rootEntries = await fs.readdir(root, { withFileTypes: true });
   const projectMarkers = markerNames.filter((marker) =>
     rootEntries.some((entry) => entry.isFile() && entry.name === marker),
