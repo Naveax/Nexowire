@@ -1138,3 +1138,67 @@ test('#22/#754: CORE revoke during independent final verification refuses authen
       await hubA.waitForIdle(job.id);
     }
   }));
+
+/**
+ * #22 / #754 P0 NEGATIVE ACCEPTANCE: final verified publication receipt,
+ * independent destination readback AND last external lease check can all
+ * precede a CORE revocation which races the subsequent local COMPLETED
+ * journal commit. This tests the missing atomic external completion gate.
+ *
+ * Two post-Native PUBLISH fence checks occur in the signed-receipt path:
+ * (1) after proof verification, (2) after destination stat/full SHA.
+ * Hold after check (2) returns a previously valid synthetic authority.
+ * Revoke CORE before allowing the stale worker to commit COMPLETED.
+ * A process-local mutex or HMAC signature must not bypass revocation.
+ * No real offhost CAS or physical durability is implied.
+ */
+test('#22/#754 P0: revoked CORE after last final-receipt fence must not allow stale COMPLETED commit', async () =>
+  temp(async root => {
+    const afterLastWitness = gate(), releaseFinalCommit = gate();
+    const fx = mock('normal', {}, true);
+    const originalAssert = fx.cas.authority.assertCurrent;
+    let postPublishChecks = 0;
+    fx.cas.authority.assertCurrent = async (job, lease, stage, offset) => {
+      await originalAssert(job, lease, stage, offset);
+      if (stage === 'PUBLISH' && fx.publications === 1 &&
+          ++postPublishChecks === 2) {
+        afterLastWitness.open();
+        await releaseFinalCommit.promise;
+      }
+    };
+    const ownerHub = fx.hub(root), otherHub = fx.hub(root);
+    const job = await ownerHub.start(input);
+    try {
+      await expectGate(afterLastWitness.promise, 'last full-SHA checked publish fence');
+      const before = await stored(root, job.id);
+      assert.equal(before.state, 'PUBLISHING');
+      assert.equal(before.bytesConfirmed, bytes.length);
+      assert.equal(before.pending, undefined);
+      assert.equal(before.publication?.dispatched, true);
+      assert.equal(before.publication?.sha256, digest(bytes));
+      const originalPublication = structuredClone(before.publication);
+      assert.ok(originalPublication?.requestId);
+      assert.equal(fx.finalReceipts.length, 1);
+      assert.equal(fx.finalReceipts[0]!.requestId, originalPublication.requestId);
+      assert.equal(fx.publications, 1);
+      assert.deepEqual(fx.target, bytes, 'test-only final destination was read back');
+      fx.grants.enabled = false;
+      releaseFinalCommit.open();
+      await ownerHub.waitForIdle(job.id);
+      const after = await stored(root, job.id);
+      assert.equal(after.state, 'MUTATION_UNKNOWN',
+        'late owner revoke must block stale COMPLETED journal even after signed proof');
+      assert.equal(after.errorCode, 'CORE_OWNER_REVOKED',
+        'do not lose the exact authoritative CORE revocation provenance');
+      assert.deepEqual(after.publication, originalPublication,
+        'keep original one-shot final requestId/epoch/SHA and dispatched marker');
+      assert.equal(after.bytesConfirmed, bytes.length);
+      assert.equal(fx.publications, 1, 'no duplicate possibly committed publication');
+      await assert.rejects(otherHub.status(job.id, input.accountId,
+        input.sourceDeviceId, input.targetDeviceId),
+      (e: unknown) => e instanceof TransferTrustError && e.code === 'CORE_OWNER_REVOKED');
+    } finally {
+      releaseFinalCommit.open();
+      await ownerHub.waitForIdle(job.id);
+    }
+  }));
