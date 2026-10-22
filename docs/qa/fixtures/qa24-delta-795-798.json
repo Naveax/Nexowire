@@ -1,0 +1,101 @@
+{
+  "nodes": [
+    {
+      "pr": 795,
+      "head_sha": "70e9735007b648db83c2a6fa891ad624a8ef224f",
+      "head_ref": "feat/04-task-worktree-unknown-scope-20261022",
+      "base_sha": "3fe56ef39ab604a472974946dd31b4e016287f46",
+      "base_ref": "feat/04-diff-approval-authority-20261022",
+      "files": [
+        "docs/NEXOWIRE_ACCESS_TASK_WORKTREE_UNKNOWN_BINDING_20261022.md",
+        "src/product/access-diff-approval-boundary.ts",
+        "test/access-diff-approval-boundary.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3fe56ef39ab604a472974946dd31b4e016287f46",
+        "head_sha": "70e9735007b648db83c2a6fa891ad624a8ef224f",
+        "merge_base_sha": "3fe56ef39ab604a472974946dd31b4e016287f46",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823364109,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "70e9735007b648db83c2a6fa891ad624a8ef224f"
+      }
+    },
+    {
+      "pr": 796,
+      "head_sha": "8feda580d3390a1d72f32d782c086485bf476da1",
+      "head_ref": "test/06-781-cloned-id-epoch-audit-20261022",
+      "base_sha": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+      "base_ref": "test/06-754-final-publish-proof-20261022",
+      "files": [
+        "docs/CONNECTION_06_781_CLONED_ID_CORRELATION_20261022.md",
+        "test/connection-781-clone-correlation.audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+        "head_sha": "8feda580d3390a1d72f32d782c086485bf476da1",
+        "merge_base_sha": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823465153,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "8feda580d3390a1d72f32d782c086485bf476da1"
+      }
+    },
+    {
+      "pr": 797,
+      "head_sha": "9e75943adc869528839a99339e1852cc15693f66",
+      "head_ref": "feat/08-issuer-fixture-contract-20261022",
+      "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "base_ref": "fix/08-checkpoint-external-commit-20261022",
+      "files": [
+        "docs/ARTIFACT_08_IDENTITY_CAS_PROVIDER_20261022.md",
+        "src/workspace/artifact-job-checkpoint.ts",
+        "test/artifact-store-job-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "head_sha": "9e75943adc869528839a99339e1852cc15693f66",
+        "merge_base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823465809,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9e75943adc869528839a99339e1852cc15693f66"
+      }
+    },
+    {
+      "pr": 798,
+      "head_sha": "825bca693d025b839bc2d4c4a1c1998ded590e53",
+      "head_ref": "docs/12-self-host-worker-deployment-identity-20261022",
+      "base_sha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+      "base_ref": "fix/12-import-ancestor-inventory-exact-20261022",
+      "files": [
+        "docs/s3-self-host-durable-worker-deployment-identity-20261022.md"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+        "head_sha": "825bca693d025b839bc2d4c4a1c1998ded590e53",
+        "merge_base_sha": "df145abbc7b28d360a2afc1c4396909bb0af5d3f",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823472405,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "825bca693d025b839bc2d4c4a1c1998ded590e53"
+      }
+    }
+  ]
+}
