@@ -1,0 +1,99 @@
+{
+  "nodes": [
+    {
+      "pr": 759,
+      "head_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+      "head_ref": "test/09-750-platform-owner-blocked-20261022",
+      "base_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+      "base_ref": "fix/09-private-picker-owner-witness-20261022",
+      "files": [
+        "docs/NEXOWIRE_09_750_756_757_OWNER_BLOCKED_20261022.md",
+        "test/private-picker-native-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+        "head_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+        "merge_base_sha": "90e4819dcebaba3d2a07231f65386b306f0e7637",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39802773499,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d"
+      }
+    },
+    {
+      "pr": 760,
+      "head_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+      "head_ref": "security/07-oauth-atomic-access-verifier-20261022",
+      "base_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+      "base_ref": "feat/07-oauth-epoch-refresh-service-adapter-20261022",
+      "files": [
+        "docs/OAUTH_ATOMIC_ACCESS_EPOCH_BRIDGE_20261022.md",
+        "src/product/mcp-oauth.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+        "head_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+        "merge_base_sha": "9ffe6accaa45235c45b7b0faa2080391a76f6cc0",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39802818096,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "1e41df6cfc60a57e6d0b50344731136705f37030"
+      }
+    },
+    {
+      "pr": 761,
+      "head_sha": "a19b1e698273a9417c8c8a054de4e56753a937cf",
+      "head_ref": "test/25-native-commit-linearization-20261022",
+      "base_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+      "base_ref": "test/25-late-permit-posteffect-unknown-20261022",
+      "files": [
+        "test/qa-25-native-commit-linearization-lost-readback.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+        "head_sha": "a19b1e698273a9417c8c8a054de4e56753a937cf",
+        "merge_base_sha": "98870fb43baf3bfa1fd294b502f8f13cff752bb6",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39802972334,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "a19b1e698273a9417c8c8a054de4e56753a937cf"
+      }
+    },
+    {
+      "pr": 762,
+      "head_sha": "9709bfe2250dd2fec6a65937dd2059ee66be39f3",
+      "head_ref": "test/21-final-receipt-owner-rollback-20261022",
+      "base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "base_ref": "feat/08-publish-receipt-20261022",
+      "files": [
+        "test/qa21-final-native-owner-rollback-and-receipt.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "head_sha": "9709bfe2250dd2fec6a65937dd2059ee66be39f3",
+        "merge_base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39803019258,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "9709bfe2250dd2fec6a65937dd2059ee66be39f3"
+      }
+    }
+  ]
+}
