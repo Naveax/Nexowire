@@ -15,7 +15,7 @@ const sha=(x:Buffer)=>createHash('sha256').update(x).digest('hex');
 const input={accountId:'account:qa08-final',projectId:'Nexowire',
   sourceDeviceId:'synthetic-source',sourcePath:'/synthetic/from.bin',
   targetDeviceId:'synthetic-target',targetPath:'/synthetic/to.bin'};
-type Mode='valid'|'ack-only'|'foreign-request-id'|'forged-proof'|'corrupt-final'|'lost-publish-ack';
+type Mode='wrong-external-commit'|'revoke-at-final-journal'|'valid'|'ack-only'|'foreign-request-id'|'forged-proof'|'corrupt-final'|'lost-publish-ack';
 async function fixture(run:(dir:string)=>Promise<void>){
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-08-final-receipt-'));
   try{await run(dir);}finally{await fs.rm(dir,{force:true,recursive:true});}
@@ -78,11 +78,32 @@ function rig(mode:Mode) {
       return {...claims,proof:mode==='forged-proof'?'0'.repeat(64):sign(claims)};
     },
   };
+  let active = true;
+  let publishChecks = 0;
   const authority={
     acquire:async()=>({epoch:1,token:'SYNTHETIC-ONLY-EXTERNAL-LEASE-XXXXXXXXXXXX'}),
-    assertCurrent:async()=>undefined,
+    assertCurrent:async (_job:unknown,_lease:unknown,stage?:string)=>{
+      if (!active) throw new TransferTrustError('NATIVE_LEASE_EXPIRED',
+        'External authority was revoked before publication was committed.');
+      if (mode==='revoke-at-final-journal' && stage==='PUBLISH' &&
+          ++publishChecks===4) {
+        // Revoked after the final precheck, before external conditional commit.
+        active=false;
+      }
+    },
+    commitPublished:async (job:{id:string;sha256:string},
+      signed:{requestId:string;epoch:number})=>{
+      if(!active)throw new TransferTrustError('NATIVE_LEASE_EXPIRED',
+        'Independent external commit rejects revoked owner or lease.');
+      return {jobId:job.id,requestId:mode==='wrong-external-commit'?
+        '00000000-0000-4000-8000-000000000000':signed.requestId,
+        epoch:signed.epoch,sha256:job.sha256,
+        durableCommitId:'SYNTHETIC-EXTERNAL-COMMIT-'+signed.requestId};
+    },
   };
-  const grants={assertCurrent:async()=>undefined};
+  const grants={assertCurrent:async()=>{
+    if(!active)throw new TransferTrustError('CORE_OWNER_REVOKED','Owner revoked.');
+  }};
   return {remote,verifier,authority,grants,
     get writes(){return nativeWrites;},get publishes(){return nativePublish;},
     get target(){return target;}};
@@ -113,6 +134,7 @@ for(const [mode,code] of [
   ['forged-proof','FINAL_RECEIPT_UNAUTHENTICATED'],
   ['corrupt-final','FINAL_DESTINATION_UNVERIFIED'],
   ['lost-publish-ack','TRANSFER_PUBLISH_OUTCOME_UNKNOWN'],
+  ['wrong-external-commit','EXTERNAL_PUBLICATION_COMMIT_INVALID'],
 ] as const){
   test('hosted '+mode+' publication cannot become COMPLETED, no second publish',
     async()=>fixture(async root=>{
@@ -146,6 +168,7 @@ test('hosted signed native publication proof + exact destination bytes can compl
     assert.equal(j.bytesConfirmed,content.length);
     assert.equal(j.sha256,sha(content));
     assert.equal(j.publication?.dispatched,true);
+    assert.match(j.publication.durableCommitId??'', /^SYNTHETIC-EXTERNAL-COMMIT-/);
     assert.equal(f.publishes,1);
     assert.equal(f.writes,2);
     assert.deepEqual(f.target,content);
@@ -154,3 +177,33 @@ test('hosted signed native publication proof + exact destination bytes can compl
       (e:unknown)=>e instanceof Error && 'code' in e && e.code==='TRANSFER_FINALIZED');
     assert.equal(f.publishes,1);
   }));
+
+test('P0: revoke between final lease precheck and local COMPLETED needs atomic external commit',
+  async()=>fixture(async root=>{
+    const {f,jobs}=await start(root,'revoke-at-final-journal');
+    const initial=await jobs.start(input);
+    await jobs.waitForIdle(initial.id);
+    const j=await state(root,initial.id);
+    assert.equal(f.publishes,1);
+    assert.equal(j.state,'MUTATION_UNKNOWN',
+      'Local journal cannot certify COMPLETED without atomically current external authority');
+    assert.equal(j.errorCode,'NATIVE_LEASE_EXPIRED');
+    assert.equal(j.bytesConfirmed,content.length);
+    assert.ok(j.publication?.dispatched);
+    assert.equal(j.publication?.durableCommitId,undefined);
+  }));
+
+test('strict hosted start rejects a verifier without an atomic external final commit provider',
+ async()=>fixture(async root=>{
+   const fx=rig('valid');
+   const jobs=new CrossDeviceTransferJobs(root,fx.remote,{
+     requireExternalAuthority:true,
+     authority:{acquire:fx.authority.acquire,assertCurrent:fx.authority.assertCurrent},
+     grants:fx.grants,requireAuthenticatedFinalReceipt:true,
+     finalReceiptVerifier:fx.verifier,
+   });
+   await assert.rejects(jobs.start(input),(e:unknown)=>
+     e instanceof TransferTrustError&&e.code==='EXTERNAL_PUBLICATION_COMMIT_REQUIRED');
+   assert.equal(fx.writes,0);
+   assert.equal(fx.publishes,0);
+ }));

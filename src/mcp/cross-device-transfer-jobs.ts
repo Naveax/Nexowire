@@ -8,6 +8,7 @@ import { requireTrustedAuthority, requireMonotonicLease,
   type TrustedTransferAuthority, type TrustedTransferCoreGrants,
   type FencedWriteEnvelope, type FencedWriteReceipt,
   type FencedFinalReceipt, type TrustedFinalReceiptVerifier,
+  type TrustedPublicationCommit,
   TransferTrustError } from '../workspace/artifact-job-trust.js';
 
 // Source/destination interaction must go through existing authorized native
@@ -63,6 +64,7 @@ const jobSchema = z.object({
   publication: z.object({
     requestId: z.string().uuid(), epoch: z.number().int().positive(),
     sha256: hex, dispatched: z.boolean(),
+    durableCommitId: z.string().min(32).max(256).optional(),
   }).strict().optional(),
   state: stateSchema, errorCode: z.string().optional(),
   createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
@@ -423,6 +425,11 @@ export class CrossDeviceTransferJobs {
       throw new TransferTrustError('FINAL_RECEIPT_VERIFIER_REQUIRED',
         'Independent signed Native final receipt verifier is not configured.');
     }
+    if (this.trust?.requireAuthenticatedFinalReceipt &&
+        !this.trust.authority?.commitPublished) {
+      throw new TransferTrustError('EXTERNAL_PUBLICATION_COMMIT_REQUIRED',
+        'Independent monotonic final publication CAS is not configured.');
+    }
     if (this.trust && (!this.remote.writeFenced || !this.remote.publishFenced)) {
       throw new TransferTrustError('NATIVE_WRITER_FENCE_REQUIRED',
         'Agent has no signed atomic writer epoch/offset fence.');
@@ -445,10 +452,14 @@ export class CrossDeviceTransferJobs {
           this.settleCancellation(job);
         } else if (job.state === 'MUTATION_UNKNOWN' || job.state === 'CANCELLED') {
           // Preserve settled journal evidence across worker error handling.
-        } else if (job.pending) {
+        } else if (job.pending || job.publication?.dispatched) {
+          // Even when external monotonic publish CAS committed, a local
+          // journal fsync/error cannot safely classify an in-flight Native
+          // publication as ordinary FAILED. No automatic retry is possible.
           job.state = 'MUTATION_UNKNOWN';
-          job.errorCode = error instanceof TransferJobError || error instanceof TransferTrustError
-            ? error.code : 'TRANSFER_WRITE_OUTCOME_UNKNOWN';
+          job.errorCode ||= error instanceof TransferJobError || error instanceof TransferTrustError
+            ? error.code : job.publication?.dispatched
+              ? 'TRANSFER_PUBLISH_OUTCOME_UNKNOWN' : 'TRANSFER_WRITE_OUTCOME_UNKNOWN';
         } else {
           job.state = 'FAILED';
           job.errorCode = error instanceof TransferJobError || error instanceof TransferTrustError
@@ -598,7 +609,8 @@ export class CrossDeviceTransferJobs {
    * receipt and final destination readback. A lost ACK remains UNKNOWN and is
    * never converted into COMPLETED by a copied payload or a local bool.
    */
-  private async publishWithAuthenticatedReceipt(job: TransferJob): Promise<void> {
+  private async publishWithAuthenticatedReceipt(job: TransferJob):
+    Promise<TrustedPublicationCommit> {
     if (!this.trust?.finalReceiptVerifier || !job.fencing || !this.remote.publishFenced) {
       throw new TransferTrustError('FINAL_RECEIPT_VERIFIER_REQUIRED',
         'Trusted final publication attestation is unavailable.');
@@ -648,14 +660,19 @@ export class CrossDeviceTransferJobs {
     }
     await this.assertCurrentCore(job, 'PUBLISH');
     await this.assertFence(job, 'PUBLISH', job.bytesTotal);
-    await this.update(job.id, current => {
-      if (current.state !== 'PUBLISHING' ||
-          current.publication?.requestId !== requestId ||
-          !current.publication.dispatched) {
-        throw new TransferTrustError('PUBLISH_FINAL_CAS_CONFLICT',
-          'Native publication completion no longer owns the current journal.');
-      }
-    });
+    // A separate anti-rollback monotonic authority must atomically commit
+    // this verified Native publication while its current owner/lease checks
+    // are still valid. The preceding awaits are NOT that atomic operation.
+    const trusted = await this.trust.authority?.commitPublished?.(job, receipt);
+    if (!trusted || trusted.jobId !== job.id ||
+        trusted.requestId !== requestId || trusted.epoch !== job.fencing.epoch ||
+        trusted.sha256 !== job.sha256 ||
+        typeof trusted.durableCommitId !== 'string' ||
+        trusted.durableCommitId.length < 32 || trusted.durableCommitId.length > 256) {
+      throw new TransferTrustError('EXTERNAL_PUBLICATION_COMMIT_INVALID',
+        'Independent monotonic service did not bind durable publish completion.');
+    }
+    return trusted;
   }
 
   private async run(id: string): Promise<void> {
@@ -781,11 +798,12 @@ export class CrossDeviceTransferJobs {
       // Never republish or downgrade UNKNOWN/pending after a stale callback.
     });
     if (before.state !== 'PUBLISHING') return;
+    let externalCommit: TrustedPublicationCommit | undefined;
     try {
       await this.assertCurrentCore(before, 'PUBLISH');
       await this.assertFence(before, 'PUBLISH', before.bytesTotal);
       if (this.trust?.requireAuthenticatedFinalReceipt) {
-        await this.publishWithAuthenticatedReceipt(before);
+        externalCommit = await this.publishWithAuthenticatedReceipt(before);
       } else if (this.trust) {
         // Direct store fixtures retain the original test-only contract;
         // hosted MCP always requires the independently verified receipt.
@@ -806,6 +824,15 @@ export class CrossDeviceTransferJobs {
       throw error;
     }
     await this.update(id, current => {
+      if (this.trust?.requireAuthenticatedFinalReceipt) {
+        if (current.state !== 'PUBLISHING' ||
+            !externalCommit || current.publication?.requestId !== externalCommit.requestId ||
+            !current.publication.dispatched || current.publication.durableCommitId) {
+          throw new TransferTrustError('PUBLISH_FINAL_CAS_CONFLICT',
+            'Authenticated external publish commit no longer owns the journal.');
+        }
+        current.publication.durableCommitId = externalCommit.durableCommitId;
+      }
       current.state = 'COMPLETED'; current.bytesConfirmed = current.bytesTotal;
     });
   }
