@@ -9,7 +9,7 @@
     {
       "pr": 708,
       "head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1",
-      "base_sha": "e7e46b970dd9123ea3d827f4f60cb91b209",
+      "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
       "base_ref": "fix/08-checkpoint-external-commit-20261022",
       "run_id": 39824007092,
       "conclusion": "failure",
