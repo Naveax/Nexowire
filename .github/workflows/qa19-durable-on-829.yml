@@ -1,0 +1,27 @@
+name: QA19 byte-identical 830 on 829 Durable Windows
+
+on:
+  pull_request:
+    branches:
+      - fix/03-durable-nwjob5-early-output-20261023
+
+permissions:
+  contents: read
+
+jobs:
+  qa19-durable-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Build reviewed disposable Windows Job guardian
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Verify durable sidecar output journal precedes terminal status
+        run: node --test --import tsx --test-concurrency=1 test/qa-19-windows-durable-fast-exit.test.ts
