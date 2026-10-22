@@ -287,12 +287,26 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
     return denied('journal_mismatch', offset);
   }
   if (worker.state === 'CANCELLED' || worker.state === 'CANCEL_REQUESTED' ||
-      checkpoint.status === 'cancel_pending') {
+      checkpoint.status === 'cancel_pending' || checkpoint.status === 'cancelled') {
     return denied('cancel_pending', offset);
   }
-  if (worker.state === 'COMPLETED' || checkpoint.status === 'complete') {
-    // Final independent published-target attestation belongs to #08.
+  // #725 may correctly preserve an UNKNOWN outcome while a damaged or
+  // partially restored journal no longer exposes either pending envelope.
+  // Equal offsets are NOT proof that an orphaned Native effect completed.
+  if (worker.state === 'MUTATION_UNKNOWN' || worker.state === 'RECOVERY_REQUIRED' ||
+      worker.state === 'FAILED' || checkpoint.status === 'unknown') {
+    return denied('mutation_unknown', offset);
+  }
+  if (worker.state === 'COMPLETED' || worker.state === 'PUBLISHING' ||
+      checkpoint.status === 'complete' || checkpoint.status === 'verified') {
+    // Publishing without pending is still unverified until trusted target
+    // postcondition; never infer success from equal source/target offsets.
     return denied('unverified_completion', offset);
+  }
+  // Only QUEUED/RUNNING with no pending and equal offsets may describe a
+  // healthy, read-only prefix. It NEVER authorizes dispatch or replay.
+  if (worker.state !== 'QUEUED' && worker.state !== 'RUNNING') {
+    return denied('mutation_unknown', offset);
   }
   return denied('prefix_consistent', offset);
 }
