@@ -56,8 +56,8 @@
         "Git hooks cannot bypass isolation",
         "unsigned HIGH Broker cannot inherit sandbox grant"
       ],
-      "sourceObservedDefect": "Exact #800 HEAD 6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8 CI 39823730640 Node24 P1 red: workspace.snapshot executed repository core.fsmonitor hook, modified file outside scoped taskRoot; reproduced unsafe source behavior.",
-      "sourceEvidence": "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts:96, job 119981387012",
+      "sourceObservedDefect": "#800 real Git core.fsmonitor escape plus #821 filter.clean external executable writes beyond PathPolicy and #814 nested refs/heads, loose and packed objects redirect Git outside task root. #821 exact head ef87410c CI 39862537837 FAIL; #814 exact head daec5dbd CI 39865936576 FAIL; source contains reproducible external read/write trust violations, no physical OS sandbox.",
+      "sourceEvidence": "PR800 39823730640; PR821 39862537837 test/p50-780-git-clean-filter-external-command-negative.test.ts; PR814 39865936576 test/p37-780-adversarial-git-metadata-fuzz.test.ts and test/p37-780-git-packed-objects-escape-negative.test.ts",
       "followup811": {
         "head": "600a0286557d360681be7bd7b86da95ba57f1980",
         "ciRunId": 39854971347,
@@ -114,7 +114,7 @@
     "FAIL": 1,
     "NOT_TESTED": 4
   },
-  "lastReview": "docs/qa/QA_20261023_PR806_811_PHYSICAL_PROOF.json",
+  "lastReview": "docs/qa/QA_20261023_RELEASE_NEXT2_EXACT_PROOF.json",
   "reviewedDate": "2026-10-23",
   "staging": "BLOCKED",
   "production": "BLOCKED"
