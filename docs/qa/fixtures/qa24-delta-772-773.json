@@ -1,0 +1,86 @@
+{
+  "nodes": [
+    {
+      "pr": 772,
+      "head_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+      "head_ref": "test/24-full-open-dag-104-sha-20261021",
+      "base_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+      "base_ref": "test/24-live-dag-77-merge-evidence-20261021",
+      "files": [
+        "docs/qa/QA24_PARTITIONED_DAG_160_REVIEW_20261022.md",
+        "docs/qa/fixtures/qa24-head-ci-part-01.json",
+        "docs/qa/fixtures/qa24-head-ci-part-02.json",
+        "docs/qa/fixtures/qa24-head-ci-part-03.json",
+        "docs/qa/fixtures/qa24-head-ci-part-04.json",
+        "docs/qa/fixtures/qa24-head-ci-part-05.json",
+        "docs/qa/fixtures/qa24-head-ci-part-06.json",
+        "docs/qa/fixtures/qa24-head-ci-part-07.json",
+        "docs/qa/fixtures/qa24-head-ci-part-08.json",
+        "docs/qa/fixtures/qa24-head-ci-part-09.json",
+        "docs/qa/fixtures/qa24-head-ci-part-10.json",
+        "docs/qa/fixtures/qa24-head-ci-part-11.json",
+        "docs/qa/fixtures/qa24-head-ci-part-12.json",
+        "docs/qa/fixtures/qa24-head-ci-part-13.json",
+        "docs/qa/fixtures/qa24-head-ci-part-14.json",
+        "docs/qa/fixtures/qa24-new-711-715.json",
+        "docs/qa/fixtures/qa24-new-716-720.json",
+        "docs/qa/fixtures/qa24-new-721-725.json",
+        "docs/qa/fixtures/qa24-new-726-729.json",
+        "docs/qa/fixtures/qa24-new-730-733.json",
+        "docs/qa/fixtures/qa24-new-734-738.json",
+        "docs/qa/fixtures/qa24-new-739-742.json",
+        "docs/qa/fixtures/qa24-new-743-746.json",
+        "docs/qa/fixtures/qa24-new-747-750.json",
+        "docs/qa/fixtures/qa24-new-751-754.json",
+        "docs/qa/fixtures/qa24-new-755-758.json",
+        "docs/qa/fixtures/qa24-new-759-760.json",
+        "docs/qa/fixtures/qa24-new-ref-711-729.json",
+        "docs/qa/fixtures/qa24-open-census-20261021.json",
+        "docs/qa/fixtures/qa24-open-census-20261022.json",
+        "docs/qa/fixtures/qa24-open-census-current-20261022.json",
+        "docs/qa/p0-open-dag-160-source-20261022.json",
+        "docs/qa/p0-open-dag-20261022.partial.json",
+        "scripts/qa24-partitioned-dag-review.ts",
+        "test/qa-24-partitioned-dag-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+        "head_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+        "merge_base_sha": "b8606439a6a967185b72d599ee83ddc3ba00a36c",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789"
+      }
+    },
+    {
+      "pr": 773,
+      "head_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "head_ref": "fix/09-759-stop-missing-state-unknown-20261022",
+      "base_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+      "base_ref": "test/09-750-platform-owner-blocked-20261022",
+      "files": [
+        "docs/NEXOWIRE_09_759_763_767_STOP_EFFECT_UNKNOWN_20261022.md",
+        "src/agent/windows-private-desktop.ts",
+        "test/private-desktop-runtime-owner-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+        "head_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+        "merge_base_sha": "28f6a1cf063e05e70d09739a2b2d8f12e896c67d",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39805175849,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7"
+      }
+    }
+  ]
+}
