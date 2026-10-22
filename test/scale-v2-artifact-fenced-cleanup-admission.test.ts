@@ -29,6 +29,11 @@ const scope:ServerBoundArtifactCleanup={
   projectId:'project-alpha',sessionId:'session-alpha-01',
   rootInvocationId:'root-alpha-01',ownerEpoch:31,deviceEpoch:19,
   expectedSizeBytes:2*65536,expectedSourceSha256:'a'.repeat(64),
+  ownerGrantGeneration:11,
+  nativePublisherIssuerId:'publisher-native-issuer-01',
+  externalCommitIssuerId:'cas-commit-issuer-01',
+  writerStopIssuerId:'protected-writer-stop-issuer-01',
+  deletionIssuerId:'protected-stage-deletion-issuer-01',
   dispatchedWriterEpoch:71,
   pendingDispatchState:'DISPATCHED_OR_UNKNOWN',
   lastDispatchedRequestId:'native-request-0001',
@@ -57,6 +62,13 @@ function fixture(){
     protectedImage:true,source:'NOT_DISPATCHED' as
       'NOT_DISPATCHED'|'WRITE_UNKNOWN'|'WRITERS_QUIESCENT'|'DELETED',
     stoppedThrough:0,deletedAt:0,fencingEpoch:0,revokeEpoch:0,
+    ownerGrantGeneration:scope.ownerGrantGeneration,
+    nativePublisherIssuerId:scope.nativePublisherIssuerId,
+    externalCommitIssuerId:scope.externalCommitIssuerId,
+    writerStopIssuerId:scope.writerStopIssuerId,
+    deletionIssuerId:scope.deletionIssuerId,
+    writerStopReceiptId:'writer-stop-immutable-receipt-01',
+    deletionReceiptId:'stage-deleted-immutable-receipt-01',
     nativeDispatchHighWaterEpoch:scope.dispatchedWriterEpoch,
     nativeDispatchState:'DISPATCHED_OR_UNKNOWN' as
       'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN',
@@ -93,13 +105,14 @@ function fixture(){
     corruptProof:false,
   };
   let proofHolds=0,releaseCount=0;
-  const leaseProof:VerifiedCoreArtifactLease={
+  const leaseProof:VerifiedCoreArtifactLease&{grantGeneration:number}={
     ownerId:scope.ownerId,deviceId:scope.deviceId,
     projectId:scope.projectId,sessionId:scope.sessionId,
     ownerEpoch:scope.ownerEpoch,deviceEpoch:scope.deviceEpoch,
     mode:'CORE',brokerTokenIntegrity:'high',
     signedBrokerVerified:true,protectedBrokerVerified:true,
     delegationCurrent:true,grantRevoked:false,
+    grantGeneration:scope.ownerGrantGeneration,
   };
   const core:TrustedCoreArtifactAuthority={
     async withVerifiedCoreLease(binding,apply){
@@ -134,6 +147,9 @@ function fixture(){
         projectId:binding.projectId,sessionId:binding.sessionId,
         rootInvocationId:binding.rootInvocationId,
         ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
+        ownerGrantGeneration:evidence.ownerGrantGeneration,
+        nativePublisherIssuerId:evidence.nativePublisherIssuerId,
+        externalCommitIssuerId:evidence.externalCommitIssuerId,
         writerRevokeEpoch:evidence.revokeEpoch,
         nativeDispatchHighWaterEpoch:evidence.nativeDispatchHighWaterEpoch,
         pendingDispatchState:evidence.nativeDispatchState,
@@ -157,6 +173,10 @@ function fixture(){
         finalTargetReadbackSha256:evidence.finalTargetReadbackSha256,
         // Independent protected store readback, not a reflected ACK.
         receiptId:evidence.immutableReceiptId,
+        writerStopIssuerId:evidence.writerStopIssuerId,
+        deletionIssuerId:evidence.deletionIssuerId,
+        writerStopReceiptId:evidence.writerStopReceiptId,
+        deletionReceiptId:evidence.deletionReceiptId,
         inFlightNativeWriters:evidence.activeWriters,
         deletionState:'VERIFIED_ABSENT' as const,
       };
@@ -172,6 +192,13 @@ function fixture(){
         const witness:IndependentFencedDeletionWitness={
           ...binding,
           ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
+          ownerGrantGeneration:evidence.ownerGrantGeneration,
+          nativePublisherIssuerId:evidence.nativePublisherIssuerId,
+          externalCommitIssuerId:evidence.externalCommitIssuerId,
+          writerStopIssuerId:evidence.writerStopIssuerId,
+          deletionIssuerId:evidence.deletionIssuerId,
+          writerStopReceiptId:evidence.writerStopReceiptId,
+          deletionReceiptId:evidence.deletionReceiptId,
           writerStoppedThroughEpoch:evidence.stoppedThrough,
           deletionEpoch:evidence.deletedAt,fencingEpoch:evidence.fencingEpoch,
           reconciliationEpoch:evidence.reconciliationEpoch,
@@ -1000,5 +1027,103 @@ test('#768 externally committed publish with unverified external writer-stop rea
      /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
    assert.equal(f.stats().occupiedBytes,SIZE);
    assert.equal(f.stats().admittedBytes,CHUNK);
+ }finally{f.close()}
+});
+
+test('#776 foreign final publisher or external CAS issuer cannot authorize quota release',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   const original=f.evidence.nativePublisherIssuerId;
+   f.evidence.nativePublisherIssuerId='forged-native-publisher-777';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.nativePublisherIssuerId=original;
+   const c=f.evidence.externalCommitIssuerId;
+   f.evidence.externalCommitIssuerId='foreign-external-cas-issuer-01';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.externalCommitIssuerId=c;
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#776 prior grant generation after re-pair cannot authorize release despite matching digest/CAS epoch',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.ownerGrantGeneration=scope.ownerGrantGeneration+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.ownerGrantGeneration=scope.ownerGrantGeneration;
+   // An old locally cached CORE lease must not be sufficient even if all
+   // other high-integrity grant booleans and external deletion proof pass.
+   const unsafeCore:TrustedCoreArtifactAuthority={
+     withVerifiedCoreLease:async(_binding,apply)=>apply(({
+       ...{
+         ownerId:scope.ownerId,deviceId:scope.deviceId,
+         projectId:scope.projectId,sessionId:scope.sessionId,
+         ownerEpoch:scope.ownerEpoch,deviceEpoch:scope.deviceEpoch,
+         mode:'CORE' as const,brokerTokenIntegrity:'high' as const,
+         signedBrokerVerified:true as const,protectedBrokerVerified:true as const,
+         delegationCurrent:true as const,grantRevoked:false as const,
+       },
+       grantGeneration:scope.ownerGrantGeneration-1,
+     }) as VerifiedCoreArtifactLease&{grantGeneration:number}),
+   };
+   const gated=new StagingArtifactFencedCleanupAdmission(f.first,unsafeCore,f.trusted);
+   await assert.rejects(()=>gated.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_CORE_GRANT_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#774 signed final publication is not a writer-stop or deletion receipt ID',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.writerStopReceiptId=f.evidence.publicationReceiptId!;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.writerStopReceiptId='writer-stop-immutable-receipt-01';
+   f.evidence.deletionReceiptId=f.evidence.publicationReceiptId!;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.deletionReceiptId='stage-deleted-immutable-receipt-01';
+   f.evidence.writerStopReceiptId=f.evidence.deletionReceiptId;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#776 wrong current writer-stop/deletion issuer rejects even if witness was previously valid',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.writerStopIssuerId='foreign-writer-stop-issuer-999';
+   await assert.rejects(()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.writerStopIssuerId=scope.writerStopIssuerId;
+   f.evidence.deletionIssuerId='foreign-deletion-issuer-999';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#780 client claimed task quota exhaustion/refund cannot bypass physical cleanup UNKNOWN',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);
+   // Separate task budget ledgers are out of scope; caller assertions about
+   // steps, elapsed time, I/O and tokens are never cleanup authority.
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup({
+     ...scope,taskExhausted:true,refundApproved:true,
+   } as typeof scope),/INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.verifiedDelete();
+   f.evidence.nativeResolution='MUTATION_UNKNOWN_PENDING';
+   f.evidence.unresolvedNativeMutations=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
  }finally{f.close()}
 });

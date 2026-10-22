@@ -15,6 +15,13 @@ export interface ServerBoundArtifactCleanup extends ServerBoundQuotaJob {
   /** Server-loaded immutable complete artifact identity, never Native ACK. */
   readonly expectedSourceSha256:string;
   readonly expectedSizeBytes:number;
+  /** Current trusted owner authority, not cached pairing JSON. */
+  readonly ownerGrantGeneration:number;
+  /** Trust-policy issuer allowlist loaded by SERVER, never publication ACK. */
+  readonly nativePublisherIssuerId:string;
+  readonly externalCommitIssuerId:string;
+  readonly writerStopIssuerId:string;
+  readonly deletionIssuerId:string;
   /** Highest dispatched writer generation, including writes with lost ACK. */
   readonly dispatchedWriterEpoch:number;
   /** Authenticated durable predispatch journal, never caller JSON. */
@@ -48,6 +55,10 @@ export type FencedPublicationDisposition=
   'OWNER_REPAIR_PENDING';
 export interface TrustedPublicationFacts {
   readonly publicationDisposition:FencedPublicationDisposition;
+  readonly ownerGrantGeneration:number;
+  /** Independent issuer of final Native signature and external CAS commit. */
+  readonly nativePublisherIssuerId:string;
+  readonly externalCommitIssuerId:string;
   /** Highest durable Native PUBLISH intent across Hubs (zero only when
    * the protected journal has independently verified no dispatch). */
   readonly publicationDispatchHighWaterEpoch:number;
@@ -78,6 +89,11 @@ export interface IndependentFencedDeletionWitness extends TrustedPublicationFact
   readonly reconciliationEpoch:number;
   readonly nativeResolution:FencedNativeResolution;
   readonly receiptId:string;
+  /** Independent typed attestations; final publisher proof MUST NOT stand in. */
+  readonly writerStopReceiptId:string;
+  readonly deletionReceiptId:string;
+  readonly writerStopIssuerId:string;
+  readonly deletionIssuerId:string;
 }
 /** Readback is from a rollback-independent external CAS + protected disk
  * authority, not a claimed receipt in client JSON or a local SQLite mirror.
@@ -103,6 +119,10 @@ export interface CurrentFencedDeletionReadback extends TrustedPublicationFacts {
   readonly nativeResolution:FencedNativeResolution;
   readonly unresolvedNativeMutations:number;
   readonly receiptId:string;
+  readonly writerStopReceiptId:string;
+  readonly deletionReceiptId:string;
+  readonly writerStopIssuerId:string;
+  readonly deletionIssuerId:string;
   readonly inFlightNativeWriters:number;
   readonly deletionState:'VERIFIED_ABSENT';
 }
@@ -123,6 +143,9 @@ const validId=(x:string)=>typeof x==='string'&&
 const epoch=(x:number)=>Number.isSafeInteger(x)&&x>0;
 const chunkSha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const validPublication=(p:TrustedPublicationFacts,scope:ServerBoundArtifactCleanup)=>{
+  if(p?.ownerGrantGeneration!==scope.ownerGrantGeneration||
+     p.nativePublisherIssuerId!==scope.nativePublisherIssuerId||
+     p.externalCommitIssuerId!==scope.externalCommitIssuerId)return false;
   if(!Number.isSafeInteger(p?.publicationDispatchHighWaterEpoch)||
      p.publicationDispatchHighWaterEpoch<0)return false;
   if(p.publicationDisposition==='NOT_ATTEMPTED_VERIFIED')
@@ -146,6 +169,9 @@ const validPublication=(p:TrustedPublicationFacts,scope:ServerBoundArtifactClean
 };
 const samePublication=(a:TrustedPublicationFacts,b:TrustedPublicationFacts)=>
   a.publicationDisposition===b.publicationDisposition&&
+  a.ownerGrantGeneration===b.ownerGrantGeneration&&
+  a.nativePublisherIssuerId===b.nativePublisherIssuerId&&
+  a.externalCommitIssuerId===b.externalCommitIssuerId&&
   a.publicationDispatchHighWaterEpoch===b.publicationDispatchHighWaterEpoch&&
   a.durablePublicationCommitId===b.durablePublicationCommitId&&
   a.publicationRequestId===b.publicationRequestId&&
@@ -163,7 +189,9 @@ const dispatchedIdentity=(x:{
 function validCore(
   lease:VerifiedCoreArtifactLease,scope:ServerBoundArtifactCleanup,
 ):boolean{
-  return lease?.ownerId===scope.ownerId&&lease.deviceId===scope.deviceId&&
+  const current=lease as VerifiedCoreArtifactLease&{readonly grantGeneration?:number};
+  return current?.grantGeneration===scope.ownerGrantGeneration&&
+    lease?.ownerId===scope.ownerId&&lease.deviceId===scope.deviceId&&
     lease.projectId===scope.projectId&&lease.sessionId===scope.sessionId&&
     lease.ownerEpoch===scope.ownerEpoch&&
     lease.deviceEpoch===scope.deviceEpoch&&lease.mode==='CORE'&&
@@ -182,6 +210,14 @@ function validWitness(
     proof.rootInvocationId===scope.rootInvocationId&&
     proof.ownerEpoch===scope.ownerEpoch&&
     proof.deviceEpoch===scope.deviceEpoch&&
+    proof.writerStopIssuerId===scope.writerStopIssuerId&&
+    proof.deletionIssuerId===scope.deletionIssuerId&&
+    validId(proof.writerStopReceiptId)&&validId(proof.deletionReceiptId)&&
+    proof.writerStopReceiptId!==proof.deletionReceiptId&&
+    proof.writerStopReceiptId!==proof.publicationReceiptId&&
+    proof.deletionReceiptId!==proof.publicationReceiptId&&
+    proof.writerStopReceiptId!==proof.durablePublicationCommitId&&
+    proof.deletionReceiptId!==proof.durablePublicationCommitId&&
     validPublication(proof,scope)&&
     dispatchedIdentity(proof)&&
     proof.lastDispatchedRequestId===scope.lastDispatchedRequestId&&
@@ -215,6 +251,11 @@ export class StagingArtifactFencedCleanupAdmission {
       !validId(scope.projectId)||!validId(scope.sessionId)||
       !validId(scope.rootInvocationId)||!epoch(scope.ownerEpoch)||
       !epoch(scope.deviceEpoch)||
+      !epoch(scope.ownerGrantGeneration)||
+      !validId(scope.nativePublisherIssuerId)||
+      !validId(scope.externalCommitIssuerId)||
+      !validId(scope.writerStopIssuerId)||
+      !validId(scope.deletionIssuerId)||
       !chunkSha(scope.expectedSourceSha256)||
       !Number.isSafeInteger(scope.expectedSizeBytes)||
       scope.expectedSizeBytes<=0||
@@ -245,6 +286,13 @@ export class StagingArtifactFencedCleanupAdmission {
         current.rootInvocationId!==scope.rootInvocationId||
         current.ownerEpoch!==scope.ownerEpoch||
         current.deviceEpoch!==scope.deviceEpoch||
+        current.writerStopIssuerId!==scope.writerStopIssuerId||
+        current.deletionIssuerId!==scope.deletionIssuerId||
+        current.writerStopReceiptId!==witness.writerStopReceiptId||
+        current.deletionReceiptId!==witness.deletionReceiptId||
+        current.writerStopReceiptId===current.deletionReceiptId||
+        current.writerStopReceiptId===current.publicationReceiptId||
+        current.deletionReceiptId===current.publicationReceiptId||
         !validPublication(current,scope)||
         !samePublication(current,witness)||
         !epoch(current.writerRevokeEpoch)||
