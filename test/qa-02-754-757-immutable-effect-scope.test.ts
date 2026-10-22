@@ -71,6 +71,53 @@ test('QA02 #754 ACK success cannot replace independently authenticated immutable
     'FORGED_OR_INVALID_OBSERVATION');
 });
 
+
+test('QA02 #770/#768/#767 cross-domain receipts, CAS commit and final grant never attest Hyper-V effect',()=>{
+  const match=obs();
+  // The same SHA-shaped digest, request and owner on the Artifact publication
+  // path cannot turn an Artifact-native publication into VM state evidence.
+  // This is one domain-separation regression, not duplicate #754/#757 cases.
+  const wrongCapability={...match,immutableVmEffect:{
+    ...immutableClaim(),capability:'artifact.publish',
+  }};
+  assert.equal(check(expected(),wrongCapability).reason,
+    'FORGED_OR_INVALID_OBSERVATION');
+
+  // #770's reconnect publication readback and #768's durable external CAS
+  // commit are not the physical Native VM effect provider. Nor is #767's
+  // signed, revoking:false FINAL_NATIVE_EFFECT_FENCED Access grant.
+  for(const forged of [
+    {publicationVerifiedNotCommitted:true},
+    {durableCommitId:'SYNTHETIC-EXTERNAL-COMMIT-'+id.requestId},
+    {finalNativeEffectFenced:true},
+    {signedNativePublishProof:'a'.repeat(64)},
+  ]){
+    assert.equal(check(expected(),{...match,...forged}).reason,
+      'FORGED_OR_INVALID_OBSERVATION');
+  }
+
+  // After reconnect, a claimed old owner epoch cannot borrow the newer
+  // operation's exact requestId, SHA, ACK and VM Running readback.
+  const reconnectEpoch={...match,immutableVmEffect:{
+    ...immutableClaim(),ownerEpoch:id.ownerEpoch-1,
+  }};
+  assert.equal(check(expected(),reconnectEpoch).reason,
+    'POSTCONDITION_IDENTITY_MISMATCH');
+
+  // Positive-looking ACK and both matching VM observations are still merely
+  // untrusted strings. Without a separately authenticated physical readback,
+  // no path may produce VERIFIED or allow another execution.
+  assert.equal(check(expected(),match).reason,
+    'POSTCONDITION_NATIVE_ATTESTATION_MISSING');
+  const lostAck={...match,ack:{...ack(),transportOk:false}};
+  assert.equal(check(expected(),lostAck).reason,
+    'ACK_TRANSPORT_UNCONFIRMED');
+
+  // The same artifact proof is not applicable to generic shell execution.
+  assert.equal(check(expected('core.shell.exec'),match).reason,
+    'POSTCONDITION_NOT_APPLICABLE');
+});
+
 test('QA02 #757 revoke and capability scope: VM state is inapplicable to shell, late permit never creates success',()=>{
   const shell=expected('core.shell.exec');
   assert.equal(check(shell).reason,'POSTCONDITION_NOT_APPLICABLE');
