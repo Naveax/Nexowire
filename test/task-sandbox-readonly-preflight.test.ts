@@ -350,3 +350,70 @@ test('reported Git availability without root/fsmonitor verification is BLOCKED d
   assert.equal(forgedGreen.dispatchAllowed, false);
   assert.equal(forgedGreen.effectiveCore, false);
 });
+
+
+/**
+ * #821 proves repository filter.clean can run with an authorized Git root;
+ * #814 proves nested refs/heads and loose-object symlink escape with the
+ * #811 repaired executor. This is a #10 READOUT test only, not another
+ * real workspace.snapshot fixture or an OS sandbox acceptance.
+ */
+test('filter.clean and nested Git metadata remain BLOCKED despite green parent Git/path/disk reports', async () => {
+  const base = fixture();
+  const previousProof = {
+    discoveredRootWithinScopedGrant: verified,
+    linkedWorktreeGitdirAndCommonDirScoped: verified,
+    fsmonitorAndHookExecutionDisabled: verified,
+    gitConfigAndEnvironmentSanitized: verified,
+    gitSubprocessesContained: verified,
+  } as const;
+  const injected = {
+    request: {...base.request, capability: 'git.status' as const},
+    root: {...base.root!, pathFilterOnly: false},
+    disk: {...base.disk!, atomicBudgetReservation: verified},
+    platform: {...base.platform!, git: verified},
+    process: {...base.process!, gitHooksConstrained: verified},
+  };
+  for (const [missingField, code] of [
+    ['repositoryFilterCommandsBlocked', 'GIT_REPOSITORY_FILTER_EXECUTION_NOT_VERIFIED'],
+    ['nestedRefsAndObjectsScoped', 'GIT_NESTED_REFS_OBJECTS_SCOPE_NOT_VERIFIED'],
+  ] as const) {
+    const git = {
+      ...previousProof,
+      repositoryFilterCommandsBlocked: verified,
+      nestedRefsAndObjectsScoped: verified,
+      [missingField]: 'unavailable' as const,
+    };
+    const result = await inspect({...injected, git});
+    assert.equal(result.status, 'BLOCKED');
+    assert.ok(result.reasons.includes(code), code);
+    // Original reported signals remain separate from physical authorization.
+    assert.equal(result.taskRoot, 'REPORTED_UNATTESTED');
+    assert.equal(result.diskBudget, 'REPORTED_UNATTESTED');
+    assert.equal(result.platformCapabilities, 'REPORTED_UNATTESTED');
+    assert.equal(result.gitRootScope, 'NOT_PROVEN');
+    assert.equal(result.safeGitExecution, 'NOT_PROVEN');
+    assert.equal(result.filesystemContainment, 'NOT_PROVEN');
+    assert.equal(result.processIsolation, 'NOT_PROVEN');
+    assert.equal(result.diskReservation, 'NOT_PROVEN');
+    assert.equal(result.remoteWorkerEligibility, 'NOT_PROVEN');
+    assert.equal(result.dispatchAllowed, false);
+    assert.equal(result.effectiveCore, false);
+  }
+
+  const allClaimedGreen = await inspect({
+    ...injected,
+    git: {
+      ...previousProof,
+      repositoryFilterCommandsBlocked: verified,
+      nestedRefsAndObjectsScoped: verified,
+    },
+  });
+  // Even optimistic injected assertions never authorize or physically attest.
+  assert.equal(allClaimedGreen.gitRootScope, 'NOT_PROVEN');
+  assert.equal(allClaimedGreen.safeGitExecution, 'NOT_PROVEN');
+  assert.equal(allClaimedGreen.filesystemContainment, 'NOT_PROVEN');
+  assert.equal(allClaimedGreen.processIsolation, 'NOT_PROVEN');
+  assert.equal(allClaimedGreen.dispatchAllowed, false);
+  assert.equal(allClaimedGreen.effectiveCore, false);
+});
