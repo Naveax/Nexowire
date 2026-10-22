@@ -28,6 +28,9 @@ const scope:ServerBoundArtifactCleanup={
   ownerId:'owner-signed-high',deviceId:'device-signed-high',
   projectId:'project-alpha',sessionId:'session-alpha-01',
   rootInvocationId:'root-alpha-01',ownerEpoch:31,deviceEpoch:19,
+  originRunbookId:'original-runbook-alpha-01',
+  logicalOperationId:'canonical-mutation-alpha-01',
+  logicalMutationSha256:'c'.repeat(64),
   expectedSizeBytes:2*65536,expectedSourceSha256:'a'.repeat(64),
   ownerGrantGeneration:11,
   nativePublisherIssuerId:'publisher-native-issuer-01',
@@ -58,6 +61,10 @@ function fixture(){
   // The source and monotonic writer state are NOT stored in the quota DB.
   const evidence={
     ownerEpoch:scope.ownerEpoch,deviceEpoch:scope.deviceEpoch,
+    originRunbookId:scope.originRunbookId,
+    logicalOperationId:scope.logicalOperationId,
+    logicalMutationSha256:scope.logicalMutationSha256,
+    unresolvedSiblingMutations:0 as number,
     revoked:false,unknown:false,coreHigh:true,signatureValid:true,
     protectedImage:true,source:'NOT_DISPATCHED' as
       'NOT_DISPATCHED'|'WRITE_UNKNOWN'|'WRITERS_QUIESCENT'|'DELETED',
@@ -146,6 +153,10 @@ function fixture(){
         ownerId:binding.ownerId,deviceId:binding.deviceId,
         projectId:binding.projectId,sessionId:binding.sessionId,
         rootInvocationId:binding.rootInvocationId,
+        originRunbookId:evidence.originRunbookId,
+        logicalOperationId:evidence.logicalOperationId,
+        logicalMutationSha256:evidence.logicalMutationSha256,
+        unresolvedSiblingMutations:evidence.unresolvedSiblingMutations,
         ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
         ownerGrantGeneration:evidence.ownerGrantGeneration,
         nativePublisherIssuerId:evidence.nativePublisherIssuerId,
@@ -191,6 +202,9 @@ function fixture(){
       try {
         const witness:IndependentFencedDeletionWitness={
           ...binding,
+          originRunbookId:evidence.originRunbookId,
+          logicalOperationId:evidence.logicalOperationId,
+          logicalMutationSha256:evidence.logicalMutationSha256,
           ownerEpoch:evidence.ownerEpoch,deviceEpoch:evidence.deviceEpoch,
           ownerGrantGeneration:evidence.ownerGrantGeneration,
           nativePublisherIssuerId:evidence.nativePublisherIssuerId,
@@ -1123,6 +1137,111 @@ test('#780 client claimed task quota exhaustion/refund cannot bypass physical cl
    f.evidence.unresolvedNativeMutations=1;
    await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
      /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#781 cloned runbook ID cannot release an original unresolved Native quota reservation',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   const cloned={
+     ...scope,rootInvocationId:'cloned-runbook-root-002',
+     originRunbookId:'cloned-runbook-alpha-002',
+   };
+   await assert.rejects(
+     ()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(cloned),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#781 cloned task with replaced logical operation ID or semantic SHA cannot launder UNKNOWN',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   for(const clone of [
+     {...scope,logicalOperationId:'new-clone-operation-002'},
+     {...scope,logicalMutationSha256:'d'.repeat(64)},
+     {...scope,lastDispatchedRequestId:'new-native-request-002'},
+   ]){
+     await assert.rejects(
+       ()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(clone),
+       /CLEANUP_INDEPENDENT_WITNESS_INVALID|CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   }
+   assert.equal(f.stats().occupiedBytes,SIZE);
+   assert.equal(f.stats().admittedBytes,CHUNK);
+ }finally{f.close()}
+});
+
+test('#781 unresolved sibling mutation under rotated runbook ID blocks first disk release despite valid final receipt',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   // Protected CAS tracks the original logical mutation even if a cloned
+   // runbook created a new syntactic task ID. The currently checked stage
+   // is physically absent, but a prior Native effect remains UNKNOWN.
+   f.evidence.unresolvedSiblingMutations=1;
+   for(let hub=0;hub<2;hub++){
+     await assert.rejects(
+       ()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+       /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   }
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   // Only authenticated *global* reconciliation in the protected issuer
+   // may make this zero. The test double models its final readback.
+   f.evidence.unresolvedSiblingMutations=0;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+ }finally{f.close()}
+});
+
+test('#785 locally COMPLETED checkpoint cannot refund quota if CAS owner or writer-stop unresolved',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);
+   const forged={
+     ...scope,localCheckpointCompleted:true,
+     publicationCasVerified:true,requestId:'replayed-clone-id-02',
+   } as typeof scope;
+   await assert.rejects(
+     ()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forged),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.verifiedDelete();
+   f.evidence.unresolvedSiblingMutations=1;
+   await assert.rejects(
+     ()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forged),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   f.evidence.unresolvedSiblingMutations=0;
+   f.evidence.writerStopped=false;
+   await assert.rejects(
+     ()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forged),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#781 missing protected logical mutation identity or sibling CAS count is never treated as safe cleanup',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   for(const invalid of [
+     {...scope,originRunbookId:undefined as unknown as string},
+     {...scope,logicalOperationId:''},
+     {...scope,logicalMutationSha256:'not-a-digest'},
+   ]){
+     await assert.rejects(
+       ()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(invalid),
+       /CLEANUP_SERVER_BINDING_INVALID/);
+   }
+   for(const untrusted of [undefined,NaN,-1,1]){
+     f.evidence.unresolvedSiblingMutations=untrusted as number;
+     await assert.rejects(
+       ()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+       /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   }
    assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
      totalSessions:1,releasedSessions:0});
  }finally{f.close()}

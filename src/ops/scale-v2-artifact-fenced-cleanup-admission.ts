@@ -12,6 +12,13 @@ import type {ServerBoundQuotaJob,TrustedCoreArtifactAuthority,
  */
 export interface ServerBoundArtifactCleanup extends ServerBoundQuotaJob {
   readonly rootInvocationId:string;
+  /** Immutable logical mutation identity issued from a protected task journal,
+   * stable across runbook_id rotations or cloned task IDs (#781).
+   * NEVER derive from a caller-controlled runbook name alone.
+   */
+  readonly originRunbookId:string;
+  readonly logicalOperationId:string;
+  readonly logicalMutationSha256:string;
   /** Server-loaded immutable complete artifact identity, never Native ACK. */
   readonly expectedSourceSha256:string;
   readonly expectedSizeBytes:number;
@@ -77,6 +84,9 @@ export interface IndependentFencedDeletionWitness extends TrustedPublicationFact
   readonly projectId:string;readonly sessionId:string;
   readonly rootInvocationId:string;readonly ownerEpoch:number;
   readonly deviceEpoch:number;
+  readonly originRunbookId:string;
+  readonly logicalOperationId:string;
+  readonly logicalMutationSha256:string;
   readonly writerStoppedThroughEpoch:number;
   readonly pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
   /** Immutable Native dispatch identity, not a possibly forged ACK. */
@@ -104,6 +114,12 @@ export interface CurrentFencedDeletionReadback extends TrustedPublicationFacts {
   readonly projectId:string;readonly sessionId:string;
   readonly rootInvocationId:string;
   readonly ownerEpoch:number;readonly deviceEpoch:number;
+  readonly originRunbookId:string;
+  readonly logicalOperationId:string;
+  readonly logicalMutationSha256:string;
+  /** Protected independent CAS count of unresolved effects under ANY
+   * cloned runbook/task ID for the same canonical logical mutation. */
+  readonly unresolvedSiblingMutations:number;
   /** Persistently revoked all old writer generations across every Hub. */
   readonly writerRevokeEpoch:number;
   readonly writerStoppedThroughEpoch:number;
@@ -208,6 +224,9 @@ function validWitness(
     proof.projectId===scope.projectId&&
     proof.sessionId===scope.sessionId&&
     proof.rootInvocationId===scope.rootInvocationId&&
+    proof.originRunbookId===scope.originRunbookId&&
+    proof.logicalOperationId===scope.logicalOperationId&&
+    proof.logicalMutationSha256===scope.logicalMutationSha256&&
     proof.ownerEpoch===scope.ownerEpoch&&
     proof.deviceEpoch===scope.deviceEpoch&&
     proof.writerStopIssuerId===scope.writerStopIssuerId&&
@@ -249,7 +268,11 @@ export class StagingArtifactFencedCleanupAdmission {
     if(!this.core||!this.durable)throw Error('CLEANUP_AUTHORITY_UNAVAILABLE');
     if(!scope||!validId(scope.ownerId)||!validId(scope.deviceId)||
       !validId(scope.projectId)||!validId(scope.sessionId)||
-      !validId(scope.rootInvocationId)||!epoch(scope.ownerEpoch)||
+      !validId(scope.rootInvocationId)||
+      !validId(scope.originRunbookId)||
+      !validId(scope.logicalOperationId)||
+      !chunkSha(scope.logicalMutationSha256)||
+      !epoch(scope.ownerEpoch)||
       !epoch(scope.deviceEpoch)||
       !epoch(scope.ownerGrantGeneration)||
       !validId(scope.nativePublisherIssuerId)||
@@ -284,6 +307,13 @@ export class StagingArtifactFencedCleanupAdmission {
         current.projectId!==scope.projectId||
         current.sessionId!==scope.sessionId||
         current.rootInvocationId!==scope.rootInvocationId||
+        current.originRunbookId!==scope.originRunbookId||
+        current.logicalOperationId!==scope.logicalOperationId||
+        current.logicalMutationSha256!==scope.logicalMutationSha256||
+        current.originRunbookId!==witness.originRunbookId||
+        current.logicalOperationId!==witness.logicalOperationId||
+        current.logicalMutationSha256!==witness.logicalMutationSha256||
+        current.unresolvedSiblingMutations!==0||
         current.ownerEpoch!==scope.ownerEpoch||
         current.deviceEpoch!==scope.deviceEpoch||
         current.writerStopIssuerId!==scope.writerStopIssuerId||
