@@ -14,6 +14,7 @@ function example(){
     deviceEpoch:randomUUID(),sessionEpoch:randomUUID(),
     ownerEpoch:4,grantGeneration:8,
     sourceSha:'a'.repeat(40),
+    worktreeId:randomUUID(),
     state:'RECONCILE_REQUIRED' as const,
     originalErrorCode:'MUTATION_STATE_UNKNOWN',
   };
@@ -173,4 +174,69 @@ test('pure loop contract refuses cloned raw commands, fresh fake success and uns
     ...cp,logicalMutationId:undefined}).success,false);
   assert.equal(AgentLoopCheckpointV1Schema.safeParse({
     ...cp,state:'COMPLETED_VERIFIED'}).success,false);
+});
+
+test('#794 sourceSha drift after cloned runbook is explicit SCOPE_MISMATCH and STOP',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse({...example(),
+    runbookId:'original',state:'DISPATCH_MAY_HAVE_OCCURRED'});
+  const cloned={...original,runbookId:'copied',
+    sourceSha:'b'.repeat(40)};
+  const result=reviewAgentLoopContinuation(cloned,original,{
+    ...record(original,'failed'),
+    dispatchedAt:'2026-10-22T15:35:00.000Z',
+    evidenceVerified:false,
+  });
+  assert.equal(result.state,'SCOPE_MISMATCH');
+  assert.equal(result.reason,'IMMUTABLE_SOURCE_SHA_CHANGED');
+  assert.equal(result.nextAction,'STOP');
+  assert.equal(result.originalErrorCode,'MUTATION_STATE_UNKNOWN');
+  assert.equal(result.logicalMutationId,original.logicalMutationId);
+  assert.equal(result.requestId,original.requestId);
+  assert.equal(result.mayDispatch,false);
+  assert.equal(result.mayReplay,false);
+});
+test('same SHA but different enrolled worktree identity cannot resume',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse(example());
+  const result=reviewAgentLoopContinuation({...original,
+    runbookId:'cloned',worktreeId:randomUUID()
+  },original,record(original,'failed'));
+  assert.equal(result.state,'SCOPE_MISMATCH');
+  assert.equal(result.reason,'IMMUTABLE_WORKTREE_ID_CHANGED');
+  assert.equal(result.nextAction,'STOP');
+  assert.equal(result.originalErrorCode,'MUTATION_STATE_UNKNOWN');
+});
+test('legacy missing source SHA or worktree identity fails closed',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse(example());
+  for(const cp of [
+    {...original,sourceSha:undefined},
+    {...original,worktreeId:undefined},
+    {...original,sourceSha:undefined,worktreeId:undefined},
+  ]){
+    const result=reviewAgentLoopContinuation(cp,undefined,
+      record(original,'failed'));
+    assert.equal(result.state,'SCOPE_MISMATCH');
+    assert.equal(result.nextAction,'STOP');
+    assert.equal(result.mayReplay,false);
+    assert.equal(result.mayDispatch,false);
+  }
+});
+test('original #794 SHA-drift fixture without worktreeId still yields source STOP',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse({...example(),
+    worktreeId:undefined});
+  const result=reviewAgentLoopContinuation({...original,
+    sourceSha:'b'.repeat(40),runbookId:'copied',
+  },original,record(original,'failed'));
+  assert.equal(result.state,'SCOPE_MISMATCH');
+  assert.equal(result.reason,'IMMUTABLE_SOURCE_SHA_CHANGED');
+});
+test('same original source and worktree with alias change preserves UNKNOWN',()=>{
+  const original=AgentLoopCheckpointV1Schema.parse(example());
+  const result=reviewAgentLoopContinuation({...original,
+    runbookId:'renamed-after-restart',
+  },original,record(original,'failed'));
+  assert.equal(result.state,'RECONCILE_REQUIRED');
+  assert.equal(result.reason,'UNKNOWN_OR_POSSIBLY_DISPATCHED');
+  assert.equal(result.originalErrorCode,'MUTATION_STATE_UNKNOWN');
+  assert.equal(result.mayDispatch,false);
+  assert.equal(result.mayReplay,false);
 });

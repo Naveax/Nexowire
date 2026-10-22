@@ -24,7 +24,9 @@ export const AgentLoopCheckpointV1Schema=z.strictObject({
   sessionEpoch:uuid,
   ownerEpoch:z.number().int().positive().safe(),
   grantGeneration:z.number().int().positive().safe(),
+  // Optional for legacy parsing only; review requires both bindings.
   sourceSha:z.string().regex(/^[a-f0-9]{40}$|^[a-f0-9]{64}$/).optional(),
+  worktreeId:uuid.optional(),
   state:z.enum([
     'PLANNED','RESERVED','DISPATCH_MAY_HAVE_OCCURRED',
     'RECONCILE_REQUIRED','LOCAL_TERMINAL_NEEDS_PROOF',
@@ -47,7 +49,11 @@ export type AgentLoopReadOnlyDecision=Readonly<{
     | 'LOCAL_TERMINAL_NOT_INDEPENDENT_PROOF'
     | 'AUTHORITY_CHECK_REQUIRED'
     | 'ORIGINAL_LOGICAL_BINDING_MISSING'
-    | 'ORIGINAL_UNKNOWN_PROVENANCE_LOST';
+    | 'ORIGINAL_UNKNOWN_PROVENANCE_LOST'
+    | 'IMMUTABLE_SOURCE_SHA_CHANGED'
+    | 'IMMUTABLE_WORKTREE_ID_CHANGED'
+    | 'SOURCE_SHA_UNBOUND'
+    | 'WORKTREE_ID_UNBOUND';
   originalErrorCode?:string;
   nextAction:'READ_ONLY_RECONCILIATION'|'READ_ONLY_INSPECTION'|'STOP';
   mayReplay:false;
@@ -88,6 +94,18 @@ export function reviewAgentLoopCheckpoint(
   });
   if(previous && immutableFields.some(key=>previous[key]!==cp[key]))
     return result('SCOPE_MISMATCH','IMMUTABLE_REQUEST_SCOPE_CHANGED','STOP');
+  // SHA drift takes priority so #794's existing SHA-only fixture has
+  // explicit STOP semantics even without an enrolled worktreeId.
+  if(previous && previous.sourceSha!==cp.sourceSha)
+    return result('SCOPE_MISMATCH','IMMUTABLE_SOURCE_SHA_CHANGED','STOP');
+  if(previous && previous.worktreeId!==cp.worktreeId)
+    return result('SCOPE_MISMATCH','IMMUTABLE_WORKTREE_ID_CHANGED','STOP');
+  // Existing/legacy checkpoints with no immutable source/worktree scope
+  // must not be treated as a safe continuation of a mutating task.
+  if(!cp.sourceSha)
+    return result('SCOPE_MISMATCH','SOURCE_SHA_UNBOUND','STOP');
+  if(!cp.worktreeId)
+    return result('SCOPE_MISMATCH','WORKTREE_ID_UNBOUND','STOP');
   // A clone/restart cannot erase UNKNOWN provenance or silently declare
   // a different local state terminal. Reconciliation needs external proof.
   if(previous?.originalErrorCode==='MUTATION_STATE_UNKNOWN' &&
@@ -123,6 +141,8 @@ export function reviewAgentLoopCheckpoint(
  * future owner implementation; absence is never proof of a new mutation.
  * Both this object and the provided 'original' are untrusted local metadata:
  * this function cannot discover reissued logical IDs after full rollback.
+ * A trusted workspace owner must enroll worktreeId; a locally minted UUID
+ * or restored checkpoint is NOT physical worktree authority.
  */
 export function reviewAgentLoopContinuation(
   candidate:unknown,

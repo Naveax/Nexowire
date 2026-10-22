@@ -111,3 +111,30 @@ Even immutable local checkpoint fields can be rolled back together; a
 fresh minted logical ID after total rollback is undetectable without
 real independent non-restorable authority (#587). No physical Broker or
 external service deployment. The prohibited atomic CAS patch is not retried.
+
+## #794 worktree source-drift independent negative (22 October 2026)
+
+Independent #18 DRAFT PR #794, HEAD `765f59f1d7c5a0137fe2fd5c4515016ab4bdcd55`,
+exact CI `39823178271` 7/7 SUCCESS, reproduces an unsafe
+*classification gap*: logicalMutationId/requestId remain the same, but
+sourceSha changes after a cloned worktree and #783 originally returns
+RECONCILE_REQUIRED rather than explicit SCOPE_MISMATCH/STOP. All existing
+decisions already have mayDispatch:false and mayReplay:false; #794 does
+NOT establish actual Native replay or independently observed revocation.
+
+The #01 metadata contract now treats original `sourceSha` and
+`worktreeId` as immutable. An alias `runbookId` may change, but a
+changed SHA or worktreeId means SCOPE_MISMATCH/STOP with original UNKNOWN
+provenance retained. A legacy checkpoint lacking either binding parses
+only for safe diagnosis and returns STOP; importantly, #794's unbound
+worktree fixture still produces explicit SHA drift classification.
+These are SOURCE-ONLY checks, not code execution permission.
+
+Trusted workspace enrollment must attach a verified worktree ID and
+authoritative root/file-ID evidence. Comparing locally stored UUIDs or
+source SHA cannot detect simultaneously restored or forged original
+and cloned records. `RunbookStore` and `TaskGraphStore` are unchanged:
+#781 FAILED+clone redispatch remains UNSAFE, and #587 external
+commit-for-dispatch/rollback-independent witness remains BLOCKED.
+No independent #18 QA files were modified, no blocked P0 patch retried,
+no live Hub/Agent/Broker/UAC/DB/VM activity.
