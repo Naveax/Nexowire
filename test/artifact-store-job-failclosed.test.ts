@@ -216,6 +216,22 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
     await bridge.commit(scope, staged.sessionId!);
     const checkpoint = await adapter.persist({ ...input, job: done });
     assert.equal(checkpoint.artifacts[0]?.sha256, digest);
+    // The SHA can be identical but a manifest produced by a different
+    // durable transfer UUID is NOT this job's completed publication proof.
+    const foreignPath = 'transfer/foreign-operation.bin';
+    const foreign = await bridge.begin({ scope, artifactPath: foreignPath,
+      repository: input.repository, commitSha: input.commitSha,
+      producerOperationId: randomUUID(), size: bytes.length, sha256: digest,
+      testStatus: 'unverified', acceptanceStatus: 'pending' });
+    for (let offset = 0; offset < bytes.length; offset += 65536) {
+      await bridge.putChunk(scope, foreign.sessionId!, offset,
+        bytes.subarray(offset, offset + 65536).toString('base64'));
+    }
+    await bridge.commit(scope, foreign.sessionId!);
+    await assert.rejects(adapter.persist({ ...input, artifactPath: foreignPath,
+      job: done }), (e:unknown)=>e instanceof ArtifactBridgeError &&
+        e.code==='JOB_ARTIFACT_ATTESTATION_MISSING');
+
     // A plausible local commit ID is not a trusted off-host attestation.
     await assert.rejects(adapter.persist({ ...input,
       job: { ...done, publication: { ...done.publication!,
@@ -234,6 +250,21 @@ test('checkpoint adapter never treats job COMPLETED or a wrong digest as verifie
     const retrieved = await independent.getCheckpoint(scope, input.workspaceId);
     assert.equal(retrieved?.artifacts[0]?.sha256, digest);
     assert.equal((await adapter.get(scope, input.workspaceId, done))?.artifacts[0]?.sha256,digest);
+    // #781 cloned-runbook identity boundary: a distinct transfer UUID with
+    // the same owner/device and content must NOT inherit the old checkpoint.
+    await assert.rejects(adapter.get(scope,input.workspaceId,
+      {...done,id:randomUUID()}),
+      (e:unknown)=>e instanceof ArtifactBridgeError &&
+        e.code==='JOB_CHECKPOINT_TRANSFER_MISMATCH');
+    // A forged/rolled-back local job must not load an old verified checkpoint.
+    await assert.rejects(adapter.get(scope,input.workspaceId,
+      {...done,state:'MUTATION_UNKNOWN'}),
+      (e:unknown)=>e instanceof ArtifactBridgeError && e.code==='JOB_NOT_VERIFIED');
+    await assert.rejects(adapter.get(scope,input.workspaceId,
+      {...done,publication:{...done.publication!,durableCommitId:'a'.repeat(64)}}),
+      (e:unknown)=>e instanceof ArtifactBridgeError &&
+        e.code==='JOB_PUBLICATION_COMMIT_MISMATCH');
+
     grantActive = false;
     await assert.rejects(adapter.get(scope,input.workspaceId,done),
       (e:unknown)=>e instanceof TransferTrustError&&e.code==='CORE_OWNER_REVOKED');
