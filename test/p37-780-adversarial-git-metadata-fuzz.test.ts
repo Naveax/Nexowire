@@ -150,9 +150,9 @@ test('W37 inherited GIT_WORK_TREE/GIT_CONFIG_COUNT overrides cannot poison eithe
     process.env.GIT_CONFIG_COUNT = '1';
     process.env.GIT_CONFIG_KEY_0 = 'core.worktree';
     process.env.GIT_CONFIG_VALUE_0 = outside;
-    const snapshot = await executeCapability('workspace.snapshot', { path: allowed }, policy)
+    const snapshot = (await executeCapability('workspace.snapshot', { path: allowed }, policy))
       as { data: { root: string } };
-    const detect = await executeCapability('workspace.detect', { path: allowed }, policy)
+    const detect = (await executeCapability('workspace.detect', { path: allowed }, policy))
       as { data: { root: string } };
     assert.equal(path.resolve(snapshot.data.root), path.resolve(allowed));
     assert.equal(path.resolve(detect.data.root), path.resolve(allowed));
