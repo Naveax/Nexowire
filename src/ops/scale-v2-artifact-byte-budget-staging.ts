@@ -55,6 +55,28 @@ export interface TrustedOpenArtifact extends TrustedArtifactIdentity {
   sessionId:string;rootInvocationId:string;sizeBytes:number;
   sourceSha256:string;physicalFreeBytes:number;now:Date;
 }
+/** Protected server/CAS identity, NOT a runbook_id or client-supplied digest. */
+export interface TrustedLogicalOpenArtifact extends TrustedOpenArtifact {
+  originRunbookId:string;logicalOperationId:string;
+  logicalMutationSha256:string;ownerEpoch:number;grantGeneration:number;
+}
+export interface IndependentlyVerifiedLogicalAdmission {
+  ownerId:string;deviceId:string;projectId:string;
+  sessionId:string;rootInvocationId:string;
+  originRunbookId:string;logicalOperationId:string;
+  logicalMutationSha256:string;ownerEpoch:number;grantGeneration:number;
+  /** Off-host state under a CURRENT held CAS lease, no side effect sent. */
+  mutationState:'NEVER_DISPATCHED'|'MUTATION_UNKNOWN'|'DISPATCHED';
+}
+/** Must hold rollback-independent owner/mutation CAS through admission.
+ * This is an interface, NOT an installed external authority.
+ */
+export interface TrustedLogicalReservationAuthority {
+  withCurrentLogicalAdmission<T>(
+    binding:Readonly<TrustedLogicalOpenArtifact>,
+    apply:(proof:Readonly<IndependentlyVerifiedLogicalAdmission>)=>Promise<T>,
+  ):Promise<T>;
+}
 export interface TrustedArtifactChunk extends TrustedArtifactIdentity {
   sessionId:string;requestId:string;offsetBytes:number;byteCount:number;
   chunkSha256:string;now:Date;
@@ -135,6 +157,18 @@ export function initArtifactBudgetFixture(db:DatabaseSync):void {
       'state TEXT NOT NULL);'+
     'CREATE INDEX IF NOT EXISTS budget_chunk_minute_owner '+
       'ON budget_artifact_chunks(owner_id,accepted_at_ms);'+
+    'CREATE TABLE IF NOT EXISTS budget_artifact_logical_reservations ('+
+      'owner_id TEXT NOT NULL,project_id TEXT NOT NULL,'+
+      'logical_operation_id TEXT NOT NULL,device_id TEXT NOT NULL,'+
+      'origin_runbook_id TEXT NOT NULL,mutation_sha256 TEXT NOT NULL,'+
+      'owner_epoch INTEGER NOT NULL,grant_generation INTEGER NOT NULL,'+
+      'session_id TEXT NOT NULL,root_invocation_id TEXT NOT NULL,'+
+      'PRIMARY KEY(owner_id,project_id,logical_operation_id));'+
+    // One immutable semantic effect cannot be laundered through a newly
+    // fabricated logicalOperationId. This index persists after RELEASED.
+    'CREATE UNIQUE INDEX IF NOT EXISTS budget_logical_semantic_once '+
+      'ON budget_artifact_logical_reservations '+
+      '(owner_id,project_id,mutation_sha256);'+
     'CREATE TABLE IF NOT EXISTS budget_artifact_clock ('+
       'singleton INTEGER PRIMARY KEY CHECK(singleton=1),last_seen_ms INTEGER NOT NULL);'
   );
@@ -143,7 +177,8 @@ export function initArtifactBudgetFixture(db:DatabaseSync):void {
 export class StagingArtifactByteBudget {
   constructor(private readonly db:DatabaseSync,
               private readonly policy:ArtifactBudgetPolicy=STAGING_ARTIFACT_BUDGET,
-              private readonly trustedProofs?:ArtifactDurableProofVerifier){
+              private readonly trustedProofs?:ArtifactDurableProofVerifier,
+              private readonly requireLogicalAdmission=false){
     policyValid(policy);
   }
   private transaction<T>(work:()=>T):T {
@@ -178,42 +213,123 @@ export class StagingArtifactByteBudget {
       'ON CONFLICT(singleton) DO UPDATE SET last_seen_ms=excluded.last_seen_ms'
     ).run(t);
   }
-  /** One logical root is registered once. No paid entitlement is granted. */
+  /** Legacy staging-only call. No canonical mutation admission: must NOT be
+   * used for production runbook tasks or interpreted as replay prevention.
+   */
   begin(x:TrustedOpenArtifact):BudgetDecision {
+    if(this.requireLogicalAdmission)
+      throw Error('LOGICAL_ADMISSION_REQUIRED');
     id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
     id(x.sessionId,'SESSION');id(x.rootInvocationId,'ROOT');sha(x.sourceSha256);
     const size=count(x.sizeBytes,'FILE_SIZE'),free=count(x.physicalFreeBytes,'DISK_FREE');
     const t=ms(x.now);
-    return this.transaction(()=>{
-      this.trustedClock(t);
-      const bySession=this.session(x.sessionId);
-      const byRoot=this.db.prepare(
-        'SELECT * FROM budget_artifact_sessions WHERE owner_id=? AND root_invocation_id=?'
-      ).get(x.ownerId,x.rootInvocationId) as Row|undefined;
-      const existed=bySession??byRoot;
-      if(existed){
-        if(!subjectMatch(existed,x)||existed.session_id!==x.sessionId ||
-           existed.root_invocation_id!==x.rootInvocationId ||
-           existed.size_bytes!==size||existed.source_sha256!==x.sourceSha256)
-          return 'DENIED_REPLAY';
-        return existed.state==='OPEN'?'ALREADY_RESERVED':'DENIED_STATE';
-      }
-      if(size<1)return 'DENIED_CAPACITY';
-      const global=this.sum('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>?', ['RELEASED']);
-      const owner=this.sum('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>? AND owner_id=?',['RELEASED',x.ownerId]);
-      if(size>this.policy.ownerStorageBytes-owner ||
-         size>this.policy.globalStorageBytes-global ||
-         size>free-global-this.policy.minFreeDiskBytes) return 'DENIED_CAPACITY';
-      const active=this.sum('SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state=?',['OPEN']);
-      const ownerActive=this.sum('SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state=? AND owner_id=?',['OPEN',x.ownerId]);
-      if(active>=this.policy.maxConcurrentGlobal||
-         ownerActive>=this.policy.maxConcurrentPerOwner) return 'DENIED_CONCURRENCY';
-      this.db.prepare('INSERT INTO budget_artifact_sessions '+
-        '(session_id,owner_id,device_id,project_id,root_invocation_id,size_bytes,'+
-        'source_sha256,offset_bytes,state) VALUES(?,?,?,?,?,?,?,0,?)'
-      ).run(x.sessionId,x.ownerId,x.deviceId,x.projectId,x.rootInvocationId,
-        size,x.sourceSha256,'OPEN');
-      return 'RESERVED';
+    return this.transaction(()=>this.beginInside(x,
+      count(x.sizeBytes,'FILE_SIZE'),count(x.physicalFreeBytes,'DISK_FREE'),ms(x.now)));
+  }
+  /** Shared atomic SQLite reservation body. Never call outside transaction. */
+  private beginInside(x:TrustedOpenArtifact,size:number,free:number,t:number):BudgetDecision {
+    this.trustedClock(t);
+    const bySession=this.session(x.sessionId);
+    const byRoot=this.db.prepare(
+      'SELECT * FROM budget_artifact_sessions WHERE owner_id=? AND root_invocation_id=?'
+    ).get(x.ownerId,x.rootInvocationId) as Row|undefined;
+    const existed=bySession??byRoot;
+    if(existed){
+      if(!subjectMatch(existed,x)||existed.session_id!==x.sessionId ||
+         existed.root_invocation_id!==x.rootInvocationId ||
+         existed.size_bytes!==size||existed.source_sha256!==x.sourceSha256)
+        return 'DENIED_REPLAY';
+      return existed.state==='OPEN'?'ALREADY_RESERVED':'DENIED_STATE';
+    }
+    if(size<1)return 'DENIED_CAPACITY';
+    const global=this.sum('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>?', ['RELEASED']);
+    const owner=this.sum('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>? AND owner_id=?',['RELEASED',x.ownerId]);
+    if(size>this.policy.ownerStorageBytes-owner ||
+       size>this.policy.globalStorageBytes-global ||
+       size>free-global-this.policy.minFreeDiskBytes) return 'DENIED_CAPACITY';
+    const active=this.sum('SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state=?',['OPEN']);
+    const ownerActive=this.sum('SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state=? AND owner_id=?',['OPEN',x.ownerId]);
+    if(active>=this.policy.maxConcurrentGlobal||
+       ownerActive>=this.policy.maxConcurrentPerOwner) return 'DENIED_CONCURRENCY';
+    this.db.prepare('INSERT INTO budget_artifact_sessions '+
+      '(session_id,owner_id,device_id,project_id,root_invocation_id,size_bytes,'+
+      'source_sha256,offset_bytes,state) VALUES(?,?,?,?,?,?,?,0,?)'
+    ).run(x.sessionId,x.ownerId,x.deviceId,x.projectId,x.rootInvocationId,
+      size,x.sourceSha256,'OPEN');
+    return 'RESERVED';
+  }
+  /** Strict staging-only protected logical mutation admission (#791).
+   * No trusted off-host CAS provider => REJECT before any SQLite reservation.
+   * The immutable primary key is never freed, even after disk deletion,
+   * so a cloned runbook cannot create a second local reserved session.
+   * All Hubs MUST share the same durable CAS and quota store for a global
+   * guarantee; this source does NOT deploy either service.
+   */
+  async beginForLogicalMutation(
+    x:TrustedLogicalOpenArtifact,
+    authority?:TrustedLogicalReservationAuthority,
+  ):Promise<BudgetDecision>{
+    if(!authority?.withCurrentLogicalAdmission)
+      throw Error('LOGICAL_ADMISSION_EXTERNAL_CAS_REQUIRED');
+    id(x.ownerId,'OWNER');id(x.deviceId,'DEVICE');id(x.projectId,'PROJECT');
+    id(x.sessionId,'SESSION');id(x.rootInvocationId,'ROOT');
+    id(x.originRunbookId,'ORIGIN_RUNBOOK');
+    id(x.logicalOperationId,'LOGICAL_OPERATION');
+    sha(x.sourceSha256);sha(x.logicalMutationSha256);
+    if(!isPositive(x.ownerEpoch)||!isPositive(x.grantGeneration))
+      throw Error('LOGICAL_ADMISSION_OWNER_EPOCH_INVALID');
+    const size=count(x.sizeBytes,'FILE_SIZE');
+    const free=count(x.physicalFreeBytes,'DISK_FREE');
+    const t=ms(x.now);
+    return authority.withCurrentLogicalAdmission(x,async proof=>{
+      if(!proof||proof.ownerId!==x.ownerId||
+        proof.deviceId!==x.deviceId||proof.projectId!==x.projectId||
+        proof.sessionId!==x.sessionId||
+        proof.rootInvocationId!==x.rootInvocationId||
+        proof.originRunbookId!==x.originRunbookId||
+        proof.logicalOperationId!==x.logicalOperationId||
+        proof.logicalMutationSha256!==x.logicalMutationSha256||
+        proof.ownerEpoch!==x.ownerEpoch||
+        proof.grantGeneration!==x.grantGeneration||
+        proof.mutationState!=='NEVER_DISPATCHED')
+        throw Error('LOGICAL_ADMISSION_RECONCILE_REQUIRED');
+      // Protected owner/CAS must remain current and EXCLUSIVE throughout
+      // the synchronous SQLite transaction, including both inserts.
+      return this.transaction(()=>{
+        const prior=this.db.prepare(
+          'SELECT logical_operation_id,mutation_sha256,session_id,root_invocation_id,device_id,origin_runbook_id,owner_epoch,grant_generation FROM budget_artifact_logical_reservations '+
+          'WHERE owner_id=? AND project_id=? AND '+
+          '(logical_operation_id=? OR mutation_sha256=?)'
+        ).get(x.ownerId,x.projectId,x.logicalOperationId,
+          x.logicalMutationSha256) as
+          {logical_operation_id:string;mutation_sha256:string;
+           session_id:string;root_invocation_id:string;device_id:string;
+           origin_runbook_id:string;owner_epoch:number;grant_generation:number}|undefined;
+        if(prior){
+          // Only the exact same session/root is an idempotent retry.
+          if(prior.device_id!==x.deviceId||
+             prior.origin_runbook_id!==x.originRunbookId||
+             prior.owner_epoch!==x.ownerEpoch||
+             prior.grant_generation!==x.grantGeneration||
+             prior.logical_operation_id!==x.logicalOperationId||
+             prior.mutation_sha256!==x.logicalMutationSha256||
+             prior.session_id!==x.sessionId||
+             prior.root_invocation_id!==x.rootInvocationId)return 'DENIED_REPLAY';
+          const replay=this.beginInside(x,size,free,t);
+          return replay==='ALREADY_RESERVED'?'ALREADY_RESERVED':'DENIED_STATE';
+        }
+        const decision=this.beginInside(x,size,free,t);
+        if(decision!=='RESERVED')return decision;
+        this.db.prepare(
+          'INSERT INTO budget_artifact_logical_reservations '+
+          '(owner_id,project_id,logical_operation_id,device_id,origin_runbook_id,'+
+          'mutation_sha256,owner_epoch,grant_generation,session_id,root_invocation_id) '+
+          'VALUES(?,?,?,?,?,?,?,?,?,?)'
+        ).run(x.ownerId,x.projectId,x.logicalOperationId,x.deviceId,
+          x.originRunbookId,x.logicalMutationSha256,x.ownerEpoch,
+          x.grantGeneration,x.sessionId,x.rootInvocationId);
+        return 'RESERVED';
+      });
     });
   }
   /**
