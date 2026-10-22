@@ -52,7 +52,21 @@ export class VerifiedTransferCheckpointAdapter {
   async get(scope: ArtifactScope, workspaceId: string, job: Readonly<TransferJob>) {
     await this.current(scope, job);
     const checkpoint = await this.store.getCheckpoint(scope, workspaceId);
-    await this.current(scope, job);
+    if (!checkpoint) return null;
+    if (job.state !== 'COMPLETED' || job.bytesConfirmed !== job.bytesTotal) {
+      throw new ArtifactBridgeError('JOB_NOT_VERIFIED',
+        'An UNKNOWN or locally cloned transfer cannot recover a completed checkpoint.');
+    }
+    if (checkpoint.artifacts.length !== 1 || !checkpoint.artifacts.every(manifest =>
+      manifest.producerOperationId === job.id &&
+      manifest.sha256 === job.sha256 && manifest.size === job.bytesTotal &&
+      manifest.scope.accountId === scope.accountId &&
+      manifest.scope.projectId === scope.projectId &&
+      manifest.scope.deviceId === scope.deviceId)) {
+      throw new ArtifactBridgeError('JOB_CHECKPOINT_TRANSFER_MISMATCH',
+        'Checkpoint artifact provenance does not bind the original transfer UUID.');
+    }
+    await this.published(scope, job);
     return checkpoint;
   }
   async persist(input: {
@@ -70,7 +84,8 @@ export class VerifiedTransferCheckpointAdapter {
     }
     await this.published(scope, job);
     const manifest = await this.store.get(scope, input.artifactPath);
-    if (!manifest || manifest.sha256 !== job.sha256 ||
+    if (!manifest || manifest.producerOperationId !== job.id ||
+        manifest.sha256 !== job.sha256 ||
         manifest.size !== job.bytesTotal || manifest.repository !== input.repository ||
         manifest.commitSha !== input.commitSha) {
       throw new ArtifactBridgeError('JOB_ARTIFACT_ATTESTATION_MISSING',
