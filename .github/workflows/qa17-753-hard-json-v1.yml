@@ -1,0 +1,31 @@
+name: QA17 strict JSON v1 acceptance (expected red on unfixed #756)
+on:
+  push:
+    branches:
+      - test/qa17-753-exact-v1-reject-on-756-20261022
+permissions:
+  contents: read
+concurrency:
+  group: qa17-strict-v1-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-strict-json-acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck exact source and QA
+        run: npm run typecheck
+      - name: Unmodified #705 native provider forgery, PID FILETIME and legacy adapter negatives
+        run: node --test --import tsx --test-concurrency=1 test/qa-17-700-native-red-preservation.test.ts
+      - name: Unmodified #709 tree/ancestor ACL cases
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-protected-tree.test.ts test/core-broker-transitive-import-negative.test.ts
+      - name: Unmodified #756 TEMP effective ACL/PID and DUP_HANDLE tests
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-native-effective-access.test.ts test/core-broker-native-pid-dup-access.test.ts
+      - name: HARD strict JSON v1 acceptance; preserve RED on wrong-type acceptance
+        run: node --test --import tsx --test-concurrency=1 test/qa-17-753-hard-json-v1-type-rejection.test.ts
