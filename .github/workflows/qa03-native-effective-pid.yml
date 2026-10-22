@@ -1,0 +1,25 @@
+name: QA03 Native Windows Effective Access and PID Boundary
+on:
+  pull_request:
+    branches:
+      - test/03-709-qa17-qa19-integration-20261022
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-effective:
+    runs-on: windows-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Real native current-token CreateFile effective ACL and PID-DUP_HANDLE synthetic fixtures
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-native-effective-access.test.ts test/core-broker-native-pid-dup-access.test.ts
+      - name: Unchanged previous owner negative source gates
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-process-witness.test.ts test/core-broker-protected-tree.test.ts test/core-broker-transitive-import-negative.test.ts
