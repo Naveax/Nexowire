@@ -28,6 +28,7 @@ const scope:ServerBoundArtifactCleanup={
   ownerId:'owner-signed-high',deviceId:'device-signed-high',
   projectId:'project-alpha',sessionId:'session-alpha-01',
   rootInvocationId:'root-alpha-01',ownerEpoch:31,deviceEpoch:19,
+  expectedSizeBytes:2*65536,expectedSourceSha256:'a'.repeat(64),
   dispatchedWriterEpoch:71,
   pendingDispatchState:'DISPATCHED_OR_UNKNOWN',
   lastDispatchedRequestId:'native-request-0001',
@@ -71,6 +72,20 @@ function fixture(){
     receiptNativeResolution:'MUTATION_UNKNOWN_PENDING' as
       'NEVER_DISPATCHED_CLEANUP_VERIFIED'|'DISPATCHED_CLEANUP_VERIFIED'|
       'MUTATION_UNKNOWN_PENDING'|'FORGED_ACK_PENDING'|'OWNER_REPAIR_PENDING',
+    publicationDisposition:'NOT_ATTEMPTED_VERIFIED' as
+      'NOT_ATTEMPTED_VERIFIED'|'AUTHENTICATED_FINAL_VERIFIED'|
+      'PUBLICATION_UNKNOWN_PENDING'|'FORGED_FINAL_RECEIPT_PENDING'|
+      'OWNER_REPAIR_PENDING',
+    witnessPublicationDisposition:'NOT_ATTEMPTED_VERIFIED' as
+      'NOT_ATTEMPTED_VERIFIED'|'AUTHENTICATED_FINAL_VERIFIED'|
+      'PUBLICATION_UNKNOWN_PENDING'|'FORGED_FINAL_RECEIPT_PENDING'|
+      'OWNER_REPAIR_PENDING',
+    publicationRequestId:null as string|null,
+    publicationEpoch:null as number|null,
+    publicationReceiptId:null as string|null,
+    publishedSizeBytes:null as number|null,
+    publishedSha256:null as string|null,
+    finalTargetReadbackSha256:null as string|null,
     actualDeletion:false,writerStopped:false,
     corruptProof:false,
   };
@@ -128,6 +143,13 @@ function fixture(){
         unresolvedNativeMutations:evidence.unresolvedNativeMutations,
         fencingEpoch:evidence.staleReadback
           ? witness.fencingEpoch+1 : evidence.fencingEpoch,
+        publicationDisposition:evidence.publicationDisposition,
+        publicationRequestId:evidence.publicationRequestId,
+        publicationEpoch:evidence.publicationEpoch,
+        publicationReceiptId:evidence.publicationReceiptId,
+        publishedSizeBytes:evidence.publishedSizeBytes,
+        publishedSha256:evidence.publishedSha256,
+        finalTargetReadbackSha256:evidence.finalTargetReadbackSha256,
         // Independent protected store readback, not a reflected ACK.
         receiptId:evidence.immutableReceiptId,
         inFlightNativeWriters:evidence.activeWriters,
@@ -149,6 +171,13 @@ function fixture(){
           deletionEpoch:evidence.deletedAt,fencingEpoch:evidence.fencingEpoch,
           reconciliationEpoch:evidence.reconciliationEpoch,
           nativeResolution:evidence.receiptNativeResolution,
+          publicationDisposition:evidence.witnessPublicationDisposition,
+          publicationRequestId:evidence.publicationRequestId,
+          publicationEpoch:evidence.publicationEpoch,
+          publicationReceiptId:evidence.publicationReceiptId,
+          publishedSizeBytes:evidence.publishedSizeBytes,
+          publishedSha256:evidence.publishedSha256,
+          finalTargetReadbackSha256:evidence.finalTargetReadbackSha256,
           receiptId:evidence.forgedReceiptId
             ?'client-forged-receipt-9999':evidence.immutableReceiptId,
         };
@@ -689,5 +718,143 @@ test('missing or negative unresolved mutation counters never count as independen
    }
    assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
      totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#754 publication UNKNOWN after lost signed ACK cannot release storage after writer-stop/deletion',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.publicationDisposition='PUBLICATION_UNKNOWN_PENDING';
+   f.evidence.witnessPublicationDisposition='PUBLICATION_UNKNOWN_PENDING';
+   for(const forged of [
+     scope,
+     {...scope,durableDeletionVerified:true,writersStoppedVerified:true,
+       finalPublishedVerified:true},
+   ]){
+     await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(forged),
+       /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   }
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#754 forged or unsigned final receipt cannot authorize refund even with valid disk deletion',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   for(const state of ['FORGED_FINAL_RECEIPT_PENDING','OWNER_REPAIR_PENDING'] as const){
+     f.evidence.publicationDisposition=state;
+     f.evidence.witnessPublicationDisposition=state;
+     await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+       /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   }
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#752 double reconnect without authenticated publication readback cannot upgrade UNKNOWN or release quota',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.publicationDisposition='PUBLICATION_UNKNOWN_PENDING';
+   f.evidence.witnessPublicationDisposition='NOT_ATTEMPTED_VERIFIED';
+   for(let reconnect=0;reconnect<2;reconnect++){
+     await assert.rejects(()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+       /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+     assert.equal(f.second.stageChunk({...baseChunk(),now:advanced}),'DENIED_STATE');
+   }
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#754 authentic final publish plus independent target digest readback can release disk exactly once',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.publicationRequestId='native-final-request-0001';
+   f.evidence.publicationEpoch=72;
+   f.evidence.publicationReceiptId='external-signer-receipt-0001';
+   f.evidence.publishedSizeBytes=SIZE;
+   f.evidence.publishedSha256=hash;
+   f.evidence.finalTargetReadbackSha256=hash;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:0,
+     totalSessions:1,releasedSessions:1});
+ }finally{f.close()}
+});
+
+test('#754 final Native receipt must bind immutable request ID, complete digest and target digest/size',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.publicationRequestId='native-final-request-0001';
+   f.evidence.publicationEpoch=72;
+   f.evidence.publicationReceiptId='external-signer-receipt-0001';
+   f.evidence.publishedSizeBytes=SIZE;
+   f.evidence.publishedSha256=hash;
+   f.evidence.finalTargetReadbackSha256=hash;
+   const tamper=[
+     ()=>{f.evidence.publicationRequestId='';},
+     ()=>{f.evidence.publicationReceiptId='';},
+     ()=>{f.evidence.publishedSha256='0'.repeat(64);},
+     ()=>{f.evidence.finalTargetReadbackSha256='0'.repeat(64);},
+     ()=>{f.evidence.publishedSizeBytes=SIZE+1;},
+     ()=>{f.evidence.publicationEpoch=0;},
+   ];
+   for(const change of tamper){
+     const state={
+       publicationRequestId:f.evidence.publicationRequestId,
+       publicationReceiptId:f.evidence.publicationReceiptId,
+       publishedSha256:f.evidence.publishedSha256,
+       finalTargetReadbackSha256:f.evidence.finalTargetReadbackSha256,
+       publishedSizeBytes:f.evidence.publishedSizeBytes,
+       publicationEpoch:f.evidence.publicationEpoch,
+     };
+     change();
+     await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+       /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+     Object.assign(f.evidence,state);
+   }
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('published authenticated receipt from old owner generation must not release after re-pair',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.publicationRequestId='native-final-request-0001';
+   f.evidence.publicationEpoch=72;
+   f.evidence.publicationReceiptId='external-signer-receipt-0001';
+   f.evidence.publishedSizeBytes=SIZE;
+   f.evidence.publishedSha256=hash;
+   f.evidence.finalTargetReadbackSha256=hash;
+   f.evidence.deviceEpoch=scope.deviceEpoch+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.deviceEpoch=scope.deviceEpoch;
+   f.evidence.revoked=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /AUTHORITY_STALE_REVOKED_UNKNOWN/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('publication was independently never attempted and stage deletion verified: first-only disk release',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   assert.equal(f.evidence.publicationDisposition,'NOT_ATTEMPTED_VERIFIED');
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   assert.equal(f.stats().admittedBytes,CHUNK);
  }finally{f.close()}
 });

@@ -12,6 +12,9 @@ import type {ServerBoundQuotaJob,TrustedCoreArtifactAuthority,
  */
 export interface ServerBoundArtifactCleanup extends ServerBoundQuotaJob {
   readonly rootInvocationId:string;
+  /** Server-loaded immutable complete artifact identity, never Native ACK. */
+  readonly expectedSourceSha256:string;
+  readonly expectedSizeBytes:number;
   /** Highest dispatched writer generation, including writes with lost ACK. */
   readonly dispatchedWriterEpoch:number;
   /** Authenticated durable predispatch journal, never caller JSON. */
@@ -32,7 +35,27 @@ export type FencedNativeResolution=
   'MUTATION_UNKNOWN_PENDING'|
   'FORGED_ACK_PENDING'|
   'OWNER_REPAIR_PENDING';
-export interface IndependentFencedDeletionWitness {
+/** Protected #08 publication journal, not a Hub status / user boolean.
+ * UNKNOWN and forged final receipts deny quota cleanup even if staged bytes
+ * appear deleted. A production provider MUST independently authenticate the
+ * final receipt AND read back target size/digest before VERIFIED is returned.
+ */
+export type FencedPublicationDisposition=
+  'NOT_ATTEMPTED_VERIFIED'|
+  'AUTHENTICATED_FINAL_VERIFIED'|
+  'PUBLICATION_UNKNOWN_PENDING'|
+  'FORGED_FINAL_RECEIPT_PENDING'|
+  'OWNER_REPAIR_PENDING';
+export interface TrustedPublicationFacts {
+  readonly publicationDisposition:FencedPublicationDisposition;
+  readonly publicationRequestId:string|null;
+  readonly publicationEpoch:number|null;
+  readonly publicationReceiptId:string|null;
+  readonly publishedSizeBytes:number|null;
+  readonly publishedSha256:string|null;
+  readonly finalTargetReadbackSha256:string|null;
+}
+export interface IndependentFencedDeletionWitness extends TrustedPublicationFacts {
   readonly ownerId:string;readonly deviceId:string;
   readonly projectId:string;readonly sessionId:string;
   readonly rootInvocationId:string;readonly ownerEpoch:number;
@@ -54,7 +77,7 @@ export interface IndependentFencedDeletionWitness {
  * authority, not a claimed receipt in client JSON or a local SQLite mirror.
  * Values MUST be read under the same exclusive writer-fence lease.
  */
-export interface CurrentFencedDeletionReadback {
+export interface CurrentFencedDeletionReadback extends TrustedPublicationFacts {
   readonly ownerId:string;readonly deviceId:string;
   readonly projectId:string;readonly sessionId:string;
   readonly rootInvocationId:string;
@@ -93,6 +116,28 @@ const validId=(x:string)=>typeof x==='string'&&
   /^[A-Za-z0-9_.:@-]{8,128}$/.test(x);
 const epoch=(x:number)=>Number.isSafeInteger(x)&&x>0;
 const chunkSha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+const validPublication=(p:TrustedPublicationFacts,scope:ServerBoundArtifactCleanup)=>{
+  if(p?.publicationDisposition==='NOT_ATTEMPTED_VERIFIED')
+    return p.publicationRequestId===null&&
+      p.publicationEpoch===null&&p.publicationReceiptId===null&&
+      p.publishedSizeBytes===null&&p.publishedSha256===null&&
+      p.finalTargetReadbackSha256===null;
+  return p?.publicationDisposition==='AUTHENTICATED_FINAL_VERIFIED'&&
+    validId(p.publicationRequestId as string)&&
+    epoch(p.publicationEpoch as number)&&
+    validId(p.publicationReceiptId as string)&&
+    p.publishedSizeBytes===scope.expectedSizeBytes&&
+    p.publishedSha256===scope.expectedSourceSha256&&
+    p.finalTargetReadbackSha256===scope.expectedSourceSha256;
+};
+const samePublication=(a:TrustedPublicationFacts,b:TrustedPublicationFacts)=>
+  a.publicationDisposition===b.publicationDisposition&&
+  a.publicationRequestId===b.publicationRequestId&&
+  a.publicationEpoch===b.publicationEpoch&&
+  a.publicationReceiptId===b.publicationReceiptId&&
+  a.publishedSizeBytes===b.publishedSizeBytes&&
+  a.publishedSha256===b.publishedSha256&&
+  a.finalTargetReadbackSha256===b.finalTargetReadbackSha256;
 const dispatchedIdentity=(x:{
   pendingDispatchState:'NEVER_DISPATCHED'|'DISPATCHED_OR_UNKNOWN';
   lastDispatchedRequestId:string|null;lastDispatchedChunkSha256:string|null;
@@ -121,6 +166,7 @@ function validWitness(
     proof.rootInvocationId===scope.rootInvocationId&&
     proof.ownerEpoch===scope.ownerEpoch&&
     proof.deviceEpoch===scope.deviceEpoch&&
+    validPublication(proof,scope)&&
     dispatchedIdentity(proof)&&
     proof.lastDispatchedRequestId===scope.lastDispatchedRequestId&&
     proof.lastDispatchedChunkSha256===scope.lastDispatchedChunkSha256&&
@@ -153,6 +199,9 @@ export class StagingArtifactFencedCleanupAdmission {
       !validId(scope.projectId)||!validId(scope.sessionId)||
       !validId(scope.rootInvocationId)||!epoch(scope.ownerEpoch)||
       !epoch(scope.deviceEpoch)||
+      !chunkSha(scope.expectedSourceSha256)||
+      !Number.isSafeInteger(scope.expectedSizeBytes)||
+      scope.expectedSizeBytes<=0||
       !Number.isSafeInteger(scope.dispatchedWriterEpoch)||
       scope.dispatchedWriterEpoch<0||
       !dispatchedIdentity(scope)||
@@ -180,6 +229,8 @@ export class StagingArtifactFencedCleanupAdmission {
         current.rootInvocationId!==scope.rootInvocationId||
         current.ownerEpoch!==scope.ownerEpoch||
         current.deviceEpoch!==scope.deviceEpoch||
+        !validPublication(current,scope)||
+        !samePublication(current,witness)||
         !epoch(current.writerRevokeEpoch)||
         current.writerRevokeEpoch<=scope.dispatchedWriterEpoch||
         !Number.isSafeInteger(current.nativeDispatchHighWaterEpoch)||
