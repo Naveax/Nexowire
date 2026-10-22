@@ -1,0 +1,80 @@
+{
+  "nodes": [
+    {
+      "pr": 766,
+      "head_sha": "4b2f9c1941000a93919913a6e0c06c8008dc35bf",
+      "head_ref": "qa/worker30-final-receipt-quota-unknown-20261022",
+      "base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "base_ref": "feat/08-publish-receipt-20261022",
+      "files": [
+        "docs/SCALE_WORKER30_FINAL_PUBLISH_QUOTA_STOP_20261022.md",
+        "test/worker30-final-publication-quota-stop-seam.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "head_sha": "4b2f9c1941000a93919913a6e0c06c8008dc35bf",
+        "merge_base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "4b2f9c1941000a93919913a6e0c06c8008dc35bf"
+      }
+    },
+    {
+      "pr": 767,
+      "head_sha": "6967cc92ae85e5d1034591940d273615c4056e00",
+      "head_ref": "feat/04-final-dispatch-grant-20261022",
+      "base_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+      "base_ref": "feat/04-late-permit-effective-20261022",
+      "files": [
+        "docs/NEXOWIRE_ACCESS_FINAL_NATIVE_CAS_GRANT_20261022.md",
+        "src/product/access-final-dispatch-authority.ts",
+        "test/access-late-permit-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+        "head_sha": "6967cc92ae85e5d1034591940d273615c4056e00",
+        "merge_base_sha": "93acbb7a4e830485ce94015b3c76837a3fcdad34",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39803417079,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6967cc92ae85e5d1034591940d273615c4056e00"
+      }
+    },
+    {
+      "pr": 768,
+      "head_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+      "head_ref": "fix/08-final-monotonic-20261022",
+      "base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+      "base_ref": "feat/08-publish-receipt-20261022",
+      "files": [
+        "docs/ARTIFACT_EXTERNAL_PUBLISH_COMMIT_20261022.md",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-08-final-native-receipt.test.ts",
+        "test/artifact-588-cross-device.e2e.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "head_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e",
+        "merge_base_sha": "3a5bf392109d17dbf2650a18398917d5501fd488",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": null,
+        "status": "unknown",
+        "conclusion": null,
+        "queried_head_sha": "00ad9a4f061a4da2a0215e470b302f1e25950e4e"
+      }
+    }
+  ]
+}

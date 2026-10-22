@@ -1,0 +1,79 @@
+{
+  "nodes": [
+    {
+      "pr": 769,
+      "head_sha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+      "head_ref": "test/qa16-pr747-758-exact-ci-20261022",
+      "base_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+      "base_ref": "test/qa16-pr730-745-docsonly-20261022",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR747_758_20261022.md",
+        "docs/qa/QA_20261022_PR747_758_EXACT_HEAD.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-747-758-exact-head-evidence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+        "head_sha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+        "merge_base_sha": "74917540d8977c50430b103f32c872ce800bf86e",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39803688568,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19"
+      }
+    },
+    {
+      "pr": 770,
+      "head_sha": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+      "head_ref": "test/06-754-final-publish-proof-20261022",
+      "base_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+      "base_ref": "test/06-742-orphan-status-no-replay-20261022",
+      "files": [
+        "docs/CONNECTION_06_754_708_FINAL_PUBLISH_20261022.md",
+        "src/mcp/cross-device-worker-journal-link.ts",
+        "test/connection-754-native-publication-readback.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+        "head_sha": "131d96cdab40a68f0b12c6991d330e9d62573bf0",
+        "merge_base_sha": "95bea58abf5be7e0fb4a3c8d7798285423e97573",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39804271245,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "131d96cdab40a68f0b12c6991d330e9d62573bf0"
+      }
+    },
+    {
+      "pr": 771,
+      "head_sha": "84856d5474f1f6177610e7a7e53da62135cc7bcb",
+      "head_ref": "test/10-public-core-readout-provider-cas-negative-20261022",
+      "base_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+      "base_ref": "test/10-broker-filetime-on-709-20261022",
+      "files": [
+        "test/core-public-readonly-provider-cas-contract-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+        "head_sha": "84856d5474f1f6177610e7a7e53da62135cc7bcb",
+        "merge_base_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39804391279,
+        "status": "queued",
+        "conclusion": null,
+        "queried_head_sha": "84856d5474f1f6177610e7a7e53da62135cc7bcb"
+      }
+    }
+  ]
+}
