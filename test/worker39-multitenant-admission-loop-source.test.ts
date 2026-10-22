@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {mkdtemp,rm} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
