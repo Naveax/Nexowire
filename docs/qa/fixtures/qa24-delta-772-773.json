@@ -51,10 +51,19 @@
         "status": "ahead"
       },
       "ci": {
-        "run_id": null,
+        "run_id": 39804484972,
         "status": "unknown",
         "conclusion": null,
-        "queried_head_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789"
+        "queried_head_sha": "10d3fedc899309d005abc5e07f34f90cf36a6789",
+        "known_run_id_verified": true,
+        "reason": "Direct exact-head run query inconsistent; run jobs independently show browser-live FAILURE. No overall SUCCESS."
+      },
+      "inherited_ci_job": {
+        "job_id": 119913921496,
+        "name": "browser-live",
+        "conclusion": "failure",
+        "failed_step": "Physical Windows Job Object regressions",
+        "failure": "fast-exit exited before stdout captured, iteration 1"
       }
     },
     {
