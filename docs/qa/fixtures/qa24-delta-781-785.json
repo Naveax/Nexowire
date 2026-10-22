@@ -1,0 +1,126 @@
+{
+  "scope": "781-785 exact SHA GitHub observation; historical after capture",
+  "nodes": [
+    {
+      "pr": 781,
+      "head_sha": "89a865363829c8c30a74de1516e53a697549c05b",
+      "head_ref": "qa/18-runbook-clone-unknown-replay-20261022",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "files": [
+        "test/qa-18-durable-runbook-cloned-unknown-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "89a865363829c8c30a74de1516e53a697549c05b",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39816363122,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "89a865363829c8c30a74de1516e53a697549c05b"
+      }
+    },
+    {
+      "pr": 782,
+      "head_sha": "3b5c807a2763eee73dea9c016395f925cf8f28df",
+      "head_ref": "test/10-task-sandbox-readonly-inventory-20261022",
+      "base_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+      "base_ref": "test/10-broker-filetime-on-709-20261022",
+      "files": [
+        "src/diagnostics/task-sandbox-readonly-preflight.ts",
+        "test/task-sandbox-readonly-preflight.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+        "head_sha": "3b5c807a2763eee73dea9c016395f925cf8f28df",
+        "merge_base_sha": "0f7c6af824c282764cdb594d0fba474686683062",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39822598965,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "3b5c807a2763eee73dea9c016395f925cf8f28df"
+      }
+    },
+    {
+      "pr": 783,
+      "head_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+      "head_ref": "docs/01-agent-loop-journal-contract-20261022",
+      "base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+      "base_ref": "fix/01-broker-dispatch-nonce-epoch-20261021",
+      "files": [
+        "docs/AGENT_LOOP_JOURNAL_CONTRACT_INVENTORY_20261022.md",
+        "src/agent/agent-loop-journal-contract.ts",
+        "test/agent-loop-journal-contract.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+        "head_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+        "merge_base_sha": "1d78a7a9174e91e3b6baaa1319a063917391a64f",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39822394016,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b"
+      }
+    },
+    {
+      "pr": 784,
+      "head_sha": "b49dc57b03df146c56e09032c8e3eff07d01e2a9",
+      "head_ref": "qa/worker30-task-budget-unknown-fairness-20261022",
+      "base_sha": "5e432c26072d82e89069fc702e634a80d2d02534",
+      "base_ref": "qa/worker30-monotonic-publish-quota-hold-20261022",
+      "files": [
+        "docs/SCALE_WORKER30_P1_TASK_BUDGET_FAIRNESS_UNKNOWN_20261022.md",
+        "test/worker30-p1-loop-task-budget-fairness-unknown.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "5e432c26072d82e89069fc702e634a80d2d02534",
+        "head_sha": "b49dc57b03df146c56e09032c8e3eff07d01e2a9",
+        "merge_base_sha": "5e432c26072d82e89069fc702e634a80d2d02534",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39816820012,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "b49dc57b03df146c56e09032c8e3eff07d01e2a9"
+      }
+    },
+    {
+      "pr": 785,
+      "head_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "head_ref": "fix/08-checkpoint-external-commit-20261022",
+      "base_sha": "c41e441a87f5d22101b8d256b1b64047a551cc0e",
+      "base_ref": "fix/08-unresolved-publish-resume-20261022",
+      "files": [
+        "docs/ARTIFACT_08_CHECKPOINT_EXTERNAL_CAS_INVENTORY_20261022.md",
+        "src/workspace/artifact-job-checkpoint.ts",
+        "test/artifact-store-job-failclosed.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c41e441a87f5d22101b8d256b1b64047a551cc0e",
+        "head_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "merge_base_sha": "c41e441a87f5d22101b8d256b1b64047a551cc0e",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39816948119,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209"
+      }
+    }
+  ]
+}
