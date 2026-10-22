@@ -24,6 +24,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040"
+      },
+      "files": [
+        "docs/s3-core-bootstrap-delegation-acceptance-20261021.md",
+        "scripts/s3-core-bootstrap-delegation-audit.ts",
+        "test/s3-core-bootstrap-delegation-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+        "head_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "merge_base_sha": "9fdee36897ded643594795ba354fc25e894b65c3",
+        "status": "ahead"
       }
     },
     {
@@ -38,6 +50,45 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/CORE_ROOT_SIGNED_BROKER_EXECUTOR_NO_GO_617.md",
+        "docs/NEXOWIRE_WINDOWS_JOB_PRODUCTION_TRUST_QA_20261018.md",
+        "native/.gitignore",
+        "native/windows-job-owner.c",
+        "scripts/audit-hyperv-launcher-trust.ps1",
+        "scripts/audit-windows-job-helper-trust.ps1",
+        "scripts/build-windows-job-owner.ps1",
+        "scripts/build-windows-user-bundle.ts",
+        "src/agent/process-manager.ts",
+        "src/agent/windows-job-kernel-attestation.ts",
+        "src/agent/windows-job-owner.ts",
+        "src/security/core-broker-executor-contract.ts",
+        "src/security/privilege.ts",
+        "test/core-broker-executor-contract.test.ts",
+        "test/durable-process.test.ts",
+        "test/fixtures/.gitignore",
+        "test/fixtures/windows-job-breakaway-attempt.c",
+        "test/fixtures/windows-job-hold-duplicated-query.ps1",
+        "test/fixtures/windows-job-hold-query.ps1",
+        "test/fixtures/windows-job-hostile-nested.c",
+        "test/hyperv-launcher-trust.test.ts",
+        "test/windows-job-attestation-spoof.test.ts",
+        "test/windows-job-breakaway.test.ts",
+        "test/windows-job-duplicate-handle-risk.test.ts",
+        "test/windows-job-helper-acl-publisher.test.ts",
+        "test/windows-job-helper-trust.test.ts",
+        "test/windows-job-hostile-nested.test.ts",
+        "test/windows-job-named-handle-caveat.test.ts",
+        "test/windows-job-owner.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "head_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "merge_base_sha": "4ba879f591d19ddff3ca1e4cba0cf7ecc8a832b4",
+        "status": "ahead"
       }
     },
     {
@@ -52,6 +103,34 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "9266f9b65a1f193360469223360552a50892949a"
+      },
+      "files": [
+        "docs/ARTIFACT_WRITER_FENCE_CORE_20261021.md",
+        "docs/CONNECTION_06_DURABLE_CROSS_DEVICE_588_ACCEPTANCE.md",
+        "docs/SCALE_V2_S5_HTTP_CHUNK_ISOLATION_20261020.md",
+        "docs/reports/s5-http-4mib-loopback-20261020.json",
+        "scripts/bench-s5-http-mcp-isolation.ts",
+        "scripts/report-s5-http-mcp-isolation.ts",
+        "src/mcp/create-server.ts",
+        "src/mcp/cross-device-transfer-continuity.ts",
+        "src/mcp/cross-device-transfer-job-tools.ts",
+        "src/mcp/cross-device-transfer-jobs.ts",
+        "src/ops/scale-s5-chunk-receipt-audit.ts",
+        "src/workspace/artifact-job-checkpoint.ts",
+        "src/workspace/artifact-job-trust.ts",
+        "test/artifact-588-cross-device.e2e.test.ts",
+        "test/artifact-store-job-failclosed.test.ts",
+        "test/artifact-writer-fence-221k.test.ts",
+        "test/cross-device-transfer-continuity.test.ts",
+        "test/s5-http-mcp-isolation.test.ts",
+        "test/scale-s5-chunk-receipt-audit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "head_sha": "9266f9b65a1f193360469223360552a50892949a",
+        "merge_base_sha": "94b92e01219aca3cd4ca86775fe4b61a72ac53c4",
+        "status": "ahead"
       }
     },
     {
@@ -66,6 +145,16 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf"
+      },
+      "files": [
+        "test/qa-17-core-broker-independent-adversarial.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "head_sha": "5a52fd6eccbff8d86cd1414d77bf659039d803cf",
+        "merge_base_sha": "c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab",
+        "status": "ahead"
       }
     },
     {
@@ -80,6 +169,16 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81"
+      },
+      "files": [
+        "test/qa-17-core-bootstrap-revoke-independent.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "56e9d97f65de27c122b607a4589404f212f1bd81",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
       }
     },
     {
@@ -94,6 +193,17 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a"
+      },
+      "files": [
+        "docs/QA_18_ANTIROLLBACK_CAS_CORE_20261021.md",
+        "test/qa-18-external-cas-hostile.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "head_sha": "474838810ecce774f6e38ddbcd14c803fe9c1c5a",
+        "merge_base_sha": "4e0cb8f5a00deb7ca00352ff24350402936ba59c",
+        "status": "ahead"
       }
     },
     {
@@ -108,6 +218,17 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959"
+      },
+      "files": [
+        ".github/workflows/qa-19-windows-job-hosted.yml",
+        "test/qa-19-windows-job-hosted-fast-exit.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+        "head_sha": "95304300649adfbcc0d7e58657fb5e17386f4959",
+        "merge_base_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+        "status": "ahead"
       }
     },
     {
@@ -122,6 +243,16 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff"
+      },
+      "files": [
+        "test/s3-worker20-signed-broker-installer-negative-qa.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "head_sha": "35acaf6cc97778f3e0aa99bd90378e9c2f251cff",
+        "merge_base_sha": "ea4229b9ed34c06f5bcb0d52048b25f591cbb040",
+        "status": "ahead"
       }
     }
   ]
