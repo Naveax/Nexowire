@@ -1,0 +1,188 @@
+﻿{
+  "schema": "nexowire.qa16.physical-acceptance-806-811.v1",
+  "observedDate": "2026-10-23",
+  "mainSha": "754cc4364822be5fda528f54042fb22a84f19924",
+  "prEvidence": [
+    {
+      "pr": 809,
+      "head": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "base": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+      "run": 39843088157,
+      "ci": "FAILURE",
+      "category": "REQUIRED_SEVEN_P0_RED_PLUS_INHERITED_WINDOWS_DURABLE",
+      "jobs": {
+        "p0": {
+          "id": 120049092580,
+          "conclusion": "FAILURE",
+          "mandatorySeven": 7,
+          "changedOriginalTest": false
+        },
+        "node22": {
+          "id": 120049092896,
+          "conclusion": "FAILURE",
+          "sameMandatorySeven": true
+        },
+        "node24": {
+          "id": 120049092477,
+          "conclusion": "CANCELLED",
+          "notSuccess": true
+        },
+        "windows": {
+          "id": 120049093038,
+          "conclusion": "FAILURE",
+          "test": "test/durable-process.test.ts",
+          "failure": "NW_DURABLE_READY after ProcessManager restart not seen; duration 27205ms",
+          "separateFromP0": true
+        }
+      },
+      "source": "BLOCKED_7_MANDATORY_AND_WINDOWS_REGRESSION",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED",
+      "physicalProof": false
+    },
+    {
+      "pr": 811,
+      "head": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "run": 39854971347,
+      "ci": "SUCCESS",
+      "category": "GIT_EXECUTOR_SOURCE_REPAIR_CANDIDATE_ONLY",
+      "scope": "Git workspace.snapshot/detect PathPolicy root .git metadata fsmonitor/include/hook environment hardened in src/agent/executors.ts; source green; unchanged #800 adversarial replay on exact #811 not independently proved in #16; not OS sandbox",
+      "source": "SOURCE_CANDIDATE_SUCCESS_NOT_INDEPENDENT_NEGATIVE_ACCEPTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED",
+      "physicalProof": false
+    },
+    {
+      "pr": 808,
+      "head": "b69e4ac5664b279e7c9a854a1946db8b433097cf",
+      "base": "70e9735007b648db83c2a6fa891ad624a8ef224f",
+      "run": 39841919586,
+      "ci": "SUCCESS",
+      "category": "CORE_UI_SOURCE_FAIL_CLOSED_CANDIDATE_ONLY",
+      "scope": "#04 CORE status uses owner epoch / final native CAS witness; #726 unchanged adversarial DOM test not re-run independent on this head by QA16; no actual Windows signed HIGH token or UAC",
+      "source": "SOURCE_CANDIDATE_SUCCESS_NOT_INDEPENDENT_NEGATIVE_ACCEPTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED",
+      "physicalProof": false
+    },
+    {
+      "pr": 807,
+      "head": "1e84d87c98c91b2d6e97a47de610ffe353d199df",
+      "base": "9e75943adc869528839a99339e1852cc15693f66",
+      "run": 39841880930,
+      "ci": "FAILURE",
+      "category": "WINDOWS_JOB_STDOUT_RACE_NOT_FULL_ACCEPTANCE",
+      "jobs": {
+        "windows": {
+          "id": 120044773235,
+          "conclusion": "FAILURE",
+          "test": "test/windows-job-owner.test.ts",
+          "failure": "Exited before stdout captured, iteration 0; no P0 #708 negative proven fixed by this result"
+        }
+      },
+      "scope": "Source adapter saveIfCurrent checkpoint admission candidate; no deployed rollback-independent provider / atomic writer-stop+save CAS, independent #708 remains RED",
+      "source": "NOT_FULL_CI_GREEN_SOURCE_ADAPTER_CANDIDATE",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED",
+      "physicalProof": false
+    },
+    {
+      "pr": 806,
+      "head": "13a6fb38cddde635c71ca0f023b763c8f68534c6",
+      "base": "3bb5c880e564336fe829d450ce1df7e310935fc5",
+      "run": 39841477982,
+      "ci": "FAILURE",
+      "category": "STAGING_QUOTA_API_COMPATIBILITY_ASSERTION",
+      "jobs": {
+        "node24": {
+          "id": 120043339572,
+          "conclusion": "FAILURE",
+          "test": "test/worker30-runbook-clone-unknown-staging-fairness-negative.test.ts:140",
+          "failure": "Actual TRUSTED_DELETION_EVIDENCE_REQUIRED, expected /WRITER_FENCE_REQUIRED/; hosted source API contract mismatch, NOT physical double refund proof"
+        },
+        "node22": {
+          "id": 120043339286,
+          "conclusion": "CANCELLED",
+          "notSuccess": true
+        }
+      },
+      "scope": "Byte-identical hostile #791-style UNKNOWN clone against newer #718 API; cannot claim original cloned double-refund proven, cannot refund CANCEL_PENDING absent stopped writer+deletion",
+      "source": "ADVERSARIAL_SOURCE_TEST_FAILS_API_CONTRACT_EXPECTATION",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "originalIncident": "BLOCKED",
+      "physicalProof": false
+    }
+  ],
+  "independentAdversarial": [
+    {
+      "pr": 800,
+      "head": "6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8",
+      "run": 39823730640,
+      "conclusion": "FAILURE",
+      "negative": "Real workspace.snapshot executed untrusted Git core.fsmonitor outside taskRoot",
+      "reproducedUnsafeSource": true,
+      "relation": "#811 mitigates source risk but QA16 did not run unchanged negative against latest #811 in isolation"
+    },
+    {
+      "pr": 726,
+      "head": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+      "run": 39823764746,
+      "conclusion": "FAILURE",
+      "negative": "Stale ownerEpoch renders CORE EFFECTIVE without physical signed HIGH/CAS",
+      "reproducedUnsafeSource": true,
+      "relation": "#808 source fix CI success is not proof original unchanged negative passes when independently cross-run"
+    },
+    {
+      "pr": 708,
+      "head": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+      "run": 39824007092,
+      "conclusion": "FAILURE",
+      "negative": "Revoke-start before checkpoint save; cloned UNKNOWN borrowed external final CAS, missing expected rejection",
+      "reproducedUnsafeSource": true,
+      "relation": "#807 adapter candidate has Windows CI FAILURE, no deployed off-host atomic CAS / physical writer stop"
+    }
+  ],
+  "originalR01R22": {
+    "source": {
+      "PASS": 6,
+      "FAIL": 6,
+      "BLOCKED": 9,
+      "NOT_TESTED": 1
+    },
+    "stagingBlocked": 22,
+    "productionBlocked": 22,
+    "originalIncidentBlocked": 22
+  },
+  "p1": {
+    "sourceSandbox": "FAIL_ADVERSARIAL_PR800",
+    "gitFix811": "SOURCE_CANDIDATE_CI_SUCCESS_NOT_INDEPENDENT_ACCEPTANCE",
+    "sourceOtherFour": "NOT_TESTED",
+    "staging": "BLOCKED",
+    "production": "BLOCKED",
+    "epic780": "OPEN_P1_NOT_P0"
+  },
+  "truth": {
+    "greenSourceIsNotPhysicalProof": true,
+    "greenSourceIsNotMergeApproval": true,
+    "doNotRerunUnchangedSha": true,
+    "mandatoryP0RedTestsUntouched": true,
+    "noLiveAgentUacBrokerAclD1BillingVm": true
+  },
+  "physicalNoGo": {
+    "realInstalledSignedHighCore": "BLOCKED",
+    "typedElevatedHypervGuid": "BLOCKED",
+    "acl271": "BLOCKED",
+    "signedInstaller551": "BLOCKED",
+    "independentRollbackResistantCas587": "BLOCKED",
+    "durableOnecallFinalPublisher588": "BLOCKED",
+    "quotaWriterStopDeletion": "BLOCKED",
+    "physicalVmRunning": "BLOCKED",
+    "ReVoltVPNUbuntuLab": "UNTOUCHED"
+  }
+}

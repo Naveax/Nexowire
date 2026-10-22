@@ -57,7 +57,13 @@
         "unsigned HIGH Broker cannot inherit sandbox grant"
       ],
       "sourceObservedDefect": "Exact #800 HEAD 6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8 CI 39823730640 Node24 P1 red: workspace.snapshot executed repository core.fsmonitor hook, modified file outside scoped taskRoot; reproduced unsafe source behavior.",
-      "sourceEvidence": "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts:96, job 119981387012"
+      "sourceEvidence": "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts:96, job 119981387012",
+      "followup811": {
+        "head": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "ciRunId": 39854971347,
+        "fullCI": "SUCCESS",
+        "interpretation": "SOURCE_CANDIDATE_ONLY: original #800 adversarial Git fsmonitor outside-root test not independently re-run unchanged against exact #811; no OS process sandbox claim"
+      }
     },
     {
       "id": "P1-LOOP",
@@ -108,5 +114,8 @@
     "FAIL": 1,
     "NOT_TESTED": 4
   },
-  "lastReview": "docs/qa/QA_20261022_PR791_803_EXACT_CI.json"
+  "lastReview": "docs/qa/QA_20261023_PR806_811_PHYSICAL_PROOF.json",
+  "reviewedDate": "2026-10-23",
+  "staging": "BLOCKED",
+  "production": "BLOCKED"
 }
