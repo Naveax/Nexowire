@@ -1,0 +1,202 @@
+﻿{
+  "schema": "nexowire.qa16.exact-failed-step-provenance.v1",
+  "date": "2026-10-22",
+  "pinnedMain": "754cc4364822be5fda528f54042fb22a84f19924",
+  "prs": [
+    {
+      "number": 779,
+      "headSha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+      "baseSha": "cd01c7e80a9d1eac8309b6fea4fa21a82f246a19",
+      "runId": 39808685776,
+      "conclusion": "FAILURE",
+      "source": "DIRECT_SAME_SHA_GITHUB_ACTIONS_RUN"
+    },
+    {
+      "number": 790,
+      "headSha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "baseSha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+      "runId": 39818835181,
+      "conclusion": "FAILURE",
+      "source": "DIRECT_SAME_SHA_GITHUB_ACTIONS_RUN"
+    }
+  ],
+  "runJobEvidence": [
+    {
+      "pr": 779,
+      "jobId": 119928712863,
+      "job": "test (24)",
+      "status": "FAILURE",
+      "failedStep": "Run npm run check",
+      "class": "MANDATORY_P0_GATES_IN_GENERAL_SUITE",
+      "knownSevenSame": true,
+      "separateTypeScriptSyntaxFailureProved": false
+    },
+    {
+      "pr": 779,
+      "jobId": 119928712888,
+      "job": "qa-independent-negative-acceptance",
+      "status": "FAILURE",
+      "failedStep": "Verify unresolved P0 rollback and one-call transfer acceptance",
+      "class": "MANDATORY_P0_NEGATIVE_ACCEPTANCE",
+      "tests": 17,
+      "pass": 10,
+      "fail": 7,
+      "skip": 0
+    },
+    {
+      "pr": 779,
+      "jobId": 119928712954,
+      "job": "browser-live",
+      "status": "FAILURE",
+      "failedStep": "Run node --test --import tsx test/durable-process.test.ts",
+      "class": "INDEPENDENT_WINDOWS_DURABLE_REATTACH_FAILURE",
+      "timeoutMs": 27108,
+      "pattern": "NW_DURABLE_READY"
+    },
+    {
+      "pr": 779,
+      "jobId": 119928713216,
+      "job": "test (22)",
+      "status": "CANCELLED",
+      "failedStep": "Run npm run check",
+      "class": "CANCELLED_NOT_PASS_OR_SEPARATE_ASSERTION"
+    },
+    {
+      "pr": 790,
+      "jobId": 119964334776,
+      "job": "test (24)",
+      "status": "FAILURE",
+      "failedStep": "Run npm run check",
+      "class": "MANDATORY_P0_GATES_IN_GENERAL_SUITE",
+      "knownSevenSame": true,
+      "separateTypeScriptSyntaxFailureProved": false
+    },
+    {
+      "pr": 790,
+      "jobId": 119964334955,
+      "job": "qa-independent-negative-acceptance",
+      "status": "FAILURE",
+      "failedStep": "Verify unresolved P0 rollback and one-call transfer acceptance",
+      "class": "MANDATORY_P0_NEGATIVE_ACCEPTANCE",
+      "tests": 17,
+      "pass": 10,
+      "fail": 7,
+      "skip": 0
+    },
+    {
+      "pr": 790,
+      "jobId": 119964334340,
+      "job": "browser-live",
+      "status": "FAILURE",
+      "failedStep": "Run node --test --import tsx test/durable-process.test.ts",
+      "class": "INDEPENDENT_WINDOWS_DURABLE_REATTACH_FAILURE",
+      "timeoutMs": 26573,
+      "pattern": "NW_DURABLE_READY"
+    },
+    {
+      "pr": 790,
+      "jobId": 119964334853,
+      "job": "test (22)",
+      "status": "CANCELLED",
+      "failedStep": "Run npm run check",
+      "class": "CANCELLED_NOT_PASS_OR_SEPARATE_ASSERTION"
+    }
+  ],
+  "sevenRequiredP0": [
+    {
+      "id": "ROOT_ISSUED_MAX_900S",
+      "file": "test/qa-core-broker-p0-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "Authenticated signed ROOT issue-time maximum 15min, not arbitrary future expiration"
+    },
+    {
+      "id": "REAL_INSTALLED_HIGH_CORE_EXECUTOR",
+      "file": "test/qa-core-broker-p0-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "Broad signed protected Windows HIGH CORE executor, not SAFE alias"
+    },
+    {
+      "id": "EXPLICIT_SIGNED_CORE_BROKER_ENDPOINT",
+      "file": "test/qa-core-broker-p0-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "Authenticated owner/session/current epoch elevated Broker endpoint"
+    },
+    {
+      "id": "HYPERV_VM_START_TYPED_ELEVATED",
+      "file": "test/qa-hyperv-617-source-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "hyperv.vm.start must not be STANDARD"
+    },
+    {
+      "id": "HYPERV_VM_GUID_SCOPED_BROKER",
+      "file": "test/qa-hyperv-617-source-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "Current scoped signed VM GUID permit and independent running readback"
+    },
+    {
+      "id": "ROLLBACK_INDEPENDENT_AUTHORITY_587",
+      "file": "test/qa-rollback-source-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "Old restored J+A journal must not re-admit completed requestId"
+    },
+    {
+      "id": "DURABLE_ONECALL_PUBLICATION_588",
+      "file": "test/qa-transfer-onecall-source-negative.test.ts",
+      "status": "FAIL",
+      "acceptance": "Public authenticated durable start/status/cancel and independent final publisher proof"
+    }
+  ],
+  "windowsDurable": {
+    "test": "test/durable-process.test.ts",
+    "assertion": "durable process stdin/stdout reattaches across ProcessManager restart",
+    "observed": "Timed out waiting for durable process output: /NW_DURABLE_READY/",
+    "classification": "HOSTED_WINDOWS_OR_RUNTIME_REGRESSION",
+    "productionProof": false,
+    "distinctFromRequiredSeven": true
+  },
+  "comparison": {
+    "sameSevenFailuresAcrossHeads": true,
+    "sameDurableProcessTestAcrossHeads": true,
+    "noIndependentTsSyntaxRegressionEstablished": true,
+    "hostedSuccessesAtBoth": [
+      "linux-native-live",
+      "wsl2-live",
+      "security-operational-live",
+      "macos-agent-lifecycle-live"
+    ],
+    "notAllCiFailuresIntentional": true,
+    "noFullCiGreen": true
+  },
+  "releaseNoGo": {
+    "highTokenCore": true,
+    "rootBounded": true,
+    "hypervPrivileged": true,
+    "acl271": true,
+    "signedInstall551": true,
+    "nonRestorableCas587": true,
+    "finalPublisher588": true,
+    "physicalVmRunning": true
+  },
+  "matrices": {
+    "p0R01R22Source": {
+      "PASS": 6,
+      "FAIL": 6,
+      "BLOCKED": 9,
+      "NOT_TESTED": 1
+    },
+    "stagingBlocked": 22,
+    "productionBlocked": 22,
+    "incidentBlocked": 22,
+    "p1FeatureSource": "NOT_TESTED",
+    "p1FeatureStaging": "BLOCKED",
+    "p1FeatureProduction": "BLOCKED",
+    "p1Epic780IsNotP0Regression": true
+  },
+  "policy": {
+    "qaOnly": true,
+    "doNotDeleteOriginalSeven": true,
+    "doNotXfailOrSuppress": true,
+    "doNotMutateLiveAgentUacVmAcl": true,
+    "mainMerge": false
+  }
+}

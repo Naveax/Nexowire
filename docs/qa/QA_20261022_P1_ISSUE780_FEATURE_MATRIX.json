@@ -1,0 +1,105 @@
+﻿{
+  "schema": "nexowire.qa16.p1.issue780.acceptance.v1",
+  "issue": 780,
+  "issueType": "OPEN_P1_EPIC_NOT_PR",
+  "main": "754cc4364822be5fda528f54042fb22a84f19924",
+  "independentQaExactHeads": [
+    {
+      "pr": 779,
+      "sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+      "ci": 39808685776,
+      "conclusion": "FAILURE"
+    },
+    {
+      "pr": 790,
+      "sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "ci": 39818835181,
+      "conclusion": "FAILURE"
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "P1-INV",
+      "title": "Feature inventory and code ownership",
+      "source": "NOT_TESTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "requiredNegative": [
+        "source symbol and exact SHA inventory",
+        "unverified modules must not be called implemented",
+        "feature not verified on main must not inherit branch green"
+      ]
+    },
+    {
+      "id": "P1-DIFF",
+      "title": "Git scoped preview approve apply and verified rollback",
+      "source": "NOT_TESTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "requiredNegative": [
+        "stale base SHA",
+        "revoked approval or owner epoch",
+        "conflict after preview",
+        "post-effect UNKNOWN no blind rollback",
+        "disk full"
+      ]
+    },
+    {
+      "id": "P1-SANDBOX",
+      "title": "Real OS task isolation not pathname policy",
+      "source": "NOT_TESTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "requiredNegative": [
+        "junction symlink ADS hardlink outside root",
+        "child process network and secret escape",
+        "Git hooks cannot bypass isolation",
+        "unsigned HIGH Broker cannot inherit sandbox grant"
+      ]
+    },
+    {
+      "id": "P1-LOOP",
+      "title": "Bounded deterministic task worker plan tool observe test stop",
+      "source": "NOT_TESTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "requiredNegative": [
+        "requestId and owner epoch immutable",
+        "steps wall time IO and token budget",
+        "revoke and re-pair stop",
+        "MUTATION_STATE_UNKNOWN to RECONCILE_REQUIRED",
+        "no automatic replay after missing Native ACK"
+      ]
+    },
+    {
+      "id": "P1-CKPT",
+      "title": "Durable encrypted scoped checkpoint and safe resume",
+      "source": "NOT_TESTED",
+      "staging": "BLOCKED",
+      "production": "BLOCKED",
+      "requiredNegative": [
+        "stale signed checkpoint",
+        "foreign owner restore",
+        "changed source SHA",
+        "pending UNKNOWN",
+        "required external witness absent",
+        "secrets never dumped"
+      ]
+    }
+  ],
+  "p0Dependencies": [
+    271,
+    551,
+    587,
+    588,
+    617,
+    539
+  ],
+  "policy": {
+    "epicIsNotP0Regression": true,
+    "acceptanceRequiresSourceInventory": true,
+    "realSignedHighCoreMustStayDisabledWithoutP0": true,
+    "qaProofDoesNotCompleteFeature": true,
+    "physicalVmUntouched": true
+  }
+}
