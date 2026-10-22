@@ -26,6 +26,8 @@ export interface FencedWorkerJournalSnapshot {
   sha256: string;
   /** #725 typed diagnostic metadata is forensic only, never a dispatch grant. */
   errorCode?: string;
+  /** #754 durable Native publish intent. This is metadata, not an ACK. */
+  publication?: { requestId: string; epoch: number; sha256: string; dispatched: boolean };
   state: 'QUEUED' | 'RUNNING' | 'RECOVERY_REQUIRED' | 'FAILED' |
     'MUTATION_UNKNOWN' | 'CANCEL_REQUESTED' | 'CANCELLED' |
     'PUBLISHING' | 'COMPLETED';
@@ -72,6 +74,32 @@ export interface BrokerOwnerEpochWitness {
   assertFresh(challenge: Readonly<BrokerOwnerEpochChallenge>): Promise<boolean>;
 }
 
+/** #754's signed Native publication receipt is only a CLAIM until a
+ * protected external source independently verifies the proof. */
+export interface AuthenticatedFinalPublicationReceipt {
+  requestId: string; jobId: string; accountId: string; projectId: string;
+  targetDeviceId: string; targetPath: string;
+  bytesTotal: number; sha256: string; epoch: number;
+  proof: string;
+}
+export interface TrustedNativePublicationReceiptReadback {
+  /** MUST authenticate signed Native issuer/proof outside worker/Agent ACK.
+   * Never infer authenticity from the persisted publication flag or string. */
+  inspect(worker: Readonly<FencedWorkerJournalSnapshot>): Promise<
+    | { kind: 'verified'; receipt: AuthenticatedFinalPublicationReceipt }
+    | { kind: 'unavailable' | 'invalid' }
+  >;
+}
+export interface TrustedPublishedTargetReadback {
+  /** Separate actual target-file stat+full SHA readback, never the stage hash
+   * or the job's metadata, from the exact authenticated destination device. */
+  inspect(worker: Readonly<FencedWorkerJournalSnapshot>): Promise<
+    | { kind: 'verified'; deviceId: string; targetPath: string;
+        bytesTotal: number; sha256: string }
+    | { kind: 'unavailable' | 'missing' | 'mismatch' }
+  >;
+}
+
 export interface WorkerLeaseWitness {
   /** Never fulfilled by a local PID, owner UI toggle, or Agent response. */
   check(
@@ -101,7 +129,8 @@ export type WorkerReconciliationDecision =
   | 'reservation_unresolved'
   | 'readback_verified_not_committed'
   | 'prefix_consistent'
-  | 'unverified_completion';
+  | 'unverified_completion'
+  | 'publication_verified_not_committed';
 
 export interface WorkerReconciliationProof {
   readonly state: WorkerReconciliationDecision;
@@ -158,6 +187,10 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
   sessionWitness?: ConnectionSessionWitness;
   /** Optional independent non-mutating destination readback. */
   stageReadback?: TrustedStageReadback;
+  /** Both independent checks are required for an observational #754 publish
+   * proof; neither can be supplied by a caller's Native ACK or worker JSON. */
+  publicationReceiptReadback?: TrustedNativePublicationReceiptReadback;
+  publishedTargetReadback?: TrustedPublishedTargetReadback;
 }): Promise<WorkerReconciliationProof> {
   const { worker, checkpoint, route } = input;
   const pending = checkpoint.pending;
@@ -297,11 +330,60 @@ export async function inspectOneCallWorkerConnectionJournal(input: {
       worker.state === 'FAILED' || checkpoint.status === 'unknown') {
     return denied('mutation_unknown', offset);
   }
+  // A durable #754 publication intent is NEVER evidence of final Native
+  // delivery, even if the worker says COMPLETED and both offsets agree.
+  const pub = worker.publication;
+  if (pub && (typeof pub.requestId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pub.requestId) ||
+      !Number.isSafeInteger(pub.epoch) || pub.epoch < 1 ||
+      pub.epoch !== worker.fencing.epoch || !sha.test(pub.sha256) ||
+      pub.sha256 !== worker.sha256 || typeof pub.dispatched !== 'boolean')) {
+    return denied('journal_mismatch', offset);
+  }
   if (worker.state === 'COMPLETED' || worker.state === 'PUBLISHING' ||
-      checkpoint.status === 'complete' || checkpoint.status === 'verified') {
-    // Publishing without pending is still unverified until trusted target
-    // postcondition; never infer success from equal source/target offsets.
-    return denied('unverified_completion', offset);
+      checkpoint.status === 'complete' || checkpoint.status === 'verified' || pub) {
+    if (!pub?.dispatched ||
+        (worker.state !== 'COMPLETED' && worker.state !== 'PUBLISHING') ||
+        !input.publicationReceiptReadback || !input.publishedTargetReadback ||
+        worker.bytesConfirmed !== worker.bytesTotal) {
+      return denied('unverified_completion', offset);
+    }
+    // The two witnesses must be distinct trusted providers: a protected
+    // signed publication receipt and independent target-file stat+full SHA.
+    // Connection does not manufacture, persist, or replay a publish result.
+    try {
+      const receipt = await input.publicationReceiptReadback.inspect(worker);
+      if (receipt.kind !== 'verified') return denied('unverified_completion', offset);
+      const p = receipt.receipt;
+      if (p.requestId !== pub.requestId || p.epoch !== pub.epoch ||
+          p.jobId !== worker.id || p.accountId !== worker.accountId ||
+          p.projectId !== worker.projectId ||
+          p.targetDeviceId !== worker.targetDeviceId ||
+          p.targetPath !== worker.targetPath ||
+          p.bytesTotal !== worker.bytesTotal || p.sha256 !== worker.sha256 ||
+          typeof p.proof !== 'string' || p.proof.length === 0) {
+        return denied('unverified_completion', offset);
+      }
+      const target = await input.publishedTargetReadback.inspect(worker);
+      if (target.kind !== 'verified' ||
+          target.deviceId !== worker.targetDeviceId ||
+          target.targetPath !== worker.targetPath ||
+          target.bytesTotal !== worker.bytesTotal ||
+          target.sha256 !== worker.sha256) {
+        return denied('unverified_completion', offset);
+      }
+      // A revoke, Hub lease rollover or reconnect during either awaited
+      // witness invalidates even a formerly genuine receipt. Fresh nonce.
+      if (!(await input.authorize(route, checkpoint.binding)) ||
+          !(await input.workerLease.check(worker, route)) ||
+          !(await input.ownerEpochWitness.assertFresh(ownerChallenge()))) {
+        return denied('authority_blocked', offset);
+      }
+      const freshEpoch = await input.sessionWitness.currentEpoch(route);
+      if (!Number.isSafeInteger(freshEpoch)) return denied('authority_blocked', offset);
+      if (freshEpoch !== route.epoch) return denied('epoch_stale', offset);
+    } catch { return denied('authority_blocked', offset); }
+    return denied('publication_verified_not_committed', offset);
   }
   // Only QUEUED/RUNNING with no pending and equal offsets may describe a
   // healthy, read-only prefix. It NEVER authorizes dispatch or replay.
