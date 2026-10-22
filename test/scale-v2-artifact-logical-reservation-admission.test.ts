@@ -277,3 +277,60 @@ test('#806 two disconnected ledgers with fake UNSEEN witness are unsafe but PEND
    // This is NOT evidence of global admission safety. Only no early release.
  }finally{a.close();b.close()}
 });
+
+test('#835/#806 no external CAS: disconnected strict ledgers deny, legacy PENDING cannot refund on unsigned deletion',async()=>{
+ const a=fixture(),b=fixture();
+ try{
+   const cloned={...logical,
+     sessionId:'session-cloned-no-cas-835',
+     rootInvocationId:'root-cloned-no-cas-835',
+     originRunbookId:'runbook-cloned-no-cas-835',
+   };
+   // No NEVER_DISPATCHED oracle is injected here. An off-host protected
+   // authority does not exist, so strict admission MUST reject both ledgers.
+   await assert.rejects(()=>a.first.beginForLogicalMutation(logical),
+     /LOGICAL_ADMISSION_EXTERNAL_CAS_REQUIRED/);
+   await assert.rejects(()=>b.first.beginForLogicalMutation(cloned),
+     /LOGICAL_ADMISSION_EXTERNAL_CAS_REQUIRED/);
+   for(const f of [a,b]){
+     assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_sessions'),0);
+     assert.equal(f.get('SELECT COUNT(*) AS n FROM budget_artifact_logical_reservations'),0);
+   }
+   // The old staging-only API is intentionally not a production safeguard.
+   // Independent local ledgers cannot discover each other's existing session.
+   const oldA=new StagingArtifactByteBudget(a.one,policy);
+   const oldB=new StagingArtifactByteBudget(b.one,policy);
+   assert.equal(oldA.begin(logical),'RESERVED');
+   assert.equal(oldB.begin(cloned),'RESERVED');
+   for(const [f,budget,subject,request] of [
+     [a,oldA,logical,'no-cas-original-pending-835'] as const,
+     [b,oldB,cloned,'no-cas-cloned-pending-835'] as const,
+   ]){
+     assert.equal(budget.stageChunk({
+       ownerId:subject.ownerId,deviceId:subject.deviceId,
+       projectId:subject.projectId,sessionId:subject.sessionId,
+       requestId:request,offsetBytes:0,byteCount:CHUNK,
+       chunkSha256:'d'.repeat(64),now:start,
+     }),'CHUNK_PENDING');
+     assert.equal(budget.requestCancel({
+       ownerId:subject.ownerId,deviceId:subject.deviceId,
+       projectId:subject.projectId,sessionId:subject.sessionId,
+       expectedOffsetBytes:0,
+     }),'CANCEL_PENDING');
+     // #806 original expects writer-stop error but source first demands a
+     // genuinely authenticated deletion verifier. A forged caller boolean
+     // cannot serve as either receipt or permission for a storage refund.
+     assert.throws(()=>budget.acknowledgeDeletionOnce({
+       ownerId:subject.ownerId,deviceId:subject.deviceId,
+       projectId:subject.projectId,sessionId:subject.sessionId,
+       durableDeletionVerified:true,writersStoppedVerified:true,
+     }),/TRUSTED_DELETION_EVIDENCE_REQUIRED/);
+     assert.equal(f.get("SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state='RELEASED'"),0);
+     assert.equal(f.get("SELECT COUNT(*) AS n FROM budget_artifact_sessions WHERE state='CANCEL_PENDING'"),1);
+     assert.equal(f.get("SELECT COUNT(*) AS n FROM budget_artifact_chunks WHERE state='PENDING'"),1);
+     assert.equal(f.get('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions'),CHUNK);
+     assert.equal(f.get('SELECT COALESCE(SUM(byte_count),0) AS n FROM budget_artifact_chunks'),CHUNK);
+   }
+   // This test is a SOURCE UNSAFE-LEGACY negative, NOT a global-CAS green.
+ }finally{a.close();b.close()}
+});
