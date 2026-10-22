@@ -78,6 +78,10 @@ export interface GitReadback {
   readonly fsmonitorAndHookExecutionDisabled: Evidence;
   readonly gitConfigAndEnvironmentSanitized: Evidence;
   readonly gitSubprocessesContained: Evidence;
+  /** #821: Git status can execute repository-defined filter.clean/process. */
+  readonly repositoryFilterCommandsBlocked?: Evidence;
+  /** #814: refs/heads and loose-object descendants may escape through links. */
+  readonly nestedRefsAndObjectsScoped?: Evidence;
 }
 export interface RemoteWorkerReadback {
   readonly workerIdentityEnrolled: Evidence;
@@ -118,6 +122,8 @@ export type PreflightReason =
   | 'PROCESS_ISOLATION_NOT_VERIFIED'
   | 'GIT_DISCOVERED_ROOT_NOT_VERIFIED'
   | 'GIT_SUBPROCESS_SANITIZATION_NOT_VERIFIED'
+  | 'GIT_REPOSITORY_FILTER_EXECUTION_NOT_VERIFIED'
+  | 'GIT_NESTED_REFS_OBJECTS_SCOPE_NOT_VERIFIED'
   | 'REMOTE_WORKER_PROVIDER_UNAVAILABLE'
   | 'REMOTE_WORKER_ELIGIBILITY_NOT_VERIFIED'
   | 'INSTALLED_HIGH_BROKER_NOT_PROVEN'
@@ -254,6 +260,16 @@ export async function inspectReadonlyTaskSandboxPreflight(
         !verified(git.gitConfigAndEnvironmentSanitized) ||
         !verified(git.gitSubprocessesContained)) {
       add('GIT_SUBPROCESS_SANITIZATION_NOT_VERIFIED');
+    }
+    // Source repairs for fsmonitor or top-level Git metadata do not establish
+    // that repository-controlled clean/process filters cannot execute (#821).
+    if (!git || !verified(git.repositoryFilterCommandsBlocked)) {
+      add('GIT_REPOSITORY_FILTER_EXECUTION_NOT_VERIFIED');
+    }
+    // Authorizing .git and commondir is not enough when nested refs/objects
+    // can point beyond the task root through symlinks/reparse points (#814).
+    if (!git || !verified(git.nestedRefsAndObjectsScoped)) {
+      add('GIT_NESTED_REFS_OBJECTS_SCOPE_NOT_VERIFIED');
     }
   }
 
