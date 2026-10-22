@@ -108,8 +108,10 @@ test('QA24 missing exact run, empty changed files and risky merge-base fail clos
  assert.ok(missing.review.issues.some(x=>x.code==='MISSING_EXACT_HEAD_PRIMARY_CI'&&x.prs.includes(811)));
  assert.ok(missing.review.issues.some(x=>x.code==='NON_GREEN_PRIMARY_CI'&&x.prs.includes(811)));
  assert.equal(missing.review.production_merge_authorized,false);
- await assert.rejects(collectQa24FullReview(mock(220,{incompleteFiles:true}).api,
-   'Naveax/Nexowire'),/INCOMPLETE_CHANGED_FILES/);
+ const empty=await collectQa24FullReview(mock(220,{incompleteFiles:true}).api,
+   'Naveax/Nexowire');
+ assert.ok(empty.review.issues.some(x=>x.code==='INCOMPLETE_OWNER_FILES'&&x.prs.includes(811)));
+ assert.deepEqual(empty.review.current_safe_merge_queue,[]);
  const risk=await collectQa24FullReview(mock(220,{badCompare:true}).api,'Naveax/Nexowire');
  assert.ok(risk.review.issues.some(x=>x.code==='MERGE_BASE_STALE_OR_DIVERGED'&&x.prs.includes(811)));
 });
