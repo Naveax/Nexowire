@@ -76,8 +76,8 @@ test('#787 stale owner epoch / early all-green snapshot must never render CORE e
   const coreEnd=app.indexOf(coreEndMarker,coreStart);
   assert.ok(tierStart>=0&&tierEnd>tierStart&&coreStart>=0&&coreEnd>coreStart,
     'live web tier and CORE card source must be present');
-  const tier=new Function('return ('+app.slice(tierStart,tierEnd).trim()+');')()
-    as (device:unknown)=>string;
+  const tier=(new Function('return ('+app.slice(tierStart,tierEnd).trim()+');')() as
+    (device:unknown)=>string);
   type View={
     effective:boolean;label:string;pressed:string|undefined;
     active:boolean;feedback:string;
