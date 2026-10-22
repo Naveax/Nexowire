@@ -37,6 +37,15 @@ export interface TrustedFinalReceiptVerifier {
  * A local SQLite file, PID lock, or another folder is NOT a trust root.
  * Only trusted Hub bootstrap may inject it; no MCP tool argument may set it.
  */
+/** Authoritative #587 anti-rollback publication commit. Must be persisted by
+ * a separate monotonic service with CURRENT owner/CORE grant and exact Native
+ * signed proof as one atomic conditional operation. A local WAL flag is not a
+ * valid implementation; a void ACK cannot supply durableCommitId.
+ */
+export interface TrustedPublicationCommit {
+  jobId: string; requestId: string; epoch: number; sha256: string;
+  durableCommitId: string;
+}
 export interface TrustedTransferAuthority {
   acquire(binding: Readonly<TransferJob>, mode: 'new' | 'resume'): Promise<{
     epoch: number; token: string;
@@ -44,6 +53,12 @@ export interface TrustedTransferAuthority {
   assertCurrent(binding: Readonly<TransferJob>, proof: Readonly<{
     epoch: number; token: string;
   }>, stage: 'WRITE' | 'PUBLISH', expectedOffset: number): Promise<void>;
+  /** Optional in legacy isolated tests, REQUIRED by strict hosted transfers.
+   * The independent service MUST atomically assert current monotonic epoch,
+   * protected owner grant and one-time signed Native publication requestId.
+   */
+  commitPublished?(job: Readonly<TransferJob>, signedReceipt: Readonly<FencedFinalReceipt>):
+    Promise<TrustedPublicationCommit>;
 }
 
 export class TransferTrustError extends Error {

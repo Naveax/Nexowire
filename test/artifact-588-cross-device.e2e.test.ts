@@ -52,6 +52,14 @@ test('one MCP start uses two real sandboxed WebSocket Agents and durable status,
         throw new Error('STALE_EXTERNAL_FENCE');
       }
     },
+    // Staging-only monotonic publication commit emulator, separate from
+    // WebSocket/Agent ACK. This is not a production CAS root.
+    commitPublished: async (job: { id: string; sha256: string },
+      receipt: { requestId: string; epoch: number }) => {
+      if (epochs.get(job.id) !== receipt.epoch) throw Error('STALE_FINAL_EPOCH');
+      return {jobId:job.id,requestId:receipt.requestId,epoch:receipt.epoch,
+        sha256:job.sha256,durableCommitId:'SYNTHETIC-EXTERNAL-COMMIT-'+receipt.requestId};
+    },
   };
   const artifactTransferCoreGrants = {
     assertCurrent: async (job: { accountId: string; projectId: string;
