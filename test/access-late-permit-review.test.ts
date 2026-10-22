@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
+import {reviewFinalDispatchAuthority,finalGrantSigningBytes,
+  type FinalNativeEffectGrant,type FinalDispatchDependencies}
+  from '../src/product/access-final-dispatch-authority.js';
 import {reviewLateDispatchPermit,brokerDispatchPermitSigningBytes,
   dispatchFenceSigningBytes,type SignedCurrentDispatchFence,
   type SignedBrokerDispatchPermit} from '../src/product/access-late-permit-review.js';
@@ -327,4 +330,192 @@ test('#731 inter-Hub adversarial barrier: revokeAndDrain enters while late signe
  assert.equal(f.reads.native,0);
  assert.equal(result.elevatedExecutionAllowed,false);
  assert.equal(result.mayReplay,false);
+});
+
+const finalKeys=generateKeyPairSync('ed25519');
+function finalFixture(config:{
+  finalMutation?:(r:FinalNativeEffectGrant)=>FinalNativeEffectGrant;
+  finalSigner?:typeof finalKeys.privateKey;
+  missingGrant?:boolean;
+  finalClock?:number;
+  revokeOnGrant?:boolean;
+  nativeSigner?:typeof nativeKeys.privateKey;
+  nativeReplacement?:Partial<InstalledBrokerNonceRecord>;
+  badPinnedNative?:boolean;
+  root?:boolean;
+}={}){
+ const expiresAt=now;
+ const jOpts:Partial<QueuedAccessRequest>=config.root?{
+   mode:'ROOT',
+   rootIssuedAt:new Date(expiresAt-900_000).toISOString(),
+   rootExpiresAt:new Date(expiresAt).toISOString(),
+ }: {};
+ const f=fixture({jobPatch:jOpts});
+ if(config.root)f.state.clock=now-1;
+ const counters={native:0,grant:0};
+ const dep:FinalDispatchDependencies={
+   ...f.deps,
+   finalGrantPublicKey:finalKeys.publicKey,
+   readNativeAtLaunch:async (job,nonce)=>{
+     counters.native++;
+     const r={...nativeReport(job,nonce),...config.nativeReplacement};
+     return {statement:r,signature:signAs(
+       installedBrokerSigningBytes(r),config.nativeSigner??nativeKeys.privateKey)};
+   },
+   getFinalExternalGrant:async (job,nonce,permitNonce,dispatchId)=>{
+     counters.grant++;
+     if(config.missingGrant)throw Error('NO_INDEPENDENT_CAS_PRODUCTION');
+     if(config.revokeOnGrant){
+       f.state.revoking=true;
+       throw Error('FINAL_CAS_REVOKE_AND_DRAIN_BEGAN');
+     }
+     if(config.finalClock!==undefined)f.state.clock=config.finalClock;
+     const raw:FinalNativeEffectGrant={
+       kind:'nexowire.access.final-native-effect-grant.v1',
+       authorityId:ids.authority,requestId:job.requestId,
+       dispatchId,brokerId:ids.broker,
+       finalNonce:nonce,permitNonce,fingerprint:'e'.repeat(64),
+       capability:'admin.shell',ownerId:job.ownerId,deviceId:job.deviceId,
+       deviceEpoch:job.deviceEpoch,sessionEpoch:job.sessionEpoch,
+       ownerEpoch:job.ownerEpoch,grantGeneration:job.grantGeneration,
+       privilege:job.mode,installedBrokerPid:image.pid,
+       installedBrokerCreationFiletime:image.creationFiletime,
+       installedImageSha256:image.imageSha256,
+       ownerRevoked:false,revoking:false,
+       reservationState:'FINAL_NATIVE_EFFECT_FENCED',
+       issuedAtMs:now-100,expiresAtMs:now+1000,
+     };
+     const statement=config.finalMutation?.(raw)??raw;
+     const signature=signAs(finalGrantSigningBytes(statement),
+       config.finalSigner??finalKeys.privateKey);
+     return {statement,signature};
+   },
+ };
+ if(config.badPinnedNative)dep.installedBroker={
+   publicKey:nativeKeys.publicKey,
+   process:{...image,creationFiletime:'134092012301239778'},
+ };
+ return {f,dep,counters};
+}
+const finalReview=async(x:ReturnType<typeof finalFixture>)=>
+  reviewFinalDispatchAuthority(x.f.j,context(),x.f.incoming,x.dep);
+
+test('independent signed final CAS grant + current installed Broker high-token is required, but not executable proof',async()=>{
+ const x=finalFixture();
+ const result=await finalReview(x);
+ assert.equal(result.status,'FINAL_SOURCE_CANDIDATE_ONLY',result.reason);
+ assert.equal(result.dispatchEffective,false);
+ assert.equal(result.canLaunch,false);
+ assert.equal(result.noRepeatedUacAfterApprovedCore,true);
+ assert.equal(result.canReplay,false);
+ assert.deepEqual(x.counters,{native:1,grant:1});
+});
+
+test('no external FINAL grant, revoked owner while grant is outstanding and forged CAS signer block queued execution',async()=>{
+ for(const config of [
+   {missingGrant:true},{revokeOnGrant:true},
+   {finalSigner:attackerKeys.privateKey},
+ ]){
+   const x=finalFixture(config);
+   const r=await finalReview(x);
+   assert.equal(r.status,'DENIED');
+   assert.equal(r.canLaunch,false);
+ }
+});
+
+test('signed final CAS proof must bind fresh launch nonce, request, owner/epoch, generation and installed image PID+FILETIME',async()=>{
+ const wrong:Array<(r:FinalNativeEffectGrant)=>FinalNativeEffectGrant>=[
+   r=>({...r,finalNonce:'a'.repeat(64)}),
+   r=>({...r,permitNonce:'b'.repeat(64)}),
+   r=>({...r,requestId:randomUUID()}),
+   r=>({...r,dispatchId:randomUUID()}),
+   r=>({...r,ownerId:randomUUID()}),
+   r=>({...r,deviceEpoch:randomUUID()}),
+   r=>({...r,sessionEpoch:randomUUID()}),
+   r=>({...r,ownerEpoch:r.ownerEpoch+1}),
+   r=>({...r,grantGeneration:r.grantGeneration+1}),
+   r=>({...r,privilege:'ROOT'}),
+   r=>({...r,installedBrokerPid:r.installedBrokerPid+1}),
+   r=>({...r,installedBrokerCreationFiletime:'134092012301239778'}),
+   r=>({...r,installedImageSha256:'f'.repeat(64)}),
+   r=>({...r,capability:'admin.hyperv'}),
+   r=>({...r,authorityId:randomUUID()}),
+   r=>({...r,issuedAtMs:now-5000}),
+   r=>({...r,expiresAtMs:now}),
+ ];
+ for(const finalMutation of wrong){
+   const x=finalFixture({finalMutation});
+   const r=await finalReview(x);
+   assert.equal(r.status,'DENIED');
+   assert.equal(r.reason,'FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
+   assert.equal(r.canLaunch,false);
+ }
+});
+
+test('native PID reuse, changed image provider and signed self-process token cannot be substituted at final launch',async()=>{
+ const scenarios=[
+   {badPinnedNative:true},
+   {nativeSigner:attackerKeys.privateKey},
+   {nativeReplacement:{creationFiletime:'134092012301239778'}},
+   {nativeReplacement:{imageSha256:'f'.repeat(64)}},
+   {nativeReplacement:{brokerPid:8008}},
+ ];
+ for(const item of scenarios){
+   const x=finalFixture(item);
+   const r=await finalReview(x);
+   assert.equal(r.status,'DENIED');
+   // A pinned process identity replaced before initial review is rejected
+   // there; a replacement discovered at launch is rejected at final gate.
+   assert.ok(['INSTALLED_BROKER_HIGH_TOKEN_LAUNCH_PROOF_UNVERIFIED',
+     'LATE_PERMIT_OR_EFFECTIVE_ACCESS_NOT_CURRENT'].includes(r.reason),r.reason);
+   assert.equal(x.counters.grant,0);
+ }
+});
+
+test('ROOT final launch before 15 minute expiry is only a source candidate; exactly at expiry denies',async()=>{
+ const x=finalFixture({root:true,finalClock:now});
+ const r=await finalReview(x);
+ assert.equal(r.status,'DENIED');
+ assert.equal(r.reason,'FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
+ assert.equal(r.canLaunch,false);
+ // ROOT current owner session and signed grant are not a per-command UAC.
+ assert.equal(r.noRepeatedUacAfterApprovedCore,true);
+});
+
+test('lost ACK after possible native dispatch returns UNKNOWN with no extra CAS or native proof read',async()=>{
+ const x=finalFixture();
+ const j={...x.f.j,effectState:'may-have-dispatched' as const};
+ const r=await reviewFinalDispatchAuthority(j,context(),x.f.incoming,x.dep);
+ assert.equal(r.status,'UNKNOWN_RECONCILE');
+ assert.equal(r.canReplay,false);
+ assert.equal(r.canLaunch,false);
+ assert.deepEqual(x.counters,{native:0,grant:0});
+});
+
+test('cached UI EFFECTIVE and pre-revoke permit cannot replace fresh final grant',async()=>{
+ const x=finalFixture({missingGrant:true});
+ x.f.j.cachedUiEffective=true;
+ const r=await finalReview(x);
+ assert.equal(r.status,'DENIED');
+ assert.equal(r.canLaunch,false);
+});
+
+test('ROOT genuinely signed fifteen-minute window may pass source review at T-1ms, never actually dispatches',async()=>{
+ const x=finalFixture({root:true,finalClock:now-1});
+ const result=await finalReview(x);
+ assert.equal(result.status,'FINAL_SOURCE_CANDIDATE_ONLY',result.reason);
+ assert.equal(result.canLaunch,false);
+ assert.equal(result.dispatchEffective,false);
+ assert.equal(result.noRepeatedUacAfterApprovedCore,true);
+});
+
+test('signed final CAS grant cannot resurrect a permit expired during native proof / final CAS latency',async()=>{
+ const x=finalFixture({
+  finalClock:now+2510,
+  finalMutation:r=>({...r,issuedAtMs:now+2500,expiresAtMs:now+3000}),
+ });
+ const result=await finalReview(x);
+ assert.equal(result.status,'DENIED');
+ assert.equal(result.reason,'FINAL_ATOMIC_GRANT_OR_ROOT_LAUNCH_STALE');
+ assert.equal(result.canLaunch,false);
 });
