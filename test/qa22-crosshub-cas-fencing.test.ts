@@ -122,6 +122,7 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {},
   // successful no-replace publication, not after ACK or Hub state change.
   const nativeKey = randomBytes(32);
   const publishedReceipts: SyntheticPublishedReceipt[] = [];
+  const finalReceipts: FencedFinalReceipt[] = [];
   const macFor = (claims: Omit<SyntheticPublishedReceipt, 'mac'>) =>
     createHmac('sha256', nativeKey).update(JSON.stringify(claims)).digest('hex');
   const verifyReceipt = (receipt: SyntheticPublishedReceipt) => {
@@ -220,6 +221,7 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {},
           sha256: digest(stage), epoch,
         };
         const receipt = { ...signedClaims, proof: finalSigner(signedClaims) };
+        finalReceipts.push({ ...receipt });
         await hooks.afterPublish?.(job, receipt);
         return receipt;
       }
@@ -231,6 +233,7 @@ function mock(mode: Mode = 'normal', hooks: Hooks = {},
         requireAuthenticatedFinalReceipt: true as const, finalReceiptVerifier: finalVerifier,
       } : {}) });
   return { cas, grants, hub, writes, verifyReceipt,
+    get finalReceipts() { return finalReceipts.map(r => ({ ...r })); },
     get publishedReceipts() { return publishedReceipts.map(r => ({ ...r })); },
     get target() { return target; }, get publications() { return publications; } };
 }
@@ -1051,6 +1054,11 @@ test('#22/#754: revoked CORE after Native publish side effect rejects late authe
       assert.equal(before.publication?.epoch, before.fencing?.epoch);
       const originalIntent = structuredClone(before.publication);
       assert.ok(originalIntent?.requestId);
+      assert.equal(fx.finalReceipts.length, 1);
+      assert.equal(fx.finalReceipts[0]!.requestId, originalIntent.requestId);
+      assert.equal(fx.finalReceipts[0]!.epoch, originalIntent.epoch);
+      assert.equal(fx.finalReceipts[0]!.sha256, originalIntent.sha256);
+      assert.equal(fx.finalReceipts[0]!.jobId, job.id);
       assert.equal(fx.publications, 1);
       assert.equal(fx.publishedReceipts.length, 1);
       assert.deepEqual(fx.target, bytes);
@@ -1101,6 +1109,11 @@ test('#22/#754: CORE revoke during independent final verification refuses authen
       assert.equal(before.publication?.sha256, digest(bytes));
       const intent = structuredClone(before.publication);
       assert.ok(intent?.requestId);
+      assert.equal(fx.finalReceipts.length, 1);
+      assert.equal(fx.finalReceipts[0]!.requestId, intent.requestId);
+      assert.equal(fx.finalReceipts[0]!.epoch, intent.epoch);
+      assert.equal(fx.finalReceipts[0]!.sha256, intent.sha256);
+      assert.equal(fx.finalReceipts[0]!.jobId, job.id);
       assert.equal(fx.publications, 1);
       assert.equal(fx.publishedReceipts.length, 1);
       fx.grants.enabled = false;
