@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -93,6 +93,19 @@ test('#43: copied job/request/SHA/CAS, foreign issuer or fake signed final ACK c
           return write();
         },
       });
+    // Correct-looking test HMAC from an attacker-controlled signer is not
+    // evidence of an externally committed original Native publication.
+    const untrustedKey = randomBytes(32);
+    const forgedClaims = {
+      requestId: job.publication!.requestId, jobId: job.id,
+      accountId: job.accountId, projectId: job.projectId,
+      targetDeviceId: job.targetDeviceId, targetPath: job.targetPath,
+      bytesTotal: job.bytesTotal, sha256: job.sha256, epoch: job.fencing!.epoch,
+    };
+    const forgedFinalReceipt = { ...forgedClaims,
+      proof: createHmac('sha256', untrustedKey)
+        .update(JSON.stringify(forgedClaims)).digest('hex') };
+    assert.match(forgedFinalReceipt.proof, /^[0-9a-f]{64}$/);
     const bad: Array<{ label: string; job: TransferJob; code: string }> = [
       { label: 'cloned jobId', job: { ...job, id: randomUUID() },
         code: 'JOB_PUBLICATION_COMMIT_MISMATCH' },
@@ -112,7 +125,9 @@ test('#43: copied job/request/SHA/CAS, foreign issuer or fake signed final ACK c
           publication: { ...job.publication!, sha256: 'b'.repeat(64) } },
         code: 'JOB_PUBLICATION_COMMIT_MISMATCH' },
       { label: 'signed final ACK but lost external commit',
-        job: { ...job, publication: { ...job.publication!, durableCommitId: undefined } },
+        job: Object.assign(
+          { ...job, publication: { ...job.publication!, durableCommitId: undefined } },
+          { forgedFinalReceipt }),
         code: 'JOB_PUBLICATION_COMMIT_REQUIRED' },
       { label: 'lost Native final ACK is UNKNOWN even if bytes were written',
         job: { ...job, state: 'MUTATION_UNKNOWN', errorCode: 'FINAL_RECEIPT_MISMATCH' },
@@ -249,8 +264,7 @@ test('#43: quota cancellation never releases reserved bytes until BOTH trusted w
         });
       await assert.rejects(partial.acknowledgeVerifiedDeletion(job),
         /WRITER_FENCE_REQUIRED/);
-      const pending = db.prepare('SELECT state FROM budget_artifact_sessions').get()
-        as { state: string };
+      const pending = db.prepare('SELECT state FROM budget_artifact_sessions').get() as { state: string };
       assert.equal(pending.state, 'CANCEL_PENDING',
         'lost ACK or revoke must retain escrow until verified writer stop');
       await assert.rejects(noAttestation.reserve(job),
@@ -262,8 +276,7 @@ test('#43: quota cancellation never releases reserved bytes until BOTH trusted w
           }),
         });
       await verified.acknowledgeVerifiedDeletion(job);
-      const released = db.prepare('SELECT state FROM budget_artifact_sessions').get()
-        as { state: string };
+      const released = db.prepare('SELECT state FROM budget_artifact_sessions').get() as { state: string };
       assert.equal(released.state, 'RELEASED',
         'this positive fixture is synthetic; no physical writer was stopped');
     } finally { db.close(); }
