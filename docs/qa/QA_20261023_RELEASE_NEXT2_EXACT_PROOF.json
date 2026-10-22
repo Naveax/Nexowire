@@ -1,0 +1,189 @@
+{
+  "schema": "nexowire.qa16.release-next2-20261023.v1",
+  "date": "2026-10-23",
+  "main": "754cc4364822be5fda528f54042fb22a84f19924",
+  "records": [
+    {
+      "pr": 837,
+      "head": "1d2a455803407b077d6838b51a3a4b0d685150e8",
+      "base": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "fullRun": 39864371572,
+      "fullConclusion": "FAILURE",
+      "jobEvidence": [
+        {
+          "id": 120122734377,
+          "name": "Node24",
+          "classification": "SAME_SEVEN_MANDATORY_P0_SOURCE_FAILURES",
+          "conclusion": "FAILURE"
+        },
+        {
+          "id": 120122734718,
+          "name": "qa-independent-negative-acceptance",
+          "classification": "MANDATORY_P0_CONTRACT_GAPS_REPRODUCED",
+          "pass": 10,
+          "fail": 7,
+          "skip": 0,
+          "conclusion": "FAILURE"
+        },
+        {
+          "id": 120122734889,
+          "name": "browser-live",
+          "classification": "SEPARATE_DURABLE_PROCESS_RUNTIME_FAILURE",
+          "durationMs": 26337,
+          "missing": "NW_DURABLE_READY",
+          "conclusion": "FAILURE"
+        },
+        {
+          "id": 120122736134,
+          "name": "Node22",
+          "classification": "CANCELLED_NOT_NEGATIVE_WITNESS",
+          "conclusion": "CANCELLED"
+        }
+      ],
+      "interpretation": "Not a seven-case test defect. Actual current pinned source lacks scoped elevation, external rollback CAS, public durable onecall. Intentional mandatory negatives are true P0 release NO-GO; separate Windows ProcessManager reattach is runtime regression."
+    },
+    {
+      "pr": 821,
+      "head": "ef87410cc7921540dabf33b83e42824cce4f4668",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "fullRun": 39862537837,
+      "fullConclusion": "FAILURE",
+      "jobEvidence": [
+        {
+          "id": 120116564545,
+          "name": "Node24",
+          "classification": "REAL_GIT_FILTER_CLEAN_TASKROOT_ESCAPE",
+          "file": "test/p50-780-git-clean-filter-external-command-negative.test.ts",
+          "conclusion": "FAILURE"
+        },
+        {
+          "name": "browser-live",
+          "classification": "HOSTED_WINDOWS_SUCCESS",
+          "conclusion": "SUCCESS"
+        }
+      ],
+      "interpretation": "Genuine deterministic source P1 sandbox escape: repository-controlled filter.clean executed by workspace.snapshot git status and wrote outside allowed PathPolicy/task root. Not test fixture failure. Same branch #811 candidate, not physical production."
+    },
+    {
+      "pr": 814,
+      "head": "daec5dbd6da1a9e1b703afdee660548ccb96367a",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "fullRun": 39865936576,
+      "fullConclusion": "FAILURE",
+      "jobEvidence": [
+        {
+          "id": 120128010532,
+          "name": "Node24",
+          "classification": "THREE_REAL_NESTED_GIT_METADATA_ROOT_ESCAPE_NEGATIVES",
+          "cases": [
+            "refs/heads external directory link missing expected denial",
+            "loose object directory outside root missing expected denial",
+            "packed Git objects outside taskRoot missing expected denial"
+          ],
+          "conclusion": "FAILURE"
+        },
+        {
+          "id": 120128010298,
+          "name": "browser-live",
+          "classification": "SEPARATE_WINDOWS_JOB_FAST_EXIT_OUTPUT_RACE",
+          "iteration": 7,
+          "conclusion": "FAILURE"
+        },
+        {
+          "name": "Node22",
+          "classification": "CANCELLED",
+          "conclusion": "CANCELLED"
+        }
+      ],
+      "interpretation": "Three true source negative failures on real workspace.snapshot/detect, not fixture-only; unrelated hosted Windows Job stdout-before-exited iteration7. Five other Git hostile checks PASS but incomplete containment."
+    },
+    {
+      "pr": 826,
+      "head": "5e307dd48657512ed0e5d5b2908e7d2cd93ec6b5",
+      "base": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "fullRun": 39866105972,
+      "fullConclusion": "FAILURE",
+      "jobEvidence": [
+        {
+          "id": 120128575331,
+          "name": "test (22)",
+          "classification": "BLANKET_FAILCLOSE_AVAILABILITY_REGRESSION_FOUR_EXISTING_POSITIVE_TESTS_FAIL",
+          "conclusion": "FAILURE",
+          "failures": [
+            "private-runbook-default-policy.test.ts headless override expected callback count1 actual0",
+            "private-runbook.test.ts nested task graph expected successful private execution but denied",
+            "runbooks.test.ts dependency-aware task/assertion expected completion but denied",
+            "runbooks.test.ts retry_unknown legacy positive raises RunbookAdmissionRequiredError code RECONCILE_REQUIRED"
+          ]
+        },
+        {
+          "id": 120128575396,
+          "name": "test (24)",
+          "classification": "CANCELLED_NOT_INDEPENDENT_WITNESS",
+          "conclusion": "CANCELLED"
+        },
+        {
+          "id": 120128574977,
+          "name": "browser-live",
+          "classification": "WINDOWS_HOSTED_SUCCESS_ON_THIS_SHA",
+          "conclusion": "SUCCESS"
+        }
+      ],
+      "interpretation": "Exact CI FAILURE. Runtime blanket task_graph deny without signed external independent atomic native admission protects UNKNOWN from replay, but four existing positive runbook/private task_graph behaviors now fail in Node22, confirming intentional functional compatibility/availability regression, NOT a witnessed second-dispatch security exploit or a mere test typo. Keep old tests; owner must design trusted CAS or explicitly resolve contract with security review, not permit local/mock CAS."
+    },
+    {
+      "pr": 829,
+      "head": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "base": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "fullRun": 39863445519,
+      "fullConclusion": "SUCCESS",
+      "dedicatedRun": 39863445634,
+      "dedicatedConclusion": "SUCCESS",
+      "jobEvidence": [
+        {
+          "id": 120119625052,
+          "name": "windows-durable-job",
+          "classification": "DEDICATED_WINDOWS_DURABLE_SOURCE_FIX_PASS",
+          "conclusion": "SUCCESS"
+        }
+      ],
+      "interpretation": "Full exact-head 7 jobs CI success plus dedicated Windows durable NWJOB5 source QA success. Real installed Agent1.0.5/privileged Broker not tested. This branch is not a merge into #837 so its success does not fix #837 Windows durable regression in that source tree."
+    }
+  ],
+  "truthRules": {
+    "noSameShaCiRerun": true,
+    "neverDisableOriginalP0Seven": true,
+    "negativeReproducedMeansActualAdversarialFailure": true,
+    "hostedRuntimeFailureSeparateFromIntentionalP0": true,
+    "fullGreenNotPhysicalAccepted": true,
+    "ownerQaOnly": true,
+    "noProductionOrMainMerge": true
+  },
+  "release": {
+    "sourceR01R22": {
+      "PASS": 6,
+      "FAIL": 6,
+      "BLOCKED": 9,
+      "NOT_TESTED": 1
+    },
+    "stagingBlocked": 22,
+    "productionBlocked": 22,
+    "originalIncidentBlocked": 22,
+    "p1": {
+      "sandbox": "FAIL",
+      "inventory": "NOT_TESTED",
+      "diff": "NOT_TESTED",
+      "loop": "NOT_TESTED",
+      "checkpoint": "NOT_TESTED"
+    },
+    "noGo": [
+      "REAL_SIGNED_HIGH_CORE",
+      "TYPED_ELEVATED_HYPERV_GUID",
+      "271_INSTALLED_PROTECTED_ACL",
+      "551_SIGNED_BOOTSTRAP_ROLLBACK",
+      "587_NONRESTORABLE_EXTERNAL_CAS",
+      "588_PUBLISHED_DURABLE_ONECALL"
+    ],
+    "vm": "UNTOUCHED"
+  }
+}
