@@ -10,7 +10,10 @@ import {
 } from '../scripts/s3-core-broker-install-gate.js';
 import type {CapturedAclNode} from '../scripts/s3-windows-acl-preflight.js';
 import {assessCoreLinkedStageAndDelegation,assessCoreOfflineRePairBootstrap,
-  assessCoreAtomicRollbackSwitchSource,type CoreAtomicSwitchEvidence,
+  assessCoreAtomicRollbackSwitchSource,assessCoreNativeAclAndDispatchSource,
+  type CoreNativeAclV2Evidence,type CoreInstallerDispatchPins,
+  type CoreInstallerPermitWitness,type CoreInstallerDispatchPermit,
+  type CoreAtomicSwitchEvidence,
   type CoreBootstrapEvidence,type CoreOfflineRePairWitness,
 } from '../scripts/s3-core-bootstrap-delegation-audit.js';
 
@@ -587,4 +590,115 @@ test('missing independent sequence, forged provenance and stale task create time
   await assert.rejects(atomicCheck(f,b,d,a),
    /ATOMIC_SWITCH_MUTATION_UNKNOWN_OR_UNATTESTED/);
  }
+});
+
+
+const authorityKey=generateKeyPairSync('ed25519');
+const dispatchFields=['schemaVersion','kind','ownerAccountId','deviceId',
+ 'transactionId','ownerEpoch','grantGeneration','challengeNonce',
+ 'brokerSha256','processCreationIdentity','externalSequence'];
+function nativeFenceFixture(){
+ const f=setup(),b=bootstrap(f),atomic=atomicFixture(f,b);
+ const sourcePaths=[...f.manifest.files.map(x=>x.path),b.ownerKey.blobPath];
+ const items=new Set<string>();
+ for(let p of sourcePaths){
+  while(true){
+   items.add(path.win32.normalize(p).toLowerCase());
+   const parent=path.win32.dirname(p);
+   if(path.win32.normalize(parent).toLowerCase()===path.win32.normalize(p).toLowerCase())break;
+   p=parent;
+  }
+ }
+ const acl:CoreNativeAclV2Evidence={
+  kind:'windows_core_broker_protected_tree_readonly_v2',
+  requestEnvelopeVersion:1,protectedRoot:root,
+  acceptedInputPaths:sourcePaths,
+  inspectedFilesCount:sourcePaths.length,
+  inspectedEntries:[...items].map(p=>({
+   path:p,evidenceAvailable:true,
+   broadLowTrustWriteFound:false,reparsePointDetected:false,
+  })),
+  inputsInsideRoot:true,rejectedOutOfRootPaths:[],
+  allInspectedPathsHaveAclEvidence:true,anyInspectedPathUnsafe:false,
+  importListIndependentlyEnumerated:false,
+  signedImportManifestVerified:false,
+  protectedCompleteImageTreeAttested:false,
+  productionReady:false,elevatedCoreDispatchEnabled:false,
+ };
+ const pins:CoreInstallerDispatchPins={
+  authorityPublicKeyPem:authorityKey.publicKey.export({format:'pem',type:'spki'}).toString(),
+  ownerAccountId:b.record.ownerAccountId,deviceId:b.record.deviceId,
+  ownerEpoch:b.record.ownerEpoch,grantGeneration:4,
+  expectedChallengeNonce:'a'.repeat(64),minimumExternalSequence:50,
+ };
+ const permit:CoreInstallerDispatchPermit={
+  schemaVersion:1,kind:'core_installer_dispatch_permit_source_v1',
+  ownerAccountId:b.record.ownerAccountId,deviceId:b.record.deviceId,
+  transactionId:b.record.transactionId,
+  ownerEpoch:b.record.ownerEpoch,grantGeneration:4,
+  challengeNonce:pins.expectedChallengeNonce,
+  brokerSha256:atomic.installedAfterCutover.sha256,
+  processCreationIdentity:atomic.nativeTaskCreationIdentity,
+  externalSequence:atomic.externalSequence,
+ };
+ const signature=()=>sign(null,Buffer.from(JSON.stringify(
+   Object.fromEntries(dispatchFields.map(key=>[
+     key,(permit as unknown as Record<string,unknown>)[key],
+   ])))),authorityKey.privateKey).toString('base64');
+ const witness:CoreInstallerPermitWitness={
+  signedPermit:permit,signatureBase64:signature(),
+  independentlyAuthenticated:true,singleUseReserved:true,
+  revoked:false,unknownMutation:false,
+ };
+ return{f,b,atomic,acl,pins,permit,witness,resign:()=>{
+  witness.signatureBase64=signature();
+ }};
+}
+function fence(v:ReturnType<typeof nativeFenceFixture>){
+ return assessCoreNativeAclAndDispatchSource(
+  v.f.manifest,v.b,v.atomic,v.acl,v.pins,v.witness);
+}
+test('native #709 v2 protected tree plus signed #712 epoch/nonce remain source-only, never privilege',()=>{
+ const v=nativeFenceFixture();
+ assert.deepEqual(fence(v),{
+  status:'native_acl_and_permit_source_only',nativeHighTokenAttested:false,
+  ownerOsConsentPhysicallyConfirmed:false,
+  executionApproved:false,productionApproved:false,
+ });
+});
+test('native #709 v2 denies missing imported DLL or parent, inherited Modify, reparse and v1 fallback',()=>{
+ for(const mutation of [
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.kind='windows_core_broker_protected_tree_readonly_v1' as CoreNativeAclV2Evidence['kind'];},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.anyInspectedPathUnsafe=true;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.inputsInsideRoot=false;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.acceptedInputPaths.pop();},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.inspectedEntries.pop();},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.inspectedEntries[0]!.broadLowTrustWriteFound=true;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.inspectedEntries[2]!.reparsePointDetected=true;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.acl.inspectedEntries[1]!.evidenceAvailable=false;},
+ ]){
+  const v=nativeFenceFixture();mutation(v);
+  assert.throws(()=>fence(v),/S3_CORE_DELEGATION_NATIVE_ACL_V2_/);
+ }
+});
+test('signed external #712 ownerEpoch/grantGeneration/nonce and replay barrier reject forged/stale claims',()=>{
+ for(const mutate of [
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.pins.grantGeneration=5;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.pins.ownerEpoch=11;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.pins.expectedChallengeNonce='b'.repeat(64);},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.witness.singleUseReserved=false as true;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.witness.revoked=true as false;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.witness.unknownMutation=true as false;},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.witness.signedPermit.externalSequence=49;v.resign();},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.witness.signedPermit.brokerSha256=H('other signed executable');v.resign();},
+  (v:ReturnType<typeof nativeFenceFixture>)=>{v.witness.signedPermit.processCreationIdentity='stale-pid-creation';v.resign();},
+ ]){
+  const v=nativeFenceFixture();mutate(v);
+  assert.throws(()=>fence(v),/S3_CORE_DELEGATION_DISPATCH_PERMIT_OWNER_NONCE_EPOCH_STALE/);
+ }
+ const forged=nativeFenceFixture();
+ forged.witness.signedPermit.grantGeneration=5;
+ forged.witness.signedPermit.grantGeneration=4;
+ forged.witness.signatureBase64=sign(null,Buffer.from('attacker'),authorityKey.privateKey).toString('base64');
+ assert.throws(()=>fence(forged),/S3_CORE_DELEGATION_SIGNATURE_INVALID/);
 });
