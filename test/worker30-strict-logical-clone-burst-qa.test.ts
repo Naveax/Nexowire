@@ -46,7 +46,7 @@ const original:TrustedLogicalOpenArtifact={
   originRunbookId:'runbook-qa30-original',
   logicalOperationId:'canonical-operation-qa30',logicalMutationSha256:mutationSha,
   ownerEpoch:7,grantGeneration:9,
-  sizeBytes:SIZE,sourceSha256,physicalFreeBytes:16*SIZE,now:CLOCK,
+  sizeBytes:SIZE,sourceSha256:sourceSha,physicalFreeBytes:16*SIZE,now:CLOCK,
 };
 // TEST-ONLY local oracle; no rollback-independent signature/lease. The API
 // additionally MUST fail closed when this authority is absent.
