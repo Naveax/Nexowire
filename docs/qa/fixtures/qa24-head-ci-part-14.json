@@ -23,7 +23,19 @@
         "status": "completed",
         "conclusion": "failure",
         "queried_head_sha": "98876d163aac7a7a580725e814b19dda621fbad0"
-      }
+      },
+      "files": [
+        "test/artifact-588-cancel-postchunk-status.qa.test.ts",
+        "test/artifact-588-cancel-read-race.qa.test.ts",
+        "test/qa21-artifact-unknown-reopen-idempotency.test.ts"
+      ],
+      "compare": {
+        "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "head_sha": "98876d163aac7a7a580725e814b19dda621fbad0",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 705,
@@ -37,7 +49,18 @@
         "status": "queued",
         "conclusion": null,
         "queried_head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5"
-      }
+      },
+      "files": [
+        ".github/workflows/qa17-700-broker-negative.yml",
+        "test/qa-17-700-native-red-preservation.test.ts"
+      ],
+      "compare": {
+        "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "head_sha": "36ba1b0a2cd9d30503b11fea1fc876be16b3f8e5",
+        "merge_base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 706,
@@ -51,7 +74,18 @@
         "status": "completed",
         "conclusion": "success",
         "queried_head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea"
-      }
+      },
+      "files": [
+        "docs/s3-worker20-agent105-preswitch-repair-qa-20261021.md",
+        "test/s3-worker20-agent105-preswitch-dag-qa.test.ts"
+      ],
+      "compare": {
+        "base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "head_sha": "6a2a1d8a2b04549a051db86291cadd99cddc82ea",
+        "merge_base_sha": "0b43332289a478a3285673f43f6bb54da5325459",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 707,
@@ -65,7 +99,21 @@
         "status": "queued",
         "conclusion": null,
         "queried_head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996"
-      }
+      },
+      "files": [
+        "docs/security/p05-transitive-updater-import-closure-20261021.md",
+        "src/agent/windows-native-file-source-boundary.ts",
+        "src/agent/windows-native-protected-import-closure.ts",
+        "test/p05-native-boundary-fixtures.ts",
+        "test/p05-transitive-protected-import-negative.test.ts"
+      ],
+      "compare": {
+        "base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "head_sha": "5ac01095e63ba51632cc5166f3a4b2bbf8f2d996",
+        "merge_base_sha": "b0e0fb30d908cc255e60cb30dedb4b6099e2c646",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 708,
@@ -79,7 +127,17 @@
         "status": "queued",
         "conclusion": null,
         "queried_head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac"
-      }
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ],
+      "compare": {
+        "base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "head_sha": "fd0545dc31b1d9f3662e1a0b7285cf5077a1abac",
+        "merge_base_sha": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 709,
@@ -93,7 +151,18 @@
         "status": "in_progress",
         "conclusion": null,
         "queried_head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88"
-      }
+      },
+      "files": [
+        "scripts/audit-core-broker-protected-tree.ps1",
+        "test/core-broker-protected-tree.test.ts"
+      ],
+      "compare": {
+        "base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "head_sha": "b083004b9ab8c18125a428cf74f3e97f7adf4e88",
+        "merge_base_sha": "637ff3a6e8705e94e6ffba91790fd83329beee3f",
+        "status": "ahead"
+      },
+      "files_complete": true
     },
     {
       "pr": 710,
@@ -107,7 +176,18 @@
         "status": "queued",
         "conclusion": null,
         "queried_head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0"
-      }
+      },
+      "files": [
+        "docs/QA_18_CROSSBROKER_REVOKE_DRAIN_20261021.md",
+        "test/qa-18-broker-revoke-drain-hostile.test.ts"
+      ],
+      "compare": {
+        "base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "head_sha": "4702b06cbad390a5dabf376d8b8eb6faea9b7ec0",
+        "merge_base_sha": "576eab8926c8257c13a47fa1be806554e2ecd190",
+        "status": "ahead"
+      },
+      "files_complete": true
     }
   ]
 }
