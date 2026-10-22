@@ -119,7 +119,7 @@ test('QA24 missing exact run, empty changed files and risky merge-base fail clos
  assert.ok(risk.review.issues.some(x=>x.code==='MERGE_BASE_STALE_OR_DIVERGED'&&x.prs.includes(811)));
 });
 
-test('QA24 complete source-green still cannot authorize external CAS or native HIGH release',()=>{
+test('QA24 complete source-green still cannot authorize external CAS or native HIGH release',async()=>{
  const m=mock(210);
  const {source}=await collectQa24FullReview(m.api,'Naveax/Nexowire');
  for(const n of source.nodes){
