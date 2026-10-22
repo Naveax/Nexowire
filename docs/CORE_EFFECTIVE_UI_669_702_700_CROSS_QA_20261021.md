@@ -165,3 +165,53 @@ and signer keys are *hypothetical*, **not physical evidence**.
 do not duplicate its Windows TEMP fixtures or bypass owner code.
 No new PR, no #04/#03/#01 source, UAC, VM, Agent, physical ACL or
 production release changes. **DRAFT / CORE EFFECTIVE NO-GO**.
+
+## #23 inventory for #780 approval UX: reality versus proposed coding-task views
+
+At current #726 HEAD `3bc631a7025699c8191ff29dfdafba191d917c4d`:
+- Existing **real** `web/app.js` device CORE card posts owner confirmation
+  via `setDeviceCorePreference`, then performs a **separate**
+  `load()` dashboard readback; it does not execute a Windows elevated
+  effect or use the approval POST return body as native token proof.
+  `coreEffective` requires server-derived `persistentMaintenance`
+  evidence, not legacy `core.active`. Backend
+  `src/product/control-plane-service.ts` computes that from
+  `AccessEffectiveAuthority.project`; missing genuine signed witness
+  remains paused. Existing `test/core-effective-ui-truth.test.ts` already
+  checks the static badge truth and must NOT be duplicated.
+- **Admin Bridge** has distinct preference and command apply approval;
+  `test/admin-bridge-apply-ui.test.ts` already checks queued status,
+  mismatched request IDs, failure, and signed apply result. No duplicate
+  tests added for that.
+- **#780 P1 coding task UI**: no concrete web diff preview/approve/reject,
+  task-scoped grant, checkpoint-aware rollback eligibility, or separated
+  four-way task approval card is implemented in inspected `web/app.js`
+  / `web/index.html`. Existing automatic update rollback *description*
+  and Broker/CORE preference cards are not Git diff approval or code
+  rollback eligibility. Do NOT report these missing views as PASS or
+  invent native permissions or a task sandbox.
+- **#775** exact owner HEAD
+  `2184612804ed4db16ed6e0e1a3acbd1cc2400955` Actions
+  `39806640003` SUCCESS. Signed final Access grant binds installed
+  FileID/volume/version/creation FILETIME and observed native witness
+  time, but owner module still returns
+  `FINAL_SOURCE_CANDIDATE_ONLY` / `canLaunch:false` and there is no
+  physical atomic native effect/rollback-independent CAS. Never promote
+  a card approval to actual HIGH token/dispatch.
+
+Single **missing non-duplicate #23 negative**: new
+`test/qa/core-card-approval-pref-only.test.ts` executes only the
+existing web CORE approval handler with a poisoned success-body object.
+It verifies malformed phrase never posts, exact approval POST only
+persists preference, does **not read** a forged `effective:true` result,
+does not call OS/UAC, and requires separate dashboard readback before
+any effective-state render. This is test-only/source-only, no browser
+automation. Expected suite discovery: prior #726 **27** tests
+plus this **1** = **28**. Do not claim hosted PASS until exact new SHA
+Node22/24 logs show 28 with zero skip.
+
+For future #780 product implementation, required separate view statuses:
+**diff content/base SHA approval**, **rollback eligibility (verified
+preimage or UNKNOWN)**, **task-scoped device/owner/epoch capability**,
+and **CORE requested vs physically EFFECTIVE**. All default
+UNVERIFIED/DENIED unless independent provider evidence exists.
