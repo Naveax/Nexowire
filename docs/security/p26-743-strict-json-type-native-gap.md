@@ -10,17 +10,24 @@
 
 Already covered by #707/#723/#743: negative transitive graph/signers, reparse/junction/hardlink/ADS, post-rename file ID, inherited insecure TEMP ACE. Do not repeat their tests.
 
-## One uncovered strict-schema negative
+## Independent P0 strict-schema negative is now an actual fail-closed RED gate
 
-In #743 source, the PowerShell check of request.version using -cne 1 permits JSON values with the wrong types through coercion:
-- numeric 1: accepted correctly.
-- string "1": incorrectly accepted as envelope-v1-readonly.
-- boolean true: incorrectly accepted as envelope-v1-readonly.
-- numeric 2 and an unknown extra field: rejected as expected.
+Original #743 exact source contains PowerShell version check `$request.version -cne 1`, which permits wrong JSON types through implicit comparison coercion. Exact read-only audit PowerShell blob `87c18f60a36149df3798a2d3911c004ffbe38668` is byte-identical on #743, #756 and this #753 QA child; **no #03 source fix was present during this audit**.
 
-Only new QA test: test/p26-743-strict-envelope-version-type-negative.test.ts. It reproduces the current invalid acceptance on disposable TEMP files. A PASS means the missing type check was observed, NOT that the input is safe. After #03 corrects this source validation, the QA test must change from documenting the currently accepted wrong types to requiring denial (and the previous assertion should fail). No installed or user file is executed, and all reports remain productionReady=false.
+- JSON numeric `1`: accepted correctly with readonly envelope-v1 report.
+- JSON string `"1"`: **accepted incorrectly**; should deny.
+- JSON boolean `true`: **accepted incorrectly**; should deny.
+- JSON array `[1]`: **accepted incorrectly**; should deny.
+- JSON object as version: denied.
+- Numeric `2`, extra keys, missing version: denied.
 
-#03 owner fix belongs in #03's own source: require strict JSON INTEGER version === 1 using explicit runtime type validation before comparison, retain common schema for legacy and envelope and preserve all existing negative tests. No #26 owner source edit.
+Test `test/p26-743-strict-envelope-version-type-negative.test.ts` changed from an informational *reproduce-and-pass* assertion to an ACTUAL fail-closed acceptance gate that **must reject all wrong version types**. It deliberately stays **RED on original #743 source**. A green result from the old HEAD is historical and does NOT pass this new acceptance requirement.
+
+Second *new* independent test `test/p26-753-envelope-malformed-legacy-negative.test.ts` checks that malformed root documents (null, scalar, list, truncated JSON), extra and case-confusable keys, wrong import-list types and shapes, missing fields, and incomplete legacy switch args are rejected. It also proves the same TEMP fixture is inspected via both a strictly numeric v1 JSON envelope and the legacy `-ProtectedInstallRoot`, `-LauncherPath`, `-UpdaterPath`, `-ImportedModulePaths` PowerShell interface. Both successful read-only reports must keep every production authority flag false.
+
+**Observed independent Windows Node22, isolated TEMP** on test-only SHA `bf638ae49342299d8e2b0be9ef468536684a40a6`: 2 tests, **1 PASS (malformed/legacy), 1 expected P0 FAIL (string/true/[1] misaccepted), 0 SKIP**, typecheck PASS; no OS ACL changes. These test cases do NOT modify production source. Child exact-head CI must be inspected and will be RED until #03 implements and verifies a strict typed integer v1 validator.
+
+#03 owner fix belongs in #03's own branch: test JSON numeric *type*, integral value and exact supported version before coercive equality or cast; reject string, bool and arrays. Preserve BOTH legacy parameter set and current base64 envelope routing into a shared fail-closed schema validator, retain unchanged QA17/QA19 and return `productionReady=false`. Never weaken rejection assertions merely to make CI green.
 
 ## Physical P0 blockers to #03 and #05
 
@@ -34,11 +41,11 @@ No real ACL changes, UAC, live Agent/Broker/service, user files, USB, VM, ReVolt
 
 Run at exact child HEAD on Windows with installed dependencies:
 ~~~powershell
-node --test --import tsx test/p26-743-strict-envelope-version-type-negative.test.ts
+node --test --import tsx test/p26-743-strict-envelope-version-type-negative.test.ts test/p26-753-envelope-malformed-legacy-negative.test.ts
 npm run typecheck
 npm run build
 npm run continuation:check
 git diff --check 7bc16b4cd1010803a4b13cdbdf95a1c02578cade...HEAD
 ~~~
 
-Hosted CI must be evaluated on exact final SHA separately from parent #707/#743 successes.
+Hosted CI must be evaluated on exact final SHA separately from parent #707/#743 successes. Any RED due strict-version misacceptance is a real unresolved fail-closed acceptance defect, not a reason to drop the test.
