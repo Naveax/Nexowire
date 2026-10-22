@@ -428,38 +428,57 @@ test('TEMP DUP_HANDLE ALLOW + co-restorable receipt root + late revoke after Acc
  // boundary. Rechecking only the two historical signed snapshots is stale.
  external.revoking=true;
  let nativeEffects=0;
- const finalSourceOnlyCheck=()=>{
-  if(!tempPidWitness.installedBrokerProcessAttested||
-     tempPidWitness.processClass==='marked-TEMP-pwsh-fixture'||
-     !tempPidWitness.inspectedTokenIsInstalledBroker||
-     !tempPidWitness.separateLowPrivilegeCallerBoundaryVerified)
+ type NativeObservation={
+  processClass:'marked-TEMP-pwsh-fixture'|'independently-attested-installed-broker';
+  pid:number;creationFiletime:string;processDupHandleOpenAccess:'ALLOW'|'DENIED';
+  inspectedTokenIsInstalledBroker:boolean;installedBrokerProcessAttested:boolean;
+  separateLowPrivilegeCallerBoundaryVerified:boolean;
+  protectedJobHandleInheritanceAndDaclVerified:boolean;
+ };
+ const finalSourceOnlyCheck=(native:NativeObservation,remaining:typeof external)=>{
+  if(!native.installedBrokerProcessAttested||
+     native.processClass==='marked-TEMP-pwsh-fixture'||
+     !native.inspectedTokenIsInstalledBroker||
+     !native.separateLowPrivilegeCallerBoundaryVerified)
    return unknown('TEMP_PID_IS_NOT_INSTALLED_HIGH_BROKER');
-  if(tempPidWitness.processDupHandleOpenAccess==='ALLOW'||
-     !tempPidWitness.protectedJobHandleInheritanceAndDaclVerified)
+  if(native.processDupHandleOpenAccess==='ALLOW'||
+     !native.protectedJobHandleInheritanceAndDaclVerified)
    return unknown('PROCESS_DUP_HANDLE_BOUNDARY_UNVERIFIED');
-  if(!external.immutableRootOutsideHubFailureDomain||
-     !external.independentInstalledOsIssuerVerified||
-     !external.independentInstalledReadbackIssuerVerified)
+  if(!remaining.immutableRootOutsideHubFailureDomain||
+     !remaining.independentInstalledOsIssuerVerified||
+     !remaining.independentInstalledReadbackIssuerVerified)
    return unknown('IMMUTABLE_INDEPENDENT_WITNESS_UNVERIFIED');
-  if(external.revoking||!external.finalExternalAtomicNativeCommitAvailable)
+  if(remaining.revoking||!remaining.finalExternalAtomicNativeCommitAvailable)
    return unknown('REVOKE_STARTED_BEFORE_FINAL_ATOMIC_EFFECT_COMMIT');
   // Never execute user/native effect in any source QA path.
   return unknown('PHYSICAL_EXECUTOR_NOT_INSTALLED');
  };
- const verdict=finalSourceOnlyCheck();
+ const verdict=finalSourceOnlyCheck(tempPidWitness,external);
  assert.equal(verdict.reason,'TEMP_PID_IS_NOT_INSTALLED_HIGH_BROKER');
  assert.equal(verdict.retrySafe,false);
- // Isolate subsequent blockers without treating injected true flags as OS
- // proof: these are in-memory fixture variations ONLY.
- const pseudoTrustedPid={...tempPidWitness,
-  processClass:'marked-TEMP-pwsh-fixture' as 'marked-TEMP-pwsh-fixture',
+ // These *forged in-memory toggles* are only used to expose the next
+ // independent missing gate, NEVER claims of installed OS authentication.
+ const fabricatedNative:NativeObservation={...tempPidWitness,
+  processClass:'independently-attested-installed-broker',
   installedBrokerProcessAttested:true,
   inspectedTokenIsInstalledBroker:true,
   separateLowPrivilegeCallerBoundaryVerified:true,
  };
- assert.equal(pseudoTrustedPid.processDupHandleOpenAccess,'ALLOW');
- assert.equal(external.immutableRootOutsideHubFailureDomain,false);
- assert.equal(external.finalExternalAtomicNativeCommitAvailable,false);
+ assert.equal(finalSourceOnlyCheck(fabricatedNative,external).reason,
+  'PROCESS_DUP_HANDLE_BOUNDARY_UNVERIFIED');
+ const fabricatedDacl:NativeObservation={...fabricatedNative,
+  processDupHandleOpenAccess:'DENIED',
+  protectedJobHandleInheritanceAndDaclVerified:true,
+ };
+ assert.equal(finalSourceOnlyCheck(fabricatedDacl,external).reason,
+  'IMMUTABLE_INDEPENDENT_WITNESS_UNVERIFIED');
+ const fabricatedIndependentWitness={...external,
+  immutableRootOutsideHubFailureDomain:true,
+  independentInstalledOsIssuerVerified:true,
+  independentInstalledReadbackIssuerVerified:true,
+ };
+ assert.equal(finalSourceOnlyCheck(fabricatedDacl,fabricatedIndependentWitness).reason,
+  'REVOKE_STARTED_BEFORE_FINAL_ATOMIC_EFFECT_COMMIT');
  assert.equal(external.revoking,true,
   'revoke can start after both signed Access readbacks');
  assert.equal(reconcileSignedReceiptAndCas(x,proof).status,'MUTATION_UNKNOWN');
