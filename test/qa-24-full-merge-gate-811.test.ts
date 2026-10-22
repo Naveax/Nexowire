@@ -71,18 +71,19 @@ function mock(total:number,opts:Opt={}) {
   };
   return {api,calls};
 }
-test('QA24 complete 232 live GET pages 100+100+32, all files/CI/compare, double HEAD pass',async()=>{
+test('QA24 two FULL 232-source passes reread HEAD/CI/files/merge-base with 100+100+32 paging',async()=>{
  const m=mock(232);
  const r=await collectQa24FullReview(m.api,'Naveax/Nexowire');
+ assert.equal(r.full_source_passes,2);
  assert.equal(r.source.open_pr_count,232);
  assert.equal(r.source.nodes.length,232);
  assert.equal(r.source.open_prs_complete,true);
  assert.ok(r.source.nodes.every(n=>n.files_complete&&n.ci.run_head_sha===n.head_sha));
  const pullCalls=m.calls.filter(x=>x.includes('/pulls?state=open'));
  assert.deepEqual(pullCalls.map(x=>Number(new URL(x,'https://api.github.com').searchParams.get('page'))),
-   [1,2,3,1,2,3]);
- assert.equal(m.calls.filter(x=>x.includes('/compare/')).length,232);
- assert.equal(m.calls.filter(x=>x.includes('/actions/runs?')).length,232);
+   [1,2,3,1,2,3,1,2,3,1,2,3]);
+ assert.equal(m.calls.filter(x=>x.includes('/compare/')).length,464);
+ assert.equal(m.calls.filter(x=>x.includes('/actions/runs?')).length,464);
  assert.equal(r.review.pr_count,232);
  assert.equal(r.review.production_merge_authorized,false);
  assert.deepEqual(r.review.current_safe_merge_queue,[]);
