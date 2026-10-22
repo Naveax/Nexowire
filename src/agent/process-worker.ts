@@ -439,6 +439,13 @@ export async function runProcessWorker(
   await fs.writeFile(eventsFile, '', { encoding: 'utf8', mode: 0o600 });
   await persistStatus();
 
+  // The native Job guardian resumes a verified root BEFORE this awaited
+  // launch returns. Bind the stream sink inside launchWindowsJob, at spawn
+  // time, or a fast durable root may produce both pipes and exit before the
+  // worker installs data listeners. append() serializes durable event writes.
+  const captureOutput = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
+    void append(stream, chunk).catch(() => undefined);
+  };
   // Only ordinary headless durable workers can inherit this guardian's
   // stdout/stderr/console. Private-desktop launch is a distinct Win32 boundary
   // and is intentionally not represented as Job-contained here.
@@ -446,7 +453,8 @@ export async function runProcessWorker(
     // Durable means independent of the Agent, not independent of the
     // owning sidecar: worker crash must close this Job and reap its shell.
     job = await launchWindowsJob(shell.executable, shell.args,
-      {cwd: init.cwd, env: process.env, guardOnParentExit: true});
+      {cwd: init.cwd, env: process.env, guardOnParentExit: true,
+        onOutput: captureOutput});
   }
   child = job?.child ?? spawn(shell.executable, shell.args, {
     ...(init.cwd ? { cwd: init.cwd } : {}),
@@ -456,19 +464,13 @@ export async function runProcessWorker(
     detached: process.platform !== 'win32',
   });
 
-  status = {
-    ...status,
-    childPid: job?.pid ?? child.pid ?? null,
-    status: 'running',
-  };
-  await persistStatus();
-
-  child.stdout.on('data', (chunk: Buffer) => {
-    void append('stdout', chunk).catch(() => undefined);
-  });
-  child.stderr.on('data', (chunk: Buffer) => {
-    void append('stderr', chunk).catch(() => undefined);
-  });
+  // Do not subscribe twice: the JobOwner is already draining both pipes.
+  // Standalone (non-Job / private desktop) process output keeps its original
+  // direct listeners, preserving those separate launch semantics.
+  if (!job) {
+    child.stdout.on('data', (chunk: Buffer) => captureOutput('stdout', chunk));
+    child.stderr.on('data', (chunk: Buffer) => captureOutput('stderr', chunk));
+  }
   child.once('error', (error) => {
     void append(
       'stderr',
@@ -476,20 +478,52 @@ export async function runProcessWorker(
     ).catch(() => undefined);
   });
 
-  await new Promise<void>((resolve) => {
-    child!.once('close', async (code, signal) => {
-      await eventChain.catch(() => undefined);
-      status = {
-        ...status,
-        status: 'exited',
-        exitCode: code,
-        signal,
-        exitedAt: new Date().toISOString(),
-      };
-      await persistStatus().catch(() => undefined);
-      resolve();
-    });
+  status = {
+    ...status,
+    childPid: job?.pid ?? child.pid ?? null,
+    status: 'running',
+  };
+  // Attach terminal listeners before the first async status write. A Job
+  // guardian can finish during awaited kernel verification or this write.
+  let resolveCompletion!: () => void;
+  const completion = new Promise<void>((resolve) => { resolveCompletion = resolve; });
+  let finalizing = false;
+  const finalize = async (
+    code: number | null, signal: NodeJS.Signals | null,
+  ): Promise<void> => {
+    if (finalizing) return;
+    finalizing = true;
+    await eventChain.catch(() => undefined);
+    status = {
+      ...status,
+      status: 'exited',
+      exitCode: code,
+      signal,
+      exitedAt: new Date().toISOString(),
+    };
+    await persistStatus().catch(() => undefined);
+    resolveCompletion();
+  };
+  child.once('close', (code, signal) => {
+    void finalize(code, signal);
   });
+  const finalizePreviouslyClosedJob = (): void => {
+    if (!job?.closed() || finalizing) return;
+    const drained = (stream: typeof child.stdout): boolean =>
+      stream.readableEnded || stream.destroyed;
+    if (drained(child.stdout) && drained(child.stderr)) {
+      void finalize(child.exitCode, child.signalCode);
+    }
+  };
+  if (job) {
+    child.stdout.once('end', finalizePreviouslyClosedJob);
+    child.stderr.once('end', finalizePreviouslyClosedJob);
+    child.stdout.once('close', finalizePreviouslyClosedJob);
+    child.stderr.once('close', finalizePreviouslyClosedJob);
+    finalizePreviouslyClosedJob();
+  }
+  await persistStatus();
+  await completion;
 
   server.close();
   await new Promise((resolve) => setTimeout(resolve, 50));

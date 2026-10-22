@@ -1,0 +1,28 @@
+name: QA03 Windows Durable NWJOB5 Early Output
+on:
+  pull_request:
+    branches:
+      - test/03-709-qa17-qa19-integration-20261022
+
+permissions:
+  contents: read
+
+jobs:
+  windows-durable-job:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Compile test-native Windows Job guardian
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Durable early-listener capture and unchanged worker reattach/recovery assertions
+        run: node --test --import tsx --test-concurrency=1 test/windows-durable-nwjob5-early-output.test.ts test/durable-process.test.ts
+      - name: Unchanged original Windows Job owner, QA19 100-cycle, and durable guardian tests
+        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/qa-19-windows-job-hosted-fast-exit.test.ts
