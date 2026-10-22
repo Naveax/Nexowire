@@ -1487,7 +1487,10 @@ test('#22/#785 P0: cloned UNKNOWN cannot borrow final CAS and revoke-start befor
       deviceId: input.targetDeviceId };
     // Only the ORIGINAL job was externally committed. Local checkpoint
     // cloning and a re-signed fake Native ACK must never mint a CAS entry.
-    const independent = new Map([[id, {
+    const independent = new Map<string, {
+      jobId: string; requestId: string; epoch: number;
+      sha256: string; durableCommitId: string;
+    }>([[id, {
       jobId: id, requestId, epoch: 5, sha256: digest(bytes),
       durableCommitId: commitId,
     }]]);
