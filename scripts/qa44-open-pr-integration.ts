@@ -107,10 +107,11 @@ async function loadNode(api:GithubRead,root:string,pin:PrRef):Promise<NodeEviden
  if((pin.changed_files!==null&&count!==pin.changed_files)||count<1||count>3000)throw Error(`CHANGED_FILE_COUNT_UNVERIFIABLE_${pin.pr}`);
  const fileObjs=await pageArray(api,`${root}/pulls/${pin.pr}/files`,3000);
  if(fileObjs.length!==count)throw Error(`INCOMPLETE_FILE_PAGINATION_${pin.pr}`);
- const paths:string[]=[];
+ const paths:string[]=[];const seenNames=new Set<string>();
  for(const f of fileObjs){const x=rec(f),name=str(x.filename),old=str(x.previous_filename);
   if(!name||[name,old].some(v=>v.startsWith('/')||v.includes('..\\')||v.includes('../')))throw Error(`BAD_CHANGED_PATH_${pin.pr}`);
-  paths.push(name);if(old)paths.push(old);
+  if(seenNames.has(name))throw Error(`DUPLICATE_CHANGED_FILENAME_${pin.pr}`);
+  seenNames.add(name);paths.push(name);if(old)paths.push(old);
  }
  const unique=[...new Set(paths)].sort();
  if(unique.length===0)throw Error(`NO_CHANGED_FILES_${pin.pr}`);
@@ -194,7 +195,7 @@ export function githubRead(token:string):GithubRead{
 if(process.argv[1]===fileURLToPath(import.meta.url)){
  const repo=process.argv[2]||'';
  const critical=(process.argv[3]||'').split(',').filter(Boolean).map(Number);
- collectOpenPrIntegration(githubRead(process.env.GH_TOKEN||process.env.GITHUB_TOKEN||''),repo,critical)
+ Promise.resolve().then(()=>collectOpenPrIntegration(githubRead(process.env.GH_TOKEN||process.env.GITHUB_TOKEN||''),repo,critical))
   .then(out=>{process.stdout.write(JSON.stringify(out,null,2)+'\n');process.exitCode=2;})
   .catch(e=>{process.stdout.write(JSON.stringify({gate:'NO_GO',safe_merge_queue:[],
    production_merge_authorized:false,error:e instanceof Error?e.message:'UNKNOWN'})+'\n');process.exitCode=3;});
