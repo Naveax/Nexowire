@@ -1,0 +1,98 @@
+{
+  "nodes": [
+    {
+      "pr": 791,
+      "head_sha": "22eec6de24264ed1b8a70f5dfbf4bd5375c3ae39",
+      "head_ref": "qa/worker30-runbook-clone-unknown-escrow-20261022",
+      "base_sha": "89a865363829c8c30a74de1516e53a697549c05b",
+      "base_ref": "qa/18-runbook-clone-unknown-replay-20261022",
+      "files": [
+        "test/worker30-runbook-clone-unknown-staging-fairness-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "89a865363829c8c30a74de1516e53a697549c05b",
+        "head_sha": "22eec6de24264ed1b8a70f5dfbf4bd5375c3ae39",
+        "merge_base_sha": "89a865363829c8c30a74de1516e53a697549c05b",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39821808832,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "22eec6de24264ed1b8a70f5dfbf4bd5375c3ae39"
+      }
+    },
+    {
+      "pr": 792,
+      "head_sha": "11ac2b320b4b1843d3f39b1b7e50c72add469b46",
+      "head_ref": "security/07-oauth-epoched-owner-writer-principal-20261022",
+      "base_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+      "base_ref": "security/07-oauth-atomic-access-verifier-20261022",
+      "files": [
+        "docs/OAUTH_EPOCH_PRINCIPAL_WSS_WORKER_CONTRACT_20261022.md",
+        "src/product/mcp-oauth.ts",
+        "test/oauth-first-party-logout-epoch-refresh-integration.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+        "head_sha": "11ac2b320b4b1843d3f39b1b7e50c72add469b46",
+        "merge_base_sha": "1e41df6cfc60a57e6d0b50344731136705f37030",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39822548339,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "11ac2b320b4b1843d3f39b1b7e50c72add469b46"
+      }
+    },
+    {
+      "pr": 793,
+      "head_sha": "9f24e7e11301ca9b8e4b8bd59f232f3eb2163d5c",
+      "head_ref": "docs/03-task-process-token-network-780-20261022",
+      "base_sha": "7927adefbbefb33e578cf85471a2e516544a91da",
+      "base_ref": "docs/03-task-sandbox-780-feasibility-20261022",
+      "files": [
+        "docs/P1_780_WINDOWS_TASK_PROCESS_TOKEN_ACCEPTANCE_20261022.md"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "7927adefbbefb33e578cf85471a2e516544a91da",
+        "head_sha": "9f24e7e11301ca9b8e4b8bd59f232f3eb2163d5c",
+        "merge_base_sha": "7927adefbbefb33e578cf85471a2e516544a91da",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39822912875,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "9f24e7e11301ca9b8e4b8bd59f232f3eb2163d5c"
+      }
+    },
+    {
+      "pr": 794,
+      "head_sha": "765f59f1d7c5a0137fe2fd5c4515016ab4bdcd55",
+      "head_ref": "qa/18-cloned-worktree-source-sha-unknown-20261022",
+      "base_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+      "base_ref": "docs/01-agent-loop-journal-contract-20261022",
+      "files": [
+        "test/qa-18-agent-loop-cloned-worktree-sha-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+        "head_sha": "765f59f1d7c5a0137fe2fd5c4515016ab4bdcd55",
+        "merge_base_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39823178271,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "765f59f1d7c5a0137fe2fd5c4515016ab4bdcd55"
+      }
+    }
+  ]
+}
