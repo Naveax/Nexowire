@@ -24,6 +24,10 @@ export interface NativeRuntimeAssessmentLike {
   protectedJobHandleInheritanceAndDaclVerified?: boolean;
   signedReleaseAndRollbackManifestVerified?: boolean;
   nativeEffectiveLowPrivilegeAccessCheckCompleted?: boolean;
+  /** Independent current installed HIGH token + PID/FILETIME at FINAL launch. */
+  finalLaunchInstalledHighBrokerReattested?: boolean;
+  /** Native side effect, not a mock callback, atomically fences revoke-start. */
+  nativeEffectCommitAtomicVsRevokeVerified?: boolean;
 }
 export interface NativeUiReceiptV2 {
   schema: 'nexowire.qa.ui.native-effective-v2';
@@ -66,6 +70,11 @@ export interface UiTrustedPinsV2 {
   /** Physically provisioned out of band: booleans from UI/request are NOT proof. */
   installedNativeSignerPhysicallyAccepted:boolean;
   externalCasMonotonicAuthorityPhysicallyAccepted:boolean;
+  /** Independent deployed CAS proves FINAL grant commits with native launch.
+   * A signed read-only CAS witness or #767 source candidate is not this proof.
+   * Never source this bit from UI, cached grant, or caller JSON.
+   */
+  finalExternalCasNativeEffectCommitPhysicallyAccepted:boolean;
   currentOwnerEpoch:number; currentGrantGeneration:number;
   installedImageSha256:string; installedVersion:string;
   currentBrokerPid:number; currentBrokerCreationFiletime:string;
@@ -76,6 +85,7 @@ export interface EffectiveUiGateResult {
   state:'PAUSED_UNVERIFIED'|'EFFECTIVE';
   effective:false|true;
   reason:'ACCESS_NOT_EFFECTIVE'|'NATIVE_RUNTIME_NOT_PHYSICALLY_ACCEPTED'|
+    'NATIVE_ATOMIC_DISPATCH_UNVERIFIED'|
     'INDEPENDENT_PHYSICAL_AUTHORITIES_UNVERIFIED'|'SIGNED_NATIVE_OR_CAS_UNAVAILABLE'|'SIGNED_NATIVE_OR_CAS_INVALID'|'INDEPENDENT_PROOF_ACCEPTED';
   canDispatch:false;
   uacProvenByAppearance:false;
@@ -144,6 +154,11 @@ export function projectVerifiedCoreUi(
      runtime.signedReleaseAndRollbackManifestVerified!==true||
      runtime.nativeEffectiveLowPrivilegeAccessCheckCompleted!==true){
     return deny('NATIVE_RUNTIME_NOT_PHYSICALLY_ACCEPTED');
+  }
+  if(runtime.finalLaunchInstalledHighBrokerReattested!==true||
+     runtime.nativeEffectCommitAtomicVsRevokeVerified!==true||
+     pins.finalExternalCasNativeEffectCommitPhysicallyAccepted!==true){
+    return deny('NATIVE_ATOMIC_DISPATCH_UNVERIFIED');
   }
   if(pins.installedNativeSignerPhysicallyAccepted!==true||
      pins.externalCasMonotonicAuthorityPhysicallyAccepted!==true){

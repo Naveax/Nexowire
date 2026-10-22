@@ -119,3 +119,49 @@ source QA PASS is reported. Production still **NO-GO**.
 **Narrow #23 independent QA correction:** Previously a source mock with `productionReady:true` plus generated Ed25519 keys could drive `projectVerifiedCoreUi` to synthetic EFFECTIVE despite absent explicit full transitive import inventory / native effective low-privilege boundary / protected installed Broker identity, or an untrusted CAS authority. The read-only projection now additionally **fails closed** unless ALL native physical-acceptance fields are explicitly true, and trusted out-of-band signer and external monotonic CAS acceptance pins are true. False/missing/wrong-typed values and in-progress revoke remain `PAUSED_UNVERIFIED`. Positive fixtures remain synthetic and are **not** a genuine physical claim.
 
 The separate proposed UI v2 nonce/CAS schema is NOT implemented in #757/#712 production providers. UI may never infer external CAS deployment, signing key custody, protected token or full loader closure from browser claims or JSON `version:1` receipts. Existing #23 CI wrapper remains unchanged, and new exact-HEAD hosted logs must confirm **25** registered tests (previous 21 plus four new) with 0 skip. Keep DRAFT; no Access/Broker/native JSON importer changes, no live UAC/VM.
+
+## #23 late signed final CAS launch review (#767) and #763 strict native JSON
+
+Current owner evidence:
+- #767 HEAD `6967cc92ae85e5d1034591940d273615c4056e00`
+  defines `nexowire.access.final-native-effect-grant.v1`, an Ed25519-signed
+  proposed final native-effect CAS grant bound to original permit nonce,
+  new launch nonce, owner/device/session epoch, generation, request and
+  dispatch ID, image SHA256 and installed PID/creation FILETIME.
+  Even an accepted synthetic signature returns
+  `FINAL_SOURCE_CANDIDATE_ONLY`, `canLaunch:false`,
+  `dispatchEffective:false`; the native effect has **not** been
+  atomically fenced by a deployed external revoke/dispatch authority.
+  The signed CAS receipt by itself MUST NOT become UI CORE EFFECTIVE
+  or a dispatch permit. Owner #767's physical execution boundary is NO-GO.
+- #763 HEAD `e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c`
+  repairs strict JSON version 1 type coercion by accepting only actual
+  Int32/Int64 integer 1 and preserving legacy read-only ACL inspection.
+  Its source compile/CI success cannot attest a high-integrity installed
+  protected Broker, complete transitive image tree, or external CAS.
+- #726 older exact HEAD `ea0df4788b9efb1d457f941f70024a60e9b4c815`
+  already had Node22/24 **25/25 discovered PASS** at CI `39802783523`,
+  but the full hosted run's Windows `browser-live` was still
+  **IN_PROGRESS** at the last independently checked observation.
+  Historical source PASS never substitutes for exact new HEAD verification.
+
+New narrow negative contract: the read-only UI projection now requires
+a **separately witnessed final-launch installed native HIGH Broker token/
+PID+FILETIME reattestation**, a physically verified *atomic native effect
+commit versus revoke start*, and external protected CAS evidence that its
+**final grant commits at that very native launch**. These are NOT
+equivalent to a cached signed queue review, a #712 permit, a #757
+post-permit readback, or #767's correctly signed
+`FINAL_SOURCE_CANDIDATE_ONLY`. All three witness fields must be strictly
+true; omitted, false, string or number substitutes stay
+`PAUSED_UNVERIFIED` with `canDispatch:false`.
+The new two tests specifically reject correctly signed alternative final
+grant/queued review schemas and absent atomic boundaries. The existing
+test-discovery wrapper is unchanged; expected current QA registrations:
+**27** (previous 25 + 2 narrow negatives). All simulated positive booleans
+and signer keys are *hypothetical*, **not physical evidence**.
+
+#763 strict numeric version belongs exclusively to the #03 native importer;
+do not duplicate its Windows TEMP fixtures or bypass owner code.
+No new PR, no #04/#03/#01 source, UAC, VM, Agent, physical ACL or
+production release changes. **DRAFT / CORE EFFECTIVE NO-GO**.

@@ -29,7 +29,9 @@ const hypothetical:NativeRuntimeAssessmentLike={actualHighIntegrityBrokerAccepte
   separateLowPrivilegeTokenBoundaryVerified:true,
   protectedJobHandleInheritanceAndDaclVerified:true,
   signedReleaseAndRollbackManifestVerified:true,
-  nativeEffectiveLowPrivilegeAccessCheckCompleted:true};
+  nativeEffectiveLowPrivilegeAccessCheckCompleted:true,
+  finalLaunchInstalledHighBrokerReattested:true,
+  nativeEffectCommitAtomicVsRevokeVerified:true};
 const native:NativeUiReceiptV2={schema:'nexowire.qa.ui.native-effective-v2',
   ownerId:owner,deviceId:device,credentialHash:cred,sessionHash:session,
   deviceEpoch,sessionEpoch,challengeNonce:nonce,ownerEpoch:4,grantGeneration:8,
@@ -50,6 +52,7 @@ const pins:UiTrustedPinsV2={nativeKey:nkey.publicKey,externalCasKey:ckey.publicK
   currentReadbackNonce:nonce,
   installedNativeSignerPhysicallyAccepted:true,
   externalCasMonotonicAuthorityPhysicallyAccepted:true,
+  finalExternalCasNativeEffectCommitPhysicallyAccepted:true,
   currentOwnerEpoch:4,currentGrantGeneration:8,installedImageSha256:hash,
   installedVersion:'1.0.5',currentBrokerPid:412,
   currentBrokerCreationFiletime:'134041932000000000',
@@ -216,5 +219,48 @@ test('#753 wrong-type JSON booleans/epochs do not manufacture UI EFFECTIVE',()=>
   denied(access,hypothetical,signed(native,{...cas,ownerEpoch:'4'} as unknown as ExternalUiEpochV2));
   denied(access,hypothetical,signed(),{
     ...pins,currentOwnerEpoch:'4',
+  } as unknown as UiTrustedPinsV2);
+});
+
+test('#767 source-only FINAL_SOURCE_CANDIDATE_ONLY and read-only CAS cannot promote UI status',()=>{
+  const sourceOnly={...hypothetical,
+    nativeEffectCommitAtomicVsRevokeVerified:false};
+  assert.equal(denied(access,sourceOnly).reason,'NATIVE_ATOMIC_DISPATCH_UNVERIFIED');
+  const staleInstalled={...hypothetical,finalLaunchInstalledHighBrokerReattested:false};
+  assert.equal(denied(access,staleInstalled).reason,'NATIVE_ATOMIC_DISPATCH_UNVERIFIED');
+  const readOnly={...pins,finalExternalCasNativeEffectCommitPhysicallyAccepted:false};
+  assert.equal(denied(access,hypothetical,signed(),readOnly).reason,
+    'NATIVE_ATOMIC_DISPATCH_UNVERIFIED');
+  // A fully signed #767 final grant is a different source-only schema,
+  // not a replacement for an independently signed UI-status CAS witness.
+  const finalGrantClaim={...cas,
+    schema:'nexowire.access.final-native-effect-grant.v1',
+  } as unknown as ExternalUiEpochV2;
+  assert.equal(denied(access,hypothetical,signed(native,finalGrantClaim)).reason,
+    'SIGNED_NATIVE_OR_CAS_INVALID');
+  const queuedReview={...cas,
+    schema:'nexowire.access.cas-readback.v1',
+  } as unknown as ExternalUiEpochV2;
+  denied(access,hypothetical,signed(native,queuedReview));
+  assert.equal(evaluate(access,hypothetical).canDispatch,false);
+});
+test('#767 final native commit and CAS fence unavailable or wrong typed is PAUSED even when source-green',()=>{
+  for(const key of [
+    'finalLaunchInstalledHighBrokerReattested',
+    'nativeEffectCommitAtomicVsRevokeVerified',
+  ] as const){
+    const absent={...hypothetical} as Record<string,unknown>;
+    delete absent[key];
+    denied(access,absent as unknown as NativeRuntimeAssessmentLike);
+    denied(access,{...hypothetical,[key]:'true'} as unknown as NativeRuntimeAssessmentLike);
+  }
+  const missing={...pins} as Record<string,unknown>;
+  delete missing.finalExternalCasNativeEffectCommitPhysicallyAccepted;
+  denied(access,hypothetical,signed(),missing as unknown as UiTrustedPinsV2);
+  denied(access,hypothetical,signed(),{
+    ...pins,finalExternalCasNativeEffectCommitPhysicallyAccepted:1,
+  } as unknown as UiTrustedPinsV2);
+  denied(access,hypothetical,signed(),{
+    ...pins,finalExternalCasNativeEffectCommitPhysicallyAccepted:'true',
   } as unknown as UiTrustedPinsV2);
 });
