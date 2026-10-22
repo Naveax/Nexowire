@@ -7,6 +7,7 @@ import {
   BrowserMicroScenarioPlanV1Schema,
   reviewBrowserMicroScenarioPlan,
   reviewBrowserMicroScenarioScreenshotRef,
+  reviewBrowserMicroScenarioStepBoundary,
 } from '../src/agent/browser-micro-scenario-contract.js';
 
 function fixture(){
@@ -17,6 +18,8 @@ function fixture(){
     ownerEpoch:3,grantGeneration:5,taskGrantId:randomUUID(),
     worktreeGrantId:randomUUID(),sandboxId:randomUUID(),
     worktreeBaseSha:'a'.repeat(40),worktreeDiffSha:'b'.repeat(64),
+    semanticEffectSha256:'c'.repeat(64),worktreeIdentitySha256:'d'.repeat(64),
+    preimageSha256:'e'.repeat(64),baseSha256:'f'.repeat(64),
     browserSessionId:randomUUID(),targetId:'page-1',
     allowedOrigin:'https://example.com',maxDurationMs:20_000,
     maxEvidenceBytes:250_000,journalState:'PLANNED' as const,
@@ -139,4 +142,83 @@ test('micro-scenario has no exposed browser capability and cannot call existing 
   await assert.rejects(executeBrowserCapability('browser.micro_scenario',fixture(),runtime),
     /Unsupported browser capability/);
   assert.equal(calls,0);
+});
+
+/**
+ * ONE scoped API-compatibility negative, across #783 Journal's original
+ * logical mutation identity and #795's task/worktree semantic readback.
+ * The progress list is synthetic metadata, NOT an actual CDP operation.
+ */
+test('#783/#795 continuation: owner/worktree drift, revoke or UNKNOWN stops before next CDP step',()=>{
+  const plan=fixture();
+  const trustedShape=()=>({
+    taskBinding:{
+      taskId:plan.taskId,logicalMutationId:plan.logicalMutationId,
+      ownerId:plan.ownerId,deviceId:plan.deviceId,
+      deviceEpoch:plan.deviceEpoch,sessionEpoch:plan.sessionEpoch,
+      ownerEpoch:plan.ownerEpoch,grantGeneration:plan.grantGeneration,
+      semanticEffectSha256:plan.semanticEffectSha256,
+      worktreeIdentitySha256:plan.worktreeIdentitySha256,
+      preimageSha256:plan.preimageSha256,
+      baseSha256:plan.baseSha256,diffSha256:plan.worktreeDiffSha,
+      gitRootWithinApprovedScope:true,gitMetadataWithinApprovedScope:true,
+      mutationState:'NOT_DISPATCHED_VERIFIED' as const,
+    },
+    ownerFence:{
+      ownerEpoch:plan.ownerEpoch,grantGeneration:plan.grantGeneration,
+      revoking:false,revoked:false,
+    },
+    journal:{
+      logicalMutationId:plan.logicalMutationId,requestId:plan.requestId,
+      state:'PLANNED' as const,
+    },
+    browserSessionId:plan.browserSessionId,targetId:plan.targetId,
+  });
+  // An apparent initial match is NOT a signed grant; even the first
+  // navigate remains blocked. We simulate only source metadata progression.
+  const initial=reviewBrowserMicroScenarioStepBoundary(plan,'n',trustedShape());
+  assert.equal(initial.status,'SOURCE_SCOPE_MATCHED_NO_AUTHORITY');
+  assert.equal(initial.canDispatch,false);
+  assert.equal(initial.canAdvance,false);
+  const scenarios=[
+    {name:'re-pair ownerEpoch',next:'a',
+      change:{ownerFence:{...trustedShape().ownerFence,
+        ownerEpoch:plan.ownerEpoch+1}},expected:'STOP'},
+    {name:'linked worktree identity SHA',next:'s',
+      change:{taskBinding:{...trustedShape().taskBinding,
+        worktreeIdentitySha256:'9'.repeat(64)}},expected:'STOP'},
+    {name:'worktree Git base content SHA',next:'a',
+      change:{taskBinding:{...trustedShape().taskBinding,
+        baseSha256:'8'.repeat(64)}},expected:'STOP'},
+    {name:'revoke-start during the prior step',next:'s',
+      change:{ownerFence:{...trustedShape().ownerFence,
+        revoking:true}},expected:'STOP'},
+    {name:'revoked generation',next:'a',
+      change:{ownerFence:{...trustedShape().ownerFence,
+        revoked:true}},expected:'STOP'},
+    {name:'unknown previous navigation effect',next:'a',
+      change:{taskBinding:{...trustedShape().taskBinding,
+        mutationState:'MUTATION_STATE_UNKNOWN'}},
+      expected:'RECONCILE_REQUIRED'},
+    {name:'UNKNOWN cloned Journal continuation',next:'s',
+      change:{journal:{...trustedShape().journal,
+        state:'MUTATION_STATE_UNKNOWN'}},expected:'RECONCILE_REQUIRED'},
+  ] as const;
+  let nextStepDispatches=0;
+  for(const variant of scenarios){
+    const current={...trustedShape(),...variant.change};
+    const review=reviewBrowserMicroScenarioStepBoundary(
+      plan,variant.next,current,
+    );
+    assert.equal(review.status,variant.expected,variant.name);
+    assert.equal(review.canDispatch,false,variant.name);
+    assert.equal(review.canReplay,false,variant.name);
+    assert.equal(review.canAdvance,false,variant.name);
+    assert.equal(review.requestId,plan.requestId,variant.name);
+    assert.equal(review.logicalMutationId,plan.logicalMutationId,variant.name);
+    // No new navigate/assert/screenshot call may be issued. Intentionally
+    // no BrowserRuntime, CDP socket or native process is instantiated.
+    if(review.canDispatch)nextStepDispatches++;
+  }
+  assert.equal(nextStepDispatches,0);
 });
