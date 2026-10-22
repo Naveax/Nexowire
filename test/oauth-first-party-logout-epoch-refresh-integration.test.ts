@@ -15,6 +15,7 @@ import {MemoryMcpOAuthStore} from '../src/product/memory-mcp-oauth-store.js';
 import {FirstPartyMcpOAuthLogoutBoundary} from '../src/product/mcp-oauth-first-party-logout.js';
 import {ProposedMcpOAuthSessionEpoch} from '../src/product/mcp-oauth-session-epoch-proposal.js';
 import {ProposedMcpOAuthEpochAtomicRefresh} from '../src/product/mcp-oauth-atomic-epoch-refresh-proposal.js';
+import {ProposedMcpOAuthEpochAccessVerifier} from '../src/product/mcp-oauth-epoch-access-verifier-proposal.js';
 
 class Statement implements D1PreparedStatementLike {
   constructor(private readonly sql:StatementSync,private readonly args:unknown[]=[]){}
@@ -52,6 +53,8 @@ const ownerB='trusted-owner-b';
 const client='oauth-client-07-fixture';
 const resource='https://mcp-issuer.invalid/mcp';
 const digest=(s:string)=>createHash('sha256').update(s,'utf8').digest('hex');
+// Fixture-only invalid-token authority for tests exercising refresh failures.
+const denyAccess={authenticateAccessToken:async(_rawToken:string)=>null};
 
 test('first-party owner logout after access revoke locks concurrent refresh while foreign owner unaffected',async()=>{
   const sqlite=new DatabaseSync(':memory:');
@@ -152,12 +155,14 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
       'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
     ).get(ownerA) as {n:number}).n;
     const rotator=new ProposedMcpOAuthEpochAtomicRefresh({db,resource,now:()=>at});
+    const epochVerifier=new ProposedMcpOAuthEpochAccessVerifier({db,resource,now:()=>at});
     // Exercise the *actual* McpOAuthService.token() routing, not just the
     // staging proposal directly. A selected epoch-atomic authority cannot
     // fall back to legacy consumeRefreshToken/issueTokens on denial.
     const strictIssuer=new McpOAuthService(new D1McpOAuthStore(db),{
       issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
       refreshMode:'epoch-atomic',epochAtomicRefresh:rotator,
+      epochAccessVerifier:epochVerifier,
     });
     const rotate=(refresh:string)=>strictIssuer.token(new URLSearchParams({
       grant_type:'refresh_token',refresh_token:refresh,
@@ -177,6 +182,15 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
       'SELECT COUNT(*) AS n FROM mcp_oauth_access_tokens WHERE account_id=?'
     ).get(ownerA) as {n:number}).n,beforeOwnerA);
     assert.equal(refreshRow(a.refresh).revoked_at,at.toISOString());
+    // Simulate a hostile stale writer reviving an old access expiry after
+    // logout. The unprotected legacy verifier would trust the row, while
+    // the issuer's strict verifier must consult the current locked epoch.
+    sqlite.prepare(
+      'UPDATE mcp_oauth_access_tokens SET expires_at=? WHERE token_hash=?'
+    ).run(new Date(at.getTime()+3600_000).toISOString(),digest(a.access));
+    assert.ok(await oauth.authenticateAccessToken(a.access));
+    assert.equal(await strictIssuer.authenticateAccessToken(a.access),null);
+    assert.equal((await strictIssuer.authenticateAccessToken(b.access))?.accountId,ownerB);
     const unrelated=await rotate(b.refresh);
     assert.match(unrelated.access_token,/^nwx_mcp_/);
     assert.ok(unrelated.refresh_token,'atomic refresh must issue the next refresh grant');
@@ -185,6 +199,7 @@ test('first-party owner logout after access revoke locks concurrent refresh whil
       'SELECT account_id FROM mcp_oauth_access_tokens WHERE token_hash=?'
     ).get(digest(unrelated.access_token)) as {account_id:string};
     assert.equal(row.account_id,ownerB);
+    assert.equal((await strictIssuer.authenticateAccessToken(unrelated.access_token))?.accountId,ownerB);
   } finally {sqlite.close()}
 });
 
@@ -194,9 +209,19 @@ test('strict issuer refresh refuses missing authority, unknown DB failure and an
   const options={issuer:'https://mcp-issuer.invalid',resource,now:()=>at};
   assert.throws(()=>new McpOAuthService(store,{
     ...options,refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
   }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
   assert.throws(()=>new McpOAuthService(store,{
     ...options,epochAtomicRefresh:{rotate:async()=>{throw Error('unreachable')}},
+  }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
+  assert.throws(()=>new McpOAuthService(store,{
+    ...options,refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
+    epochAtomicRefresh:{rotate:async()=>{throw Error('unreachable')}},
+  }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
+  assert.throws(()=>new McpOAuthService(store,{
+    ...options,refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
   }),/OAUTH_ATOMIC_REFRESH_AUTHORITY_REQUIRED/);
 
   const old='nwx_refresh_'+('Z'.repeat(43));
@@ -209,6 +234,7 @@ test('strict issuer refresh refuses missing authority, unknown DB failure and an
   let calls=0;
   const strict=new McpOAuthService(store,{
     ...options,refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
     epochAtomicRefresh:{
       async rotate(){calls++;throw Error('SYNTHETIC_D1_UNAVAILABLE')},
     },
@@ -225,6 +251,7 @@ test('strict issuer refresh refuses missing authority, unknown DB failure and an
 
   const forged=new McpOAuthService(store,{
     ...options,refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
     epochAtomicRefresh:{async rotate(){return {
       access_token:'invalid',
       refresh_token:'invalid',
@@ -241,6 +268,7 @@ test('strict issuer checks resource before calling trusted atomic refresher',asy
   const strict=new McpOAuthService(store,{
     issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
     refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
     epochAtomicRefresh:{async rotate(){touched++;throw Error('unreachable')}},
   });
   for(const fields of [
@@ -261,6 +289,7 @@ test('issuer accepts both valid refresh scope orders from a trusted atomic autho
   const service=new McpOAuthService(store,{
     issuer:'https://mcp-issuer.invalid',resource,now:()=>at,
     refreshMode:'epoch-atomic',
+    epochAccessVerifier:denyAccess,
     epochAtomicRefresh:{
       async rotate(){
         return {
