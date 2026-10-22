@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import {promises as fs} from 'node:fs';
+import {promises as fs,renameSync,mkdirSync,writeFileSync} from 'node:fs';
 import {PathPolicy,PathDeniedError} from '../src/agent/path-policy.js';
 import {ScopedPathGrantRegistry} from '../src/agent/scoped-path-grants.js';
 
@@ -124,6 +124,36 @@ test('actual File API dispatch respects task root and denies writes and unsandbo
     rejected('UNSANDBOXED_EXECUTION_DENIED'));
   assert.equal(await fs.readFile(path.join(f.task,'inside.txt'),'utf8'),'task-only');
   assert.deepEqual((await fs.readdir(f.task)).sort(),['inside.txt']);
+});
+
+test('task root directory renamed and recreated during read authorization must fail closed',async t=>{
+  const f=await fixture(t);
+  const oldTask=path.join(f.dir,'task-original');
+  let activeCalls=0;
+  // Inject a deterministic owner registry callback at the exact authorization
+  // phase after realpath but before PathPolicy's final path-stability check.
+  // All directory changes stay inside this single disposable TEMP fixture.
+  const grants=new class extends ScopedPathGrantRegistry {
+    override active(ownerId:string,deviceId:string){
+      activeCalls++;
+      if(activeCalls===2){
+        renameSync(f.task,oldTask);
+        mkdirSync(f.task);
+        writeFileSync(path.join(f.task,'inside.txt'),'replaced directory', 'utf8');
+      }
+      return super.active(ownerId,deviceId);
+    }
+  }();
+  const policy=new PathPolicy([f.task],{
+    taskRoot:f.task,platform:'win32',grants,
+    ownerId:'task-owner',deviceId:'task-device',
+  });
+  await assert.rejects(
+    ()=>policy.authorizeExisting(path.join(f.task,'inside.txt'),'read'),
+    rejected('TASK_ROOT_CHANGED_DURING_AUTHORIZATION'));
+  assert.equal(activeCalls>=2,true);
+  assert.equal(await fs.readFile(path.join(oldTask,'inside.txt'),'utf8'),'task-only');
+  assert.equal(await fs.readFile(path.join(f.task,'inside.txt'),'utf8'),'replaced directory');
 });
 
 test('task root itself cannot be replaced by a disposable junction or symlink',async t=>{

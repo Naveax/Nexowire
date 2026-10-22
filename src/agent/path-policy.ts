@@ -132,17 +132,34 @@ export class PathPolicy {
     return this.taskRoot ? [this.taskRoot] : this.roots;
   }
 
-  private async assertTaskRootNotReparse(): Promise<void> {
-    if (!this.taskRoot) return;
+  private async assertTaskRootNotReparse(): Promise<{dev: bigint; ino: bigint} | undefined> {
+    if (!this.taskRoot) return undefined;
     // Reject a symlink/junction passed as the task root itself. This check
     // still cannot protect ancestor changes after observation; only an OS
     // retained-directory-handle sandbox could guarantee that property.
-    let st: import('node:fs').Stats;
-    try { st = await fs.lstat(this.taskRoot); }
+    let st: import('node:fs').BigIntStats;
+    try { st = await fs.lstat(this.taskRoot, {bigint:true}); }
     catch { throw new PathDeniedError(this.taskRoot, 'TASK_ROOT_UNVERIFIED'); }
-    if (!st.isDirectory() || st.isSymbolicLink()) {
+    if (!st.isDirectory() || st.isSymbolicLink() || st.ino <= 0n) {
       throw new PathDeniedError(this.taskRoot, 'TASK_ROOT_REPARSE_UNVERIFIED');
     }
+    return {dev:st.dev,ino:st.ino};
+  }
+
+  private async assertTaskRootIdentityStable(
+    original: {dev:bigint;ino:bigint} | undefined, scope:FileScope,
+  ):Promise<void> {
+    if (!original || !this.taskRoot) return;
+    let after:{dev:bigint;ino:bigint}|undefined;
+    try { after=await this.assertTaskRootNotReparse(); }
+    catch {
+      throw new PathDeniedError(this.taskRoot,'TASK_ROOT_CHANGED_DURING_AUTHORIZATION',scope);
+    }
+    if (!after || after.dev!==original.dev || after.ino!==original.ino) {
+      throw new PathDeniedError(this.taskRoot,'TASK_ROOT_CHANGED_DURING_AUTHORIZATION',scope);
+    }
+    // A post-check rename still requires a native retained-directory-handle
+    // File API. This resampling is not a complete kernel sandbox or lock.
   }
 
   resolve(requestedPath: string, cwd = process.cwd()): string {
@@ -243,11 +260,12 @@ export class PathPolicy {
     scope: FileScope,
     cwd = process.cwd(),
   ): Promise<string> {
-    await this.assertTaskRootNotReparse();
+    const taskRootId = await this.assertTaskRootNotReparse();
     const roots = this.availableRoots(requestedPath, cwd);
     const target = await this.resolveExistingWithRoots(requestedPath, cwd, roots);
     await this.assertScope(target, scope);
     await this.assertPathStable(requestedPath, target, cwd, roots, scope, true);
+    await this.assertTaskRootIdentityStable(taskRootId,scope);
     return target;
   }
 
@@ -256,11 +274,12 @@ export class PathPolicy {
     scope: FileScope,
     cwd = process.cwd(),
   ): Promise<string> {
-    await this.assertTaskRootNotReparse();
+    const taskRootId = await this.assertTaskRootNotReparse();
     const roots = this.availableRoots(requestedPath, cwd);
     const target = await this.resolveForCreateWithRoots(requestedPath, cwd, roots);
     await this.assertScope(target, scope);
     await this.assertPathStable(requestedPath, target, cwd, roots, scope, false);
+    await this.assertTaskRootIdentityStable(taskRootId,scope);
     return target;
   }
 
