@@ -48,6 +48,12 @@ export type FencedPublicationDisposition=
   'OWNER_REPAIR_PENDING';
 export interface TrustedPublicationFacts {
   readonly publicationDisposition:FencedPublicationDisposition;
+  /** Highest durable Native PUBLISH intent across Hubs (zero only when
+   * the protected journal has independently verified no dispatch). */
+  readonly publicationDispatchHighWaterEpoch:number;
+  /** Distinct rollback-independent #768 commitPublished result, never
+   * the final Native ACK proof or locally inferred COMPLETED status. */
+  readonly durablePublicationCommitId:string|null;
   readonly publicationRequestId:string|null;
   readonly publicationEpoch:number|null;
   readonly publicationReceiptId:string|null;
@@ -117,12 +123,20 @@ const validId=(x:string)=>typeof x==='string'&&
 const epoch=(x:number)=>Number.isSafeInteger(x)&&x>0;
 const chunkSha=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const validPublication=(p:TrustedPublicationFacts,scope:ServerBoundArtifactCleanup)=>{
-  if(p?.publicationDisposition==='NOT_ATTEMPTED_VERIFIED')
-    return p.publicationRequestId===null&&
+  if(!Number.isSafeInteger(p?.publicationDispatchHighWaterEpoch)||
+     p.publicationDispatchHighWaterEpoch<0)return false;
+  if(p.publicationDisposition==='NOT_ATTEMPTED_VERIFIED')
+    return p.publicationDispatchHighWaterEpoch===0&&
+      p.durablePublicationCommitId===null&&
+      p.publicationRequestId===null&&
       p.publicationEpoch===null&&p.publicationReceiptId===null&&
       p.publishedSizeBytes===null&&p.publishedSha256===null&&
       p.finalTargetReadbackSha256===null;
-  return p?.publicationDisposition==='AUTHENTICATED_FINAL_VERIFIED'&&
+  return p.publicationDisposition==='AUTHENTICATED_FINAL_VERIFIED'&&
+    epoch(p.publicationDispatchHighWaterEpoch)&&
+    p.publicationEpoch===p.publicationDispatchHighWaterEpoch&&
+    validId(p.durablePublicationCommitId as string)&&
+    p.durablePublicationCommitId!==p.publicationReceiptId&&
     validId(p.publicationRequestId as string)&&
     epoch(p.publicationEpoch as number)&&
     validId(p.publicationReceiptId as string)&&
@@ -132,6 +146,8 @@ const validPublication=(p:TrustedPublicationFacts,scope:ServerBoundArtifactClean
 };
 const samePublication=(a:TrustedPublicationFacts,b:TrustedPublicationFacts)=>
   a.publicationDisposition===b.publicationDisposition&&
+  a.publicationDispatchHighWaterEpoch===b.publicationDispatchHighWaterEpoch&&
+  a.durablePublicationCommitId===b.durablePublicationCommitId&&
   a.publicationRequestId===b.publicationRequestId&&
   a.publicationEpoch===b.publicationEpoch&&
   a.publicationReceiptId===b.publicationReceiptId&&
@@ -233,6 +249,7 @@ export class StagingArtifactFencedCleanupAdmission {
         !samePublication(current,witness)||
         !epoch(current.writerRevokeEpoch)||
         current.writerRevokeEpoch<=scope.dispatchedWriterEpoch||
+        current.writerRevokeEpoch<=current.publicationDispatchHighWaterEpoch||
         !Number.isSafeInteger(current.nativeDispatchHighWaterEpoch)||
         current.nativeDispatchHighWaterEpoch!==scope.dispatchedWriterEpoch||
         current.pendingDispatchState!==scope.pendingDispatchState||
@@ -247,6 +264,7 @@ export class StagingArtifactFencedCleanupAdmission {
         (scope.dispatchedWriterEpoch>0&&
           current.pendingDispatchState!=='DISPATCHED_OR_UNKNOWN')||
         current.writerStoppedThroughEpoch<scope.dispatchedWriterEpoch||
+        current.writerStoppedThroughEpoch<current.publicationDispatchHighWaterEpoch||
         current.writerStoppedThroughEpoch!==witness.writerStoppedThroughEpoch||
         current.deletionEpoch!==witness.deletionEpoch||
         !epoch(current.reconciliationEpoch)||

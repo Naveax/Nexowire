@@ -80,6 +80,9 @@ function fixture(){
       'NOT_ATTEMPTED_VERIFIED'|'AUTHENTICATED_FINAL_VERIFIED'|
       'PUBLICATION_UNKNOWN_PENDING'|'FORGED_FINAL_RECEIPT_PENDING'|
       'OWNER_REPAIR_PENDING',
+    publicationDispatchHighWaterEpoch:0,
+    durablePublicationCommitId:null as string|null,
+    forgedWitnessCommitId:undefined as string|null|undefined,
     publicationRequestId:null as string|null,
     publicationEpoch:null as number|null,
     publicationReceiptId:null as string|null,
@@ -144,6 +147,8 @@ function fixture(){
         fencingEpoch:evidence.staleReadback
           ? witness.fencingEpoch+1 : evidence.fencingEpoch,
         publicationDisposition:evidence.publicationDisposition,
+        publicationDispatchHighWaterEpoch:evidence.publicationDispatchHighWaterEpoch,
+        durablePublicationCommitId:evidence.durablePublicationCommitId,
         publicationRequestId:evidence.publicationRequestId,
         publicationEpoch:evidence.publicationEpoch,
         publicationReceiptId:evidence.publicationReceiptId,
@@ -172,6 +177,10 @@ function fixture(){
           reconciliationEpoch:evidence.reconciliationEpoch,
           nativeResolution:evidence.receiptNativeResolution,
           publicationDisposition:evidence.witnessPublicationDisposition,
+          publicationDispatchHighWaterEpoch:evidence.publicationDispatchHighWaterEpoch,
+          durablePublicationCommitId:
+            evidence.forgedWitnessCommitId===undefined
+              ?evidence.durablePublicationCommitId:evidence.forgedWitnessCommitId,
           publicationRequestId:evidence.publicationRequestId,
           publicationEpoch:evidence.publicationEpoch,
           publicationReceiptId:evidence.publicationReceiptId,
@@ -771,9 +780,11 @@ test('#754 authentic final publish plus independent target digest readback can r
  const f=fixture();try{
    reserve(f);pending(f);await cancel(f);f.verifiedDelete();
    f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.publicationDispatchHighWaterEpoch=71;
+   f.evidence.durablePublicationCommitId='external-atomic-commit-0001';
    f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
    f.evidence.publicationRequestId='native-final-request-0001';
-   f.evidence.publicationEpoch=72;
+   f.evidence.publicationEpoch=71;
    f.evidence.publicationReceiptId='external-signer-receipt-0001';
    f.evidence.publishedSizeBytes=SIZE;
    f.evidence.publishedSha256=hash;
@@ -791,9 +802,11 @@ test('#754 final Native receipt must bind immutable request ID, complete digest 
  const f=fixture();try{
    reserve(f);pending(f);await cancel(f);f.verifiedDelete();
    f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.publicationDispatchHighWaterEpoch=71;
+   f.evidence.durablePublicationCommitId='external-atomic-commit-0001';
    f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
    f.evidence.publicationRequestId='native-final-request-0001';
-   f.evidence.publicationEpoch=72;
+   f.evidence.publicationEpoch=71;
    f.evidence.publicationReceiptId='external-signer-receipt-0001';
    f.evidence.publishedSizeBytes=SIZE;
    f.evidence.publishedSha256=hash;
@@ -828,9 +841,11 @@ test('published authenticated receipt from old owner generation must not release
  const f=fixture();try{
    reserve(f);pending(f);await cancel(f);f.verifiedDelete();
    f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.publicationDispatchHighWaterEpoch=71;
+   f.evidence.durablePublicationCommitId='external-atomic-commit-0001';
    f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
    f.evidence.publicationRequestId='native-final-request-0001';
-   f.evidence.publicationEpoch=72;
+   f.evidence.publicationEpoch=71;
    f.evidence.publicationReceiptId='external-signer-receipt-0001';
    f.evidence.publishedSizeBytes=SIZE;
    f.evidence.publishedSha256=hash;
@@ -855,6 +870,135 @@ test('publication was independently never attempted and stage deletion verified:
      'RELEASED_FIRST');
    assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
      'RELEASED_ALREADY');
+   assert.equal(f.stats().admittedBytes,CHUNK);
+ }finally{f.close()}
+});
+
+/** Synthetic protected #768 final-commit witness, NOT a real signer/CAS. */
+function verifiedExternalPublication(f:ReturnType<typeof fixture>){
+ f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+ f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+ f.evidence.publicationDispatchHighWaterEpoch=71;
+ f.evidence.publicationEpoch=71;
+ f.evidence.publicationRequestId='native-final-request-0001';
+ f.evidence.publicationReceiptId='external-signer-receipt-0001';
+ f.evidence.durablePublicationCommitId='external-atomic-commit-0001';
+ f.evidence.publishedSizeBytes=SIZE;
+ f.evidence.publishedSha256=hash;
+ f.evidence.finalTargetReadbackSha256=hash;
+}
+
+test('#768 final Native receipt alone cannot release quota without distinct external monotonic commit',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.durablePublicationCommitId=null;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   f.evidence.durablePublicationCommitId=f.evidence.publicationReceiptId;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#768 external publication commit mismatch between independent witness and current CAS cannot refund',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.forgedWitnessCommitId='outdated-external-commit-0007';
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+   f.evidence.forgedWitnessCommitId=undefined;
+   assert.equal(await f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_FIRST');
+   assert.equal(await f.cleanup2.releaseReservedDiskAfterVerifiedCleanup(scope),
+     'RELEASED_ALREADY');
+   assert.equal(f.stats().admittedBytes,CHUNK);
+ }finally{f.close()}
+});
+
+test('#766 signed final receipt and monotonic commit still are not writer-stop or physical deletion proof',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.writerStopped=false;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.evidence.writerStopped=true;
+   f.evidence.actualDeletion=false;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_PHYSICAL_PROOF_UNAVAILABLE/);
+   f.evidence.actualDeletion=true;
+   f.evidence.activeWriters=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#768 stale Hub cannot call publication never attempted when protected Native publication intent exists',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   assert.equal(f.evidence.publicationDisposition,'NOT_ATTEMPTED_VERIFIED');
+   f.evidence.publicationDispatchHighWaterEpoch=75;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#768 newer publication epoch cannot escape old writer revoke or missing stopped-through',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.publicationDispatchHighWaterEpoch=75;
+   f.evidence.publicationEpoch=75;
+   // External CAS says publishing was attempted at epoch 75 but all evidence
+   // was fenced and writer-stopped only through 71 / revoked at 72.
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
+ }finally{f.close()}
+});
+
+test('#768 rejected commit / lost final ACK keeps storage reserved across two Hubs and CORE re-pair',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.publicationDisposition='PUBLICATION_UNKNOWN_PENDING';
+   f.evidence.witnessPublicationDisposition='PUBLICATION_UNKNOWN_PENDING';
+   for(let i=0;i<2;i++){
+     await assert.rejects(()=>f.cleanup2.releaseReservedDiskAfterVerifiedCleanup({
+       ...scope,durableDeletionVerified:true,finalSigned:true,
+     } as typeof scope),/CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   }
+   f.evidence.publicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.witnessPublicationDisposition='AUTHENTICATED_FINAL_VERIFIED';
+   f.evidence.ownerEpoch=scope.ownerEpoch+1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_INDEPENDENT_WITNESS_INVALID/);
+   assert.deepEqual(f.stats(),{admittedBytes:CHUNK,occupiedBytes:SIZE,
+     totalSessions:1,releasedSessions:0});
+ }finally{f.close()}
+});
+
+test('#768 externally committed publish with unverified external writer-stop readback never credits quota',async()=>{
+ const f=fixture();try{
+   reserve(f);pending(f);await cancel(f);f.verifiedDelete();
+   verifiedExternalPublication(f);
+   f.evidence.readbackUnavailable=true;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /INDEPENDENT_READBACK_UNAVAILABLE/);
+   f.evidence.readbackUnavailable=false;
+   f.evidence.unresolvedNativeMutations=1;
+   await assert.rejects(()=>f.cleanup.releaseReservedDiskAfterVerifiedCleanup(scope),
+     /CLEANUP_MONOTONIC_READBACK_STALE_OR_FORGED/);
+   assert.equal(f.stats().occupiedBytes,SIZE);
    assert.equal(f.stats().admittedBytes,CHUNK);
  }finally{f.close()}
 });
