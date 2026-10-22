@@ -1,0 +1,133 @@
+{
+  "scope": "786-790 exact SHA GitHub observation; historical after capture",
+  "nodes": [
+    {
+      "pr": 786,
+      "head_sha": "8d5390dc8ed94e13ac380c6e37aa6f4de2888d4b",
+      "head_ref": "qa/w26-780-worktree-root-escape-20261022",
+      "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "base_ref": "main",
+      "files": [
+        "test/p26-780-git-worktree-root-escape-negative.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "8d5390dc8ed94e13ac380c6e37aa6f4de2888d4b",
+        "merge_base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39817020745,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "8d5390dc8ed94e13ac380c6e37aa6f4de2888d4b"
+      }
+    },
+    {
+      "pr": 787,
+      "head_sha": "3fe56ef39ab604a472974946dd31b4e016287f46",
+      "head_ref": "feat/04-diff-approval-authority-20261022",
+      "base_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955",
+      "base_ref": "feat/04-final-identity-binding-20261022",
+      "files": [
+        "docs/NEXOWIRE_ACCESS_DIFF_APPROVAL_BOUNDARY_20261022.md",
+        "src/product/access-diff-approval-boundary.ts",
+        "test/access-diff-approval-boundary.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955",
+        "head_sha": "3fe56ef39ab604a472974946dd31b4e016287f46",
+        "merge_base_sha": "2184612804ed4db16ed6e0e1a3acbd1cc2400955",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39817200109,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "3fe56ef39ab604a472974946dd31b4e016287f46"
+      }
+    },
+    {
+      "pr": 788,
+      "head_sha": "7927adefbbefb33e578cf85471a2e516544a91da",
+      "head_ref": "docs/03-task-sandbox-780-feasibility-20261022",
+      "base_sha": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c",
+      "base_ref": "fix/03-strict-json-v1-native-boundary-20261022",
+      "files": [
+        "docs/P1_780_TASK_SANDBOX_FEASIBILITY_20261022.md"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c",
+        "head_sha": "7927adefbbefb33e578cf85471a2e516544a91da",
+        "merge_base_sha": "e67f8f4ce14adb161a81f1f1ab45becbf5d7f40c",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39817363480,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "7927adefbbefb33e578cf85471a2e516544a91da"
+      }
+    },
+    {
+      "pr": 789,
+      "head_sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+      "head_ref": "test/24-delta-774-779-source-20261022",
+      "base_sha": "540770c173a820060f84ab1370e633aa5b064e79",
+      "base_ref": "test/24-delta-759-773-exact-20261022",
+      "files": [
+        "docs/qa/QA24_DELTA_774_779_20261022.md",
+        "docs/qa/fixtures/qa24-delta-774-776.json",
+        "docs/qa/fixtures/qa24-delta-777-779.json",
+        "docs/qa/fixtures/qa24-open-census-774-779-20261022.json",
+        "scripts/qa24-delta774-live.ts",
+        "scripts/qa24-delta774-review.ts",
+        "test/qa-24-delta774-review.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "540770c173a820060f84ab1370e633aa5b064e79",
+        "head_sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+        "merge_base_sha": "540770c173a820060f84ab1370e633aa5b064e79",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39818844791,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e"
+      }
+    },
+    {
+      "pr": 790,
+      "head_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "head_ref": "test/qa16-pr774-780-p1-checklist-20261022",
+      "base_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+      "base_ref": "test/qa16-pr759-773-exact-evidence-20261022",
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR774_780_20261022.md",
+        "docs/qa/QA_20261022_PR774_780_EXACT_HEAD.json",
+        "docs/qa/QA_P1_FEATURE_ACCEPTANCE_ISSUE780_20261022.md",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-774-780-exact-feature-evidence.test.ts"
+      ],
+      "files_complete": true,
+      "compare": {
+        "base_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+        "head_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+        "merge_base_sha": "8487b5be39737c10f0edfaf6da55bc37d5bad8fe",
+        "status": "ahead"
+      },
+      "ci": {
+        "run_id": 39818835181,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9"
+      }
+    }
+  ]
+}

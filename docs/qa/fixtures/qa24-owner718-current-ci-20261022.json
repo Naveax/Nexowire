@@ -1,0 +1,39 @@
+{
+  "schema": "qa24-external-head-drift-v1",
+  "source": "GitHub get_pr_info exact SHA + primary CI and hosted job inspection",
+  "captured_at_date": "2026-10-22",
+  "critical_owner": {
+    "pr": 718,
+    "head_sha": "81931c5f3d9a0995b621bd3c678ab0854876e26d",
+    "base_sha": "0cc9710c37d19d4e31cc2f3ae9fb1984b5ffd1b8",
+    "primary_ci_run": 39817410885,
+    "status": "completed",
+    "conclusion": "failure",
+    "failure_job": "browser-live",
+    "failure_step": "Physical Windows Job Object regressions",
+    "failure_evidence": "All non-Windows CI jobs successful, Windows browser-live FAILURE"
+  },
+  "other_exact_ci": [
+    {
+      "pr": 786,
+      "sha": "8d5390dc8ed94e13ac380c6e37aa6f4de2888d4b",
+      "run": 39817020745,
+      "conclusion": "failure",
+      "jobs": "Node22 check FAIL, Node24 CANCELLED"
+    },
+    {
+      "pr": 790,
+      "sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "run": 39818835181,
+      "conclusion": "failure",
+      "jobs": "Node24 FAIL, Windows FAIL, independent QA FAIL; Node22 CANCELLED"
+    },
+    {
+      "pr": 789,
+      "sha": "a038d8f8dc3bc9451ababf243ffb75b9c52ec15e",
+      "run": 39818844791,
+      "conclusion": "success"
+    }
+  ],
+  "scope": "Read-only witness, not a refreshed complete 198-head DAG; previous #718 record must be treated stale and no earlier green carried over"
+}
