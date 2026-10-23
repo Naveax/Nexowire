@@ -1,0 +1,107 @@
+{
+  "scope": [
+    708,
+    726,
+    821,
+    814
+  ],
+  "records": [
+    {
+      "pr": 708,
+      "head": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+      "base": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "head_ref": "test/22-691-crosshub-dispatch-20261021",
+      "base_ref": "fix/08-checkpoint-external-commit-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39824007092,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1"
+      },
+      "compare": {
+        "merge_base": "437030d288fdf13441f506ce83a9ff72644822dd",
+        "status": "diverged",
+        "base_sha": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+        "head_sha": "36b443ef300d6465fa11af3a02c94b394d8841a1"
+      },
+      "files": [
+        "test/qa22-crosshub-cas-fencing.test.ts"
+      ]
+    },
+    {
+      "pr": 726,
+      "head": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+      "base": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "head_ref": "qa/23-ui-native-cas-reconnect-20261021",
+      "base_ref": "qa/23-effective-owner669-negative-20261021",
+      "state": "open",
+      "ci": {
+        "run_id": 39823764746,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "50491525249bcc1f5c47b90f23890b2b3062e33d"
+      },
+      "compare": {
+        "merge_base": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "status": "ahead",
+        "base_sha": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+        "head_sha": "50491525249bcc1f5c47b90f23890b2b3062e33d"
+      },
+      "files": [
+        "docs/CORE_EFFECTIVE_UI_669_702_700_CROSS_QA_20261021.md",
+        "src/diagnostics/core-effective-native-cas-ui-gate.ts",
+        "test/core-effective-native-cas-ui-gate.test.ts",
+        "test/qa/core-card-approval-pref-only.test.ts",
+        "test/qa/core-effective-ui-worker23.test.ts"
+      ]
+    },
+    {
+      "pr": 821,
+      "head": "ef87410cc7921540dabf33b83e42824cce4f4668",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "head_ref": "test/50-p1-git-clean-filter-red-20261023",
+      "base_ref": "fix/31-scoped-git-executor-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39862537837,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "ef87410cc7921540dabf33b83e42824cce4f4668"
+      },
+      "compare": {
+        "merge_base": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "status": "ahead",
+        "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "head_sha": "ef87410cc7921540dabf33b83e42824cce4f4668"
+      },
+      "files": [
+        "test/p50-780-git-clean-filter-external-command-negative.test.ts"
+      ]
+    },
+    {
+      "pr": 814,
+      "head": "daec5dbd6da1a9e1b703afdee660548ccb96367a",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "head_ref": "test/37-adversarial-git-metadata-20261023",
+      "base_ref": "fix/31-scoped-git-executor-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39865936576,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "daec5dbd6da1a9e1b703afdee660548ccb96367a"
+      },
+      "compare": {
+        "merge_base": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "status": "ahead",
+        "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "head_sha": "daec5dbd6da1a9e1b703afdee660548ccb96367a"
+      },
+      "files": [
+        "test/p37-780-adversarial-git-metadata-fuzz.test.ts",
+        "test/p37-780-git-packed-objects-escape-negative.test.ts"
+      ]
+    }
+  ]
+}
