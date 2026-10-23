@@ -180,7 +180,8 @@ export class TaskGraphStore {
       this.graphs.set(checkpoint.id, checkpoint);
     }
 
-    this.pruneExpiredInMemory();
+    // A restart must retain old mutation evidence even after local TTL.
+    // Local expiry is not independently verified proof of no native effect.
     if (changed) await this.persistState();
   }
 
@@ -297,7 +298,7 @@ export class TaskGraphStore {
   }
 
   list(): TaskGraphCheckpoint[] {
-    this.pruneExpiredInMemory();
+    // Read-only enumeration must never silently discard UNKNOWN evidence.
     return [...this.graphs.values()]
       .map(cloneGraph)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -308,7 +309,7 @@ export class TaskGraphStore {
     jobId?: string;
     limit?: number;
   } = {}): TaskArtifactRecord[] {
-    this.pruneExpiredInMemory();
+    // Inspecting artifact metadata must never retire an original effect.
     if (input.graphId && !this.graphs.has(input.graphId)) {
       throw new TaskGraphStoreError(
         'TASK_GRAPH_NOT_FOUND',
@@ -342,29 +343,17 @@ export class TaskGraphStore {
     return records;
   }
 
-  async prune(input: { olderThanMs?: number } = {}) {
-    const cutoff =
-      Date.now() - (input.olderThanMs ?? this.retentionMs);
-    let removed = 0;
-
-    for (const [id, graph] of this.graphs) {
-      if (graph.status === 'running') continue;
-      if (Date.parse(graph.updatedAt) <= cutoff) {
-        this.graphs.delete(id);
-        removed++;
-      }
-    }
-
-    await this.persistState();
-    return { removed, remaining: this.graphs.size };
-  }
-
-  private pruneExpiredInMemory(): void {
-    const cutoff = Date.now() - this.retentionMs;
-    for (const [id, graph] of this.graphs) {
-      if (graph.status === 'running') continue;
-      if (Date.parse(graph.updatedAt) <= cutoff) this.graphs.delete(id);
-    }
+  /**
+   * No safe local TTL purge is possible until #587 supplies durable,
+   * rollback-independent original-mutation tombstones and authenticated
+   * reconciliation. Even old succeeded/failed/blocked graphs may represent
+   * irreversible native effects. A local status alone is not physical proof.
+   */
+  async prune(_input: { olderThanMs?: number } = {}): Promise<never> {
+    throw new TaskGraphStoreError(
+      'RECONCILE_REQUIRED',
+      'Task graph pruning needs off-host mutation tombstones and atomic reconciliation; local TTL is not dispatch authority.',
+    );
   }
 
   private async persistState(): Promise<void> {
