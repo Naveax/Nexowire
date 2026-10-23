@@ -74,7 +74,10 @@ $rootPrefix=$root+[IO.Path]::DirectorySeparatorChar
 $lowTrustSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
 # WriteData/CreateFiles, Append/CreateDirectories, WriteEA, WriteAttributes,
 # DELETE, DELETE_CHILD, WRITE_DAC, WRITE_OWNER plus generic write.
-$writeMask=[int64](0x2 -bor 0x4 -bor 0x10 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000)
+# Include FILE_DELETE_CHILD (0x40): a low-trust parent directory ACE with
+# DeleteSubdirectoriesAndFiles can remove a child even if its file DACL
+# does not grant DELETE. A DACL scan remains read-only/source-only evidence.
+$writeMask=[int64](0x2 -bor 0x4 -bor 0x10 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000)
 $evidence=@()
 $seen=@{}
 function Observe-Path([string]$requested,[bool]$isDirectory){
