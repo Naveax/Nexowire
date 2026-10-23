@@ -81,3 +81,34 @@ hash/signature/CAS validation. Lexically unchanged root can still be
 symlink-rebound. #40 has no deployed physical issuer, and #32 still lacks
 the actual atomic filesystem CAS provider. No source CI or UI display
 becomes HIGH, native apply, rollback or release proof. P0 NO-GO.
+
+
+## NEXT5: hidden native diff after visible review
+#828 prior SHA `3a67b9182777240db4027c224a079baca419de09` hosted
+[39939566310](https://github.com/Naveax/Nexowire/actions/runs/39939566310)
+ended FAILURE on inherited Windows NWJOB3 fast-exit output iteration 7.
+Node22/24 and four other jobs SUCCESS; source #48 16/16 PASS.
+
+Cross-owner #813 HEAD `8d897ab6fd0b6a5ae33c189ab04dff567f0e84c4`
+[39939356650](https://github.com/Naveax/Nexowire/actions/runs/39939356650)
+FAILURE: Node24 named RED terminal/bidi control negative
+`#32 preview rejects hidden terminal and bidi controls in before and after text`
+(`Missing expected rejection`), plus Windows NWJOB3 iteration 5.
+The independent stale preimage negative itself is PASS. Source/UI
+green does not prove the current #32 native file CAS adapter.
+#40 #833 HEAD `7cc50cd5dfb8b3bafe350bcc500c7ba46c252ce1`
+[39869030435](https://github.com/Naveax/Nexowire/actions/runs/39869030435)
+7/7 source SUCCESS, real signed physical issuer and atomic one-shot
+human approval consume are NOT deployed.
+
+NEXT5 #48-only scope closes a display-readback gap: when the #32
+preview exposes `patch.diff`, a hidden change to the live native diff
+must not be hidden by an unchanged visible `proposed.diff`,
+`accessDiffSha256` string or patch fingerprint. Reject mismatched
+present `proposed.patch.diff`, `current.patch.diff` or `current.diff`
+as `STALE_READ_ONLY`. One new negative covers native hidden diff,
+post-render change and wrong owner/device/grant/approvalEpoch with no
+CORE HIGH/native apply ever, retaining all older 16 tests byte-for-byte.
+Optional omitted browser fields remain UNVERIFIED rather than physical
+CAS evidence. The trusted server remains responsible for hashing and
+fresh external CAS/native effect admission. Production P0 NO-GO.

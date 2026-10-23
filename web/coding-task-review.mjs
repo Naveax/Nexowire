@@ -107,6 +107,15 @@ function approvedSnapshotMatches(view,proposed,current,scope,nowMs){
   if(!Array.isArray(proposed.files)||proposed.files.length!==1||
     proposed.files[0]?.path!==shown.file||
     typeof proposed.diff!=='string'||view.diff!==proposed.diff)return false;
+  // A #32 ReviewedPreview exposes the raw unified diff separately from
+  // the flattened visible summary. Any supplied copy that diverges is stale,
+  // even if the fingerprint/hash strings were replayed unchanged. Missing
+  // browser fields are NOT proof of file identity; native CAS remains required.
+  if(Object.hasOwn(shown,'diff')||Object.hasOwn(live,'diff')){
+    if(typeof shown.diff!=='string'||shown.diff!==proposed.diff||
+       typeof live.diff!=='string'||live.diff!==shown.diff)return false;
+  }
+  if(Object.hasOwn(current,'diff')&&current.diff!==proposed.diff)return false;
   if(statement.kind!=='nexowire.coding.human-diff-consent.v1'||
     statement.scope!=='LOCAL_HUMAN_SOURCE_ONLY'||
     !['APPLY','UNDO'].includes(statement.phase)||

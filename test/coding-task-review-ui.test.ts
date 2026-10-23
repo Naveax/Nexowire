@@ -342,3 +342,51 @@ test('#48 #32 nested preview drift after consent renders STALE_READ_ONLY (no HIG
   assert.equal(mounted.button.disabled,true);
   assert.match(mounted.message.textContent,/DENIED/);
 });
+
+
+test('#48 #32 hidden native diff drift stays read-only after visible review',()=>{
+  const make=()=>{
+    const f:any=approvedFixture();
+    f.proposed.patch.diff=f.proposed.diff;
+    f.current.patch.diff=f.proposed.diff;
+    f.current.diff=f.proposed.diff;
+    return f;
+  };
+  const matching=projectTaskReview(make(),NOW);
+  assert.equal(matching.status,'REVIEW_INTENT_ONLY');
+  assert.equal(matching.effectiveWindowsHigh,false);
+  for(const variant of ['current patch diff','proposed patch diff',
+    'current independent diff','wrong device','wrong grant',
+    'wrong owner','cloned approvalEpoch']){
+    const f=make();
+    switch(variant){
+      case 'current patch diff':f.current.patch.diff+='\n+hidden';break;
+      case 'proposed patch diff':f.proposed.patch.diff+='\n+hidden';break;
+      case 'current independent diff':f.current.diff+='\n+hidden';break;
+      case 'wrong device':f.current.scope.deviceId='device-attacker';break;
+      case 'wrong grant':f.current.scope.grantGeneration+=1;break;
+      case 'wrong owner':f.current.scope.ownerId='owner-attacker';break;
+      case 'cloned approvalEpoch':f.current.patch.approvalEpoch+=1;break;
+    }
+    const v=projectTaskReview(f,NOW);
+    assert.equal(v.canRecordIntent,false,variant);
+    assert.equal(v.canApply,false,variant);
+    assert.equal(v.canRollback,false,variant);
+    assert.equal(v.canDispatch,false,variant);
+    assert.equal(v.effectiveWindowsHigh,false,variant);
+    assert.equal(v.physicalVerified,false,variant);
+    assert.equal(makeReviewIntent(f,NOW),null,variant);
+    if(variant.includes('diff')||variant==='cloned approvalEpoch'){
+      assert.equal(v.status,'STALE_READ_ONLY',variant);
+    }
+  }
+  const f=make(),doc=new FakeDocument(),root=new FakeNode('main',doc);
+  let intents=0;
+  const mounted=mountTaskReview(root,f,{now:()=>NOW,onIntent:()=>{intents++}});
+  assert.equal(mounted.button.disabled,false);
+  f.current.patch.diff+='\n+mutation-after-visible-render';
+  mounted.button.click();
+  assert.equal(mounted.button.disabled,true);
+  assert.equal(intents,0);
+  assert.match(mounted.message.textContent,/DENIED/);
+});
