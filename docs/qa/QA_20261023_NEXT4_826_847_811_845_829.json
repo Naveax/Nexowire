@@ -1,0 +1,231 @@
+{
+  "schema": "nexowire.qa16.next4-exact-ci.v1",
+  "capturedDate": "2026-10-23",
+  "main": "754cc4364822be5fda528f54042fb22a84f19924",
+  "prCensus": {
+    "previousCoordinatorOpen": 245,
+    "previousCoordinatorNewest": 847,
+    "nowObservedTotal": 246,
+    "nowObservedNewest": 848,
+    "source": "GitHub search is:pr is:open repository Naveax/Nexowire, incomplete_results=false",
+    "scope": "point-in-time, not exhaustive paginated DAG",
+    "currentMainMerged": false
+  },
+  "evidence": [
+    {
+      "pr": 826,
+      "headSha": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966",
+      "baseSha": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "runId": 39938851608,
+      "fullCi": "FAILURE",
+      "source": "CURRENT FAIL_CLOSED_NATIVE_ADMISSION_18_LEGACY_POSITIVES_AND_WINDOWS_STREAMS",
+      "node24": {
+        "jobId": 120365021361,
+        "result": "FAILURE",
+        "positiveTestsFailed": 18,
+        "total": 2109,
+        "pass": 1818,
+        "fail": 18,
+        "skip": 273,
+        "reason": "RunbookAdmissionRequiredError on protected graph/runbook/artifact positives; independently hosted external native admission still absent; preserve deny"
+      },
+      "browserLive": {
+        "jobId": 120365021186,
+        "result": "FAILURE",
+        "negative": "Windows Job separate stdin/stdout/stderr pipes expected WINJOB_STDOUT but missing; genuine separate Windows output regression, not native CAS approval"
+      },
+      "node22": "CANCELLED",
+      "physicalAdmission": "NOT_PRESENT"
+    },
+    {
+      "pr": 847,
+      "headSha": "79fdecf348b526c1e876f434d6f0292769b2bc17",
+      "baseSha": "661d817fbefcf00a797a775c03864681b3f1a7ea",
+      "runId": 39914505805,
+      "fullCi": "FAILURE",
+      "source": "REAL_REPRODUCED_NATIVE_GRAPH_DISPATCH_BYPASS",
+      "node24": {
+        "jobId": 120284881427,
+        "result": "FAILURE",
+        "total": 2104,
+        "pass": 1826,
+        "fail": 5,
+        "skip": 273,
+        "securityNegative": {
+          "name": "test/connection-826-direct-graph-unknown-deny.RED.test.ts",
+          "expectedExternalMarkerSubprocesses": 0,
+          "observedExternalMarkerSubprocesses": 2,
+          "reason": "Cloned UNKNOWN original native mutation was redispatched via direct native-capable task.graph.run lacking independently current external CAS"
+        }
+      },
+      "additionalLegacyCompatibilityFails": 4,
+      "windowsBrowserLive": "SUCCESS",
+      "node22": "CANCELLED",
+      "physicalAdmission": "NOT_PRESENT"
+    },
+    {
+      "pr": 811,
+      "headSha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "baseSha": "754cc4364822be5fda528f54042fb22a84f19924",
+      "runId": 39939395440,
+      "fullCi": "FAILURE",
+      "source": "CURRENT_NODE22_NODE24_SOURCE_SUCCESS_BUT_WINDOWS_JOB_STDOUT_EARLY_EXIT_RED",
+      "hostedJobs": {
+        "success": 6,
+        "fail": 1,
+        "cancelled": 0
+      },
+      "physicalAcl": "NOT_TESTED",
+      "independentCurrentSignedHigh": "NOT_TESTED",
+      "originalHostileCrossBranchTestReplayedOnThisExactHead": "NOT_CONFIRMED",
+      "windowsJob": {
+        "jobId": 120367127511,
+        "test": "test/windows-job-owner.test.ts:216",
+        "reason": "Fast-exit status emitted before stdout captured iteration0"
+      }
+    },
+    {
+      "pr": 845,
+      "headSha": "6b16de921ce059f28f5e2e9254ff9de764457bef",
+      "baseSha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "runId": 39868037273,
+      "fullCi": "FAILURE",
+      "source": "REAL_OLD_BASE_GIT_NESTED_COMMITGRAPH_SYMLINK_NEGATIVE",
+      "node24": {
+        "jobId": 120135106034,
+        "result": "FAILURE",
+        "test": "test/p26-811-nested-commitgraph-symlink-negative.test.ts:82",
+        "reason": "Missing expected rejection: nested Git commit-graph file symlink escapes approved task root before Git log"
+      },
+      "browserLive": {
+        "jobId": 120135105967,
+        "result": "FAILURE",
+        "test": "test/windows-control.test.ts",
+        "reason": "PowerShell operation timed out after 45000ms, independent hosted Windows source test failure"
+      },
+      "node22": "CANCELLED",
+      "notEquivalentToLatest811": true,
+      "physicalScope": "BLOCKED"
+    },
+    {
+      "pr": 829,
+      "headSha": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "baseSha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "runId": 39863445519,
+      "fullCi": "SUCCESS",
+      "source": "ALL_SEVEN_HOSTED_CI_JOBS_GREEN_SOURCE_ONLY",
+      "hostedJobs": {
+        "success": 7,
+        "fail": 0,
+        "cancelled": 0
+      },
+      "dedicatedQa": {
+        "runId": 39863445634,
+        "status": "SUCCESS",
+        "name": "QA03 Windows Durable NWJOB5 Early Output"
+      },
+      "physicalAgent15": "NOT_TESTED",
+      "realInstalledSignedHigh": "NOT_TESTED"
+    }
+  ],
+  "classification": {
+    "realSecuritySourceRed": [
+      847,
+      845
+    ],
+    "failClosedLegacyCompatibilityRed": [
+      826
+    ],
+    "sourceGreenNotPhysical": [
+      829
+    ],
+    "extraHostedWindowsRed": [
+      826,
+      811,
+      845
+    ],
+    "preserveAllOriginalNegativeTests": true,
+    "failedSourcePositiveNotAuthorizationToRemoveGuard": true,
+    "p1Sandbox": "FAIL_NOT_CLEARED_BY_811_CI_ALONE",
+    "currentFullCiFailure": [
+      826,
+      847,
+      811,
+      845
+    ],
+    "currentFullCiSuccess": [
+      829
+    ],
+    "historicalFullCiSuccess": [
+      {
+        "pr": 811,
+        "headSha": "f7a8fae628a84b2580ec2f5ccf7195aea28595cb",
+        "run": 39913730567
+      }
+    ],
+    "node22Node24SuccessButFullCiRed": [
+      811
+    ]
+  },
+  "p0": {
+    "source": {
+      "PASS": 6,
+      "FAIL": 6,
+      "BLOCKED": 9,
+      "NOT_TESTED": 1
+    },
+    "staging": "22_OF_22_BLOCKED",
+    "production": "22_OF_22_BLOCKED",
+    "originalIncident": "22_OF_22_BLOCKED",
+    "noGo": [
+      "Genuine first-party signed installed broad Windows HIGH CORE/ROOT <=900s",
+      "Typed elevated Hyper-V exact VM GUID with independently trusted Running readback",
+      "#271 installed effective protected ACL",
+      "#551 signed installed Broker + genuine local UAC/complete rollback",
+      "#587 independently hosted rollback-resistant monotonic CAS and no cloned UNKNOWN re-dispatch",
+      "#588 real onecall authenticated durable transfer/final immutable publisher receipt"
+    ]
+  },
+  "p1": {
+    "sandboxSource": "FAIL_PENDING_EXACT_HEAD_HOSTILE_CROSS_REPLAY",
+    "otherFeaturesSource": "4_NOT_TESTED",
+    "staging": "BLOCKED",
+    "production": "BLOCKED",
+    "issue780": "P1 epic not P0 release authorization"
+  },
+  "guardrails": {
+    "docsOnly": true,
+    "originalP0TestBlobsByteIdentical": true,
+    "noMainMerge": true,
+    "noLiveVmUacAgentAcl": true,
+    "ReVoltVPN_Ubuntu_Lab": "UNTOUCHED"
+  },
+  "historicalSupersededHeads": [
+    {
+      "pr": 826,
+      "headSha": "aabc75fd539dfb1b5db42d958ba344d12bad4f3c",
+      "runId": 39914532851,
+      "conclusion": "FAILURE",
+      "classification": "Node24 18 old positives fail-closed native external admission; browser-live artifact-integrity source fixture blocked"
+    },
+    {
+      "pr": 811,
+      "headSha": "f7a8fae628a84b2580ec2f5ccf7195aea28595cb",
+      "runId": 39913730567,
+      "conclusion": "SUCCESS",
+      "classification": "7 of 7 hosted CI SUCCESS source-only; not physical Broker/CAS/sandbox or newest HEAD status"
+    }
+  ],
+  "lastHeadVerification": {
+    "date": "2026-10-23",
+    "note": "Latest final GitHub head check: #826 ba21955cedc7be43fe57c5b2fe4c8e2c4c656966 run 39938851608 full FAILURE (18 original graph positives blocked, independent Windows WINJOB_STDOUT pipe failure). #811 daa166e42f94fa1529b48c293a51c58b1c2384e7 run 39939395440 full FAILURE (Node22/24 source SUCCESS, Windows fast-exit stdout order iteration0 FAILED). Prior #826 aabc75fd run 39914532851 FAILURE and prior #811 f7a8fae run 39913730567 7/7 SUCCESS are HISTORICAL, never current.",
+    "currentCount": {
+      "fullCiFailure": 4,
+      "fullCiSuccess": 1
+    },
+    "initialCensus": {
+      "openPr": 246,
+      "newestPr": 848
+    }
+  }
+}
