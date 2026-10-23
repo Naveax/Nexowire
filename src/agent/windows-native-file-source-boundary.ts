@@ -1,6 +1,10 @@
 import path from 'node:path';
 import {unsafeWindowsPath} from './scoped-path-grants.js';
 import {
+  assertProtectedImportClosure,
+  type ProtectedImportGraph,
+} from './windows-native-protected-import-closure.js';
+import {
   assertEffectiveNativeAcl,
   authorizeNativeRelativeChain,
   RelativeAccessDenied,
@@ -60,6 +64,10 @@ export interface NativeGrantEvidence {
   deviceId:string;
   scopes:readonly FileScope[];
   root:string;
+  /** Immutable FileID from the independently approved grant-root handle. */
+  rootFileId:string;
+  /** Independently approved native volume serial. */
+  volumeSerial:string;
   expiresAtMonotonic:number;
   observedAtMonotonic:number;
   approvalEpoch:number;
@@ -86,6 +94,8 @@ export interface VerifiedFilesystemBoundary {
   destinationRelativeChain:NativeRelativeChain;
   destinationParent:NativeHandleEvidence;
   protectedComponents:Readonly<Record<ProtectedRole,ProtectedAclEvidence>>;
+  /** Mandatory independently pinned transitive DLL/PE imports closure. */
+  protectedImportGraph:ProtectedImportGraph;
   grant:NativeGrantEvidence;
 }
 export class NativeFileBoundaryError extends Error {
@@ -116,8 +126,8 @@ function idMatches(a:NativeFileId,b:NativeFileId):boolean{
 export function assertNativeHandleIdentity(
   handle:NativeHandleEvidence,expected:string,kind:'file'|'directory',
 ):void{
-  if(!handle||!handle.noFollowVerified || handle.objectType!==kind ||
-     handle.alternateStream || handle.reparseTag!==null ||
+  if(!handle||handle.noFollowVerified!==true || handle.objectType!==kind ||
+     handle.alternateStream!==false || handle.reparseTag!==null ||
      !Number.isSafeInteger(handle.linkCount)||handle.linkCount<1 ||
      (kind==='file' && handle.linkCount!==1) ||
      canonical(handle.openedPath)!==canonical(expected) ||
@@ -169,6 +179,10 @@ export function assertNativeProtectedFileBoundary(
   for(const role of ['parent','updater','module'] as const){
     assertProtected(evidence.protectedComponents?.[role],role);
   }
+  // Role-wide signed/ACL flags do not prove each imported updater DLL.
+  // Require independently inventoried and signed *transitive* import closure.
+  assertProtectedImportClosure(evidence.protectedImportGraph,
+    evidence.pinnedSource,evidence.source,evidence.protectedComponents);
   const grant=evidence.grant;
   if(!grant)deny('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED');
   // Every segment is derived from the independently pinned grant root handle.
@@ -189,25 +203,35 @@ export function assertNativeProtectedFileBoundary(
   }
   const parentPath=path.win32.dirname(canonical(verified.derivedDestination));
   assertNativeHandleIdentity(evidence.destinationParent,parentPath,'directory');
-  if(verified.parent.fileId!==evidence.destinationParent.fileId ||
-     verified.parent.volumeGuid!==evidence.destinationParent.volumeGuid ||
-     verified.parent.diskId!==evidence.destinationParent.diskId){
+  // File IDs are volume-scoped; two independently retained handles must
+  // agree on the FULL native identity, including volume serial/partition.
+  if(!idMatches(verified.parent,evidence.destinationParent)){
     deny('FILE_NATIVE_PARENT_HANDLE_NOT_PINNED');
   }
-  if(!grant.ownerApprovalVerified ||
+  if(grant.ownerApprovalVerified!==true ||
      grant.ownerId!==ownerId||grant.deviceId!==deviceId||
      !grant.scopes.includes(scope) ||
      !Number.isFinite(grant.expiresAtMonotonic) ||
      !Number.isFinite(grant.observedAtMonotonic)||
      grant.expiresAtMonotonic<=grant.observedAtMonotonic ||
      !Number.isSafeInteger(grant.approvalEpoch) ||
+     grant.approvalEpoch<0 ||
+     !Number.isSafeInteger(grant.currentOwnerEpoch) ||
+     grant.currentOwnerEpoch<0 ||
      grant.approvalEpoch!==grant.currentOwnerEpoch ||
      !inside(grant.root,requestedDestination) ||
+     // FileId and volume serial of approved ROOT must survive rename/recreate.
+     !grant.rootFileId || !grant.volumeSerial ||
+     evidence.destinationRelativeChain.grantRoot.fileId!==grant.rootFileId ||
+     evidence.destinationRelativeChain.grantRoot.volumeSerial!==grant.volumeSerial ||
      !idMatches(evidence.destinationParent,evidence.destinationParent.observedAfter) ||
+     evidence.destinationParent.volumeSerial!==grant.volumeSerial ||
      evidence.destinationParent.volumeGuid!==grant.volumeGuid ||
      evidence.destinationParent.diskId!==grant.diskId ||
      evidence.destinationParent.partitionNumber!==grant.partitionNumber ||
-     (grant.removable && scope!=='read' && !grant.usbWriteApproved)){
+     typeof grant.removable!=='boolean' ||
+     typeof grant.usbWriteApproved!=='boolean' ||
+     (grant.removable && scope!=='read' && grant.usbWriteApproved!==true)){
     deny('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED');
   }
   return {

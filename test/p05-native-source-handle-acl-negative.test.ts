@@ -147,6 +147,93 @@ test('destination grants are scoped to immutable parent handle and actual volume
   }
 });
 
+test('two independent destination parent witnesses must match full volume serial and partition FileId identity',()=>{
+  // Native file ID alone is only scoped to its physical volume. The relative
+  // chain root may not be silently substituted for the separately verified
+  // destination-parent/grant handle by keeping just fileId/GUID/disk equal.
+  for(const mutate of [
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.volumeSerial='OTHER-VOLUME-SERIAL';
+      x.destinationRelativeChain.grantRoot.observedAfter.volumeSerial='OTHER-VOLUME-SERIAL';
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.partitionNumber=9;
+      x.destinationRelativeChain.grantRoot.observedAfter.partitionNumber=9;
+    },
+  ]){
+    const fixture=syntheticProtectedBoundary();
+    mutate(fixture);
+    assert.throws(()=>verify(fixture),denied('FILE_NATIVE_PARENT_HANDLE_NOT_PINNED'));
+  }
+});
+
+test('approved native grant root FileID and volume serial cannot be silently rebound on stable path',()=>{
+  // These two mutation cases preserve every existing retained-handle
+  // before/after comparison and the pinned requested pathname. Without
+  // separately recorded ORIGINAL grant-root identity, source currently
+  // treats a replacement object or changed volume serial as authorized.
+  for(const modify of [
+    (x:VerifiedFilesystemBoundary)=>{
+      for(const handle of [x.destinationRelativeChain.grantRoot,x.destinationParent]){
+        handle.fileId='replacement-dir-same-path';
+        handle.observedAfter.fileId='replacement-dir-same-path';
+      }
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      for(const handle of [x.destinationRelativeChain.grantRoot,x.destinationParent]){
+        handle.volumeSerial='other-volume-serial-same-path';
+        handle.observedAfter.volumeSerial='other-volume-serial-same-path';
+      }
+    },
+  ]){
+    const evidence=syntheticProtectedBoundary();
+    modify(evidence);
+    assert.throws(()=>verify(evidence),
+      denied('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED'),
+      'Native grant root approval must bind the exact root FileID and volume serial');
+  }
+});
+
+test('native retained-handle and owner-epoch witnesses reject truthy but unverified fields',()=>{
+  // This is the original protected FILE boundary, not the already-strict
+  // transitive imported-DLL graph. Missing and stringified Win32 evidence
+  // must NOT promote a caller-supplied object into retained-handle authority.
+  for(const mutate of [
+    (x:VerifiedFilesystemBoundary)=>{x.source.noFollowVerified='true' as never;},
+    (x:VerifiedFilesystemBoundary)=>{x.source.alternateStream=undefined as never;},
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.noFollowVerified=1 as never;
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      x.destinationRelativeChain.grantRoot.alternateStream=undefined as never;
+    },
+    (x:VerifiedFilesystemBoundary)=>{x.grant.ownerApprovalVerified='true' as never;},
+    (x:VerifiedFilesystemBoundary)=>{
+      x.grant.approvalEpoch=-1;
+      x.grant.currentOwnerEpoch=-1;
+    },
+    (x:VerifiedFilesystemBoundary)=>{
+      x.grant.approvalEpoch=4;
+      x.grant.currentOwnerEpoch=4.5;
+    },
+  ]){
+    const fixture=syntheticProtectedBoundary(); mutate(fixture);
+    assert.throws(()=>verify(fixture),
+      (error:unknown)=>error instanceof NativeFileBoundaryError,
+      'Wrong type or impossible ownerEpoch must not authorize native access');
+  }
+});
+
+test('removable native grant requires exact boolean USB approval, not truthy string',()=>{
+  // Native witness JSON can be forged/coerced if source accepts 'true'.
+  // Synthetic proof only; do NOT mount or write a real USB volume.
+  const fixture=syntheticProtectedBoundary();
+  fixture.grant.removable=true;
+  fixture.grant.usbWriteApproved='true' as never;
+  assert.throws(()=>verify(fixture),
+    denied('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED'));
+});
+
 test('destination never leaves granted root even for path-prefix sibling, ADS, traversal or junction parent',()=>{
   for(const destination of [
     'C:\\Protected\\owner-other\\stage.tmp',
