@@ -1,4 +1,4 @@
-﻿{
+{
   "schema": "nexowire.qa16.p1.issue780.acceptance.v1",
   "issue": 780,
   "issueType": "OPEN_P1_EPIC_NOT_PR",
@@ -47,7 +47,7 @@
     {
       "id": "P1-SANDBOX",
       "title": "Real OS task isolation not pathname policy",
-      "source": "NOT_TESTED",
+      "source": "FAIL",
       "staging": "BLOCKED",
       "production": "BLOCKED",
       "requiredNegative": [
@@ -55,7 +55,9 @@
         "child process network and secret escape",
         "Git hooks cannot bypass isolation",
         "unsigned HIGH Broker cannot inherit sandbox grant"
-      ]
+      ],
+      "sourceObservedDefect": "Exact #800 HEAD 6eb562cffd68a5d123e8ec2455fd2d3d8d9a9fd8 CI 39823730640 Node24 P1 red: workspace.snapshot executed repository core.fsmonitor hook, modified file outside scoped taskRoot; reproduced unsafe source behavior.",
+      "sourceEvidence": "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts:96, job 119981387012"
     },
     {
       "id": "P1-LOOP",
@@ -101,5 +103,10 @@
     "realSignedHighCoreMustStayDisabledWithoutP0": true,
     "qaProofDoesNotCompleteFeature": true,
     "physicalVmUntouched": true
-  }
+  },
+  "sourceSummary": {
+    "FAIL": 1,
+    "NOT_TESTED": 4
+  },
+  "lastReview": "docs/qa/QA_20261022_PR791_803_EXACT_CI.json"
 }

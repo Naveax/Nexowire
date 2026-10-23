@@ -49,18 +49,20 @@ test('R01-R22 physical P0 matrix source statuses remain stable, no hidden waiver
  assert.equal(m.requirements.length,22);
  assert.deepEqual(m.requirements.reduce((o:any,r:any)=>(o[r.levels.source.status]=(o[r.levels.source.status]||0)+1,o),{}),{BLOCKED:9,FAIL:6,PASS:6,NOT_TESTED:1});
  assert.ok(m.requirements.every((r:any)=>['staging','production','incident'].every(k=>r.levels[k].status==='BLOCKED')));
- assert.equal(m.qa16LatestReview.jobClasses.mandatorySevenP0,'FAILED_UNWAIVED');
- assert.equal(m.qa16LatestReview.jobClasses.windowsDurable,'INHERITED_SEPARATE_FAIL');
+ assert.equal(x.runJobEvidence.filter((j:any)=>j.class==='MANDATORY_P0_NEGATIVE_ACCEPTANCE').length,2);
+ assert.equal(x.runJobEvidence.filter((j:any)=>j.class==='INDEPENDENT_WINDOWS_DURABLE_REATTACH_FAILURE').length,2);
 });
-test('independent issue780 P1 feature matrix all NOT_TESTED and cannot override CORE P0',()=>{
+test('issue780 P1 sandbox source FAIL and four other feature items NOT_TESTED, original P0 protected',()=>{
  const x=rd('QA_20261022_P1_ISSUE780_FEATURE_MATRIX.json'),m=rd('cross-project-final-acceptance.json');
  assert.equal(x.issue,780);
  assert.equal(x.issueType,'OPEN_P1_EPIC_NOT_PR');
  assert.deepEqual(x.acceptance.map((a:any)=>a.id),['P1-INV','P1-DIFF','P1-SANDBOX','P1-LOOP','P1-CKPT']);
- assert.ok(x.acceptance.every((a:any)=>a.source==='NOT_TESTED'&&a.staging==='BLOCKED'&&a.production==='BLOCKED'&&a.requiredNegative.length>=3));
+ assert.equal(x.acceptance.find((a:any)=>a.id==='P1-SANDBOX').source,'FAIL');
+ assert.equal(x.acceptance.filter((a:any)=>a.source==='NOT_TESTED').length,4);
+ assert.ok(x.acceptance.every((a:any)=>a.staging==='BLOCKED'&&a.production==='BLOCKED'&&a.requiredNegative.length>=3));
  assert.equal(x.policy.realSignedHighCoreMustStayDisabledWithoutP0,true);
  assert.equal(m.qa16P1FeatureAcceptance.p0OverridesAllowed,false);
- assert.equal(m.qa16P1FeatureAcceptance.source,'NOT_TESTED');
+ assert.equal(m.qa16P1FeatureAcceptance.source,'MIXED_1_FAIL_4_NOT_TESTED');
 });
 test('no live VM UAC Agent ACL or original red source-test mutations in QA scope',()=>{
  const x=rd('QA_20261022_PR779_790_FAILED_STEPS.json');
