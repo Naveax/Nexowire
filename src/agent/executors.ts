@@ -1221,8 +1221,10 @@ async function runScopedGit(
     env[name] = value;
   }
   env.GIT_CONFIG_NOSYSTEM = '1';
-  env.GIT_CONFIG_GLOBAL = os.devNull;
-  env.GIT_CONFIG_SYSTEM = os.devNull;
+  // Git for Windows may reject Node's \\.\nul device spelling. Git's
+  // own /dev/null sentinel disables both levels on Git/MSYS and POSIX.
+  env.GIT_CONFIG_GLOBAL = '/dev/null';
+  env.GIT_CONFIG_SYSTEM = '/dev/null';
   env.GIT_OPTIONAL_LOCKS = '0';
   env.GIT_TERMINAL_PROMPT = '0';
   env.GIT_NO_REPLACE_OBJECTS = '1';
@@ -1245,6 +1247,18 @@ async function runScopedGit(
   ], { timeoutMs: 10_000, maxOutputBytes: 131_072, env });
 }
 
+/**
+ * A Git for Windows root may differ in drive-letter / directory casing from
+ * fs.realpath() even when pointing at the exact same approved directory.
+ * path.relative() uses the platform's path semantics, but a parent or
+ * sibling remains non-empty and cannot become a widened authorization.
+ * Never resolve or open a newly discovered out-of-root path here.
+ */
+function sameScopedGitRoot(discovered: string, expected: string): boolean {
+  return path.isAbsolute(discovered) &&
+    path.relative(expected, path.resolve(discovered)) === '';
+}
+
 async function resolveWorkspaceRoot(
   cwd: string, policy: PathPolicy,
 ): Promise<{ root: string; gitRoot: boolean }> {
@@ -1254,7 +1268,7 @@ async function resolveWorkspaceRoot(
   if (!scoped) return { root: cwd, gitRoot: false };
   const result = await runScopedGit(executable, scoped, ['rev-parse', '--show-toplevel']);
   if (result.exitCode !== 0 ||
-      path.resolve(result.stdout.trim()) !== scoped.root) {
+      !sameScopedGitRoot(result.stdout.trim(), scoped.root)) {
     throw new PathDeniedError(scoped.root);
   }
   return { root: await policy.resolveExisting(scoped.root), gitRoot: true };
@@ -2274,7 +2288,7 @@ async function workspaceSnapshot(
   // Validate the discovered root before Git status, log or directory reads.
   const rootResult = await runScopedGit(executable, scoped, ['rev-parse', '--show-toplevel']);
   if (rootResult.exitCode !== 0 ||
-      path.resolve(rootResult.stdout.trim()) !== scoped.root) {
+      !sameScopedGitRoot(rootResult.stdout.trim(), scoped.root)) {
     throw new PathDeniedError(scoped.root);
   }
   const root = await policy.resolveExisting(scoped.root);
