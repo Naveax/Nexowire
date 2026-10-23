@@ -1,0 +1,30 @@
+name: QA03 829 Durable + Strict Broker JSON Native Negative
+on:
+  pull_request:
+    branches:
+      - fix/03-durable-nwjob5-early-output-20261023
+
+permissions:
+  contents: read
+
+jobs:
+  windows-owner-boundary:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Compile disposable test-native Job guardian
+        shell: pwsh
+        run: ./scripts/build-windows-job-owner.ps1
+      - name: Original #763 strict JSON and native EXE/import/updater ancestor negatives
+        run: node --test --import tsx --test-concurrency=1 test/core-broker-strict-json-v1-schema.test.ts test/core-broker-protected-tree.test.ts test/core-broker-transitive-import-negative.test.ts
+      - name: Existing #829 durable early output and unchanged durable recovery negatives
+        run: node --test --import tsx --test-concurrency=1 test/windows-durable-nwjob5-early-output.test.ts test/durable-process.test.ts
+      - name: Unchanged original Windows Job and QA19 fast-exit evidence
+        run: node --test --import tsx --test-concurrency=1 test/windows-job-owner.test.ts test/qa-19-windows-job-hosted-fast-exit.test.ts
