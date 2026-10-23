@@ -15,8 +15,8 @@
       "state": "open",
       "ci": {
         "run_id": 39939395440,
-        "status": "queued",
-        "conclusion": null,
+        "status": "completed",
+        "conclusion": "failure",
         "queried_head_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7"
       },
       "compare": {
