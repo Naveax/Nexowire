@@ -220,3 +220,74 @@ NOT been deployed/attested. Do not add an always-true CAS, local
 "readonly command" string heuristic, or weaken #781 hostile QA.
 
 **#826 remains DRAFT, CI RED, production P0 NO-GO, #587 OPEN.**
+
+## NEXT5 (2026-10-23): UNKNOWN journal can vanish through TTL inspection — actual source defect
+
+Exact parent #826 HEAD `ba21955cedc7be43fe57c5b2fe4c8e2c4c656966`,
+CI `39938851608` FAILURE. Its source-only 7/7 direct graph QA PASS
+but 18 inherited shell-positive tests FAIL. Windows browser-live
+also FAILED a separate Windows Job stdout pipe test. PR #847's
+historical RED on OLD #826 is NOT the current head's bypass evidence;
+current direct task.graph.run refuses native launch.
+
+**New #01 independent actual source observation:**
+`src/agent/task-graph-store.ts` constructor uses `retentionMs`
+(default seven days). `list()` and `listArtifacts()` BOTH invoke
+`pruneExpiredInMemory()` before returning. That method keeps only
+`graph.status==='running'` exempt and deletes old `interrupted`
+graphs even if their jobs contain `status:'unknown'`. `initialize()`
+also calls this expiry routine. `get()` then returns
+`TASK_GRAPH_NOT_FOUND`. This means a nominally read-only metadata
+enumeration can erase the sole *in-memory* record of original UNKNOWN.
+A later unrelated `TaskGraphStore.prepare/save` writes the remaining
+graph Map to the same local JSON file, permanently omitting the old
+UNKNOWN evidence from that local file. None of these paths requires
+a native shell or external witness. Explicit `prune()` has the same
+unprotected status filter and is an actual storage mutation.
+
+**No claim that retention was fixed.** The new isolated #01 test file
+`test/agent-task-graph-unknown-ttl-negative.test.ts` contains three
+explicit UNSAFE SOURCE NEGATIVE tests using a disposable JSON journal,
+5-ms retention and a 40-ms bounded delay. It proves via the actual
+`executeCapability('task.graph.list')` and
+`executeCapability('task.artifact.list')` APIs that an expired
+interrupted/unknown record disappears from get/list; the first
+test proves a later unrelated local metadata write also removes the
+record from the JSON file. No native process, real user file, Agent,
+Broker or VM involved. Each test is designed to PASS only when it
+reproduces the *unsafe defect*, not to claim a safety fix.
+
+### Missing immutable evidence authority (BLOCKED; #587/#08 handoff)
+
+The actual `TaskGraphCheckpoint` schema has `graph.id/specHash/status/
+updatedAt/runCount/jobs`, but lacks immutable original
+`logicalMutationId/requestId/sourceSha/worktreeId/ownerEpoch/
+grantGeneration`. The new tests keep a separate local illustrative
+identity tuple solely to show it is NOT bound to the checkpoint and
+CANNOT establish off-host monotonic authority.
+
+A production-grade external evidence store must, **before any shell
+dispatch**, durably/atomically bind a global original
+`logicalMutationId`, `requestId`, fingerprint,
+`ownerId/deviceId/deviceEpoch/sessionEpoch/ownerEpoch/grantGeneration`,
+`sourceSha/worktreeId`, and unique dispatchId/admission generation.
+Reserve and `commitIfCurrent` must be atomically serialized against
+revoke-start across all Hubs. Missing local cache/graph means
+`RECONCILE_REQUIRED`, never a new mutation. Every UNKNOWN/possibly
+dispatched lease requires an external non-restorable tombstone until
+independently authenticated completion/cancellation and the retention
+horizon required by owner policy; TTL of the cache must NOT delete
+that tombstone or release its duplicate-dispatch fence. Read-only
+`readOutcome(requestId,logicalMutationId,ownerEpoch)` must return
+signed monotonic sequence and verified terminal state or UNKNOWN.
+No local `graph.status='succeeded'`, expired cache or signed old
+permit is physical OS postcondition proof.
+
+Ownership: #01 supplies these source-only negative tests and
+authority contract. The owners of TaskGraphStore/checkpoint persistence
+(#08) should implement safe unresolved-UNKNOWN retention semantics
+without weakening #31 Git executor or #18 hostile #781/#847 tests;
+#03 must attest installed Native Broker/HIGH and actual effect
+readback. #587 external non-restorable service is NOT deployed.
+Do not bypass the prior security-blocked external CAS patch.
+#826 remains DRAFT, CI RED, P0 production NO-GO.
