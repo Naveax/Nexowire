@@ -1,0 +1,47 @@
+name: QA31 disposable Windows Git #845 acceptance
+on:
+  push:
+    branches:
+      - qa/31-845-windows-temp-20261023
+permissions:
+  contents: read
+concurrency:
+  group: qa31-windows-commitgraph-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  windows-git-temp:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install exact branch dependencies
+        run: npm ci
+      - name: Verify exact unchanged test and current executor blobs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git --version
+          node --version
+          $test = (git hash-object test/p26-811-nested-commitgraph-symlink-negative.test.ts).Trim()
+          $src = (git hash-object src/agent/executors.ts).Trim()
+          Write-Host "Original W26 #845 blob: $test"
+          Write-Host "Owner #31 executor blob: $src"
+          if ($test -ne '616cfe4563682a821787191c8864be18afd41767') { throw 'Original QA blob changed' }
+          if ($src -ne '21c7f546a8ab3dda5c8b976cb4ad0a6f52dac3a9') { throw 'Owner executor SHA mismatch' }
+          Write-Host "Node os.devNull is: $(node -p 'require("node:os").devNull')"
+      - name: Same disposable Windows repo healthy positive AND commit-graph symlink negative
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $report = (& node --test --test-reporter=tap --import tsx test/p26-811-nested-commitgraph-symlink-negative.test.ts 2>&1 | Out-String)
+          $exitCode = $LASTEXITCODE
+          Write-Host $report
+          if ($exitCode -ne 0) { throw "Original W26 test exited $exitCode" }
+          if ($report -notmatch '(?m)^# pass 1\s*$' -or $report -notmatch '(?m)^# fail 0\s*$' -or $report -notmatch '(?m)^# skipped 0\s*$') {
+            throw 'Mandatory one real positive+negative test PASS and zero skips not established'
+          }
+          Write-Host 'Confirmed original W26 test pass with healthy Git positive followed by symlink denial; no skipped symlink fixture.'
