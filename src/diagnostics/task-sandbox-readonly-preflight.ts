@@ -82,6 +82,10 @@ export interface GitReadback {
   readonly repositoryFilterCommandsBlocked?: Evidence;
   /** #814: refs/heads and loose-object descendants may escape through links. */
   readonly nestedRefsAndObjectsScoped?: Evidence;
+  /** #845: nested .git/objects/info/commit-graph FILE, not only its parent. */
+  readonly nestedCommitGraphFileScoped?: Evidence;
+  /** A Windows healthy-repo/null Git-config positive is fixture evidence only. */
+  readonly windowsNullConfigHealthyBaseline?: Evidence;
 }
 export interface RemoteWorkerReadback {
   readonly workerIdentityEnrolled: Evidence;
@@ -124,6 +128,8 @@ export type PreflightReason =
   | 'GIT_SUBPROCESS_SANITIZATION_NOT_VERIFIED'
   | 'GIT_REPOSITORY_FILTER_EXECUTION_NOT_VERIFIED'
   | 'GIT_NESTED_REFS_OBJECTS_SCOPE_NOT_VERIFIED'
+  | 'GIT_COMMIT_GRAPH_FILE_SCOPE_NOT_VERIFIED'
+  | 'GIT_WINDOWS_NULL_CONFIG_BASELINE_NOT_VERIFIED'
   | 'REMOTE_WORKER_PROVIDER_UNAVAILABLE'
   | 'REMOTE_WORKER_ELIGIBILITY_NOT_VERIFIED'
   | 'INSTALLED_HIGH_BROKER_NOT_PROVEN'
@@ -148,6 +154,11 @@ export interface ReadonlyTaskPreflight {
   readonly gitRootScope: 'NOT_PROVEN';
   /** Git status may execute fsmonitor/config subprocesses without sanitization. */
   readonly safeGitExecution: 'NOT_PROVEN';
+  /** #845's nested metadata FILE remains independently unproven. */
+  readonly gitCommitGraphScope: 'NOT_PROVEN';
+  /** Only an untrusted fixture report, never production Windows approval. */
+  readonly windowsGitNullConfigBaseline:
+    'NOT_APPLICABLE' | 'NOT_OBSERVED' | 'REPORTED_UNATTESTED';
   readonly processIsolation: 'NOT_PROVEN';
   readonly remoteWorkerEligibility: 'NOT_PROVEN';
   readonly installedHighBroker: 'NOT_PROVEN';
@@ -244,9 +255,9 @@ export async function inspectReadonlyTaskSandboxPreflight(
     add('PLATFORM_CAPABILITY_NOT_VERIFIED');
   }
 
-  // The existing workspace.snapshot executor currently expands scope via
-  // git --show-toplevel and can run repository-controlled core.fsmonitor.
-  // Neither PathPolicy nor a platform "git" flag proves these side effects safe.
+  // #811's new source can deny the older root/filter fixtures. It is NOT an
+  // OS process sandbox: source PASS cannot attest untested metadata or a
+  // physically installed high Broker. PathPolicy and a Git flag are not proof.
   // workspace.snapshot is deliberately NOT an approved capability here.
   const gitRelevant = req.capability === 'git.status' ||
     String(req.capability) === 'workspace.snapshot';
@@ -270,6 +281,17 @@ export async function inspectReadonlyTaskSandboxPreflight(
     // can point beyond the task root through symlinks/reparse points (#814).
     if (!git || !verified(git.nestedRefsAndObjectsScoped)) {
       add('GIT_NESTED_REFS_OBJECTS_SCOPE_NOT_VERIFIED');
+    }
+    // A recursive parent refs/objects report does not separately attest
+    // the nested FILE .git/objects/info/commit-graph (#845 old-base RED).
+    if (!git || !verified(git.nestedCommitGraphFileScoped)) {
+      add('GIT_COMMIT_GRAPH_FILE_SCOPE_NOT_VERIFIED');
+    }
+    // Windows null-config/healthy-workspace positive is distinct from the
+    // Git symlink negative. A failed positive is not evidence of containment.
+    if (p?.platform === 'win32' &&
+        (!git || !verified(git.windowsNullConfigHealthyBaseline))) {
+      add('GIT_WINDOWS_NULL_CONFIG_BASELINE_NOT_VERIFIED');
     }
   }
 
@@ -338,6 +360,11 @@ export async function inspectReadonlyTaskSandboxPreflight(
         ? 'REPORTED_UNATTESTED' : 'NOT_VERIFIED',
     gitRootScope: 'NOT_PROVEN',
     safeGitExecution: 'NOT_PROVEN',
+    gitCommitGraphScope: 'NOT_PROVEN',
+    windowsGitNullConfigBaseline: p?.platform !== 'win32'
+      ? 'NOT_APPLICABLE'
+      : gitRelevant && verified(input.git?.windowsNullConfigHealthyBaseline)
+        ? 'REPORTED_UNATTESTED' : 'NOT_OBSERVED',
     processIsolation: 'NOT_PROVEN',
     remoteWorkerEligibility: 'NOT_PROVEN',
     installedHighBroker: 'NOT_PROVEN',
