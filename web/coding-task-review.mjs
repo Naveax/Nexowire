@@ -35,6 +35,54 @@ const allowedPath=(p)=>typeof p==='string'&&p.length>0&&p.length<=500&&
  * A successful match never means signed approval or native admission.
  * Any present but incomplete/mismatched record is STALE_READ_ONLY.
  */
+/**
+ * #32 ReviewedPreview.identity is separate from the flattened UI patch row.
+ * When its native-shaped identity is present, any lost field or mismatch
+ * between displayed and current identity must make #40's approval STALE.
+ * Worktree root comparison is display-only: lexical equality cannot prove
+ * symlink safety, same-volume inode identity, or authorized OS root scope.
+ */
+function nativePatchIdentityMatches(shown,live,statement,scope){
+  const shownHas=Object.hasOwn(shown,'identity');
+  const liveHas=Object.hasOwn(live,'identity');
+  // Old flattened UI fixtures have no #32 identity. The server must require
+  // a complete authoritative #32 preview before considering any approval.
+  if(!shownHas&&!liveHas)return true;
+  if(!shownHas||!liveHas)return false;
+  const original=shown.identity, latest=live.identity;
+  if(!original||!latest||typeof original!=='object'||
+     typeof latest!=='object'||Array.isArray(original)||
+     Array.isArray(latest))return false;
+  const keys=['ownerId','taskId','worktreeId','worktreeRoot',
+    'baseSha','sourceSha','approvalEpoch'];
+  if(!keys.every(k=>Object.hasOwn(original,k)&&Object.hasOwn(latest,k)&&
+     original[k]===latest[k]))return false;
+  const root=original.worktreeRoot;
+  if(typeof root!=='string'||root.length<1||root.length>1024||
+     !(root.startsWith('/')||/^[A-Za-z]:[\\\\/]/.test(root)))return false;
+  if(!scalar(original.ownerId)||!scalar(original.taskId)||
+     !scalar(original.worktreeId)||!GIT_SHA.test(original.baseSha)||
+     !GIT_SHA.test(original.sourceSha)||
+     !Number.isSafeInteger(original.approvalEpoch)||
+     original.approvalEpoch<0)return false;
+  if(!Object.hasOwn(shown,'beforeSha256')||
+     !Object.hasOwn(live,'beforeSha256')||
+     !SHA.test(shown.beforeSha256)||
+     shown.beforeSha256!==live.beforeSha256)return false;
+  return original.ownerId===scope.ownerId&&
+    original.taskId===scope.taskId&&
+    original.worktreeId===shown.worktreeId&&
+    original.worktreeId===statement.worktreeId&&
+    original.baseSha===scope.gitBaseSha&&
+    original.baseSha===statement.gitBaseSha&&
+    original.sourceSha===scope.gitSourceSha&&
+    original.sourceSha===statement.gitSourceSha&&
+    original.approvalEpoch===shown.approvalEpoch&&
+    original.approvalEpoch===statement.approvalEpoch&&
+    shown.beforeSha256===scope.preimageSha256&&
+    shown.beforeSha256===statement.beforeSha256;
+}
+
 function approvedSnapshotMatches(view,proposed,current,scope,nowMs){
   const statement=view?.statement;
   const shown=proposed?.patch;
@@ -48,6 +96,7 @@ function approvedSnapshotMatches(view,proposed,current,scope,nowMs){
     !shown||!live||!Number.isSafeInteger(nowMs))return false;
   if(!fields.every(k=>Object.hasOwn(shown,k)&&Object.hasOwn(live,k)&&
       shown[k]===live[k]))return false;
+  if(!nativePatchIdentityMatches(shown,live,statement,scope))return false;
   if(typeof shown.file!=='string'||!allowedPath(shown.file)||
     typeof shown.beforeVersion!=='string'||!shown.beforeVersion||
     shown.beforeVersion.length>256||!SHA.test(shown.afterSha256)||

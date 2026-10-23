@@ -52,3 +52,32 @@ A matching client display is labeled `DISPLAY_MATCH_UNVERIFIED`,
 never HIGH; forged preference, approval, dispatch and physical flags
 deny local review intent and cannot enable native privilege. No
 `#32` apply/undo edits, #04 web/app.js, #23 QA or production wiring.
+
+
+## #48 NEXT4 #32 native nested identity cross-review (2026-10-23)
+
+Verified unmerged #32 #813 HEAD `4570568c8bc28a061aa29578449eb7e5251480f4`:
+`ReviewedPreview.identity` has `ownerId/taskId/worktreeId/worktreeRoot/baseSha/sourceSha/approvalEpoch`,
+and preview has `beforeSha256/beforeVersion/afterSha256/fingerprint`.
+#40 #833 HEAD `7cc50cd5dfb8b3bafe350bcc500c7ba46c252ce1` signs the
+worktree ID and base/source OIDs and approval epoch but not raw `worktreeRoot`;
+trusted #32 attestation must independently re-check the authorized root.
+
+A **real view-only gap** existed: if `proposed.patch.identity` and
+`current.patch.identity` were supplied but nested source OID, cloned
+approvalEpoch or worktreeRoot changed, the flattened `patch` row could
+still appear identical. The display comparison now requires both native
+identity objects if either is present, checks all seven fields, the
+native preview preimage SHA, and exact approved Git/source/epoch scope.
+Any mismatch, absent identity half or mutation after render makes the
+approved snapshot `STALE_READ_ONLY`, with no review intent.
+
+Legacy flattened UI projections without a native identity remain
+unverified visual fixtures, **not authorized #32 previews**. An entirely
+omitted or identically forged client-native identity cannot prove root
+integrity; production integration must supply independently attested,
+fresh canonical resolved worktree and Git metadata plus a server-side
+hash/signature/CAS validation. Lexically unchanged root can still be
+symlink-rebound. #40 has no deployed physical issuer, and #32 still lacks
+the actual atomic filesystem CAS provider. No source CI or UI display
+becomes HIGH, native apply, rollback or release proof. P0 NO-GO.

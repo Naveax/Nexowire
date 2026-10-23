@@ -289,3 +289,56 @@ test('#48 UI mismatched approval remains readonly even if client requests HIGH',
   assert.equal(count,0);
   assert.equal(m.view.physicalEvidence,'NOT_PHYSICALLY_VERIFIED');
 });
+
+
+test('#48 #32 nested preview drift after consent renders STALE_READ_ONLY (no HIGH)',()=>{
+  const seeded=()=>{
+    const f:any=approvedFixture();
+    const identity={
+      ownerId:f.proposed.scope.ownerId,
+      taskId:f.proposed.scope.taskId,
+      worktreeId:f.proposed.patch.worktreeId,
+      worktreeRoot:'C:\\\\tasks\\\\review-one',
+      baseSha:f.proposed.scope.gitBaseSha,
+      sourceSha:f.proposed.scope.gitSourceSha,
+      approvalEpoch:f.proposed.patch.approvalEpoch
+    };
+    f.proposed.patch.identity={...identity};
+    f.current.patch.identity={...identity};
+    f.proposed.patch.beforeSha256=f.proposed.scope.preimageSha256;
+    f.current.patch.beforeSha256=f.current.scope.preimageSha256;
+    return f;
+  };
+  assert.equal(projectTaskReview(seeded(),NOW).status,'REVIEW_INTENT_ONLY');
+  for(const [caseName,alter] of [
+    ['cloned approvalEpoch', (f:any)=>{f.current.patch.identity.approvalEpoch+=1}],
+    ['hidden worktree root', (f:any)=>{f.current.patch.identity.worktreeRoot='C:\\\\tasks\\\\other'}],
+    ['source SHA', (f:any)=>{f.current.patch.identity.sourceSha='3'.repeat(40)}],
+    ['Git base SHA', (f:any)=>{f.current.patch.identity.baseSha='4'.repeat(40)}],
+    ['changed afterSha256', (f:any)=>{f.current.patch.afterSha256='7'.repeat(64)}],
+    ['changed preimage SHA', (f:any)=>{f.current.patch.beforeSha256='6'.repeat(64)}],
+    ['missing native identity', (f:any)=>{delete f.current.patch.identity}]
+  ] as const){
+    const f=seeded();
+    alter(f);
+    const v=projectTaskReview(f,NOW);
+    assert.equal(v.status,'STALE_READ_ONLY',caseName);
+    assert.equal(v.approvedReviewStatus,'STALE_READ_ONLY',caseName);
+    assert.equal(v.canRecordIntent,false,caseName);
+    assert.equal(v.canDispatch,false,caseName);
+    assert.equal(v.canApply,false,caseName);
+    assert.equal(v.effectiveWindowsHigh,false,caseName);
+    assert.equal(makeReviewIntent(f,NOW),null,caseName);
+  }
+  const f=seeded();
+  const root=new FakeNode('main',new FakeDocument());
+  let emitted=0;
+  const mounted=mountTaskReview(root,f,{now:()=>NOW,onIntent:()=>{emitted++}});
+  assert.equal(mounted.button.disabled,false);
+  f.current.patch.identity.worktreeRoot='C:\\\\tasks\\\\swapped-during-preview';
+  assert.equal(projectTaskReview(f,NOW).status,'STALE_READ_ONLY');
+  mounted.button.click();
+  assert.equal(emitted,0);
+  assert.equal(mounted.button.disabled,true);
+  assert.match(mounted.message.textContent,/DENIED/);
+});
