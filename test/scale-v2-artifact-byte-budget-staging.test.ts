@@ -25,7 +25,7 @@ const hash='b'.repeat(64);
 const free=16*1024*1024*1024;
 const size=ARTIFACT_CHUNK_BYTES*2;
 
-function fixture(policy?:ArtifactBudgetPolicy){
+function fixture(policy?:ArtifactBudgetPolicy, proofs=legacyFixtureProofs){
   const dir=mkdtempSync(path.join(tmpdir(),'nexowire-byte-budget-'));
   const file=path.join(dir,'budget.db');
   const db=new DatabaseSync(file);
@@ -33,8 +33,8 @@ function fixture(policy?:ArtifactBudgetPolicy){
   initArtifactBudgetFixture(db);
   const db2=new DatabaseSync(file);
   db2.exec('PRAGMA busy_timeout=10000');
-  const first=new StagingArtifactByteBudget(db,policy,legacyFixtureProofs);
-  const second=new StagingArtifactByteBudget(db2,policy,legacyFixtureProofs);
+  const first=new StagingArtifactByteBudget(db,policy,proofs);
+  const second=new StagingArtifactByteBudget(db2,policy,proofs);
   const n=(sql:string,...params:(number|string)[])=>Number(
     (db.prepare(sql).get(...params) as {n:number}|undefined)?.n??0
   );
@@ -78,12 +78,53 @@ test('bounded 64KiB atomic reservation, durable commit, full hash and storage st
     assert.equal(f.n('SELECT SUM(size_bytes) AS n FROM budget_artifact_sessions WHERE state<>?', 'RELEASED'),size);
     assert.equal(f.first.acknowledgeDeletion({
       ...a,sessionId:'session-alpha-01',durableDeletionVerified:true,
+      writersStoppedVerified:true,
     }),'RELEASED');
     assert.equal(f.n('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>?', 'RELEASED'),0);
     assert.equal(f.n('SELECT COUNT(*) AS n FROM budget_artifact_chunks'),2);
     assert.equal(f.n('SELECT SUM(byte_count) AS n FROM budget_artifact_chunks'),size);
   }finally{f.close()}
 });
+test('COMPLETE final hash plus deletion still cannot refund disk without independent writer-stop',()=>{
+  let externallyWitnessedWriterStop=false;
+  const f=fixture(undefined,{
+    ...legacyFixtureProofs,
+    verifyWriterFence:()=>externallyWitnessedWriterStop,
+  });
+  try{
+    assert.equal(f.first.begin(open()),'RESERVED');
+    const c1=chunk();
+    assert.equal(f.first.stageChunk(c1),'CHUNK_PENDING');
+    assert.equal(f.second.commitChunk(durable(c1)),'CHUNK_COMMITTED');
+    const c2=chunk(a,'session-alpha-01','chunk-id-0002',ARTIFACT_CHUNK_BYTES);
+    assert.equal(f.second.stageChunk(c2),'CHUNK_PENDING');
+    assert.equal(f.first.commitChunk(durable(c2)),'CHUNK_COMMITTED');
+    assert.equal(f.first.finalize(baseReceipt),'COMPLETE');
+
+    const deletion={...a,sessionId:'session-alpha-01',
+      durableDeletionVerified:true as const,
+      writersStoppedVerified:true as const};
+    // An authenticated completed-file digest and even a deletion witness
+    // do not attest that another Native writer or publisher cannot recur.
+    assert.throws(()=>f.second.acknowledgeDeletionOnce({
+      ...deletion,writersStoppedVerified:undefined,
+    }),/TRUSTED_WRITER_FENCE_REQUIRED/);
+    assert.throws(()=>f.second.acknowledgeDeletionOnce(deletion),
+      /TRUSTED_WRITER_FENCE_REQUIRED/);
+    assert.equal(f.n(
+      "SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>'RELEASED'"
+    ),size);
+    externallyWitnessedWriterStop=true;
+    assert.equal(f.second.acknowledgeDeletionOnce(deletion),'RELEASED_FIRST');
+    assert.equal(f.first.acknowledgeDeletionOnce(deletion),'RELEASED_ALREADY');
+    assert.equal(f.n(
+      "SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>'RELEASED'"
+    ),0);
+    // Byte traffic stays charged even after a verified disk release.
+    assert.equal(f.n('SELECT SUM(byte_count) AS n FROM budget_artifact_chunks'),size);
+  }finally{f.close()}
+});
+
 test('different SHA, size, device, owner, project or root ID never reuses a session/billed logical root',()=>{
   const f=fixture();try{
     assert.equal(f.first.begin(open()),'RESERVED');
