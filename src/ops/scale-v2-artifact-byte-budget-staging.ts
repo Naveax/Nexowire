@@ -468,10 +468,12 @@ export class StagingArtifactByteBudget {
       if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
       if(s.state==='RELEASED')return 'RELEASED_ALREADY';
       if(s.state!=='COMPLETE'&&s.state!=='CANCEL_PENDING')return 'DENIED_STATE';
-      // Cancelled writes may have an unknown in-flight write/ACK.
-      if(s.state==='CANCEL_PENDING'&&
-         (x.writersStoppedVerified!==true ||
-          this.trustedProofs?.verifyWriterFence(x)!==true))
+      // A COMPLETE upload proves only its durable bytes/digest. An external
+      // publisher or stale Native writer may still be active. Release needs
+      // independent writer-stop evidence for BOTH completed and cancelled
+      // sessions; verified deletion alone cannot fence subsequent writes.
+      if(x.writersStoppedVerified!==true ||
+         this.trustedProofs?.verifyWriterFence(x)!==true)
         throw Error('TRUSTED_WRITER_FENCE_REQUIRED');
       this.db.prepare('UPDATE budget_artifact_sessions SET state=? WHERE session_id=?')
         .run('RELEASED',x.sessionId);
