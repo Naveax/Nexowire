@@ -174,8 +174,8 @@
       "pr": 811,
       "sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
       "run": 39939395440,
-      "status": "queued",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "failure",
       "base": "754cc4364822be5fda528f54042fb22a84f19924",
       "merge_base": "754cc4364822be5fda528f54042fb22a84f19924",
       "compare": "ahead"
@@ -333,7 +333,7 @@
   ],
   "issues": [
     "Missing independently refreshed full-current CI, changed files and compare for remaining PRs",
-    "#811 latest queued; earlier green on older SHA does not transfer",
+    "#811 latest complete FAILURE on Windows browser-live, source Node22/24 passed; older green SHA cannot transfer",
     "#845 #821 #814 based on OLD #811 SHA 600a028",
     "#826 current red on runbook guard legacy positive expectations",
     "#708 compare diverged, #726 CI RED",
