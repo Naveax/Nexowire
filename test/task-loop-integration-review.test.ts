@@ -138,3 +138,40 @@ test('fake/missing generation and forged local COMPLETED metadata remain denial'
   assert.equal(reviewCodingLoopCrossOwner(g).mayClaimCompletedVerified,false);
   assert.equal(reviewCodingLoopCrossOwner(g).mayDispatch,false);
 });
+
+test('#33 NEXT4 persisted UNKNOWN survives clone + cancellation after reconnect',()=>{
+  const f=clone();
+  const started=advanceTaskLoop(f.loop,{
+    identity:f.loop.identity,nowMs:T+1
+  }).checkpoint;
+  f.loop=advanceTaskLoop(started,{
+    identity:started.identity,nowMs:T+2,
+    externalMutationState:'unknown'
+  }).checkpoint;
+  f.checkpoint!.cancelled=true;
+  f.worker!.identity.originalRequestId='cloned-request';
+  f.worker!.identity.ownerEpoch++;
+  f.quota!.binding.logicalOperationId='cloned-logical';
+  f.worktree!.sourceSha=git('e');
+  const decision=reviewCodingLoopCrossOwner(f);
+  assert.equal(decision.reason,'MUTATION_STATE_UNKNOWN');
+  assert.equal(decision.state,'RECONCILE_REQUIRED');
+  assert.equal(decision.originalRequestId,
+    '55555555-5555-4555-8555-555555555555');
+  assert.equal(decision.mayReplayMutation,false);
+  assert.equal(decision.mayDispatch,false);
+});
+
+test('#33 NEXT4 persisted CANCELLED terminal survives missing reconnect projections',()=>{
+  const f=clone();
+  f.loop=advanceTaskLoop(f.loop,{
+    identity:f.loop.identity,nowMs:T+1,cancelled:true
+  }).checkpoint;
+  delete f.worker;
+  delete f.quota;
+  const decision=reviewCodingLoopCrossOwner(f);
+  assert.equal(decision.reason,'REVOKED_OR_CANCELLED');
+  assert.equal(decision.state,'BLOCKED');
+  assert.equal(decision.mayResumeTool,false);
+  assert.equal(decision.mayDispatch,false);
+});

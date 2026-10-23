@@ -106,6 +106,13 @@ export function reviewCodingLoopCrossOwner(
   input:CodingLoopControllerInput,
 ):CodingLoopControllerDecision {
   const l=input?.loop, i=l?.identity;
+  // Trust neither the reconnect metadata nor local quotas as native authority.
+  // Preserve a pre-existing terminal verdict before inspecting potentially
+  // stale/cloned projections supplied by the *new* session.
+  if(l?.status==='RECONCILE_REQUIRED')
+    return decide(l,'MUTATION_STATE_UNKNOWN','RECONCILE_REQUIRED');
+  if(l?.status==='STOPPED'&&l.reason==='CANCELLED')
+    return decide(l,'REVOKED_OR_CANCELLED');
   const w=input?.worker, c=input?.checkpoint, q=input?.quota, t=input?.worktree;
   if(!asObject(i)||!asObject(i.grant)||
      !asObject(w)||!asObject(w.identity)||

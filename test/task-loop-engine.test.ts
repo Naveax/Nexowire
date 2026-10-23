@@ -209,3 +209,61 @@ test('immutable checkpoint changes and altered deadline detected before resume',
       (e:unknown)=>e instanceof TaskLoopError&&e.code==='INVALID_LOOP_CHECKPOINT');
   }
 });
+
+test('#33 NEXT4 UNKNOWN checkpoint survives cancel and cloned reconnect authority',()=>{
+  const original=issue(createTaskLoop(plan('dry_run'),t0));
+  const unknown=advanceTaskLoop(original,context(original,{
+    evidence:{...evidence(original,'unknown'),errorCode:'MUTATION_STATE_UNKNOWN'}
+  })).checkpoint;
+  assert.equal(unknown.status,'RECONCILE_REQUIRED');
+  const changed=structuredClone(unknown.identity);
+  changed.ownerEpoch++;
+  changed.originalRequestId='forged-new-request';
+  changed.worktreeSha='f'.repeat(40);
+  const after=advanceTaskLoop(JSON.parse(JSON.stringify(unknown)),context(unknown,{
+    identity:changed,cancelled:true,grantRevoked:true,
+    externalMutationState:'none'
+  }));
+  assert.deepEqual(after.checkpoint,unknown);
+  assert.equal(after.action.kind,'STOP');
+  assert.equal(after.action.canExecuteMutation,false);
+  assert.equal(after.checkpoint.reason,'MUTATION_STATE_UNKNOWN');
+  assert.equal(after.checkpoint.pending?.intentId,original.pending?.intentId);
+});
+
+test('#33 NEXT4 cancelled terminal cannot be reset by reconnect epoch drift',()=>{
+  const cp=createTaskLoop(plan(),t0);
+  const cancelled=advanceTaskLoop(cp,context(cp,{cancelled:true})).checkpoint;
+  const authority=structuredClone(cancelled.identity);
+  authority.ownerEpoch++;
+  const result=advanceTaskLoop(cancelled,context(cancelled,{identity:authority}));
+  assert.deepEqual(result.checkpoint,cancelled);
+  assert.equal(result.checkpoint.reason,'CANCELLED');
+  assert.equal(result.action.kind,'STOP');
+});
+
+test('#33 NEXT4 exhausted budget beats repeat tenant wait and cannot propose tools',()=>{
+  const p=plan('read_only');
+  p.limits.maxActions=1;
+  let cp=issue(createTaskLoop(p,t0));
+  cp=advanceTaskLoop(cp,context(cp,{evidence:evidence(cp,'failed')})).checkpoint;
+  assert.equal(cp.phase,'FIX');
+  cp=advanceTaskLoop(cp,context(cp)).checkpoint;
+  assert.equal(cp.phase,'TOOL');
+  const saturated={
+    activeGlobal:2,activeTenant:1,maxGlobal:2,maxPerTenant:1
+  };
+  let result=advanceTaskLoop(cp,context(cp,{tenantCapacity:saturated}));
+  assert.equal(result.action.kind,'STOP');
+  assert.equal(result.checkpoint.reason,'BUDGET_EXHAUSTED');
+  assert.equal(result.checkpoint.usedActions,1);
+  for(let i=0;i<5;i++){
+    result=advanceTaskLoop(result.checkpoint,context(result.checkpoint,{
+      tenantCapacity:saturated
+    }));
+    assert.equal(result.action.kind,'STOP');
+    assert.equal(result.checkpoint.usedActions,1);
+    assert.equal(result.checkpoint.pending,undefined);
+    assert.equal(result.action.canExecuteMutation,false);
+  }
+});

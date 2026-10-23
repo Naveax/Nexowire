@@ -185,12 +185,14 @@ function evidenceValid(cp:LoopCheckpoint,e:NonNullable<LoopRuntimeContext['evide
 export function advanceTaskLoop(saved:LoopCheckpoint,ctx:LoopRuntimeContext):LoopTransition{
   validated(saved);
   const cp=structuredClone(saved);
-  if(!ctx||!natural(ctx.nowMs)||!validIdentity(ctx.identity)||
-    !scoped(cp.identity,ctx.identity))
-    return stopped(cp,'BLOCKED','SCOPE_MISMATCH');
+  // Terminal cancellation and UNKNOWN are sticky across WSS reconnects.
+  // A mismatched new session must not rewrite the original checkpoint verdict.
   if(cp.status!=='ACTIVE')
     return {checkpoint:cp,action:{kind:'STOP',
       reason:cp.reason??'SCOPE_MISMATCH',canExecuteMutation:false}};
+  if(!ctx||!natural(ctx.nowMs)||!validIdentity(ctx.identity)||
+    !scoped(cp.identity,ctx.identity))
+    return stopped(cp,'BLOCKED','SCOPE_MISMATCH');
   if(ctx.grantRevoked)return stopped(cp,'BLOCKED','GRANT_REVOKED');
   if(ctx.nowMs>=cp.identity.grant.expiresAtMs)
     return stopped(cp,'BLOCKED','GRANT_EXPIRED');
@@ -216,6 +218,11 @@ export function advanceTaskLoop(saved:LoopCheckpoint,ctx:LoopRuntimeContext):Loo
     // mutation always requires reconciliation, never emits TOOL_INTENT.
     if(step.mode==='mutation')
       return stopped(cp,'RECONCILE_REQUIRED','EXTERNAL_CAS_REQUIRED');
+    // Exhausted per-task budget must win over a saturated tenant wait.
+    // Otherwise restored controllers can spin forever without a legal next step.
+    if(cp.usedActions>=cp.limits.maxActions||
+      cp.usedTokens+step.reservedTokens>cp.limits.maxTokens)
+      return stopped(cp,'STOPPED','BUDGET_EXHAUSTED');
     const t=ctx.tenantCapacity;
     if(t){
       if(![t.activeGlobal,t.activeTenant,t.maxGlobal,t.maxPerTenant].every(natural)||
@@ -225,9 +232,6 @@ export function advanceTaskLoop(saved:LoopCheckpoint,ctx:LoopRuntimeContext):Loo
         return {checkpoint:cp,action:{kind:'WAIT_TENANT_CAPACITY',
           canExecuteMutation:false}};
     }
-    if(cp.usedActions>=cp.limits.maxActions||
-      cp.usedTokens+step.reservedTokens>cp.limits.maxTokens)
-      return stopped(cp,'STOPPED','BUDGET_EXHAUSTED');
     const attempt=cp.attempt+1;
     const intent:LoopPending={
       intentId:sha(JSON.stringify([cp.immutableSha256,step.id,cp.stepIndex,attempt])),
