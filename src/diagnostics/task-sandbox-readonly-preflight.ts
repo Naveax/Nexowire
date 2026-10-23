@@ -361,9 +361,9 @@ export async function inspectReadonlyTaskSandboxPreflight(
     gitRootScope: 'NOT_PROVEN',
     safeGitExecution: 'NOT_PROVEN',
     gitCommitGraphScope: 'NOT_PROVEN',
-    windowsGitNullConfigBaseline: p?.platform !== 'win32'
+    windowsGitNullConfigBaseline: p?.platform !== 'win32' || !gitRelevant
       ? 'NOT_APPLICABLE'
-      : gitRelevant && verified(input.git?.windowsNullConfigHealthyBaseline)
+      : verified(input.git?.windowsNullConfigHealthyBaseline)
         ? 'REPORTED_UNATTESTED' : 'NOT_OBSERVED',
     processIsolation: 'NOT_PROVEN',
     remoteWorkerEligibility: 'NOT_PROVEN',
