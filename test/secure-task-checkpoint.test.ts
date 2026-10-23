@@ -14,7 +14,8 @@ function fixture(): SecureTaskCheckpoint {
   return {
     version: 1,
     scope: {ownerId: randomUUID(), deviceId: randomUUID(), taskId: 'task-34',
-      worktreeId: randomUUID(), sourceSha: src, ownerEpoch: 7, grantGeneration: 3,
+      worktreeId: randomUUID(), worktreeSha: 'd'.repeat(40), sourceSha: src,
+      ownerEpoch: 7, grantGeneration: 3,
       signedGrantScopeDigest: hash('b')},
     mutation: {logicalMutationId: randomUUID(), requestId: randomUUID(),
       fingerprint: hash('c'), state: 'PLANNED', pendingUnknown: false},
@@ -82,6 +83,7 @@ test('revoked grant, changed owner epoch, worktree or SHA fails closed', async t
     (s: typeof cp.scope) => {s.ownerEpoch++},
     (s: typeof cp.scope) => {s.grantGeneration++},
     (s: typeof cp.scope) => {s.worktreeId = randomUUID()},
+    (s: typeof cp.scope) => {s.worktreeSha = 'f'.repeat(40)},
     (s: typeof cp.scope) => {s.sourceSha = 'f'.repeat(40)},
   ]) {
     const scope = structuredClone(cp.scope);
@@ -198,6 +200,7 @@ test('full AAD refuses a legacy path-only ciphertext for changed source/worktree
   // NEW AAD binds the exact expected identity BEFORE plaintext parsing.
   for (const modify of [
     (c: SecureTaskCheckpoint) => {c.scope.worktreeId = randomUUID()},
+    (c: SecureTaskCheckpoint) => {c.scope.worktreeSha = 'f'.repeat(40)},
     (c: SecureTaskCheckpoint) => {c.scope.sourceSha = 'f'.repeat(40); c.ciWitnesses[0]!.sourceSha = c.scope.sourceSha},
     (c: SecureTaskCheckpoint) => {c.scope.ownerEpoch++; c.approvals[0]!.approvalEpoch++},
     (c: SecureTaskCheckpoint) => {c.scope.signedGrantScopeDigest = hash('f'); c.approvals[0]!.grantScopeDigest = hash('f')},
@@ -291,4 +294,102 @@ test('UNKNOWN and CI/approval lineage remain sticky after repeated compaction', 
   const snapshot = (await d.open().restore(cp.scope, true)).snapshot!;
   assert.equal(snapshot.foldedEvents?.count, 3);
   assert.equal(snapshot.mutation.pendingUnknown, true);
+});
+
+/**
+ * #34 NEXT4: one disposable hostile rollback/checkpoint-overflow regression.
+ * The old ciphertext is *genuinely* authenticated and therefore can be
+ * reinstalled after an epoch advance. It must NEVER mint a replay or native
+ * resume permit. Off-host epoch readback is mandatory for stale detection.
+ */
+test('chat overflow + compaction: sealed epoch-7 rollback never replays original UNKNOWN under epoch-8', async t => {
+  const d = await disposable(t);
+  const cp = fixture();
+  cp.mutation.state = 'RECONCILE_REQUIRED';
+  cp.mutation.pendingUnknown = true;
+  cp.mutation.originalErrorCode = 'MUTATION_STATE_UNKNOWN';
+  const original = {
+    requestId: cp.mutation.requestId,
+    logicalMutationId: cp.mutation.logicalMutationId,
+    sourceSha: cp.scope.sourceSha,
+    worktreeId: cp.scope.worktreeId,
+    worktreeSha: cp.scope.worktreeSha,
+  };
+  cp.events = Array.from({length: 240}, (_, i) => ({
+    stepId: 'overflow-' + i, phase: 'OBSERVE' as const,
+    outcome: 'UNKNOWN' as const, fingerprint: hash('e'),
+  }));
+  const store = d.open();
+  const revisionBefore = await store.create(cp);
+  const [name] = await (await import('node:fs/promises')).readdir(d.dir);
+  const file = path.join(d.dir, name!);
+  const sealedEpoch7 = await readFile(file, 'utf8');
+  const compacted = compactTaskContext(cp);
+  const compactRevision = await store.update(cp, compacted, revisionBefore);
+  const afterOverflow = await d.open().restore(cp.scope, true);
+  assert.equal(afterOverflow.revision, compactRevision);
+  assert.equal(afterOverflow.verdict, 'RECONCILE_REQUIRED');
+  assert.equal(afterOverflow.snapshot?.foldedEvents?.count, 240);
+  assert.equal(afterOverflow.snapshot?.mutation.originalErrorCode, 'MUTATION_STATE_UNKNOWN');
+  assert.deepEqual({
+    requestId: afterOverflow.snapshot?.mutation.requestId,
+    logicalMutationId: afterOverflow.snapshot?.mutation.logicalMutationId,
+    sourceSha: afterOverflow.snapshot?.scope.sourceSha,
+    worktreeId: afterOverflow.snapshot?.scope.worktreeId,
+    worktreeSha: afterOverflow.snapshot?.scope.worktreeSha,
+  }, original);
+
+  // EXTERNAL state changed: the caller must use independently enrolled epoch
+  // and worktree HEAD, never the checkpoint itself as the expected scope.
+  const current = structuredClone(cp.scope);
+  current.ownerEpoch = 8;
+  current.grantGeneration = 4;
+  current.worktreeSha = 'f'.repeat(40);
+  const staleBeforeRollback = await d.open().restore(current, true);
+  assert.equal(staleBeforeRollback.verdict, 'STOP');
+  assert.equal(staleBeforeRollback.mayReplay, false);
+  assert.equal(staleBeforeRollback.mayDispatch, false);
+
+  // Full rollback is not GCM tampering! The correct original epoch-7 tag
+  // must decrypt under epoch-7 if a caller trusts stale local scope.
+  await writeFile(file, sealedEpoch7, 'utf8');
+  const rolledBackUsingCurrentEpoch = await d.open().restore(current, true);
+  assert.equal(rolledBackUsingCurrentEpoch.verdict, 'STOP');
+  assert.equal(rolledBackUsingCurrentEpoch.mayDispatch, false);
+  assert.equal(rolledBackUsingCurrentEpoch.mayReplay, false);
+
+  const staleLocalOnly = await d.open().restore(cp.scope, true);
+  assert.equal(staleLocalOnly.revision, revisionBefore);
+  assert.equal(staleLocalOnly.verdict, 'RECONCILE_REQUIRED');
+  assert.equal(staleLocalOnly.reason, 'UNKNOWN_NEEDS_EXTERNAL_CAS');
+  assert.equal(staleLocalOnly.mayReplay, false);
+  assert.equal(staleLocalOnly.mayDispatch, false);
+  assert.equal(staleLocalOnly.completedVerified, false);
+  assert.deepEqual({
+    requestId: staleLocalOnly.snapshot?.mutation.requestId,
+    logicalMutationId: staleLocalOnly.snapshot?.mutation.logicalMutationId,
+    sourceSha: staleLocalOnly.snapshot?.scope.sourceSha,
+    worktreeId: staleLocalOnly.snapshot?.scope.worktreeId,
+    worktreeSha: staleLocalOnly.snapshot?.scope.worktreeSha,
+  }, original);
+
+  const clonedRequest = structuredClone(cp);
+  clonedRequest.mutation.requestId = randomUUID();
+  await assert.rejects(store.update(cp, clonedRequest, revisionBefore),
+    /CHECKPOINT_IMMUTABLE_SCOPE_CHANGED/);
+  const driftedWorktree = structuredClone(cp);
+  driftedWorktree.scope.worktreeSha = 'f'.repeat(40);
+  await assert.rejects(store.update(cp, driftedWorktree, revisionBefore),
+    /CHECKPOINT_IMMUTABLE_SCOPE_CHANGED/);
+
+  // Ciphertext corruption, unlike full rollback, fails GCM authentication.
+  const corrupted = JSON.parse(sealedEpoch7) as {ciphertext: string};
+  const bytes = Buffer.from(corrupted.ciphertext, 'base64');
+  bytes[0] = bytes[0]! ^ 0x01;
+  corrupted.ciphertext = bytes.toString('base64');
+  await writeFile(file, JSON.stringify(corrupted), 'utf8');
+  const damaged = await d.open().restore(cp.scope, true);
+  assert.equal(damaged.verdict, 'STOP');
+  assert.equal(damaged.reason, 'CORRUPT_OR_MISSING');
+  assert.equal(damaged.mayReplay, false);
 });
