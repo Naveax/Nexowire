@@ -289,3 +289,46 @@ test('#32 denies traversal, .git metadata, binary text and oversized preview', a
     assert.equal(x.port.casCount, 0);
   } finally { await x.clean(); }
 });
+
+
+test('#32 preview accepts an existing empty UTF-8 file without performing any patch', async () => {
+  const x = await fixture();
+  try {
+    await x.port.externalWrite('');
+    const preview = await x.patch.preview(x.request);
+    assert.equal(preview.beforeSha256, digest(Buffer.alloc(0)));
+    assert.match(preview.diff, /^@@ -0,0 \+1,1 @@$/m);
+    assert.match(preview.diff, /^\+after$/m);
+    assert.equal(await fs.readFile(path.join(x.root, 'a.txt'), 'utf8'), '');
+    assert.equal(x.port.entries.size, 0);
+    assert.equal(x.port.casCount, 0);
+    assert.deepEqual(x.port.approves, []);
+  } finally { await x.clean(); }
+});
+
+test('#32 preview rejects hidden terminal and bidi controls in before and after text', async () => {
+  const x = await fixture();
+  try {
+    for (const replacement of [
+      'safe\u001b[31m forged\n',
+      'safe\u0008forged\n',
+      'review\u202Etxt\n',
+      'review\u2066txt\n',
+      '\uFEFFsurprise\n',
+    ]) {
+      await assert.rejects(
+        () => x.patch.preview({ ...x.request, replacement }),
+        /ONLY_UTF8_LF_TEXT_SUPPORTED/,
+      );
+    }
+    await x.port.externalWrite('before\u202Eforged\n');
+    await assert.rejects(
+      () => x.patch.preview(x.request),
+      /ONLY_UTF8_LF_TEXT_SUPPORTED/,
+    );
+    assert.equal(await fs.readFile(path.join(x.root, 'a.txt'), 'utf8'), 'before\u202Eforged\n');
+    assert.equal(x.port.entries.size, 0);
+    assert.equal(x.port.casCount, 0);
+    assert.deepEqual(x.port.approves, []);
+  } finally { await x.clean(); }
+});

@@ -144,7 +144,12 @@ function validateFile(file: string): void {
 }
 
 function lines(s: string): string[] {
-  if (!s.endsWith('\n') || s.includes('\r') || s.includes('\0')) {
+  // Empty regular files are valid LF text. A reviewed diff must not contain
+  // terminal-control or bidirectional-formatting instructions that could
+  // disguise the bytes a human is asked to approve.
+  if ((s.length > 0 && !s.endsWith('\n')) ||
+      s.includes('\r') ||
+      /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/u.test(s)) {
     throw new Error('ONLY_UTF8_LF_TEXT_SUPPORTED');
   }
   return s.length === 0 ? [] : s.slice(0, -1).split('\n');
