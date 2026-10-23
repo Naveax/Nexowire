@@ -37,7 +37,7 @@ import {
 } from './windows-console-grant.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
-import { executeDurableRunbook } from './runbooks.js';
+import { executeDurableRunbook, assertExternalNativeTaskGraphAdmission } from './runbooks.js';
 import { executeSystemCapability } from './system-control.js';
 import type { ProcessManager } from './process-manager.js';
 import type { ProgressSupervisor } from './progress-supervisor.js';
@@ -1722,6 +1722,14 @@ async function runTaskGraph(
   if (parsed.graph_id && !store) {
     throw new Error('Persistent task graph store is unavailable.');
   }
+
+  // #01 delegated direct task.graph.run entrypoint. This path BYPASSES
+  // executeDurableRunbook; all jobs contain arbitrary shell commands.
+  // Without independent rollback-external commit-for-dispatch evidence
+  // binding original logicalMutationId/requestId/fingerprint/sourceSha/
+  // worktreeId and current ownerEpoch, DENY BEFORE TaskGraphStore.prepare
+  // can erase UNKNOWN or spawn a single process. No local/mock allow path.
+  assertExternalNativeTaskGraphAdmission();
 
   const specHash = sha256Buffer(
     Buffer.from(

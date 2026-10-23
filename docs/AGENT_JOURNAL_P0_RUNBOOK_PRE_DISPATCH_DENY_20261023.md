@@ -101,3 +101,46 @@ Independent #18 hostile #781 remains byte-identical; its old-SHA
 reproduction should be interpreted as UNSAFE, and a changed outcome
 against #826 would be evidence of fail-closed denial, not a proof
 of physical exactly-once. #587 P0 OPEN; production NO-GO.
+
+## Third round (#01 2026-10-23): direct task.graph.run admission bypass
+
+A separate factual route exists in `src/agent/executors.ts`:
+`executeCapability('task.graph.run') -> runTaskGraph -> TaskGraphStore.prepare
+-> runProcess/runWindowsPrivateShell`. It never reaches
+`executeDurableRunbook` and previously bypassed #826's guard.
+`TaskGraphJobSchema` accepts arbitrary `jobs[].command`, so none of
+these jobs is an authenticated READ_ONLY capability.
+
+This delegated #01-owned **single executor seam** is now guarded
+after schema/dependency/resume validation and BEFORE any
+`TaskGraphStore.prepare` or OS process. It calls the same
+`assertExternalNativeTaskGraphAdmission()` from #01
+`src/agent/runbooks.ts`. With no independently verified off-host
+CAS/installed protected HIGH Broker, the function always throws
+`RECONCILE_REQUIRED` and accepts no supplied bypass token or mock.
+No #31 Git workspace executor-owned code was edited. Existing
+runbook task_graph denial remains unchanged. `task.graph.get` and
+`task.graph.list` read-only operations remain available.
+
+The original immutable logicalMutationId, requestId, fingerprint,
+sourceSha, worktreeId and current ownerEpoch cannot be authenticated
+at this direct runtime entrypoint. It is precisely **because** this
+verified binding is missing that denial is unconditional. A local
+TaskGraphStore ID, replayed signed grant or arbitrary JSON metadata
+is NOT remote dispatch admission. This source-only change does not
+implement or deploy #587 atomic commitIfCurrent or physical native
+cancellation.
+
+New source test `test/agent-direct-task-graph-admission.test.ts`
+runs actual executeCapability on disposable TEMP graph state, verifying
+direct/clone shell requests never create a file or graph, retry_unknown
+doesn't overwrite existing UNKNOWN/runCount, `task.graph.get`
+remains read-only, and innocent-looking shell commands are denied.
+No remote host, real Broker, D1, UAC/ACL, VM or user files are touched.
+
+Original #781 cloned UNKNOWN negative remains byte-identical, original
+four positive runbook tests remain RED, and existing direct-task-graph
+positive tests may now be RED as a documented deliberate
+compatibility limitation. No greenwashing or always-true CAS.
+Coordinate #06/#25 for independent direct-entrypoint negative QA.
+P0 #587 remains OPEN; production NO-GO.

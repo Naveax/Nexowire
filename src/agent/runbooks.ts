@@ -219,6 +219,17 @@ export class RunbookAdmissionRequiredError extends Error {
   }
 }
 
+/**
+ * #01 shared fail-closed admission guard for direct task.graph.run and
+ * durable runbook task_graph. This void-returning function intentionally
+ * cannot issue a dispatch permit or accept caller-supplied approval.
+ * The required remote atomic reserve -> commit against revoke-start and
+ * signed installed HIGH Broker do not exist on this runtime path.
+ */
+export function assertExternalNativeTaskGraphAdmission(): void {
+  throw new RunbookAdmissionRequiredError();
+}
+
 function errorCode(error: unknown): string {
   return typeof error === 'object' &&
     error !== null &&
