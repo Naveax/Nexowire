@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, promises as fs } from 'node:fs';
+import { createReadStream, promises as fs, constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -346,6 +346,7 @@ export async function runProcess(
     cwd?: string;
     timeoutMs?: number;
     maxOutputBytes?: number;
+    env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<ProcessResult> {
   const timeoutMs = options.timeoutMs ?? 60_000;
@@ -355,7 +356,7 @@ export async function runProcess(
     const child = spawn(executable, [...args], {
       ...(options.cwd ? { cwd: options.cwd } : {}),
       windowsHide: true,
-      env: process.env,
+      env: options.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -395,13 +396,21 @@ export async function runProcess(
   });
 }
 
-function hasExecutable(command: string): boolean {
+function executablePath(command: string): string | null {
   const result = spawnSync(
     process.platform === 'win32' ? 'where.exe' : 'which',
     [command],
-    { windowsHide: true, stdio: 'ignore' },
+    { encoding: 'utf8', windowsHide: true, timeout: 5000 },
   );
-  return result.status === 0;
+  if (result.error || result.status !== 0) return null;
+  return result.stdout.split(/\r?\n/u).map((file) => file.trim())
+    .find((file) => path.isAbsolute(file) &&
+      (process.platform !== 'win32' ||
+       /\.(?:exe|cmd|bat)$/iu.test(file))) ?? null;
+}
+
+function hasExecutable(command: string): boolean {
+  return executablePath(command) !== null;
 }
 
 function shellCommand(
@@ -1038,25 +1047,231 @@ interface WorkspaceDetection {
   checkSpecs: WorkspaceCheckSpec[];
 }
 
-async function resolveWorkspaceRoot(cwd: string): Promise<{
-  root: string;
-  gitRoot: boolean;
-}> {
-  if (!hasExecutable('git')) return { root: cwd, gitRoot: false };
 
-  try {
-    const result = await runProcess(
-      'git',
-      ['-C', cwd, 'rev-parse', '--show-toplevel'],
-      { timeoutMs: 10_000, maxOutputBytes: 131_072 },
-    );
-    if (result.exitCode === 0 && result.stdout.trim()) {
-      return { root: result.stdout.trim(), gitRoot: true };
-    }
-  } catch {
-    // Non-Git workspaces are still valid workspaces.
+/** Read-only Git is not inert: local fsmonitor can launch executable code.
+ * First locate and authorize ALL Git metadata, without running Git.
+ * These checks are source policy only, not an OS process sandbox.
+ */
+interface ScopedGitWorkspace { root: string; gitDir: string; commonDir: string }
+
+/**
+ * Read a bounded Git metadata file without following the final symlink.
+ * The open handle is compared to the inspected path before consuming data.
+ * Windows still needs native handle/reparse proof for race-free acceptance.
+ */
+async function readScopedGitFile(
+  file: string, policy: PathPolicy,
+): Promise<string | undefined> {
+  let inspected;
+  try { inspected = await fs.lstat(file); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
   }
-  return { root: cwd, gitRoot: false };
+  if (!inspected.isFile() || inspected.isSymbolicLink() ||
+      inspected.size > 1_048_576) throw new PathDeniedError(file);
+  await policy.resolveExisting(file);
+  const handle = await fs.open(
+    file,
+    fsConstants.O_RDONLY | (process.platform === 'win32' ? 0 : fsConstants.O_NOFOLLOW),
+  );
+  try {
+    const actual = await handle.stat();
+    if (!actual.isFile() || actual.dev !== inspected.dev ||
+        actual.ino !== inspected.ino || actual.size > 1_048_576) {
+      throw new PathDeniedError(file);
+    }
+    const data = await handle.readFile('utf8');
+    const finalPath = await fs.lstat(file);
+    if (finalPath.isSymbolicLink() || finalPath.dev !== actual.dev ||
+        finalPath.ino !== actual.ino) throw new PathDeniedError(file);
+    return data;
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Git follows loose-object fanout, pack directories, refs, logs, common-dir,
+ * and worktree metadata beneath .git. Check every descendant before ANY
+ * subprocess invocation. Never traverse symlinks/junctions or special files.
+ * A bounded scan denies unusually large trees rather than returning a
+ * misleadingly safe snapshot. This is NOT an atomic OS handle grant.
+ */
+async function assertGitMetadataTree(
+  metadataRoot: string, policy: PathPolicy,
+): Promise<void> {
+  const stack: Array<{ dir: string; depth: number }> = [
+    { dir: metadataRoot, depth: 0 },
+  ];
+  let inspected = 0;
+  while (stack.length) {
+    const entry = stack.pop()!;
+    const stat = await fs.lstat(entry.dir);
+    if (stat.isSymbolicLink() || !stat.isDirectory() || entry.depth > 48) {
+      throw new PathDeniedError(entry.dir);
+    }
+    await policy.resolveExisting(entry.dir);
+    const children = await fs.readdir(entry.dir, { withFileTypes: true });
+    inspected += children.length;
+    if (inspected > 100_000) throw new PathDeniedError(metadataRoot);
+    for (const child of children) {
+      const item = path.join(entry.dir, child.name);
+      policy.resolve(item);
+      const kind = await fs.lstat(item);
+      if (kind.isSymbolicLink() || (!kind.isDirectory() && !kind.isFile())) {
+        throw new PathDeniedError(item);
+      }
+      if (kind.isDirectory()) {
+        stack.push({ dir: item, depth: entry.depth + 1 });
+      }
+    }
+  }
+}
+
+function hasUnsafeGitConfig(config: string): boolean {
+  // A local filter driver runs arbitrary clean/process/smudge commands even
+  // in read-only git status. Driver names are arbitrary: no safe wildcard
+  // override exists, so deny filter configuration before Git can execute.
+  return /^[ \t]*\[[ \t]*(?:filter|include(?:if)?)(?=[ \t\].])/imu.test(config) ||
+    /^[ \t]*(?:worktree|partialclone|promisor)[ \t]*=/imu.test(config);
+}
+
+async function findScopedGitWorkspace(
+  cwd: string, policy: PathPolicy,
+): Promise<ScopedGitWorkspace | null> {
+  let root = cwd;
+  for (;;) {
+    const marker = path.join(root, '.git');
+    let stat;
+    try { stat = await fs.lstat(marker); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (stat) {
+      if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) {
+        throw new PathDeniedError(marker);
+      }
+      await policy.resolveExisting(marker);
+      let gitDir = marker;
+      if (stat.isFile()) {
+        const match = /^gitdir:\s*(.+)$/iu.exec(
+          (await readScopedGitFile(marker, policy) ?? '').trim(),
+        );
+        if (!match) throw new PathDeniedError(marker);
+        gitDir = await policy.resolveExisting(path.resolve(root, match[1]!));
+      }
+      if (!(await fs.stat(gitDir)).isDirectory()) throw new PathDeniedError(gitDir);
+      const commonFile = await readScopedGitFile(path.join(gitDir, 'commondir'), policy);
+      const commonDir = commonFile
+        ? await policy.resolveExisting(path.resolve(gitDir, commonFile.trim()))
+        : gitDir;
+      if (!(await fs.stat(commonDir)).isDirectory()) {
+        throw new PathDeniedError(commonDir);
+      }
+
+      for (const dir of new Set([gitDir, commonDir])) {
+        // Refuse nested refs/heads, objects/pack, loose object fanout,
+        // symlinked attributes/config, and any further metadata indirection.
+        await assertGitMetadataTree(dir, policy);
+        for (const name of ['config', 'config.worktree']) {
+          const file = path.join(dir, name);
+          const config = await readScopedGitFile(file, policy);
+          if (config !== undefined && hasUnsafeGitConfig(config)) {
+            throw new PathDeniedError(file);
+          }
+        }
+        // Even a locally scoped object alternate can redirect arbitrary
+        // object reads to a second repository with its own trust surface.
+        for (const name of ['objects/info/alternates', 'objects/info/http-alternates']) {
+          const file = path.join(dir, name);
+          try { await fs.lstat(file); throw new PathDeniedError(file); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+        }
+      }
+      return { root, gitDir, commonDir };
+    }
+
+    const parent = path.dirname(root);
+    if (parent === root) return null;
+    try { policy.resolve(parent); }
+    catch (error) {
+      if (error instanceof PathDeniedError) return null;
+      throw error;
+    }
+    root = await policy.resolveExisting(parent);
+  }
+}
+
+function scopedGitExecutable(): string | null {
+  const resolved = executablePath('git');
+  if (process.platform === 'win32' && resolved &&
+      !/\.exe$/iu.test(resolved)) return null;
+  return resolved;
+}
+
+async function runScopedGit(
+  executable: string, scoped: ScopedGitWorkspace, args: readonly string[],
+): Promise<ProcessResult> {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (/^(?:GIT_|GCM_|LD_|DYLD_|SSH_ASKPASS$|BASH_ENV$|ENV$)/iu.test(name)) continue;
+    env[name] = value;
+  }
+  env.GIT_CONFIG_NOSYSTEM = '1';
+  // Git for Windows may reject Node's \\.\nul device spelling. Git's
+  // own /dev/null sentinel disables both levels on Git/MSYS and POSIX.
+  env.GIT_CONFIG_GLOBAL = '/dev/null';
+  env.GIT_CONFIG_SYSTEM = '/dev/null';
+  env.GIT_OPTIONAL_LOCKS = '0';
+  env.GIT_TERMINAL_PROMPT = '0';
+  env.GIT_NO_REPLACE_OBJECTS = '1';
+  env.GIT_ATTR_NOSYSTEM = '1';
+  env.GIT_EXTERNAL_DIFF = '0';
+  env.GIT_PAGER = 'cat';
+  env.HOME = scoped.root;
+  env.XDG_CONFIG_HOME = scoped.root;
+  const overrides = [
+    'core.fsmonitor=false', 'core.hooksPath=' + os.devNull,
+    'core.externalDiff=', 'diff.external=',
+    'core.untrackedCache=false', 'submodule.recurse=false',
+    'status.submoduleSummary=false',
+    'core.attributesFile=' + path.join(scoped.commonDir, 'info', 'attributes'),
+    'core.excludesFile=' + path.join(scoped.commonDir, 'info', 'exclude'),
+  ];
+  return await runProcess(executable, [
+    '--no-pager', ...overrides.flatMap((flag) => ['-c', flag]),
+    '-C', scoped.root, ...args,
+  ], { timeoutMs: 10_000, maxOutputBytes: 131_072, env });
+}
+
+/**
+ * A Git for Windows root may differ in drive-letter / directory casing from
+ * fs.realpath() even when pointing at the exact same approved directory.
+ * path.relative() uses the platform's path semantics, but a parent or
+ * sibling remains non-empty and cannot become a widened authorization.
+ * Never resolve or open a newly discovered out-of-root path here.
+ */
+function sameScopedGitRoot(discovered: string, expected: string): boolean {
+  return path.isAbsolute(discovered) &&
+    path.relative(expected, path.resolve(discovered)) === '';
+}
+
+async function resolveWorkspaceRoot(
+  cwd: string, policy: PathPolicy,
+): Promise<{ root: string; gitRoot: boolean }> {
+  const executable = scopedGitExecutable();
+  if (!executable) return { root: cwd, gitRoot: false };
+  const scoped = await findScopedGitWorkspace(cwd, policy);
+  if (!scoped) return { root: cwd, gitRoot: false };
+  const result = await runScopedGit(executable, scoped, ['rev-parse', '--show-toplevel']);
+  if (result.exitCode !== 0 ||
+      !sameScopedGitRoot(result.stdout.trim(), scoped.root)) {
+    throw new PathDeniedError(scoped.root);
+  }
+  return { root: await policy.resolveExisting(scoped.root), gitRoot: true };
 }
 
 function commandDisplay(executable: string, args: readonly string[]): string {
@@ -1096,7 +1311,7 @@ async function detectWorkspaceInternal(
     throw new Error('Workspace path is not a directory.');
   }
 
-  const resolved = await resolveWorkspaceRoot(requestedPath);
+  const resolved = await resolveWorkspaceRoot(requestedPath, policy);
   const root = await policy.resolveExisting(resolved.root);
   const entries = await fs.readdir(root, { withFileTypes: true });
   const names = new Set(entries.map((entry) => entry.name));
@@ -1117,7 +1332,7 @@ async function detectWorkspaceInternal(
   if (names.has('package.json')) {
     kinds.push('node');
     manifests.push('package.json');
-    const raw = await fs.readFile(path.join(root, 'package.json'), 'utf8');
+    const raw = await fs.readFile(await policy.resolveExisting(path.join(root, 'package.json')), 'utf8');
     const pkg = JSON.parse(raw) as {
       packageManager?: unknown;
       scripts?: unknown;
@@ -2066,24 +2281,45 @@ async function workspaceSnapshot(
 ): Promise<unknown> {
   const parsed = WorkspaceSnapshotInputSchema.parse(input);
   const cwd = await policy.resolveExisting(parsed.path);
-  const [rootResult, statusResult, headResult, logResult] = await Promise.all([
-    runProcess('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
-      timeoutMs: 10_000,
-    }),
-    runProcess('git', ['-C', cwd, 'status', '--short', '--branch'], {
-      timeoutMs: 10_000,
-    }),
-    runProcess('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], {
-      timeoutMs: 10_000,
-    }),
-    runProcess('git', ['-C', cwd, 'log', '-1', '--format=%H%x09%s'], {
-      timeoutMs: 10_000,
-    }),
-  ]);
-
-  if (rootResult.exitCode !== 0) {
-    throw new Error(rootResult.stderr.trim() || 'Not a Git workspace.');
+  const executable = scopedGitExecutable();
+  if (!executable) throw new Error('Git executable unavailable.');
+  const scoped = await findScopedGitWorkspace(cwd, policy);
+  if (!scoped) throw new Error('WORKSPACE_ROOT_NOT_AUTHORIZED');
+  // Validate the discovered root before Git status, log or directory reads.
+  const rootResult = await runScopedGit(executable, scoped, ['rev-parse', '--show-toplevel']);
+  if (rootResult.exitCode !== 0 ||
+      !sameScopedGitRoot(rootResult.stdout.trim(), scoped.root)) {
+    throw new PathDeniedError(scoped.root);
   }
+  const root = await policy.resolveExisting(scoped.root);
+  const [statusResult, headResult, logResult] = await Promise.all([
+    runScopedGit(executable, scoped, [
+      'status', '--short', '--branch', '--ignore-submodules=all',
+    ]),
+    runScopedGit(executable, scoped, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    runScopedGit(executable, scoped, ['log', '-1', '--format=%H%x09%s']),
+  ]);
+  if (statusResult.exitCode !== 0 || statusResult.timedOut ||
+      statusResult.truncated || headResult.timedOut || headResult.truncated ||
+      logResult.timedOut || logResult.truncated) {
+    throw new Error('WORKSPACE_GIT_READ_FAILED');
+  }
+  let branch = headResult.stdout.trim();
+  if (headResult.exitCode !== 0 || logResult.exitCode !== 0) {
+    // In an empty Git repository both rev-parse --abbrev-ref HEAD and log
+    // may exit 128. Accept ONLY the verified unborn symbolic branch case.
+    const [symbolic, commit] = await Promise.all([
+      runScopedGit(executable, scoped, ['symbolic-ref', '--quiet', '--short', 'HEAD']),
+      runScopedGit(executable, scoped, ['rev-parse', '--verify', '--quiet', 'HEAD']),
+    ]);
+    if (commit.exitCode === 0 || commit.timedOut || commit.truncated ||
+        symbolic.exitCode !== 0 || symbolic.timedOut || symbolic.truncated ||
+        !symbolic.stdout.trim()) {
+      throw new Error('WORKSPACE_GIT_READ_FAILED');
+    }
+    branch = symbolic.stdout.trim();
+  }
+  await policy.resolveExisting(root);
 
   const markerNames = [
     'package.json',
@@ -2092,7 +2328,6 @@ async function workspaceSnapshot(
     'requirements.txt',
     'go.mod',
   ];
-  const root = rootResult.stdout.trim();
   const rootEntries = await fs.readdir(root, { withFileTypes: true });
   const projectMarkers = markerNames.filter((marker) =>
     rootEntries.some((entry) => entry.isFile() && entry.name === marker),
@@ -2107,7 +2342,7 @@ async function workspaceSnapshot(
     data: {
       requestedPath: cwd,
       root,
-      branch: headResult.stdout.trim(),
+      branch,
       status: statusResult.stdout.trimEnd(),
       lastCommit: logResult.stdout.trim(),
       projectMarkers,
