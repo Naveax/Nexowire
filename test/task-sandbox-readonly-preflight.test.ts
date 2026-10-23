@@ -417,3 +417,82 @@ test('filter.clean and nested Git metadata remain BLOCKED despite green parent G
   assert.equal(allClaimedGreen.dispatchAllowed, false);
   assert.equal(allClaimedGreen.effectiveCore, false);
 });
+
+
+/**
+ * #845 old-#811 Linux: healthy Git passes, nested commit-graph symlink is
+ * accepted. Windows observed a separate healthy-root/null-config precondition
+ * issue; its hosted browser-live failure was unrelated PowerShell timeout.
+ * No Git command, file/ACL mutation, OS or native provider is used here.
+ */
+test('Git commit-graph unknown and Windows null-config positive are independent read-only evidence', async () => {
+  const base = fixture();
+  const priorGitReported = {
+    discoveredRootWithinScopedGrant: verified,
+    linkedWorktreeGitdirAndCommonDirScoped: verified,
+    fsmonitorAndHookExecutionDisabled: verified,
+    gitConfigAndEnvironmentSanitized: verified,
+    gitSubprocessesContained: verified,
+    repositoryFilterCommandsBlocked: verified,
+    nestedRefsAndObjectsScoped: verified,
+  } as const;
+  const common = {
+    request: {...base.request, capability: 'git.status' as const},
+    root: {...base.root!, pathFilterOnly: false},
+    disk: {...base.disk!, atomicBudgetReservation: verified},
+    platform: {...base.platform!, git: verified},
+    process: {...base.process!, gitHooksConstrained: verified},
+  };
+
+  // Linux positive fixture for ordinary repository does not prove the
+  // separately accessed commit-graph metadata FILE's no-follow boundary.
+  const linux = await inspect({
+    ...common,
+    platform: {...common.platform, platform:'linux' as const, linuxNamespace: verified},
+    process: {...common.process, kind: 'linux-namespace' as const},
+    git: {...priorGitReported},
+  });
+  assert.equal(linux.status, 'BLOCKED');
+  assert.ok(linux.reasons.includes('GIT_COMMIT_GRAPH_FILE_SCOPE_NOT_VERIFIED'));
+  assert.equal(linux.reasons.includes('GIT_WINDOWS_NULL_CONFIG_BASELINE_NOT_VERIFIED'), false);
+  assert.equal(linux.gitCommitGraphScope, 'NOT_PROVEN');
+  assert.equal(linux.windowsGitNullConfigBaseline, 'NOT_APPLICABLE');
+  assert.equal(linux.safeGitExecution, 'NOT_PROVEN');
+  assert.equal(linux.dispatchAllowed, false);
+
+  // A Windows null-config positive is independent of the commit-graph
+  // negative: even if the nested FILE is *reported* checked, an absent
+  // healthy-run baseline must not be promoted to a security PASS.
+  const windows = await inspect({
+    ...common,
+    git: {...priorGitReported, nestedCommitGraphFileScoped: verified},
+  });
+  assert.equal(windows.status, 'BLOCKED');
+  assert.equal(windows.reasons.includes('GIT_COMMIT_GRAPH_FILE_SCOPE_NOT_VERIFIED'), false);
+  assert.ok(windows.reasons.includes('GIT_WINDOWS_NULL_CONFIG_BASELINE_NOT_VERIFIED'));
+  assert.equal(windows.windowsGitNullConfigBaseline, 'NOT_OBSERVED');
+  assert.equal(windows.gitCommitGraphScope, 'NOT_PROVEN');
+  assert.equal(windows.safeGitExecution, 'NOT_PROVEN');
+  assert.equal(windows.installedHighBroker, 'NOT_PROVEN');
+  assert.equal(windows.dispatchAllowed, false);
+  assert.equal(windows.effectiveCore, false);
+
+  // Even a forged optimistic Windows healthy-Git observation is recorded
+  // only as REPORTED_UNATTESTED, never as native, OS or CAS authority.
+  const positiveReported = await inspect({
+    ...common,
+    git: {
+      ...priorGitReported,
+      nestedCommitGraphFileScoped: verified,
+      windowsNullConfigHealthyBaseline: verified,
+    },
+  });
+  assert.equal(positiveReported.windowsGitNullConfigBaseline, 'REPORTED_UNATTESTED');
+  assert.equal(positiveReported.gitCommitGraphScope, 'NOT_PROVEN');
+  assert.equal(positiveReported.safeGitExecution, 'NOT_PROVEN');
+  assert.equal(positiveReported.filesystemContainment, 'NOT_PROVEN');
+  assert.equal(positiveReported.processIsolation, 'NOT_PROVEN');
+  assert.equal(positiveReported.remoteWorkerEligibility, 'NOT_PROVEN');
+  assert.equal(positiveReported.dispatchAllowed, false);
+  assert.equal(positiveReported.effectiveCore, false);
+});
