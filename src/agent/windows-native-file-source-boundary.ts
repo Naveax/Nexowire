@@ -229,7 +229,9 @@ export function assertNativeProtectedFileBoundary(
      evidence.destinationParent.volumeGuid!==grant.volumeGuid ||
      evidence.destinationParent.diskId!==grant.diskId ||
      evidence.destinationParent.partitionNumber!==grant.partitionNumber ||
-     (grant.removable && scope!=='read' && !grant.usbWriteApproved)){
+     typeof grant.removable!=='boolean' ||
+     typeof grant.usbWriteApproved!=='boolean' ||
+     (grant.removable && scope!=='read' && grant.usbWriteApproved!==true)){
     deny('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED');
   }
   return {

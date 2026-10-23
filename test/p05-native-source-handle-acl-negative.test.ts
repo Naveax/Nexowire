@@ -224,6 +224,16 @@ test('native retained-handle and owner-epoch witnesses reject truthy but unverif
   }
 });
 
+test('removable native grant requires exact boolean USB approval, not truthy string',()=>{
+  // Native witness JSON can be forged/coerced if source accepts 'true'.
+  // Synthetic proof only; do NOT mount or write a real USB volume.
+  const fixture=syntheticProtectedBoundary();
+  fixture.grant.removable=true;
+  fixture.grant.usbWriteApproved='true' as never;
+  assert.throws(()=>verify(fixture),
+    denied('FILE_NATIVE_OWNER_VOLUME_GRANT_UNVERIFIED'));
+});
+
 test('destination never leaves granted root even for path-prefix sibling, ADS, traversal or junction parent',()=>{
   for(const destination of [
     'C:\\Protected\\owner-other\\stage.tmp',
