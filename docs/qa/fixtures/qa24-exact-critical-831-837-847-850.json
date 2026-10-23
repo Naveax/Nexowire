@@ -1,0 +1,109 @@
+{
+  "scope": [
+    831,
+    837,
+    847,
+    850
+  ],
+  "records": [
+    {
+      "pr": 831,
+      "head": "f305cc910d5b1c55b99de024216b2e6a1114fc68",
+      "base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_ref": "test/44-open-pr-dag-exact-ci-20261023",
+      "base_ref": "main",
+      "state": "open",
+      "ci": {
+        "run_id": 39869258466,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "f305cc910d5b1c55b99de024216b2e6a1114fc68"
+      },
+      "compare": {
+        "merge_base": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead",
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "f305cc910d5b1c55b99de024216b2e6a1114fc68"
+      },
+      "files": [
+        "docs/qa/QA44_OPEN_PR_DAG_20261023.md",
+        "scripts/qa44-open-pr-integration.ts",
+        "test/qa-44-open-pr-integration.test.ts"
+      ]
+    },
+    {
+      "pr": 837,
+      "head": "1d2a455803407b077d6838b51a3a4b0d685150e8",
+      "base": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "head_ref": "test/qa16-pr806-811-physical-proof-20261023",
+      "base_ref": "test/qa16-pr791-803-exact-proof-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39864371572,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "1d2a455803407b077d6838b51a3a4b0d685150e8"
+      },
+      "compare": {
+        "merge_base": "a43933a42391cccbe426fa7a02382f08764f572f",
+        "status": "ahead",
+        "base_sha": "a43933a42391cccbe426fa7a02382f08764f572f",
+        "head_sha": "1d2a455803407b077d6838b51a3a4b0d685150e8"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR806_811_20261023.md",
+        "docs/qa/QA_20261022_P1_ISSUE780_FEATURE_MATRIX.json",
+        "docs/qa/QA_20261023_PR806_811_PHYSICAL_PROOF.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-806-811-physical-proof.test.ts"
+      ]
+    },
+    {
+      "pr": 847,
+      "head": "79fdecf348b526c1e876f434d6f0292769b2bc17",
+      "base": "661d817fbefcf00a797a775c03864681b3f1a7ea",
+      "head_ref": "test/06-task-graph-unknown-deny-red-20261023",
+      "base_ref": "test/06-runbook-task-graph-alias-negative-20261023",
+      "state": "open",
+      "ci": {
+        "run_id": 39914505805,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "79fdecf348b526c1e876f434d6f0292769b2bc17"
+      },
+      "compare": {
+        "merge_base": "661d817fbefcf00a797a775c03864681b3f1a7ea",
+        "status": "ahead",
+        "base_sha": "661d817fbefcf00a797a775c03864681b3f1a7ea",
+        "head_sha": "79fdecf348b526c1e876f434d6f0292769b2bc17"
+      },
+      "files": [
+        "test/connection-826-direct-graph-unknown-deny.RED.test.ts"
+      ]
+    },
+    {
+      "pr": 850,
+      "head": "70d67c8e1824c63baf95830f31e21fb8bc5230b2",
+      "base": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "head_ref": "test/qa17-nwjob5-installed-handle-physical-contract-20261023",
+      "base_ref": "fix/03-durable-nwjob5-early-output-20261023",
+      "state": "open",
+      "ci": {
+        "run_id": 39939244397,
+        "status": "in_progress",
+        "conclusion": null,
+        "queried_head_sha": "70d67c8e1824c63baf95830f31e21fb8bc5230b2"
+      },
+      "compare": {
+        "merge_base": "5715402142968498ce6d53014888e1c39f6e2ac9",
+        "status": "ahead",
+        "base_sha": "5715402142968498ce6d53014888e1c39f6e2ac9",
+        "head_sha": "70d67c8e1824c63baf95830f31e21fb8bc5230b2"
+      },
+      "files": [
+        "docs/qa/QA17_NWJOB5_INSTALLED_HIGH_HANDLE_PHYSICAL_NEGATIVE_20261023.md"
+      ]
+    }
+  ]
+}

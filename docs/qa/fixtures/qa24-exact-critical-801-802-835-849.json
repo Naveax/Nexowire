@@ -1,0 +1,111 @@
+{
+  "scope": [
+    801,
+    802,
+    835,
+    849
+  ],
+  "records": [
+    {
+      "pr": 801,
+      "head": "6742ddfceb3456846f4cbebef10eb8e262e4eec1",
+      "base": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "head_ref": "test/09-cdp-micro-scenario-contract-20261022",
+      "base_ref": "fix/09-759-stop-missing-state-unknown-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39823885977,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1"
+      },
+      "compare": {
+        "merge_base": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+        "status": "ahead",
+        "base_sha": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+        "head_sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/NEXOWIRE_09_780_CDP_MICRO_SCENARIO_CONTRACT_20261022.md",
+        "src/agent/browser-micro-scenario-contract.ts",
+        "test/browser-micro-scenario-contract.test.ts"
+      ]
+    },
+    {
+      "pr": 802,
+      "head": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+      "base": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "head_ref": "test/qa16-pr779-790-ci-provenance-20261022",
+      "base_ref": "test/qa16-pr774-780-p1-checklist-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39824624827,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe"
+      },
+      "compare": {
+        "merge_base": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+        "status": "ahead",
+        "base_sha": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+        "head_sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe"
+      },
+      "files": [
+        ".github/workflows/ci.yml",
+        "docs/qa/INDEPENDENT_QA_PR779_790_CI_FAILURE_AUDIT_20261022.md",
+        "docs/qa/QA_20261022_P1_ISSUE780_FEATURE_MATRIX.json",
+        "docs/qa/QA_20261022_PR779_790_FAILED_STEPS.json",
+        "docs/qa/cross-project-final-acceptance.json",
+        "test/qa-779-790-failed-step-provenance.test.ts"
+      ]
+    },
+    {
+      "pr": 835,
+      "head": "e0c34b7bf7106a99a4de1abc1019ffa98e4268d1",
+      "base": "3f2bbfa8c3003b410992d631946a17263ea2b987",
+      "head_ref": "qa/worker30-strict-logical-clone-burst-20261023",
+      "base_ref": "test/parallel-14-predispatch-unknown-20261021",
+      "state": "open",
+      "ci": {
+        "run_id": 39864497330,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "e0c34b7bf7106a99a4de1abc1019ffa98e4268d1"
+      },
+      "compare": {
+        "merge_base": "3f2bbfa8c3003b410992d631946a17263ea2b987",
+        "status": "ahead",
+        "base_sha": "3f2bbfa8c3003b410992d631946a17263ea2b987",
+        "head_sha": "e0c34b7bf7106a99a4de1abc1019ffa98e4268d1"
+      },
+      "files": [
+        "test/worker30-strict-logical-clone-burst-qa.test.ts"
+      ]
+    },
+    {
+      "pr": 849,
+      "head": "1b63db6ddca1786aa0b95bf52b023a80f0511388",
+      "base": "aabc75fd539dfb1b5db42d958ba344d12bad4f3c",
+      "head_ref": "qa/18-temp-cross-781-847-on-826-aabc-20261023",
+      "base_ref": "qa/18-temp-base-826-aabc-20261023",
+      "state": "open",
+      "ci": {
+        "run_id": 39939046984,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "1b63db6ddca1786aa0b95bf52b023a80f0511388"
+      },
+      "compare": {
+        "merge_base": "aabc75fd539dfb1b5db42d958ba344d12bad4f3c",
+        "status": "ahead",
+        "base_sha": "aabc75fd539dfb1b5db42d958ba344d12bad4f3c",
+        "head_sha": "1b63db6ddca1786aa0b95bf52b023a80f0511388"
+      },
+      "files": [
+        "test/connection-826-direct-graph-unknown-deny.RED.test.ts",
+        "test/qa-18-durable-runbook-cloned-unknown-negative.test.ts"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "scope": [
+    811,
+    826,
+    845,
+    829
+  ],
+  "records": [
+    {
+      "pr": 811,
+      "head": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "head_ref": "fix/31-scoped-git-executor-20261022",
+      "base_ref": "main",
+      "state": "open",
+      "ci": {
+        "run_id": 39939395440,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7"
+      },
+      "compare": {
+        "merge_base": "754cc4364822be5fda528f54042fb22a84f19924",
+        "status": "ahead",
+        "ahead": 7,
+        "behind": 0,
+        "too_large": null,
+        "base_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+        "head_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7"
+      },
+      "files": [
+        "src/agent/executors.ts",
+        "test/p20-780-git-fsmonitor-hook-escape-negative.test.ts",
+        "test/p26-780-git-worktree-root-escape-negative.test.ts",
+        "test/p26-811-nested-commitgraph-symlink-negative.test.ts",
+        "test/p37-780-adversarial-git-metadata-fuzz.test.ts",
+        "test/p37-780-git-packed-objects-escape-negative.test.ts",
+        "test/p50-780-git-clean-filter-external-command-negative.test.ts",
+        "test/p50-780-git-process-filter-external-command-negative.test.ts"
+      ],
+      "file_evidence": "compare_files_may_be_truncated_beyond_300"
+    },
+    {
+      "pr": 826,
+      "head": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966",
+      "base": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "head_ref": "fix/01-runbook-native-admission-failclosed-20261023",
+      "base_ref": "docs/01-agent-loop-journal-contract-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39938851608,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966"
+      },
+      "compare": {
+        "merge_base": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+        "status": "ahead",
+        "ahead": 4,
+        "behind": 0,
+        "too_large": null,
+        "base_sha": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+        "head_sha": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966"
+      },
+      "files": [
+        "docs/AGENT_JOURNAL_P0_RUNBOOK_PRE_DISPATCH_DENY_20261023.md",
+        "src/agent/executors.ts",
+        "src/agent/runbooks.ts",
+        "test/agent-direct-task-graph-admission.test.ts",
+        "test/agent-runbook-unknown-source-guard.test.ts"
+      ],
+      "file_evidence": "compare_files_may_be_truncated_beyond_300"
+    },
+    {
+      "pr": 845,
+      "head": "6b16de921ce059f28f5e2e9254ff9de764457bef",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "head_ref": "qa/w26-811-commitgraph-nofollow-20261023",
+      "base_ref": "fix/31-scoped-git-executor-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39868037273,
+        "status": "completed",
+        "conclusion": "failure",
+        "queried_head_sha": "6b16de921ce059f28f5e2e9254ff9de764457bef"
+      },
+      "compare": {
+        "merge_base": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "status": "ahead",
+        "ahead": 3,
+        "behind": 0,
+        "too_large": null,
+        "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+        "head_sha": "6b16de921ce059f28f5e2e9254ff9de764457bef"
+      },
+      "files": [
+        "test/p26-811-nested-commitgraph-symlink-negative.test.ts"
+      ],
+      "file_evidence": "compare_files_may_be_truncated_beyond_300"
+    },
+    {
+      "pr": 829,
+      "head": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "base": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "head_ref": "fix/03-durable-nwjob5-early-output-20261023",
+      "base_ref": "test/03-709-qa17-qa19-integration-20261022",
+      "state": "open",
+      "ci": {
+        "run_id": 39863445519,
+        "status": "completed",
+        "conclusion": "success",
+        "queried_head_sha": "5715402142968498ce6d53014888e1c39f6e2ac9"
+      },
+      "compare": {
+        "merge_base": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "status": "ahead",
+        "ahead": 1,
+        "behind": 0,
+        "too_large": null,
+        "base_sha": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+        "head_sha": "5715402142968498ce6d53014888e1c39f6e2ac9"
+      },
+      "files": [
+        ".github/workflows/qa03-durable-nwjob5.yml",
+        "docs/qa/QA03_DURABLE_NWJOB5_EARLY_STREAM_20261023.md",
+        "src/agent/process-worker.ts",
+        "test/windows-durable-nwjob5-early-output.test.ts"
+      ],
+      "file_evidence": "compare_files_may_be_truncated_beyond_300"
+    }
+  ]
+}
