@@ -159,10 +159,15 @@ function validated(cp:LoopCheckpoint):void{
       'Checkpoint invalid or immutable scope changed.');
 }
 function stopped(cp:LoopCheckpoint,status:LoopStatus,reason:LoopReason):LoopTransition{
-  return {checkpoint:{...cp,phase:'STOP',status,reason,
-    pending:status==='RECONCILE_REQUIRED'?cp.pending:undefined,
-    testForIntentId:status==='RECONCILE_REQUIRED'?cp.testForIntentId:undefined},
-    action:{kind:'STOP',reason,canExecuteMutation:false}};
+  // Absent optional receipt fields must stay absent through JSON checkpoints.
+  // Inserting explicit undefined breaks deterministic deep-equality on restore.
+  // Reconciliation preserves the original immutable pending intent and IDs.
+  const checkpoint:LoopCheckpoint={...cp,phase:'STOP',status,reason};
+  if(status!=='RECONCILE_REQUIRED'){
+    delete checkpoint.pending;
+    delete checkpoint.testForIntentId;
+  }
+  return {checkpoint,action:{kind:'STOP',reason,canExecuteMutation:false}};
 }
 function scoped(a:LoopIdentity,b:LoopIdentity):boolean{
   const limits={maxActions:1,maxFixes:0,maxTokens:1,timeoutMs:100};
