@@ -57,7 +57,7 @@ export function reviewLive248Evidence(data:Evidence) {
        ref.head_ref!==n.head_ref||ref.base_ref!==n.base_ref)
       add('CRITICAL_HEAD_BASE_STALE_OR_DUPLICATED',[n.pr]);
     unique.add(n.pr);
-    if(!n.ci||n.ci.queried_head_sha!==n.head||!Number.isSafeInteger(n.ci.run_id)||
+    if(!n.ci||n.ci.queried_head_sha!==n.head||(typeof n.ci.run_id!=='number'||!Number.isSafeInteger(n.ci.run_id))||
        (n.ci.run_id??0)<=0)
       add('CRITICAL_MAIN_CI_UNKNOWN_OR_STALE',[n.pr]);
     else if(n.ci.status!=='completed'||n.ci.conclusion!=='success')
