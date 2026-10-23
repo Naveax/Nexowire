@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, promises as fs } from 'node:fs';
+import { createReadStream, promises as fs, constants as fsConstants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
@@ -1054,18 +1054,87 @@ interface WorkspaceDetection {
  */
 interface ScopedGitWorkspace { root: string; gitDir: string; commonDir: string }
 
+/**
+ * Read a bounded Git metadata file without following the final symlink.
+ * The open handle is compared to the inspected path before consuming data.
+ * Windows still needs native handle/reparse proof for race-free acceptance.
+ */
 async function readScopedGitFile(
   file: string, policy: PathPolicy,
 ): Promise<string | undefined> {
-  let stat;
-  try { stat = await fs.lstat(file); }
+  let inspected;
+  try { inspected = await fs.lstat(file); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
   }
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new PathDeniedError(file);
+  if (!inspected.isFile() || inspected.isSymbolicLink() ||
+      inspected.size > 1_048_576) throw new PathDeniedError(file);
   await policy.resolveExisting(file);
-  return await fs.readFile(file, 'utf8');
+  const handle = await fs.open(
+    file,
+    fsConstants.O_RDONLY | (process.platform === 'win32' ? 0 : fsConstants.O_NOFOLLOW),
+  );
+  try {
+    const actual = await handle.stat();
+    if (!actual.isFile() || actual.dev !== inspected.dev ||
+        actual.ino !== inspected.ino || actual.size > 1_048_576) {
+      throw new PathDeniedError(file);
+    }
+    const data = await handle.readFile('utf8');
+    const finalPath = await fs.lstat(file);
+    if (finalPath.isSymbolicLink() || finalPath.dev !== actual.dev ||
+        finalPath.ino !== actual.ino) throw new PathDeniedError(file);
+    return data;
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Git follows loose-object fanout, pack directories, refs, logs, common-dir,
+ * and worktree metadata beneath .git. Check every descendant before ANY
+ * subprocess invocation. Never traverse symlinks/junctions or special files.
+ * A bounded scan denies unusually large trees rather than returning a
+ * misleadingly safe snapshot. This is NOT an atomic OS handle grant.
+ */
+async function assertGitMetadataTree(
+  metadataRoot: string, policy: PathPolicy,
+): Promise<void> {
+  const stack: Array<{ dir: string; depth: number }> = [
+    { dir: metadataRoot, depth: 0 },
+  ];
+  let inspected = 0;
+  while (stack.length) {
+    const entry = stack.pop()!;
+    const stat = await fs.lstat(entry.dir);
+    if (stat.isSymbolicLink() || !stat.isDirectory() || entry.depth > 48) {
+      throw new PathDeniedError(entry.dir);
+    }
+    await policy.resolveExisting(entry.dir);
+    const children = await fs.readdir(entry.dir, { withFileTypes: true });
+    inspected += children.length;
+    if (inspected > 100_000) throw new PathDeniedError(metadataRoot);
+    for (const child of children) {
+      const item = path.join(entry.dir, child.name);
+      policy.resolve(item);
+      const kind = await fs.lstat(item);
+      if (kind.isSymbolicLink() || (!kind.isDirectory() && !kind.isFile())) {
+        throw new PathDeniedError(item);
+      }
+      if (kind.isDirectory()) {
+        stack.push({ dir: item, depth: entry.depth + 1 });
+      }
+    }
+  }
+}
+
+function hasUnsafeGitConfig(config: string): boolean {
+  // A local filter driver runs arbitrary clean/process/smudge commands even
+  // in read-only git status. Driver names are arbitrary: no safe wildcard
+  // override exists, so deny filter configuration before Git can execute.
+  return /^[ \t]*\[[ \t]*(?:filter|include(?:if)?)(?=[ \t\].])/imu.test(config) ||
+    /^[ \t]*(?:worktree|partialclone|promisor)[ \t]*=/imu.test(config);
 }
 
 async function findScopedGitWorkspace(
@@ -1087,7 +1156,7 @@ async function findScopedGitWorkspace(
       let gitDir = marker;
       if (stat.isFile()) {
         const match = /^gitdir:\s*(.+)$/iu.exec(
-          (await fs.readFile(marker, 'utf8')).trim(),
+          (await readScopedGitFile(marker, policy) ?? '').trim(),
         );
         if (!match) throw new PathDeniedError(marker);
         gitDir = await policy.resolveExisting(path.resolve(root, match[1]!));
@@ -1102,34 +1171,21 @@ async function findScopedGitWorkspace(
       }
 
       for (const dir of new Set([gitDir, commonDir])) {
-        // Authorize parent metadata directories before probing nested paths.
-        for (const name of ['objects', 'objects/info', 'info']) {
+        // Refuse nested refs/heads, objects/pack, loose object fanout,
+        // symlinked attributes/config, and any further metadata indirection.
+        await assertGitMetadataTree(dir, policy);
+        for (const name of ['config', 'config.worktree']) {
           const file = path.join(dir, name);
-          try { await fs.lstat(file); await policy.resolveExisting(file); }
-          catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          const config = await readScopedGitFile(file, policy);
+          if (config !== undefined && hasUnsafeGitConfig(config)) {
+            throw new PathDeniedError(file);
           }
         }
-        for (const name of ['config', 'config.worktree']) {
-          const config = await readScopedGitFile(path.join(dir, name), policy);
-          if (config && (
-            /^\s*\[\s*include(?:if)?(?:\s|\])/imu.test(config) ||
-            /^\s*worktree\s*=/imu.test(config)
-          )) throw new PathDeniedError(path.join(dir, name));
-        }
+        // Even a locally scoped object alternate can redirect arbitrary
+        // object reads to a second repository with its own trust surface.
         for (const name of ['objects/info/alternates', 'objects/info/http-alternates']) {
           const file = path.join(dir, name);
           try { await fs.lstat(file); throw new PathDeniedError(file); }
-          catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          }
-        }
-        for (const name of [
-          'HEAD', 'index', 'packed-refs', 'objects', 'refs',
-          'info/attributes', 'info/exclude',
-        ]) {
-          const file = path.join(dir, name);
-          try { await fs.lstat(file); await policy.resolveExisting(file); }
           catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
           }
