@@ -96,3 +96,76 @@ test('benign-looking direct shell still has no trusted read-only exception',asyn
   }
   assert.deepEqual(work.store.list(),[]);
 });
+
+test('list/get/artifact metadata remain read-only on a recovered UNKNOWN graph',async t=>{
+  const work=await isolated(t);
+  const seeded=await work.store.prepare({
+    id:'read-only-unknown-inspection',
+    specHash:'c'.repeat(64),
+    jobs:[{id:'unresolved-job',dependsOn:[]}],
+    resume:false,retryFailed:false,retryUnknown:false,
+  });
+  seeded.status='interrupted';
+  seeded.jobs[0]!.status='unknown';
+  seeded.jobs[0]!.attempts=2;
+  seeded.jobs[0]!.startedAt='2026-10-23T09:00:00.000Z';
+  await work.store.save(seeded);
+  const before=work.store.get(seeded.id);
+
+  for(let i=0;i<3;i++){
+    const listed=await executeCapability('task.graph.list',{},
+      work.policy,{taskGraphs:work.store}) as {data:Array<{
+        id:string;status:string;
+        jobs:Array<{status:string;attempts:number}>
+      }>};
+    const entry=listed.data.find(x=>x.id===seeded.id);
+    assert.equal(entry?.status,'interrupted');
+    assert.equal(entry?.jobs[0]?.status,'unknown');
+    assert.equal(entry?.jobs[0]?.attempts,2);
+
+    const fetched=await executeCapability('task.graph.get',
+      {graph_id:seeded.id},work.policy,{taskGraphs:work.store}) as {
+        data:{id:string;jobs:Array<Record<string,unknown>>;
+          progress:{completionEvidence:string;progressVerified:boolean}}
+      };
+    assert.equal(fetched.data.id,seeded.id);
+    assert.equal(fetched.data.jobs[0]?.status,'unknown');
+    assert.equal('command' in fetched.data.jobs[0]!,false);
+    assert.equal('stdout' in fetched.data.jobs[0]!,false);
+    assert.equal(fetched.data.progress.progressVerified,false);
+    assert.equal(fetched.data.progress.completionEvidence,
+      'persisted_job_status_not_application_result');
+
+    const artifacts=await executeCapability('task.artifact.list',
+      {graph_id:seeded.id},work.policy,{taskGraphs:work.store}) as {
+        data:{artifacts:unknown[]}
+      };
+    assert.deepEqual(artifacts.data.artifacts,[]);
+  }
+  assert.deepEqual(work.store.get(seeded.id),before);
+  await assert.rejects(fs.stat(path.join(work.root,'marker.txt')),
+    {code:'ENOENT'});
+});
+test('read-only graph inspection remains available after denied direct mutation',async t=>{
+  const work=await isolated(t);
+  const seeded=await work.store.prepare({
+    id:'earlier-unresolved',specHash:'d'.repeat(64),
+    jobs:[{id:'original-unknown',dependsOn:[]}],
+    resume:false,retryFailed:false,retryUnknown:false,
+  });
+  seeded.status='interrupted';
+  seeded.jobs[0]!.status='unknown';
+  seeded.jobs[0]!.attempts=1;
+  await work.store.save(seeded);
+  const before=work.store.get(seeded.id);
+
+  await denied(work,'cloned-execution-attempt');
+  const response=await executeCapability('task.graph.get',
+    {graph_id:seeded.id},work.policy,{taskGraphs:work.store}) as {
+      data:{id:string;status:string;jobs:Array<{status:string}>}
+    };
+  assert.equal(response.data.status,'interrupted');
+  assert.equal(response.data.jobs[0]?.status,'unknown');
+  assert.deepEqual(work.store.get(seeded.id),before);
+  assert.deepEqual(work.store.list().map(x=>x.id),[seeded.id]);
+});

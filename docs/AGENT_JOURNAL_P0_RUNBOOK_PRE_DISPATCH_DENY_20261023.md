@@ -144,3 +144,79 @@ positive tests may now be RED as a documented deliberate
 compatibility limitation. No greenwashing or always-true CAS.
 Coordinate #06/#25 for independent direct-entrypoint negative QA.
 P0 #587 remains OPEN; production NO-GO.
+
+## Fourth round: exhaustive original Node24 18/18 classification (#01 NEXT4, 2026-10-23)
+
+Exact parent #826 HEAD `aabc75fd539dfb1b5db42d958ba344d12bad4f3c`,
+run `39914532851` **FAILURE**; Node24 had 18 unchanged legacy
+positives RED and all five new direct-graph deny tests PASS.
+Browser-live also FAILURE, Node22 CANCELLED; WSL2/Linux/macOS/security
+SUCCESS. PR #847 HEAD `79fdecf348b526c1e876f434d6f0292769b2bc17`
+is a hostile QA candidate based on #843/#826 **OLDER**
+`5e307dd48657512ed0e5d5b2908e7d2cd93ec6b5`; its RED
+is NOT a bypass proof against the newer #826 direct graph guard.
+The independent #847 test must remain unchanged.
+
+| # | Original unchanged failing expectation | Genuine trusted-readonly? / reason |
+| - | - | - |
+| 1 | explicit headless override still wins over configured private default | NO: `echo hello` shell dispatched |
+| 2 | private runbook pins every nested task graph to NexowirePrivate and denies headless resume | NO: `echo private` shell dispatched |
+| 3 | private task graph refuses unsupported OS without headless fallback | NO: shell entry `echo deny`; OS precheck assertion coupled to dispatch |
+| 4 | negative: an artifact changed without changing its byte count must not verify | MIXED: verification is read-only, but test first creates artifact with shell |
+| 5 | durable runbook persists dependency-aware task/assertion steps without payloads | MIXED: read-only assertions follow `echo build` shell task |
+| 6 | unknown task-graph step requires explicit retry_unknown | UNSAFE: rerun of original `echo build` after UNKNOWN |
+| 7 | task graph records verified artifact metadata without persisting artifact content | MIXED: provenance read-only, initial shell produces artifact |
+| 8 | task graph fails a job when a declared artifact is missing | NO: requires shell process/job success before artifact failure |
+| 9 | task artifact lifecycle lists, re-verifies, detects changes, and detects missing files | MIXED: artifact list/verify read-only, initial shell creates data |
+| 10 | task artifact hashing is bounded during collection | MIXED: read-only hashing after shell creates artifact |
+| 11 | persisted task graph resume reuses succeeded jobs instead of rerunning them | MIXED: resume-read can reuse, but test first runs shell to establish success |
+| 12 | persistent task graph rejects mismatched resume specifications | MIXED: spec comparison read-only, but test first submits shell |
+| 13 | unknown post-restart jobs require explicit retry_unknown before replay | UNSAFE: expects explicit shell retry of original UNKNOWN |
+| 14 | task graph list/get/prune capabilities expose payload-free metadata | MIXED: list/get readonly, prune deletes checkpoint; test first executes shell |
+| 15 | task graph runs independent jobs in parallel and waits for dependencies | NO: several arbitrary shell commands |
+| 16 | task graph blocks dependents after failure but lets independent work finish | NO: shell process.exit plus parallel shell |
+| 17 | task graph stop_on_failure blocks later independent jobs | NO: shell exit and scheduling |
+| 18 | task graph total timeout bounds a long-running job | NO: running shell with timeout |
+
+All 18 complete test workflows therefore require a **mutating/native-capable
+shell setup or execution**, even when an intermediate assertion is a
+pure read. Passing them by special-casing commands such as `echo`,
+`cat` or `node -e console.log` would be a security bypass. A
+successful process exit or `graph.status==='succeeded'` in restored
+local JSON does NOT verify the independent physical postcondition.
+
+### Narrow current read-only surface, no allow-list forgery
+
+Keep the executable `task.graph.run` (and nested runbook
+`task_graph`) fail-closed at #01's actual source admission boundary.
+Use independent, existing, non-shell APIs for authorized inspection:
+`task.graph.get`, `task.graph.list`, `task.artifact.list`,
+and `runbook.get/list`; assertions use separate `verify.assertions`
+but their postconditions require their own scope and trusted input.
+Artifact verification (`task.artifact.verify`) hashes existing
+path-policy scoped files and is a separate readback, NOT proof of an
+admitted native dispatch. `task.graph.prune`/`runbook.prune`
+delete local metadata and are NOT read-only.
+
+New #01 source tests operate on a directly seeded TEMP `TaskGraphStore`
+without shell: repeated list/get/artifact metadata reads preserve original
+UNKNOWN state, attempts and runCount, leak no payload/output and do not
+claim `progressVerified`; the same reads remain accessible after a
+cloned direct graph request is denied. This is the only justified
+read-only-path preservation in this round. There is NO change to the
+native dispatch guard or #31 Git executor code.
+
+### Required provider for later compatibility (still BLOCKED)
+
+Before any shell job can execute, a real rollback-external trust root
+must verify signed original immutable
+`logicalMutationId/requestId/fingerprint/sourceSha/worktreeId`,
+current owner/device/session and ownerEpoch + grantGeneration, and
+atomically commit a single-use dispatch lease against revoke-start.
+Unknown response/final ACK cannot produce a new `graph_id` or
+permission to replay; only authenticated read-only outcome reconciliation
+is allowed. This service and an installed protected HIGH Broker have
+NOT been deployed/attested. Do not add an always-true CAS, local
+"readonly command" string heuristic, or weaken #781 hostile QA.
+
+**#826 remains DRAFT, CI RED, production P0 NO-GO, #587 OPEN.**
