@@ -144,3 +144,58 @@ claim, owner A->B->A, signer/issuer rotation, lost ACK readback, DB snapshot
 rollback/failover, and deterministic precedence of authority outcomes.
 A client-side `supportsCAS` switch, constructor injection or local SQLite
 transaction is not an admissible implementation. **Production P0 NO-GO.**
+
+## NEXT4 contract delta and precise native proof barrier (2026-10-23)
+
+Inventory reconfirmed at `main` `754cc4364822be5fda528f54042fb22a84f19924`:
+`ControlPlaneService.consumePairing` executes `getPairing` ->
+`consumePairingChallenge` -> D1 `putDevice` (unconditional upsert by ID)
+-> reset lease/prefs -> D1 `putPairing` (unconditional consumed update).
+No shared atomic one-use enrollment nonce, owner revoke-start admission or
+device-credential generation comparison exists at this actual source seam.
+#818 prior exact HEAD `1c37f241d33d318d4fc1b6cca97c3bb5445b3c62`,
+Actions `39869582708` 6/7: Node22/24 successful, physical Windows
+`test/windows-job-owner.test.ts:216` fast-exit stdout capture negative failed.
+This is NOT a #35 source test failure and must not be masked.
+
+#42 #819 now exact HEAD `8394b9472ca4540cb7849b8943932aeb17b4bc84`,
+Actions `39869733813` SUCCESS 7/7 (source-only). Its
+`WorkerMutationIdentity` includes pairingRealm + WSS/device signer epochs
+but still cannot supply the external pairing authority or protected grant.
+
+The NEXT4 #35 **input contract**, with no provider, now also binds expected
+`deviceGeneration`, `credentialGeneration`, `revocationEpoch` and
+`issuerSpkiSha256` (issuer operator signing key, distinct from the device
+`signerSpkiSha256`) into original request fingerprint and claim. The
+provider must compare these values, along with `oauthSessionEpoch`,
+`ownerEpoch`, `pairingEpoch`, `issuerEpoch`, full original request and
+nonce against CURRENT state in a shared REPAIR/REVOKE_START transaction.
+A caller supplying numerically larger generations is not authoritative.
+
+`UntrustedPairingGenerationReceipt` is only a forward-looking schema:
+owner+issuer+device+credential generation, nonce consumption, original
+request fingerprint, provider incarnation/high-water and signature.
+It is NOT signed by this module and is NEVER used as a grant. The
+`UnboundPairingWriter.requireNativeGrant` method ALWAYS returns BLOCKED,
+including with forged, replayed, cross-realm or apparently signed receipt
+fields. A real trusted provider must securely pin an independent signing
+identity and verify canonical signatures and current non-restorable
+high-water before any separate external native dispatch-vs-revoke CAS.
+This is not implementable from the existing SQLite/WSS/D1 staging objects.
+
+**Atomic device credential boundary:** the source owner of
+`ControlPlaneService.consumePairing` and `D1ControlPlaneStore.putDevice`
+must change projection activation so no Hub can authenticate a new credential
+until externally committed one-use claim and device generation are current.
+Immediately after a revoke-start, neither delayed D1 UPSERT nor a stale
+signed receipt may reactivate an older credential. Return UNKNOWN on
+commit/ACK ambiguity; never retry or mint new request identity.
+
+Required external-provider test: two independently hosted Hubs with
+REPAIR-vs-REVOKE_START racing and OAuth logout concurrently, atomic one-use
+nonce consumption, owner A->B->A re-pair, issuer/device key rotation,
+provider partition, lost ACK, DB restore/rollback, high-water and current
+owner readback, including a native grant denial without a signed provider
+witness and independent final native effect fence. No in-process mutex,
+unconditional `supportsCAS` flag, local SQLite fixture or signed WSS
+hello can satisfy this gate. P0 production NO-GO; no live source edited.

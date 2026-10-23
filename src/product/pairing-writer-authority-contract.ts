@@ -25,8 +25,15 @@ export interface PairingMutationIntent {
   readonly pairingEpoch:number;
   readonly issuerId:string;
   readonly issuerEpoch:number;
-  /** SHA256 of DER SPKI, never private signing material. */
+  /** Pinned operator issuer DER-SPKI, distinct from the device signer. */
+  readonly issuerSpkiSha256:string;
+  /** SHA256 of device signing DER SPKI, never private signing material. */
   readonly signerSpkiSha256:string;
+  /** Expected device/credential generations (0 = not yet enrolled). */
+  readonly deviceGeneration:number;
+  readonly credentialGeneration:number;
+  /** Expected revoke-start high-water. Must be compared atomically. */
+  readonly revocationEpoch:number;
   /** Digest of a fresh one-use nonce, null only for REVOKE. */
   readonly nonceSha256:string|null;
   readonly issuedAtMs:number;
@@ -56,7 +63,11 @@ export interface EnrollmentClaimIntent {
   readonly pairingEpoch:number;
   readonly issuerId:string;
   readonly issuerEpoch:number;
+  readonly issuerSpkiSha256:string;
   readonly signerSpkiSha256:string;
+  readonly deviceGeneration:number;
+  readonly credentialGeneration:number;
+  readonly revocationEpoch:number;
   readonly nonceSha256:string;
   readonly devicePossessionProofSha256:string;
 }
@@ -84,7 +95,9 @@ const ID=/^[A-Za-z0-9][A-Za-z0-9._:@-]{7,127}$/;
 const SHA=/^[a-f0-9]{64}$/;
 const MUTATION_FIELDS=[
   'version','realm','kind','ownerAccountId','deviceId','requestId',
-  'oauthSessionEpoch','ownerEpoch','pairingEpoch','issuerId','issuerEpoch','signerSpkiSha256',
+  'oauthSessionEpoch','ownerEpoch','pairingEpoch','issuerId','issuerEpoch',
+  'issuerSpkiSha256','signerSpkiSha256','deviceGeneration',
+  'credentialGeneration','revocationEpoch',
   'nonceSha256','issuedAtMs','expiresAtMs',
 ] as const;
 const READ_FIELDS=[
@@ -94,7 +107,8 @@ const READ_FIELDS=[
 const CLAIM_FIELDS=[
   'version','realm','ownerAccountId','deviceId','requestId',
   'intentFingerprintSha256','oauthSessionEpoch','ownerEpoch','pairingEpoch',
-  'issuerId','issuerEpoch','signerSpkiSha256',
+  'issuerId','issuerEpoch','issuerSpkiSha256','signerSpkiSha256',
+  'deviceGeneration','credentialGeneration','revocationEpoch',
   'nonceSha256','devicePossessionProofSha256',
 ] as const;
 
@@ -125,7 +139,11 @@ export function validatePairingMutation(value:unknown):Readonly<PairingMutationI
     !id(value.ownerAccountId)||!id(value.deviceId)||!id(value.requestId)||
     !epoch(value.oauthSessionEpoch)||!epoch(value.ownerEpoch)||
     !epoch(value.pairingEpoch,true)||!id(value.issuerId)||
-    !epoch(value.issuerEpoch)||!sha(value.signerSpkiSha256)||
+    !epoch(value.issuerEpoch)||!sha(value.issuerSpkiSha256)||
+    !sha(value.signerSpkiSha256)||
+    !epoch(value.deviceGeneration,true)||
+    !epoch(value.credentialGeneration,true)||
+    !epoch(value.revocationEpoch,true)||
     (value.kind==='REVOKE'?value.nonceSha256!==null:!sha(value.nonceSha256))||
     !epoch(value.issuedAtMs)||!epoch(value.expiresAtMs)||
     (value.expiresAtMs as number)<=(value.issuedAtMs as number)||
@@ -148,7 +166,9 @@ export function validateEnrollmentClaim(value:unknown):Readonly<EnrollmentClaimI
     !sha(value.intentFingerprintSha256)||!epoch(value.oauthSessionEpoch)||
     !epoch(value.ownerEpoch)||!epoch(value.pairingEpoch)||
     !id(value.issuerId)||!epoch(value.issuerEpoch)||
-    !sha(value.signerSpkiSha256)||
+    !sha(value.issuerSpkiSha256)||!sha(value.signerSpkiSha256)||
+    !epoch(value.deviceGeneration)||!epoch(value.credentialGeneration)||
+    !epoch(value.revocationEpoch,true)||
     !sha(value.nonceSha256)||!sha(value.devicePossessionProofSha256)){
     throw new Error('PAIRING_CLAIM_INVALID');
   }
@@ -162,6 +182,46 @@ export function pairingMutationFingerprint(value:unknown):string{
   return createHash('sha256').update(JSON.stringify([
     'nexowire.pairing-writer-intent.v1',...tuple,
   ])).digest('hex');
+}
+
+
+/**
+ * FORWARD-ONLY SCHEMA for a future real off-host authority. THIS IS AN
+ * UNTRUSTED RECEIPT: field names or a syntactically valid signature are NOT
+ * evidence of a linearizable commit or a current-owner/native grant.
+ *
+ * Any future verifier must pin the provider signer independently, verify its
+ * signature over the complete canonical envelope, reject stale incarnation
+ * and rollback using a separate non-restorable high-water source, and check
+ * current OAuth logout/owner/device/issuer/revoke epoch in the SAME atomic
+ * serialization domain as the final native dispatch-vs-revoke admission.
+ */
+export interface UntrustedPairingGenerationReceipt {
+  readonly version:1;
+  readonly realm:PairingRealm;
+  readonly authorityId:string;
+  readonly authorityIncarnation:string;
+  readonly authoritySignerSpkiSha256:string;
+  readonly ownerAccountId:string;
+  readonly deviceId:string;
+  readonly requestId:string;
+  readonly intentFingerprintSha256:string;
+  readonly ownerEpoch:number;
+  readonly oauthSessionEpoch:number;
+  readonly pairingEpoch:number;
+  readonly issuerId:string;
+  readonly issuerEpoch:number;
+  readonly issuerSpkiSha256:string;
+  readonly signerSpkiSha256:string;
+  readonly deviceGeneration:number;
+  readonly credentialGeneration:number;
+  readonly revocationEpoch:number;
+  readonly nonceSha256:string;
+  readonly nonceConsumed:boolean;
+  readonly durableCommitSequence:number;
+  readonly issuedAtMs:number;
+  readonly expiresAtMs:number;
+  readonly signatureBase64url:string;
 }
 
 /** A lost commit ACK is UNKNOWN, NOT DENIED or a retry authorization. */
@@ -190,6 +250,10 @@ export class UnboundPairingWriter {
   }
   async claimEnrollment(input:unknown):Promise<PairingBlocked>{
     validateEnrollmentClaim(input);
+    return BLOCKED;
+  }
+  /** Even an apparently signed receipt must never grant native rights here. */
+  async requireNativeGrant(_receipt:unknown):Promise<PairingBlocked>{
     return BLOCKED;
   }
 }

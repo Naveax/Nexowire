@@ -15,7 +15,8 @@ const initial={
   ownerAccountId:'owner-example-001',deviceId:'device-example-001',
   requestId:'immutable-request-001',oauthSessionEpoch:9,ownerEpoch:4,
   pairingEpoch:7,issuerId:'issuer-example-001',issuerEpoch:3,
-  signerSpkiSha256:'a'.repeat(64),
+  issuerSpkiSha256:'d'.repeat(64),signerSpkiSha256:'a'.repeat(64),
+  deviceGeneration:8,credentialGeneration:12,revocationEpoch:2,
   nonceSha256:'b'.repeat(64),issuedAtMs:1_800_000_000_000,
   expiresAtMs:1_800_000_120_000,
 };
@@ -26,8 +27,11 @@ const claim={
   intentFingerprintSha256:pairingMutationFingerprint(initial),
   oauthSessionEpoch:initial.oauthSessionEpoch,ownerEpoch:initial.ownerEpoch,
   pairingEpoch:initial.pairingEpoch+1,issuerId:initial.issuerId,
-  issuerEpoch:initial.issuerEpoch,
+  issuerEpoch:initial.issuerEpoch,issuerSpkiSha256:initial.issuerSpkiSha256,
   signerSpkiSha256:initial.signerSpkiSha256,
+  deviceGeneration:initial.deviceGeneration+1,
+  credentialGeneration:initial.credentialGeneration+1,
+  revocationEpoch:initial.revocationEpoch,
   nonceSha256:initial.nonceSha256,
   devicePossessionProofSha256:'c'.repeat(64),
 };
@@ -57,7 +61,9 @@ test('immutable identity/realm/epochs/SPKI/nonce bind fingerprint; secrets never
   for(const override of [
     {requestId:'immutable-request-002'},{oauthSessionEpoch:10},
     {ownerEpoch:5},{pairingEpoch:8},{issuerId:'issuer-example-002'},
-    {issuerEpoch:4},{realm:'cloud'},{signerSpkiSha256:'d'.repeat(64)},
+    {issuerEpoch:4},{issuerSpkiSha256:'e'.repeat(64)},
+    {deviceGeneration:9},{credentialGeneration:13},{revocationEpoch:3},
+    {realm:'cloud'},{signerSpkiSha256:'d'.repeat(64)},
     {nonceSha256:'e'.repeat(64)},{kind:'ENROLL'},
   ]){
     assert.notEqual(base,pairingMutationFingerprint({...initial,...override}));
@@ -71,6 +77,10 @@ test('immutable identity/realm/epochs/SPKI/nonce bind fingerprint; secrets never
     {...initial,pairingEpoch:-1},
     {...initial,issuerId:''},
     {...initial,issuerEpoch:0},
+    {...initial,issuerSpkiSha256:'bad'},
+    {...initial,deviceGeneration:-1},
+    {...initial,credentialGeneration:1.5},
+    {...initial,revocationEpoch:-1},
     {...initial,kind:'REVOKE',nonceSha256:initial.nonceSha256},
     {...initial,realm:'cloud',cloudBearer:'token'},
   ]){
@@ -158,5 +168,61 @@ test('original request and intent fingerprint are mandatory read/claim correlati
     ...claim,intentFingerprintSha256:'not-sha256',
   }),/PAIRING_CLAIM_INVALID/);
   assert.equal((await hub.readCurrentPairing(read)).status,'BLOCKED');
+  assert.equal((await hub.claimEnrollment(claim)).status,'BLOCKED');
+});
+
+test('NEXT4 forged current-generation signature cannot authorize native effect',async()=>{
+  const a=new UnboundPairingWriter();
+  const b=new UnboundPairingWriter();
+  const forged={
+    version:1,realm:initial.realm,authorityId:'authority-fake',
+    authorityIncarnation:'epoch-restored',authoritySignerSpkiSha256:'f'.repeat(64),
+    ownerAccountId:initial.ownerAccountId,deviceId:initial.deviceId,
+    requestId:initial.requestId,intentFingerprintSha256:pairingMutationFingerprint(initial),
+    ownerEpoch:initial.ownerEpoch,oauthSessionEpoch:initial.oauthSessionEpoch,
+    pairingEpoch:initial.pairingEpoch+1,
+    issuerId:initial.issuerId,issuerEpoch:initial.issuerEpoch,
+    issuerSpkiSha256:initial.issuerSpkiSha256,
+    signerSpkiSha256:initial.signerSpkiSha256,
+    deviceGeneration:initial.deviceGeneration+1,
+    credentialGeneration:initial.credentialGeneration+1,
+    revocationEpoch:initial.revocationEpoch,nonceSha256:initial.nonceSha256,
+    nonceConsumed:true,durableCommitSequence:99,
+    issuedAtMs:initial.issuedAtMs,expiresAtMs:initial.expiresAtMs,
+    signatureBase64url:'caller-signed-not-operator-proof',
+  };
+  for(const hub of [a,b]){
+    for(const evidence of [forged,{...forged,revocationEpoch:1},
+      {...forged,deviceGeneration:1},{...forged,realm:'cloud'},
+      {...forged,nonceConsumed:false},null]){
+      const result=await hub.requireNativeGrant(evidence);
+      assert.equal(result.status,'BLOCKED');
+      assert.equal(result.mayDispatch,false);
+      assert.equal(result.mayReplay,false);
+    }
+  }
+});
+
+test('NEXT4 generation/issuer-key revocation expectations stay immutable and no-provider blocks',async()=>{
+  const hub=new UnboundPairingWriter();
+  const fingerprint=pairingMutationFingerprint(initial);
+  for(const change of [
+    {deviceGeneration:initial.deviceGeneration+1},
+    {credentialGeneration:initial.credentialGeneration+1},
+    {revocationEpoch:initial.revocationEpoch+1},
+    {issuerSpkiSha256:'9'.repeat(64)},
+  ]){
+    const changed={...initial,...change};
+    assert.notEqual(pairingMutationFingerprint(changed),fingerprint);
+    assert.equal((await hub.commitPairing(changed)).status,'BLOCKED');
+  }
+  for(const change of [
+    {deviceGeneration:0},
+    {credentialGeneration:-1},
+    {revocationEpoch:-1},
+    {issuerSpkiSha256:'0'},
+  ]){
+    await assert.rejects(hub.claimEnrollment({...claim,...change}),/PAIRING_CLAIM_INVALID/);
+  }
   assert.equal((await hub.claimEnrollment(claim)).status,'BLOCKED');
 });
