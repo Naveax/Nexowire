@@ -195,14 +195,17 @@ export function advanceTaskLoop(saved:LoopCheckpoint,ctx:LoopRuntimeContext):Loo
   if(cp.status!=='ACTIVE')
     return {checkpoint:cp,action:{kind:'STOP',
       reason:cp.reason??'SCOPE_MISMATCH',canExecuteMutation:false}};
+  // An already-uncertain external mutation cannot be downgraded to a
+  // generic stale-grant/scope STOP by a new, revoked or expired session.
+  // This is a conservative denial, NOT authenticated outcome readback.
+  if(ctx?.externalMutationState==='unknown'||ctx?.externalMutationState==='in_progress')
+    return stopped(cp,'RECONCILE_REQUIRED','MUTATION_STATE_UNKNOWN');
   if(!ctx||!natural(ctx.nowMs)||!validIdentity(ctx.identity)||
     !scoped(cp.identity,ctx.identity))
     return stopped(cp,'BLOCKED','SCOPE_MISMATCH');
   if(ctx.grantRevoked)return stopped(cp,'BLOCKED','GRANT_REVOKED');
   if(ctx.nowMs>=cp.identity.grant.expiresAtMs)
     return stopped(cp,'BLOCKED','GRANT_EXPIRED');
-  if(ctx.externalMutationState==='unknown'||ctx.externalMutationState==='in_progress')
-    return stopped(cp,'RECONCILE_REQUIRED','MUTATION_STATE_UNKNOWN');
   if(ctx.cancelled)return stopped(cp,
     cp.pending?'RECONCILE_REQUIRED':'STOPPED','CANCELLED');
   if(ctx.nowMs>=cp.deadlineMs)return stopped(cp,

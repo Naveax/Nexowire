@@ -90,6 +90,38 @@ test('lost ACK UNKNOWN retains immutable request, operation and receipt for reco
   assert.equal(again.action.kind,'STOP');
   assert.equal(again.checkpoint.pending?.intentId,cp.pending?.intentId);
 });
+test('#05 restored lost-ACK UNKNOWN outranks revoked, expired and cloned reconnect',()=>{
+  const pending=issue(createTaskLoop(plan('dry_run'),t0));
+  const restored=JSON.parse(JSON.stringify(pending)) as LoopCheckpoint;
+  const staleIdentity=structuredClone(restored.identity);
+  staleIdentity.ownerEpoch++;
+  staleIdentity.originalRequestId='new-session-alias';
+  for(const externalMutationState of ['unknown','in_progress'] as const){
+    for(const boundary of [
+      {grantRevoked:true},
+      {nowMs:t0+20000},
+      {identity:staleIdentity},
+      {identity:staleIdentity,grantRevoked:true,nowMs:t0+20000},
+    ] satisfies Partial<LoopRuntimeContext>[]){
+      const result=advanceTaskLoop(restored,context(restored,{
+        externalMutationState,...boundary
+      }));
+      assert.equal(result.checkpoint.status,'RECONCILE_REQUIRED');
+      assert.equal(result.checkpoint.reason,'MUTATION_STATE_UNKNOWN');
+      assert.equal(result.action.kind,'STOP');
+      assert.equal(result.action.canExecuteMutation,false);
+      assert.deepEqual(result.checkpoint.pending,restored.pending);
+      assert.equal(result.checkpoint.identity.originalRequestId,
+        restored.identity.originalRequestId);
+      assert.equal(result.checkpoint.identity.ownerEpoch,restored.identity.ownerEpoch);
+      const afterRestart=advanceTaskLoop(JSON.parse(JSON.stringify(result.checkpoint)),
+        context(restored,{identity:staleIdentity,externalMutationState:'none'}));
+      assert.equal(afterRestart.action.kind,'STOP');
+      assert.equal(afterRestart.checkpoint.reason,'MUTATION_STATE_UNKNOWN');
+      assert.deepEqual(afterRestart.checkpoint.pending,restored.pending);
+    }
+  }
+});
 test('external UNKNOWN/in-progress inventory blocks preview and dispatch',()=>{
   for(const state of ['unknown','in_progress'] as const){
     const cp=createTaskLoop(plan(),t0);
