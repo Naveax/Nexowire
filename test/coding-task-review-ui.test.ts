@@ -186,3 +186,106 @@ test('#48 absent current context is blocked and standalone UI cannot submit',()=
   assert.equal(mounted.button.disabled,true);
   assert.equal(mounted.view.canDispatch,false);
 });
+
+
+function approvedFixture(){
+  const f=fixture();
+  const patch={
+    file:'src/safe.ts',beforeVersion:'version-001',
+    afterSha256:'9'.repeat(64),fingerprint:'8'.repeat(64),
+    approvalEpoch:12,worktreeId:'worktree-one'
+  };
+  const proposed=Object.assign(f.proposed,{patch,requestedMode:'CORE'});
+  const current=Object.assign(f.current,{patch:{...patch},requestedMode:'CORE'});
+  return Object.assign(f,{proposed,current,
+    approvedReview:{
+      // Untrusted client display data, NOT a cryptographically verified ticket.
+      statement:{
+        kind:'nexowire.coding.human-diff-consent.v1',
+        scope:'LOCAL_HUMAN_SOURCE_ONLY',
+        phase:'APPLY',
+        ownerId:f.proposed.scope.ownerId,
+        deviceId:f.proposed.scope.deviceId,
+        taskId:f.proposed.scope.taskId,
+        logicalMutationId:f.proposed.scope.logicalMutationId,
+        requestId:f.proposed.scope.requestId,
+        semanticEffectSha256:f.proposed.scope.semanticEffectSha256,
+        deviceEpoch:f.proposed.scope.deviceEpoch,
+        sessionEpoch:f.proposed.scope.sessionEpoch,
+        ownerEpoch:f.proposed.scope.ownerEpoch,
+        grantGeneration:f.proposed.scope.grantGeneration,
+        worktreeIdentitySha256:f.proposed.scope.worktreeIdentitySha256,
+        gitBaseSha:f.proposed.scope.gitBaseSha,
+        gitSourceSha:f.proposed.scope.gitSourceSha,
+        accessBaseSha256:f.proposed.scope.baseSha256,
+        accessDiffSha256:f.proposed.scope.diffSha256,
+        beforeSha256:f.proposed.scope.preimageSha256,
+        requestedMode:'CORE',
+        file:patch.file,beforeVersion:patch.beforeVersion,
+        afterSha256:patch.afterSha256,patchFingerprintSha256:patch.fingerprint,
+        approvalEpoch:patch.approvalEpoch,worktreeId:patch.worktreeId,
+        issuedAtMs:NOW-1000,expiresAtMs:NOW+29000
+      },
+      diff:f.proposed.diff
+    }
+  });
+}
+test('#48 #40 consent display match is unverified and NEVER Windows HIGH',()=>{
+  const f=approvedFixture();
+  const v=projectTaskReview(f,NOW);
+  assert.equal(v.status,'REVIEW_INTENT_ONLY');
+  assert.equal(v.approvedReviewStatus,'DISPLAY_MATCH_UNVERIFIED');
+  assert.equal(v.canDispatch,false);
+  assert.equal(v.effectiveWindowsHigh,false);
+  assert.equal(v.physicalVerified,false);
+  assert.equal(makeReviewIntent(f,NOW)?.nativeHigh,false);
+});
+test('#48 #40 approved Git base/source and patch SHA mismatches are STALE_READ_ONLY',()=>{
+  for(const field of ['gitBaseSha','gitSourceSha','accessBaseSha256',
+    'accessDiffSha256','beforeSha256','patchFingerprintSha256',
+    'afterSha256','file','beforeVersion','approvalEpoch','worktreeId',
+    'logicalMutationId','requestId','ownerEpoch','grantGeneration']){
+    const f=approvedFixture();
+    const s=f.approvedReview.statement as Record<string,unknown>;
+    s[field]=field==='ownerEpoch'||field==='grantGeneration'||
+      field==='approvalEpoch'?300:'tampered';
+    const view=projectTaskReview(f,NOW);
+    assert.equal(view.status,'STALE_READ_ONLY',field);
+    assert.equal(view.approvedReviewStatus,'STALE_READ_ONLY',field);
+    assert.ok(view.reasons.includes('APPROVED_BASE_OR_PATCH_STALE_READ_ONLY'),field);
+    assert.equal(view.canRecordIntent,false,field);
+    assert.equal(view.canDispatch,false,field);
+    assert.equal(makeReviewIntent(f,NOW),null,field);
+  }
+});
+test('#48 #40 changed displayed diff and changed current patch version deny old approval',()=>{
+  for(const variant of ['diff','currentPatch','file','mode','expired','missingPatch']){
+    const f=approvedFixture();
+    if(variant==='diff')f.proposed.diff+='\n+unapproved line';
+    if(variant==='currentPatch')f.current.patch.beforeVersion='changed-live';
+    if(variant==='file')f.proposed.patch.file='src/other.ts';
+    if(variant==='mode')f.current.requestedMode='SAFE';
+    if(variant==='expired')f.approvedReview.statement.expiresAtMs=NOW;
+    if(variant==='missingPatch')delete (f.current as Record<string,unknown>).patch;
+    const view=projectTaskReview(f,NOW);
+    assert.equal(view.status,'STALE_READ_ONLY',variant);
+    assert.equal(view.canRecordIntent,false,variant);
+    assert.equal(makeReviewIntent(f,NOW),null,variant);
+  }
+});
+test('#48 UI mismatched approval remains readonly even if client requests HIGH',()=>{
+  const f=approvedFixture();
+  f.approvedReview.statement.gitBaseSha='3'.repeat(40);
+  Object.assign(f,{clientPreference:{nativeHigh:true,coreEffective:true,canDispatch:true},
+    signedApproval:true,effectiveWindowsHigh:true,clientApprovalGranted:true});
+  const doc=new FakeDocument(),root=new FakeNode('main',doc);
+  let count=0;
+  const m=mountTaskReview(root,f,{now:()=>NOW,onIntent:()=>{count++}});
+  assert.equal(m.view.status,'STALE_READ_ONLY');
+  assert.equal(m.view.effectiveWindowsHigh,false);
+  assert.equal(m.view.canApply,false);
+  assert.equal(m.button.disabled,true);
+  m.button.click();
+  assert.equal(count,0);
+  assert.equal(m.view.physicalEvidence,'NOT_PHYSICALLY_VERIFIED');
+});

@@ -9,7 +9,8 @@ export type TaskReviewIntent={
   readonly nativeHigh:false;readonly externalCasWitness:false;
 };
 export type TaskReviewProjection={
-  readonly status:'BLOCKED'|'REVIEW_INTENT_ONLY';
+  readonly status:'BLOCKED'|'REVIEW_INTENT_ONLY'|'STALE_READ_ONLY';
+  readonly approvedReviewStatus:'NOT_PRESENT'|'DISPLAY_MATCH_UNVERIFIED'|'STALE_READ_ONLY';
   readonly reasons:readonly string[];
   readonly canRecordIntent:boolean;readonly canDispatch:false;
   readonly canApply:false;readonly canRollback:false;

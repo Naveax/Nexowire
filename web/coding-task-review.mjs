@@ -28,6 +28,65 @@ const allowedPath=(p)=>typeof p==='string'&&p.length>0&&p.length<=500&&
   !p.split('/').some(s=>s==='..'||s==='.'||s==='')&&
   !/[\x00-\x1f\x7f]/.test(p);
 
+
+/**
+ * #40 HumanConsentStatement40 vs #32 ReviewedPreview display-only cross-check.
+ * Neither envelope nor the supplied diff is authenticated in the browser.
+ * A successful match never means signed approval or native admission.
+ * Any present but incomplete/mismatched record is STALE_READ_ONLY.
+ */
+function approvedSnapshotMatches(view,proposed,current,scope,nowMs){
+  const statement=view?.statement;
+  const shown=proposed?.patch;
+  const live=current?.patch;
+  const fields=[
+    'file','beforeVersion','afterSha256','fingerprint',
+    'approvalEpoch','worktreeId'
+  ];
+  if(!statement||typeof statement!=='object'||Array.isArray(statement)||
+    !scope||typeof scope!=='object'||
+    !shown||!live||!Number.isSafeInteger(nowMs))return false;
+  if(!fields.every(k=>Object.hasOwn(shown,k)&&Object.hasOwn(live,k)&&
+      shown[k]===live[k]))return false;
+  if(typeof shown.file!=='string'||!allowedPath(shown.file)||
+    typeof shown.beforeVersion!=='string'||!shown.beforeVersion||
+    shown.beforeVersion.length>256||!SHA.test(shown.afterSha256)||
+    !SHA.test(shown.fingerprint)||!Number.isSafeInteger(shown.approvalEpoch)||
+    shown.approvalEpoch<0||!scalar(shown.worktreeId))return false;
+  if(!['SAFE','FULL','ROOT','CORE'].includes(proposed?.requestedMode)||
+    proposed.requestedMode!==current?.requestedMode)return false;
+  if(!Array.isArray(proposed.files)||proposed.files.length!==1||
+    proposed.files[0]?.path!==shown.file||
+    typeof proposed.diff!=='string'||view.diff!==proposed.diff)return false;
+  if(statement.kind!=='nexowire.coding.human-diff-consent.v1'||
+    statement.scope!=='LOCAL_HUMAN_SOURCE_ONLY'||
+    !['APPLY','UNDO'].includes(statement.phase)||
+    statement.issuedAtMs>nowMs||statement.expiresAtMs<=nowMs||
+    !Number.isSafeInteger(statement.issuedAtMs)||
+    !Number.isSafeInteger(statement.expiresAtMs)||
+    statement.issuedAtMs<0||
+    statement.expiresAtMs-statement.issuedAtMs>30000)return false;
+  const matched={
+    ownerId:'ownerId',deviceId:'deviceId',taskId:'taskId',
+    requestId:'requestId',logicalMutationId:'logicalMutationId',
+    semanticEffectSha256:'semanticEffectSha256',
+    deviceEpoch:'deviceEpoch',sessionEpoch:'sessionEpoch',
+    ownerEpoch:'ownerEpoch',grantGeneration:'grantGeneration',
+    worktreeIdentitySha256:'worktreeIdentitySha256',
+    gitBaseSha:'gitBaseSha',gitSourceSha:'gitSourceSha',
+    accessBaseSha256:'baseSha256',accessDiffSha256:'diffSha256',
+    beforeSha256:'preimageSha256'
+  };
+  if(!Object.entries(matched).every(([approvedKey,scopeKey])=>
+    statement[approvedKey]===scope[scopeKey]))return false;
+  return statement.requestedMode===proposed.requestedMode&&
+    statement.file===shown.file&&statement.beforeVersion===shown.beforeVersion&&
+    statement.afterSha256===shown.afterSha256&&
+    statement.patchFingerprintSha256===shown.fingerprint&&
+    statement.approvalEpoch===shown.approvalEpoch&&
+    statement.worktreeId===shown.worktreeId;
+}
+
 /**
  * Both 'proposed' and 'current' are untrusted view data. An independent
  * server-side signer, authoritative readback and atomic effect admission
@@ -62,9 +121,20 @@ export function projectTaskReview(input,nowMs=Date.now()){
   const diff=proposed?.diff;
   if(typeof diff!=='string'||diff.length===0||diff.length>MAX_DIFF)
     reasons.push('DIFF_MISSING_OR_TRUNCATED');
+  const hasApprovedReview=Object.hasOwn(input??{},'approvedReview');
+  const approvedViewMatches=hasApprovedReview&&
+    approvedSnapshotMatches(input.approvedReview,proposed,current,a,nowMs);
+  if(hasApprovedReview&&!approvedViewMatches)
+    reasons.push('APPROVED_BASE_OR_PATCH_STALE_READ_ONLY');
   if(input?.proof?.physicalVerified===true||input?.proof?.nativeHigh===true||
     input?.proof?.externalCas===true)reasons.push('UNTRUSTED_PHYSICAL_PROOF_CLAIM');
-  if(input?.claimedApproval===true||input?.canApply===true)
+  if(input?.claimedApproval===true||input?.canApply===true||
+    input?.canDispatch===true||input?.canRollback===true||
+    input?.signedApproval===true||input?.clientApprovalGranted===true||
+    input?.effectiveWindowsHigh===true||
+    input?.clientPreference?.nativeHigh===true||
+    input?.clientPreference?.coreEffective===true||
+    input?.clientPreference?.canDispatch===true)
     reasons.push('UNTRUSTED_CLIENT_APPROVAL_OR_APPLY_CLAIM');
   const unique=[...new Set(reasons)];
   const safeFiles=Array.isArray(files)?files.slice(0,MAX_FILES).filter(f=>allowedPath(f?.path)&&
@@ -73,7 +143,11 @@ export function projectTaskReview(input,nowMs=Date.now()){
       path:f.path,status:f.status,additions:f.additions,deletions:f.deletions
     })):[];
   return Object.freeze({
-    status:unique.length?'BLOCKED':'REVIEW_INTENT_ONLY',
+    status:unique.includes('APPROVED_BASE_OR_PATCH_STALE_READ_ONLY')
+      ?'STALE_READ_ONLY':unique.length?'BLOCKED':'REVIEW_INTENT_ONLY',
+    approvedReviewStatus:hasApprovedReview
+      ?approvedViewMatches?'DISPLAY_MATCH_UNVERIFIED':'STALE_READ_ONLY'
+      :'NOT_PRESENT',
     reasons:Object.freeze(unique),
     canRecordIntent:unique.length===0,
     canDispatch:false,canApply:false,canRollback:false,
@@ -139,6 +213,7 @@ export function mountTaskReview(root,input,{now=()=>Date.now(),onIntent}={}){
   pair(doc,meta,'Source CI claim',view.sourceEvidence);
   pair(doc,meta,'Physical proof',view.physicalEvidence);
   pair(doc,meta,'Native dispatch/apply/rollback','DENIED / DENIED / DENIED');
+  pair(doc,meta,'#40 approval snapshot',view.approvedReviewStatus);
   wrapper.append(meta);
   wrapper.append(el(doc,'h2','Change summary'));
   wrapper.append(el(doc,'p',String(view.files.length)+' files, +'+view.additions+' / -'+view.deletions));

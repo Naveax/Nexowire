@@ -16,3 +16,39 @@ Scope: `web/coding-task-review.mjs`, optional standalone `web/coding-task-review
 `projectTaskReview` provides deterministic fail-closed projection; `mountTaskReview` uses `textContent` only. The standalone page has a no-connect CSP and empty blocked state unless a future authenticated host supplies a projection. Tests deny forged proofs, stale source/diff, revoked/expired ownerEpoch, conflict, expired intent, UNKNOWN replay, completed effects, hostile text markup and click-time TOCTOU. These are **source/UI tests**, not a real browser, installed Windows HIGH Broker, OS sandbox or two-Hub physical CAS acceptance.
 
 **Physical acceptance: NO-GO.** No #32 reviewed apply adapter or #40 production human-authority API was verified at creation time. This PR intentionally has no dispatch integration and must not be represented as production-ready.
+
+## #48 NEXT2 cross-review: exact immutable field coverage (#813 / #833)
+
+#813 `ReviewedIdentity` supplies `ownerId`, `taskId`, raw
+`worktreeId` and `worktreeRoot`, Git `baseSha/sourceSha`, and
+`approvalEpoch`. Its `ReviewedPreview` supplies `file`,
+`beforeSha256`, `beforeVersion`, `afterSha256`, `fingerprint` and
+raw `diff`. **It does not supply** #48 `deviceId`, `requestId`,
+`logicalMutationId`, `semanticEffectSha256`, authenticated
+`worktreeIdentitySha256`, `deviceEpoch`, `sessionEpoch`,
+`ownerEpoch`, `grantGeneration`, nor #04 `accessBaseSha256` and
+`accessDiffSha256` as signed/attested independent inputs. The source
+`beforeSha256` can map to `preimageSha256` only through a trusted
+scope adapter. `baseSha/sourceSha` Git OIDs are not the #04 access
+content SHA-256 fields.
+
+#833 `AuthoritativeReview40` supplies the missing scope bindings and
+`HumanConsentStatement40` binds `patchFingerprintSha256`,
+`beforeVersion`, `file`, `afterSha256`, `worktreeId`,
+`approvalEpoch` and `gitBaseSha/gitSourceSha`. The #48 UI now
+supports an **optional untrusted display-only** `approvedReview`:
+`{statement: HumanConsentStatement40, diff: originalReviewedDiff}`.
+If present it requires `proposed.patch`, `current.patch`, and
+`proposed.requestedMode/current.requestedMode`, matching all source
+identity, mode, exact patch identifiers and original diff text.
+Any omitted or changed field displays `STALE_READ_ONLY` and disables
+intent, including a display mutated without a corresponding changed
+`diffSha256` claim. It does **not** validate the receipt signature or
+sha256 bytes and must not be interpreted as a trusted authorization.
+The server **must** independently verify the SHA-256 over the diff
+bytes, Ed25519 receipt and matching current provider before any effect.
+
+A matching client display is labeled `DISPLAY_MATCH_UNVERIFIED`,
+never HIGH; forged preference, approval, dispatch and physical flags
+deny local review intent and cannot enable native privilege. No
+`#32` apply/undo edits, #04 web/app.js, #23 QA or production wiring.
