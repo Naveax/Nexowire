@@ -154,8 +154,7 @@ export function reviewCodingLoopCrossOwner(
      qb.grantGeneration!==i.grant.generation)
     return decide(l,'CROSS_OWNER_SCOPE_MISMATCH');
   // UNKNOWN is sticky even with a healthy new WSS lease or quota readback.
-  if(l.status==='RECONCILE_REQUIRED'||
-     l.reason==='MUTATION_STATE_UNKNOWN'||
+  if(l.reason==='MUTATION_STATE_UNKNOWN'||
      w.mutationState!=='not_sent'||
      m.pendingUnknown||
      m.state==='DISPATCH_MAY_HAVE_OCCURRED'||
