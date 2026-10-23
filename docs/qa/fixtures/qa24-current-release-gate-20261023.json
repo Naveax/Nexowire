@@ -1,0 +1,347 @@
+{
+  "schema": "qa24-two-pass-current-readiness-v1",
+  "repo": "Naveax/Nexowire",
+  "date": "2026-10-23",
+  "main_sha": "754cc4364822be5fda528f54042fb22a84f19924",
+  "first_pass_count": 248,
+  "second_pass_count": 248,
+  "refs_equal": true,
+  "page_sizes": [
+    100,
+    100,
+    48,
+    0
+  ],
+  "open_pr_refs": 248,
+  "full_current_sha_base_coverage": true,
+  "fully_current_ci_files_compare_coverage": false,
+  "exact_scoped_detail_count": 16,
+  "exact_scoped_detail_ids": [
+    708,
+    726,
+    801,
+    802,
+    811,
+    814,
+    821,
+    826,
+    829,
+    831,
+    835,
+    837,
+    845,
+    847,
+    849,
+    850
+  ],
+  "unverified_detail_count": 232,
+  "edges": 201,
+  "stale_parent_edges": [
+    {
+      "parent": 576,
+      "child": 609,
+      "parent_sha": "a3946c1f25b8ba151baf945b5acacc7aafbd66c3",
+      "base_sha": "91c69f66de88b755309e3c127f23357adcedfb86",
+      "stale": true
+    },
+    {
+      "parent": 618,
+      "child": 622,
+      "parent_sha": "4e66122dea21e86abbcb57058affc516485d7465",
+      "base_sha": "512a1764d65efbfb448577687225d71e3a845a8d",
+      "stale": true
+    },
+    {
+      "parent": 783,
+      "child": 794,
+      "parent_sha": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "base_sha": "0fab0d7eab6fc9455d8fa7bdadd528e41279182b",
+      "stale": true
+    },
+    {
+      "parent": 718,
+      "child": 806,
+      "parent_sha": "d0a9ba925580c44c5f2f48a709fb0b7e968430c1",
+      "base_sha": "3bb5c880e564336fe829d450ce1df7e310935fc5",
+      "stale": true
+    },
+    {
+      "parent": 811,
+      "child": 814,
+      "parent_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "stale": true
+    },
+    {
+      "parent": 718,
+      "child": 817,
+      "parent_sha": "d0a9ba925580c44c5f2f48a709fb0b7e968430c1",
+      "base_sha": "20ef28fa725f21e9585b73263feef72705c1dedf",
+      "stale": true
+    },
+    {
+      "parent": 811,
+      "child": 821,
+      "parent_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "stale": true
+    },
+    {
+      "parent": 718,
+      "child": 835,
+      "parent_sha": "d0a9ba925580c44c5f2f48a709fb0b7e968430c1",
+      "base_sha": "3f2bbfa8c3003b410992d631946a17263ea2b987",
+      "stale": true
+    },
+    {
+      "parent": 813,
+      "child": 836,
+      "parent_sha": "8d897ab6fd0b6a5ae33c189ab04dff567f0e84c4",
+      "base_sha": "4570568c8bc28a061aa29578449eb7e5251480f4",
+      "stale": true
+    },
+    {
+      "parent": 811,
+      "child": 839,
+      "parent_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "stale": true
+    },
+    {
+      "parent": 826,
+      "child": 840,
+      "parent_sha": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966",
+      "base_sha": "5e307dd48657512ed0e5d5b2908e7d2cd93ec6b5",
+      "stale": true
+    },
+    {
+      "parent": 826,
+      "child": 843,
+      "parent_sha": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966",
+      "base_sha": "5e307dd48657512ed0e5d5b2908e7d2cd93ec6b5",
+      "stale": true
+    },
+    {
+      "parent": 811,
+      "child": 845,
+      "parent_sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "base_sha": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "stale": true
+    }
+  ],
+  "unresolved_parents": [
+    {
+      "pr": 776,
+      "base_ref": "test/21-isolated-integration-768-770-20261022"
+    },
+    {
+      "pr": 849,
+      "base_ref": "qa/18-temp-base-826-aabc-20261023"
+    }
+  ],
+  "critical_independent_path_overlaps": [
+    {
+      "a": 811,
+      "b": 826,
+      "files": [
+        "src/agent/executors.ts"
+      ]
+    },
+    {
+      "a": 837,
+      "b": 801,
+      "files": [
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "a": 847,
+      "b": 849,
+      "files": [
+        "test/connection-826-direct-graph-unknown-deny.RED.test.ts"
+      ]
+    },
+    {
+      "a": 801,
+      "b": 802,
+      "files": [
+        ".github/workflows/ci.yml"
+      ]
+    }
+  ],
+  "critical_ci": [
+    {
+      "pr": 811,
+      "sha": "daa166e42f94fa1529b48c293a51c58b1c2384e7",
+      "run": 39939395440,
+      "status": "queued",
+      "conclusion": null,
+      "base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "compare": "ahead"
+    },
+    {
+      "pr": 826,
+      "sha": "ba21955cedc7be43fe57c5b2fe4c8e2c4c656966",
+      "run": 39938851608,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "merge_base": "3dc5f12fdbf7f3ab101c1c6e73e7c508d644f0c9",
+      "compare": "ahead"
+    },
+    {
+      "pr": 845,
+      "sha": "6b16de921ce059f28f5e2e9254ff9de764457bef",
+      "run": 39868037273,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "merge_base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "compare": "ahead"
+    },
+    {
+      "pr": 829,
+      "sha": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "run": 39863445519,
+      "status": "completed",
+      "conclusion": "success",
+      "base": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "merge_base": "7bc16b4cd1010803a4b13cdbdf95a1c02578cade",
+      "compare": "ahead"
+    },
+    {
+      "pr": 708,
+      "sha": "36b443ef300d6465fa11af3a02c94b394d8841a1",
+      "run": 39824007092,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "e7e46b970dd9123ea3d827f4f6bb4f60cb91b209",
+      "merge_base": "437030d288fdf13441f506ce83a9ff72644822dd",
+      "compare": "diverged"
+    },
+    {
+      "pr": 726,
+      "sha": "50491525249bcc1f5c47b90f23890b2b3062e33d",
+      "run": 39823764746,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "merge_base": "c46f9138b9af32b798b40a0e9d8e21b2e147ddae",
+      "compare": "ahead"
+    },
+    {
+      "pr": 821,
+      "sha": "ef87410cc7921540dabf33b83e42824cce4f4668",
+      "run": 39862537837,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "merge_base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "compare": "ahead"
+    },
+    {
+      "pr": 814,
+      "sha": "daec5dbd6da1a9e1b703afdee660548ccb96367a",
+      "run": 39865936576,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "merge_base": "600a0286557d360681be7bd7b86da95ba57f1980",
+      "compare": "ahead"
+    },
+    {
+      "pr": 831,
+      "sha": "f305cc910d5b1c55b99de024216b2e6a1114fc68",
+      "run": 39869258466,
+      "status": "completed",
+      "conclusion": "success",
+      "base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "merge_base": "754cc4364822be5fda528f54042fb22a84f19924",
+      "compare": "ahead"
+    },
+    {
+      "pr": 837,
+      "sha": "1d2a455803407b077d6838b51a3a4b0d685150e8",
+      "run": 39864371572,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "merge_base": "a43933a42391cccbe426fa7a02382f08764f572f",
+      "compare": "ahead"
+    },
+    {
+      "pr": 847,
+      "sha": "79fdecf348b526c1e876f434d6f0292769b2bc17",
+      "run": 39914505805,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "661d817fbefcf00a797a775c03864681b3f1a7ea",
+      "merge_base": "661d817fbefcf00a797a775c03864681b3f1a7ea",
+      "compare": "ahead"
+    },
+    {
+      "pr": 850,
+      "sha": "70d67c8e1824c63baf95830f31e21fb8bc5230b2",
+      "run": 39939244397,
+      "status": "in_progress",
+      "conclusion": null,
+      "base": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "merge_base": "5715402142968498ce6d53014888e1c39f6e2ac9",
+      "compare": "ahead"
+    },
+    {
+      "pr": 801,
+      "sha": "6742ddfceb3456846f4cbebef10eb8e262e4eec1",
+      "run": 39823885977,
+      "status": "completed",
+      "conclusion": "success",
+      "base": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "merge_base": "ade5526b69b0a2c81bb8bdb4d1fd7de3aacb95b7",
+      "compare": "ahead"
+    },
+    {
+      "pr": 802,
+      "sha": "12c7511bdeb9e1f015a9eea67a4dd631c6d312fe",
+      "run": 39824624827,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "merge_base": "bc9eba3a57ce9dba9ac141f8746c511bc82914d9",
+      "compare": "ahead"
+    },
+    {
+      "pr": 835,
+      "sha": "e0c34b7bf7106a99a4de1abc1019ffa98e4268d1",
+      "run": 39864497330,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "3f2bbfa8c3003b410992d631946a17263ea2b987",
+      "merge_base": "3f2bbfa8c3003b410992d631946a17263ea2b987",
+      "compare": "ahead"
+    },
+    {
+      "pr": 849,
+      "sha": "1b63db6ddca1786aa0b95bf52b023a80f0511388",
+      "run": 39939046984,
+      "status": "completed",
+      "conclusion": "failure",
+      "base": "aabc75fd539dfb1b5db42d958ba344d12bad4f3c",
+      "merge_base": "aabc75fd539dfb1b5db42d958ba344d12bad4f3c",
+      "compare": "ahead"
+    }
+  ],
+  "issues": [
+    "Missing independently refreshed full-current CI, changed files and compare for remaining PRs",
+    "#811 latest queued; earlier green on older SHA does not transfer",
+    "#845 #821 #814 based on OLD #811 SHA 600a028",
+    "#826 current red on runbook guard legacy positive expectations",
+    "#708 compare diverged, #726 CI RED",
+    "Source-only CI PASS not equivalent to physical HIGH Broker, independent CAS or controlled merge"
+  ],
+  "merge_gate": "NO_GO",
+  "safe_merge_queue": [],
+  "roadmap_issue_780": "P1 product roadmap, not release gate",
+  "source": "two-pass actual GitHub REST open refs + exact critical CI / compare receipts",
+  "no_production_mutation": true
+}
