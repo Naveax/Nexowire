@@ -332,3 +332,80 @@ test('#32 preview rejects hidden terminal and bidi controls in before and after 
     assert.deepEqual(x.port.approves, []);
   } finally { await x.clean(); }
 });
+
+test('#32 stale approved preimage is readonly CONFLICT, never an effect or approval', async () => {
+  for (const content of ['concurrent different bytes\n', 'before\n']) {
+    const x = await fixture();
+    try {
+      const reviewed = await x.patch.preview(x.request);
+      assert.equal(await x.patch.comparePreview(x.request, reviewed), 'MATCH');
+      // Same bytes with a newer generation must also invalidate review.
+      await x.port.externalWrite(content);
+      assert.equal(await x.patch.comparePreview(x.request, reviewed), 'CONFLICT');
+      assert.equal((await x.patch.apply(x.request, reviewed, 'human-apply')).state, 'CONFLICT');
+      assert.equal(x.port.casCount, 0);
+      assert.deepEqual(x.port.approves, []);
+      assert.equal(x.port.entries.size, 0);
+      assert.equal(await fs.readFile(path.join(x.root, 'a.txt'), 'utf8'), content);
+    } finally { await x.clean(); }
+  }
+});
+
+test('#32 source, base, worktree identity and attested digest drift reject prior review', async () => {
+  for (const scope of ['sourceSha', 'baseSha', 'worktreeId', 'worktreeRoot', 'worktreeSha256'] as const) {
+    const x = await fixture();
+    try {
+      const signedScope: ReviewedIdentity = {
+        ...x.request.identity,
+        worktreeSha256: 'c'.repeat(64),
+      };
+      x.request.identity = signedScope;
+      x.port.id = { ...signedScope };
+      const reviewed = await x.patch.preview(x.request);
+      assert.equal(await x.patch.comparePreview(x.request, reviewed), 'MATCH');
+      const changed = scope === 'worktreeSha256' ? 'd'.repeat(64)
+        : scope === 'sourceSha' || scope === 'baseSha' ? 'd'.repeat(40)
+        : scope === 'worktreeId' ? 'other-worktree'
+        : path.join(x.root, 'other-worktree');
+      x.port.id = { ...x.port.id, [scope]: changed };
+      assert.equal(await x.patch.comparePreview(x.request, reviewed), 'CONFLICT', scope);
+      assert.equal((await x.patch.apply(x.request, reviewed, 'human-apply')).state,
+        'CONFLICT', scope);
+      assert.equal(x.port.casCount, 0, scope);
+      assert.equal(x.port.entries.size, 0, scope);
+      assert.deepEqual(x.port.approves, [], scope);
+      assert.equal(await fs.readFile(path.join(x.root, 'a.txt'), 'utf8'), 'before\n');
+    } finally { await x.clean(); }
+  }
+});
+
+test('#32 matching new source/worktree cannot reuse stale old fingerprint', async () => {
+  const x = await fixture();
+  try {
+    const old = await x.patch.preview(x.request);
+    const changed: ReviewedIdentity = {
+      ...x.request.identity,
+      sourceSha: 'd'.repeat(40),
+      worktreeSha256: 'e'.repeat(64),
+    };
+    x.port.id = { ...changed };
+    x.request.identity = changed;
+    assert.equal(await x.patch.comparePreview(x.request, old), 'CONFLICT');
+    assert.equal((await x.patch.apply(x.request, old, 'human-apply')).state, 'CONFLICT');
+    assert.equal(x.port.casCount, 0);
+    assert.equal(x.port.entries.size, 0);
+    assert.deepEqual(x.port.approves, []);
+  } finally { await x.clean(); }
+});
+
+test('#32 worktree digest must be a valid SHA256 when supplied', async () => {
+  const x = await fixture();
+  try {
+    const malformed = { ...x.request, identity: {
+      ...x.request.identity, worktreeSha256: 'not-sha',
+    } };
+    await assert.rejects(() => x.patch.preview(malformed), /INVALID_WORKTREE_DIGEST/);
+    assert.equal(x.port.casCount, 0);
+    assert.equal(x.port.entries.size, 0);
+  } finally { await x.clean(); }
+});

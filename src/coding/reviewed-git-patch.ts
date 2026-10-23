@@ -22,6 +22,8 @@ export interface ReviewedIdentity {
   worktreeRoot: string;
   baseSha: string;
   sourceSha: string;
+  /** Optional source-only snapshot digest. A production adapter must attest it. */
+  worktreeSha256?: string;
   approvalEpoch: number;
 }
 
@@ -105,7 +107,7 @@ export interface ReviewedPatchPorts {
 const MAX_FILE = 64 * 1024;
 const MAX_DIFF = 192 * 1024;
 const encoder = new TextEncoder();
-const decoder = new TextDecoder('utf-8', { fatal: true });
+const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 function sha(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -125,6 +127,11 @@ function validateIdentity(identity: ReviewedIdentity): void {
     if (typeof v !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(v)) {
       throw new Error('INVALID_GIT_SHA');
     }
+  }
+  if (identity.worktreeSha256 !== undefined &&
+      (typeof identity.worktreeSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(identity.worktreeSha256))) {
+    throw new Error('INVALID_WORKTREE_DIGEST');
   }
   if (!Number.isSafeInteger(identity.approvalEpoch) || identity.approvalEpoch < 0) {
     throw new Error('INVALID_APPROVAL_EPOCH');
@@ -166,6 +173,7 @@ function equalIdentity(a: ReviewedIdentity, b: ReviewedIdentity): boolean {
   return a.ownerId === b.ownerId && a.taskId === b.taskId &&
     a.worktreeId === b.worktreeId && a.worktreeRoot === b.worktreeRoot &&
     a.baseSha === b.baseSha && a.sourceSha === b.sourceSha &&
+    a.worktreeSha256 === b.worktreeSha256 &&
     a.approvalEpoch === b.approvalEpoch;
 }
 
@@ -232,6 +240,21 @@ export class ReviewedGitPatch {
   /** Read-only: no Git subprocess, file write, journal write or approval issuance. */
   async preview(request: ReviewedRequest): Promise<ReviewedPreview> {
     return (await this.observe(request)).preview;
+  }
+
+  /** Read-only, point-in-time comparison. MATCH is never write authorization. */
+  async comparePreview(
+    request: ReviewedRequest,
+    reviewed: ReviewedPreview,
+  ): Promise<'MATCH' | 'CONFLICT'> {
+    try {
+      const current = (await this.observe(request)).preview;
+      return current.fingerprint === reviewed.fingerprint &&
+        JSON.stringify(current) === JSON.stringify(reviewed)
+        ? 'MATCH' : 'CONFLICT';
+    } catch {
+      return 'CONFLICT';
+    }
   }
 
   async apply(
