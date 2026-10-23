@@ -7,10 +7,10 @@ import path from 'node:path';
 // Read-only source negative: no ACL edits, no elevated process, no installed Broker.
 function brokerTreeUnsafeRights(): {mask:number; expression:string; source:string} {
   const source=readFileSync(path.resolve('scripts/audit-core-broker-protected-tree.ps1'),'utf8');
-  const match=/\\$writeMask\\s*=\\s*\\[int64\\]\\(([^)]*)\\)/i.exec(source);
+  const match=/\$writeMask\s*=\s*\[int64\]\(([^)]*)\)/i.exec(source);
   assert.ok(match,'expected the canonical Broker-tree ACL mask expression');
   const expression=match[1]!.trim();
-  assert.match(expression,/^0x[0-9a-f]+(?:\\s+-bor\\s+0x[0-9a-f]+)*$/i,
+  assert.match(expression,/^0x[0-9a-f]+(?:\s+-bor\s+0x[0-9a-f]+)*$/i,
     'ACL unsafe-rights mask must contain only explicit literal OR terms');
   const mask=[...expression.matchAll(/0x[0-9a-f]+/gi)]
     .reduce((bits,m)=>bits|Number.parseInt(m[0],16),0);
@@ -24,9 +24,9 @@ test('QA02: low-trust DELETE_CHILD-only directory ACE is included in Broker-tree
   // despite not granting DELETE on that child file itself.
   assert.equal(mask&0x40,0x40,
     'low-trust DeleteSubdirectoriesAndFiles directory ACE was not detected');
-  assert.match(source,/productionReady=\\$false/,
+  assert.match(source,/productionReady=\$false/,
     'a read-only ACL audit must never assert production readiness');
-  assert.match(source,/nativeEffectiveLowPrivilegeAccessCheckCompleted=\\$false/,
+  assert.match(source,/nativeEffectiveLowPrivilegeAccessCheckCompleted=\$false/,
     'enumerating access rules is not a native effective AccessCheck');
 });
 
