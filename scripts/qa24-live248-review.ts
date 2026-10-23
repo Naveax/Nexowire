@@ -17,9 +17,10 @@ const issue=(code:string,prs:number[]=[])=>({code,prs});
 export function reviewLive248Evidence(data:Evidence) {
   const issues:Array<{code:string;prs:number[]}>=[],add=(code:string,prs:number[]=[])=>issues.push(issue(code,prs));
   const c=data.census,refs=c.refs??[];
+  const penultimate=c.first_counts.length>=2?c.first_counts.at(-2):undefined;
   const paged=c.refs_equal===true&&JSON.stringify(c.first_counts)===JSON.stringify(c.second_counts)&&
-    c.first_counts?.at(-1)===0&&c.first_counts?.slice(0,-2).every(n=>n===100)&&
-    c.first_counts?.at(-2)>0&&c.first_counts?.at(-2)<100&&
+    c.first_counts.at(-1)===0&&c.first_counts.slice(0,-2).every(n=>n===100)&&
+    typeof penultimate==='number'&&penultimate>0&&penultimate<100&&
     c.first_count===refs.length&&c.second_count===refs.length&&refs.length>0;
   if(!paged)add('OPEN_REST_TWO_PASS_INCOMPLETE');
   if(!sha.test(data.main))add('MAIN_SHA_NOT_VERIFIED');
