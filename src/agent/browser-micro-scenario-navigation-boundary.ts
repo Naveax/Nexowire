@@ -59,8 +59,9 @@ export function reviewBrowserMicroNavigationBoundary(
     status,reason,requestId:plan.requestId,
     logicalMutationId:plan.logicalMutationId,
     navigationStepId:observed.navigationStepId,
-    canDispatch:false,canAdvance:false,canReplay:false,
-    evidenceVerified:false,physicalStopVerified:false,
+    canDispatch:false as const,canAdvance:false as const,
+    canReplay:false as const,evidenceVerified:false as const,
+    physicalStopVerified:false as const,
   });
   // Stop first, including when a later status/readback claims success.
   if(observed.emergencyStop!=='CLEAR_SOURCE_ONLY')
