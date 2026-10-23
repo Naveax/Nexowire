@@ -21,7 +21,7 @@ const count = z.number().int().nonnegative().safe();
 const positive = z.number().int().positive().safe();
 const scopeSchema = z.strictObject({
   ownerId: uuid, deviceId: uuid, taskId: boundedId,
-  worktreeId: uuid, sourceSha: gitSha, ownerEpoch: positive,
+  worktreeId: uuid, worktreeSha: gitSha, sourceSha: gitSha, ownerEpoch: positive,
   grantGeneration: positive, signedGrantScopeDigest: hash,
 });
 const mutationSchema = z.strictObject({
@@ -193,14 +193,14 @@ export class SecureTaskCheckpointStore {
   }
   /** Canonical AAD is independent of object key order and binds the complete
    * expected identity, epoch and grant digest before any plaintext is parsed.
-   * Changing even one worktree/source/grant field invalidates the GCM tag.
+   * Changing even one worktree ID/HEAD/source/grant field invalidates the GCM tag.
    * The actual encrypted metadata remains independently schema-validated.
    */
   private aad(scope: TrustedCheckpointScope): Buffer {
     const s = scopeSchema.parse(scope);
     return Buffer.from(JSON.stringify([
       AD, this.file(s), s.ownerId, s.deviceId, s.taskId,
-      s.worktreeId, s.sourceSha, s.ownerEpoch, s.grantGeneration,
+      s.worktreeId, s.worktreeSha, s.sourceSha, s.ownerEpoch, s.grantGeneration,
       s.signedGrantScopeDigest,
     ]));
   }
