@@ -39,6 +39,15 @@ test('authorized release publisher requires an exact version marker and preserve
   assert.match(authorize, /EXPECTED="authorized-version=\$\{TAG\}"/);
   assert.match(authorize, /npm run release:check/);
   assert.match(authorize, /npm run release:tag:check/);
+  const ciGate=authorize.indexOf('name: Require successful CI for this exact main commit');
+  const createTag=authorize.indexOf('name: Create exact release tag when absent');
+  assert.ok(ciGate>0&&createTag>ciGate,'exact-source CI must succeed before tag mutation');
+  const guard=authorize.slice(ciGate,createTag);
+  assert.match(guard,/head_sha=\$\{GITHUB_SHA\}&event=push/);
+  assert.match(guard,/\.head_sha == \$sha and \.head_branch == "main"/);
+  assert.match(guard,/"\$CONCLUSION" != "success"/);
+  assert.match(guard,/seq 1 60/);
+  assert.doesNotMatch(guard,/gh workflow run/,'CI waits must not create duplicate workflows');
   assert.match(authorize, /git rev-list -n 1 "\$\{TAG\}"/);
   assert.match(authorize, /git push origin "\$\{TAG\}"/);
   assert.match(
