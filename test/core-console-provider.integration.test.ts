@@ -10,6 +10,7 @@ import {CoreConsoleAdmission} from '../src/agent/core-console-admission.js';
 import {CoreConsoleAuthorityClient,WindowsCoreConsoleProvider,type CoreProfileStore} from '../src/agent/windows-core-console-provider.js';
 import {executeCapability} from '../src/agent/executors.js';
 import {CoreNativeDenial} from '../src/agent/windows-core-console-native.js';
+import {NEXOWIRE_VERSION} from '../src/version.js';
 import {PathPolicy} from '../src/agent/path-policy.js';
 
 class Statement implements D1PreparedStatementLike {
@@ -49,7 +50,7 @@ function fixture(){
     save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},clearStop:async()=>{stopped=false;},stopped:async()=>stopped,
     block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},blocked:async()=>blocked};
   const options={deviceId,authority:client,store,
-    broker:{probe:async()=>({reachable:bridge,elevated:bridge,version:'1.0.5'})},
+    broker:{probe:async()=>({reachable:bridge,elevated:bridge,version:NEXOWIRE_VERSION})},
     consent:async()=>{consents++;return true;},
     native:async()=>{effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};},
     monitor:{desktopAllowed:()=>desktop,close:()=>{}},

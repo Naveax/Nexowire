@@ -1045,10 +1045,23 @@ export class ProcessManager {
     }
 
     const shell = resolveShell(parsed.shell, parsed.command);
+    // Adapt the reviewed volatile early-output fix from #743 without changing
+    // the native protocol or accepting pipe output as ownership evidence.
+    const pendingOutput:Array<{stream:'stdout'|'stderr';chunk:Buffer}>=[];
+    let earlyOutputBytes=0,earlyOutputTruncated=false;
+    let outputSink:((stream:'stdout'|'stderr',chunk:Buffer)=>void)|undefined;
+    const receiveOutput=(stream:'stdout'|'stderr',chunk:Buffer):void=>{
+      if(outputSink){outputSink(stream,chunk);return;}
+      const room=Math.max(0,parsed.max_buffer_bytes-earlyOutputBytes);
+      if(chunk.length>room)earlyOutputTruncated=true;
+      if(room){const retained=Buffer.from(chunk.subarray(0,room));
+        pendingOutput.push({stream,chunk:retained});earlyOutputBytes+=retained.length;}
+    };
     // On Windows the native guardian owns the entire Job lifetime. The root
     // starts suspended and only resumes after a verified Job assignment.
     const job = process.platform === 'win32'
-      ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env, guardOnParentExit: true })
+      ? await launchWindowsJob(shell.executable, shell.args, { cwd, env: process.env,
+          guardOnParentExit: true,onOutput:receiveOutput })
       : undefined;
     const child = job?.child ?? spawn(shell.executable, shell.args, {
       ...(cwd ? { cwd } : {}),
@@ -1133,8 +1146,17 @@ export class ProcessManager {
       }
     };
 
-    child.stdout.on('data', (chunk: Buffer) => append('stdout', chunk));
-    child.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
+    if(job){
+      // Switching sinks and flushing is synchronous relative to data events.
+      outputSink=append;
+      for(const event of pendingOutput)append(event.stream,event.chunk);
+      pendingOutput.length=0;
+      if(earlyOutputTruncated)append('stderr',Buffer.from(
+        '[Nexowire] Pre-registration pipe output exceeded session buffer; early output truncated.\n'));
+    }else{
+      child.stdout.on('data', (chunk: Buffer) => append('stdout', chunk));
+      child.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
+    }
     child.once('error', (error) => {
       append('stderr', Buffer.from(`Process error: ${error.message}\n`));
     });

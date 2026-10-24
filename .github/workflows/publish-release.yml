@@ -80,6 +80,32 @@ jobs:
           GITHUB_REF_TYPE: tag
           GITHUB_REF_NAME: ${{ steps.release.outputs.tag }}
         run: npm run release:tag:check
+      - name: Require successful CI for this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Follow the existing push run. Never dispatch a duplicate CI run.
+          for attempt in $(seq 1 60); do
+            RUNS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100")"
+            RUN="$(jq -c --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push")] | sort_by(.run_number) | last' <<< "$RUNS")"
+            STATUS="$(jq -r '.status // "missing"' <<< "$RUN")"
+            CONCLUSION="$(jq -r '.conclusion // "pending"' <<< "$RUN")"
+            RUN_ID="$(jq -r '.id // "missing"' <<< "$RUN")"
+            if [[ "$STATUS" == "completed" ]]; then
+              if [[ "$CONCLUSION" != "success" ]]; then
+                echo "Exact-source CI ${RUN_ID} concluded ${CONCLUSION}; refusing tag/publication." >&2
+                exit 1
+              fi
+              echo "Exact-source CI ${RUN_ID} succeeded for ${GITHUB_SHA}."
+              exit 0
+            fi
+            echo "Waiting for existing exact-source CI ${RUN_ID}: ${STATUS}."
+            sleep 20
+          done
+          echo "Exact-source CI did not succeed within 20 minutes; refusing tag/publication." >&2
+          exit 1
       - name: Create exact release tag when absent
         shell: bash
         env:
