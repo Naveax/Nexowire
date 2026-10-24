@@ -21,7 +21,45 @@ local enrollment, exact installation/owner/device binding, current trusted
 readback and desktop state. It deliberately returns `mayDispatch:false`:
 eligibility is NOT native authorization or secure-desktop/UAC access.
 
-## Required provider / integration still missing
+## Agent integration added; production provider still missing
+
+`CoreConsoleAdmission` now runs at the real `executeCapability` console boundary.
+When no separate timed grant is active, console mutations must use the protected
+provider's native dispatcher; they never fall through to the legacy GUI switch.
+Each request reserves a unique ID before any await, snapshots the input, binds a
+fingerprint and exact enrollment epochs, fetches current authority without a
+positive cache, and rejects stale/invalid evidence. SAFE, CORE OFF, wrong binding,
+changed generation, lock/Secure Desktop, missing native admission and lost ACK
+are rejected. STOP aborts pending work and latches this controller closed.
+
+The installed composition root deliberately constructs the controller **without
+a provider**. Its effective status is `CORE_CONSOLE_PROVIDER_UNAVAILABLE` and
+inactive. No remote field, environment flag, FULL mode or policy-eligible
+certificate installs a provider. The provider interface is not a signed native
+implementation. Its atomic external authority/dispatch/revoke and durable replay
+requirements remain mandatory; the in-process duplicate-ID guard alone does not
+provide restart/rollback-resistant replay protection.
+
+Console status separately exposes `core.preferenceEnabled`, `core.localEnrolled`
+(current verified eligibility), `core.active` and `core.state`. Unknown authority
+does not imply enrollment or ACTIVE. An indefinite active provider uses
+`mode: core`, `expiresAt: null`, `remainingMs: null`; ordinary grants stay timed.
+An attempted `mode: core` enrollment currently fails explicitly, without silently
+opening a timed prompt. A working on-device enrollment UI is still missing.
+
+Timed consent now carries a cancellation epoch and connection lifetime. STOP,
+disconnect and timeout invalidate delayed approval, and wall-clock rollback
+cannot extend an existing timed grant. The prompt launches pinned Windows
+PowerShell with a restricted environment. Approval flags supplied remotely are
+rejected. CORE provider dispatch is separate from Windows elevation/UAC.
+
+The added provider-fixture tests exercise the actual Agent routing and Ed25519
+policy; their positive effects are explicitly synthetic. Windows consent tests
+inject decisions and never approve a real prompt or inject physical input.
+The hosted Windows job now explicitly runs these tests. They do not constitute
+installed enrollment, persistent STOP, real restart or physical acceptance.
+
+## Required production implementation and acceptance still missing
 1. Install a protected local physical-console enrollment flow. A cloud login
    or profile checkbox is not proof that Windows locally consented.
 2. Pin the local issuer public key in an OS-protected store; signed enrollment

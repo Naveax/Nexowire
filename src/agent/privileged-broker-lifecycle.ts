@@ -344,7 +344,7 @@ $info=$task | Get-ScheduledTaskInfo
   taskName=$name
   state=[string]$task.State
   lastRunTime=if ($null -eq $info.LastRunTime -or $info.LastRunTime -eq [datetime]::MinValue) {$null} else {$info.LastRunTime.ToString('o')}
-  lastTaskResult=[int]$info.LastTaskResult
+  lastTaskResult=[long]$info.LastTaskResult
   nextRunTime=if ($null -eq $info.NextRunTime -or $info.NextRunTime -eq [datetime]::MinValue) {$null} else {$info.NextRunTime.ToString('o')}
 } | ConvertTo-Json -Compress
 `;

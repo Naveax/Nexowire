@@ -28,6 +28,8 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
+import {CoreConsoleAdmission} from './core-console-admission.js';
+import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 
 export interface AgentIdentity {
   id: string;
@@ -361,6 +363,9 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
+  // No native protected enrollment/current-authority provider is installed.
+  // Do not construct one from Hub request flags, CORE preference or telemetry.
+  const coreConsole = new CoreConsoleAdmission();
   const operationJournal = new AgentOperationJournal(
     env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
       path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite'),
@@ -445,12 +450,15 @@ export async function runNativeAgent(
     let openedAt: number | undefined;
 
     await new Promise<void>((resolve) => {
+      const requestLifetime = new AbortController();
       let heartbeatTimer: NodeJS.Timeout | undefined;
       let lastPongAt = Date.now();
       let settled = false;
       const finish = (): void => {
         if (settled) return;
         settled = true;
+        requestLifetime.abort();
+        revokePhysicalConsoleGrant();
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         resolve();
       };
@@ -570,6 +578,9 @@ export async function runNativeAgent(
                       runbooks,
                       privilegeMode: activePrivilegeMode,
                       accessMode: request.data.accessMode,
+                      requestId: request.data.requestId,
+                      requestSignal: requestLifetime.signal,
+                      coreConsole,
                       ...(privilegedBroker
                         ? { privilegedBroker }
                         : {}),

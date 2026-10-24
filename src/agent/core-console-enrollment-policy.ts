@@ -74,6 +74,21 @@ function valid(input: unknown): input is CoreConsoleEnrollmentV1 {
     input.approvedLocallyAtMs > 0 &&
     typeof input.issuerSpkiSha256 === 'string' && HEX64.test(input.issuerSpkiSha256);
 }
+function validReadback(input: unknown): input is CoreConsoleCurrentReadback {
+  if (!exact(input, [
+    'ownerAccountId','deviceId','installationId','ownerEpoch',
+    'grantGeneration','revokeEpoch','coreEnabled','accessMode',
+    'deviceOnline','bridgeVerified',
+  ])) return false;
+  return [input.ownerAccountId,input.deviceId,input.installationId]
+    .every(value => typeof value === 'string' && ID.test(value)) &&
+    integer(input.ownerEpoch) && input.ownerEpoch > 0 &&
+    integer(input.grantGeneration) && input.grantGeneration > 0 &&
+    integer(input.revokeEpoch) && typeof input.coreEnabled === 'boolean' &&
+    (input.accessMode === 'safe' || input.accessMode === 'full') &&
+    typeof input.deviceOnline === 'boolean' &&
+    typeof input.bridgeVerified === 'boolean';
+}
 /** Canonical signed payload: untrusted unknown keys cannot be silently ignored. */
 export function canonicalCoreConsoleEnrollment(value: CoreConsoleEnrollmentV1): Buffer {
   if (!valid(value)) throw new Error('CORE_CONSOLE_ENROLLMENT_INVALID');
@@ -104,7 +119,9 @@ export function evaluateCoreConsoleEnrollment(input: {
   const enrollment = certificate?.enrollment;
   if (!certificate || !input.pinnedLocalSpkiDer || !input.trustedCurrentReadback)
     return blocked('LOCAL_ENROLLMENT_REQUIRED');
-  if (!valid(enrollment) || !Number.isSafeInteger(input.nowMs) ||
+  if (!exact(certificate,['enrollment','signatureBase64']) ||
+      !valid(enrollment) || !validReadback(input.trustedCurrentReadback) ||
+      !Number.isSafeInteger(input.nowMs) || input.nowMs <= 0 ||
       enrollment.approvedLocallyAtMs > input.nowMs)
     return blocked('INVALID_ENROLLMENT');
   const proof = input.trustedCurrentReadback;
@@ -126,13 +143,20 @@ export function evaluateCoreConsoleEnrollment(input: {
   if (input.desktop !== 'default')
     return blocked('PHYSICAL_DESKTOP_NOT_ALLOWED');
   try {
+    if (!(input.pinnedLocalSpkiDer instanceof Uint8Array) ||
+        input.pinnedLocalSpkiDer.byteLength > 256 ||
+        typeof certificate.signatureBase64 !== 'string' ||
+        certificate.signatureBase64.length !== 88)
+      return blocked('INVALID_ENROLLMENT');
     const pinned = Buffer.from(input.pinnedLocalSpkiDer);
     if (createHash('sha256').update(pinned).digest('hex') !== enrollment.issuerSpkiSha256)
       return blocked('INVALID_ENROLLMENT');
     const signature = Buffer.from(certificate.signatureBase64,'base64');
-    if (signature.length !== 64 ||
+    const key = createPublicKey({key:pinned,format:'der',type:'spki'});
+    if (key.asymmetricKeyType !== 'ed25519' || signature.length !== 64 ||
+        signature.toString('base64') !== certificate.signatureBase64 ||
         !verify(null,canonicalCoreConsoleEnrollment(enrollment),
-          createPublicKey({key:pinned,format:'der',type:'spki'}),signature))
+          key,signature))
       return blocked('INVALID_ENROLLMENT');
   } catch {
     return blocked('INVALID_ENROLLMENT');
