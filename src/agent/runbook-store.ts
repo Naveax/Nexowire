@@ -150,7 +150,8 @@ export class RunbookStore {
       this.runbooks.set(checkpoint.id, checkpoint);
     }
 
-    this.pruneExpiredInMemory();
+    // Boot reconciliation must retain original UNKNOWN journal evidence.
+    // A local TTL is not rollback-independent native admission readback.
     if (changed) await this.persist();
   }
 
@@ -297,37 +298,22 @@ export class RunbookStore {
   }
 
   list(): RunbookCheckpoint[] {
-    this.pruneExpiredInMemory();
+    // Read-only listing cannot discard unresolved mutation history.
     return [...this.runbooks.values()]
       .map(clone)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async prune(input: { olderThanMs?: number } = {}) {
-    const cutoff =
-      Date.now() - (input.olderThanMs ?? this.retentionMs);
-    let removed = 0;
-
-    for (const [id, runbook] of this.runbooks) {
-      if (runbook.status === 'running') continue;
-      if (Date.parse(runbook.updatedAt) <= cutoff) {
-        this.runbooks.delete(id);
-        removed++;
-      }
-    }
-
-    await this.persist();
-    return { removed, remaining: this.runbooks.size };
-  }
-
-  private pruneExpiredInMemory(): void {
-    const cutoff = Date.now() - this.retentionMs;
-    for (const [id, runbook] of this.runbooks) {
-      if (runbook.status === 'running') continue;
-      if (Date.parse(runbook.updatedAt) <= cutoff) {
-        this.runbooks.delete(id);
-      }
-    }
+  /**
+   * Without #587 external tombstone / independently authenticated readback,
+   * any historical runbook can contain an irreversible native effect.
+   * Local completion or expiry cannot authorize erasing its journal.
+   */
+  async prune(_input: { olderThanMs?: number } = {}): Promise<never> {
+    throw new RunbookStoreError(
+      'RECONCILE_REQUIRED',
+      'Runbook pruning requires external mutation tombstones and atomic reconciliation.',
+    );
   }
 
   private async persist(): Promise<void> {
