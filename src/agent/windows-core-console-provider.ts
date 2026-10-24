@@ -9,8 +9,8 @@ import {CoreConsoleAdmission,type CoreConsoleBinding,type CoreConsoleDispatch,
 import {canonicalCoreConsoleEnrollment,evaluateCoreConsoleEnrollment,type SignedCoreConsoleEnrollmentV1} from './core-console-enrollment-policy.js';
 import {coreOperationBytes,verifyCoreCertificate,CoreAuthorityStateSchema,normalizeCoreAuthorityUrl,readCoreJson,type CoreAuthorityRequest,
   type CoreAuthorityResponse,type CoreAuthorityState} from '../protocol/core-console-authority.js';
-import {readProtectedSecretFile,writeProtectedSecretFile} from '../security/protected-secret-files.js';
-import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
+import {writeProtectedSecretFile} from '../security/protected-secret-files.js';
+import {windowsDpapiChildEnvironment,unprotectWindowsUserSecretForPurpose} from '../security/windows-dpapi.js';
 import {CORE_NATIVE_DEFINITION,CORE_POWERSHELL,executeCoreConsoleNative,runCorePowerShell,parseCoreNativeInput,CoreNativeDenial} from './windows-core-console-native.js';
 import type {PrivilegedBrokerClient} from './privileged-broker-client.js';
 import {NEXOWIRE_VERSION} from '../version.js';
@@ -18,6 +18,8 @@ import {executeWindowsPrivateViewerCapability} from './windows-private-viewer.js
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 
 const PURPOSE='core-console-profile-v1';
+const EnvelopeSchema=z.strictObject({version:z.literal(1),purpose:z.literal(PURPOSE),
+  protection:z.literal('windows-dpapi-current-user'),ciphertext:z.string().min(4).max(16000)});
 interface Profile {version:1;installationId:string;deviceId:string;authorityUrl:string;
   certificate:SignedCoreConsoleEnrollmentV1|null;privateKey:string|null;pendingRevoke:boolean}
 const ProfileSchema=z.strictObject({version:z.literal(1),installationId:z.string().uuid(),
@@ -32,6 +34,7 @@ export interface CoreProfileStore {load():Promise<Profile|null>;save(profile:Pro
  * No key, plaintext profile or enrollment certificate comes from a tool input. */
 export class WindowsCoreProfileStore implements CoreProfileStore {
   readonly stopFile:string;private readonly file:string;
+  private verifiedEnvelope?:{raw:string;profile:Profile};
   constructor(private readonly root=path.join(os.homedir(),'.nexowire','core-console')){
     this.file=path.join(root,'profile.dpapi.json');this.stopFile=path.join(root,'STOP');
   }
@@ -54,12 +57,24 @@ foreach($s in @($sid.Value,'S-1-5-18','S-1-5-32-544')){
 }
 Set-Acl -LiteralPath $dir.FullName -AclObject $acl
 @{protected=$true}|ConvertTo-Json -Compress`;
-    await runCorePowerShell(script,{root:this.root},undefined,15000);
+    // Windows CLR/module cold start on hosted runners can exceed 30 seconds.
+    // This only changes ACLs on the owner's dedicated profile directory.
+    await runCorePowerShell(script,{root:this.root},undefined,180000);
   }
   async load(){
     try{const stat=await fs.lstat(this.file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16384)throw new Error('CORE_PROFILE_INVALID');}
     catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return null;throw e;}
-    const parsed=ProfileSchema.parse(JSON.parse(readProtectedSecretFile(this.file,PURPOSE,'CORE console')));
+    const handle=await fs.open(this.file,'r');let raw:string;
+    try{const bytes=Buffer.alloc(16385);const read=await handle.read(bytes,0,bytes.length,0);
+      if(read.bytesRead>16384)throw new Error('CORE_PROFILE_INVALID');raw=bytes.subarray(0,read.bytesRead).toString('utf8');
+    }finally{await handle.close();}
+    const envelope=EnvelopeSchema.parse(JSON.parse(raw));
+    // Re-read and compare the complete bounded envelope on every admission.
+    // Only DPAPI decryption is cached, never current authority or STOP state.
+    if(this.verifiedEnvelope?.raw===raw)return structuredClone(this.verifiedEnvelope.profile);
+    // Async DPAPI must never block the Agent's WSS/heartbeat event loop.
+    const plaintext=await unprotectWindowsUserSecretForPurpose(envelope.ciphertext,PURPOSE);
+    const parsed=ProfileSchema.parse(JSON.parse(plaintext));
     const profile=parsed as Profile;
     if(profile.certificate){
       if(!profile.privateKey)throw new Error('CORE_PRIVATE_KEY_MISSING');
@@ -69,7 +84,7 @@ Set-Acl -LiteralPath $dir.FullName -AclObject $acl
       if(profile.certificate.enrollment.installationId!==profile.installationId||
         profile.certificate.enrollment.deviceId!==profile.deviceId)throw new Error('CORE_PROFILE_BINDING_CHANGED');
     }
-    return profile;
+    this.verifiedEnvelope={raw,profile:structuredClone(profile)};return profile;
   }
   async save(profile:Profile){
     await this.protectDirectory();
@@ -161,9 +176,13 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private timer?:NodeJS.Timeout;private lastReport=0;private pollBusy=false;
   private readonly lifetime=new AbortController();
   private revoking?:Promise<void>;
+  private initialization?:Promise<void>;
   onEnrollmentRequested?:()=>Promise<void>;
   constructor(private readonly options:WindowsCoreProviderOptions){}
-  async initialize(){
+  initialize():Promise<void>{
+    this.initialization??=this.initializeProfile();return this.initialization;
+  }
+  private async initializeProfile(){
     this.profile=await this.options.store.load()??{version:1,deviceId:this.options.deviceId,
       installationId:randomUUID(),authorityUrl:this.options.authority.url,certificate:null,privateKey:null,pendingRevoke:false};
     if(this.profile.deviceId!==this.options.deviceId||this.profile.authorityUrl!==this.options.authority.url)
@@ -173,11 +192,14 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     if(this.profile.pendingRevoke)this.revoked=true;
   }
   start(){
+    if(this.closed)return;
     this.timer=setInterval(()=>{if(this.pollBusy||this.closed)return;this.pollBusy=true;
       void this.poll().catch(async()=>{this.desktop=false;await this.options.store.block?.();}).catch(()=>{}).finally(()=>{this.pollBusy=false;});},2000);this.timer.unref();
     void this.poll().catch(async()=>{await this.options.store.block?.();}).catch(()=>{});
   }
   private async poll(){
+    await this.initialize();
+    if(this.closed)return;
     if(this.profile.pendingRevoke){await this.revoke();return;}
     const state=await this.options.authority.call(this.profile,'read');
     const broker=await this.options.broker.probe();
@@ -211,6 +233,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private allowedDesktop(){return this.options.monitor?.desktopAllowed()??
     (!!this.monitor&&this.desktop&&Date.now()-this.monitorAt<3500);}
   async inspect(signal:AbortSignal):Promise<CoreConsoleEvidence>{
+    await this.initialize();
+    if(this.closed||signal.aborted)throw new Error('CORE_PROVIDER_CLOSED_OR_CANCELLED');
     const observedAtMs=Date.now();
     const state=await this.options.authority.call(this.profile,'read',{},signal);
     const local=await this.options.store.load();
@@ -230,6 +254,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     requestedOwnerAccountId:this.binding.ownerAccountId,requestedDeviceId:this.binding.deviceId,
     requestedInstallationId:this.binding.installationId,nowMs:Date.now(),desktop:e.desktop}).policyEligible;}
   private async startMonitor(){
+    if(this.closed)throw new Error('CORE_PROVIDER_CLOSED');
     if(this.options.monitor)return;
     if(this.monitor)return;
     const child=spawn(CORE_POWERSHELL,['-NoLogo','-NoProfile','-STA','-Command',monitorScript],{
@@ -237,7 +262,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     this.monitor=child;let buffer='';
     let ready!:()=>void,failed!:(e:Error)=>void;
     const startup=new Promise<void>((resolve,reject)=>{ready=resolve;failed=reject;});
-    const timeout=setTimeout(()=>failed(new Error('CORE_LOCAL_MONITOR_TIMEOUT')),15000);
+    const timeout=setTimeout(()=>failed(new Error('CORE_LOCAL_MONITOR_TIMEOUT')),180000);
     child.stdin.on('error',()=>{});child.stderr.on('data',()=>{});
     child.stdout.on('data',chunk=>{buffer+=chunk.toString();if(buffer.length>16384){child.kill();return;}
       let end:number;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end).trim();buffer=buffer.slice(end+1);
@@ -253,6 +278,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   }
   async enroll(signal:AbortSignal):Promise<boolean>{
     signal=AbortSignal.any([signal,this.lifetime.signal]);
+    await this.initialize();
+    if(this.closed||signal.aborted)throw new Error('CORE_PROVIDER_CLOSED_OR_CANCELLED');
     if(this.pending)throw new Error('CORE_ENROLLMENT_PROMPT_ACTIVE');this.pending=true;
     try{
       const state=await this.options.authority.call(this.profile,'read',{},signal);
@@ -326,6 +353,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     if(this.revoking)return this.revoking;
     const work=(async()=>{
       await this.options.store.stop();
+      await this.initialize();
       this.profile={...this.profile,pendingRevoke:true};await this.options.store.save(this.profile);
       await this.options.authority.call(this.profile,'revoke');
       this.profile={...this.profile,certificate:null,privateKey:null,pendingRevoke:false};await this.options.store.save(this.profile);
@@ -334,7 +362,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     void work.finally(()=>{if(this.revoking===work)this.revoking=undefined;}).catch(()=>{});
     return work;
   }
-  async resumeMonitor(){if(this.profile.certificate&&!this.profile.pendingRevoke)await this.startMonitor();}
+  async resumeMonitor(){await this.initialize();if(!this.closed&&this.profile.certificate&&!this.profile.pendingRevoke)await this.startMonitor();}
   close(){this.closed=true;this.lifetime.abort();clearInterval(this.timer);this.monitor?.kill();this.options.monitor?.close();}
 }
 
@@ -346,9 +374,14 @@ export async function createWindowsCoreConsoleAdmission(options:{deviceId:string
   try{
   provider=new WindowsCoreConsoleProvider({deviceId:options.deviceId,
     authority:new CoreConsoleAuthorityClient(url,options.credential),store:new WindowsCoreProfileStore(),broker:options.broker});
-  await provider.initialize();await provider.resumeMonitor();
   const controller=new CoreConsoleAdmission(undefined,provider);
   provider.onEnrollmentRequested=async()=>{await controller.enroll(new AbortController().signal);};
-  provider.start();return controller;
+  // CORE bootstrap is optional. It must not delay Agent hello, standard tools
+  // or heartbeat while DPAPI/CLR initializes. Admission stays inactive meanwhile.
+  const activeProvider=provider;
+  void provider.initialize().then(()=>activeProvider.resumeMonitor()).then(()=>{
+    activeProvider.start();
+  }).catch(()=>{activeProvider.close();});
+  return controller;
   }catch{provider?.close();return new CoreConsoleAdmission();}
 }

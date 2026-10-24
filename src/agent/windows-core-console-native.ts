@@ -196,8 +196,9 @@ export async function runCorePowerShell(script:string,payload:unknown,signal?:Ab
   return await new Promise((resolve,reject)=>{
     const child=spawn(CORE_POWERSHELL,['-NoLogo','-NoProfile','-NonInteractive','-STA','-Command',script],{
       cwd:'C:\\Windows\\System32',shell:false,windowsHide:true,env:windowsDpapiChildEnvironment(),stdio:['pipe','pipe','pipe']});
-    let out='',err='',done=false;
-    const cancel=()=>finish(new Error('CORE_NATIVE_CANCELLED_OR_UNKNOWN'));
+    let out='',err='',done=false,exitSeen:number|null|undefined;
+    const cancel=()=>finish(new Error('CORE_NATIVE_CANCELLED_OR_UNKNOWN '+
+      JSON.stringify({timeoutMs,stdoutBytes:out.length,stderrBytes:err.length,exitCode:exitSeen??null})));
     const timer=setTimeout(cancel,timeoutMs);
     function finish(error?:Error,value?:unknown){if(done)return;done=true;clearTimeout(timer);signal?.removeEventListener('abort',cancel);
       if(error){child.kill();reject(error);}else resolve(value);}
@@ -205,6 +206,7 @@ export async function runCorePowerShell(script:string,payload:unknown,signal?:Ab
     child.stdout.on('data',b=>{out+=b.toString('utf8');if(out.length>65536)finish(new Error('CORE_NATIVE_OUTPUT_LIMIT'));});
     child.stderr.on('data',b=>{err+=b.toString('utf8');if(err.length>16384)finish(new Error('CORE_NATIVE_ERROR_LIMIT'));});
     child.stdin.on('error',()=>{});child.on('error',e=>finish(e));
+    child.once('exit',code=>{exitSeen=code;});
     child.on('close',code=>{if(code!==0){finish(new Error(err.slice(0,2048)||'CORE_NATIVE_DENIED'));return;}
       try{finish(undefined,JSON.parse(out.replace(/^\uFEFF/,'').trim()));}catch{finish(new Error('CORE_NATIVE_INVALID_RECEIPT'));}});
     child.stdin.end(JSON.stringify(payload));
@@ -212,7 +214,8 @@ export async function runCorePowerShell(script:string,payload:unknown,signal?:Ab
 }
 export async function executeCoreConsoleNative(capability:string,input:unknown,stopFile:string,signal:AbortSignal){
   const parsed=capability==='probe'?{}:parseCoreNativeInput(capability,input);
-  const data=await runCorePowerShell(nativeScript,{capability,input:parsed,stopFile,agentPid:process.pid},signal);
+  const data=await runCorePowerShell(nativeScript,{capability,input:parsed,stopFile,agentPid:process.pid},signal,
+    capability==='probe'?180000:30000);
   if(data&&typeof data==='object'&&'guardVerified' in data&&data.guardVerified===false&&
     'effectAttempted' in data&&data.effectAttempted===false)throw new CoreNativeDenial('CORE_NATIVE_GUARD_DENIED');
   if(!(data&&typeof data==='object'&&('nativeEffectVerified' in data&&data.nativeEffectVerified===true||

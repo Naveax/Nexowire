@@ -21,7 +21,7 @@ test('real Windows native fence compiles and obeys actual desktop/integrity and 
     const root=await fs.mkdtemp(path.join(os.tmpdir(),'nexowire-core-native-'));
     try{
       const source=`$ErrorActionPreference='Stop'\nAdd-Type -TypeDefinition @'\n${CORE_NATIVE_DEFINITION}\n'@\n@{allowed=[NxCoreConsole]::DesktopAllowed()}|ConvertTo-Json -Compress`;
-      const observed=await runCorePowerShell(source,{}) as {allowed:boolean};
+      const observed=await runCorePowerShell(source,{},undefined,180000) as {allowed:boolean};
       const stop=path.join(root,'STOP');
       if(observed.allowed){
         const result=await executeCoreConsoleNative('probe',{},stop,new AbortController().signal);
@@ -51,6 +51,7 @@ test('real Windows DPAPI enrollment survives reload and rejects modified ciphert
         privateKey:keys.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'),
         certificate:{enrollment,signatureBase64:sign(null,canonicalCoreConsoleEnrollment(enrollment),keys.privateKey).toString('base64')}};
       await store.save(profile);assert.deepEqual(await store.load(),profile);
+      assert.deepEqual(await new WindowsCoreProfileStore(root).load(),profile,'a fresh process profile requires DPAPI decryption');
       const file=path.join(root,'profile.dpapi.json'),raw=await fs.readFile(file,'utf8');
       assert.equal(raw.includes(profile.privateKey),false);assert.equal(raw.includes(enrollment.ownerAccountId),false);
       const envelope=JSON.parse(raw);const bytes=Buffer.from(envelope.ciphertext,'base64');bytes[bytes.length-1]=(bytes[bytes.length-1]??0)^1;

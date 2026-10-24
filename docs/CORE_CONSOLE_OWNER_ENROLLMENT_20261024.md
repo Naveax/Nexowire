@@ -58,6 +58,11 @@ Existing paired Agents need the same trusted origin in
 `NEXOWIRE_CORE_AUTHORITY_URL`. No remote tool payload can select another origin.
 No profile, missing configuration, corrupt DPAPI data, absent current device
 credential or verification outage leaves physical control inactive.
+Profile bootstrap and DPAPI decryption are asynchronous; they do not hold up Agent
+hello or heartbeat. Admission re-reads the bounded encrypted profile on every
+check, reusing decryption only for identical ciphertext. Current authority and
+STOP are never cached. Read-only/bootstrap Windows cold starts have a separate
+timeout; the physical input worker retains its 25-second native deadline.
 
 The key protects against other Windows accounts and at-rest tampering; it is not
 an isolation boundary against malicious code already running as the Windows owner.

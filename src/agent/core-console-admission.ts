@@ -128,20 +128,23 @@ export class CoreConsoleAdmission {
           !Number.isSafeInteger(nowMs) || evidence.observedAtMs > nowMs ||
           nowMs - evidence.observedAtMs > MAX_READBACK_AGE_MS)
         return {status:this.inactive('CURRENT_AUTHORITY_UNAVAILABLE')};
-      const evaluation = evaluateCoreConsoleEnrollment({
+      const evaluationInput = {
         certificate:evidence.certificate,
         pinnedLocalSpkiDer:evidence.pinnedLocalSpkiDer,
         trustedCurrentReadback:evidence.current,
         requestedOwnerAccountId:this.binding.ownerAccountId,
         requestedDeviceId:this.binding.deviceId,
         requestedInstallationId:this.binding.installationId,
-        nowMs,desktop:evidence.desktop,
-      });
+        nowMs,
+      };
+      const evaluation=evaluateCoreConsoleEnrollment({...evaluationInput,desktop:evidence.desktop});
+      const enrollment=evidence.desktop==='default'?evaluation:
+        evaluateCoreConsoleEnrollment({...evaluationInput,desktop:'default'});
       const active = evaluation.policyEligible && evidence.nativeAdmission === 'verified';
       return {evidence,status:{
         preferenceEnabled: typeof evidence.current?.coreEnabled === 'boolean'
           ? evidence.current.coreEnabled : null,
-        localEnrolled:evaluation.policyEligible,
+        localEnrolled:enrollment.policyEligible,
         active,duration:'indefinite-revocable',expiresAt:null,
         state:active ? 'ACTIVE' : evaluation.policyEligible
           ? 'NATIVE_ADMISSION_UNAVAILABLE' : evaluation.reason,

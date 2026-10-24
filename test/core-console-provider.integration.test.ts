@@ -75,6 +75,7 @@ test('real provider + HTTP handler + D1 SQL enroll, sign, dispatch and restart w
     assert.deepEqual(await input(controller),{data:{syntheticNativeEffect:true}});
     assert.equal(f.consents(),1);assert.equal(f.effects(),1);
     const restarted=await f.make();assert.equal((await restarted.controller.status('full')).active,true);
+    controller.close();assert.equal((await controller.status('full')).active,false,'closed providers cannot admit new input');
     await input(restarted.controller);assert.equal(f.consents(),1);assert.equal(f.effects(),2);
     assert.equal(await restarted.controller.enroll(new AbortController().signal),true);
     assert.equal(f.consents(),1,'valid existing enrollment must not show another prompt');
@@ -108,7 +109,8 @@ test('SAFE, owner/re-pair, changed issuer, Broker loss and locked/private deskto
   const f=fixture();try{const {controller}=await enable(f);
     assert.equal((await controller.status('safe')).active,false);
     f.setBridge(false);assert.equal((await controller.status('full')).active,false);
-    f.setBridge(true);f.setDesktop(false);assert.equal((await controller.status('full')).active,false);
+    f.setBridge(true);f.setDesktop(false);const locked=await controller.status('full');
+    assert.equal(locked.active,false);assert.equal(locked.localEnrolled,true,'desktop denial does not erase a verified enrollment');
     await assert.rejects(input(controller));assert.equal(f.effects(),0);
   }finally{f.db.close();}
 });
