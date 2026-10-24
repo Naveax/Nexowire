@@ -6,6 +6,7 @@ export interface ProductDeviceSummary {
   accessMode: 'safe' | 'full';
   rootMode: { active: boolean; expiresAt: string | null };
   persistentMaintenance: { enabled: boolean; active: boolean; updatedAt: string | null };
+  physicalConsole?: {localEnrolled:boolean;active:boolean;observedAtMs:number|null};
   bridgePreference: { desiredMode: 'auto' | 'on' | 'off'; applied: false; updatedAt: string | null };
   agentVersion: string | null;
   privilegeMode: 'direct' | 'broker' | null;

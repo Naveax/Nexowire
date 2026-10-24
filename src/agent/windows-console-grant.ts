@@ -454,13 +454,23 @@ export async function executeWindowsConsoleControlCapability(
     case 'windows.console_control.request':
       // Even FULL must get a real, time-bounded local physical-console
       // approval. Never synthesize an owner grant from API access alone.
+      if(typeof input==='object'&&input!==null&&'mode' in input&&input.mode==='core'){
+        z.strictObject({mode:z.literal('core'),reason:z.string().max(256).optional()}).parse(input);
+        if(accessMode!=='full')throw new WindowsConsoleGrantError('CORE_REQUIRES_FULL','CORE console requires FULL mode.');
+        if(!coreConsole)throw new WindowsConsoleGrantError('CORE_CONSOLE_PROVIDER_UNAVAILABLE','Local CORE provider is unavailable.');
+        const approved=await coreConsole.enroll(signal??new AbortController().signal);
+        const core=await coreConsole.status(accessMode);
+        return {data:{approved:approved&&core.active,localDecisionApproved:approved,
+          mode:'core',status:{active:core.active,expiresAt:null,core}}};
+      }
       return {
         data: await requestPhysicalConsoleGrant(input, {signal}),
       };
     case 'windows.console_control.revoke': {
       const result = revokePhysicalConsoleGrant();
       await coreConsole?.revoke();
-      return { data: result };
+      return { data: {...result,revoked:result.revoked||coreConsole?.installed===true,
+        ...(coreConsole?{core:await coreConsole.status(accessMode)}:{})} };
     }
     default:
       throw new WindowsConsoleGrantError(

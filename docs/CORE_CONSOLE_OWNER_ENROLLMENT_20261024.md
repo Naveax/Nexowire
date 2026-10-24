@@ -1,79 +1,81 @@
-# CORE console | Indefinite owner enrollment contract (source-only, blocked deployment)
+# CORE physical console: implementation and rollout
 
-## Verified original cause
-`src/agent/windows-console-grant.ts` has `duration_minutes` 1..60,
-stores the local grant in process memory, and requires it for foreground
-window/input/clipboard mutations even when control-plane access mode is FULL.
-The existing CORE owner preference is indefinite but presently *never a
-verified native physical console grant*: `CORE UNLIMITED` is a control-plane
-request, not a Windows user consent/token.
+CORE physical console is a separate, time-unbounded **revocable** grant. FULL and
+a stored CORE preference do not grant input by themselves. ROOT expiry is not used.
 
-## Proposed mode
-An explicit **on-device**, owner-approved enrollment may have an indefinite
-*revocable* desired lifetime (`expiresAt: null`). It must not inherit the
-60-minute interactive lease. Unlike a one-off physical session, its effective
-authority must continuously reflect the current authenticated owner device,
-installation binding, grant generation, owner epoch, revoke epoch and protected
-local signing key. SAFE/CORE-OFF/Bridge-OFF/re-pair/owner change revokes it.
+## Implemented path
 
-The new source-only `evaluateCoreConsoleEnrollment` validates the signed
-local enrollment, exact installation/owner/device binding, current trusted
-readback and desktop state. It deliberately returns `mayDispatch:false`:
-eligibility is NOT native authorization or secure-desktop/UAC access.
+1. Cloud pairing (`connect`) records the authenticated control-plane HTTPS origin
+   in the Agent launcher. Explicit enrollment also accepts `--core-authority-url`.
+   Existing local-only tokens cannot impersonate paired cloud device credentials.
+2. Owner CORE enablement queues a local enrollment request. The Windows Agent
+   verifies current owner/device state and matching authenticated Broker health,
+   then displays a real local Yes/No dialog (default No). `mode: core` on the
+   console-request tool also requests enrollment; a valid existing grant is reused.
+3. After local consent, re-read current authority. Generate an Ed25519 key and
+   signed certificate bound to owner, device, installation and all three epochs.
+   Seal the private profile with purpose-bound **CurrentUser DPAPI**, under a
+   dedicated owner/SYSTEM/Administrators ACL. No caller supplies a key or pin.
+4. Register the enrollment in independent D1 state. Every native input request
+   rechecks it, reserves an externally durable one-use ID, atomically claims only
+   the current enabled generation, then runs the typed native actuator. Local
+   backup restoration cannot reset server generations or operation tombstones.
+5. The local non-focusing tray monitor supplies desktop status and a **KAPAT**
+   action. STOP writes a persistent marker immediately; native input checks it
+   before each key-down/mouse effect. Renewed local consent drains old native work
+   before clearing STOP. Lost ACK is UNKNOWN and never blindly replayed.
+6. The physical actuator runs only at Medium integrity, on WinSta0/Default. It
+   checks target session, PID/creation identity and foreground, holds process
+   handles, and refuses elevated targets. Parent Agent death, native deadline,
+   STOP/BLOCKED, lock or Secure Desktop stops further input. Key releases are
+   permitted for cleanup. UAC, administrator permissions and private AI routing
+   are not bypassed. The HIGH Broker is queried for health, not used for input.
 
-## Agent integration added; production provider still missing
+## Authority and revocation
 
-`CoreConsoleAdmission` now runs at the real `executeCapability` console boundary.
-When no separate timed grant is active, console mutations must use the protected
-provider's native dispatcher; they never fall through to the legacy GUI switch.
-Each request reserves a unique ID before any await, snapshots the input, binds a
-fingerprint and exact enrollment epochs, fetches current authority without a
-positive cache, and rejects stale/invalid evidence. SAFE, CORE OFF, wrong binding,
-changed generation, lock/Secure Desktop, missing native admission and lost ACK
-are rejected. STOP aborts pending work and latches this controller closed.
+Migration `0019_core_console_authority.sql` adds generation/revoke rows, status,
+nonce replay protection and durable operation tombstones. Triggers invalidate
+records on CORE OFF, SAFE, bridge OFF, credential/owner change and preference
+removal. New admission after OFF is synchronously denied by the D1 claim CAS.
+Already admitted input is cancelled through the local marker/watch path: authority
+is polled every two seconds, with bounded network timeouts. This is not a claim
+of zero-latency distributed cancellation or atomicity between D1 and Windows.
+Local STOP does not wait for the network. Unconfirmed external revocation remains
+persisted as pending and is retried before granting access after restart.
 
-The installed composition root deliberately constructs the controller **without
-a provider**. Its effective status is `CORE_CONSOLE_PROVIDER_UNAVAILABLE` and
-inactive. No remote field, environment flag, FULL mode or policy-eligible
-certificate installs a provider. The provider interface is not a signed native
-implementation. Its atomic external authority/dispatch/revoke and durable replay
-requirements remain mandatory; the in-process duplicate-ID guard alone does not
-provide restart/rollback-resistant replay protection.
+Status separates preference, local enrollment and effective physical control.
+The dashboard labels **physical** access separately; it never calls this Windows
+administrator/HIGH verification. Signed status older than 15 seconds is inactive.
+Normal 1–60 minute local grants remain separate. A saved local consent with no
+current native status returns `localDecisionApproved` separately from `approved`.
 
-Console status separately exposes `core.preferenceEnabled`, `core.localEnrolled`
-(current verified eligibility), `core.active` and `core.state`. Unknown authority
-does not imply enrollment or ACTIVE. An indefinite active provider uses
-`mode: core`, `expiresAt: null`, `remainingMs: null`; ordinary grants stay timed.
-An attempted `mode: core` enrollment currently fails explicitly, without silently
-opening a timed prompt. A working on-device enrollment UI is still missing.
+## Required deployment configuration
 
-Timed consent now carries a cancellation epoch and connection lifetime. STOP,
-disconnect and timeout invalidate delayed approval, and wall-clock rollback
-cannot extend an existing timed grant. The prompt launches pinned Windows
-PowerShell with a restricted environment. Approval flags supplied remotely are
-rejected. CORE provider dispatch is separate from Windows elevation/UAC.
+Apply migration 0019 **before** deploying the Worker that instantiates
+`D1CoreConsoleAuthority`. Deploy a matching Agent/Broker package afterwards.
+New cloud `connect` enrollment persists the correct authority automatically.
+Existing paired Agents need the same trusted origin in
+`NEXOWIRE_CORE_AUTHORITY_URL`. No remote tool payload can select another origin.
+No profile, missing configuration, corrupt DPAPI data, absent current device
+credential or verification outage leaves physical control inactive.
 
-The added provider-fixture tests exercise the actual Agent routing and Ed25519
-policy; their positive effects are explicitly synthetic. Windows consent tests
-inject decisions and never approve a real prompt or inject physical input.
-The hosted Windows job now explicitly runs these tests. They do not constitute
-installed enrollment, persistent STOP, real restart or physical acceptance.
+The key protects against other Windows accounts and at-rest tampering; it is not
+an isolation boundary against malicious code already running as the Windows owner.
+This feature does not provision a signed HIGH Broker, bypass UAC, or replace the
+separate signed/protected installer acceptance gates.
 
-## Required production implementation and acceptance still missing
-1. Install a protected local physical-console enrollment flow. A cloud login
-   or profile checkbox is not proof that Windows locally consented.
-2. Pin the local issuer public key in an OS-protected store; signed enrollment
-   must not accept a remote caller-selected trust anchor.
-3. Obtain rollback-independent, authenticated current owner/CORE preference,
-   revoke epoch and grant-generation readback from the trusted authority.
-4. At each native dispatch, recheck grant and HWND/PID creation identity;
-   emergency STOP, screen lock and Windows secure/UAC desktop always deny.
-5. Persist registration and revoke tombstones securely across restarts;
-   enrollment must not silently restore from an old backup/epoch.
-6. Test both `Naveax` and `work-pc` in a controlled authorized staging
-   release before deployment, and keep a local physical OFF switch.
+## Validation and rollout status
 
-No real device installation, console activation, signed HIGH Broker,
-physical UI grants, policy bypass, browser/chat automation, or production
-acceptance is claimed. The short-lived grant remains unchanged until a
-physical provider and integration are demonstrably ready.
+Tests execute the real HTTP handler, Ed25519 verification and D1 SQL using an
+isolated SQLite database, including restart, old backup restore after OFF/ON,
+wrong owner/credential/issuer, parallel reservation, revoke-before-claim and lost
+native ACK. Native callbacks and local decisions in these integration tests are
+explicit fixtures, not physical control acceptance.
+
+Separate Windows tests compile and execute the real Win32 guard (read-only probe),
+exercise real DPAPI save/reload/tamper rejection, and preserve all installed Agent
+state. A staging source patch passed these tests on Naveax without injecting input.
+
+This change is not a production rollout. Worker migration/deployment, a published
+Agent update, real human first consent, actual input/STOP validation and independent
+checks on both installed PCs must precede a claim that live CORE control works.

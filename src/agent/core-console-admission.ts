@@ -51,6 +51,10 @@ export interface CoreConsoleReceipt {
  * No production provider is installed by this module.
  */
 export interface CoreConsoleNativeProvider {
+  readonly durableReplayProtected?: true;
+  readonly binding?: CoreConsoleBinding;
+  enroll?(signal:AbortSignal):Promise<boolean>;
+  close?():void;
   inspect(signal: AbortSignal): Promise<CoreConsoleEvidence>;
   execute(request: CoreConsoleDispatch, signal: AbortSignal): Promise<CoreConsoleReceipt>;
   revoke(): Promise<void>;
@@ -86,11 +90,12 @@ async function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T
 /** Per-Agent controller. No positive cache, no ROOT expiry, no timed-grant fallback. */
 export class CoreConsoleAdmission {
   private stopped = false;
-  private readonly abort = new AbortController();
+  private abort = new AbortController();
   private readonly requests = new Set<string>();
+  private readonly inFlight = new Set<string>();
 
   constructor(
-    private readonly binding?: CoreConsoleBinding,
+    private binding?: CoreConsoleBinding,
     private readonly provider?: CoreConsoleNativeProvider,
     private readonly now: () => number = Date.now,
   ) {
@@ -106,14 +111,17 @@ export class CoreConsoleAdmission {
     status: CoreConsoleStatus; evidence?: CoreConsoleEvidence;
   }> {
     if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
-    if (!this.binding || !this.provider)
+    if (!this.provider)
       return {status:this.inactive('CORE_CONSOLE_PROVIDER_UNAVAILABLE')};
     if (accessMode !== 'full') return {status:this.inactive('SAFE_MODE')};
     try {
       const signal = AbortSignal.any([this.abort.signal,
-        AbortSignal.timeout(MAX_READBACK_AGE_MS),...(requestSignal?[requestSignal]:[])]);
+        AbortSignal.timeout(10000),...(requestSignal?[requestSignal]:[])]);
       if (signal.aborted) return {status:this.inactive('CORE_CONSOLE_REQUEST_CANCELLED')};
       const evidence = structuredClone(await untilAborted(this.provider.inspect(signal),signal));
+      const binding=this.binding??this.provider.binding;
+      if(!binding)return {status:this.inactive('LOCAL_ENROLLMENT_REQUIRED')};
+      this.binding=Object.freeze({...binding});
       const nowMs = this.now();
       if (this.stopped) return {status:this.inactive('REVOKED_LOCALLY')};
       if (!Number.isSafeInteger(evidence.observedAtMs) ||
@@ -155,6 +163,20 @@ export class CoreConsoleAdmission {
     if (this.provider) await this.provider.revoke();
   }
 
+  /** Only the provider's real local decision UI can reopen a stopped profile. */
+  async enroll(signal:AbortSignal):Promise<boolean>{
+    if(!this.provider?.enroll)throw failure('CORE_CONSOLE_PROVIDER_UNAVAILABLE');
+    const approved=await this.provider.enroll(signal);
+    if(approved===true&&!signal.aborted){
+      if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
+      this.binding=Object.freeze({...this.provider.binding});this.abort=new AbortController();this.stopped=false;
+      return true;
+    }
+    return false;
+  }
+  close():void {this.provider?.close?.();}
+  get installed():boolean {return this.provider!==undefined;}
+
   async execute(
     capability: string, input: unknown, requestId: string | undefined,
     accessMode: 'safe' | 'full',
@@ -164,21 +186,27 @@ export class CoreConsoleAdmission {
       throw failure('CORE_CONSOLE_SCOPE_DENIED');
     if (!requestId || !REQUEST_ID.test(requestId))
       throw failure('CORE_CONSOLE_REQUEST_ID_REQUIRED');
-    // Reserve synchronously BEFORE awaiting authority or dispatch. Never evict
-    // UNKNOWN IDs to make room, and never replay after lost ACK in this process.
-    // Cross-restart replay protection is additionally mandatory in the provider.
+    // Reserve before any await. The bounded hot cache is not the durable
+    // authority; a production provider retains all IDs externally, including
+    // UNKNOWN. Pending local requests are never evicted.
     if (this.requests.has(requestId)) throw failure('CORE_CONSOLE_REPLAY_DENIED');
-    if (this.requests.size >= 4096) throw failure('CORE_CONSOLE_REQUEST_CAPACITY');
+    if(this.inFlight.size>=64)throw failure('CORE_CONSOLE_CONCURRENCY_CAPACITY');
+    if (this.requests.size >= 4096){
+      if(this.provider?.durableReplayProtected!==true)throw failure('CORE_CONSOLE_REQUEST_CAPACITY');
+      for(const id of this.requests){if(!this.inFlight.has(id)){this.requests.delete(id);break;}}
+      if(this.requests.size>=4096)throw failure('CORE_CONSOLE_REQUEST_CAPACITY');
+    }
     this.requests.add(requestId);
+    this.inFlight.add(requestId);
+    try{
     const snapshot = JSON.parse(JSON.stringify(input ?? null)) as unknown;
-    const fingerprint = createHash('sha256')
-      .update(JSON.stringify([requestId,capability,snapshot,this.binding]))
-      .digest('hex');
     const {status,evidence} = await this.inspect(accessMode,requestSignal);
     if (!status.active || !evidence?.certificate || !this.binding || !this.provider)
       throw failure(status.state);
     if (this.stopped) throw failure('REVOKED_LOCALLY');
     if (requestSignal?.aborted) throw failure('CORE_CONSOLE_REQUEST_CANCELLED');
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify([requestId,capability,snapshot,this.binding])).digest('hex');
     const enrollment = evidence.certificate.enrollment;
     let receipt: CoreConsoleReceipt;
     try {
@@ -199,5 +227,6 @@ export class CoreConsoleAdmission {
       throw failure('CORE_CONSOLE_MUTATION_STATE_UNKNOWN');
     if (receipt.outcome !== 'succeeded') throw failure('CORE_CONSOLE_NATIVE_DENIED');
     return receipt.data;
+    }finally{this.inFlight.delete(requestId);}
   }
 }

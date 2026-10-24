@@ -9,6 +9,7 @@ import { McpOAuthService } from '../dist/src/product/mcp-oauth.js';
 import { createFusedMcpAuthorizeChargeHandler } from '../dist/src/product/fused-mcp-authorize-charge.js';
 import { createMcpOAuthHttpHandler } from '../dist/src/product/mcp-oauth-http.js';
 import { createControlPlaneHttpHandler } from '../dist/src/product/control-plane-http.js';
+import {D1CoreConsoleAuthority} from '../dist/src/product/d1-core-console-authority.js';
 import { D1BillingStore } from '../dist/src/product/d1-billing-store.js';
 import { BillingService } from '../dist/src/product/billing-service.js';
 import { createBillingHttpHandler } from '../dist/src/product/billing-http.js';
@@ -738,6 +739,7 @@ export default {
         env.NEXOWIRE_AGENT_WS_URL ?? '',
       ).trim();
       const handler = createControlPlaneHttpHandler(service, {
+        coreConsoleAuthority: new D1CoreConsoleAuthority(env.DB),
         authenticate: (req) => authenticate(req, env),
         enableBridgeCommandTransport: PRODUCTION_BRIDGE_COMMAND_TRANSPORT_ENABLED,
         ...(agentUrl ? { agentUrl } : {}),

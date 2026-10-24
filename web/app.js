@@ -581,6 +581,18 @@ function render(snapshot) {
         : core.enabled
           ? 'CORE tercih kaydı duruyor, ancak cihaz veya Admin Bridge hazır olmadığı için etkin değil.'
           : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
+      const physical=device.physicalConsole;
+      const physicalFresh=physical?.localEnrolled===true&&physical.active===true&&
+        Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
+        Date.now()-physical.observedAtMs<15000&&core.enabled&&mode==='full'&&device.online&&ready;
+      if(physicalFresh){
+        coreShortcut.textContent='CORE FİZİKSEL AÇIK';
+        coreText.textContent='Yerel onaylı fiziksel kontrol süresiz etkin. PC tepsisindeki Nexowire CORE → KAPAT ile iptal edilir. Yönetici ve UAC izinleri ayrıdır.';
+      }else if(core.enabled){
+        coreText.textContent=physical?.localEnrolled
+          ? 'Yerel CORE kaydı var; güncel fiziksel erişim doğrulanamadı. Kilit, bağlantı veya Broker durumunu kontrol et.'
+          : 'CORE tercihi açık. İlk kullanımda bu PC üzerinde gösterilen yerel onayı ver; her işlemde tekrar sorulmaz.';
+      }
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
         setSettingsOpen(true);

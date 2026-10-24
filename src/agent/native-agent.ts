@@ -28,7 +28,7 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
-import {CoreConsoleAdmission} from './core-console-admission.js';
+import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 
 export interface AgentIdentity {
@@ -363,9 +363,6 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
-  // No native protected enrollment/current-authority provider is installed.
-  // Do not construct one from Hub request flags, CORE preference or telemetry.
-  const coreConsole = new CoreConsoleAdmission();
   const operationJournal = new AgentOperationJournal(
     env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
       path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite'),
@@ -419,6 +416,9 @@ export async function runNativeAgent(
     await singletonLock?.close();
     throw error;
   }
+  // Start local CORE UI/authority polling only after winning the singleton.
+  const coreConsole = await createWindowsCoreConsoleAdmission({deviceId:identity.id,
+    credential:token,broker:privilegedBroker,env});
   progressSupervisor.recover(processes.list());
   const progressWatchdogTimer = setInterval(() => {
     // Do not consume de-duplicated alerts while the Hub is unreachable.
@@ -434,6 +434,7 @@ export async function runNativeAgent(
   let endpointIndex = 0;
 
   const stop = (): void => {
+    coreConsole.close();
     stopped = true;
     clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');

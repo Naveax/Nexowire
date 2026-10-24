@@ -40,7 +40,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Verify CORE console admission and local consent cancellation
-        run: node --test --import tsx test/core-console-enrollment-policy.test.ts test/core-console-admission.test.ts test/windows-console-grant.test.ts test/privileged-broker-lifecycle.test.ts
+        run: node --test --import tsx test/core-console-enrollment-policy.test.ts test/core-console-admission.test.ts test/core-console-provider.integration.test.ts test/windows-core-console-native.test.ts test/windows-console-grant.test.ts test/privileged-broker-lifecycle.test.ts
       - name: Compile native Windows Job guardian
         shell: pwsh
         run: ./scripts/build-windows-job-owner.ps1
