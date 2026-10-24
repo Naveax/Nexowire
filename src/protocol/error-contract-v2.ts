@@ -146,6 +146,17 @@ export function classifyFailure(evidence: FailureEvidence): FailureAttributionV2
     certainty = 'confirmed';
     nextAction = 'Select an explicitly authorized device or request the missing scoped MCP permission.';
     retrySafety = 'after_reauthorization';
+  } else if (observedAt === 'upstream_client' &&
+             (code === 'UPSTREAM_TOOL_CALL_BUDGET_EXHAUSTED' ||
+              code === 'UPSTREAM_TOOL_REFUSAL_OBSERVED')) {
+    // Only a trusted client observer can establish its own control-plane
+    // interruption. This does NOT identify an unseen policy or prove that
+    // the underlying MCP tool was not already dispatched.
+    causeLayer = 'upstream_client';
+    certainty = 'confirmed';
+    nextAction = code === 'UPSTREAM_TOOL_CALL_BUDGET_EXHAUSTED'
+      ? 'Preserve the completed workflow checkpoint and continue within a new bounded call budget. Reconcile unknown native effects first.'
+      : 'Keep the interrupted step blocked; review the provider-visible refusal. Do not reroute or encode the same call to evade a denial.';
   } else if (code === 'UPSTREAM_REFUSAL_NOT_DELIVERED' &&
              observedAt === 'upstream_client' && dispatchState === 'not_dispatched') {
     causeLayer = 'upstream_client';
