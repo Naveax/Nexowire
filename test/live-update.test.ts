@@ -114,6 +114,20 @@ test('Windows live cutover is side-by-side, health checked and rollback capable'
 });
 
 
+test('Windows cutover does not restart a deliberately disabled per-user Hub task', () => {
+  const script=renderWindowsCutoverScript({
+    targetVersion:'1.0.7',
+    buildId:'1.0.7-012345abcdef',
+    targetRoot:'C:\\Users\\test\\AppData\\Local\\Nexowire\\versions\\1.0.7-012345abcdef',
+    localAppData:'C:\\Users\\test\\AppData\\Local',
+  });
+  assert.match(script,/function Task-Enabled/);
+  assert.match(script,/State -ne "Disabled"/);
+  assert.match(script,/\$hadHub=\(Task-Enabled \$HubTask\) -and -not \$hubBootInstalled/);
+  assert.doesNotMatch(script,/\$hadHub=\(Task-Exists \$HubTask\)/);
+  assert.match(script,/if\(\$hadHub\)\{Start-ScheduledTask -TaskName \$HubTask/);
+});
+
 test('automatic update requires elevated Broker and skips absent/unreachable authority', async () => {
   const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
   const release = {
