@@ -1,12 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {PRIVILEGED_NODE_INJECTION_ENV} from '../src/security/windows-privileged-runtime-trust.js';
 import {
   buildPrivilegedBrokerLauncher,
   privilegedBrokerTaskStatus,
+  privilegedBrokerStatusScript,
   PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS,
 } from '../src/agent/privileged-broker-lifecycle.js';
+
+test('Broker status preserves unsigned Windows HRESULT task results without Int32 overflow',
+  {skip:process.platform!=='win32'},()=>{
+    // Real PowerShell conversion/serialization; synthetic read-only task data.
+    const script=`
+function Get-ScheduledTask { [pscustomobject]@{State='Running'} }
+function Get-ScheduledTaskInfo { [pscustomobject]@{
+  LastRunTime=[datetime]::MinValue; NextRunTime=[datetime]::MinValue
+  LastTaskResult=[uint32]2147946720
+} }
+${privilegedBrokerStatusScript}`;
+    const result=spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,
+        timeout:30_000,env:{...process.env,NEXOWIRE_BROKER_TASK_NAME:'Synthetic Readonly Broker'}});
+    assert.equal(result.status,0,result.stderr);
+    assert.equal(JSON.parse(result.stdout.replace(/^\uFEFF/,'')).lastTaskResult,2147946720);
+  });
 
 test('broker task launcher preserves runtime args and never persists plaintext broker tokens', () => {
   const launcher = buildPrivilegedBrokerLauncher({

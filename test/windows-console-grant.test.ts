@@ -136,7 +136,8 @@ test('Full console-control request must use local prompt rather than synthetic a
     new URL('../src/agent/windows-console-grant.ts',import.meta.url),'utf8',
   );
   const dispatcher=source.slice(source.indexOf('export async function executeWindowsConsoleControlCapability('));
-  assert.match(dispatcher,/requestPhysicalConsoleGrant\(input\)/);
+  // Connection lifetime is now passed to cancel pending local approval.
+  assert.match(dispatcher,/requestPhysicalConsoleGrant\(input, \{signal\}\)/);
   assert.doesNotMatch(dispatcher,/authorization: 'owner-full-access'|approvalRequired: false/);
 });
 
@@ -236,10 +237,8 @@ test(
       approved.status.durationMinutes,
       1,
     );
-    assert.equal(
-      approved.status.remainingMs,
-      60_000,
-    );
+    assert.ok(approved.status.remainingMs > 59_000 &&
+      approved.status.remainingMs <= 60_000);
     assert.doesNotThrow(() =>
       assertPhysicalConsoleGrant(
         'windows.pointer.click',
@@ -288,3 +287,49 @@ test(
     assert.equal(revoked.status.active, false);
   },
 );
+
+test('STOP, disconnect and timeout cannot be undone by a delayed local approval',
+  {skip:process.platform!=='win32'},async()=>{
+    let tick=Date.parse('2031-01-01T00:00:00Z');
+    const now=()=>new Date(tick);
+    for(const reason of ['stop','disconnect','timeout'] as const){
+      revokePhysicalConsoleGrant(); tick+=120_000;
+      let approve!:(value:boolean)=>void;
+      const decision=new Promise<boolean>(resolve=>{approve=resolve;});
+      const connection=new AbortController();
+      const pending=requestPhysicalConsoleGrant({duration_minutes:5},{now,
+        timeoutMs:reason==='timeout'?10:1000,signal:connection.signal,
+        decisionProvider:async()=>decision});
+      if(reason==='stop')revokePhysicalConsoleGrant();
+      if(reason==='disconnect')connection.abort();
+      if(reason!=='timeout')approve(true);
+      const result=await pending;
+      approve(true);
+      assert.equal(result.approved,false,reason);
+      assert.equal(result.status.active,false,reason);
+      await new Promise<void>(resolve=>setImmediate(resolve));
+      assert.equal(physicalConsoleGrantStatus(now()).active,false,reason);
+    }
+  });
+
+test('timed approval rejects remote approval flags, CORE fallback and clock rollback',
+  {skip:process.platform!=='win32'},async()=>{
+    revokePhysicalConsoleGrant();
+    const base=Date.parse('2032-01-01T00:00:00Z');
+    let tick=base;
+    let prompts=0;
+    const options={now:()=>new Date(tick),decisionProvider:async()=>{++prompts;return true;}};
+    await assert.rejects(requestPhysicalConsoleGrant({mode:'core'},options),
+      (error:unknown)=>typeof error==='object'&&error!==null&&'code' in error&&
+        error.code==='CORE_CONSOLE_ENROLLMENT_UNAVAILABLE');
+    await assert.rejects(requestPhysicalConsoleGrant({approved:true},options));
+    assert.equal(prompts,0);
+    const granted=await requestPhysicalConsoleGrant({duration_minutes:1},options);
+    assert.equal(granted.status.active,true);
+    tick=base-1;
+    assert.equal(physicalConsoleGrantStatus(new Date(tick)).active,false);
+    tick=base+120_000;
+    await assert.rejects(requestPhysicalConsoleGrant({duration_minutes:1},{...options,
+      decisionProvider:async()=>{tick-=1;return true;}}));
+    assert.equal(physicalConsoleGrantStatus(new Date(tick)).active,false);
+  });

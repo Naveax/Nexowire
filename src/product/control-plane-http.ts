@@ -7,8 +7,11 @@ import { PRODUCT_PLANS, type ProductFeature } from './plans.js';
 import { quoteToolUsage } from './usage-policy.js';
 import { withScaleHttpMetrics, type ScaleControlPlaneMetrics } from '../ops/scale-control-plane-metrics.js';
 import { GuardianSignedReceiptSchema } from '../protocol/guardian-signed-receipt.js';
+import type {CoreConsoleAuthority} from './d1-core-console-authority.js';
+import {readCoreJson} from '../protocol/core-console-authority.js';
 
 export interface ControlPlaneHttpOptions {
+  coreConsoleAuthority?: CoreConsoleAuthority;
   /** Optional, payload-free DEV measurements. Production callers omit this. */
   scaleMetrics?: ScaleControlPlaneMetrics;
   authenticate(
@@ -204,6 +207,18 @@ export function createControlPlaneHttpHandler(
     const path = url.pathname;
 
     try {
+      if(request.method==='POST'&&path==='/api/v1/device/core-console'){
+        if(!options.coreConsoleAuthority)return json(503,{error:'CORE_AUTHORITY_UNAVAILABLE'});
+        const authorization=request.headers.get('authorization')??'';
+        const credential=authorization.startsWith('Bearer ')?authorization.slice(7):'';
+        if(!/^nwx_dev_[A-Za-z0-9_-]{8,500}$/.test(credential))return json(401,{error:'CORE_DEVICE_UNAUTHENTICATED'});
+        try {
+          return json(200,await options.coreConsoleAuthority.handle(credential,await readCoreJson(request)));
+        } catch(error){
+          const message=error instanceof Error?error.message:'CORE_AUTHORITY_FAILED';
+          return json(message==='CORE_DEVICE_UNAUTHENTICATED'?401:message==='CORE_JSON_TOO_LARGE'?413:409,{error:message});
+        }
+      }
       if (
         request.method === 'POST' &&
         path === '/api/v1/pairing/consume'
@@ -251,7 +266,13 @@ export function createControlPlaneHttpHandler(
         request.method === 'GET' &&
         path === '/api/v1/me/dashboard'
       ) {
-        return json(200, await service.dashboard(identity));
+        const dashboard=await service.dashboard(identity);
+        if(options.coreConsoleAuthority?.deviceStatus){
+          for(const device of dashboard.devices){
+            device.physicalConsole=await options.coreConsoleAuthority.deviceStatus(device.id,identity.accountId);
+          }
+        }
+        return json(200,dashboard);
       }
 
       if (request.method === 'GET' &&
@@ -378,9 +399,12 @@ export function createControlPlaneHttpHandler(
         )) {
           return json(400, { error: 'CORE_CONFIRMATION_REQUIRED' });
         }
-        return json(200, await service.setDeviceCorePreference(
+        const result=await service.setDeviceCorePreference(
           identity, stringField(body, 'deviceId'), body.enabled,
-        ));
+        );
+        if(body.enabled&&options.coreConsoleAuthority?.requestEnrollment)
+          await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
+        return json(200,result);
       }
 
       if (

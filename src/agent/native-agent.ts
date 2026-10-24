@@ -28,6 +28,8 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
+import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
+import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 
 export interface AgentIdentity {
   id: string;
@@ -414,6 +416,9 @@ export async function runNativeAgent(
     await singletonLock?.close();
     throw error;
   }
+  // Start local CORE UI/authority polling only after winning the singleton.
+  const coreConsole = await createWindowsCoreConsoleAdmission({deviceId:identity.id,
+    credential:token,broker:privilegedBroker,env});
   progressSupervisor.recover(processes.list());
   const progressWatchdogTimer = setInterval(() => {
     // Do not consume de-duplicated alerts while the Hub is unreachable.
@@ -429,6 +434,7 @@ export async function runNativeAgent(
   let endpointIndex = 0;
 
   const stop = (): void => {
+    coreConsole.close();
     stopped = true;
     clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');
@@ -445,12 +451,15 @@ export async function runNativeAgent(
     let openedAt: number | undefined;
 
     await new Promise<void>((resolve) => {
+      const requestLifetime = new AbortController();
       let heartbeatTimer: NodeJS.Timeout | undefined;
       let lastPongAt = Date.now();
       let settled = false;
       const finish = (): void => {
         if (settled) return;
         settled = true;
+        requestLifetime.abort();
+        revokePhysicalConsoleGrant();
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         resolve();
       };
@@ -570,6 +579,9 @@ export async function runNativeAgent(
                       runbooks,
                       privilegeMode: activePrivilegeMode,
                       accessMode: request.data.accessMode,
+                      requestId: request.data.requestId,
+                      requestSignal: requestLifetime.signal,
+                      coreConsole,
                       ...(privilegedBroker
                         ? { privilegedBroker }
                         : {}),
