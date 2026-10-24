@@ -200,6 +200,12 @@ test('independent completed-file and cancelled-file attestation must match store
      /TRUSTED_DELETION_EVIDENCE_REQUIRED/);
    const dr=deletedReceipt();
    f.deleted.add(f.sKey(dr));
+   // Durable final bytes + physical deletion are not an independent
+   // writer-stop/fence receipt. No capacity can be reclaimed yet.
+   assert.throws(()=>f.second.acknowledgeDeletion(dr),
+     /TRUSTED_WRITER_FENCE_REQUIRED/);
+   assert.deepEqual(summed(f),{bytes:bytes2,sessions:1,active:1});
+   f.fenced.add(f.sKey(dr));
    assert.equal(f.second.acknowledgeDeletion(dr),'RELEASED');
    assert.deepEqual(summed(f),{bytes:bytes2,sessions:1,active:0});
  }finally{f.close()}
