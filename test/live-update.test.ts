@@ -10,6 +10,7 @@ import {
   parseWindowsSetupMetadata,
   readLiveUpdateState,
   renderWindowsCutoverScript,
+  windowsUpdateStagingParent,
 } from '../src/update/live-update.js';
 
 test('live updater compares stable release versions numerically', () => {
@@ -254,4 +255,13 @@ test('reinstall cannot override the owners explicit disabled updater state', asy
   assert.match(script, /ownerDisabled=\$true/);
   assert.match(script, /\$existing\.Settings\.Enabled -eq \$false/);
   assert.match(script, /exit 0/);
+});
+
+
+test('Windows updater stages on target volume when TEMP uses another drive', () => {
+  const versions='C:\\Users\\navea\\AppData\\Local\\Nexowire\\versions';
+  assert.equal(windowsUpdateStagingParent(versions),versions);
+  assert.equal(windowsUpdateStagingParent(versions,'D:\\Temp'),versions);
+  assert.equal(windowsUpdateStagingParent(versions,'C:\\Temp'),'C:\\Temp');
+  assert.equal(windowsUpdateStagingParent(versions,'d:\\Temp'),versions);
 });

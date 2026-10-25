@@ -307,6 +307,16 @@ async function runPowerShell(
   });
 }
 
+/** Stage on the target release volume. User TEMP may be a different drive. */
+export function windowsUpdateStagingParent(versionsRootPath:string, requestedTempDir?:string):string {
+  const destination=path.win32.resolve(versionsRootPath);
+  if(!requestedTempDir)return destination;
+  const requested=path.win32.resolve(requestedTempDir);
+  const expectedVolume=path.win32.parse(destination).root.toLowerCase();
+  if(path.win32.parse(requested).root.toLowerCase()!==expectedVolume)return destination;
+  return requested;
+}
+
 async function stageWindowsRelease(
   release: ReleaseInfo,
   options: LiveUpdateOptions,
@@ -372,8 +382,12 @@ async function stageWindowsRelease(
     await fs.access(targetCli);
     await fs.access(targetNode);
   } catch {
+    const stagingParent = windowsUpdateStagingParent(
+      versionsRoot(options), options.tempDir,
+    );
+    await fs.mkdir(stagingParent, { recursive: true });
     const tempRoot = await fs.mkdtemp(
-      path.join(options.tempDir ?? os.tmpdir(), 'nexowire-update-'),
+      path.join(stagingParent, 'nexowire-update-'),
     );
     try {
       const zipFile = path.join(tempRoot, 'Nexowire-Windows-x64.zip');
