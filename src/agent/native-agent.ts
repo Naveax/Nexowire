@@ -245,12 +245,21 @@ async function privilegedBrokerFromEnv(
   return new PrivilegedBrokerClient({ url, token });
 }
 
+/** Do not advertise privileged readiness for a stale or incompatible Broker. */
+export function isBridgeReadyForAgent(
+  broker: { reachable: boolean; elevated: boolean; version?: string | null },
+  expectedVersion: string,
+): boolean {
+  return broker.reachable === true && broker.elevated === true &&
+    typeof broker.version === 'string' && broker.version === expectedVersion;
+}
+
 // An asynchronously probed Admin Bridge must not turn a dropped WSS
 // connection into an unhandled error or falsely advertise elevation.
 export async function sendAgentHelloWhenReady(
   socket: Pick<WebSocket, 'readyState' | 'send' | 'terminate'>,
-  probeBridge: () => Promise<{ reachable: boolean; elevated: boolean }>,
-  createHello: (bridge: { reachable: boolean; elevated: boolean }) => unknown,
+  probeBridge: () => Promise<{ reachable: boolean; elevated: boolean; version?: string | null }>,
+  createHello: (bridge: { reachable: boolean; elevated: boolean; version: string | null }) => unknown,
   probeTimeoutMs = 1_000,
 ): Promise<boolean> {
   // Hub helloTimeoutMs defaults to 5000ms; the bridge health probe can
@@ -258,7 +267,7 @@ export async function sendAgentHelloWhenReady(
   const deadline = Number.isFinite(probeTimeoutMs)
     ? Math.min(1_500, Math.max(25, probeTimeoutMs))
     : 1_000;
-  const notReady = { reachable: false, elevated: false };
+  const notReady = { reachable: false, elevated: false, version: null };
   let timeout: NodeJS.Timeout | undefined;
   const timeoutResult = new Promise<typeof notReady>((resolve) => {
     timeout = setTimeout(() => resolve(notReady), deadline);
@@ -269,6 +278,7 @@ export async function sendAgentHelloWhenReady(
   const bridge = {
     reachable: result.reachable === true,
     elevated: result.reachable === true && result.elevated === true,
+    version: typeof result.version === 'string' ? result.version : null,
   };
   if (socket.readyState !== WebSocket.OPEN) return false;
   try {
@@ -503,8 +513,7 @@ export async function runNativeAgent(
               privilegeMode: activePrivilegeMode,
               adminBridgeReady:
                 activePrivilegeMode === 'broker' &&
-                bridgeProbe.reachable &&
-                bridgeProbe.elevated,
+                isBridgeReadyForAgent(bridgeProbe, agentVersion()),
             },
           }),
         );
