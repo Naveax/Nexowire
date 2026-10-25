@@ -255,3 +255,19 @@ test('reinstall cannot override the owners explicit disabled updater state', asy
   assert.match(script, /\$existing\.Settings\.Enabled -eq \$false/);
   assert.match(script, /exit 0/);
 });
+
+test('offline update check persists failed, not a stuck checking state', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-s3-check-'));
+  try {
+    await assert.rejects(checkLiveUpdate({
+      localAppData: temp,
+      fetchImpl: async () => { throw new Error('NETWORK_DISCONNECTED'); },
+    }), /NETWORK_DISCONNECTED/);
+    const status = await readLiveUpdateState({ localAppData: temp });
+    assert.equal(status.state, 'failed');
+    assert.equal(status.error, 'UPDATE_CHECK_FAILED');
+    assert.equal(status.targetVersion, null);
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});

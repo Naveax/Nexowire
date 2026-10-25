@@ -223,6 +223,7 @@ export async function checkLiveUpdate(
     updatedAt: isoNow(),
     error: null,
   });
+  try {
   const response = await fetchChecked(LATEST_RELEASE_URL, fetchImpl);
   const body = await response.json() as {
     tag_name?: unknown;
@@ -260,6 +261,22 @@ export async function checkLiveUpdate(
     error: null,
   });
   return result;
+  } catch (error) {
+    // A failed network check must never remain stuck in "checking" or imply
+    // an update was staged. Do not serialize arbitrary HTTP failure payloads.
+    await writeState(options, {
+      schemaVersion: 1,
+      state: 'failed',
+      currentVersion: NEXOWIRE_VERSION,
+      targetVersion: null,
+      buildId: null,
+      targetRoot: null,
+      machineComponentsPending: false,
+      updatedAt: isoNow(),
+      error: 'UPDATE_CHECK_FAILED',
+    });
+    throw error;
+  }
 }
 
 async function sha256(data: Buffer): Promise<string> {

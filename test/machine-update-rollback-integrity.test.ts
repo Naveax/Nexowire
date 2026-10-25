@@ -59,6 +59,12 @@ for(const s of scenarios){
       "$BrokerTask='Nexowire Privileged Broker'",
       '$hasBoot=$true',
       '$hasBroker=$true',
+      // This fixture executes only the catch block, so explicitly model a
+      // post-cutover failure. Otherwise all restart/stop branches are skipped.
+      '$cutoverStarted=$true',
+      "$BootLauncher='C:\\\\fixture\\\\hub.ps1'",
+      "$BrokerLauncher='C:\\\\fixture\\\\broker.ps1'",
+      "$previousRoots=@{'C:\\\\fixture\\\\hub.ps1'='C:\\\\old-hub';'C:\\\\fixture\\\\broker.ps1'='C:\\\\old-broker'}",
       '$backups=@{}',
       '$stopFail='+JSON.stringify(s.stopFail),
       '$startFail='+JSON.stringify(s.startFail),
@@ -72,6 +78,7 @@ for(const s of scenarios){
       "  if(($startFail -eq 'broker' -and $TaskName -eq $BrokerTask) -or ($startFail -eq 'hub' -and $TaskName -eq $BootTask)){throw 'START_SYNTHETIC_FAILURE'}",
       '}',
       'function Restore {if($restoreFail){throw "RESTORE_SYNTHETIC_FAILURE"}}',
+      'function Wait-Service {param($Port,$Pattern,$Seconds,$ExpectedRoot);return $true}',
       'function Start-Sleep {param([int]$Seconds)}',
       'function Write-Status {param([string]$state,[string]$message);[Console]::WriteLine("STATUS="+$state+";"+$message)}',
       "try {throw 'ORIGINAL_UPDATE_FAILURE'",

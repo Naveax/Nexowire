@@ -23,7 +23,7 @@ const installers = {
     url: RELEASE + 'Nexowire-Setup.cmd',
     label: 'Windows kurulumunu indir ↗',
     checksum: RELEASE + 'SHA256SUMS-Windows',
-    note: 'Komut yalnızca indirir; güvenliğin için tarayıcıdan sessiz komut çalıştırılmaz. Dosyayı çalıştırmadan önce SHA-256 değerini doğrula.',
+    note: 'Komut yalnızca indirir; tarayıcıdan sessiz çalıştırma yapılmaz. Dosyayı çalıştırmadan önce SHA-256 değerini doğrula. Mevcut .cmd dosyası Nexowire adına Authenticode imzalı native installer değildir.',
   },
   macos: {
     heading: 'macOS kurulumu',
@@ -209,10 +209,25 @@ async function loadAccount() {
         throw new Error('Bağlantı cevabı geçersiz.');
       }
 
-      callback.searchParams.set('state', state);
-      callback.searchParams.set('pairing_id', body.pairingId);
-      callback.searchParams.set('token', body.token);
-      window.location.replace(callback.toString());
+      // Never place the short-lived pairing credential in URL/history,
+      // Referrer, intermediary access logs or browser navigation arguments.
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = callback.toString();
+      form.hidden = true;
+      for (const [key, value] of Object.entries({
+        state,
+        pairing_id: body.pairingId,
+        token: body.token,
+      })) {
+        const field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = key;
+        field.value = value;
+        form.appendChild(field);
+      }
+      document.body.appendChild(form);
+      form.submit();
     } catch (error) {
       showError(
         error instanceof Error ? error.message : String(error),
