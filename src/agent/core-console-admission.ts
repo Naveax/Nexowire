@@ -149,6 +149,7 @@ export class CoreConsoleAdmission {
         localEnrolled:enrollment.policyEligible,
         active,duration:'indefinite-revocable',expiresAt:null,
         state:active ? 'ACTIVE'
+          : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
           : evidence.brokerVersionVerified === false &&
             evidence.current?.coreEnabled === true &&
             evidence.current.accessMode === 'full' &&
