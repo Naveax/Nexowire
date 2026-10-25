@@ -93,6 +93,31 @@ test('live update check persists official release state without applying it', as
   }
 });
 
+test('live update status accepts UTF-8 BOM from Windows PowerShell without masking invalid JSON', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-status-bom-'));
+  const file = path.join(temp, 'Nexowire', 'update', 'status.json');
+  try {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const state = {
+      schemaVersion: 1,
+      state: 'succeeded',
+      currentVersion: '1.0.6',
+      targetVersion: '1.0.6',
+      buildId: '1.0.6-7b27b5acdcfa',
+      targetRoot: 'C:\\Users\\test\\AppData\\Local\\Nexowire\\versions\\1.0.6-7b27b5acdcfa',
+      machineComponentsPending: true,
+      updatedAt: '2026-10-25T15:00:00.000Z',
+      error: null,
+    };
+    await fs.writeFile(file, '\uFEFF' + JSON.stringify(state), 'utf8');
+    assert.deepEqual(await readLiveUpdateState({ localAppData: temp }), state);
+    await fs.writeFile(file, '\uFEFF' + '{not-json', 'utf8');
+    await assert.rejects(() => readLiveUpdateState({ localAppData: temp }), SyntaxError);
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
 test('Windows live cutover is side-by-side, health checked and rollback capable', () => {
   const script = renderWindowsCutoverScript({
     targetVersion: '1.0.4',
