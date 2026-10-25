@@ -8,7 +8,16 @@ import {
   privilegedBrokerTaskStatus,
   privilegedBrokerStatusScript,
   PRIVILEGED_BROKER_TASK_RECOVERY_SETTINGS,
+  BROKER_ROOT_TASK_PATH,
 } from '../src/agent/privileged-broker-lifecycle.js';
+
+test('Broker TaskPath root survives TypeScript template-string interpolation', () => {
+  assert.equal(BROKER_ROOT_TASK_PATH, String.raw`'\'`);
+  const source = readFileSync(new URL('../src/agent/privileged-broker-lifecycle.ts', import.meta.url), 'utf8');
+  const interpolated = '-TaskPath ${BROKER_ROOT_TASK_PATH}';
+  assert.equal(source.split(interpolated).length - 1, 7);
+  assert.equal('-TaskPath ' + BROKER_ROOT_TASK_PATH, String.raw`-TaskPath '\'`);
+});
 
 test('Broker status preserves unsigned Windows HRESULT task results without Int32 overflow',
   {skip:process.platform!=='win32'},()=>{
