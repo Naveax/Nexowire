@@ -82,6 +82,35 @@ test('real executeCapability routes valid CORE input to the provider, not legacy
   assert.equal(combined.remainingMs,null);
 });
 
+test('outdated elevated Broker does not mislabel an enabled CORE preference as needing another consent',async()=>{
+  const f=fixture();
+  const base=evidence();
+  f.set({...base,certificate:null,nativeAdmission:'unavailable',brokerVersionVerified:false});
+  const blocked=await f.controller.status('full');
+  assert.equal(blocked.preferenceEnabled,true);
+  assert.equal(blocked.active,false);
+  assert.equal(blocked.localEnrolled,false);
+  assert.equal(blocked.state,'CORE_BROKER_VERIFICATION_REQUIRED');
+  f.set({...base,certificate:null,nativeAdmission:'unavailable',brokerVersionVerified:true});
+  assert.equal((await f.controller.status('full')).state,'LOCAL_ENROLLMENT_REQUIRED');
+  f.set({...base,certificate:null,nativeAdmission:'unavailable',brokerVersionVerified:false,
+    current:{...base.current!,coreEnabled:false}});
+  assert.equal((await f.controller.status('full')).state,'CORE_NOT_EFFECTIVE');
+});
+
+test('indefinite CORE must take precedence over a simultaneous temporary grant',async()=>{
+  const controller=fixture().controller;
+  const {requestPhysicalConsoleGrant} = await import('../src/agent/windows-console-grant.js');
+  revokePhysicalConsoleGrant();
+  // Never allow a temporary permission to hide the standing CORE status.
+  const result=await executeWindowsConsoleControlCapability(
+    'windows.console_control.status',{},'full',controller);
+  const data=result.data as {mode:string;remainingMs:number|null;core:{active:boolean}};
+  assert.equal(data.core.active,true);
+  assert.equal(data.mode,'core');
+  assert.equal(data.remainingMs,null);
+});
+
 test('SAFE never borrows CORE and non-console capabilities cannot use this provider',async()=>{
   const f=fixture();
   await assert.rejects(f.controller.execute('windows.pointer.click',{},randomUUID(),'safe'),
