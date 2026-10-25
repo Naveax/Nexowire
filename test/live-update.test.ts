@@ -197,19 +197,57 @@ test('automatic update requires elevated Broker and skips absent/unreachable aut
   assert.equal(calls, 1);
 });
 
-test('automatic update skips already-current releases without Broker or writes', async () => {
+test('automatic update verifies elevated Broker even when Agent is current; no update writes', async () => {
   const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  let probes=0;
   const result = await executeAutomaticUpdate({
     check: async () => ({
-      currentVersion: '1.0.5',
-      latestVersion: '1.0.5',
+      currentVersion: '1.0.6',
+      latestVersion: '1.0.6',
       updateAvailable: false,
-      release: { version: '1.0.5', tag: 'v1.0.5', htmlUrl: '', publishedAt: null },
+      release: { version: '1.0.6', tag: 'v1.0.6', htmlUrl: '', publishedAt: null },
     }),
-    broker: async () => { throw new Error('should not request broker'); },
+    broker: async () => ({
+      probe: async () => { probes++; return {reachable:true,elevated:true,version:'1.0.6'}; },
+    }) as never,
     apply: async () => { throw new Error('should not apply'); },
   });
   assert.equal(result.action, 'up_to_date');
+  assert.equal(probes,1);
+});
+
+test('hourly updater reports obsolete and missing Broker versions without invoking privileged cutover', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  for (const version of ['1.0.4','1.0.5',null]) {
+    for (const updateAvailable of [false,true]) {
+      let calls=0;
+      const result = await executeAutomaticUpdate({
+        check: async () => ({
+          currentVersion:'1.0.6',
+          latestVersion:updateAvailable?'1.0.7':'1.0.6',
+          updateAvailable,
+          release:{version:updateAvailable?'1.0.7':'1.0.6',
+            tag:updateAvailable?'v1.0.7':'v1.0.6',htmlUrl:'',publishedAt:null},
+        }),
+        broker: async () => ({probe:async () => ({reachable:true,elevated:true,version})}) as never,
+        apply:async () => {calls++;return {scheduled:true};},
+      });
+      assert.equal(result.action,'broker_version_mismatch');
+      assert.match(result.detail ?? '', /trusted Broker repair required/);
+      assert.equal(calls,0);
+    }
+  }
+});
+
+test('hourly updater must not claim whole-device ready when Broker is unavailable', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  const result=await executeAutomaticUpdate({
+    check:async () => ({currentVersion:'1.0.6',latestVersion:'1.0.6',updateAvailable:false,
+      release:{version:'1.0.6',tag:'v1.0.6',htmlUrl:'',publishedAt:null}}),
+    broker:async()=>null,
+    apply:async()=>{throw new Error('no updates');},
+  });
+  assert.equal(result.action,'broker_unavailable');
 });
 
 test('automatic Windows task is hourly, indefinite, user-limited and singleton', async () => {
