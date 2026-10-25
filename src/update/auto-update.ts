@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
-import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
+import { readExistingPrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import {
   applyLatestLiveUpdate,
   checkLiveUpdate,
@@ -275,7 +275,16 @@ async function runAutoUpdateOnce(): Promise<AutomaticUpdateResult> {
       broker: async () => {
         // The same DPAPI CurrentUser token used by the existing elevated
         // Broker is loaded for the same user; never write it to task XML.
-        const token = await loadOrCreatePrivilegedBrokerToken();
+        // Hourly health checks are read-only. Never mint a new DPAPI token
+        // when no canonical owner-installed Broker credential exists:
+        // a fresh token cannot authenticate the already-running Broker.
+        let token: string;
+        try {
+          token = await readExistingPrivilegedBrokerToken();
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+          throw error;
+        }
         return new PrivilegedBrokerClient({
           url: 'http://127.0.0.1:43112',
           token,
