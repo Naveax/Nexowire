@@ -98,18 +98,27 @@ test('outdated elevated Broker does not mislabel an enabled CORE preference as n
   assert.equal((await f.controller.status('full')).state,'CORE_NOT_EFFECTIVE');
 });
 
-test('indefinite CORE must take precedence over a simultaneous temporary grant',async()=>{
-  const controller=fixture().controller;
-  const {requestPhysicalConsoleGrant} = await import('../src/agent/windows-console-grant.js');
-  revokePhysicalConsoleGrant();
-  // Never allow a temporary permission to hide the standing CORE status.
-  const result=await executeWindowsConsoleControlCapability(
-    'windows.console_control.status',{},'full',controller);
-  const data=result.data as {mode:string;remainingMs:number|null;core:{active:boolean}};
-  assert.equal(data.core.active,true);
-  assert.equal(data.mode,'core');
-  assert.equal(data.remainingMs,null);
-});
+test('indefinite CORE takes precedence even when a 60-minute local grant is also active',
+  {skip:process.platform!=='win32'},async()=>{
+    const controller=fixture().controller;
+    const {requestPhysicalConsoleGrant} = await import('../src/agent/windows-console-grant.js');
+    revokePhysicalConsoleGrant();
+    try {
+      const temporary=await requestPhysicalConsoleGrant({duration_minutes:60},
+        {decisionProvider:async()=>true,timeoutMs:1000});
+      assert.equal(temporary.approved,true);
+      assert.equal(temporary.status.active,true);
+      const result=await executeWindowsConsoleControlCapability(
+        'windows.console_control.status',{},'full',controller);
+      const data=result.data as {active:boolean;mode:string;remainingMs:number|null;
+        core:{active:boolean;expiresAt:null}};
+      assert.equal(data.active,true);
+      assert.equal(data.core.active,true);
+      assert.equal(data.mode,'core');
+      assert.equal(data.remainingMs,null);
+      assert.equal(data.core.expiresAt,null);
+    } finally { revokePhysicalConsoleGrant(); }
+  });
 
 test('SAFE never borrows CORE and non-console capabilities cannot use this provider',async()=>{
   const f=fixture();
