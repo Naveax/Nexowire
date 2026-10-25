@@ -247,7 +247,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       pinnedLocalSpkiDer:pinned,
       current:{...this.current(state),bridgeVerified:state.bridgeVerified&&bridge},
       observedAtMs,desktop:this.allowedDesktop()?'default':'unknown',
-      nativeAdmission:bridge&&this.allowedDesktop()?'verified':'unavailable'} as CoreConsoleEvidence;
+      nativeAdmission:bridge&&this.allowedDesktop()?'verified':'unavailable',
+      brokerVersionVerified:bridge} as CoreConsoleEvidence;
   }
   private eligible(e:CoreConsoleEvidence){if(!this.binding)return false;return evaluateCoreConsoleEnrollment({certificate:e.certificate,
     pinnedLocalSpkiDer:e.pinnedLocalSpkiDer,trustedCurrentReadback:e.current,

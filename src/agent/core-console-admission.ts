@@ -19,6 +19,8 @@ export interface CoreConsoleEvidence {
   readonly observedAtMs: number;
   readonly desktop: 'default' | 'private' | 'secure' | 'locked' | 'unknown';
   readonly nativeAdmission: 'verified' | 'unavailable';
+  /** Verified from the on-device, authenticated elevated Broker health probe. */
+  readonly brokerVersionVerified?: boolean;
 }
 
 export interface CoreConsoleDispatch {
@@ -146,8 +148,15 @@ export class CoreConsoleAdmission {
           ? evidence.current.coreEnabled : null,
         localEnrolled:enrollment.policyEligible,
         active,duration:'indefinite-revocable',expiresAt:null,
-        state:active ? 'ACTIVE' : evaluation.policyEligible
-          ? 'NATIVE_ADMISSION_UNAVAILABLE' : evaluation.reason,
+        state:active ? 'ACTIVE'
+          : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
+          : evidence.brokerVersionVerified === false &&
+            evidence.current?.coreEnabled === true &&
+            evidence.current.accessMode === 'full' &&
+            !evidence.certificate
+            ? 'CORE_BROKER_VERIFICATION_REQUIRED'
+          : evaluation.policyEligible
+            ? 'NATIVE_ADMISSION_UNAVAILABLE' : evaluation.reason,
       }};
     } catch {
       return {status:this.inactive(this.stopped?'REVOKED_LOCALLY':

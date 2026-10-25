@@ -447,8 +447,10 @@ export async function executeWindowsConsoleControlCapability(
           state:'CORE_CONSOLE_PROVIDER_UNAVAILABLE',
         };
       return {data:{...timed,active:timed.active || core.active,
-        mode:timed.active?'timed':core.active?'core':null,
-        remainingMs:timed.active?timed.remainingMs:core.active?null:0,
+        // A persistent CORE grant supersedes any concurrent temporary grant.
+        // Never display a 60-minute expiry for a valid indefinite CORE grant.
+        mode:core.active?'core':timed.active?'timed':null,
+        remainingMs:core.active?null:timed.active?timed.remainingMs:0,
         core}};
     }
     case 'windows.console_control.request':

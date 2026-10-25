@@ -82,6 +82,44 @@ test('real executeCapability routes valid CORE input to the provider, not legacy
   assert.equal(combined.remainingMs,null);
 });
 
+test('outdated elevated Broker does not mislabel an enabled CORE preference as needing another consent',async()=>{
+  const f=fixture();
+  const base=evidence();
+  f.set({...base,certificate:null,nativeAdmission:'unavailable',brokerVersionVerified:false});
+  const blocked=await f.controller.status('full');
+  assert.equal(blocked.preferenceEnabled,true);
+  assert.equal(blocked.active,false);
+  assert.equal(blocked.localEnrolled,false);
+  assert.equal(blocked.state,'CORE_BROKER_VERIFICATION_REQUIRED');
+  f.set({...base,certificate:null,nativeAdmission:'unavailable',brokerVersionVerified:true});
+  assert.equal((await f.controller.status('full')).state,'LOCAL_ENROLLMENT_REQUIRED');
+  f.set({...base,certificate:null,nativeAdmission:'unavailable',brokerVersionVerified:false,
+    current:{...base.current!,coreEnabled:false}});
+  assert.equal((await f.controller.status('full')).state,'CORE_NOT_EFFECTIVE');
+});
+
+test('indefinite CORE takes precedence even when a 60-minute local grant is also active',
+  {skip:process.platform!=='win32'},async()=>{
+    const controller=fixture().controller;
+    const {requestPhysicalConsoleGrant} = await import('../src/agent/windows-console-grant.js');
+    revokePhysicalConsoleGrant();
+    try {
+      const temporary=await requestPhysicalConsoleGrant({duration_minutes:60},
+        {decisionProvider:async()=>true,timeoutMs:1000});
+      assert.equal(temporary.approved,true);
+      assert.equal(temporary.status.active,true);
+      const result=await executeWindowsConsoleControlCapability(
+        'windows.console_control.status',{},'full',controller);
+      const data=result.data as {active:boolean;mode:string;remainingMs:number|null;
+        core:{active:boolean;expiresAt:null}};
+      assert.equal(data.active,true);
+      assert.equal(data.core.active,true);
+      assert.equal(data.mode,'core');
+      assert.equal(data.remainingMs,null);
+      assert.equal(data.core.expiresAt,null);
+    } finally { revokePhysicalConsoleGrant(); }
+  });
+
 test('SAFE never borrows CORE and non-console capabilities cannot use this provider',async()=>{
   const f=fixture();
   await assert.rejects(f.controller.execute('windows.pointer.click',{},randomUUID(),'safe'),
