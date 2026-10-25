@@ -156,7 +156,7 @@ export async function readLiveUpdateState(
 ): Promise<LiveUpdateState> {
   try {
     return UpdateStateSchema.parse(
-      JSON.parse(await fs.readFile(statePath(options), 'utf8')),
+      JSON.parse((await fs.readFile(statePath(options), 'utf8')).replace(/^\uFEFF/, '')),
     );
   } catch (error) {
     if (
