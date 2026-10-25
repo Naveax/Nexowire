@@ -1,0 +1,95 @@
+# QA11 | Exact-head CI, Windows NWJOB5 ancestry and R01–R22 acceptance
+**Observed:** 2026-10-24 (Europe/Istanbul) · **Repository:** `Naveax/Nexowire` · **Scope:** read-only GitHub verification plus this QA-only document.
+
+## Authority, snapshot and limits
+
+- Independently read `main = 754cc4364822be5fda528f54042fb22a84f19924` from GitHub branch REST; checked exact HEAD/base of the 20 critical PRs below via GitHub PR metadata, their commit-bound PR workflow runs and failed job steps/logs.
+- `#539` defines 22 still-open cross-project reliability acceptance items. `#780` is the coding-agent roadmap, **not** release authorization.
+- This is a **20-PR critical updated shortlist**, not exhaustive all-open CI/merge-base/file collision coverage. For #852, historical two-pass census captured 248 OPEN refs; its NEXT4 document captured a later 248-ref membership with 202 parent edges, 14 stale edges, and only #776 unresolved open-parent ref. That document's own prior SHA is not the current #852 SHA. Do not call either a live/current 248-wide CI proof.
+- **No merge approved. NO_GO/BLOCKED** even on scoped source-success PRs until independent protected native HIGH, rollback-independent external atomic CAS and physical staging/production evidence exist. No live Agent/Broker/UAC/ACL, user files, production D1/billing, paid runner or VM accessed. No workflow rerun requested.
+- Workflow check below is GitHub Actions commit-associated PR run, latest available attempt returned by connector. Node22 cancelled when Node24 failed must not be called a Node22 success. `browser-live` runs Windows. WSL2/Linux/macOS/security job results are stated separately from installed hardware certification.
+
+## Exact-head twenty-PR job/step evidence
+
+| PR | Current HEAD SHA | CI run / conclusion | Failed job → exact step and classification |
+|---|---|---|---|
+| [#826](https://github.com/Naveax/Nexowire/pull/826) | `3e79bb154e3a23828311edf6cd940639bee87fc2` | [39945732459](https://github.com/Naveax/Nexowire/actions/runs/39945732459) **FAIL** | `test (24) → Run npm run check`: 18 fail / 1821 pass / 273 skip, task-graph/runbook legacy positives including independence, stop_on_failure, artifact tests. `browser-live → Verify independent cross-project negative acceptance gates`: same-byte-count changed artifact verification test throws RunbookAdmissionRequiredError. Node22 cancelled. **Owner #01 actual legacy/source integration regression + QA discovery interaction**, not NWJOB3-only. |
+| [#813](https://github.com/Naveax/Nexowire/pull/813) | `9f5b6617884282ab135d453c2a75f9e7ad1d8437` | [39945590186](https://github.com/Naveax/Nexowire/actions/runs/39945590186) **FAIL** | `browser-live → Physical Windows Job Object regressions`: missing `WINJOB_STDOUT` and exited-before-drain iteration 7. Six other jobs pass. **Inherited Windows stdout path is plausible, not absolution of reviewed-patch native CAS.** |
+| [#828](https://github.com/Naveax/Nexowire/pull/828) | `446c1af160171a0641447237b5e0c5fafac5a95e` | [39945499888](https://github.com/Naveax/Nexowire/actions/runs/39945499888) **PASS** | Commit-bound overall CI SUCCESS; **scoped source only**, not approved native apply/undo or deploy. |
+| [#814](https://github.com/Naveax/Nexowire/pull/814) | `daec5dbd6da1a9e1b703afdee660548ccb96367a` | [39865936576](https://github.com/Naveax/Nexowire/actions/runs/39865936576) **FAIL** | `test (24) → npm run check`: nested refs/heads, loose-object and packed-object Git escape negatives RED. `browser-live → Physical Windows Job Object regressions`: exited-before-stdout iteration 7. Built on historical #811 base `600a028...`, not current #811 HEAD; **do not transfer negative result** to new owner HEAD. |
+| [#811](https://github.com/Naveax/Nexowire/pull/811) | `daa166e42f94fa1529b48c293a51c58b1c2384e7` | [39939395440](https://github.com/Naveax/Nexowire/actions/runs/39939395440) **FAIL** | `browser-live → Physical Windows Job Object regressions`: exit-before-stdout iteration 0; Node22/24, WSL2, Linux, macOS, security pass. **Old NWJOB3 ancestry verified below**. Healthy Windows native Git acceptance not thereby proven. |
+| [#845](https://github.com/Naveax/Nexowire/pull/845) | `6b16de921ce059f28f5e2e9254ff9de764457bef` | [39868037273](https://github.com/Naveax/Nexowire/actions/runs/39868037273) **FAIL** | `test (24) → npm run check`: nested commit-graph file symlink escape negative RED on OLD #811 base `600a028...`. `browser-live → Verify structured Windows controls`: PowerShell timed out at 45000ms. New #811 acceptance **UNVERIFIED**, original negative preserved. |
+| [#815](https://github.com/Naveax/Nexowire/pull/815) | `9b6773309eaeacd3d2cdd59a24cec8f2cca81e93` | [39939324497](https://github.com/Naveax/Nexowire/actions/runs/39939324497) **PASS** | Seven source/hosted jobs pass. Encrypted checkpoint source only; off-host monotonic epoch and safe native resume **not** certified. |
+| [#829](https://github.com/Naveax/Nexowire/pull/829) | `5715402142968498ce6d53014888e1c39f6e2ac9` | [39863445519](https://github.com/Naveax/Nexowire/actions/runs/39863445519) **PASS**; [QA 39863445634](https://github.com/Naveax/Nexowire/actions/runs/39863445634) **PASS** | All 7 CI jobs and Windows NWJOB5 early-stream QA success **at exactly this SHA**. Not transitive proof for sibling PRs or installed signed HIGH Broker. |
+| [#852](https://github.com/Naveax/Nexowire/pull/852) | `42cd3302653b20d4cfca36dd99e1c2af4c2a3f67` | [39944994429](https://github.com/Naveax/Nexowire/actions/runs/39944994429) **FAIL** | `browser-live → Physical Windows Job Object regressions`: exited-before-stdout iteration 1. Other 6 jobs pass; its frozen QA fixtures are historical, **not** 248 exact-current full acceptance. |
+| [#807](https://github.com/Naveax/Nexowire/pull/807) | `1e84d87c98c91b2d6e97a47de610ffe353d199df` | [39841880930](https://github.com/Naveax/Nexowire/actions/runs/39841880930) **FAIL** | Windows `browser-live → Physical Windows Job Object regressions`: stdout ordering iteration 0. Six other jobs pass. External writer/CAS still blocked. |
+| [#822](https://github.com/Naveax/Nexowire/pull/822) | `fb0dfafebd1b2748696bbe97e2fad8289f5ad36b` | [39944888456](https://github.com/Naveax/Nexowire/actions/runs/39944888456) **PASS** | Seven CI jobs pass; bounded pure/read-only controller, **not native dispatch**. |
+| [#809](https://github.com/Naveax/Nexowire/pull/809) | `f5a2897928ea30f322dc7f4049f8728dc2fa900c` | [39944387608](https://github.com/Naveax/Nexowire/actions/runs/39944387608) **FAIL** | `qa-independent-negative-acceptance → Verify unresolved P0 rollback and one-call transfer acceptance`: 7 explicit RED tests (ROOT expiry, CORE/HIGH grant, scoped Hyper-V, rolled-back SQLite CAS, one-call transfer). `test (24) → npm run check` fail; Node22 cancelled. `browser-live → durable-process.test.ts`: `NW_DURABLE_READY` output timeout. Distinct genuine P0 QA discovery and Windows liveness evidence. |
+| [#849](https://github.com/Naveax/Nexowire/pull/849) **CLOSED** | `1b63db6ddca1786aa0b95bf52b023a80f0511388` | [39939046984](https://github.com/Naveax/Nexowire/actions/runs/39939046984) **FAIL** | Historical TEMP cross-run, `test (24) → npm run check`: 20 fail / 1818 pass / 273 skip incl cloned UNKNOWN. `browser-live → Verify independent cross-project negative acceptance gates` fails. **Not an open merge candidate**. |
+| [#847](https://github.com/Naveax/Nexowire/pull/847) | `79fdecf348b526c1e876f434d6f0292769b2bc17` | [39914505805](https://github.com/Naveax/Nexowire/actions/runs/39914505805) **FAIL** | `test (24) → npm run check`: real direct-graph UNKNOWN negative saw **2**, expected **0** inert dispatches, plus inherited legacy positives. This was historical #826 source, not present latest #826. Browser-live PASS. **Original adversarial test byte preservation mandatory**. |
+| [#633](https://github.com/Naveax/Nexowire/pull/633) | `c429ed9c7eb6de45c4c1ae8de67b528f940fe3ab` | [39610643900](https://github.com/Naveax/Nexowire/actions/runs/39610643900) **PASS**; release readiness [39610643844](https://github.com/Naveax/Nexowire/actions/runs/39610643844) **PASS** | **Hosted source/release workflow only**. Not installed Windows signed HIGH or ROOT consent witness. |
+| [#722](https://github.com/Naveax/Nexowire/pull/722) | `06f564f4f9b888c035c132ac790c833c4e30f6fc` | [39939472896](https://github.com/Naveax/Nexowire/actions/runs/39939472896) **FAIL** | `test (24) → npm run check`: 4 native dispatch negatives (ROOT T+899999, T+900000, revoked owner generation, preference-only CORE) each reached inert Broker once, expected zero. Node22 cancelled. **Real owner #04 trust boundary red**, not merely CI infrastructure. |
+| [#576](https://github.com/Naveax/Nexowire/pull/576) | `a3946c1f25b8ba151baf945b5acacc7aafbd66c3` | [39598258315](https://github.com/Naveax/Nexowire/actions/runs/39598258315) **FAIL** | `browser-live → Physical Windows Job Object regressions`: **two independent negatives** on OS signature verification and inherited parent-directory Modify ACL. **Do not mislabel these as only NWJOB3**. |
+| [#844](https://github.com/Naveax/Nexowire/pull/844) | `6b8d0b880b158f22665e3d5dc6e0f6d75368f390` | [39867256053](https://github.com/Naveax/Nexowire/actions/runs/39867256053) **PASS** | Seven CI jobs pass; UI false-VERIFIED denial source only, no physical CORE enrollment. |
+| [#818](https://github.com/Naveax/Nexowire/pull/818) | `3997e9724cc8fe14fb397f906f96861a1b2eb051` | [39939355028](https://github.com/Naveax/Nexowire/actions/runs/39939355028) **PASS** | Seven CI jobs pass. WSS writer test does not certify real two-Hub external CAS. |
+| [#851](https://github.com/Naveax/Nexowire/pull/851) | `2b60d105a3fab15170908046797966d995dff5bb` | [39939385483](https://github.com/Naveax/Nexowire/actions/runs/39939385483) **PASS**; [QA 39939385622](https://github.com/Naveax/Nexowire/actions/runs/39939385622) **PASS** | Seven source/hosted jobs + strict JSON QA pass; native installed signed HIGH token, complete ACL/dll/updater closure **not yet accepted**. |
+
+Additional physical-contract witness: [#850](https://github.com/Naveax/Nexowire/pull/850) `70d67c8e1824c63baf95830f31e21fb8bc5230b2` [39939244397](https://github.com/Naveax/Nexowire/actions/runs/39939244397) SUCCESS. This is **QA contract/source** rather than actual physical installed Broker clearance.
+
+### NWJOB3 vs NWJOB5 ancestry: independently grounded
+
+- GitHub file content/blob at `src/agent/process-worker.ts` on `main`, #811 and #852: **same blob SHA** `7cdd179bee26f5f173bf797a885d7e985dbcfaf0`, old `child.stdout.on('data', ... void append().catch(...))` stream path.
+- #829 exact source blob: **`4e672df6be5e9181ab46fe44814e6d5fb592fe16`**, with `captureOutput` and drain-before-terminal reconciliation code. Its complete hosted CI and custom NWJOB5 QA are green.
+- Thus #811/#852 Windows fast-exit ordering failure plausibly arises from older process-worker implementation present in those commits. #813 shares Windows symptom; its process-worker blob not independently compared in this audit, so classification is **symptom matches, ancestry unverified**.
+- #576 Windows failure is signature/ACL trust, **not** fast-exit stdout. #826 Node24 and independent P0 job failures are separate substantive regressions. Green NWJOB5 alone cannot certify safe integrated runner, Git on Windows, signed Broker or native job trust.
+- The action is an **owner/integrator cross-branch combination + fresh SHA-specific Windows acceptance**, never silently cherry-pick/merge from QA #11, and never hide a RED by skipping the job.
+
+### #852 DAG and acceptance fixture integrity
+
+- #852 latest tested SHA is **`42cd330...`** (run 39944994429 FAILURE). Its `QA24_NEXT4_LIVE_DAG_DELTA_20261023.md` documents a previous #852 SHA and 248 OPEN refs, **202 edges / 14 stale / #776 only unresolved**, plus #849 CLOSED and #852 OPEN. Those are a *historical observed capture*, not independent proof of today's unchanged 248.
+- The test loader `scripts/qa24-live248-review.ts` still imports immutable `qa24-open-rest-two-pass-20261023.json` with **201 edges / 13 stale / #776 and #849 unresolved**, and a 16-PR exact-ci subset. Its test `test/qa-24-live248-review.test.ts` asserts those historical values. **Not wrong as a historical regression fixture**, but cannot serve as the *current* full-DAG acceptor. The script hardcodes `gate:'NO_GO'`, `production_merge_authorized:false`, `current_safe_merge_queue:[]`, and deliberate exitCode 2, so it **does not grant merge authorization**.
+- Parent SHA drift independently rechecked for #814 and #845: both `base.sha = 600a0286557d360681be7bd7b86da95ba57f1980` while owner #811 latest HEAD is `daa166e42f94fa1529b48c293a51c58b1c2384e7`. Historical adversarial negatives stay byte-identical; test against updated owner head in an isolated TEMP branch before source acceptance.
+- #811 and #826 independently touch `src/agent/executors.ts` (owner collision). #801/#802/#837 overlap `.github/workflows/ci.yml` per #852's scoped source evidence. QA #11 does not arbitrate ownership by modifying these files.
+- **Do not propose any merge candidate** from fixed-time census, 16/248 scoped exact CI, green unrelated child, merged base without corresponding owner verification, or a historical QA run. **Current safe merge queue: empty**.
+
+## R01–R22 evidence ledger (conservative)
+
+Legend: **candidate** = source implementation/test recorded in #539/backlog but no exact-current comprehensive acceptance; **partial** = incomplete source claim; **scoped PASS** = independently verified *specific* SHA CI above, not complete R-item coverage; **RED** = observed failing primary negative; **unverified** = no acceptable evidence established in this audit; **BLOCKED** = mandatory release stage not proven. A GitHub-hosted Windows runner executing a Windows test is not automatically the installed customer/device physical witness.
+
+| ID | Required functional boundary | Source-level evidence | Staging | Physical independent | Production/incident |
+|---|---|---|---|---|---|
+| R01 | Transport/provider/Agent/task error origin | candidate (#539) | unverified | unverified | BLOCKED |
+| R02 | Agent journal, restart and lost ACK | candidate, native UNKNOWN/CAS RED (#826/#847) | unverified | unverified | BLOCKED |
+| R03 | Readonly status/reconciliation/offline history | candidate, off-host readback unproven | unverified | unverified | BLOCKED |
+| R04 | FULL/ROOT/CORE/UAC explicit authorization | **RED** ROOT/CORE native dispatch #722 | unverified | unverified | BLOCKED |
+| R05 | Path and USB volume grants/revoke | partial per #539; exact target acceptance absent | unverified | unverified | BLOCKED |
+| R06 | Two-device reconnect / epoch fencing | partial per #539 | unverified | unverified | BLOCKED |
+| R07 | Process tree, job ownership, durable lifecycle | **scoped PASS** #829 NWJOB5, #576 physical trust RED | unverified | unverified | BLOCKED |
+| R08 | Shell/WSL encoding, timeout and exit | partial per backlog; multi-OS jobs exist, end-to-end exit receipt not concluded | unverified | unverified | BLOCKED |
+| R09 | GUI/Broker focus/console grant | partial; native HIGH trust RED | unverified | unverified | BLOCKED |
+| R10 | Artifact/Git SHA sync and device identity | partial; #826 artifact negative regression | unverified | unverified | BLOCKED |
+| R11 | Reliability Doctor operator UI | consolidated UI unverified | unverified | unverified | BLOCKED |
+| R12 | Scale 100+ authenticated sockets, 600/min, 24h quota | partial source; backlog says "staging only", **not verified staging PASS** | unverified | unverified | BLOCKED |
+| R13 | Upstream provider/MCP denial provenance | incomplete per #539 | unverified | unverified | BLOCKED |
+| R14 | Codex OAuth PKCE/refresh/logout | not production-accepted per backlog | unverified | unverified | BLOCKED |
+| R15 | Cross-chat authorized artifact continuity | incomplete per #539 | unverified | unverified | BLOCKED |
+| R16 | Owner HWND native file picker/UIA | partial; no proven physical private desktop | unverified | unverified | BLOCKED |
+| R17 | WSL/USB/Python/CUDA/Ollama preflight | partial diagnostics only | unverified | unverified | BLOCKED |
+| R18 | Real progress counters vs alive PID | incomplete, #809 durable output negative | unverified | unverified | BLOCKED |
+| R19 | Agent/Broker controlled update/rollback | partial per backlog | unverified | unverified | BLOCKED |
+| R20 | Atomic compare-and-swap append/write_at | **RED** off-host rollback-independent monotonic CAS (#587) | unverified | unverified | BLOCKED |
+| R21 | USB/gamepad/VM real physical acceptance | partial harness; physical witness absent | unverified | unverified | BLOCKED |
+| R22 | Exact source/CI/provider/release gating | scoped CI checks, cross-branch/red discovery and incomplete census | unverified | unverified | BLOCKED |
+
+**Four distinct milestone states**: (1) source exact SHA job success with negative discovery; (2) staging connected-runtime acceptance; (3) independently witnessed physical OS/Broker/CAS acceptance; (4) production rollout + rollback + original incident replay/closure. These may overlap operationally but no one state substitutes for another. For every R-item, **no final production/original-incident acceptance was evidenced** in this audit.
+
+## QA11 next checks / owner handoff
+
+1. **#02 / #12 integration:** bring #829's early-output implementation into a distinct integration SHA together with #811/#813/#852 where relevant; prove ancestry from exact process-worker blob and run Windows fast-exit plus healthy Git positives on *that exact SHA*. No CI rerun with same SHA/input.
+2. **#01:** preserve #847 direct-graph negative; distinguish readonly task.graph paths from mutation; reconcile #826's 18 inherited positives without permitting native dispatch with absent external CAS. **No fake external provider.**
+3. **#04 + #10:** preserve #722 four native dispatch negatives and #809 seven P0 negatives. Those RED tests are release blockers even if independently unrelated branch CI is green. No ROOT/CORE authorization through UI, OAuth or synthetic receipts.
+4. **#06 + #10:** #814/#845 hostile negatives were run on outdated #811 parent. Cross-run unchanged files on current #811 in isolated branch; independent Windows healthy git scenario also required. Never delete/relax these negatives to claim green.
+5. **#00 / #12:** refresh all-open two-pass HEAD/base DAG **before** any merge discussion and collect actual full current changed-file, merge-base, branch-protection and CI evidence. #852's historical JSON and 16-PR subset must be tagged with capture time and never called current full acceptance.
+6. **#11 scope:** maintain CI/discovery and R01–R22 ledger only. No production source, main merge, native Agent/Broker, physical UAC/ACL/VM, ReVoltVPN-Ubuntu-Lab, D1/billing or paid cloud work.
+
+**Final disposition:** `SOURCE MIXED / STAGING UNVERIFIED / PHYSICAL BLOCKED / PRODUCTION NO_GO`. No merge authorization, no staged release, no accepted irreversible mutation replay.
