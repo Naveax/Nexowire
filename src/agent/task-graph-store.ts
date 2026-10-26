@@ -305,9 +305,18 @@ export class TaskGraphStore {
     });
     // A checkpoint update cannot create an unreserved mutation identity.
     // Reserve it first through prepare(), which enforces journal capacity.
-    if(!this.graphs.has(parsed.id))
+    const original=this.graphs.get(parsed.id);
+    if(!original)
       throw new TaskGraphStoreError('TASK_GRAPH_NOT_PREPARED',
         'Checkpoint must be admitted through prepare before it can be saved.');
+    const sameJobs=original.jobs.length===parsed.jobs.length && original.jobs.every((old,index)=>{
+      const next=parsed.jobs[index];
+      return next?.id===old.id && next.dependsOn.length===old.dependsOn.length &&
+        next.dependsOn.every((dep,i)=>dep===old.dependsOn[i]);
+    });
+    if(original.specHash!==parsed.specHash||!sameJobs)
+      throw new TaskGraphStoreError('TASK_GRAPH_SPEC_MISMATCH',
+        'Checkpoint update cannot rewrite persisted task-graph specification or job identities.');
     this.graphs.set(parsed.id, cloneGraph(parsed));
     await this.persistState();
   }
