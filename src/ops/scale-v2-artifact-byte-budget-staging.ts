@@ -64,6 +64,10 @@ export interface TrustedRemovedReceipt extends TrustedArtifactIdentity {
   /** Required before any disk release, including COMPLETE uploads. The source adapter must independently authenticate this fact; a client boolean is NOT a fence. */
   writersStoppedVerified?:true;
 }
+/** Injected by an independently trusted server provider, never by Agent JSON. */
+export interface ArtifactWriterStopAuthority {
+  verifyWriterFence(receipt:Readonly<TrustedRemovedReceipt>):boolean;
+}
 
 const idRe=/^[A-Za-z0-9_.:@-]{8,128}$/;
 const shaRe=/^[a-f0-9]{64}$/;
@@ -128,7 +132,8 @@ export function initArtifactBudgetFixture(db:DatabaseSync):void {
 
 export class StagingArtifactByteBudget {
   constructor(private readonly db:DatabaseSync,
-              private readonly policy:ArtifactBudgetPolicy=STAGING_ARTIFACT_BUDGET){
+              private readonly policy:ArtifactBudgetPolicy=STAGING_ARTIFACT_BUDGET,
+               private readonly writerStopAuthority?:ArtifactWriterStopAuthority){
     policyValid(policy);
   }
   private transaction<T>(work:()=>T):T {
@@ -332,6 +337,10 @@ export class StagingArtifactByteBudget {
       // adapter has independently proved writer stop (issue #588/#587).
       if(x.writersStoppedVerified!==true)
         throw Error('WRITER_FENCE_REQUIRED');
+      // Caller boolean is never independent stop proof. Without a trusted
+      // provider the retained disk reservation cannot be refunded.
+      if(this.writerStopAuthority?.verifyWriterFence(x)!==true)
+        throw Error('TRUSTED_WRITER_FENCE_REQUIRED');
       this.db.prepare('UPDATE budget_artifact_sessions SET state=? WHERE session_id=?')
         .run('RELEASED',x.sessionId);
       return 'RELEASED';

@@ -19,7 +19,7 @@ const hash='b'.repeat(64);
 const free=16*1024*1024*1024;
 const size=ARTIFACT_CHUNK_BYTES*2;
 
-function fixture(policy?:ArtifactBudgetPolicy){
+function fixture(policy?:ArtifactBudgetPolicy,writerStopAuthority={verifyWriterFence:()=>true}){
   const dir=mkdtempSync(path.join(tmpdir(),'nexowire-byte-budget-'));
   const file=path.join(dir,'budget.db');
   const db=new DatabaseSync(file);
@@ -27,8 +27,8 @@ function fixture(policy?:ArtifactBudgetPolicy){
   initArtifactBudgetFixture(db);
   const db2=new DatabaseSync(file);
   db2.exec('PRAGMA busy_timeout=10000');
-  const first=new StagingArtifactByteBudget(db,policy);
-  const second=new StagingArtifactByteBudget(db2,policy);
+  const first=new StagingArtifactByteBudget(db,policy,writerStopAuthority);
+  const second=new StagingArtifactByteBudget(db2,policy,writerStopAuthority);
   const n=(sql:string,...params:(number|string)[])=>Number(
     (db.prepare(sql).get(...params) as {n:number}|undefined)?.n??0
   );
@@ -171,5 +171,30 @@ test('no automatic pending refund, clock rollback, cross-user billing or impossi
     assert.equal(f.first.acknowledgeDeletion({
       ...a,sessionId:'session-alpha-01',durableDeletionVerified:true,
     }),'DENIED_STATE');
+  }finally{f.close()}
+});
+
+
+test('COMPLETE writer-stop boolean is insufficient without independent injected fence authority',()=>{
+  let independentlyStopped=false;
+  const f=fixture(undefined,{verifyWriterFence:()=>independentlyStopped});
+  try{
+    assert.equal(f.first.begin(open()),'RESERVED');
+    const c1=chunk();
+    assert.equal(f.first.stageChunk(c1),'CHUNK_PENDING');
+    assert.equal(f.second.commitChunk(durable(c1)),'CHUNK_COMMITTED');
+    const c2=chunk(a,'session-alpha-01','chunk-id-0002',ARTIFACT_CHUNK_BYTES);
+    assert.equal(f.second.stageChunk(c2),'CHUNK_PENDING');
+    assert.equal(f.first.commitChunk(durable(c2)),'CHUNK_COMMITTED');
+    assert.equal(f.first.finalize(baseReceipt),'COMPLETE');
+    const deletion={...a,sessionId:'session-alpha-01',durableDeletionVerified:true as const,
+      writersStoppedVerified:true as const};
+    assert.throws(()=>f.first.acknowledgeDeletion(deletion),/TRUSTED_WRITER_FENCE_REQUIRED/);
+    assert.equal(f.n("SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>'RELEASED'"),size);
+    independentlyStopped=true; // only a future trusted external provider can prove this
+    assert.equal(f.second.acknowledgeDeletion(deletion),'RELEASED');
+    assert.equal(f.first.acknowledgeDeletion(deletion),'RELEASED');
+    assert.equal(f.n("SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>'RELEASED'"),0);
+    assert.equal(f.n('SELECT SUM(byte_count) AS n FROM budget_artifact_chunks'),size);
   }finally{f.close()}
 });
