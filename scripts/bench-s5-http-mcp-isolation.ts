@@ -5,6 +5,7 @@
  */
 import {createServer,request,type Server,type IncomingMessage,type ServerResponse} from 'node:http';
 import {createHash} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
 import {once} from 'node:events';
 import {performance} from 'node:perf_hooks';
 import {setTimeout as sleep} from 'node:timers/promises';
@@ -20,6 +21,7 @@ export interface S5HttpIsolationOptions {
   rssGrowthBudgetBytes?:number;
   probeFifthRequest?:boolean;
   probeOverLimit?:boolean;
+  probeGzipUnderLoad?:boolean;
 }
 export interface S5HttpIsolationResult {
   classification:'REAL_LOCAL_HTTP_BYTES_SYNTHETIC_MCP_FIXTURE';
@@ -33,6 +35,8 @@ export interface S5HttpIsolationResult {
   largeLatencyMs:{p50:number;p95:number;p99:number};
   http413Count:number;
   http429Count:number;
+  http503BusyCount:number;
+  gzipBusy503Count:number;
   backpressureWrites:number;
   bytesReceived:number;
   receivedHashes:string[];
@@ -63,7 +67,7 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
   check(budget,32*1024*1024,256*1024*1024,'memory budget');
   const started=performance.now(),rssStart=process.memoryUsage().rss;
   let rssPeak=rssStart,largeActive=0,largePeak=0,smallArrived=0,smallOk=0;
-  let largeOk=0,rejected413=0,rejected429=0,networkBytes=0,backpressureWrites=0;
+  let largeOk=0,rejected413=0,rejected503=0,rejectedGzip503=0,networkBytes=0,backpressureWrites=0;
   let allStarted!:()=>void;
   const barrier=new Promise<void>(resolve=>{allStarted=resolve});
   const receiverHashes:string[]=[],smallLatency:number[]=[],largeLatency:number[]=[];
@@ -73,7 +77,18 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
     if(performance.now()-started>limit)throw new Error('S5 fixture deadline');
   };
   const server:Server=createServer((req:IncomingMessage,res:ServerResponse)=>{
-    if(req.url==='/mcp/small'&&req.method==='GET'){
+    if(req.url==='/mcp/small'&&req.method==='POST'){
+      const encoding=req.headers['content-encoding'];
+      const identity=encoding===undefined||encoding==='identity';
+      const length=req.headers['content-length'];
+      const fastPath=identity&&typeof length==='string'&&/^\d+$/.test(length)&&Number(length)<=100*1024;
+      if(!fastPath){
+        // A tiny gzip wire request could expand beyond 100 KiB; mirror the
+        // #598 admission principle, NOT its production parser implementation.
+        rejectedGzip503++;
+        res.writeHead(503).end('synthetic encoded request cannot bypass admission');
+        req.resume();return;
+      }
       if(largeActive>0)smallArrived++;
       smallOk++;
       res.setHeader('Content-Type','application/json');
@@ -83,7 +98,7 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
     if(req.url!=='/mcp/large'||req.method!=='POST'){
       res.writeHead(404).end();return;
     }
-    if(largeActive>=4){rejected429++;res.writeHead(429).end('synthetic concurrency cap');req.resume();return}
+    if(largeActive>=4){rejected503++;res.writeHead(503).end('synthetic parser-stage concurrency cap');req.resume();return}
     if(Number(req.headers['content-length']??0)>S5_HTTP_MAX_BYTES){
       rejected413++;res.writeHead(413).end('synthetic body cap');req.resume();return;
     }
@@ -122,9 +137,10 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
       const began=performance.now(),digest=createHash('sha256');
       const req=request({
         host:'127.0.0.1',port:(server.address() as {port:number}).port,path:route,
-        method:route==='/mcp/small'?'GET':'POST',
+        method:'POST',
         agent:false,
-        headers:route==='/mcp/large'?{'Content-Length':overlimitHeader?S5_HTTP_MAX_BYTES+1:bodyLength}: {},
+        headers:route==='/mcp/large'?{'Content-Length':overlimitHeader?S5_HTTP_MAX_BYTES+1:bodyLength}:
+          {'Content-Length':49,'Content-Type':'application/json','Content-Encoding':'identity'},
       },async res=>{
         try{
           let response='';
@@ -148,7 +164,11 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
       active.add(req);
       req.on('error',e=>{active.delete(req);reject(e)});
       req.setTimeout(Math.min(limit,15000),()=>req.destroy(new Error('HTTP fixture deadline')));
-      if(route==='/mcp/small'||overlimitHeader){req.end();return}
+      if(route==='/mcp/small'){
+        req.end(Buffer.from('{"jsonrpc":"2.0","method":"ping","id":"s5-small"}'));
+        return;
+      }
+      if(overlimitHeader){req.end();return}
       // The producer asynchronously writes 64 KiB chunks and waits for drain.
       void(async()=>{
         const bytes=Buffer.alloc(S5_HTTP_CHUNK_BYTES,0xa5);
@@ -186,7 +206,25 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
     // Probe fifth only while all 4 slots are occupied. Tests for <4 skip it.
     if(options.probeFifthRequest===true&&count===4){
       const fifth=await localRequest('/mcp/large',1);
-      if(fifth.status!==429)throw new Error('Fifth large request was not rejected');
+      if(fifth.status!==503)throw new Error('Fifth large request did not get parser-busy 503');
+    }
+    if(options.probeGzipUnderLoad===true&&count===4){
+      // Wire body is tiny; declared payload decompresses to >2 MiB. Never
+      // decompress or parse it in this bounded fixture.
+      const gzipBody=gzipSync(Buffer.from(JSON.stringify({content:'x'.repeat(2*1024*1024)})));
+      if(gzipBody.byteLength>=100*1024)throw new Error('Unexpected oversized compressed probe');
+      const gzipStatus=await new Promise<number>((resolve,reject)=>{
+        const req=request({host:'127.0.0.1',port:(server.address() as {port:number}).port,
+          path:'/mcp/small',method:'POST',agent:false,
+          headers:{'Content-Type':'application/json','Content-Encoding':'gzip',
+            'Content-Length':gzipBody.byteLength}},res=>{
+          res.resume();res.once('end',()=>resolve(res.statusCode??0));
+        });
+        req.once('error',reject);
+        req.setTimeout(5000,()=>req.destroy(new Error('Gzip admission probe timeout')));
+        req.end(gzipBody);
+      });
+      if(gzipStatus!==503)throw new Error('Compressed request bypassed large parser admission gate');
     }
     const small=await Promise.all(Array.from({length:smallCount},
       ()=>localRequest('/mcp/small',0)));
@@ -213,7 +251,8 @@ export async function runS5LocalHttpIsolation(options:S5HttpIsolationOptions={})
       smallSuccessful:smallOk,smallArrivedDuringLarge:smallArrived,
       smallLatencyMs:{p50:pctl(smallLatency,.5),p95:pctl(smallLatency,.95),p99:pctl(smallLatency,.99)},
       largeLatencyMs:{p50:pctl(largeLatency,.5),p95:pctl(largeLatency,.95),p99:pctl(largeLatency,.99)},
-      http413Count:rejected413,http429Count:rejected429,
+      http413Count:rejected413,http429Count:0,http503BusyCount:rejected503,
+      gzipBusy503Count:rejectedGzip503,
       backpressureWrites,bytesReceived:networkBytes,
       receivedHashes:receiverHashes,
       rssGrowthPeakBytes:Math.max(0,rssPeak-rssStart),
