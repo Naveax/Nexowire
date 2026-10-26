@@ -305,6 +305,11 @@ export class RunbookStore {
       ...checkpoint,
       updatedAt: new Date().toISOString(),
     });
+    // save() is a checkpoint update, not an admission path: otherwise a
+    // caller can bypass the bounded prepare() journal and forge a fresh ID.
+    if(!this.runbooks.has(parsed.id))
+      throw new RunbookStoreError('RUNBOOK_NOT_PREPARED',
+        'Checkpoint must be admitted through prepare before it can be saved.');
     this.runbooks.set(parsed.id, clone(parsed));
     await this.persist();
   }

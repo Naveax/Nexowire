@@ -303,6 +303,11 @@ export class TaskGraphStore {
       ...graph,
       updatedAt: new Date().toISOString(),
     });
+    // A checkpoint update cannot create an unreserved mutation identity.
+    // Reserve it first through prepare(), which enforces journal capacity.
+    if(!this.graphs.has(parsed.id))
+      throw new TaskGraphStoreError('TASK_GRAPH_NOT_PREPARED',
+        'Checkpoint must be admitted through prepare before it can be saved.');
     this.graphs.set(parsed.id, cloneGraph(parsed));
     await this.persistState();
   }
