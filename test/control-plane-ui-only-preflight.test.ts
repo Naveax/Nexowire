@@ -41,6 +41,7 @@ test('read-only preview accepts an unchanged stylesheet only if diff lists only 
   const f=fixture();
   // A valid unchanged stylesheet must already contain required live controls.
   f.baseline['web/styles.css']=f.candidate['web/styles.css'];
+  f.live['web/styles.css']=f.candidate['web/styles.css'];
   f.modifiedPaths=['web/app.js'];
   const ok=verifyUiOnlyRelease(f);
   assert.equal(ok.files.length,2);
