@@ -163,6 +163,8 @@ function errorStatus(message: string): number {
     message === 'ADMIN_REQUIRED' ||
     message === 'OWNER_LOGIN_REQUIRED' ||
     message === 'ROOT_REQUIRES_OWNER_LOGIN' ||
+    message === 'ROOT_SESSION_BINDING_REQUIRED' ||
+    message === 'ROOT_SESSION_REVOKED' ||
     message === 'CORE_REQUIRES_OWNER_LOGIN' ||
     message === 'BRIDGE_REQUIRES_OWNER_LOGIN' ||
     message === 'BRIDGE_COMMAND_OWNER_REQUIRED' ||
@@ -170,6 +172,7 @@ function errorStatus(message: string): number {
   ) return 403;
   if (
     message === 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' ||
+    message === 'ROOT_SESSION_REVOKED_OR_DEVICE_CHANGED' ||
     message === 'CORE_REQUIRES_FULL_ONLINE_BROKER' ||
     message === 'BRIDGE_COMMAND_DEVICE_NOT_READY' ||
     message === 'BRIDGE_COMMAND_PREFERENCE_MISMATCH' ||

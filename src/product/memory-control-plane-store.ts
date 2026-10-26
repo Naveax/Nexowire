@@ -80,6 +80,10 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
   private readonly identities = new Map<string, ExternalIdentityRecord>();
   private readonly devices = new Map<string, ProductDeviceRecord>();
   private readonly rootModeLeases = new Map<string, RootModeLeaseRecord>();
+  private readonly rootSessionGrants = new Map<string,{
+    ownerAccountId:string;sessionHash:string;issuedAt:string;expiresAt:string;
+  }>();
+  private readonly revokedLoginHashes = new Map<string,string>();
   private readonly maintenancePreferences = new Map<string, DeviceMaintenancePreferenceRecord>();
   private readonly bridgePreferences = new Map<string, DeviceBridgePreferenceRecord>();
   private readonly bridgePreferenceRevisions = new Map<string, string>();
@@ -257,6 +261,50 @@ export class MemoryControlPlaneStore implements ControlPlaneStore {
 
   async putRootModeLease(record: RootModeLeaseRecord): Promise<void> {
     this.rootModeLeases.set(record.deviceId, clone(record));
+  }
+
+  async grantRootSession(input:{
+    deviceId:string;ownerAccountId:string;sessionHash:string;issuedAt:string;expiresAt:string;
+  }):Promise<boolean>{
+    const device=this.devices.get(input.deviceId);
+    if(!device || device.ownerAccountId!==input.ownerAccountId ||
+       device.accessMode!=='full' || !device.online ||
+       await this.isControlPlaneSessionRevoked(input.sessionHash,input.issuedAt)) return false;
+    this.rootSessionGrants.set(input.deviceId,clone(input));
+    return true;
+  }
+
+  async getRootSessionGrant(input:{
+    deviceId:string;ownerAccountId:string;sessionHash:string;at:string;
+  }):Promise<{issuedAt:string;expiresAt:string}|null>{
+    const grant=this.rootSessionGrants.get(input.deviceId);
+    const device=this.devices.get(input.deviceId);
+    const lease=this.rootModeLeases.get(input.deviceId);
+    if(!grant || !device || !lease ||
+       grant.ownerAccountId!==input.ownerAccountId ||
+       grant.sessionHash!==input.sessionHash ||
+       grant.expiresAt<=input.at || grant.issuedAt>input.at ||
+       lease.expiresAt!==grant.expiresAt || lease.updatedAt!==grant.issuedAt ||
+       lease.ownerAccountId!==input.ownerAccountId ||
+       device.ownerAccountId!==input.ownerAccountId ||
+       device.accessMode!=='full' || !device.online ||
+       await this.isControlPlaneSessionRevoked(input.sessionHash,input.at)) return null;
+    return {issuedAt:grant.issuedAt,expiresAt:grant.expiresAt};
+  }
+
+  async revokeControlPlaneSession(input:{
+    ownerAccountId:string;sessionHash:string;revokedAt:string;expiresAt:string;
+  }):Promise<void>{
+    this.revokedLoginHashes.set(input.sessionHash,input.expiresAt);
+    for(const [deviceId,grant] of this.rootSessionGrants){
+      if(grant.ownerAccountId===input.ownerAccountId && grant.sessionHash===input.sessionHash){
+        this.rootSessionGrants.delete(deviceId);
+      }
+    }
+  }
+
+  async isControlPlaneSessionRevoked(sessionHash:string,at:string):Promise<boolean>{
+    return (this.revokedLoginHashes.get(sessionHash) ?? '')>at;
   }
 
   async getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null> {

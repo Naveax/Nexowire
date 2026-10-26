@@ -242,6 +242,21 @@ export interface ControlPlaneStore {
   putDevice(record: ProductDeviceRecord): Promise<void>;
   getRootModeLease(deviceId: string): Promise<RootModeLeaseRecord | null>;
   putRootModeLease(record: RootModeLeaseRecord): Promise<void>;
+  /** Session-bound ROOT grant admission is atomic with revoked-session check. */
+  grantRootSession(input: {
+    deviceId:string;ownerAccountId:string;sessionHash:string;
+    issuedAt:string;expiresAt:string;
+  }): Promise<boolean>;
+  /** Returns a grant only when bound to a still-valid, unrevoked login. */
+  getRootSessionGrant(input: {
+    deviceId:string;ownerAccountId:string;sessionHash:string;at:string;
+  }): Promise<{issuedAt:string;expiresAt:string}|null>;
+  /** Logout atomically blocks replay and clears all this login's ROOT grants. */
+  revokeControlPlaneSession(input: {
+    ownerAccountId:string;sessionHash:string;
+    revokedAt:string;expiresAt:string;
+  }): Promise<void>;
+  isControlPlaneSessionRevoked(sessionHash:string,at:string): Promise<boolean>;
   getDeviceMaintenancePreference(deviceId: string): Promise<DeviceMaintenancePreferenceRecord | null>;
   putDeviceMaintenancePreference(record: DeviceMaintenancePreferenceRecord): Promise<void>;
   getDeviceBridgePreference(deviceId: string): Promise<DeviceBridgePreferenceRecord | null>;

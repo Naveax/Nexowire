@@ -89,6 +89,9 @@ function explainApiError(code) {
       'Eski sunucu yapılandırması Broker istiyor. Sayfayı yenileyip tekrar dene.',
     ROOT_DANGER_CONFIRMATION_REQUIRED:
       'ROOT DANGER onay ifadesi doğrulanamadı.',
+    ROOT_SESSION_BINDING_REQUIRED: 'ROOT için yeni ve doğrulanmış oturum gerekli; çıkış yapıp yeniden giriş yap.',
+    ROOT_SESSION_REVOKED: 'Bu oturum iptal edilmiş. ROOT izni verilemez.',
+    ROOT_SESSION_REVOKED_OR_DEVICE_CHANGED: 'Oturum iptal edildi veya cihaz yeniden eşleştirildi. ROOT isteği kabul edilmedi.',
     ROOT_REQUIRES_OWNER_LOGIN:
       'Bu işlem için cihazın sahibi olan hesapla giriş yap.',
     CORE_REQUIRES_OWNER_LOGIN: 'CORE için cihazın sahibi olan hesapla giriş yap.',
@@ -422,6 +425,7 @@ function render(snapshot) {
         ' <div class="bridge-access">',
         '  <div class="bridge-head"><strong>ADMIN BRIDGE</strong><span class="bridge-live-status"></span></div>',
         '  <small class="bridge-copy"></small>',
+        '  <small class="bridge-privilege-truth" role="status">Windows yetkisi doğrulanmadı: FULL/ROOT/CORE, Hyper-V hizmetinin çalışması veya Broker /health 401 yönetici tokeni kanıtı değildir. VM işlemi için tam VM GUID, cihaz/sahip politikası, imzalı yerel onay, görünür UAC izni, doğrulanmış Broker sürümü ve güvenilir ACL gerekir. Bu ekran UAC onayı vermez.</small>',
         '  <div class="bridge-switch-row"><div class="bridge-switch-description"><strong>ON / OFF</strong><small>Tercihi tek tıkla değiştir</small></div><button type="button" class="bridge-toggle" role="switch" aria-checked="false" aria-label="Admin Bridge aç kapa tercihi"><span class="bridge-toggle-track" aria-hidden="true"><span class="bridge-toggle-thumb"></span></span><span class="bridge-toggle-label">OFF</span></button></div>',
         '  <div class="bridge-mode-options" role="group" aria-label="Admin Bridge otomatik tercihi"><button type="button" class="secondary bridge-mode" data-bridge="auto" aria-pressed="false">AUTO MOD</button><small>İstersen AUTO tercihini ayrıca seçebilirsin.</small></div>',
         '  <small class="bridge-mode-feedback" role="status" aria-live="polite"></small>',
@@ -493,7 +497,7 @@ function render(snapshot) {
       const rootStateChip = row.querySelector('.root-state-chip');
       const rootLeaseActive = device.rootMode?.active === true &&
         Date.parse(device.rootMode?.expiresAt ?? '') > Date.now();
-      rootStateChip.textContent = rootLeaseActive ? 'ROOT izni açık' : 'ROOT kapalı';
+      rootStateChip.textContent = rootLeaseActive ? 'ROOT bakım politikası aktif (Windows yetkisi ayrı)' : 'ROOT kapalı';
       if (!rootLeaseActive && device.rootMode?.expiresAt &&
           Date.parse(device.rootMode.expiresAt) > Date.now()) {
         // The stored 15-minute owner request is not a session-bound grant.
@@ -524,7 +528,7 @@ function render(snapshot) {
         rootCopy.textContent = '15 dakikalık bakım izni ' +
           (active ? 'aktif' : 'beklemede') + ' · ' +
           new Date(expiresAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) +
-          ' bitiş. ' + (ready ? 'Admin Bridge hazır.' : 'Yönetici işlemleri için Admin Bridge gerekli.');
+          ' bitiş. ' + (ready ? 'Broker hazır bildirimi var; Guardian kanıtı yok.' : 'Yönetici işlemleri için doğrulanmış Admin Bridge gerekli.');
         if (!active) {
           rootCopy.textContent =
             'ROOT isteği kaydedildi; ancak oturum kapanışında iptal ' +
@@ -544,7 +548,7 @@ function render(snapshot) {
         rootCopy.textContent = 'Önce Full Access açmalısın.';
       } else {
         rootCopy.textContent = ready
-          ? '15 dakikalık bakım izni hazır. İstediğin zaman iptal edilebilir.'
+          ? '15 dakikalık bakım politikası açılabilir. Windows yükseltmesi ve Guardian izni ayrıca doğrulanır.'
           : 'Bakım izni açılabilir. Yükseltilmiş işlemler için Admin Bridge henüz hazır değil.';
       }
       rootPanel.hidden = true;
@@ -623,6 +627,14 @@ function render(snapshot) {
           ? 'Broker hazır bildirimi yok. CORE yalnızca doğrulanan Broker ile etkin olabilir.'
           : 'Cihaz çevrimdışı. Son Broker bilgisi güncel kabul edilemez.';
       const bridgeDesired = device.bridgePreference?.desiredMode ?? 'auto';
+      // This is a conflict with *reported* runtime, not trusted task proof.
+      const bridgeReportedMismatch = device.online === true &&
+        ((bridgeDesired === 'off' && ready) ||
+         (bridgeDesired === 'on' && !ready));
+      if (bridgeReportedMismatch) {
+        bridgeLabel.textContent = 'HATA: tercih / bildirilen Broker durumu uyuşmuyor';
+        bridgeLabel.classList.add('bridge-warning');
+      }
       const bridgeIsOn = bridgeDesired === 'on';
       const bridgeCard = row.querySelector('.bridge-access');
       const bridgeQuickToggle = row.querySelector('.bridge-quick-toggle');
@@ -686,6 +698,9 @@ function render(snapshot) {
             ? 'AUTO seçildi. Broker hazır bildirimi var; otomatik yönetim etkin değil.'
             : 'AUTO seçildi. Otomatik yerel görev yönetimi henüz etkin değil.';
       bridgeFeedback.textContent = bridgeObservation +
+        (bridgeReportedMismatch
+          ? ' HATA BRIDGE_REPORTED_MODE_MISMATCH: UI tercihi ve Agent bildirimi uyuşmuyor; Guardian kanıtı yok.'
+          : '') +
         ' Bu anahtar şimdilik yalnızca tercihi kaydeder. OFF, CORE tercihini iptal eder.';
       bridgeFeedback.classList.toggle('bridge-warning',
         (bridgeDesired === 'off' && ready) ||
