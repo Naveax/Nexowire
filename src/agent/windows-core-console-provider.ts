@@ -47,16 +47,46 @@ $p=[Console]::In.ReadToEnd()|ConvertFrom-Json
 $dir=Get-Item -LiteralPath $p.root -Force
 if(($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)-ne 0){throw 'CORE_PROFILE_REPARSE_DENIED'}
 $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
-$owner=(Get-Acl -LiteralPath $dir.FullName).GetOwner([Security.Principal.SecurityIdentifier]).Value
-if($owner -notin @($sid.Value,'S-1-5-18','S-1-5-32-544')){throw 'CORE_PROFILE_OWNER_CHANGED'}
-$acl=New-Object Security.AccessControl.DirectorySecurity
-$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false)
-foreach($s in @($sid.Value,'S-1-5-18','S-1-5-32-544')){
+$expected=@($sid.Value,'S-1-5-18','S-1-5-32-544')
+$acl=Get-Acl -LiteralPath $dir.FullName -ErrorAction Stop
+$owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+if($owner -notin $expected){throw 'CORE_PROFILE_OWNER_CHANGED'}
+function Test-CoreProfileAcl($candidate){
+ if(-not $candidate.AreAccessRulesProtected){return $false}
+ $rules=@($candidate.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+ if($rules.Count -ne $expected.Count){return $false}
+ $seen=@{}
+ foreach($ace in $rules){
+  $principal=$ace.IdentityReference.Value
+  if($principal -notin $expected -or $seen.ContainsKey($principal) -or $ace.IsInherited -or
+     $ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+     $ace.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl -or
+     $ace.InheritanceFlags -ne ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit) -or
+     $ace.PropagationFlags -ne [Security.AccessControl.PropagationFlags]::None){return $false}
+  $seen[$principal]=$true
+ }
+ return $seen.Count -eq $expected.Count
+}
+# Many previously enrolled Windows owners already have this exact private
+# DACL. Re-applying Set-Acl with an unnecessary owner write can demand
+# SeSecurityPrivilege in a Medium Agent process and strand pending revoke.
+if(Test-CoreProfileAcl $acl){
+ @{protected=$true;alreadyProtected=$true}|ConvertTo-Json -Compress
+ exit 0
+}
+# Preserve the previously validated owner. Change only the DACL, never
+# request ownership/security privilege elevation from a console Agent.
+$acl.SetAccessRuleProtection($true,$false)
+foreach($existing in @($acl.Access)){[void]$acl.RemoveAccessRuleAll($existing)}
+foreach($s in $expected){
  $rule=New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.SecurityIdentifier]::new($s),'FullControl','ContainerInherit,ObjectInherit','None','Allow')
  $acl.AddAccessRule($rule)
 }
-Set-Acl -LiteralPath $dir.FullName -AclObject $acl
-@{protected=$true}|ConvertTo-Json -Compress`;
+Set-Acl -LiteralPath $dir.FullName -AclObject $acl -ErrorAction Stop
+$checked=Get-Acl -LiteralPath $dir.FullName -ErrorAction Stop
+if($checked.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $owner -or
+   -not (Test-CoreProfileAcl $checked)){throw 'CORE_PROFILE_ACL_POSTCHECK_FAILED'}
+@{protected=$true;alreadyProtected=$false}|ConvertTo-Json -Compress`;
     // Windows CLR/module cold start on hosted runners can exceed 30 seconds.
     // This only changes ACLs on the owner's dedicated profile directory.
     await runCorePowerShell(script,{root:this.root},undefined,180000);

@@ -51,6 +51,24 @@ test('real Windows DPAPI enrollment survives reload and rejects modified ciphert
         privateKey:keys.privateKey.export({type:'pkcs8',format:'der'}).toString('base64'),
         certificate:{enrollment,signatureBase64:sign(null,canonicalCoreConsoleEnrollment(enrollment),keys.privateKey).toString('base64')}};
       await store.save(profile);assert.deepEqual(await store.load(),profile);
+      // The exact owner/SYSTEM/Administrators private DACL is already correct.
+      // Repeated Agent saves (including pending revocation) must not require
+      // SeSecurityPrivilege or rewrite the directory's owner.
+      const protectedOwner=await runCorePowerShell(String.raw`
+$p=[Console]::In.ReadToEnd()|ConvertFrom-Json
+$a=Get-Acl -LiteralPath $p.root -ErrorAction Stop
+@{owner=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;protected=$a.AreAccessRulesProtected}|ConvertTo-Json -Compress
+`,{root},undefined,180000) as {owner:string;protected:boolean};
+      assert.equal(protectedOwner.protected,true);
+      await store.save({...profile,pendingRevoke:true});
+      assert.equal((await new WindowsCoreProfileStore(root).load())?.pendingRevoke,true);
+      await store.save(profile);
+      const afterOwner=await runCorePowerShell(String.raw`
+$p=[Console]::In.ReadToEnd()|ConvertFrom-Json
+$a=Get-Acl -LiteralPath $p.root -ErrorAction Stop
+@{owner=$a.GetOwner([Security.Principal.SecurityIdentifier]).Value;protected=$a.AreAccessRulesProtected}|ConvertTo-Json -Compress
+`,{root},undefined,180000) as {owner:string;protected:boolean};
+      assert.deepEqual(afterOwner,protectedOwner);
       assert.deepEqual(await new WindowsCoreProfileStore(root).load(),profile,'a fresh process profile requires DPAPI decryption');
       const file=path.join(root,'profile.dpapi.json'),raw=await fs.readFile(file,'utf8');
       assert.equal(raw.includes(profile.privateKey),false);assert.equal(raw.includes(enrollment.ownerAccountId),false);
