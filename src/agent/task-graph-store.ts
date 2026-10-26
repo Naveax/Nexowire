@@ -50,9 +50,12 @@ const PersistedGraphSchema = z.object({
   jobs: z.array(PersistedJobSchema).min(1).max(32),
 });
 
+// Load the complete supported admission range across restart. Lowering the
+// configured limit must not discard previously recorded UNKNOWN effects.
+const MAX_TASK_GRAPH_JOURNAL_ENTRIES = 65_536;
 const PersistedStateSchema = z.object({
   version: z.literal(1),
-  graphs: z.array(PersistedGraphSchema).max(1000),
+  graphs: z.array(PersistedGraphSchema).max(MAX_TASK_GRAPH_JOURNAL_ENTRIES),
 });
 
 export type PersistedTaskJobStatus = z.infer<typeof JobStatusSchema>;
@@ -144,7 +147,7 @@ export class TaskGraphStore {
     this.stateFile = options.stateFile;
     this.retentionMs = options.retentionMs ?? 7 * 24 * 60 * 60 * 1000;
     const maxEntries=options.maxEntries ?? 4096;
-    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>65536)
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>MAX_TASK_GRAPH_JOURNAL_ENTRIES)
       throw new Error('TASK_GRAPH_JOURNAL_CAPACITY_CONFIG_INVALID');
     this.maxEntries=maxEntries;
   }
@@ -166,6 +169,15 @@ export class TaskGraphStore {
     }
 
     const parsed = PersistedStateSchema.parse(JSON.parse(raw));
+    // Validate all identity keys before state restoration; otherwise a
+    // repeated JSON graph ID can overwrite the earlier UNKNOWN in Map.set.
+    const seenIds=new Set<string>();
+    for(const entry of parsed.graphs){
+      if(seenIds.has(entry.id))
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_DUPLICATE_ID',
+          'Duplicate durable task-graph identity requires external reconciliation.');
+      seenIds.add(entry.id);
+    }
     let changed = false;
     for (const graph of parsed.graphs) {
       const checkpoint: TaskGraphCheckpoint = cloneGraph(graph);

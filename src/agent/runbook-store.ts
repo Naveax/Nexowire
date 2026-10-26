@@ -43,9 +43,12 @@ const RunbookSchema = z.object({
   steps: z.array(StepSchema).min(1).max(64),
 });
 
+// Load the complete supported admission range across restart. Lowering the
+// configured limit must not discard previously recorded UNKNOWN effects.
+const MAX_RUNBOOK_JOURNAL_ENTRIES = 65_536;
 const StateSchema = z.object({
   version: z.literal(1),
-  runbooks: z.array(RunbookSchema).max(1000),
+  runbooks: z.array(RunbookSchema).max(MAX_RUNBOOK_JOURNAL_ENTRIES),
 });
 
 export type RunbookStepStatus = z.infer<typeof StepStatusSchema>;
@@ -115,7 +118,7 @@ export class RunbookStore {
     this.retentionMs =
       options.retentionMs ?? 14 * 24 * 60 * 60 * 1000;
     const maxEntries=options.maxEntries ?? 4096;
-    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>65536)
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>MAX_RUNBOOK_JOURNAL_ENTRIES)
       throw new Error('RUNBOOK_JOURNAL_CAPACITY_CONFIG_INVALID');
     this.maxEntries=maxEntries;
   }
@@ -137,6 +140,16 @@ export class RunbookStore {
     }
 
     const state = StateSchema.parse(JSON.parse(raw));
+    // A corrupted or tampered journal must never silently overwrite an
+    // earlier UNKNOWN effect via Map.set on the same durable ID. Validate
+    // the complete snapshot BEFORE installing any entry into memory.
+    const seenIds=new Set<string>();
+    for(const entry of state.runbooks){
+      if(seenIds.has(entry.id))
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_DUPLICATE_ID',
+          'Duplicate durable runbook identity requires external reconciliation.');
+      seenIds.add(entry.id);
+    }
     let changed = false;
 
     for (const persisted of state.runbooks) {
