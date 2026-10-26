@@ -198,6 +198,26 @@ async function setDeviceCorePreference(deviceId, enabled, row) {
   }
 }
 
+async function retryCoreEnrollmentRequest(deviceId, row) {
+  const button=row.querySelector('.core-enrollment-retry');
+  const status=row.querySelector('.core-copy');
+  if(button.disabled)return;
+  button.disabled=true;
+  status.textContent='Yerel CORE onayı bu bilgisayardan isteniyor…';
+  try {
+    const result=await postDeviceMode(
+      '/api/v1/me/devices/core-enrollment-request',deviceId,{},
+      'core-enrollment-request-v1');
+    if(result.deviceId!==deviceId||result.enrollmentRequested!==true)
+      throw new Error('CORE kayıt isteği doğrulanamadı.');
+    status.textContent='Yerel onay isteği gönderildi. Cihazdaki Nexowire CORE penceresinden ilk onayı ver.';
+  } catch(error) {
+    status.textContent=error.message;
+  } finally {
+    button.disabled=false;
+  }
+}
+
 async function setDeviceBridgePreference(deviceId, mode, row, focusSelector = '.bridge-toggle') {
   const buttons = [...row.querySelectorAll('.bridge-quick-toggle, .bridge-toggle, .bridge-mode')];
   const feedback = row.querySelector('.bridge-mode-feedback');
@@ -413,6 +433,7 @@ function render(snapshot) {
         '  <div class="core-head"><strong>CORE ACCESS</strong><span class="core-duration">SÜRESİZ</span></div>',
         '  <small class="core-copy" role="status" aria-live="polite"></small>',
         '  <button type="button" class="secondary core-toggle">CORE aç</button>',
+        '  <button type="button" class="secondary core-enrollment-retry" hidden>Yerel CORE kaydını yeniden iste</button>',
         '  <div class="core-confirm-panel" hidden>',
         '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir.</small>',
         '   <label>Onaylamak için CORE UNLIMITED yaz<input class="core-phrase" maxlength="32" autocomplete="off" placeholder="CORE UNLIMITED"></label>',
@@ -582,6 +603,8 @@ function render(snapshot) {
           ? 'CORE tercih kaydı duruyor, ancak cihaz veya Admin Bridge hazır olmadığı için etkin değil.'
           : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
       const physical=device.physicalConsole;
+      const coreRetry=row.querySelector('.core-enrollment-retry');
+      coreRetry.hidden=!(core.enabled&&!physical?.localEnrolled&&device.online&&mode==='full'&&ready);
       const physicalFresh=physical?.localEnrolled===true&&physical.active===true&&
         Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
         Date.now()-physical.observedAtMs<15000&&core.enabled&&mode==='full'&&device.online&&ready;
@@ -612,6 +635,9 @@ function render(snapshot) {
       });
       row.querySelector('.core-approve').addEventListener('click', () => {
         void setDeviceCorePreference(device.id, true, row);
+      });
+      row.querySelector('.core-enrollment-retry').addEventListener('click', () => {
+        void retryCoreEnrollmentRequest(device.id, row);
       });
       const bridgeLabel = row.querySelector('.bridge-live-status');
       bridgeLabel.textContent = ready ? 'HAZIR BİLDİRİMİ' :

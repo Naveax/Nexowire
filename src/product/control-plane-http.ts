@@ -407,6 +407,20 @@ export function createControlPlaneHttpHandler(
         return json(200,result);
       }
 
+      // Retry only the local consent REQUEST for an already owner-enabled CORE.
+      // No elevation, enrollment certificate or ACTIVE status is created here.
+      if(request.method==='POST'&&path==='/api/v1/me/devices/core-enrollment-request'){
+        if(request.headers.get('x-nexowire-confirm')!=='core-enrollment-request-v1')
+          return json(400,{error:'CORE_ENROLLMENT_REQUEST_CONFIRMATION_REQUIRED'});
+        const body=await readJsonObject(request);
+        const result=await service.requestDeviceCoreEnrollment(
+          identity,stringField(body,'deviceId'));
+        if(!options.coreConsoleAuthority?.requestEnrollment)
+          return json(503,{error:'CORE_AUTHORITY_UNAVAILABLE'});
+        await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
+        return json(200,result);
+      }
+
       if (
         request.method === 'POST' &&
         path === '/api/v1/me/devices/bridge-preference'
