@@ -71,13 +71,17 @@ foreach($rawPath in @($ProtectedInstallRoot,$LauncherPath,$UpdaterPath)+$Importe
 
 $root=[IO.Path]::GetFullPath($ProtectedInstallRoot).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
 $rootPrefix=$root+[IO.Path]::DirectorySeparatorChar
-$lowTrustSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
+# Unknown, domain, service, app-container and inherited principals must not
+# be guessed trusted. Only SYSTEM and BUILTIN Administrators may write the
+# privileged code tree. This is a conservative DACL scan, not OS AccessCheck.
+$privilegedWriterSids=@('S-1-5-18','S-1-5-32-544')
 # WriteData/CreateFiles, Append/CreateDirectories, WriteEA, WriteAttributes,
-# DELETE, DELETE_CHILD, WRITE_DAC, WRITE_OWNER plus generic write.
+# DELETE, DELETE_CHILD, WRITE_DAC, WRITE_OWNER, GENERIC_WRITE,
+# GENERIC_ALL. A generic allow ACE must not evade the protected-tree scan.
 # Include FILE_DELETE_CHILD (0x40): a low-trust parent directory ACE with
 # DeleteSubdirectoriesAndFiles can remove a child even if its file DACL
 # does not grant DELETE. A DACL scan remains read-only/source-only evidence.
-$writeMask=[int64](0x2 -bor 0x4 -bor 0x10 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000)
+$writeMask=[int64](0x2 -bor 0x4 -bor 0x10 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000)
 $evidence=@()
 $seen=@{}
 function Observe-Path([string]$requested,[bool]$isDirectory){
@@ -97,7 +101,7 @@ function Observe-Path([string]$requested,[bool]$isDirectory){
    foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
      if($ace.AccessControlType -ne 'Allow'){continue}
      $sid=try{$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}catch{$ace.IdentityReference.Value}
-     if($sid -in $lowTrustSids -and (([int64]$ace.FileSystemRights -band $writeMask) -ne 0)){
+     if($sid -notin $privilegedWriterSids -and (([int64]$ace.FileSystemRights -band $writeMask) -ne 0)){
        $unsafe+= $sid
      }
    }

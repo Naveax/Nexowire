@@ -30,6 +30,19 @@ test('QA02: low-trust DELETE_CHILD-only directory ACE is included in Broker-tree
     'enumerating access rules is not a native effective AccessCheck');
 });
 
+test('QA02: generic write/all and unrecognized principals fail closed',()=>{
+  const {mask,source}=brokerTreeUnsafeRights();
+  assert.equal(mask&0x10000000,0x10000000,'GENERIC_ALL missing');
+  assert.equal(mask&0x40000000,0x40000000,'GENERIC_WRITE missing');
+  assert.match(source,/\$privilegedWriterSids\s*=\s*@\('S-1-5-18','S-1-5-32-544'\)/,
+    'only SYSTEM and built-in Administrators may write the protected image');
+  assert.match(source,/\$sid\s+-notin\s+\$privilegedWriterSids/,
+    'arbitrary local/domain/service writers must remain unsafe');
+  assert.doesNotMatch(source,/\$sid\s+-in\s+\$lowTrustSids/,
+    'a finite low-trust denylist silently misses domain/service write grants');
+  assert.doesNotMatch(source,/elevatedCoreDispatchEnabled=\$true/);
+});
+
 test('QA02: real .NET FileSystemRights DELETE_CHILD value is recognized by the PowerShell mask', {
   skip:process.platform!=='win32',timeout:20000,
 },()=>{
