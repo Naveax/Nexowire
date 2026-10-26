@@ -227,7 +227,9 @@ test('unknown post-restart jobs require explicit retry_unknown before replay', a
   // graph through the public capability, then overwrite only the metadata with
   // an unknown-state checkpoint. This keeps the test coupled to the real
   // fingerprinting rules instead of duplicating them here.
-  await recoveredStore.prune({ olderThanMs: 0 });
+  // A mutation journal cannot be erased by local age: its UNKNOWN effects
+  // require independent reconciliation, even while unrelated work proceeds.
+  await assert.rejects(recoveredStore.prune({ olderThanMs: 0 }), /reconciliation|tombstones/i);
   const liveStore = new TaskGraphStore({ stateFile });
   await liveStore.initialize();
 
@@ -367,14 +369,15 @@ test('task graph list/get/prune capabilities expose payload-free metadata', asyn
     assert.equal('command' in fetched.data.jobs[0]!, false);
     assert.equal('stdout' in fetched.data.jobs[0]!, false);
 
-    const pruned = (await executeCapability(
+    // Even a completed native-capable graph may carry irreversible effects.
+    // Without rollback-independent reconciliation, a local prune must deny.
+    await assert.rejects(executeCapability(
       'task.graph.prune',
       { older_than_ms: 0 },
       policy,
       { taskGraphs: store },
-    )) as { data: { removed: number; remaining: number } };
-    assert.equal(pruned.data.removed, 1);
-    assert.equal(pruned.data.remaining, 0);
+    ),/tombstones|reconciliation/i);
+    assert.equal(store.get('control-demo').status,'succeeded');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

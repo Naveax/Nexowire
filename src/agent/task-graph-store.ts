@@ -180,7 +180,7 @@ export class TaskGraphStore {
       this.graphs.set(checkpoint.id, checkpoint);
     }
 
-    this.pruneExpiredInMemory();
+    // Local TTL must not erase unreconciled native-effect history on startup.
     if (changed) await this.persistState();
   }
 
@@ -297,7 +297,7 @@ export class TaskGraphStore {
   }
 
   list(): TaskGraphCheckpoint[] {
-    this.pruneExpiredInMemory();
+    // Enumeration alone must never retire UNKNOWN/native mutation history.
     return [...this.graphs.values()]
       .map(cloneGraph)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -308,7 +308,7 @@ export class TaskGraphStore {
     jobId?: string;
     limit?: number;
   } = {}): TaskArtifactRecord[] {
-    this.pruneExpiredInMemory();
+    // Artifact reads cannot garbage-collect unrelated mutation checkpoints.
     if (input.graphId && !this.graphs.has(input.graphId)) {
       throw new TaskGraphStoreError(
         'TASK_GRAPH_NOT_FOUND',
@@ -342,29 +342,12 @@ export class TaskGraphStore {
     return records;
   }
 
-  async prune(input: { olderThanMs?: number } = {}) {
-    const cutoff =
-      Date.now() - (input.olderThanMs ?? this.retentionMs);
-    let removed = 0;
-
-    for (const [id, graph] of this.graphs) {
-      if (graph.status === 'running') continue;
-      if (Date.parse(graph.updatedAt) <= cutoff) {
-        this.graphs.delete(id);
-        removed++;
-      }
-    }
-
-    await this.persistState();
-    return { removed, remaining: this.graphs.size };
-  }
-
-  private pruneExpiredInMemory(): void {
-    const cutoff = Date.now() - this.retentionMs;
-    for (const [id, graph] of this.graphs) {
-      if (graph.status === 'running') continue;
-      if (Date.parse(graph.updatedAt) <= cutoff) this.graphs.delete(id);
-    }
+  /** Native mutation history may be pruned only after independent CAS/tombstones. */
+  async prune(_input: { olderThanMs?: number } = {}): Promise<never> {
+    throw new TaskGraphStoreError(
+      'RECONCILE_REQUIRED',
+      'Task graph pruning needs off-host mutation tombstones and reconciliation.',
+    );
   }
 
   private async persistState(): Promise<void> {
