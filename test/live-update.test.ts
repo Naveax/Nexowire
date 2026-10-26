@@ -250,6 +250,18 @@ test('hourly updater must not claim whole-device ready when Broker is unavailabl
   assert.equal(result.action,'broker_unavailable');
 });
 
+test('hourly update never creates a replacement DPAPI Broker identity when missing', async () => {
+  const {readFileSync} = await import('node:fs');
+  const source=readFileSync(new URL('../src/update/auto-update.ts',import.meta.url),'utf8');
+  const start=source.indexOf('async function runAutoUpdateOnce():');
+  const end=source.indexOf('async function installAutoUpdateTask()',start);
+  assert.ok(start>=0 && end>start);
+  const hourly=source.slice(start,end);
+  assert.match(hourly,/readExistingPrivilegedBrokerToken\(\)/);
+  assert.doesNotMatch(hourly,/loadOrCreatePrivilegedBrokerToken\(/);
+  assert.match(hourly,/code === 'ENOENT'\) return null/);
+});
+
 test('automatic Windows task is hourly, indefinite, user-limited and singleton', async () => {
   const {
     AUTO_UPDATE_INTERVAL_MINUTES,
