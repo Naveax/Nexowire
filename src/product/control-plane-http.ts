@@ -171,6 +171,8 @@ function errorStatus(message: string): number {
   if (
     message === 'ROOT_REQUIRES_FULL_ONLINE_DEVICE' ||
     message === 'CORE_REQUIRES_FULL_ONLINE_BROKER' ||
+    message === 'CORE_ALREADY_ENROLLED' ||
+    message === 'CORE_DEVICE_NOT_READY' ||
     message === 'BRIDGE_COMMAND_DEVICE_NOT_READY' ||
     message === 'BRIDGE_COMMAND_PREFERENCE_MISMATCH' ||
     message === 'BRIDGE_COMMAND_QUEUE_REJECTED' ||
@@ -402,8 +404,11 @@ export function createControlPlaneHttpHandler(
         const result=await service.setDeviceCorePreference(
           identity, stringField(body, 'deviceId'), body.enabled,
         );
-        if(body.enabled&&options.coreConsoleAuthority?.requestEnrollment)
-          await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
+        if(body.enabled&&options.coreConsoleAuthority?.requestEnrollment){
+          const status=await options.coreConsoleAuthority.deviceStatus?.(result.deviceId,identity.accountId);
+          if(!status?.localEnrolled)
+            await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
+        }
         return json(200,result);
       }
 
@@ -417,6 +422,8 @@ export function createControlPlaneHttpHandler(
           identity,stringField(body,'deviceId'));
         if(!options.coreConsoleAuthority?.requestEnrollment)
           return json(503,{error:'CORE_AUTHORITY_UNAVAILABLE'});
+        const current=await options.coreConsoleAuthority.deviceStatus?.(result.deviceId,identity.accountId);
+        if(current?.localEnrolled)return json(409,{error:'CORE_ALREADY_ENROLLED'});
         await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
         return json(200,result);
       }

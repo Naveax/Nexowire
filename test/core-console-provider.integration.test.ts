@@ -84,6 +84,26 @@ test('real provider + HTTP handler + D1 SQL enroll, sign, dispatch and restart w
   }finally{f.db.close();}
 });
 
+test('CORE enrollment retry updates only un-enrolled devices and cannot requeue an existing signed certificate',async()=>{
+  const f=fixture();try{
+    await f.authority.requestEnrollment(deviceId,owner);
+    const pending=await f.authority.deviceStatus(deviceId,owner);
+    assert.equal(pending.localEnrolled,false);
+    assert.equal(pending.enrollmentRequested,true);
+    await f.authority.requestEnrollment(deviceId,owner); // an initial stalled request is retryable
+    await enable(f);
+    const enrolled=await f.authority.deviceStatus(deviceId,owner);
+    assert.equal(enrolled.localEnrolled,true);
+    assert.equal(enrolled.enrollmentRequested,false);
+    await assert.rejects(f.authority.requestEnrollment(deviceId,owner),/CORE_ALREADY_ENROLLED/);
+    const after=await f.authority.deviceStatus(deviceId,owner);
+    assert.equal(after.enrollmentRequested,false);
+    assert.equal(after.localEnrolled,true);
+    assert.equal(after.active,false,'enrollment never fabricates a fresh signed activity receipt');
+    await assert.rejects(f.authority.requestEnrollment(deviceId,'foreign-owner'),/CORE_DEVICE_NOT_READY/);
+  }finally{f.db.close();}
+});
+
 test('CORE OFF->ON invalidates an old signed backup; only new local consent can restore access',async()=>{
   const f=fixture();try{
     const {controller}=await enable(f);const backup=f.profile();

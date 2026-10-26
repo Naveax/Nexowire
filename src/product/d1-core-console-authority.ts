@@ -119,10 +119,18 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       statusObservedAtMs:row.status_observed_at_ms};
   }
   async requestEnrollment(deviceId:string,ownerAccountId:string){
+    // Only the FIRST enrollment can be queued. Re-queueing an already
+    // certified device can mislead the UI and trigger unwanted local consent.
+    // Keep this predicate in the same D1 UPDATE to close the read/write race.
     const result=await this.db.prepare(`UPDATE device_core_console_authority SET enrollment_requested=1
-      WHERE device_id IN(SELECT c.device_id ${JOIN} WHERE d.id=? AND d.owner_account_id=? AND ${READY})`)
+      WHERE enrollment_id IS NULL AND device_id IN(SELECT c.device_id ${JOIN}
+        WHERE d.id=? AND d.owner_account_id=? AND ${READY})`)
       .bind(deviceId,ownerAccountId).run();
-    if(result.success===false||result.meta?.changes!==1)throw new Error('CORE_DEVICE_NOT_READY');
+    if(result.success===false||result.meta?.changes!==1){
+      const current=await this.deviceStatus(deviceId,ownerAccountId);
+      if(current.localEnrolled)throw new Error('CORE_ALREADY_ENROLLED');
+      throw new Error('CORE_DEVICE_NOT_READY');
+    }
   }
   async deviceStatus(deviceId:string,ownerAccountId:string){
     const row=await this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,

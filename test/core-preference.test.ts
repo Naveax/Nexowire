@@ -102,7 +102,7 @@ test('owner can re-request LOCAL CORE consent without disabling standing prefere
     {privilegeMode:'broker',adminBridgeReady:true});
   await service.setDeviceCorePreference(owner,device.id,true);
   const before=await store.getDeviceMaintenancePreference(device.id);
-  let queued=0;
+  let queued=0,localEnrolled=false;
   const handler=createControlPlaneHttpHandler(service,{
     authenticate:async req=>{
       const raw=req.headers.get('x-test-identity');
@@ -110,6 +110,7 @@ test('owner can re-request LOCAL CORE consent without disabling standing prefere
     },
     coreConsoleAuthority:{
       handle:async()=>{throw new Error('device read not tested here');},
+      deviceStatus:async()=>({localEnrolled,active:false,observedAtMs:null}),
       requestEnrollment:async(id,account)=>{
         assert.equal(id,device.id);
         assert.equal(account,owner.accountId);
@@ -135,6 +136,11 @@ test('owner can re-request LOCAL CORE consent without disabling standing prefere
   assert.equal(queued,1);
   assert.deepEqual(await store.getDeviceMaintenancePreference(device.id),before);
   assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.enabled,true);
+  localEnrolled=true;
+  const duplicate=await send(owner,true);
+  assert.equal(duplicate.status,409);
+  assert.deepEqual(await duplicate.json(),{error:'CORE_ALREADY_ENROLLED'});
+  assert.equal(queued,1,'already signed devices cannot queue a second initial consent');
   await service.setDeviceCorePreference(owner,device.id,false);
   assert.notEqual((await send(owner,true)).status,200);
   assert.equal(queued,1);
