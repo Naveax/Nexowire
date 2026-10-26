@@ -37,6 +37,19 @@ test('only expected UI files change and live bytes match pinned baseline',()=>{
   }
 });
 
+test('read-only preview accepts an unchanged stylesheet only if diff lists only app.js',()=>{
+  const f=fixture();
+  f.candidate['web/styles.css']=f.baseline['web/styles.css'];
+  f.modifiedPaths=['web/app.js'];
+  const ok=verifyUiOnlyRelease(f);
+  assert.equal(ok.files.length,2);
+  assert.equal(ok.files.find(x=>x.path==='web/styles.css')?.oldSha256,
+    ok.files.find(x=>x.path==='web/styles.css')?.newSha256);
+  assert.equal(ok.productionDeploymentPerformed,false);
+  assert.throws(()=>verifyUiOnlyRelease({...f,modifiedPaths:[...UI_ONLY_FILES]}),
+    /UI_ONLY_UNEXPECTED_FILE_CHANGES/);
+});
+
 test('reject any non-UI file, missing expected file or changed backend commit',()=>{
   assert.throws(()=>verifyUiOnlyRelease({
     ...fixture(),modifiedPaths:['web/app.js','cloudflare/worker.js'],
@@ -74,7 +87,10 @@ test('reject no-op assets, oversized payloads and missing ON/OFF control',()=>{
   const f=fixture();
   assert.throws(()=>verifyUiOnlyRelease({
     ...f,candidate:{...f.candidate,'web/app.js':f.baseline['web/app.js']},
-  }),/UI_ONLY_ASSET_MISSING_UNCHANGED_OR_UNBOUNDED/);
+  }),/UI_ONLY_UNEXPECTED_FILE_CHANGES/);
+  assert.throws(()=>verifyUiOnlyRelease({
+    ...f,candidate:{...f.baseline},modifiedPaths:[],
+  }),/UI_ONLY_UNEXPECTED_FILE_CHANGES/);
   assert.throws(()=>verifyUiOnlyRelease({
     ...f,candidate:{...f.candidate,'web/app.js':Buffer.alloc(300000,65)},
   }),/UI_ONLY_ASSET_MISSING_UNCHANGED_OR_UNBOUNDED/);

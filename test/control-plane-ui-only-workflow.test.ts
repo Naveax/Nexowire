@@ -9,7 +9,7 @@ const wf=readFileSync(
 test('UI-only preview is manually invoked and pins the previously deployed backend',()=>{
   assert.match(wf,/workflow_dispatch:/);
   assert.doesNotMatch(wf,/\bon:\s*\[?push|\bpush:\s*\n/);
-  assert.match(wf,/ref: 6f5863363b4ad25bbecceca5b5c78e8ffdd8fffd/);
+  assert.match(wf,/ref: d6bf09a4da37042096427d415782902b97e5e87a/);
   assert.match(wf,/cp ui-source\/web\/app\.js pinned-production\/web\/app\.js/);
   assert.match(wf,/cp ui-source\/web\/styles\.css pinned-production\/web\/styles\.css/);
   assert.match(wf,/node ui-source\/scripts\/preflight-control-plane-ui-only\.mjs pinned-production/);

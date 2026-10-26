@@ -21,10 +21,10 @@ jobs:
           path: ui-source
           persist-credentials: false
 
-      - name: Checkout exact last successfully deployed backend
+      - name: Checkout observed live-asset source baseline (backend runtime unattested)
         uses: actions/checkout@v4
         with:
-          ref: 6f5863363b4ad25bbecceca5b5c78e8ffdd8fffd
+          ref: d6bf09a4da37042096427d415782902b97e5e87a
           path: pinned-production
           persist-credentials: false
 
@@ -64,7 +64,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C pinned-production diff --name-only HEAD | wc -l | tr -d ' ')" = 2
+          changed_count="$(git -C pinned-production diff --name-only HEAD | wc -l | tr -d ' ')"
+          test "$changed_count" -ge 1
+          test "$changed_count" -le 2
           git -C pinned-production diff --exit-code HEAD -- cloudflare/worker.js
           git -C pinned-production diff --exit-code HEAD -- cloudflare/migrations
           echo "UI_ONLY_PREFLIGHT=PASS"
@@ -78,7 +80,7 @@ jobs:
           cp pinned-production/web/app.js ui-preview/web/app.js
           cp pinned-production/web/styles.css ui-preview/web/styles.css
           cp ui-only-preflight-manifest.json ui-preview/manifest.json
-          node -e 'const m=require("./ui-preview/manifest.json"); if(m.backendCommit!=="6f5863363b4ad25bbecceca5b5c78e8ffdd8fffd" || m.liveBaselineMatched!==true || m.productionDeploymentPerformed!==false || m.backendRuntimeAttested!==false || m.files.length!==2 || m.files.map(x=>x.path).sort().join(",")!=="web/app.js,web/styles.css") process.exit(1)'
+          node -e 'const m=require("./ui-preview/manifest.json"); if(m.backendCommit!=="d6bf09a4da37042096427d415782902b97e5e87a" || m.liveBaselineMatched!==true || m.productionDeploymentPerformed!==false || m.backendRuntimeAttested!==false || m.files.length!==2 || m.files.map(x=>x.path).sort().join(",")!=="web/app.js,web/styles.css") process.exit(1)'
           test "$(find ui-preview -type f | wc -l | tr -d ' ')" = 3
 
       - name: Upload verified review artifact (NO DEPLOY)
