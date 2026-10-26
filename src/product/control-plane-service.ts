@@ -994,6 +994,33 @@ export class ControlPlaneService {
     return { deviceId, persistentMaintenance: { enabled, active: false, updatedAt } };
   }
 
+  /**
+   * An already-enabled CORE preference must be able to request a fresh LOCAL
+   * enrollment prompt without toggling CORE OFF and invalidating its epochs.
+   * This is only an owner-authorized request to the device, never consent.
+   */
+  async requestDeviceCoreEnrollment(
+    identity: ControlPlaneIdentity,
+    deviceIdInput: string,
+  ): Promise<{deviceId:string;enrollmentRequested:true;active:false}> {
+    if (identity.role === 'service') throw new Error('CORE_REQUIRES_OWNER_LOGIN');
+    const account=await this.requireAccount(identity.accountId);
+    const deviceId=boundedId('deviceId',deviceIdInput);
+    const device=await this.store.getDevice(deviceId);
+    if(!device||device.ownerAccountId!==account.id)throw new Error('DEVICE_NOT_FOUND');
+    const [preference,bridgePreference]=await Promise.all([
+      this.store.getDeviceMaintenancePreference(deviceId),
+      this.store.getDeviceBridgePreference(deviceId),
+    ]);
+    if(!preference?.enabled || preference.ownerAccountId!==account.id)
+      throw new Error('CORE_NOT_ENABLED');
+    if(device.platform!=='win32'||device.accessMode!=='full'||!device.online||
+      device.privilegeMode!=='broker'||device.adminBridgeReady!==true||
+      bridgePreference?.desiredMode==='off')
+      throw new Error('CORE_REQUIRES_FULL_ONLINE_BROKER');
+    return {deviceId,enrollmentRequested:true,active:false};
+  }
+
   /** Desired device Broker mode. This endpoint never executes host commands. */
   async setDeviceBridgePreference(
     identity: ControlPlaneIdentity,
