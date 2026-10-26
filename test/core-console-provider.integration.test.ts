@@ -188,13 +188,18 @@ test('signed status reports reject nonce replay and stop claiming ACTIVE when st
     await enable(f);let report:unknown;
     f.before(body=>{if(body.action==='report')report=structuredClone(body);});
     await f.client.call(f.profile(),'report',{active:true});
-    assert.equal((await f.authority.deviceStatus(deviceId,owner)).active,true);
+    const readyStatus=await f.authority.deviceStatus(deviceId,owner);
+    assert.equal(readyStatus.active,true);
+    assert.equal(readyStatus.localEnrolled,true);
+    assert.equal(readyStatus.enrollmentRequested,false);
+    assert.equal(readyStatus.deviceReady,true);
     await assert.rejects(f.authority.handle(credential,report),/NONCE_REPLAY/);
     f.db.exec('UPDATE device_core_console_authority SET status_observed_at_ms=0');
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).active,false);
     f.db.exec('UPDATE device_maintenance_preferences SET enabled=0');
     const status=await f.authority.deviceStatus(deviceId,owner);
     assert.equal(status.active,false);assert.equal(status.localEnrolled,false);
+    assert.equal(status.deviceReady,false);
   }finally{f.db.close();}
 });
 

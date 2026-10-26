@@ -17,7 +17,8 @@ export interface CoreConsoleAuthority {
   requestEnrollment?(deviceId:string,ownerAccountId:string):Promise<void>;
   handle(credential:string,raw:unknown):Promise<{nonce:string;state:CoreAuthorityState}>;
   deviceStatus?(deviceId:string,ownerAccountId:string):Promise<{
-    localEnrolled:boolean;active:boolean;observedAtMs:number|null}>;
+    localEnrolled:boolean;active:boolean;observedAtMs:number|null;
+    enrollmentRequested?:boolean;deviceReady?:boolean}>;
 }
 /** Independent D1 rows and one-use IDs survive restoration of Agent-local state. */
 export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
@@ -124,11 +125,15 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
     if(result.success===false||result.meta?.changes!==1)throw new Error('CORE_DEVICE_NOT_READY');
   }
   async deviceStatus(deviceId:string,ownerAccountId:string){
-    const row=await this.db.prepare(`SELECT c.enrollment_id,c.physical_active,c.status_observed_at_ms,
+    const row=await this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
+      c.physical_active,c.status_observed_at_ms,
+      CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready,
       CASE WHEN ${READY} AND c.status_observed_at_ms>=${DB_NOW}-15000 THEN 1 ELSE 0 END fresh
       ${JOIN} WHERE d.id=? AND d.owner_account_id=?`).bind(deviceId,ownerAccountId)
-      .first<{enrollment_id:string|null;physical_active:number;status_observed_at_ms:number|null;fresh:number}>();
+      .first<{enrollment_id:string|null;enrollment_requested:number;device_ready:number;
+        physical_active:number;status_observed_at_ms:number|null;fresh:number}>();
     return {localEnrolled:!!row?.enrollment_id,active:row?.fresh===1&&row.physical_active===1,
-      observedAtMs:row?.status_observed_at_ms??null};
+      observedAtMs:row?.status_observed_at_ms??null,
+      enrollmentRequested:row?.enrollment_requested===1,deviceReady:row?.device_ready===1};
   }
 }
