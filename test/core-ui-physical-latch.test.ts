@@ -11,7 +11,11 @@ function tier(snapshot:unknown):string{
  assert.ok(app.includes(latch),'physical CORE verifier must not be client-configured');
  assert.ok(begin>=0&&end>begin,'device tier implementation not found');
  const scope=vm.createContext({device:snapshot,Date});
- vm.runInContext(latch+'\n'+app.slice(begin,end),scope);
+ // Execute the actual source declarations preceding getDeviceTier rather than
+ // constructing a synthetic VM gate that could omit a newly added verifier.
+ const gateStart=app.indexOf(latch);
+ assert.ok(gateStart>=0&&gateStart<begin);
+ vm.runInContext(app.slice(gateStart,end),scope);
  return vm.runInContext('getDeviceTier(device)',scope) as string;
 }
 test('forged physical CORE and persistent preference are not a VERIFIED tier',()=>{
