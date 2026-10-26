@@ -114,6 +114,7 @@ export class TaskGraphStoreError extends Error {
 export interface TaskGraphStoreOptions {
   stateFile: string;
   retentionMs?: number;
+  maxEntries?: number;
 }
 
 function cloneGraph(graph: TaskGraphCheckpoint): TaskGraphCheckpoint {
@@ -136,11 +137,16 @@ export class TaskGraphStore {
   private readonly graphs = new Map<string, TaskGraphCheckpoint>();
   private readonly stateFile: string;
   private readonly retentionMs: number;
+  private readonly maxEntries: number;
   private persistChain: Promise<void> = Promise.resolve();
 
   constructor(options: TaskGraphStoreOptions) {
     this.stateFile = options.stateFile;
     this.retentionMs = options.retentionMs ?? 7 * 24 * 60 * 60 * 1000;
+    const maxEntries=options.maxEntries ?? 4096;
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>65536)
+      throw new Error('TASK_GRAPH_JOURNAL_CAPACITY_CONFIG_INVALID');
+    this.maxEntries=maxEntries;
   }
 
   async initialize(): Promise<void> {
@@ -198,6 +204,11 @@ export class TaskGraphStore {
     const now = new Date().toISOString();
 
     if (!existing) {
+      // Never silently evict unresolved effects at capacity, even when the
+      // prior graph appears locally completed. Require external reconciliation.
+      if(this.graphs.size>=this.maxEntries)
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_CAPACITY_REACHED',
+          'Task graph journal full; independent mutation reconciliation required.');
       const graph: TaskGraphCheckpoint = {
         id: input.id,
         specHash: input.specHash,
