@@ -34,8 +34,12 @@ function syncFolders(folders) {
   $('folder-delete').disabled = selectedFolder === 'all' || selectedFolder === 'unassigned';
 }
 
+// Fail-closed release latch: client snapshots or synthetic local receipts
+// cannot verify a signed installed HIGH Broker plus independent native CAS.
+// Only a separately reviewed server-authenticated verifier may replace this.
+const physicalCoreStatusVerifierInstalled = false;
 function getDeviceTier(device) {
-  if (device.persistentMaintenance?.active === true) return 'persistent';
+  if (physicalCoreStatusVerifierInstalled && device.persistentMaintenance?.active === true) return 'persistent';
   if (device.rootMode?.active === true &&
       Date.parse(device.rootMode.expiresAt ?? '') > Date.now()) return 'root';
   return device.accessMode === 'full' ? 'full' : 'safe';
@@ -592,12 +596,14 @@ function render(snapshot) {
       const coreText = row.querySelector('.core-copy');
       const coreShortcut = row.querySelector('.core-shortcut');
       const coreContainer = row.querySelector('.core-access');
-      coreContainer.classList.toggle('active', core.active === true);
-      coreShortcut.classList.toggle('active', core.active === true);
-      coreShortcut.setAttribute('aria-pressed', String(core.active === true));
-      coreShortcut.textContent = core.active ? 'CORE AÇIK' : core.enabled ? 'CORE BEKLEMEDE' : 'CORE';
+      // A preference or browser-provided active flag is not physical CORE.
+      const coreEffective = physicalCoreStatusVerifierInstalled && core.active === true;
+      coreContainer.classList.toggle('active', coreEffective);
+      coreShortcut.classList.toggle('active', coreEffective);
+      coreShortcut.setAttribute('aria-pressed', String(coreEffective));
+      coreShortcut.textContent = coreEffective ? 'CORE AÇIK' : core.enabled ? 'CORE BEKLEMEDE' : 'CORE';
       coreButton.textContent = core.enabled ? 'CORE kapat' : 'CORE aç';
-      coreText.textContent = core.active
+      coreText.textContent = coreEffective
         ? 'CORE tercihi süresiz etkin. Her yönetici işlemi ayrıca Broker ve Windows denetiminden geçer.'
         : core.enabled
           ? 'CORE tercih kaydı duruyor, ancak cihaz veya Admin Bridge hazır olmadığı için etkin değil.'
@@ -606,7 +612,8 @@ function render(snapshot) {
       const coreRetry=row.querySelector('.core-enrollment-retry');
       coreRetry.hidden=!(core.enabled&&!physical?.localEnrolled&&device.online&&mode==='full'&&ready&&
         physical?.deviceReady!==false);
-      const physicalFresh=physical?.localEnrolled===true&&physical.active===true&&
+      const physicalFresh=physicalCoreStatusVerifierInstalled&&
+        physical?.localEnrolled===true&&physical.active===true&&
         Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
         Date.now()-physical.observedAtMs<15000&&core.enabled&&mode==='full'&&device.online&&ready;
       if(physicalFresh){
