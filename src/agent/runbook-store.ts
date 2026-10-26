@@ -43,9 +43,12 @@ const RunbookSchema = z.object({
   steps: z.array(StepSchema).min(1).max(64),
 });
 
+// Load the complete supported admission range across restart. Lowering the
+// configured limit must not discard previously recorded UNKNOWN effects.
+const MAX_RUNBOOK_JOURNAL_ENTRIES = 65_536;
 const StateSchema = z.object({
   version: z.literal(1),
-  runbooks: z.array(RunbookSchema).max(1000),
+  runbooks: z.array(RunbookSchema).max(MAX_RUNBOOK_JOURNAL_ENTRIES),
 });
 
 export type RunbookStepStatus = z.infer<typeof StepStatusSchema>;
@@ -115,7 +118,7 @@ export class RunbookStore {
     this.retentionMs =
       options.retentionMs ?? 14 * 24 * 60 * 60 * 1000;
     const maxEntries=options.maxEntries ?? 4096;
-    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>65536)
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>MAX_RUNBOOK_JOURNAL_ENTRIES)
       throw new Error('RUNBOOK_JOURNAL_CAPACITY_CONFIG_INVALID');
     this.maxEntries=maxEntries;
   }
