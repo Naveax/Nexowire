@@ -90,6 +90,7 @@ function Observe-Path([string]$requested,[bool]$isDirectory){
  $seen[$path]=$true
  $item=$null;$acl=$null;$errorName=''
  $unsafe=@()
+ $ownerTrusted=$null
  try{
    $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
    if([bool]$item.PSIsContainer -ne $isDirectory){throw 'UNEXPECTED_FILE_TYPE'}
@@ -98,9 +99,16 @@ function Observe-Path([string]$requested,[bool]$isDirectory){
    }else{
       $acl=[IO.FileSystemAclExtensions]::GetAccessControl([IO.FileInfo]$item)
    }
+   # Actual owners may change DACLs even with no explicit write ACE.
+   $ownerSid=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+   $ownerTrusted=($ownerSid -in $privilegedWriterSids)
    foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
      if($ace.AccessControlType -ne 'Allow'){continue}
      $sid=try{$ace.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value}catch{$ace.IdentityReference.Value}
+     # The non-effective CREATOR OWNER InheritOnly template on Program Files
+     # does not grant a right on THIS path. Inspect each child's real owner.
+     if($sid -eq 'S-1-3-0' -and
+        ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){continue}
      if($sid -notin $privilegedWriterSids -and (([int64]$ace.FileSystemRights -band $writeMask) -ne 0)){
        $unsafe+= $sid
      }
@@ -114,6 +122,7 @@ function Observe-Path([string]$requested,[bool]$isDirectory){
    reparsePointDetected=$(if($null -ne $item){[bool](($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)}else{$null})
    aclProtected=$(if($null -ne $acl){[bool]$acl.AreAccessRulesProtected}else{$null})
    broadLowTrustWriteFound=$(if($null -ne $acl){$unsafe.Count -gt 0}else{$null})
+   ownerTrusted=$ownerTrusted
  }
 }
 # PowerShell function scopes can differ; return results with a script-scoped list
@@ -149,7 +158,8 @@ foreach($entry in $required){
 $allEvidencePresent=($badPaths.Count -eq 0) -and ($evidence.Count -gt 0) -and
   (@($evidence | Where-Object {-not $_.evidenceAvailable}).Count -eq 0)
 $anyUnsafe=@($evidence | Where-Object {
- $_.broadLowTrustWriteFound -eq $true -or $_.reparsePointDetected -eq $true
+ $_.broadLowTrustWriteFound -eq $true -or $_.reparsePointDetected -eq $true -or
+ $_.ownerTrusted -eq $false
 }).Count -gt 0
 [ordered]@{
  kind='windows_core_broker_protected_tree_readonly_v2'
