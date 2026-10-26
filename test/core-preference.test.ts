@@ -149,3 +149,52 @@ test('Admin Bridge mode API requires owner authentication and explicit confirmat
   assert.equal((await handler(mk(owner,true))).status,200);
   assert.equal((await service.dashboard(owner)).devices[0]?.bridgePreference.applied,false);
 });
+
+
+test('CORE enrollment retry is owner-bound and never grants physical console access',async()=>{
+  const store=new MemoryControlPlaneStore();
+  const service=new ControlPlaneService(store);
+  const owner:ControlPlaneIdentity={accountId:'retry-owner',role:'user'};
+  await service.ensureAccount({id:owner.accountId});
+  const pairing=await service.beginPairing(owner,'retry-device');
+  const {device}=await service.consumePairing({pairingId:pairing.pairingId,token:pairing.token,
+    platform:'win32',deviceAnchorHash:'a'.repeat(64)});
+  await service.setDeviceAccessMode(owner,device.id,'full');
+  await service.setDevicePresence(device.id,true,new Date().toISOString(),
+    {privilegeMode:'broker',adminBridgeReady:true});
+  await service.setDeviceCorePreference(owner,device.id,true);
+  let queued=0;
+  const handler=createControlPlaneHttpHandler(service,{
+    authenticate:async req=>{
+      const raw=req.headers.get('x-test-owner');
+      return raw?{accountId:raw,role:'user'}:null;
+    },
+    coreConsoleAuthority:{
+      handle:async()=>{throw new Error('unexpected device operation');},
+      deviceStatus:async()=>({localEnrolled:false,active:false,observedAtMs:null,
+        deviceReady:true,enrollmentRequested:false}),
+      requestEnrollment:async(id,account)=>{
+        assert.equal(id,device.id);
+        assert.equal(account,owner.accountId);
+        queued++;
+      },
+    },
+  });
+  const retry='/api/v1/me/devices/core-enrollment/retry';
+  const request=(account:string|null,confirm:string|null)=>new Request('https://example.invalid'+retry,{
+    method:'POST',headers:{'content-type':'application/json',
+      ...(account?{'x-test-owner':account}:{}),
+      ...(confirm?{'x-nexowire-confirm':confirm}:{})},
+    body:JSON.stringify({deviceId:device.id}),
+  });
+  assert.equal((await handler(request(null,'core-enrollment-retry-v1'))).status,401);
+  assert.equal((await handler(request(owner.accountId,null))).status,400);
+  assert.equal(queued,0);
+  const ok=await handler(request(owner.accountId,'core-enrollment-retry-v1'));
+  assert.equal(ok.status,202);
+  assert.deepEqual(await ok.json(),{deviceId:device.id,queued:true});
+  assert.equal(queued,1);
+  const deviceDashboard=(await service.dashboard(owner)).devices[0]!;
+  assert.equal(deviceDashboard.persistentMaintenance.enabled,true);
+  assert.equal(deviceDashboard.persistentMaintenance.active,false);
+});

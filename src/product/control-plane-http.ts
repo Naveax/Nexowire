@@ -402,9 +402,28 @@ export function createControlPlaneHttpHandler(
         const result=await service.setDeviceCorePreference(
           identity, stringField(body, 'deviceId'), body.enabled,
         );
-        if(body.enabled&&options.coreConsoleAuthority?.requestEnrollment)
+        if(body.enabled&&options.coreConsoleAuthority?.requestEnrollment){
           await options.coreConsoleAuthority.requestEnrollment(result.deviceId,identity.accountId);
+          return json(200,{...result,enrollmentQueued:true});
+        }
         return json(200,result);
+      }
+
+      // An already enabled CORE preference does not need to be toggled OFF/ON
+      // to recover a lost or declined first local enrollment. This only queues
+      // a request to the CURRENT, owner-bound paired device. The Agent must
+      // still obtain real local consent and register its own signed profile.
+      if(request.method==='POST'&&path==='/api/v1/me/devices/core-enrollment/retry'){
+        if(request.headers.get('x-nexowire-confirm')!=='core-enrollment-retry-v1')
+          return json(400,{error:'CORE_ENROLLMENT_CONFIRMATION_REQUIRED'});
+        if(!options.coreConsoleAuthority?.requestEnrollment||!options.coreConsoleAuthority.deviceStatus)
+          return json(503,{error:'CORE_AUTHORITY_UNAVAILABLE'});
+        const body=await readJsonObject(request);
+        const deviceId=stringField(body,'deviceId');
+        const current=await options.coreConsoleAuthority.deviceStatus(deviceId,identity.accountId);
+        if(current.localEnrolled)return json(409,{error:'CORE_ALREADY_ENROLLED'});
+        await options.coreConsoleAuthority.requestEnrollment(deviceId,identity.accountId);
+        return json(202,{deviceId,queued:true});
       }
 
       if (

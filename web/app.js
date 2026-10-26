@@ -101,6 +101,10 @@ function explainApiError(code) {
     BRIDGE_COMMAND_QUEUE_REJECTED: 'Broker komutu kuyruğa alınamadı.',
     CORE_CONFIRMATION_REQUIRED: 'Onay ifadesi CORE UNLIMITED olmalı.',
     CORE_REQUIRES_FULL_ONLINE_BROKER: 'CORE için Full Access, çevrimiçi cihaz ve hazır Admin Bridge gerekli.',
+    CORE_DEVICE_NOT_READY: 'Cihaz henüz yerel CORE kaydını başlatabilecek durumda değil.',
+    CORE_ALREADY_ENROLLED: 'Bu cihazın kalıcı CORE kaydı zaten var.',
+    CORE_AUTHORITY_UNAVAILABLE: 'CORE yetki sunucusu kullanılamıyor.',
+    CORE_ENROLLMENT_CONFIRMATION_REQUIRED: 'CORE kaydını yeniden başlatma onayı geçersiz.',
     DEVICE_NOT_FOUND: 'Cihaz bu hesaba bağlı değil.',
     UNAUTHENTICATED: 'Oturum süresi doldu. GitHub ile tekrar giriş yap.',
   };
@@ -195,6 +199,21 @@ async function setDeviceCorePreference(deviceId, enabled, row) {
     status.textContent = error.message;
     action.disabled = false;
     approve.disabled = false;
+  }
+}
+
+async function retryDeviceCoreEnrollment(deviceId, row) {
+  const button=row.querySelector('.core-retry');
+  const status=row.querySelector('.core-copy');
+  button.disabled=true;
+  status.textContent='Yerel CORE kaydı tekrar kuyruğa alınıyor…';
+  try{
+    await postDeviceMode('/api/v1/me/devices/core-enrollment/retry',
+      deviceId,{},'core-enrollment-retry-v1');
+    await load();
+  }catch(error){
+    status.textContent=error.message;
+    button.disabled=false;
   }
 }
 
@@ -413,6 +432,7 @@ function render(snapshot) {
         '  <div class="core-head"><strong>CORE ACCESS</strong><span class="core-duration">SÜRESİZ</span></div>',
         '  <small class="core-copy" role="status" aria-live="polite"></small>',
         '  <button type="button" class="secondary core-toggle">CORE aç</button>',
+        '  <button type="button" class="secondary core-retry" hidden>Yerel CORE kurulumunu yeniden başlat</button>',
         '  <div class="core-confirm-panel" hidden>',
         '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir.</small>',
         '   <label>Onaylamak için CORE UNLIMITED yaz<input class="core-phrase" maxlength="32" autocomplete="off" placeholder="CORE UNLIMITED"></label>',
@@ -591,8 +611,17 @@ function render(snapshot) {
       }else if(core.enabled){
         coreText.textContent=physical?.localEnrolled
           ? 'Yerel CORE kaydı var; güncel fiziksel erişim doğrulanamadı. Kilit, bağlantı veya Broker durumunu kontrol et.'
-          : 'CORE tercihi açık. İlk kullanımda bu PC üzerinde gösterilen yerel onayı ver; her işlemde tekrar sorulmaz.';
+          : physical?.enrollmentRequested
+            ? 'CORE isteği cihaz kuyruğunda. İlk yerel onay henüz doğrulanmadı; bu her işlemde istenmez.'
+            : physical?.deviceReady===false
+              ? 'CORE kaydı başlatılamadı: cihazın FULL/Broker hazır durumunu denetle.'
+              : 'CORE tercihi açık ancak ilk yerel kayıt kuyruğa alınmamış. Kurulumu yeniden başlat.';
       }
+      const coreRetry=row.querySelector('.core-retry');
+      coreRetry.hidden=!core.enabled || physical?.localEnrolled===true ||
+        !device.online || mode!=='full' || !ready || physical?.deviceReady===false ||
+        physical?.enrollmentRequested===true;
+      coreRetry.addEventListener('click',()=>{void retryDeviceCoreEnrollment(device.id,row);});
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
         setSettingsOpen(true);
