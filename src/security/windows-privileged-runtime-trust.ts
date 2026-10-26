@@ -113,12 +113,12 @@ $env:PSModulePath='C:\Windows\System32\WindowsPowerShell\v1.0\Modules'
 Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1' -ErrorAction Stop
 $allow=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
 $rights=[System.Security.AccessControl.FileSystemRights]
-$mask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$mask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x40000000 -bor [int64]0x10000000)
 # Common Windows ancestors permit non-admin creation of OTHER children.
 # Creating a sibling cannot replace a protected existing child without
 # DELETE_CHILD, DELETE, WriteDac or ownership privileges on its ancestry.
 # Do not relax any permission on a runtime executable, code root or descendant.
-$ancestorMask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$ancestorMask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x10000000)
 $protectedTargets=@($env:NEXOWIRE_TRUST_EXE,$env:NEXOWIRE_TRUST_CLI,$env:NEXOWIRE_TRUST_ROOT)
 $seen=New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 $scanned=0
@@ -143,8 +143,12 @@ function CheckItem([string]$p){
        (([int]$ace.PropagationFlags -band [int][System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){
       continue
     }
+    # CREATOR OWNER + InheritOnly is not effective here. The actual owner
+    # of every inspected file/directory is independently checked above.
+    if($ace.IdentityReference.Value -eq 'S-1-3-0' -and
+       (([int]$ace.PropagationFlags -band [int][System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
     if($ace.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
-       ([int]$ace.FileSystemRights -band $effectiveMask) -ne 0 -and
+       ([int64]$ace.FileSystemRights -band $effectiveMask) -ne 0 -and
        -not $allow.ContainsKey($ace.IdentityReference.Value)){throw 'RUNTIME_UNTRUSTED_WRITE_ACE'}
   }
 }
