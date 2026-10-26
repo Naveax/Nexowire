@@ -38,9 +38,12 @@ function syncFolders(folders) {
 // cannot verify a signed installed HIGH Broker plus independent native CAS.
 // Only a separately reviewed server-authenticated verifier may replace this.
 const physicalCoreStatusVerifierInstalled = false;
+// ROOT is currently a stored maintenance request, not a session-bound,
+// authenticated HIGH token. No browser JSON field can promote it to active.
+const physicalRootStatusVerifierInstalled = false;
 function getDeviceTier(device) {
   if (physicalCoreStatusVerifierInstalled && device.persistentMaintenance?.active === true) return 'persistent';
-  if (device.rootMode?.active === true &&
+  if (physicalRootStatusVerifierInstalled && device.rootMode?.active === true &&
       Date.parse(device.rootMode.expiresAt ?? '') > Date.now()) return 'root';
   return device.accessMode === 'full' ? 'full' : 'safe';
 }
@@ -516,7 +519,8 @@ function render(snapshot) {
       modeChip.textContent = mode === 'full' ? 'Full Access açık' : 'SAFE açık';
       modeChip.classList.add(mode);
       const rootStateChip = row.querySelector('.root-state-chip');
-      const rootLeaseActive = device.rootMode?.active === true &&
+      const rootLeaseActive = physicalRootStatusVerifierInstalled &&
+        device.rootMode?.active === true &&
         Date.parse(device.rootMode?.expiresAt ?? '') > Date.now();
       rootStateChip.textContent = rootLeaseActive ? 'ROOT izni açık' : 'ROOT kapalı';
       if (!rootLeaseActive && device.rootMode?.expiresAt &&
@@ -537,7 +541,8 @@ function render(snapshot) {
 
       const expiresAt = device.rootMode?.expiresAt;
       const pending = Boolean(expiresAt && Date.parse(expiresAt) > Date.now());
-      const active = pending && device.rootMode?.active === true;
+      const active = physicalRootStatusVerifierInstalled &&
+        pending && device.rootMode?.active === true;
       const rootPanel = row.querySelector('.root-confirm-panel');
       const rootButton = row.querySelector('.root-toggle');
       const rootApprove = row.querySelector('.root-approve');
