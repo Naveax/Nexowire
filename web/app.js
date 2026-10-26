@@ -604,7 +604,8 @@ function render(snapshot) {
           : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
       const physical=device.physicalConsole;
       const coreRetry=row.querySelector('.core-enrollment-retry');
-      coreRetry.hidden=!(core.enabled&&!physical?.localEnrolled&&device.online&&mode==='full'&&ready);
+      coreRetry.hidden=!(core.enabled&&!physical?.localEnrolled&&device.online&&mode==='full'&&ready&&
+        physical?.deviceReady!==false);
       const physicalFresh=physical?.localEnrolled===true&&physical.active===true&&
         Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
         Date.now()-physical.observedAtMs<15000&&core.enabled&&mode==='full'&&device.online&&ready;
@@ -614,7 +615,11 @@ function render(snapshot) {
       }else if(core.enabled){
         coreText.textContent=physical?.localEnrolled
           ? 'Yerel CORE kaydı var; güncel fiziksel erişim doğrulanamadı. Kilit, bağlantı veya Broker durumunu kontrol et.'
-          : 'CORE tercihi açık. İlk kullanımda bu PC üzerinde gösterilen yerel onayı ver; her işlemde tekrar sorulmaz.';
+          : physical?.enrollmentRequested
+            ? 'CORE isteği cihaz kuyruğunda. İlk yerel onay henüz doğrulanmadı; işlem tekrarlanmayacak.'
+            : physical?.deviceReady===false
+              ? 'CORE kaydı başlatılamadı: cihazın FULL/Broker hazır durumunu denetle.'
+              : 'CORE tercihi açık fakat yerel kayıt bekliyor. Kurulumu yeniden iste.';
       }
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
