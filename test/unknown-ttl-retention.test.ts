@@ -76,3 +76,52 @@ test('UNKNOWN runbook survives local TTL, list, unrelated save, restart and prun
   const persisted=JSON.parse(await readFile(file,'utf8')) as {runbooks:Array<{id:string}>};
   assert.ok(persisted.runbooks.some(g=>g.id===checkpoint.id));
 });
+
+test('bounded task graph journal denies new IDs at capacity while retaining the original UNKNOWN',async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'nwx-graph-cap-'));
+  t.after(async()=>rm(dir,{recursive:true,force:true}));
+  const stateFile=path.join(dir,'graphs.json');
+  assert.throws(()=>new TaskGraphStore({stateFile,maxEntries:0}),/CAPACITY_CONFIG_INVALID/);
+  const store=new TaskGraphStore({stateFile,maxEntries:1,retentionMs:1});
+  await store.initialize();
+  const original=await store.prepare({id:'first-mutating-graph',specHash:'e'.repeat(64),
+    jobs:[{id:'unknown-native-step',dependsOn:[]}],resume:false,retryFailed:false,retryUnknown:false});
+  original.status='interrupted';original.jobs[0]!.status='unknown';original.jobs[0]!.attempts=1;
+  await store.save(original);
+  const snapshot=await readFile(stateFile,'utf8');
+  await delay(10);
+  await assert.rejects(store.prepare({id:'second-graph',specHash:'f'.repeat(64),
+    jobs:[{id:'new-step',dependsOn:[]}],resume:false,retryFailed:false,retryUnknown:false}),e=>
+      e instanceof TaskGraphStoreError&&e.code==='TASK_GRAPH_JOURNAL_CAPACITY_REACHED');
+  assert.equal(await readFile(stateFile,'utf8'),snapshot,'full journal must remain byte-identical');
+  assert.equal(store.list().length,1);
+  assert.equal(store.get('first-mutating-graph').jobs[0]?.status,'unknown');
+  const rebooted=new TaskGraphStore({stateFile,maxEntries:1});
+  await rebooted.initialize();
+  assert.equal(rebooted.get('first-mutating-graph').jobs[0]?.status,'unknown');
+});
+
+test('bounded runbook journal rejects new work without erasing a previously UNKNOWN mutation',async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'nwx-runbook-cap-'));
+  t.after(async()=>rm(dir,{recursive:true,force:true}));
+  const stateFile=path.join(dir,'runbooks.json');
+  assert.throws(()=>new RunbookStore({stateFile,maxEntries:65537}),/CAPACITY_CONFIG_INVALID/);
+  const store=new RunbookStore({stateFile,maxEntries:1,retentionMs:1});
+  await store.initialize();
+  const original=await store.prepare({id:'first-mutating-runbook',specHash:'a'.repeat(64),
+    steps:[{id:'unknown-native-step',kind:'task_graph',taskGraphId:'a-graph',dependsOn:[]}],
+    resume:false,retryFailed:false,retryUnknown:false});
+  original.status='interrupted';original.steps[0]!.status='unknown';original.steps[0]!.attempts=1;
+  await store.save(original);
+  const snapshot=await readFile(stateFile,'utf8');
+  await delay(10);
+  await assert.rejects(store.prepare({id:'second-runbook',specHash:'b'.repeat(64),
+    steps:[{id:'assertion',kind:'assertions',dependsOn:[]}],resume:false,retryFailed:false,retryUnknown:false}),e=>
+      e instanceof RunbookStoreError&&e.code==='RUNBOOK_JOURNAL_CAPACITY_REACHED');
+  assert.equal(await readFile(stateFile,'utf8'),snapshot,'rejected reservation cannot modify trusted history');
+  assert.equal(store.list().length,1);
+  assert.equal(store.get('first-mutating-runbook').steps[0]?.status,'unknown');
+  const rebooted=new RunbookStore({stateFile,maxEntries:1});
+  await rebooted.initialize();
+  assert.equal(rebooted.get('first-mutating-runbook').steps[0]?.status,'unknown');
+});

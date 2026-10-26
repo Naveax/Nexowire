@@ -104,14 +104,20 @@ export class RunbookStore {
   private readonly stateFile: string;
   private readonly retentionMs: number;
   private persistChain: Promise<void> = Promise.resolve();
+  private readonly maxEntries: number;
 
   constructor(options: {
     stateFile: string;
     retentionMs?: number;
+    maxEntries?: number;
   }) {
     this.stateFile = options.stateFile;
     this.retentionMs =
       options.retentionMs ?? 14 * 24 * 60 * 60 * 1000;
+    const maxEntries=options.maxEntries ?? 4096;
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>65536)
+      throw new Error('RUNBOOK_JOURNAL_CAPACITY_CONFIG_INVALID');
+    this.maxEntries=maxEntries;
   }
 
   async initialize(): Promise<void> {
@@ -172,6 +178,11 @@ export class RunbookStore {
     const now = new Date().toISOString();
 
     if (!existing) {
+      // Preserve old UNKNOWN records; never evict a history entry to make
+      // room for new native-capable operations before external CAS (#587).
+      if(this.runbooks.size>=this.maxEntries)
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_CAPACITY_REACHED',
+          'Runbook journal full; reconcile independently before admitting new work.');
       const checkpoint: RunbookCheckpoint = {
         id: input.id,
         specHash: input.specHash,
