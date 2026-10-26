@@ -39,7 +39,8 @@ test('only expected UI files change and live bytes match pinned baseline',()=>{
 
 test('read-only preview accepts an unchanged stylesheet only if diff lists only app.js',()=>{
   const f=fixture();
-  f.candidate['web/styles.css']=f.baseline['web/styles.css'];
+  // A valid unchanged stylesheet must already contain required live controls.
+  f.baseline['web/styles.css']=f.candidate['web/styles.css'];
   f.modifiedPaths=['web/app.js'];
   const ok=verifyUiOnlyRelease(f);
   assert.equal(ok.files.length,2);
