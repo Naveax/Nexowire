@@ -169,6 +169,15 @@ export class TaskGraphStore {
     }
 
     const parsed = PersistedStateSchema.parse(JSON.parse(raw));
+    // Validate all identity keys before state restoration; otherwise a
+    // repeated JSON graph ID can overwrite the earlier UNKNOWN in Map.set.
+    const seenIds=new Set<string>();
+    for(const entry of parsed.graphs){
+      if(seenIds.has(entry.id))
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_DUPLICATE_ID',
+          'Duplicate durable task-graph identity requires external reconciliation.');
+      seenIds.add(entry.id);
+    }
     let changed = false;
     for (const graph of parsed.graphs) {
       const checkpoint: TaskGraphCheckpoint = cloneGraph(graph);

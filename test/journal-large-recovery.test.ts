@@ -63,3 +63,31 @@ test('task graph persists and restores >1000 UNKNOWN entries under default confi
   (error:unknown)=>error instanceof TaskGraphStoreError&&error.code==='TASK_GRAPH_JOURNAL_CAPACITY_REACHED');
  assert.equal(await readFile(file,'utf8'),bytes);
 });
+
+test('runbook duplicate durable IDs fail closed before a later record can overwrite UNKNOWN',async t=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'nxw-duplicate-runbook-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=path.join(root,'runbook.json');
+ const unknown=fixtures().runbooks[0]!;
+ const forged={...unknown,status:'succeeded',steps:[{...unknown.steps[0]!,status:'succeeded'}]};
+ const bytes=JSON.stringify({version:1,runbooks:[unknown,forged]});
+ await writeFile(file,bytes);
+ const store=new RunbookStore({stateFile:file});
+ await assert.rejects(store.initialize(),e=>e instanceof RunbookStoreError&&e.code==='RUNBOOK_JOURNAL_DUPLICATE_ID');
+ assert.equal(store.list().length,0,'no partial journal accepted after duplicate-id denial');
+ assert.equal(await readFile(file,'utf8'),bytes,'original UNKNOWN history must be retained byte-identically');
+});
+
+test('task graph duplicate durable IDs fail closed before a later record can overwrite UNKNOWN',async t=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'nxw-duplicate-graph-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=path.join(root,'graph.json');
+ const unknown=fixtures().graphs[0]!;
+ const forged={...unknown,status:'succeeded',jobs:[{...unknown.jobs[0]!,status:'succeeded'}]};
+ const bytes=JSON.stringify({version:1,graphs:[unknown,forged]});
+ await writeFile(file,bytes);
+ const store=new TaskGraphStore({stateFile:file});
+ await assert.rejects(store.initialize(),e=>e instanceof TaskGraphStoreError&&e.code==='TASK_GRAPH_JOURNAL_DUPLICATE_ID');
+ assert.equal(store.list().length,0);
+ assert.equal(await readFile(file,'utf8'),bytes);
+});

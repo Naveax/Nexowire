@@ -140,6 +140,16 @@ export class RunbookStore {
     }
 
     const state = StateSchema.parse(JSON.parse(raw));
+    // A corrupted or tampered journal must never silently overwrite an
+    // earlier UNKNOWN effect via Map.set on the same durable ID. Validate
+    // the complete snapshot BEFORE installing any entry into memory.
+    const seenIds=new Set<string>();
+    for(const entry of state.runbooks){
+      if(seenIds.has(entry.id))
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_DUPLICATE_ID',
+          'Duplicate durable runbook identity requires external reconciliation.');
+      seenIds.add(entry.id);
+    }
     let changed = false;
 
     for (const persisted of state.runbooks) {
