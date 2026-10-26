@@ -61,7 +61,7 @@ export interface TrustedArtifactCancel extends TrustedArtifactIdentity {
 }
 export interface TrustedRemovedReceipt extends TrustedArtifactIdentity {
   sessionId:string;durableDeletionVerified:true;
-  /** Required before releasing an interrupted/uncertain partial upload. */
+  /** Required before any disk release, including COMPLETE uploads. The source adapter must independently authenticate this fact; a client boolean is NOT a fence. */
   writersStoppedVerified?:true;
 }
 
@@ -327,8 +327,10 @@ export class StagingArtifactByteBudget {
       if(!s||!subjectMatch(s,x))return 'DENIED_OWNER';
       if(s.state==='RELEASED')return 'RELEASED';
       if(s.state!=='COMPLETE'&&s.state!=='CANCEL_PENDING')return 'DENIED_STATE';
-      // Cancelled writes may have an unknown in-flight write/ACK.
-      if(s.state==='CANCEL_PENDING'&&x.writersStoppedVerified!==true)
+      // COMPLETE attests bytes, not the absence of later Native writers.
+      // Hold storage for BOTH COMPLETE and CANCEL_PENDING until an external
+      // adapter has independently proved writer stop (issue #588/#587).
+      if(x.writersStoppedVerified!==true)
         throw Error('WRITER_FENCE_REQUIRED');
       this.db.prepare('UPDATE budget_artifact_sessions SET state=? WHERE session_id=?')
         .run('RELEASED',x.sessionId);

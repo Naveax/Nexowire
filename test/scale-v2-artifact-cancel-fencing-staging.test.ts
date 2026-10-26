@@ -139,7 +139,9 @@ test('ordinary completed-file deletion behavior stays unchanged and cannot be ca
      storedSizeBytes:fileBytes,storedSha256:digest,durableStorageVerified:true}),
      'COMPLETE');
    assert.equal(f.q.requestCancel(cancelled(a,fileBytes)),'DENIED_STATE');
-   assert.equal(f.q.acknowledgeDeletion(deleted(a,false)),'RELEASED');
+   assert.throws(()=>f.q.acknowledgeDeletion(deleted(a,false)),/WRITER_FENCE_REQUIRED/);
+   assert.equal(activeStorage(f),fileBytes);
+   assert.equal(f.q.acknowledgeDeletion(deleted(a,true)),'RELEASED');
    assert.equal(activeStorage(f),0);
  }finally{f.close()}
 });

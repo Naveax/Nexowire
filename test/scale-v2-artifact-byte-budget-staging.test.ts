@@ -70,8 +70,12 @@ test('bounded 64KiB atomic reservation, durable commit, full hash and storage st
     assert.equal(f.second.finalize(baseReceipt),'COMPLETE');
     assert.equal(f.first.finalize(baseReceipt),'ALREADY_COMPLETE');
     assert.equal(f.n('SELECT SUM(size_bytes) AS n FROM budget_artifact_sessions WHERE state<>?', 'RELEASED'),size);
-    assert.equal(f.first.acknowledgeDeletion({
+    assert.throws(()=>f.first.acknowledgeDeletion({
       ...a,sessionId:'session-alpha-01',durableDeletionVerified:true,
+    }),/WRITER_FENCE_REQUIRED/);
+    assert.equal(f.n('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>?', 'RELEASED'),size);
+    assert.equal(f.first.acknowledgeDeletion({
+      ...a,sessionId:'session-alpha-01',durableDeletionVerified:true,writersStoppedVerified:true,
     }),'RELEASED');
     assert.equal(f.n('SELECT COALESCE(SUM(size_bytes),0) AS n FROM budget_artifact_sessions WHERE state<>?', 'RELEASED'),0);
     assert.equal(f.n('SELECT COUNT(*) AS n FROM budget_artifact_chunks'),2);
