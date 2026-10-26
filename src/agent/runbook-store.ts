@@ -320,6 +320,13 @@ export class RunbookStore {
     if(original.specHash!==parsed.specHash||!sameSteps)
       throw new RunbookStoreError('RUNBOOK_SPEC_MISMATCH',
         'Checkpoint update cannot rewrite persisted runbook specification or step identities.');
+    // UNKNOWN means an effect may already have executed. Only prepare() with
+    // an explicit retry/reconciliation decision may transition it to pending;
+    // a plain checkpoint save must not manufacture later success evidence.
+    if(original.steps.some((old,index)=>old.status==='unknown'&&parsed.steps[index]?.status!=='unknown')||
+      (parsed.status==='succeeded'&&parsed.steps.some(step=>step.status==='unknown')))
+      throw new RunbookStoreError('RUNBOOK_UNKNOWN_RECONCILIATION_REQUIRED',
+        'An UNKNOWN runbook step cannot change state through a checkpoint write.');
     this.runbooks.set(parsed.id, clone(parsed));
     await this.persist();
   }

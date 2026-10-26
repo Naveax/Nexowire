@@ -317,6 +317,12 @@ export class TaskGraphStore {
     if(original.specHash!==parsed.specHash||!sameJobs)
       throw new TaskGraphStoreError('TASK_GRAPH_SPEC_MISMATCH',
         'Checkpoint update cannot rewrite persisted task-graph specification or job identities.');
+    // Native UNKNOWN persists until prepare() performs explicit retry admission
+    // or an independent reconciliation source establishes the actual effect.
+    if(original.jobs.some((old,index)=>old.status==='unknown'&&parsed.jobs[index]?.status!=='unknown')||
+      (parsed.status==='succeeded'&&parsed.jobs.some(job=>job.status==='unknown')))
+      throw new TaskGraphStoreError('TASK_GRAPH_UNKNOWN_RECONCILIATION_REQUIRED',
+        'An UNKNOWN native job cannot change state through a checkpoint write.');
     this.graphs.set(parsed.id, cloneGraph(parsed));
     await this.persistState();
   }
