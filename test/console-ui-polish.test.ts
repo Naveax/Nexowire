@@ -61,3 +61,11 @@ test('install view preserves protected local callback pairing and allows leaving
   assert.match(connectJs, /window\.location\.replace\(callback\.toString\(\)\)/);
   assert.doesNotMatch(connectJs, /eval\(|new Function\(/);
 });
+
+test('enabled CORE has a separate owner-only local enrollment retry control',()=>{
+  assert.match(app,/core-enrollment-retry/);
+  assert.match(app,/retryCoreEnrollmentRequest/);
+  assert.match(app,/core-enrollment-request-v1/);
+  assert.match(app,/coreRetry\.hidden=/);
+  assert.match(app,/Yerel CORE kaydını yeniden iste/);
+});

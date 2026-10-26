@@ -87,6 +87,59 @@ test('CORE HTTP activation requires authenticated owner and typed confirmation',
   assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.enabled,false);
 });
 
+test('owner can re-request LOCAL CORE consent without disabling standing preference or forging ACTIVE', async()=>{
+  const store=new MemoryControlPlaneStore();
+  const service=new ControlPlaneService(store);
+  const owner:ControlPlaneIdentity={accountId:'core-retry-owner',role:'user'};
+  const outsider:ControlPlaneIdentity={accountId:'other-owner',role:'user'};
+  await service.ensureAccount({id:owner.accountId});
+  await service.ensureAccount({id:outsider.accountId});
+  const challenge=await service.beginPairing(owner,'core-retry');
+  const {device}=await service.consumePairing({pairingId:challenge.pairingId,
+    token:challenge.token,platform:'win32',deviceAnchorHash:'b'.repeat(64)});
+  await service.setDeviceAccessMode(owner,device.id,'full');
+  await service.setDevicePresence(device.id,true,new Date().toISOString(),
+    {privilegeMode:'broker',adminBridgeReady:true});
+  await service.setDeviceCorePreference(owner,device.id,true);
+  const before=await store.getDeviceMaintenancePreference(device.id);
+  let queued=0;
+  const handler=createControlPlaneHttpHandler(service,{
+    authenticate:async req=>{
+      const raw=req.headers.get('x-test-identity');
+      return raw?JSON.parse(raw) as ControlPlaneIdentity:null;
+    },
+    coreConsoleAuthority:{
+      handle:async()=>{throw new Error('device read not tested here');},
+      requestEnrollment:async(id,account)=>{
+        assert.equal(id,device.id);
+        assert.equal(account,owner.accountId);
+        queued++;
+      },
+    },
+  });
+  const url='https://example.test/api/v1/me/devices/core-enrollment-request';
+  const send=(identity:ControlPlaneIdentity|null,confirmed:boolean)=>
+    handler(new Request(url,{method:'POST',
+      headers:{'content-type':'application/json',
+        ...(identity?{'x-test-identity':JSON.stringify(identity)}:{}),
+        ...(confirmed?{'x-nexowire-confirm':'core-enrollment-request-v1'}:{})},
+      body:JSON.stringify({deviceId:device.id})}));
+  assert.equal((await send(null,true)).status,401);
+  assert.equal((await send(owner,false)).status,400);
+  assert.equal((await send({...owner,role:'service'},true)).status,403);
+  assert.equal((await send(outsider,true)).status,404);
+  assert.equal(queued,0);
+  const ok=await send(owner,true);
+  assert.equal(ok.status,200);
+  assert.deepEqual(await ok.json(),{deviceId:device.id,enrollmentRequested:true,active:false});
+  assert.equal(queued,1);
+  assert.deepEqual(await store.getDeviceMaintenancePreference(device.id),before);
+  assert.equal((await service.dashboard(owner)).devices[0]?.persistentMaintenance.enabled,true);
+  await service.setDeviceCorePreference(owner,device.id,false);
+  assert.notEqual((await send(owner,true)).status,200);
+  assert.equal(queued,1);
+});
+
 test('Admin Bridge modes persist as desired-only policy and OFF invalidates CORE', async () => {
   const store = new MemoryControlPlaneStore();
   const service = new ControlPlaneService(store);
