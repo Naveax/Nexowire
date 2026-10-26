@@ -141,12 +141,12 @@ $trusted=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-
 $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
 if(-not $trusted.ContainsKey($owner)){throw 'STACK_OUTER_ANCESTOR_OWNER_UNTRUSTED'}
 $rights=[Security.AccessControl.FileSystemRights]
-$mask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$mask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x10000000)
 foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
   # Inherit-only ACEs do not apply to the inspected ancestor itself.
   if((([int]$ace.PropagationFlags -band [int][Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
   if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
-     ([int]$ace.FileSystemRights -band $mask) -ne 0 -and
+     ([int64]$ace.FileSystemRights -band $mask) -ne 0 -and
      -not $trusted.ContainsKey($ace.IdentityReference.Value)){
     throw 'STACK_OUTER_ANCESTOR_REPLACEMENT_RIGHTS'
   }

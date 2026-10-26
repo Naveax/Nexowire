@@ -59,7 +59,8 @@ $writeMask=([int]$rights::WriteData -bor
             [int]$rights::Delete -bor
             [int]$rights::DeleteSubdirectoriesAndFiles -bor
             [int]$rights::ChangePermissions -bor
-            [int]$rights::TakeOwnership)
+            [int]$rights::TakeOwnership -bor
+            [int64]0x40000000 -bor [int64]0x10000000)
 $visited=New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 $problems=New-Object System.Collections.ArrayList
 $totalFindings=0
@@ -98,7 +99,11 @@ function Inspect-Path([string]$Path,[string]$Label,[string]$Category) {
   $rules=$acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])
   foreach($rule in $rules) {
     if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {continue}
-    if ((([int]$rule.FileSystemRights -band $writeMask) -eq 0)) {continue}
+    # An inherited CREATOR OWNER template with InheritOnly does not apply
+    # to the inspected path. Every actual descendant owner is audited.
+    if($rule.IdentityReference.Value -eq 'S-1-3-0' -and
+       ($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){continue}
+    if ((([int64]$rule.FileSystemRights -band $writeMask) -eq 0)) {continue}
     $sid=$rule.IdentityReference.Value
     if ($trusted.ContainsKey($sid)) {continue}
     $classification=switch($sid) {
