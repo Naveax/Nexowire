@@ -307,9 +307,19 @@ export class RunbookStore {
     });
     // save() is a checkpoint update, not an admission path: otherwise a
     // caller can bypass the bounded prepare() journal and forge a fresh ID.
-    if(!this.runbooks.has(parsed.id))
+    const original=this.runbooks.get(parsed.id);
+    if(!original)
       throw new RunbookStoreError('RUNBOOK_NOT_PREPARED',
         'Checkpoint must be admitted through prepare before it can be saved.');
+    const sameSteps=original.steps.length===parsed.steps.length && original.steps.every((old,index)=>{
+      const next=parsed.steps[index];
+      return next?.id===old.id && next.kind===old.kind &&
+        next.dependsOn.length===old.dependsOn.length &&
+        next.dependsOn.every((dep,i)=>dep===old.dependsOn[i]);
+    });
+    if(original.specHash!==parsed.specHash||!sameSteps)
+      throw new RunbookStoreError('RUNBOOK_SPEC_MISMATCH',
+        'Checkpoint update cannot rewrite persisted runbook specification or step identities.');
     this.runbooks.set(parsed.id, clone(parsed));
     await this.persist();
   }
