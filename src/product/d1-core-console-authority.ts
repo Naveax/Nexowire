@@ -2,6 +2,17 @@ import {createHash} from 'node:crypto';
 import type {D1DatabaseLike} from './d1-control-plane-store.js';
 import {CoreAuthorityRequestSchema,verifyCoreCertificate,verifyCoreOperation,
   type CoreAuthorityState,type CoreAuthorityRequest} from '../protocol/core-console-authority.js';
+import type {CoreConsoleEnrollmentV1} from '../agent/core-console-enrollment-policy.js';
+
+export interface TrustedNativeCoreEnrollmentVerifier {
+  /** Must independently verify protected Windows approval, owner/device/logon
+   * and consume receipt ID atomically across concurrent Workers. Never trust
+   * an Agent-provided JSON witness or merely its timestamp. */
+  verifyAndConsume(
+    proof:NonNullable<CoreAuthorityRequest['nativeConsent']>,
+    expected:CoreConsoleEnrollmentV1,
+  ):Promise<boolean>;
+}
 
 const DB_NOW="(CAST(strftime('%s','now') AS INTEGER)*1000)";
 const JOIN=`FROM device_core_console_authority c JOIN devices d ON d.id=c.device_id
@@ -22,7 +33,8 @@ export interface CoreConsoleAuthority {
 }
 /** Independent D1 rows and one-use IDs survive restoration of Agent-local state. */
 export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
-  constructor(private readonly db:D1DatabaseLike){}
+  constructor(private readonly db:D1DatabaseLike,
+    private readonly nativeEnrollmentVerifier?:TrustedNativeCoreEnrollmentVerifier){}
   private async row(hash:string,id:string):Promise<Row>{
     const row=await this.db.prepare(`SELECT ${DB_NOW} authority_time_ms,d.id device_id,d.owner_account_id,c.installation_id,
       c.enrollment_id,c.public_key_spki,c.owner_epoch,c.grant_generation,c.revoke_epoch,
@@ -67,6 +79,21 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       if(e.approvedLocallyAtMs<before.authority_time_ms-300000||
          e.approvedLocallyAtMs>before.authority_time_ms+5000)
         throw new Error('CORE_LOCAL_DECISION_NOT_FRESH');
+      // The device itself can self-sign an arbitrary timestamp and receipt.
+      // Default D1 composition has NO independent native proof authority.
+      // Deny direct-to-Worker enrollment even with a valid paired credential.
+      if(!this.nativeEnrollmentVerifier||!r.nativeConsent)
+        throw new Error('CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE');
+      const proof=r.nativeConsent;
+      if(proof.ownerAccountId!==e.ownerAccountId||proof.deviceId!==e.deviceId||
+        proof.installationId!==e.installationId||proof.enrollmentId!==e.enrollmentId||
+        proof.ownerEpoch!==e.ownerEpoch||proof.grantGeneration!==e.grantGeneration||
+        proof.revokeEpoch!==e.revokeEpoch||proof.approvedAtMs!==e.approvedLocallyAtMs)
+        throw new Error('CORE_NATIVE_CONSENT_SCOPE_MISMATCH');
+      // Native verifier must provide authenticated OS owner/session readback
+      // and a durable one-shot CAS. No dev fixture is a production verifier.
+      if(await this.nativeEnrollmentVerifier.verifyAndConsume(proof,e)!==true)
+        throw new Error('CORE_NATIVE_CONSENT_NOT_VERIFIED');
       await changed(`UPDATE device_core_console_authority SET installation_id=?,enrollment_id=?,public_key_spki=?,enrollment_requested=0,physical_active=0
         WHERE device_id=? AND owner_epoch=? AND grant_generation=? AND revoke_epoch=?
         AND enrollment_id IS NULL AND EXISTS(SELECT 1 ${JOIN}
