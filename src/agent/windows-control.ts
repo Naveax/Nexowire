@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
+import {assertCoreWindowsMutationAdmission} from './core-windows-mutation-dispatch.js';
 
 const ProcessListInputSchema = z.object({
   name: z.string().min(1).max(260).optional(),
@@ -995,6 +996,8 @@ export async function executeWindowsCapability(
   input: unknown,
 ): Promise<unknown> {
   assertWindows();
+  // #03 native effect barrier: legacy bearer alone is NOT a CORE grant.
+  assertCoreWindowsMutationAdmission(capability,input);
 
   switch (capability) {
     case 'windows.processes': {
