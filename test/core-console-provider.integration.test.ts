@@ -47,6 +47,7 @@ function fixture(){
   let currentLogon={windowsUserSid:'S-1-5-21-101-202-303-1001',windowsSessionId:1,
     windowsLogonLuid:'0000000000000001',windowsLogonSessionEpoch:randomUUID()};
   let beforeNativeReadback:(()=>void)|undefined;
+  let afterLocalNativeReadback:(()=>void)|undefined;
   let pauseNextAuthorityReadback:(()=>Promise<void>)|undefined;
   const consumedNativeReceipts=new Set<string>();
   const sameLogon=(proof:NativeCoreConsentProof)=>proof.windowsUserSid===currentLogon.windowsUserSid&&
@@ -104,8 +105,12 @@ function fixture(){
         nativeReceipt=forgedNativeReceipt?.(next)??next;
         return structuredClone(nativeReceipt);
       },
-      currentReadback:async(receiptId:string)=>readbackEnabled&&nativeReceipt?.receiptId===receiptId&&sameLogon(nativeReceipt)
-        ?structuredClone(nativeReceipt):null,
+      currentReadback:async(receiptId:string)=>{
+        const proof=readbackEnabled&&nativeReceipt?.receiptId===receiptId&&sameLogon(nativeReceipt)
+          ?structuredClone(nativeReceipt):null;
+        const hook=afterLocalNativeReadback;afterLocalNativeReadback=undefined;hook?.();
+        return proof;
+      },
     },
     native:async()=>{effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};},
     monitor:{desktopAllowed:()=>desktop,close:()=>{}},
@@ -123,6 +128,7 @@ function fixture(){
     setAuthorityReadback:(v:boolean)=>{authorityReadbackEnabled=v;},
     setCurrentLogon:(v:typeof currentLogon)=>{currentLogon={...v};},
     duringNativeReadback:(cb:()=>void)=>{beforeNativeReadback=cb;},
+    afterLocalReadback:(cb:()=>void)=>{afterLocalNativeReadback=cb;},
     pauseNextAuthorityReadback:()=>{
       let entered!:()=>void,release!:()=>void;
       const enteredPromise=new Promise<void>(resolve=>{entered=resolve;});
@@ -584,6 +590,32 @@ test('native readback completing after revoke, CORE OFF or re-pair never exposes
       const after=await f.authority.deviceStatus(deviceId,owner);
       assert.equal(after.localEnrolled,false,sql);
       assert.equal(after.active,false,sql);
+    }finally{f.db.close();}
+  }
+});
+
+test('Agent post-native-readback D1/Broker recheck rejects owner/revoke/session changes before using proof',async()=>{
+  const cases=[
+    {name:'CORE OFF',mutate:(f:ReturnType<typeof fixture>)=>
+      f.db.exec('UPDATE device_maintenance_preferences SET enabled=0')},
+    {name:'owner re-pair',mutate:(f:ReturnType<typeof fixture>)=>
+      f.db.exec("UPDATE devices SET owner_account_id='another-owner-0001'")},
+    {name:'revoke generation',mutate:(f:ReturnType<typeof fixture>)=>
+      f.db.exec('UPDATE device_core_console_authority SET revoke_epoch=revoke_epoch+1')},
+    {name:'Windows logon session epoch',mutate:(f:ReturnType<typeof fixture>)=>
+      f.db.exec("UPDATE device_core_console_authority SET windows_logon_session_epoch='"+
+        randomUUID()+"'")},
+    {name:'Broker loss',mutate:(f:ReturnType<typeof fixture>)=>f.setBridge(false)},
+  ];
+  for(const race of cases){
+    const f=fixture();try{
+      const {controller}=await enable(f);
+      assert.equal((await controller.status('full')).active,true,race.name);
+      f.afterLocalReadback(()=>race.mutate(f));
+      const status=await controller.status('full');
+      assert.equal(status.active,false,race.name);
+      await assert.rejects(input(controller));
+      assert.equal(f.effects(),0,race.name);
     }finally{f.db.close();}
   }
 });
