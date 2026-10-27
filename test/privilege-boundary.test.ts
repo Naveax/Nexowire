@@ -210,3 +210,22 @@ test(
     assert.equal(calls.length,0);
   },
 );
+
+test('#03 direct or unspecified privilege modes cannot bypass CAS for elevated mutations',async()=>{
+  const policy=new PathPolicy([os.homedir()]);
+  for(const privilegeMode of [undefined,'direct'] as const){
+    for(const [capability,input] of [
+      ['windows.firewall.control',{name:'synthetic',action:'enable'}],
+      ['windows.service.control',{name:'synthetic',action:'start'}],
+      ['windows.registry.set',{hive:'HKLM',path:'Software\\Nexowire',
+        name:'test',type:'string',value:'a'}],
+    ] as const){
+      await assert.rejects(
+        executeCapability(capability,input,policy,
+          privilegeMode?{privilegeMode}:{}),
+        (error:unknown)=>error instanceof Error&&
+          'code' in error&&error.code==='CORE_EXTERNAL_CAS_DISPATCH_REQUIRED',
+      );
+    }
+  }
+});
