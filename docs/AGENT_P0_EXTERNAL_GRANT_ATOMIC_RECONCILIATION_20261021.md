@@ -123,3 +123,16 @@ real two-device canary and verified restore exercises. No Cloudflare
 DO/D1 staging and no live Agent/VM/service changes were performed.
 
 **P0 #587 stays OPEN; DRAFT only; no UNKNOWN replay.**
+
+
+## 2026-10-27 #01 immutable transition scope and receipt
+
+The coordinator snapshots owner, device, session, generation, signed approval and
+new re-pair fields before any asynchronous authorization. It also copies and
+freezes the external receipt before verifying it and applying local state. A
+caller changing the original request or a provider changing its returned object
+cannot redirect an already authorized transition or alter local reconciliation.
+
+The regression tests use a synthetic PostgreSQL contract and remote authority;
+they do not prove a deployed independent CAS, secure credential custody, physical
+rollback resistance or native acceptance. Production remains **NO-GO**.

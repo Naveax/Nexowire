@@ -211,6 +211,73 @@ function fixture(){
 }
 const denied=async(p:Promise<unknown>,code:string)=>
  assert.rejects(p,{code});
+function deferred(){
+ let resolve!:()=>void;
+ const promise=new Promise<void>(r=>{resolve=r});
+ return {promise,resolve};
+}
+test('re-pair pins the approved new owner and epochs across async verification',async()=>{
+ const f=fixture(),entered=deferred(),resume=deferred();
+ const newOwner=randomUUID(),newEpoch=randomUUID(),newSession=randomUUID();
+ const change={action:'re_pair' as const,deviceId:f.ids.deviceId,
+  ownerId:f.ids.ownerId,deviceEpoch:f.ids.epoch,sessionEpoch:f.ids.session,
+  expectedGeneration:2,signedProof:'SIGNED_APPROVAL_FIXTURE_'.repeat(3),
+  newOwnerId:newOwner,newDeviceEpoch:newEpoch,newSessionEpoch:newSession};
+ const gate=new WitnessRevokeCoordinator({
+  pool:f.pg,external:f.external,authorityId:f.ids.authorityId,
+  verifyPrincipal:async(deviceId,epoch)=>({ownerId:f.ids.ownerId,deviceId,epoch}),
+  verifySession:async value=>value.sessionEpoch===f.ids.session,
+  verifyOperatorApproval:async intent=>{
+   assert.equal(intent.nextOwnerId,newOwner);
+   assert.equal(intent.nextEpoch,newEpoch);
+   assert.equal(intent.nextSessionEpoch,newSession);
+   entered.resolve();await resume.promise;return true;
+  },
+ });
+ const pending=gate.rePair(change);
+ await Promise.race([entered.promise,pending.then(()=>{throw Error('UNEXPECTED_COMPLETION')})]);
+ change.newOwnerId=randomUUID();change.newDeviceEpoch=randomUUID();
+ change.newSessionEpoch=randomUUID();
+ resume.resolve();
+ const result=await pending;
+ assert.equal(result.external.newOwnerId,newOwner);
+ assert.equal(result.external.newDeviceEpoch,newEpoch);
+ assert.equal(result.external.newSessionEpoch,newSession);
+ assert.equal(f.pg.state.device.get(f.ids.deviceId)?.owner_id,newOwner);
+ assert.equal(f.pg.state.grant.get(f.ids.deviceId)?.session_epoch,newSession);
+});
+test('revoke pins its request and confirmed receipt through local reconciliation',async()=>{
+ const f=fixture(),entered=deferred(),resume=deferred();
+ let captured:ExternalRevokeReceipt|undefined;
+ const external:ExternalGrantCas={
+  reserveIfCurrent:(request,scope)=>f.external.reserveIfCurrent(request,scope),
+  rePairIfCurrent:request=>f.external.rePairIfCurrent(request),
+  revokeIfCurrent:async request=>{
+   captured=await f.external.revokeIfCurrent(request);return captured;
+  },
+ };
+ const pool:WitnessPgPool={connect:async()=>{
+  entered.resolve();await resume.promise;return f.pg.connect();
+ }};
+ const gate=new WitnessRevokeCoordinator({
+  pool,external,authorityId:f.ids.authorityId,
+  verifyPrincipal:async(deviceId,epoch)=>({ownerId:f.ids.ownerId,deviceId,epoch}),
+  verifySession:async value=>value.sessionEpoch===f.ids.session,
+  verifyOperatorApproval:async()=>true,
+ });
+ const change=f.revoke(),pending=gate.revoke(change);
+ await Promise.race([entered.promise,pending.then(()=>{throw Error('UNEXPECTED_COMPLETION')})]);
+ const mutableReceipt=captured as ExternalRevokeReceipt|undefined;
+ assert.ok(mutableReceipt);
+ mutableReceipt.generation=999;
+ change.expectedGeneration=999;change.ownerId=randomUUID();
+ resume.resolve();
+ const result=await pending;
+ assert.equal(result.external.generation,3);
+ assert.equal(result.local.generation,3);
+ assert.equal(f.pg.state.grant.get(f.ids.deviceId)?.generation,3);
+ assert.equal(f.pg.state.grant.get(f.ids.deviceId)?.core_enabled,false);
+});
 test('24 concurrent same request IDs: exactly one external created; PG records once',async()=>{
  const f=fixture(),id=f.request();
  const responses=await Promise.all(Array.from({length:24},()=>f.cas.reserve(id)));
