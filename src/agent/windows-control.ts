@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import * as z from 'zod';
 import type { Capability } from '../protocol/capabilities.js';
-import {assertCoreWindowsMutationAdmission} from './core-windows-mutation-dispatch.js';
+import { assertCoreWindowsMutationAdmission } from './core-windows-mutation-dispatch.js';
 
 const ProcessListInputSchema = z.object({
   name: z.string().min(1).max(260).optional(),
@@ -996,9 +996,6 @@ export async function executeWindowsCapability(
   input: unknown,
 ): Promise<unknown> {
   assertWindows();
-  // #03 native effect barrier: legacy bearer alone is NOT a CORE grant.
-  assertCoreWindowsMutationAdmission(capability,input);
-
   switch (capability) {
     case 'windows.processes': {
       const parsed = ProcessListInputSchema.parse(input);
@@ -1031,6 +1028,8 @@ export async function executeWindowsCapability(
       if (parsed.action === 'set_startup' && !parsed.startup_type) {
         throw new Error('startup_type is required when action is set_startup.');
       }
+      // Validate shape before the fail-closed authority gate. No command runs without admission.
+      assertCoreWindowsMutationAdmission(capability, parsed);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           serviceControlScript,
@@ -1084,6 +1083,7 @@ export async function executeWindowsCapability(
     case 'windows.registry.set': {
       const parsed = RegistrySetInputSchema.parse(input);
       validateRegistrySetInput(parsed);
+      assertCoreWindowsMutationAdmission(capability, parsed);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           registrySetScript,
@@ -1094,6 +1094,7 @@ export async function executeWindowsCapability(
     }
     case 'windows.registry.delete': {
       const parsed = RegistryDeleteInputSchema.parse(input);
+      assertCoreWindowsMutationAdmission(capability, parsed);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           registryDeleteScript,
@@ -1105,6 +1106,7 @@ export async function executeWindowsCapability(
     case 'windows.task.control': {
       const parsed = ScheduledTaskControlInputSchema.parse(input);
       assertGenericTaskActivationAllowed(parsed.name,parsed.action);
+      assertCoreWindowsMutationAdmission(capability, parsed);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           scheduledTaskControlScript,
@@ -1118,6 +1120,7 @@ export async function executeWindowsCapability(
       if (parsed.action === 'set_action' && !parsed.rule_action) {
         throw new Error('rule_action is required when action is set_action.');
       }
+      assertCoreWindowsMutationAdmission(capability, parsed);
       return {
         data: await runPowerShellJson<Record<string, unknown>>(
           firewallControlScript,
