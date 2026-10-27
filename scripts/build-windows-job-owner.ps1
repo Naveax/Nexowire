@@ -8,7 +8,7 @@ if (!$OutputPath) { $OutputPath = Join-Path $root 'native\windows-job-owner.exe'
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
 $zig = Get-Command 'zig.exe' -ErrorAction SilentlyContinue
 if ($zig) {
-  & $zig.Source cc -O2 -target x86_64-windows-gnu -o $OutputPath $source -lshell32 -lkernel32
+  & $zig.Source cc -O2 -target x86_64-windows-gnu -o $OutputPath $source -lshell32 -lkernel32 -ladvapi32
   if ($LASTEXITCODE -ne 0) { throw "Zig helper build failed: $LASTEXITCODE" }
 } else {
   $x86 = (Get-Item 'Env:ProgramFiles(x86)').Value
@@ -20,7 +20,7 @@ if ($zig) {
   if (!(Test-Path $vcvars)) { throw "Missing vcvars64.bat: $vcvars" }
   $obj = Join-Path $root 'native\windows-job-owner.obj'
   $command = '"' + $vcvars + '" >nul && cl.exe /nologo /O2 /W4 /utf-8 /Fo:"' +
-    $obj + '" /Fe:"' + $OutputPath + '" "' + $source + '" shell32.lib kernel32.lib'
+    $obj + '" /Fe:"' + $OutputPath + '" "' + $source + '" shell32.lib kernel32.lib advapi32.lib'
   & cmd.exe /d /s /c $command
   if ($LASTEXITCODE -ne 0) { throw "MSVC helper build failed: $LASTEXITCODE" }
 }
