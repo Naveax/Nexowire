@@ -280,6 +280,16 @@ export class TaskGraphStore {
       );
     }
 
+    // Caller-supplied specHash and matching job IDs are not enough to prove
+    // the same previously admitted native dependency graph on resume.
+    const changedGraph=existing.jobs.some((stored,index)=>{
+      const requested=input.jobs[index];
+      return requested?.dependsOn.length!==stored.dependsOn.length ||
+        requested.dependsOn.some((dep,i)=>dep!==stored.dependsOn[i]);
+    });
+    if(changedGraph)
+      throw new TaskGraphStoreError('TASK_GRAPH_SPEC_MISMATCH',
+        'Resume cannot rewrite the persisted native dependency DAG.');
     existing.status = 'running';
     existing.updatedAt = now;
     existing.runCount++;

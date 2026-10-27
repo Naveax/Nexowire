@@ -258,6 +258,17 @@ export class RunbookStore {
       );
     }
 
+    // Matching ID order and caller-supplied specHash alone cannot attest the
+    // native DAG. Compare the persisted immutable kind and ordered edges.
+    const changedGraph=existing.steps.some((stored,index)=>{
+      const requested=input.steps[index];
+      return requested?.kind!==stored.kind ||
+        requested.dependsOn.length!==stored.dependsOn.length ||
+        requested.dependsOn.some((dep,i)=>dep!==stored.dependsOn[i]);
+    });
+    if(changedGraph)
+      throw new RunbookStoreError('RUNBOOK_SPEC_MISMATCH',
+        'Resume cannot rewrite the persisted runbook kind or dependency DAG.');
     existing.status = 'running';
     existing.updatedAt = now;
     existing.runCount++;
