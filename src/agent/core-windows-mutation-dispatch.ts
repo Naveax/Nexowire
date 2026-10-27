@@ -101,3 +101,56 @@ export async function executeCoreWindowsMutation<T>(
     finally{state.active=false}
   });
 }
+
+
+/**
+ * #03 executor-side routing boundary for CORE/Broker task subprocesses.
+ * #07's current task-os-sandbox-capability/worker is SOURCE-ONLY and has
+ * launchAllowed=false; the accepted native sandbox launcher/attestation
+ * interface does not exist. Do not convert a signed CORE grant into a shell
+ * token or fall back to a current-user Node spawn, WSL or nested task graph.
+ *
+ * A top-level graph/runbook approval is not approval for its individual OS
+ * effects (each job, artifact write, subprocess and retry). Future #07 must
+ * admit each separate effect under an independent immutable request ID and
+ * prove the low-privilege token, descendants, resource/IO/network confinement,
+ * revoke/drain and no-replay before the launcher can resume any process.
+ */
+export const CORE_SANDBOX_REQUIRED_CAPABILITIES:ReadonlySet<string>=new Set([
+  'shell.exec','wsl.exec','process.start','process.write',
+  'task.graph.run','runbook.run','workspace.checks',
+  'workspace.snapshot','workspace.detect',
+]);
+
+/**
+ * A privileged-Broker route or any attached CORE dispatch candidate is never
+ * allowed to silently reach legacy raw spawn without the independent #07
+ * provider. A caller can request denial but cannot supply authority by
+ * setting a UI flag or by injecting a fixture.
+ *
+ * Other legacy non-CORE paths remain unchanged; #04/#02 still MUST ensure
+ * authentic CORE traffic is tagged as such at the protected entry point.
+ */
+export function assertCoreSandboxRouteUnavailable(
+  capability:string,
+  coreOrBrokerRouted:boolean,
+):void{
+  if(coreOrBrokerRouted && CORE_SANDBOX_REQUIRED_CAPABILITIES.has(capability))
+    deny('OS_TASK_SANDBOX_UNAVAILABLE');
+}
+
+/**
+ * #02's BrokerEffectRequest/operationId and #01's signed dispatch request are
+ * NOT interchangeable: #919 reserves an effect ticket but #926 binds signed
+ * receipts, nonce and monotonic deadlines. This source-only #03 compatibility
+ * guard will not accept a #919 ticket as a #01 signed permit.
+ *
+ * Each OS callback (including installer/update stages) requires one native
+ * protected Broker admission with a separate stable per-effect request UUID.
+ * Reconcile UNKNOWN by observation only; never run a retry callback.
+ */
+export function assertNoSyntheticBrokerAdmission(
+  _brokerTicket:unknown,
+):never{
+  return deny('CORE_BROKER_NATIVE_EFFECT_PROVIDER_UNAVAILABLE');
+}
