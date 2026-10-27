@@ -57,6 +57,11 @@ export interface CoreCiGitHubAudit {
   readonly findings:readonly string[];
   /** True only after successful native HTTPS requests, including GET /user. */
   readonly githubOriginAuthenticated:boolean;
+  /** Run head_sha identifies the PR head; it is not the job checkout commit. */
+  readonly checkoutRevisionEvidence:'NOT_COLLECTED';
+  readonly checkoutTreeMatchesHead:'NOT_PROVEN';
+  /** Seven successful jobs do not establish that a particular case executed. */
+  readonly windowsBrokerFixtureCases:'NOT_PROVEN';
   readonly physicalAcceptance:'NOT_PROVEN';
   readonly productionCore:'NO_GO';
   readonly requiredJobs:readonly string[];
@@ -273,6 +278,9 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
     snapshotConsistency:findings.length===0?'CONSISTENT':'BLOCKED',
     findings,
     githubOriginAuthenticated:false,
+    checkoutRevisionEvidence:'NOT_COLLECTED',
+    checkoutTreeMatchesHead:'NOT_PROVEN',
+    windowsBrokerFixtureCases:'NOT_PROVEN',
     physicalAcceptance:'NOT_PROVEN',
     productionCore:'NO_GO',
     requiredJobs:REQUIRED_CORE_CI_JOBS,
