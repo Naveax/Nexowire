@@ -75,7 +75,7 @@ test('after Job attestation, equal-HIGH same-logon PROCESS_DUP_HANDLE opens are 
     let observedSeal=false;
     let bootstrapOpen=false;
     for(let attempt=0;attempt<100;attempt++) {
-      const probe=spawnSync(path.resolve('test/fixtures/windows-job-medium-dup-probe.exe'),
+      const probe: import('node:child_process').SpawnSyncReturns<string> = spawnSync(path.resolve('test/fixtures/windows-job-medium-dup-probe.exe'),
         ['--probe-high',String(guard.ProcessId),nw[3]!],
         {windowsHide:true,encoding:'utf8',timeout:7000,maxBuffer:8192});
       if(probe.status===77) {
