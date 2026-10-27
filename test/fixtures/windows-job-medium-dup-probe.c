@@ -4,6 +4,7 @@
 // or manipulate any Job. Child only requests PROCESS_DUP_HANDLE on the
 // exact disposable guardian PID supplied by the test harness.
 #define WIN32_LEAN_AND_MEAN
+#define _WIN32_WINNT 0x0601
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,12 +26,24 @@ static BOOL token_identity(HANDLE token, DWORD *level, DWORD *elevated) {
   return TRUE;
 }
 
-static BOOL same_account(HANDLE a, HANDLE b) {
+static BOOL same_logon_session(HANDLE a, HANDLE b) {
   BYTE left[1024]={0},right[1024]={0};
   DWORD bytes=0;
   if(!GetTokenInformation(a,TokenUser,left,sizeof(left),&bytes) ||
      !GetTokenInformation(b,TokenUser,right,sizeof(right),&bytes))return FALSE;
-  return EqualSid(((TOKEN_USER*)left)->User.Sid,((TOKEN_USER*)right)->User.Sid);
+  if(!EqualSid(((TOKEN_USER*)left)->User.Sid,((TOKEN_USER*)right)->User.Sid))
+    return FALSE;
+  TOKEN_STATISTICS high={0},medium={0};
+  DWORD first=0,second=0;
+  DWORD highSession=0,mediumSession=0;
+  if(!GetTokenInformation(a,TokenStatistics,&high,sizeof(high),&first) ||
+     !GetTokenInformation(b,TokenStatistics,&medium,sizeof(medium),&second) ||
+     !GetTokenInformation(a,TokenSessionId,&highSession,sizeof(highSession),&first) ||
+     !GetTokenInformation(b,TokenSessionId,&mediumSession,sizeof(mediumSession),&second))
+    return FALSE;
+  return high.AuthenticationId.HighPart==medium.AuthenticationId.HighPart &&
+    high.AuthenticationId.LowPart==medium.AuthenticationId.LowPart &&
+    highSession==mediumSession;
 }
 
 int wmain(int argc,wchar_t **argv) {
@@ -58,17 +71,17 @@ int wmain(int argc,wchar_t **argv) {
   if(!GetTokenInformation(current,TokenLinkedToken,&link,sizeof(link),&returned) ||
      !link.LinkedToken) {
     CloseHandle(current);
-    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_token_unavailable\\n");
+    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_token_unavailable\n");
     return 77;
   }
   DWORD medium=0,lowElevation=0;
-  BOOL matched=same_account(current,link.LinkedToken);
+  BOOL matched=same_logon_session(current,link.LinkedToken);
   BOOL realMedium=token_identity(link.LinkedToken,&medium,&lowElevation) &&
     medium==SECURITY_MANDATORY_MEDIUM_RID && !lowElevation && matched;
   CloseHandle(current);
   if(!realMedium) {
     CloseHandle(link.LinkedToken);
-    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_token_not_medium_same_user\\n");
+    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_token_not_medium_same_user\n");
     return 77;
   }
   wchar_t binary[MAX_PATH]={0};
@@ -87,7 +100,7 @@ int wmain(int argc,wchar_t **argv) {
   DWORD error=spawned?ERROR_SUCCESS:GetLastError();
   CloseHandle(link.LinkedToken);
   if(!spawned) {
-    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_spawn_win32_%lu\\n",error);
+    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_spawn_win32_%lu\n",error);
     return 77;
   }
   DWORD wait=WaitForSingleObject(process.hProcess,10000);
@@ -97,13 +110,13 @@ int wmain(int argc,wchar_t **argv) {
   CloseHandle(process.hThread);
   CloseHandle(process.hProcess);
   if(status==0) {
-    wprintf(L"NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_DENIED same_user=1 elevated_guardian=1\\n");
+    wprintf(L"NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_DENIED same_user=1 elevated_guardian=1\n");
     return 0;
   }
   if(status==3) {
-    wprintf(L"NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_ALLOWED SECURITY_FAILURE\\n");
+    wprintf(L"NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_ALLOWED SECURITY_FAILURE\n");
     return 3;
   }
-  wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_status_%lu\\n",status);
+  wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_status_%lu\n",status);
   return 77;
 }
