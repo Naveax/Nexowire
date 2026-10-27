@@ -306,6 +306,10 @@ test('lost begin ACK after durable reservation cannot mint a second permit acros
  assert.equal(f.remote.active.size,1,
   'lost ACK remains reserved/UNKNOWN until explicit reconciliation');
  assert.equal(effects,0,'lost begin ACK never reaches the OS callback');
+ await code(hubA.execute(op,async()=>++effects),
+  'DISPATCH_REVOKE_PENDING');
+ assert.equal(f.remote.beginChallenges.length,1,
+  'same Broker stays fenced and must not retry the unknown begin');
  await code(hubB.execute(op,async()=>++effects),
   'DISPATCH_EXTERNAL_CAS_UNKNOWN');
  assert.equal(f.remote.beginChallenges.length,2,

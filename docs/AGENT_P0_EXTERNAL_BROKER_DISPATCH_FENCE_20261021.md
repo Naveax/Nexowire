@@ -145,7 +145,10 @@ mutation under a fresh request ID.
 
 The deterministic regression test forces the synthetic authority to persist
 the request UUID and claim, then lose the begin ACK. It verifies that Hub A's
-callback does not run and Hub B cannot obtain a second claim with a new nonce.
+callback does not run, Hub A remains locally fenced without a second authority
+attempt, and Hub B cannot obtain a second claim with a new nonce. The local
+fence is defense in depth only; new Hub instances still depend on the independent
+durable authority tombstone.
 This is only a test fixture: it does not prove that an independent production
 provider exists, is durable, or survives its own backup/restore. The real
 provider, protected credentials, monotonic restore canary, and physical

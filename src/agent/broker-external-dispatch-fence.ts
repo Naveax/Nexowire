@@ -216,7 +216,13 @@ export class BrokerExternalDispatchFence {
     let remote:DispatchClaim;
     try{remote=await this.config.authority.beginIfCurrent(
       request,broker,challengeNonce)}
-    catch{return deny('DISPATCH_EXTERNAL_CAS_UNKNOWN')}
+    catch{
+      // The reservation may have committed remotely despite a lost ACK.
+      // Keep this Broker instance fenced; new instances still rely on the
+      // external authority's durable requestId tombstone for global safety.
+      this.locallyFenced.add(device);
+      return deny('DISPATCH_EXTERNAL_CAS_UNKNOWN');
+    }
     let proof:Permit;
     try{proof=this.checkPermit(this.decode(remote),request,broker,
       challengeNonce)}
