@@ -123,7 +123,7 @@ test('broker privilege mode fails closed when no broker is configured', async ()
 });
 
 test(
-  'Windows privileged broker authenticates and isolates elevated execution',
+  'Windows privileged broker refuses bearer-only elevated callbacks',
   { skip: process.platform !== 'win32' },
   async (t) => {
     const calls: Array<{
@@ -156,25 +156,15 @@ test(
       token: 'broker-secret',
     });
 
-    const response = (await client.execute(
-      'windows.firewall.control',
-      {
-        name: 'test-rule',
-        action: 'enable',
-      },
-    )) as {
-      data?: {
-        routed?: boolean;
-        capability?: string;
-      };
-    };
-
-    assert.equal(response.data?.routed, true);
-    assert.equal(
-      response.data?.capability,
-      'windows.firewall.control',
+    await assert.rejects(
+      () => client.execute('windows.firewall.control', {
+        name: 'test-rule', action: 'enable',
+      }),
+      (error: unknown) => error instanceof PrivilegedBrokerError &&
+        error.code === 'BROKER_EFFECT_ADMISSION_REQUIRED',
     );
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 0,
+      'injected callback may not bypass absent external CAS');
 
     const wrongToken = new PrivilegedBrokerClient({
       url: handle.url,
@@ -206,23 +196,17 @@ test(
     );
 
     const policy = new PathPolicy([os.homedir()]);
-    const routed = (await executeCapability(
-      'windows.firewall.control',
-      {
-        name: 'test-rule',
-        action: 'enable',
-      },
-      policy,
-      {
-        privilegeMode: 'broker',
-        privilegedBroker: client,
-      },
-    )) as {
-      data?: {
-        routed?: boolean;
-      };
-    };
-    assert.equal(routed.data?.routed, true);
-    assert.equal(calls.length, 2);
+    await assert.rejects(
+      () => executeCapability(
+        'windows.firewall.control',
+        {name:'test-rule',action:'enable'},
+        policy,
+        {privilegeMode:'broker',privilegedBroker:client},
+      ),
+      (error: unknown) => error instanceof PrivilegedBrokerError &&
+        error.code === 'BROKER_EFFECT_ADMISSION_REQUIRED',
+    );
+    assert.equal(calls.length, 0,
+      'Broker client and executor cannot turn bearer into admission');
   },
 );
