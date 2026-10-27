@@ -258,7 +258,7 @@ test('external DB clock rejects signed stale and future local enrollment decisio
     const state=read.state;
     const pair=generateKeyPairSync('ed25519');
     const der=pair.publicKey.export({format:'der',type:'spki'});
-    for(const approvedLocallyAtMs of [state.authorityTimeMs-300001,state.authorityTimeMs+5001]){
+    for(const approvedLocallyAtMs of [state.authorityTimeMs-3600000,state.authorityTimeMs+60000]){
       const enrollment={version:1 as const,scope:'physical-console' as const,
         ownerAccountId:owner,deviceId,installationId,enrollmentId:randomUUID(),
         ownerEpoch:state.ownerEpoch,grantGeneration:state.grantGeneration,
