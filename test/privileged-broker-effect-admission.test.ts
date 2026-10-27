@@ -323,3 +323,21 @@ test('Broker health never confuses synthetic startup with actual HIGH token',{
     assert.equal(body.elevated,isWindowsProcessElevated());
   }finally{await broker.close()}
 });
+
+// Signed-looking fields are not enough when the receipt object changes during
+// an awaited verification step. The callback must never consume such a proof.
+test('receipt mutated during async verification denies before native effect',async()=>{
+  for(const state of ['RESERVED','COMMITTED'] as const){
+    const f=fixture();
+    const original=f.authority.verifyReceipt.bind(f.authority);
+    f.authority.verifyReceipt=async(receipt)=>{
+      await Promise.resolve();
+      if(receipt.state===state){
+        (receipt as {capability:string}).capability='windows.task.control';
+      }
+      return original(receipt);
+    };
+    await assert.rejects(f.run(),deny,state);
+    assert.equal(f.events.includes('invoke'),false,state);
+  }
+});
