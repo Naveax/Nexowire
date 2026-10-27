@@ -89,3 +89,26 @@ synthetic JSON fixtures and never touch the connected devices.
 
 No CI reruns, PR merge, production service, device, UAC, ACL, or live
 installation modifications are performed by this QA change.
+
+
+## Live exact-SHA GitHub API audit
+
+A separate read-only helper fetches the current PR, the supplied workflow run and its complete job list directly from api.github.com using HTTPS and a bearer token. It binds the run to the PR's current head and base SHAs, the pinned CI workflow ID, run attempt, event, all seven job names and each job conclusion. It refuses redirects, foreign origins, partial job pages, stale SHAs and mismatched PR context.
+
+Usage from a checkout:
+
+    GH_TOKEN=<read-only-token> node --import tsx scripts/qa-core-ci-github-audit.ts Naveax/Nexowire PR_NUMBER RUN_ID
+
+The token needs pull-request-read and Actions-read access. The tool makes GET requests only; it does not dispatch, rerun, cancel or modify workflows. It never prints the token. Tests use an injected synthetic fetcher and therefore always report githubOriginAuthenticated=false. A real CLI run may report authenticated GitHub source evidence, but physicalAcceptance remains NOT_PROVEN and productionCore remains NO_GO.
+
+## Live exact-SHA GitHub API audit
+
+A separate read-only helper fetches the authenticated GitHub user, current PR, exact workflow run, the jobs for that specific run attempt, and a final PR snapshot from fixed \`api.github.com\` HTTPS endpoints. For manually dispatched runs, it also resolves the run's commit to its associated pull request. The helper verifies the current PR head/base did not change during the audit, pins CI workflow ID \`369213208\`, checks exact SHA/run/attempt/PR association, and requires all seven expected jobs to be completed successfully. It rejects redirects, foreign origins, partial job pages, stale SHAs, foreign repositories and mismatched PR context.
+
+Usage from a checkout:
+
+    GH_TOKEN=<read-only-token> node --import tsx scripts/qa-core-ci-github-audit.ts Naveax/Nexowire PR_NUMBER RUN_ID
+
+Provide a GitHub user token accepted by \`GET /user\` with read access to pull requests and Actions. The tool makes GET requests only; it does not dispatch, rerun, cancel or modify workflows. It never prints the token. Tests use an injected synthetic fetcher and therefore always report \`githubOriginAuthenticated=false\`. A live run may report authenticated GitHub source evidence, but \`physicalAcceptance=NOT_PROVEN\` and \`productionCore=NO_GO\` remain unconditional.
+
+The audit reads separate GitHub endpoints and cannot create an atomic cross-endpoint snapshot. It rereads the PR at the end and fails closed if the head, base, state or draft status changed while it was running.
