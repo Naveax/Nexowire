@@ -149,6 +149,10 @@ export class RunbookStore {
         throw new RunbookStoreError('RUNBOOK_JOURNAL_DUPLICATE_ID',
           'Duplicate durable runbook identity requires external reconciliation.');
       seenIds.add(entry.id);
+      const stepIds=new Set(entry.steps.map(step=>step.id));
+      if(stepIds.size!==entry.steps.length)
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_DUPLICATE_STEP_ID',
+          'Duplicate nested step identity in persisted runbook requires reconciliation.');
     }
     let changed = false;
 
@@ -187,6 +191,9 @@ export class RunbookStore {
     retryFailed: boolean;
     retryUnknown: boolean;
   }): Promise<RunbookCheckpoint> {
+    if(new Set(input.steps.map(step=>step.id)).size!==input.steps.length)
+      throw new RunbookStoreError('RUNBOOK_DUPLICATE_STEP_ID',
+        'Duplicate runbook step identity must not be admitted to native journal.');
     const existing = this.runbooks.get(input.id);
     const now = new Date().toISOString();
 
