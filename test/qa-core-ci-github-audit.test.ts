@@ -76,7 +76,7 @@ test('live audit binds authenticated source, exact PR, run attempt and complete 
   const fixture=fixtures();
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.equal(report.snapshotConsistency,'CONSISTENT');
@@ -86,7 +86,9 @@ test('live audit binds authenticated source, exact PR, run attempt and complete 
   assert.equal(report.githubOriginAuthenticated,false);
   assert.equal(report.physicalAcceptance,'NOT_PROVEN');
   assert.equal(report.productionCore,'NO_GO');
-  assert.equal(fake.urls.length,5);
+  assert.equal(fake.urls.length,6);
+  assert.equal(fake.urls[5],fake.urls[2]);
+  assert.ok(fake.urls[3]!.includes('/attempts/1/jobs?'));
   assert.equal(fake.urls[0],'https://api.github.com/user');
   assert.ok(fake.urls.every(url=>url.startsWith('https://api.github.com/')));
   assert.ok(fake.authHeaders.every(value=>value==='Bearer '+token));
@@ -98,7 +100,7 @@ test('saved or mismatched SHA cannot inherit a current PASS',async()=>{
   fixture.run.head_sha='c'.repeat(40);
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.equal(report.snapshotConsistency,'BLOCKED');
@@ -111,7 +113,7 @@ test('the workflow must be the pinned CI workflow',async()=>{
   fixture.run.workflow_id=17;
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.ok(report.findings.includes('WORKFLOW_ID_MISMATCH'));
@@ -122,7 +124,7 @@ test('base movement after the run blocks exact PR context',async()=>{
   fixture.pullRequest.base.sha='d'.repeat(40);
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.ok(report.findings.includes('RUN_PR_BASE_MISMATCH'));
@@ -136,7 +138,7 @@ test('PR head or base changing during the audit invalidates the snapshot',async(
   }};
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,changed,
+    fixture.pullRequest,fixture.run,fixture.jobs,changed,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
@@ -149,7 +151,7 @@ test('workflow_dispatch must resolve its exact commit to the current PR',async()
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
     fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
-    [fixture.pullRequest],
+    [fixture.pullRequest],fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.equal(report.snapshotConsistency,'CONSISTENT');
@@ -163,7 +165,7 @@ test('foreign PR context cannot be reused for another pull request',async()=>{
   fixture.run.pull_requests[0]!.number=913;
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.ok(report.findings.includes('RUN_PR_CONTEXT_MISSING'));
@@ -182,7 +184,7 @@ test('duplicate, missing, skipped, failed and foreign-run jobs block evidence',(
     repositoryFullName:repo,pullRequestNumber:prNumber,runId,
     pullRequest:fixture.pullRequest,
     recheckedPullRequest:fixture.pullRequest,
-    run:fixture.run,jobs:fixture.jobs,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
   });
   assert.ok(report.findings.includes('DUPLICATE_JOB_NAME'));
   assert.ok(report.findings.includes('JOB_NOT_SUCCESSFUL'));
@@ -199,7 +201,7 @@ test('job pagination truncation and attempt mismatch block evidence',()=>{
     repositoryFullName:repo,pullRequestNumber:prNumber,runId,
     pullRequest:fixture.pullRequest,
     recheckedPullRequest:fixture.pullRequest,
-    run:fixture.run,jobs:fixture.jobs,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
   });
   assert.ok(report.findings.includes('JOB_PAGE_INCOMPLETE'));
   assert.ok(report.findings.includes('JOB_ATTEMPT_MISMATCH'));
@@ -223,7 +225,7 @@ test('attempt-scoped job endpoint remains usable when job records omit run_attem
   }
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.equal(report.snapshotConsistency,'CONSISTENT');
@@ -234,7 +236,7 @@ test('a token response without authenticated user identity is rejected',async()=
   const fixture=fixtures();
   const fake=fakeFetch([
     {message:'not authenticated'},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
   ]);
   await assert.rejects(
     ()=>auditCurrentGitHubCi(auditInput(),fake.fetcher),
@@ -255,7 +257,7 @@ test('successful run metadata and forged flags cannot prove checked-out tree or 
   const report=auditGitHubCiPayload({
     repositoryFullName:repo,pullRequestNumber:prNumber,runId,
     pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
-    run:fixture.run,jobs:fixture.jobs,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
     checkoutRevisionEvidence:'VERIFIED',
     checkoutTreeMatchesHead:'MATCHED',
     windowsBrokerFixtureCases:'PASSED',
@@ -267,4 +269,37 @@ test('successful run metadata and forged flags cannot prove checked-out tree or 
   assert.equal(report.githubOriginAuthenticated,false);
   assert.equal(report.physicalAcceptance,'NOT_PROVEN');
   assert.equal(report.productionCore,'NO_GO');
+});
+
+test('a new run attempt or changed outcome after job retrieval blocks the snapshot',async()=>{
+  for(const changed of [
+    {run_attempt:2,status:'in_progress',conclusion:null},
+    {status:'completed',conclusion:'cancelled'},
+    {head_sha:'c'.repeat(40)},
+    {workflow_id:17},
+  ]){
+    const fixture=fixtures();
+    const fake=fakeFetch([
+      {login:'synthetic-test-user',id:1},
+      fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+      {...fixture.run,...changed},
+    ]);
+    const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+    assert.equal(report.snapshotConsistency,'BLOCKED');
+    assert.ok(report.findings.includes('RUN_CHANGED_DURING_AUDIT'));
+    assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+    assert.equal(report.productionCore,'NO_GO');
+    assert.equal(fake.urls[5],fake.urls[2]);
+  }
+});
+
+test('missing run recheck never yields a consistent live metadata snapshot',()=>{
+  const fixture=fixtures();
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('RUN_RECHECK_MISSING'));
 });

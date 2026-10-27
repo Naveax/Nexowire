@@ -100,6 +100,7 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
     const pr=input.pullRequest;
     const recheckedPr=input.recheckedPullRequest;
     const run=input.run;
+    const recheckedRun=input.recheckedRun;
     const jobsEnvelope=input.jobs;
     const dispatchAssociations=input.workflowDispatchPullRequests;
 
@@ -217,6 +218,19 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
           addOnce(findings,'RUN_PR_BASE_MISMATCH');
         }
       }
+    }
+
+    // A later attempt can start after run metadata was first fetched but
+    // before the attempt-scoped jobs were read. Do not call the old attempt
+    // the current successful run when GitHub now reports a different state.
+    if(!record(recheckedRun)){
+      addOnce(findings,'RUN_RECHECK_MISSING');
+    }else if(!record(run)||
+      (['id','run_attempt','head_sha','head_branch','workflow_id','event',
+        'status','conclusion'] as const).some(key=>run[key]!==recheckedRun[key])||
+      nestedRecord(run,'head_repository')?.full_name!==
+        nestedRecord(recheckedRun,'head_repository')?.full_name){
+      addOnce(findings,'RUN_CHANGED_DURING_AUDIT');
     }
 
     if(!record(jobsEnvelope)||!Array.isArray(jobsEnvelope.jobs)){
@@ -396,6 +410,11 @@ export async function auditCurrentGitHubCi(
   const jobsResult=results[0]!;
   const recheckedPrResult=results[1]!;
   const dispatchResult=results[2];
+  // Read the current run only after the attempt-scoped jobs have arrived.
+  // This is a bounded snapshot, not an atomic lock against later changes.
+  const recheckedRunResult=await fetchGitHubJson(
+    runUrl,token,fetcher,trustedNativeFetch,
+  );
   const report=auditGitHubCiPayload({
     repositoryFullName:input.repositoryFullName,
     pullRequestNumber:input.pullRequestNumber,
@@ -403,6 +422,7 @@ export async function auditCurrentGitHubCi(
     pullRequest:prResult.payload,
     recheckedPullRequest:recheckedPrResult.payload,
     run,
+    recheckedRun:recheckedRunResult.payload,
     jobs:jobsResult.payload,
     workflowDispatchPullRequests:dispatchResult?.payload,
   });
@@ -410,6 +430,7 @@ export async function auditCurrentGitHubCi(
     viewerResult.originAuthenticated&&prResult.originAuthenticated&&
     runResult.originAuthenticated&&jobsResult.originAuthenticated&&
     recheckedPrResult.originAuthenticated&&
+    recheckedRunResult.originAuthenticated&&
     (!dispatchResult||dispatchResult.originAuthenticated);
   return {...report,githubOriginAuthenticated:originAuthenticated};
 }
