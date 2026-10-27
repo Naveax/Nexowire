@@ -232,6 +232,15 @@ export class BrokerExternalDispatchFence {
         brokerId:commitBroker.brokerId,request})}catch{this.locallyFenced.add(device)}
       deny('DISPATCH_REVOKE_PENDING');
     }
+    // A native readback can itself block. Never commit a reservation whose
+    // signed lifetime ended during re-attestation; a remote authority must
+    // enforce this too. UNKNOWN or expiry must not retry the OS effect.
+    if(proof.expiresAtMs<=this.now()){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
+      deny('DISPATCH_PROOF_EXPIRED');
+    }
     // Required remote dispatch admission linearized against revoke.
     // A pre-revoke reservation alone cannot authorize an OS effect.
     const commitNonce=randomBytes(32).toString('hex');
@@ -245,8 +254,9 @@ export class BrokerExternalDispatchFence {
         brokerId:broker.brokerId,request})}catch{}
       deny('DISPATCH_COMMIT_UNKNOWN');
     }
+    let committedProof:Commit;
     try{
-      const committedProof=this.checkPermit(this.decode(acknowledged),
+      committedProof=this.checkPermit(this.decode(acknowledged),
         request,commitBroker,commitNonce,'commit');
       if(committedProof.dispatchId!==proof.dispatchId)
         deny('DISPATCH_COMMIT_IDENTITY_MISMATCH');
@@ -274,6 +284,15 @@ export class BrokerExternalDispatchFence {
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}
       deny('DISPATCH_REVOKE_PENDING');
+    }
+    // The final asynchronous native HIGH readback may outlive the signed
+    // commit lease. Recheck time synchronously directly before callback.
+    // A once-valid commit receipt never permits a late effect.
+    if(committedProof.expiresAtMs<=this.now()){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
+      deny('DISPATCH_PROOF_EXPIRED');
     }
     // Exactly once: only after remotely committed dispatch admission and fresh
     // native Broker readback.
