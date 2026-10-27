@@ -322,6 +322,10 @@ test('missing protected native consent provider cannot show local approval or re
     const bare=await f.make(false);
     assert.equal((await bare.controller.status('full')).localEnrolled,false);
     assert.equal((await bare.controller.status('full')).state,'LOCAL_ENROLLMENT_REQUIRED');
+    f.setBridge(false);
+    assert.equal((await bare.controller.status('full')).state,'LOCAL_ENROLLMENT_REQUIRED',
+      'native provider absence takes priority over missing Broker');
+    f.setBridge(true);
     assert.equal(await bare.controller.enroll(new AbortController().signal),false);
     assert.equal(f.consents(),0);
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
@@ -381,6 +385,12 @@ test('default D1 authority denies self-signed enrollment, even with correct devi
     await enable(f);
     const p=f.profile();
     const bare=new D1CoreConsoleAuthority(f.d1); // production: no trusted OS native verifier
+    const readback=await bare.deviceStatus(deviceId,owner);
+    assert.equal(readback.localEnrolled,false);
+    assert.equal(readback.active,false);
+    assert.equal(readback.deviceReady,false);
+    await assert.rejects(bare.requestEnrollment(deviceId,owner),
+      /CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE/);
     const key=createPrivateKey({key:Buffer.from(p.privateKey!,'base64'),type:'pkcs8',format:'der'});
     const spki=createPublicKey(key).export({type:'spki',format:'der'}).toString('base64');
     const request={action:'enroll' as const,deviceId,installationId:p.installationId,
@@ -392,4 +402,13 @@ test('default D1 authority denies self-signed enrollment, even with correct devi
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,true,
       'the fixture authority was configured separately; production verifier still denied');
   }finally{f.db.close();}
+});
+
+test('non-enrollment signature v1 wire bytes remain backward compatible',()=>{
+  const request={action:'read' as const,deviceId,installationId:randomUUID(),
+    nonce:randomUUID(),issuedAtMs:Date.now()};
+  const legacy=Buffer.from(JSON.stringify(['nexowire.core-console.operation.v1',
+    request.action,request.deviceId,request.installationId,
+    request.nonce,request.issuedAtMs,null,null,null,null]));
+  assert.deepEqual(coreOperationBytes(request),legacy);
 });
