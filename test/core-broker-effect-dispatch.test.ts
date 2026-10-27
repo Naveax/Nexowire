@@ -106,7 +106,9 @@ function harness(fault:Fault='none'){
 
 test('#03 legacy bearer/capability without external fence never invokes effect',async()=>{
   const h=harness();
-  await assert.rejects(h.invoke(undefined),{code:'CORE_EXTERNAL_CAS_DISPATCH_REQUIRED'});
+  await assert.rejects(executeProtectedBrokerEffect(undefined,transport,
+    capability,input,async()=>{throw Error('FORBIDDEN_EFFECT');}),
+    {code:'CORE_EXTERNAL_CAS_DISPATCH_REQUIRED'});
   assert.equal(h.metrics().effectCount,0);
   assert.equal(h.metrics().beginCount,0);
 });
