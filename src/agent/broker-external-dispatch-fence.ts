@@ -4,6 +4,7 @@ import type {AuthenticatedGrantScope} from './postgres-bound-grant-cas.js';
 import {WitnessAuthorityError} from './postgres-monotonic-witness.js';
 
 const uuid=z.string().uuid();
+const MAX_PERMIT_MS=5_000;
 const scopeSchema=z.object({
   ownerId:uuid,deviceId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
   ownerEpoch:z.number().int().positive().safe(),
@@ -106,6 +107,10 @@ function deny(code:string):never{throw new WitnessAuthorityError(code)}
 /** Source gate: does not modify #03/#04 Broker/Access owner implementation. */
 export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
+  private readonly maxPermitMs:number;
+  private readonly readClock:()=>number;
+  private lastClockMs=0;
+  private clockUntrusted=false;
   private readonly inFlight=new Map<string,string>();
   private readonly claimed=new Set<string>();
   /** One request UUID may have only one in-flight local admission. */
@@ -124,11 +129,28 @@ export class BrokerExternalDispatchFence {
     verifyOwnerRevocation:(request:DispatchRevokeRequest)=>Promise<boolean>;
   }){
     if(!uuid.safeParse(config.authorityId).success)deny('DISPATCH_AUTHORITY_INVALID');
+    const max=config.maxPermitMs===undefined?MAX_PERMIT_MS:config.maxPermitMs;
+    if(!Number.isSafeInteger(max)||max<1||max>MAX_PERMIT_MS)
+      deny('DISPATCH_PERMIT_TTL_INVALID');
+    this.maxPermitMs=max;
+    this.readClock=config.now??Date.now;
     this.publicKey=createPublicKey(config.publicKeyPem);
     if(this.publicKey.asymmetricKeyType!=='ed25519')
       deny('DISPATCH_SIGNING_KEY_INVALID');
   }
-  private now():number{return (this.config.now??Date.now)()}
+  private now():number{
+    if(this.clockUntrusted)deny('DISPATCH_CLOCK_UNTRUSTED');
+    try{
+      const value=this.readClock();
+      if(!Number.isSafeInteger(value)||value<=0||value<this.lastClockMs)
+        throw new Error('CLOCK_INVALID');
+      this.lastClockMs=value;
+      return value;
+    }catch{
+      this.clockUntrusted=true;
+      return deny('DISPATCH_CLOCK_UNTRUSTED');
+    }
+  }
   /** Refresh native Broker evidence after every remote CAS await before effect admission. */
   private async verifyBrokerFor(request:BrokerDispatchRequest,
     expectedBrokerId?:string):Promise<ProtectedBrokerEvidence>{
@@ -191,7 +213,7 @@ export class BrokerExternalDispatchFence {
        p.privilege!==req.scope.requiredPrivilege)
       deny('DISPATCH_PROOF_SCOPE_MISMATCH');
     const now=this.now();
-    const ttl=this.config.maxPermitMs??5000;
+    const ttl=this.maxPermitMs;
     if(p.issuedAtMs>now+1000||p.expiresAtMs<=now||
        p.expiresAtMs<=p.issuedAtMs||
        p.expiresAtMs-p.issuedAtMs>ttl)
@@ -218,6 +240,7 @@ export class BrokerExternalDispatchFence {
     run:()=>Promise<T>):Promise<T>{
     const device=request.scope.deviceId;
     if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
+    try{this.now()}catch(e){this.locallyFenced.add(device);throw e}
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
     if(identity!==true)deny('DISPATCH_IDENTITY_UNVERIFIED');
     const broker=await this.verifyBrokerFor(request);
@@ -263,7 +286,14 @@ export class BrokerExternalDispatchFence {
     // A native readback can itself block. Never commit a reservation whose
     // signed lifetime ended during re-attestation; a remote authority must
     // enforce this too. UNKNOWN or expiry must not retry the OS effect.
-    if(proof.expiresAtMs<=this.now()){
+    let preCommitNow:number;
+    try{preCommitNow=this.now()}catch(e){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
+      throw e;
+    }
+    if(proof.expiresAtMs<=preCommitNow){
       this.locallyFenced.add(device);
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}
@@ -316,7 +346,14 @@ export class BrokerExternalDispatchFence {
     // The final asynchronous native HIGH readback may outlive the signed
     // commit lease. Recheck time synchronously directly before callback.
     // A once-valid commit receipt never permits a late effect.
-    if(committedProof.expiresAtMs<=this.now()){
+    let beforeEffectNow:number;
+    try{beforeEffectNow=this.now()}catch(e){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
+      throw e;
+    }
+    if(committedProof.expiresAtMs<=beforeEffectNow){
       this.locallyFenced.add(device);
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}

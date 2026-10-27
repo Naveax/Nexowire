@@ -166,3 +166,19 @@ provider exists, is durable, or survives its own backup/restore. The real
 provider, protected credentials, monotonic restore canary, and physical
 multi-Hub/lost-ACK acceptance remain external requirements. Production remains
 **NO-GO**.
+
+
+## 2026-10-27 #01 fail-closed receipt time checks
+
+The Broker accepts a configured permit lifetime only from 1 through 5000 ms,
+and snapshots that bound at construction. A non-finite, fractional, non-positive,
+throwing, or backwards clock reading makes this Broker clock untrusted and
+denies the operation. If an invalid clock is observed after a known reservation,
+the device is locally fenced and release is attempted; no effect is retried.
+
+The clock and TTL tests use an injected source and a synthetic authority. A
+nondecreasing process-local reading does not prove that the host clock was
+initially correct, advances continuously, or survives restore. The independent
+CAS authority must enforce its own trusted time, generation and revocation
+policy; a real protected time source and physical acceptance remain required.
+Production remains **NO-GO**.

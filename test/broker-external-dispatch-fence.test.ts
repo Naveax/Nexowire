@@ -183,10 +183,10 @@ function fixture(){
  });
  const verifyApproval=signedOperatorGrantVerifier(
   ownerKeys.publicKey.export({type:'spki',format:'pem'}).toString());
- const broker=(opts?:{now?:()=>number;onReadback?:()=>void})=>
+ const broker=(opts?:{now?:()=>number;onReadback?:()=>void;maxPermitMs?:number})=>
   new BrokerExternalDispatchFence({
   authority:remote,authorityId,publicKeyPem:keys,
-  now:opts?.now,
+  now:opts?.now,maxPermitMs:opts?.maxPermitMs,
   verifyIdentity:async()=>identity,
   verifyEffectiveBroker:async()=>{
     opts?.onReadback?.();
@@ -264,6 +264,69 @@ test('verified high-token Broker executes once after new signed external CAS per
  await code(gate.execute(f.request([...f.remote.dispatched.keys()][0]!),async()=>++effects),
   'DISPATCH_EXTERNAL_CAS_UNKNOWN');
  assert.equal(effects,1);
+});
+test('permit TTL configuration fails closed above five seconds or when invalid',async()=>{
+ for(const ttl of [0,-1,5001,1.5,Number.NaN,Number.POSITIVE_INFINITY]){
+  const f=fixture();
+  assert.throws(()=>f.broker({maxPermitMs:ttl}),{code:'DISPATCH_PERMIT_TTL_INVALID'});
+ }
+ const f=fixture(),gate=f.broker({maxPermitMs:2500});
+ let effects=0;
+ assert.equal(await gate.execute(f.request(),async()=>++effects),1);
+ assert.equal(effects,1,'a valid bounded TTL still admits the fixture effect');
+});
+test('mutating the caller configuration cannot widen the accepted permit TTL',async()=>{
+ const f=fixture();
+ const config={authority:f.remote,authorityId:f.remote.authorityId,
+  publicKeyPem:keys,maxPermitMs:1000,
+  verifyIdentity:async()=>true,
+  verifyEffectiveBroker:async()=>({verified:true as const,
+   brokerId:f.remote.brokerId,ownerEpoch:4,grantGeneration:7,
+   highIntegrityToken:true as const,signedProtectedImage:true as const,
+   protectedParentAndImports:true as const}),
+  verifyOwnerRevocation:async()=>true};
+ const gate=new BrokerExternalDispatchFence(config);
+ config.maxPermitMs=Number.POSITIVE_INFINITY;
+ let effects=0;
+ await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_PROOF_EXPIRED');
+ assert.equal(f.remote.commitCalls,0);
+ assert.equal(effects,0);
+});
+test('invalid or unavailable clock fences before external reservation',async()=>{
+ const clocks=[()=>Number.NaN,()=>Number.POSITIVE_INFINITY,()=>0,()=>1.5,
+  ()=>{throw Error('CLOCK_UNAVAILABLE')}];
+ for(const now of clocks){
+  const f=fixture(),gate=f.broker({now});let effects=0;
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_CLOCK_UNTRUSTED');
+  assert.equal(f.remote.beginChallenges.length,0,'invalid time must not reserve');
+  assert.equal(effects,0);
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_REVOKE_PENDING');
+  assert.equal(effects,0);
+ }
+});
+test('clock failure during either protected readback prevents a callback',async()=>{
+ for(const failingReadback of [2,3]){
+  const f=fixture();let clock=Date.now(),readbacks=0,effects=0;
+  const gate=f.broker({now:()=>clock,
+   onReadback:()=>{if(++readbacks===failingReadback)clock=Number.NaN}});
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_CLOCK_UNTRUSTED');
+  assert.equal(readbacks,failingReadback);
+  assert.equal(f.remote.commitCalls,failingReadback===2?0:1);
+  assert.equal(f.remote.active.size,0,'known claim is released after clock failure');
+  assert.equal(effects,0);
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_REVOKE_PENDING');
+  assert.equal(effects,0,'clock failure cannot replay the mutation');
+ }
+});
+test('clock rollback during final protected readback denies effect',async()=>{
+ const f=fixture();let clock=Date.now(),readbacks=0,effects=0;
+ const gate=f.broker({now:()=>clock,
+  onReadback:()=>{if(++readbacks===3)clock-=1}});
+ await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_CLOCK_UNTRUSTED');
+ assert.equal(readbacks,3);
+ assert.equal(f.remote.commitCalls,1);
+ assert.equal(f.remote.active.size,0);
+ assert.equal(effects,0);
 });
 test('begin permit expiry during async HIGH reattestation blocks remote commit',async()=>{
  const f=fixture();
