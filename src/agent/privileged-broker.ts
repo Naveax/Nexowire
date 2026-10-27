@@ -86,6 +86,13 @@ export function isWindowsProcessElevated(): boolean {
   );
 }
 
+/** Health must reflect a fresh token probe, never test-only startup options. */
+export function brokerHealthElevationClaim(
+  readCurrentToken:()=>boolean=isWindowsProcessElevated,
+):boolean {
+  try{return readCurrentToken()===true}catch{return false}
+}
+
 function isLoopbackHost(host: string): boolean {
   const normalized = host.trim().toLowerCase();
   return (
@@ -205,10 +212,8 @@ export async function startPrivilegedBroker(
       response.end(JSON.stringify({
         ok: true,
         version: NEXOWIRE_VERSION,
-        elevated:
-          options.requireElevation === false
-            ? true
-            : isWindowsProcessElevated(),
+        // Test fixtures may skip startup elevation; health never invents HIGH.
+        elevated: brokerHealthElevationClaim(),
       }));
       return;
     }
