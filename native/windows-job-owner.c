@@ -126,6 +126,68 @@ cleanup:
   return trusted;
 }
 
+/**
+ * The Agent must temporarily duplicate the Job handle from this process to
+ * verify membership while the root is suspended. That bootstrap handle is a
+ * genuine same-HIGH attack window. Once the Agent has acknowledged the
+ * verification gate, remove PROCESS_DUP_HANDLE from BA/OWNER_RIGHTS before
+ * ResumeThread. Failure to apply/read back the ACL MUST terminate the Job;
+ * a suspended root may never be resumed with a broadly duplicable guardian.
+ *
+ * This mitigates new opens AFTER the seal only. It cannot revoke any Job
+ * handle already stolen before the seal; SeDebugPrivilege, equal-HIGH admins
+ * that can modify the DACL, and SYSTEM remain outside the trust boundary.
+ * A separate service SID/principal with trusted IPC is required for P0.
+ */
+static BOOL seal_guardian_after_attestation(void) {
+  const DWORD queryOnly=PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE;
+  wchar_t sddl[160]={0};
+  if(swprintf(sddl,160,
+       L"D:P(A;;0x%08lx;;;SY)(A;;0x%08lx;;;BA)(A;;0x%08lx;;;OW)",
+       (unsigned long)PROCESS_ALL_ACCESS,
+       (unsigned long)queryOnly,(unsigned long)queryOnly)<0)
+    return FALSE;
+  PSECURITY_DESCRIPTOR desired=NULL,observed=NULL;
+  PACL desiredAcl=NULL,installed=NULL;
+  BOOL hasDacl=FALSE,wasDefaulted=FALSE;
+  HANDLE processHandle=NULL;
+  BOOL valid=FALSE;
+  if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+       sddl,SDDL_REVISION_1,&desired,NULL))goto cleanup;
+  if(!GetSecurityDescriptorDacl(desired,&hasDacl,&desiredAcl,&wasDefaulted)
+     || !hasDacl || !desiredAcl)goto cleanup;
+  // Obtain the WRITE_DAC/READ_CONTROL handle while bootstrap BA still has it.
+  processHandle=OpenProcess(READ_CONTROL|WRITE_DAC,FALSE,GetCurrentProcessId());
+  if(!processHandle)goto cleanup;
+  if(SetSecurityInfo(processHandle,SE_KERNEL_OBJECT,
+       DACL_SECURITY_INFORMATION|PROTECTED_DACL_SECURITY_INFORMATION,
+       NULL,NULL,desiredAcl,NULL)!=ERROR_SUCCESS)goto cleanup;
+  if(GetSecurityInfo(processHandle,SE_KERNEL_OBJECT,
+       DACL_SECURITY_INFORMATION,NULL,NULL,&installed,NULL,&observed)
+       !=ERROR_SUCCESS || !observed || !installed)goto cleanup;
+  if(installed->AceCount!=desiredAcl->AceCount)goto cleanup;
+  for(DWORD i=0;i<desiredAcl->AceCount;i++){
+    void *left=NULL,*right=NULL;
+    if(!GetAce(desiredAcl,i,&left) || !GetAce(installed,i,&right))
+      goto cleanup;
+    ACE_HEADER *a=(ACE_HEADER*)left,*c=(ACE_HEADER*)right;
+    if(a->AceSize!=c->AceSize || memcmp(a,c,a->AceSize)!=0)
+      goto cleanup;
+  }
+  SECURITY_DESCRIPTOR_CONTROL control=0;
+  DWORD revision=0;
+  if(!GetSecurityDescriptorControl(observed,&control,&revision) ||
+     !(control&SE_DACL_PROTECTED))goto cleanup;
+  valid=TRUE;
+cleanup:
+  if(observed)LocalFree(observed);
+  if(processHandle)CloseHandle(processHandle);
+  if(desired)LocalFree(desired);
+  if(!valid)fwprintf(stderr,
+    L"NEXOWIRE_WINJOB_ERROR post_attestation_guardian_dacl_unsealed\\n");
+  return valid;
+}
+
 static int quote_arg(const wchar_t *src, wchar_t **pos, const wchar_t *end) {
   int needs=!*src;
   const wchar_t *s=src;
@@ -284,6 +346,15 @@ int main(void){
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
     if(parent)CloseHandle(parent);
     return 76;
+  }
+  // A release marker alone does not allow the root to resume. New equal-HIGH
+  // PROCESS_DUP_HANDLE opens must be denied BEFORE the first side effect.
+  // A stolen handle from the initial attestation window remains P0 BLOCKED.
+  if(!seal_guardian_after_attestation()){
+    TerminateJobObject(job,79);
+    CloseHandle(pi.hThread);CloseHandle(pi.hProcess);CloseHandle(job);
+    if(parent)CloseHandle(parent);
+    return 79;
   }
   if(ResumeThread(pi.hThread)==(DWORD)-1){
     diagnostic(L"resume");
