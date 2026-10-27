@@ -363,7 +363,9 @@ test('missing protected native consent provider cannot show local approval or re
 test('legacy local proof without session epoch remains revocable but never admits',async()=>{
   const f=fixture();try{
     const enrolled=await enable(f);const legacy=f.profile();
-    delete legacy.nativeConsent!.windowsLogonSessionEpoch;
+    const legacyProof={...legacy.nativeConsent!} as Partial<NativeCoreConsentProof>;
+    delete legacyProof.windowsLogonSessionEpoch;
+    legacy.nativeConsent=legacyProof as unknown as NativeCoreConsentProof;
     f.setProfile(legacy);
     const restarted=await f.make();
     const status=await restarted.controller.status('full');
