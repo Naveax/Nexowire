@@ -19,7 +19,9 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   for(const token of ['CLONE_NEWUSER','CLONE_NEWNS','CLONE_NEWNET',
     'CLONE_NEWIPC','CLONE_NEWUTS','CLONE_NEWPID','SYS_pivot_root',
     'stat("/proc/self/ns/user"', 'stat("/proc/self/ns/net"',
-    'MS_PRIVATE','PR_SET_NO_NEW_PRIVS','SYS_close_range','clearenv()']){
+    'MS_PRIVATE','PR_SET_NO_NEW_PRIVS','PR_SET_SECCOMP',
+    'SECCOMP_MODE_FILTER','SECCOMP_RET_ERRNO|EPERM',
+    'SYS_close_range','clearenv()']){
     assert.ok(source.includes(token),token);
   }
   assert.doesNotMatch(source,/\b(?:execve|execvp|execl|system|popen|posix_spawn)\s*\(/);
@@ -45,7 +47,7 @@ test('#07 native probe compiles and refuses arbitrary command',{
         encoding:'utf8',timeout:20000,env:{PATH:'/usr/bin:/bin'}});
       assert.equal(checked.status,0,
         'OS_NAMESPACE_DIAGNOSTIC_BLOCKED: '+checked.stderr);
-      assert.match(checked.stdout,/NW07_NAMESPACE_SOURCE_SELFTEST_OK/);
+      assert.match(checked.stdout,/NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK/);
     }
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

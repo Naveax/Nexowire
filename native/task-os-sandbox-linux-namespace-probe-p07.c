@@ -10,6 +10,10 @@
  */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <stddef.h>
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
 #include <fcntl.h>
 #include <sched.h>
 #include <stdio.h>
@@ -42,6 +46,43 @@ static int map_ids(uid_t outer_uid,gid_t outer_gid) {
      put("/proc/self/uid_map",line)<0)return -1;
   if(snprintf(line,sizeof(line),"0 %lu 1\n",(unsigned long)outer_gid)<0 ||
      put("/proc/self/gid_map",line)<0)return -1;
+  return 0;
+}
+/*
+ * Source-only minimal SECcomp evidence: after this syscall fence there is no
+ * shell, exec, socket, filesystem or child-creation syscall available.
+ * This probe never executes task payload; no production sandbox is accepted.
+ */
+#if defined(__x86_64__)
+#define NW07_SECCOMP_ARCH AUDIT_ARCH_X86_64
+#elif defined(__aarch64__)
+#define NW07_SECCOMP_ARCH AUDIT_ARCH_AARCH64
+#else
+#error Unsupported native seccomp audit architecture: fail closed
+#endif
+#define NW07_SC_ALLOW(n) \
+  BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K,SYS_##n,0,1), \
+  BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_ALLOW)
+static int install_probe_seccomp(void) {
+  const struct sock_filter filter[] = {
+    BPF_STMT(BPF_LD|BPF_W|BPF_ABS,(unsigned)offsetof(struct seccomp_data,arch)),
+    BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K,NW07_SECCOMP_ARCH,1,0),
+    BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_KILL_PROCESS),
+    BPF_STMT(BPF_LD|BPF_W|BPF_ABS,(unsigned)offsetof(struct seccomp_data,nr)),
+    NW07_SC_ALLOW(write),
+    NW07_SC_ALLOW(exit),
+    NW07_SC_ALLOW(exit_group),
+    NW07_SC_ALLOW(rt_sigreturn),
+    NW07_SC_ALLOW(getpid),
+    NW07_SC_ALLOW(getuid),
+    BPF_STMT(BPF_RET|BPF_K,SECCOMP_RET_ERRNO|EPERM),
+  };
+  const struct sock_fprog program = {
+    .len=(unsigned short)(sizeof(filter)/sizeof(filter[0])),
+    .filter=(struct sock_filter*)filter,
+  };
+  if(prctl(PR_SET_NO_NEW_PRIVS,1,0,0,0)<0)return -1;
+  if(prctl(PR_SET_SECCOMP,SECCOMP_MODE_FILTER,&program)<0)return -1;
   return 0;
 }
 static int kernel_child(const char *root) {
@@ -90,18 +131,15 @@ static int kernel_child(const char *root) {
   if(getpid()!=1||getuid()!=0)_exit(45);
   if(stat("/etc/passwd",&st)==0||errno!=ENOENT)_exit(46);
   if(stat("/proc/self/environ",&st)==0||errno!=ENOENT)_exit(47);
+  if(install_probe_seccomp()<0)_exit(51);
+  /* Direct kernel denial, not a connection-refused / no-listener false pass. */
+  errno=0;
   int s=socket(AF_INET,SOCK_STREAM|SOCK_CLOEXEC,0);
-  if(s<0)_exit(48);
-  struct sockaddr_in addr;
-  memset(&addr,0,sizeof(addr));
-  addr.sin_family=AF_INET;
-  addr.sin_port=htons(2);
-  addr.sin_addr.s_addr=htonl(0x7f000001UL);
-  int net=connect(s,(const struct sockaddr*)&addr,sizeof(addr));
-  (void)close(s);
-  if(net==0)_exit(49);
-  puts("NW07_NAMESPACE_SOURCE_SELFTEST_OK (NOT_RUNTIME_OR_PHYSICAL_ACCEPTANCE)");
-  fflush(stdout);
+  if(s!=-1 || errno!=EPERM)_exit(52);
+  const char marker[]=
+    "NW07_NAMESPACE_SECCOMP_SOURCE_SELFTEST_OK (NOT_RUNTIME_OR_PHYSICAL_ACCEPTANCE)\n";
+  if(write(STDOUT_FILENO,marker,sizeof(marker)-1)!=(ssize_t)(sizeof(marker)-1))
+    _exit(53);
   _exit(0);
 }
 int main(int argc,char **argv) {
