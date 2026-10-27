@@ -134,13 +134,17 @@ cleanup:
  * ResumeThread. Failure to apply/read back the ACL MUST terminate the Job;
  * a suspended root may never be resumed with a broadly duplicable guardian.
  *
+ * Keep PROCESS_TERMINATE so the trusted caller can stop its guardian; a
+ * same-HIGH attacker can also kill this process, but without a stolen Job
+ * handle that death still triggers KILL_ON_JOB_CLOSE. Never grant DUP_HANDLE.
+ *
  * This mitigates new opens AFTER the seal only. It cannot revoke any Job
  * handle already stolen before the seal; SeDebugPrivilege, equal-HIGH admins
  * that can modify the DACL, and SYSTEM remain outside the trust boundary.
  * A separate service SID/principal with trusted IPC is required for P0.
  */
 static BOOL seal_guardian_after_attestation(void) {
-  const DWORD queryOnly=PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE;
+  const DWORD queryOnly=PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE|PROCESS_TERMINATE;
   wchar_t sddl[160]={0};
   if(swprintf(sddl,160,
        L"D:P(A;;0x%08lx;;;SY)(A;;0x%08lx;;;BA)(A;;0x%08lx;;;OW)",
