@@ -47,7 +47,18 @@ export interface DispatchReleaseRequest {
   request:BrokerDispatchRequest;
 }
 export interface ExternalBrokerDispatchAuthority {
-  /** Must be atomic with revoke/re-pair and single-use claim allocation. */
+  /**
+   * Atomically serialize against revoke/re-pair and allocate a single-use
+   * claim. Before acknowledging a reservation, persist an independent durable
+   * tombstone keyed by the immutable requestId and bind it to the complete
+   * request and Broker scope. Repeated begin calls for that requestId,
+   * including after a lost ACK, restart, failover or restore, MUST reject or
+   * return a non-authorizing UNKNOWN outcome; they MUST NEVER mint a new
+   * dispatchId or permit, even with a fresh challengeNonce. Release cannot
+   * delete the tombstone. Reconcile an unknown outcome by inspection; never
+   * replay it as a new mutation or substitute a fresh requestId. Missing or
+   * ambiguous authority state fails closed.
+   */
   beginIfCurrent(operation:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>;
   /**

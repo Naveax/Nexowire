@@ -129,3 +129,25 @@ token downgrade or revoke after the last readback: real protected Broker
 admission/cancel barriers and effective Windows token evidence are still
 required from #02/#03, together with independent durable CAS and physical
 two-device rollback/revocation acceptance. Production remains **NO-GO**.
+
+
+## 2026-10-27 #01 durable reservation when begin ACK is lost
+
+The external authority MUST durably tombstone the immutable mutation
+`requestId`, bound to the complete original request and Broker scope, in the
+same atomic operation that reserves its dispatch claim and before acknowledging
+it. If the response is lost after reservation, repeating begin with that same
+`requestId`—including from another Hub or Broker process and with a fresh
+`challengeNonce`—must reject or return a non-authorizing UNKNOWN outcome. It may
+not allocate a new dispatch ID or issue a new permit. A release must not erase
+the request tombstone. UNKNOWN is reconciled by inspection; never retry the
+mutation under a fresh request ID.
+
+The deterministic regression test forces the synthetic authority to persist
+the request UUID and claim, then lose the begin ACK. It verifies that Hub A's
+callback does not run and Hub B cannot obtain a second claim with a new nonce.
+This is only a test fixture: it does not prove that an independent production
+provider exists, is durable, or survives its own backup/restore. The real
+provider, protected credentials, monotonic restore canary, and physical
+multi-Hub/lost-ACK acceptance remain external requirements. Production remains
+**NO-GO**.
