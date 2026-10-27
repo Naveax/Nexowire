@@ -12,6 +12,10 @@ export interface TrustedNativeCoreEnrollmentVerifier {
     proof:NonNullable<CoreAuthorityRequest['nativeConsent']>,
     expected:CoreConsoleEnrollmentV1,
   ):Promise<boolean>;
+  /** Independent fresh native OS/session readback, not Agent-signed report. */
+  currentReadback(expected:{ownerAccountId:string;deviceId:string;
+    installationId:string;enrollmentId:string;ownerEpoch:number;
+    grantGeneration:number;revokeEpoch:number}):Promise<boolean>;
 }
 
 const DB_NOW="(CAST(strftime('%s','now') AS INTEGER)*1000)";
@@ -151,6 +155,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       statusObservedAtMs:row.status_observed_at_ms};
   }
   async requestEnrollment(deviceId:string,ownerAccountId:string){
+    if(!this.nativeEnrollmentVerifier)throw new Error('CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE');
     // Only the FIRST enrollment can be queued. Re-queueing an already
     // certified device can mislead the UI and trigger unwanted local consent.
     // Keep this predicate in the same D1 UPDATE to close the read/write race.
@@ -166,14 +171,27 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
   }
   async deviceStatus(deviceId:string,ownerAccountId:string){
     const row=await this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
+      c.installation_id,c.owner_epoch,c.grant_generation,c.revoke_epoch,
       c.physical_active,c.status_observed_at_ms,
       CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready,
       CASE WHEN ${READY} AND c.status_observed_at_ms>=${DB_NOW}-15000 THEN 1 ELSE 0 END fresh
       ${JOIN} WHERE d.id=? AND d.owner_account_id=?`).bind(deviceId,ownerAccountId)
-      .first<{enrollment_id:string|null;enrollment_requested:number;device_ready:number;
-        physical_active:number;status_observed_at_ms:number|null;fresh:number}>();
-    return {localEnrolled:!!row?.enrollment_id,active:row?.fresh===1&&row.physical_active===1,
+      .first<{enrollment_id:string|null;installation_id:string|null;owner_epoch:number;
+        grant_generation:number;revoke_epoch:number;enrollment_requested:number;
+        device_ready:number;physical_active:number;status_observed_at_ms:number|null;fresh:number}>();
+    let nativeCurrent=false;
+    if(row?.enrollment_id&&row.installation_id&&this.nativeEnrollmentVerifier){
+      try{nativeCurrent=await this.nativeEnrollmentVerifier.currentReadback({
+        ownerAccountId,deviceId,installationId:row.installation_id,
+        enrollmentId:row.enrollment_id,ownerEpoch:row.owner_epoch,
+        grantGeneration:row.grant_generation,revokeEpoch:row.revoke_epoch})===true;
+      }catch{nativeCurrent=false;}
+    }
+    // Never infer OS-local human approval from a D1 row or signed Agent report.
+    return {localEnrolled:nativeCurrent,
+      active:nativeCurrent&&row?.fresh===1&&row.physical_active===1,
       observedAtMs:row?.status_observed_at_ms??null,
-      enrollmentRequested:row?.enrollment_requested===1,deviceReady:row?.device_ready===1};
+      enrollmentRequested:!!this.nativeEnrollmentVerifier&&row?.enrollment_requested===1,
+      deviceReady:!!this.nativeEnrollmentVerifier&&row?.device_ready===1};
   }
 }
