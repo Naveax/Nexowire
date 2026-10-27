@@ -29,11 +29,14 @@ static BOOL enforce_guardian_isolation(void) {
   DWORD sidBytes=sizeof(adminSid);
   SID_IDENTIFIER_AUTHORITY ntAuthority=SECURITY_NT_AUTHORITY;
   BOOL trusted=FALSE;
+  const wchar_t *stage=L"token_open";
+  DWORD win32=ERROR_SUCCESS;
   PSECURITY_DESCRIPTOR descriptor=NULL;
   PACL dacl=NULL;
   HANDLE self=NULL;
 
   if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))goto cleanup;
+  stage=L"integrity_query";
   if(!GetTokenInformation(token,TokenIntegrityLevel,integrity,sizeof(integrity),
        &returned))goto cleanup;
   TOKEN_MANDATORY_LABEL *label=(TOKEN_MANDATORY_LABEL*)integrity;
@@ -41,31 +44,41 @@ static BOOL enforce_guardian_isolation(void) {
   DWORD count=*GetSidSubAuthorityCount(label->Label.Sid);
   if(count==0)goto cleanup;
   DWORD level=*GetSidSubAuthority(label->Label.Sid,count-1);
+  stage=L"integrity_not_high";
   if(level<SECURITY_MANDATORY_HIGH_RID)goto cleanup;
+  stage=L"token_elevation";
   if(!GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),
        &returned) || !elevation.TokenIsElevated)goto cleanup;
+  stage=L"mandatory_policy";
   if(!GetTokenInformation(token,TokenMandatoryPolicy,&mandatory,sizeof(mandatory),
        &returned) || !(mandatory.Policy&TOKEN_MANDATORY_POLICY_NO_WRITE_UP))
     goto cleanup;
+  stage=L"admins_sid";
   if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,adminSid,&sidBytes))
     goto cleanup;
+  stage=L"admins_membership";
   if(!CheckTokenMembership(NULL,adminSid,&admin) || !admin)goto cleanup;
 
   // An OWNER_RIGHTS ACE suppresses the implicit WRITE_DAC privilege of
   // the creator SID. Only SYSTEM and an enabled Administrators SID get
   // PROCESS_DUP_HANDLE. Medium filtered admin tokens are not enabled BA.
   // Explicitly fail if the DACL cannot be applied and read back.
+  stage=L"dacl_sddl";
   if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(
        L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00101000;;;OW)",
        SDDL_REVISION_1,&descriptor,NULL))goto cleanup;
+  stage=L"dacl_parse";
   BOOL present=FALSE,defaulted=FALSE;
   if(!GetSecurityDescriptorDacl(descriptor,&present,&dacl,&defaulted) ||
      !present || !dacl)goto cleanup;
+  stage=L"self_open";
   self=OpenProcess(READ_CONTROL|WRITE_DAC,FALSE,GetCurrentProcessId());
   if(!self)goto cleanup;
+  stage=L"dacl_set";
   if(SetSecurityInfo(self,SE_KERNEL_OBJECT,
        DACL_SECURITY_INFORMATION|PROTECTED_DACL_SECURITY_INFORMATION,
        NULL,NULL,dacl,NULL)!=ERROR_SUCCESS)goto cleanup;
+  stage=L"dacl_readback";
   PSECURITY_DESCRIPTOR observed=NULL;
   PACL installed=NULL;
   DWORD verify=GetSecurityInfo(self,SE_KERNEL_OBJECT,DACL_SECURITY_INFORMATION,
@@ -91,7 +104,8 @@ cleanup:
   if(descriptor)LocalFree(descriptor);
   if(token)CloseHandle(token);
   if(!trusted)fwprintf(stderr,
-    L"NEXOWIRE_WINJOB_ERROR guardian_high_token_or_acl_unverified\n");
+    L"NEXOWIRE_WINJOB_ERROR guardian_high_token_or_acl_unverified stage=%ls win32=%lu\n",
+    stage,win32?win32:GetLastError());
   return trusted;
 }
 
