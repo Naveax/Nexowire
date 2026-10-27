@@ -140,3 +140,29 @@ on an existing test-input mismatch. A future source change requires its own
 run and evidence; do not reuse that RED or a prior PASS for another SHA.
 None of these records proves production CAS, installed Broker or physical
 acceptance.
+
+The offline snapshot auditor follows the same boundary: an internally
+consistent saved JSON document is not authenticated GitHub data, does not
+identify the actual checkout tree and does not prove a required test case ran.
+Its matching checkout/case fields remain `NOT_COLLECTED`/`NOT_PROVEN`,
+even if callers insert self-reported green flags into the snapshot.
+
+## #919 Node 22 cancellation: bounded evidence
+
+Run `40513511664` at HEAD
+`b05c08ffe64cd6fcff21f150b71fc51c1f8bf44d` finished `cancelled`.
+Node 22 job `122221488020` reached `npm test`; its last emitted result was
+test 108, a skipped Windows-only case in
+`test/ai-workspace-strict-policy.test.ts`. The runner then canceled the
+operation after roughly six hours and cleaned up a Node worker and esbuild.
+There was no completed TAP summary or stack trace identifying the hanging
+test or handle. GitHub documents a default 360-minute job timeout, so the
+duration is consistent with that limit, but the job log does not establish
+the cancellation trigger.
+
+The next cases in the successful Node 24 output belong to
+`test/all-ingress-transport-meter-staging.test.ts`. Concurrent/buffered test
+output order is not a diagnosis. Both files have the same blob SHA in #919 and
+#933, and the different #933 Node 22 run completed those cases. That result
+neither proves nor rules out a transient #919-specific issue. The old run
+was not canceled or rerun by this QA work.
