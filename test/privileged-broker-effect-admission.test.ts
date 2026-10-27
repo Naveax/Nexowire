@@ -266,3 +266,37 @@ test('Broker HTTP route gates native, injected, installer, updater and no-provid
     }finally{await broker.close();}
   }
 });
+
+// A valid receipt must not become immortal when Windows wall time freezes.
+// The wait represents an async external CAS, signature verification or readback.
+test('frozen wall clock cannot extend Broker admission after async waits',async()=>{
+  for(const stage of ['begin','verify','commit','readback'] as const){
+    const f=fixture();
+    const genuineDateNow=Date.now;
+    const fixedMs=genuineDateNow();
+    Date.now=()=>fixedMs;
+    try{
+      f.setBinding({...proof(),expiresAtMs:fixedMs+50});
+      const stall=()=>new Promise<void>(resolve=>setTimeout(resolve,90));
+      if(stage==='begin'){
+        const previous=f.authority.begin.bind(f.authority);
+        f.authority.begin=async(...args)=>{await stall();return previous(...args)};
+      }else if(stage==='verify'){
+        const previous=f.authority.verifyReceipt.bind(f.authority);
+        f.authority.verifyReceipt=async(...args)=>{await stall();return previous(...args)};
+      }else if(stage==='commit'){
+        const previous=f.authority.commit.bind(f.authority);
+        f.authority.commit=async(...args)=>{await stall();return previous(...args)};
+      }else{
+        const previous=f.authority.readVerifiedBinding.bind(f.authority);
+        f.authority.readVerifiedBinding=async()=>{
+          const result=await previous();
+          if(f.lastRequest)await stall();
+          return result;
+        };
+      }
+      await assert.rejects(f.run(),deny,stage);
+      assert.equal(f.events.includes('invoke'),false,stage);
+    }finally{Date.now=genuineDateNow}
+  }
+});
