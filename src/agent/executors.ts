@@ -2283,6 +2283,16 @@ export async function executeCapability(
       input,
     );
   }
+  // #03: Never fall back to direct process capabilities for actions that
+  // require the protected Broker. A legacy `direct`/missing privilegeMode
+  // is NOT permission to skip remote single-use CAS admission.
+  if (privilegeRequirement(capability, input) === 'elevated') {
+    const denied = new Error(
+      'Elevated dispatch requires an authenticated protected Broker and external CAS.',
+    ) as Error & {code?:string};
+    denied.code='CORE_EXTERNAL_CAS_DISPATCH_REQUIRED';
+    throw denied;
+  }
   switch (capability) {
     case 'agent.operation.status': {
       // Operator-only MCP tool authorizes caller and target at the Hub.

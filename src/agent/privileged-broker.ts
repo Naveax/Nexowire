@@ -16,6 +16,7 @@ import {
   preflightVerifiedInstaller,
 } from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+import {executeProtectedBrokerEffect, type ProtectedBrokerEffectDispatch} from './core-broker-effect-dispatch.js';
 
 const BROKER_ELEVATION_SYSTEM32='C:\\Windows\\System32';
 const BROKER_ELEVATION_POWERSHELL=BROKER_ELEVATION_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -37,6 +38,9 @@ export interface PrivilegedBrokerServerOptions {
   tokens: readonly string[];
   maxBodyBytes?: number;
   requireElevation?: boolean;
+  /** Required for ALL elevated /execute callbacks, including legacy bearer routes.
+   * Absent in currently deployed startup: the endpoint denies mutation. */
+  protectedDispatch?:ProtectedBrokerEffectDispatch;
   execute?: (
     capability: string,
     input: unknown,
@@ -291,9 +295,13 @@ export async function startPrivilegedBroker(
                   requestedInput,
                 ));
 
-      const data = await execute(
-        capability,
-        decoded.input,
+      // Bearer authentication and capability allowlisting alone NEVER admit
+      // an OS effect. Every elevated mutation, including old /execute
+      // callers, must pass fresh owner/device/session/epoch and the external
+      // atomic single-use begin+commit fence. No configured provider = DENY.
+      const data = await executeProtectedBrokerEffect(
+        options.protectedDispatch,request,capability,decoded.input,
+        () => execute(capability,decoded.input),
       );
 
       response.writeHead(200, {
