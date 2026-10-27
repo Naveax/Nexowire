@@ -176,8 +176,17 @@ export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=new S
 export function assertCoreOtherNativeEffectUnavailable(
   capability:string,
   coreOrBrokerRouted:boolean,
+  input?:unknown,
 ):void{
-  if(coreOrBrokerRouted &&
+  // Privileged registry/machine-environment writes already have the stricter
+  // native guard and existing exact error codes. Non-elevated variants must
+  // not bypass CORE just because HKCU/user/process needs no HIGH token.
+  const separatelyFenced=('windows.registry.set'===capability||
+    'windows.registry.delete'===capability||
+    'windows.environment.set'===capability||
+    'windows.environment.delete'===capability) &&
+    privilegeRequirement(capability,input)==='elevated';
+  if(coreOrBrokerRouted && !separatelyFenced &&
      CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES.has(capability))
     deny('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED');
 }
