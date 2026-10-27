@@ -45,7 +45,7 @@ test('after Job attestation, equal-HIGH same-logon PROCESS_DUP_HANDLE opens are 
   // the earlier bootstrap window, SeDebug or a SYSTEM peer is contained.
   const groups=execFileSync('whoami.exe',['/groups'],
     {encoding:'utf8',windowsHide:true,timeout:8000});
-  const isHigh=/S-1-16-12288\\b/.test(groups);
+  const isHigh=/S-1-16-12288\b/.test(groups);
   const elevated=execFileSync('powershell.exe',['-NoProfile','-NonInteractive',
     '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
     {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
@@ -56,7 +56,7 @@ test('after Job attestation, equal-HIGH same-logon PROCESS_DUP_HANDLE opens are 
   const marker='NX_SEALED_JOB_'+randomBytes(12).toString('hex');
   const manager=new ProcessManager();
   const started=await manager.start({shell:'powershell',
-    command:'node -e "const marker=\\''+marker+'\\';setInterval(()=>{},1000)"'},
+    command:`node -e \"const marker='${marker}';setInterval(()=>{},1000)\"`},
     new PathPolicy(['*']));
   try{
     assert.equal(started.treeOwnership,'windows_job');
@@ -64,10 +64,10 @@ test('after Job attestation, equal-HIGH same-logon PROCESS_DUP_HANDLE opens are 
     const guard=exact(started.jobGuardianPid);
     assert.ok(guard?.Name.toLowerCase()==='windows-job-owner.exe' &&
       guard.CommandLine?.includes(marker),'must target a marked, owned guardian');
-    const statusPath=/--status\\s+(?:"([^"]+)"|([^\\s]+))\\s+--cwd/.exec(guard.CommandLine!);
+    const statusPath=/--status\s+(?:"([^"]+)"|([^\s]+))\s+--cwd/.exec(guard.CommandLine!);
     assert.ok(statusPath);
     const text=(await readFile(statusPath[1]??statusPath[2]!,'utf8')).trim();
-    const nw=/^NWJOB5 (\\d+) (\\d+) (\\d+)$/.exec(text);
+    const nw=/^NWJOB5 (\d+) (\d+) (\d+)$/.exec(text);
     assert.ok(nw&&Number(nw[1])===started.pid);
     const root=exact(started.pid);
     assert.ok(root&&root.Name.toLowerCase()==='powershell.exe');
