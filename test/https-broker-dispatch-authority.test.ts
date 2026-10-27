@@ -26,7 +26,7 @@ test('isolated TLS dispatch rejects lost begin ACK replay and forged receipts',a
  const authorityId=ca.authorityId,brokerId=randomUUID();
  const ownerId=randomUUID(),sessionEpoch=randomUUID(),deviceEpoch=ca.epoch;
  let generation=5,revoked=false,forged=false,released=0,lostBeginAck=false;
- let beginCalls=0;
+ let beginCalls=0,revokeRequests=0;
  const beginChallenges:string[]=[];
  const requestTombstones=new Map<string,{request:string;brokerId:string;dispatchId:string}>();
  let claims=new Map<string,{request:Record<string,unknown>;brokerId:string;committed:boolean}>();
@@ -109,6 +109,11 @@ test('isolated TLS dispatch rejects lost begin ACK replay and forged receipts',a
     res.writeHead(204);res.end();return;
    }
    if(req.url==='/v1/broker-dispatch/revoke-and-drain'){
+    revokeRequests++;
+    if(typeof payload.challengeNonce!=='string'||
+       !/^[0-9a-f]{64}$/.test(payload.challengeNonce)){
+      respond({error:'challenge required'},400);return;
+    }
     if(revoked||payload.expectedGeneration!==generation||
        [...claims.values()].some(x=>x.committed)){
       respond({error:'stale or active dispatch'},409);return;
@@ -117,7 +122,8 @@ test('isolated TLS dispatch rejects lost begin ACK replay and forged receipts',a
     respond(signed({kind:'broker_dispatch_revocation_v1',authorityId,
       deviceId:payload.deviceId,ownerId:payload.ownerId,
       deviceEpoch:payload.deviceEpoch,sessionEpoch:payload.sessionEpoch,
-      previousGeneration:before,generation,revoked:true,drained:true},
+      challengeNonce:payload.challengeNonce,previousGeneration:before,
+      generation,revoked:true,drained:true},
       signer.privateKey));
     return;
    }
@@ -233,9 +239,14 @@ test('isolated TLS dispatch rejects lost begin ACK replay and forged receipts',a
   verifyOwnerRevocation:async()=>true,
  });
  forged=false;
- assert.equal((await fresh.revoke({deviceId:ca.deviceId,ownerId,
+ const revokeRequest={deviceId:ca.deviceId,ownerId,
   deviceEpoch,sessionEpoch,expectedGeneration:5,
-  signedOwnerApproval:'SIGNED_EXTERNAL_OWNER_REVOKE'.repeat(2)})).revoked,true);
+  signedOwnerApproval:'SIGNED_EXTERNAL_OWNER_REVOKE'.repeat(2)};
+ await assert.rejects(remote.revokeAndDrain(revokeRequest,'invalid'),
+  {code:'BROKER_DISPATCH_CHALLENGE_INVALID'});
+ assert.equal(revokeRequests,0,'invalid challenge never reaches TLS server');
+ assert.equal((await fresh.revoke(revokeRequest)).revoked,true);
+ assert.equal(revokeRequests,1,'valid revoke sends one fresh challenge');
  await assert.rejects(fresh.execute(request(),async()=>false),
   {code:'DISPATCH_REVOKE_PENDING'});
 });

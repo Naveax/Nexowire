@@ -16,6 +16,11 @@ const operation=z.object({
   capability:z.string().min(1).max(128),
   scope:scopeSchema,
 }).strict();
+const revokeInput=z.object({
+  deviceId:uuid,ownerId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
+  expectedGeneration:z.number().int().positive().safe(),
+  signedOwnerApproval:z.string().min(32).max(8192),
+}).strict();
 export type BrokerDispatchRequest=z.infer<typeof operation>;
 export interface ProtectedBrokerEvidence {
   verified:true;
@@ -73,7 +78,7 @@ export interface ExternalBrokerDispatchAuthority {
    * Revoke and fence NEW claims immediately. Return only after all
    * previously admitted claims finish, or return UNKNOWN without replay.
    */
-  revokeAndDrain(request:DispatchRevokeRequest):Promise<DispatchClaim>;
+  revokeAndDrain(request:DispatchRevokeRequest,challengeNonce:string):Promise<DispatchClaim>;
   /** Release a claim. Lost ACK is UNKNOWN, never execute the effect again. */
   release(release:DispatchReleaseRequest):Promise<void>;
 }
@@ -96,7 +101,8 @@ const committed=permit.extend({
 const revoked=z.object({
   kind:z.literal('broker_dispatch_revocation_v1'),
   authorityId:uuid,deviceId:uuid,ownerId:uuid,deviceEpoch:uuid,
-  sessionEpoch:uuid,previousGeneration:z.number().int().positive().safe(),
+  sessionEpoch:uuid,challengeNonce:z.string().regex(/^[0-9a-f]{64}$/),
+  previousGeneration:z.number().int().positive().safe(),
   generation:z.number().int().positive().safe(),
   drained:z.literal(true),revoked:z.literal(true),
 }).strict();
@@ -116,6 +122,8 @@ export class BrokerExternalDispatchFence {
   /** One request UUID may have only one in-flight local admission. */
   private readonly pendingRequests=new Set<string>();
   private readonly locallyFenced=new Set<string>();
+  /** Revocation remains single-attempt even after a local execution fence. */
+  private readonly revocations=new Set<string>();
   constructor(private readonly config:{
     authority:ExternalBrokerDispatchAuthority;
     authorityId:string;
@@ -380,29 +388,34 @@ export class BrokerExternalDispatchFence {
    * No auto-retry, no re-enabling the old owner epoch after an UNKNOWN.
    */
   async revoke(raw:DispatchRevokeRequest):Promise<RevokeProof>{
-    const device=uuid.parse(raw.deviceId),owner=uuid.parse(raw.ownerId);
-    uuid.parse(raw.deviceEpoch);uuid.parse(raw.sessionEpoch);
-    if(!Number.isSafeInteger(raw.expectedGeneration)||
-       raw.expectedGeneration<1||
-       typeof raw.signedOwnerApproval!=='string'||
-       raw.signedOwnerApproval.length<32)
-      deny('DISPATCH_REVOKE_INVALID');
-    if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
+    const parsed=revokeInput.safeParse(raw);
+    if(!parsed.success)deny('DISPATCH_REVOKE_INVALID');
+    const request:DispatchRevokeRequest=parsed.data;
+    Object.freeze(request);
+    const device=request.deviceId,owner=request.ownerId;
+    if(this.revocations.has(device))deny('DISPATCH_REVOKE_PENDING');
+    this.revocations.add(device);
     this.locallyFenced.add(device);
-    const approved=await this.config.verifyOwnerRevocation(raw).catch(()=>false);
-    if(approved!==true)deny('DISPATCH_REVOKE_SIGNATURE_UNTRUSTED');
+    const approved=await this.config.verifyOwnerRevocation(request).catch(()=>false);
+    if(approved!==true){
+      // No remote revocation was attempted; a valid owner approval may retry.
+      this.revocations.delete(device);
+      deny('DISPATCH_REVOKE_SIGNATURE_UNTRUSTED');
+    }
+    const challengeNonce=randomBytes(32).toString('hex');
     let receipt:DispatchClaim;
-    try{receipt=await this.config.authority.revokeAndDrain(raw)}
+    try{receipt=await this.config.authority.revokeAndDrain(request,challengeNonce)}
     catch{return deny('DISPATCH_REVOKE_OUTCOME_UNKNOWN')}
     const data=revoked.safeParse(this.decode(receipt));
     if(!data.success)deny('DISPATCH_REVOKE_PROOF_INVALID');
     const r=data.data;
     if(r.authorityId!==this.config.authorityId||
        r.deviceId!==device||r.ownerId!==owner||
-       r.deviceEpoch!==raw.deviceEpoch||
-       r.sessionEpoch!==raw.sessionEpoch||
-       r.previousGeneration!==raw.expectedGeneration||
-       r.generation!==raw.expectedGeneration+1||
+       r.deviceEpoch!==request.deviceEpoch||
+       r.sessionEpoch!==request.sessionEpoch||
+       r.challengeNonce!==challengeNonce||
+       r.previousGeneration!==request.expectedGeneration||
+       r.generation!==request.expectedGeneration+1||
        [...this.inFlight.values()].some(id=>id===device))
       deny('DISPATCH_REVOKE_PROOF_MISMATCH');
     return r;

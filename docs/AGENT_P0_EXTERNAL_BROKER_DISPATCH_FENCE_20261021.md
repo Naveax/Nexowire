@@ -182,3 +182,27 @@ initially correct, advances continuously, or survives restore. The independent
 CAS authority must enforce its own trusted time, generation and revocation
 policy; a real protected time source and physical acceptance remain required.
 Production remains **NO-GO**.
+
+
+## 2026-10-27 #01 revoke after an UNKNOWN dispatch
+
+A local execution fence after begin or release UNKNOWN blocks new effects,
+but it must not prevent the first separately authenticated owner revoke from
+reaching `revokeAndDrain`. The Broker records an in-flight revocation before
+the authority call and never retries it after UNKNOWN, lost ACK or receipt
+failure. An invalid owner approval that was rejected before any authority call
+may be replaced by a new valid approval; dispatch stays locally fenced.
+
+The deterministic tests simulate durable reservation with a lost begin ACK,
+operator reconciliation of the fixture claim, remote drain, lost release ACK,
+and lost revoke ACK. The tests do not implement a real independent authority
+or prove physical drain or restoration behavior. Production remains NO-GO.
+
+
+Revocation input is parsed into a frozen scope before asynchronous owner
+approval. Each remote revoke-and-drain call includes a fresh random challenge;
+the signed revocation receipt must echo that exact challenge. A copied signed
+receipt from an earlier call is rejected. This is a wire-contract change:
+providers must accept and sign `challengeNonce`; old responses fail closed.
+A nonce does not prove that a provider's storage survives rollback or that
+physical drain completed. Those external acceptance conditions remain open.
