@@ -208,8 +208,7 @@ test('external release refuses wrong owner, session, grant generation and broker
   protectedParentAndImports:true,
  };
  const claimed=await f.remote.beginIfCurrent(op,broker,'1'.repeat(64));
- const decoded=JSON.parse(Buffer.from(claimed.payload,'base64url').toString('utf8'))
-  as {dispatchId:string};
+ const decoded=JSON.parse(Buffer.from(claimed.payload,'base64url').toString('utf8')) as {dispatchId:string};
  const id=decoded.dispatchId;
  const different=(scope:Partial<BrokerDispatchRequest['scope']>)=>({
   dispatchId:id,brokerId:broker.brokerId,
