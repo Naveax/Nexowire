@@ -417,7 +417,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
           sign(null,canonicalCoreConsoleEnrollment(enrollment),key.privateKey).toString('base64')}};
       await this.options.store.save(profile);this.profile=profile;
       await this.options.authority.call(profile,'enroll',{certificate:profile.certificate,
-        publicKeySpki:der.toString('base64')},signal);
+        publicKeySpki:der.toString('base64'),nativeConsent:proof},signal);
       this.binding={ownerAccountId:challenge.ownerAccountId,deviceId:challenge.deviceId,
         installationId:challenge.installationId};
       this.revoked=false;await this.options.store.clearStop();
