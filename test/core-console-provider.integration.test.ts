@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync,type StatementSync} from 'node:sqlite';
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {D1CoreConsoleAuthority} from '../src/product/d1-core-console-authority.js';
+import {canonicalCoreConsoleEnrollment} from '../src/agent/core-console-enrollment-policy.js';
+import {coreOperationBytes} from '../src/protocol/core-console-authority.js';
 import type {D1DatabaseLike,D1PreparedStatementLike} from '../src/product/d1-control-plane-store.js';
 import {createControlPlaneHttpHandler} from '../src/product/control-plane-http.js';
 import {CoreConsoleAdmission} from '../src/agent/core-console-admission.js';
@@ -230,5 +232,47 @@ test('a proven pre-effect native denial does not discard an otherwise valid loca
     assert.equal((await controller.status('full')).active,true);assert.equal(f.consents(),1);
     assert.equal(f.db.prepare("SELECT state FROM device_core_console_operations").get()?.state,'denied');
     f.native(undefined);await input(controller);assert.equal(f.consents(),1);
+  }finally{f.db.close();}
+});
+
+
+test('enrollment is registered once: a new nonce cannot re-register the same signed certificate',async()=>{
+  const f=fixture();try{
+    await enable(f);
+    const profile=f.profile();
+    const key=createPrivateKey({key:Buffer.from(profile.privateKey!,'base64'),format:'der',type:'pkcs8'});
+    const spki=createPublicKey(key).export({format:'der',type:'spki'}).toString('base64');
+    await assert.rejects(f.client.call(profile,'enroll',{
+      certificate:profile.certificate,publicKeySpki:spki,
+    }),/CORE_AUTHORITY_DENIED_/);
+    assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,true);
+  }finally{f.db.close();}
+});
+
+test('external DB clock rejects signed stale and future local enrollment decisions',async()=>{
+  const f=fixture();try{
+    const installationId=randomUUID();
+    const read=await f.authority.handle(credential,{
+      action:'read',deviceId,installationId,nonce:randomUUID(),issuedAtMs:Date.now(),
+    });
+    const state=read.state;
+    const pair=generateKeyPairSync('ed25519');
+    const der=pair.publicKey.export({format:'der',type:'spki'});
+    for(const approvedLocallyAtMs of [state.authorityTimeMs-300001,state.authorityTimeMs+5001]){
+      const enrollment={version:1 as const,scope:'physical-console' as const,
+        ownerAccountId:owner,deviceId,installationId,enrollmentId:randomUUID(),
+        ownerEpoch:state.ownerEpoch,grantGeneration:state.grantGeneration,
+        revokeEpoch:state.revokeEpoch,approvedLocallyAtMs,
+        issuerSpkiSha256:createHash('sha256').update(der).digest('hex')};
+      const certificate={enrollment,signatureBase64:sign(null,
+        canonicalCoreConsoleEnrollment(enrollment),pair.privateKey).toString('base64')};
+      const request={action:'enroll' as const,deviceId,installationId,
+        nonce:randomUUID(),issuedAtMs:Date.now(),certificate,
+        publicKeySpki:der.toString('base64')};
+      const signature=sign(null,coreOperationBytes(request),pair.privateKey).toString('base64');
+      await assert.rejects(f.authority.handle(credential,{...request,signature}),
+        /CORE_LOCAL_DECISION_NOT_FRESH/);
+    }
+    assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
   }finally{f.db.close();}
 });
