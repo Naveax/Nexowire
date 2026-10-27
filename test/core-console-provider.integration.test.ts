@@ -43,6 +43,7 @@ function fixture(){
     batch:async statements=>{db.exec('BEGIN');try{const r=await Promise.all(statements.map(s=>s.run()));db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}}};
   // In-memory fixture is explicitly NOT a trusted native OS approval source.
   let nativeReceipt:NativeCoreConsentProof|null=null,readbackEnabled=true;
+  let beforeNativeReadback:(()=>void)|undefined;
   const consumedNativeReceipts=new Set<string>();
   const authority=new D1CoreConsoleAuthority(d1,{verifyAndConsume:async(proof,expected)=>{
     if(!readbackEnabled||!nativeReceipt||consumedNativeReceipts.has(proof.receiptId)||
@@ -50,14 +51,19 @@ function fixture(){
         .some(key=>proof[key]!==nativeReceipt![key])||
       proof.enrollmentId!==expected.enrollmentId)return false;
     consumedNativeReceipts.add(proof.receiptId);return true;
-  },currentReadback:async expected=>readbackEnabled&&!!nativeReceipt&&
+  },currentReadback:async expected=>{
+    // Negative QA hook models a remote revoke/re-pair while native OS
+    // verification is pending. The synthetic native side may still say yes.
+    const hook=beforeNativeReadback;beforeNativeReadback=undefined;hook?.();
+    return readbackEnabled&&!!nativeReceipt&&
     nativeReceipt.ownerAccountId===expected.ownerAccountId&&
     nativeReceipt.deviceId===expected.deviceId&&
     nativeReceipt.installationId===expected.installationId&&
     nativeReceipt.enrollmentId===expected.enrollmentId&&
     nativeReceipt.ownerEpoch===expected.ownerEpoch&&
     nativeReceipt.grantGeneration===expected.grantGeneration&&
-    nativeReceipt.revokeEpoch===expected.revokeEpoch});
+    nativeReceipt.revokeEpoch===expected.revokeEpoch;
+  }});
   const handler=createControlPlaneHttpHandler({} as never,{authenticate:async()=>null,coreConsoleAuthority:authority});
   let beforeRequest:((body:Record<string,unknown>)=>void)|undefined;
   const fetcher=(async(input,init)=>{const request=new Request(String(input),init);
@@ -98,6 +104,7 @@ function fixture(){
     profile:()=>structuredClone(record)!,setProfile:(p:Profile)=>{record=structuredClone(p);},
     setDesktop:(v:boolean)=>{desktop=v;},setBridge:(v:boolean)=>{bridge=v;},
     setNativeReadback:(v:boolean)=>{readbackEnabled=v;},
+    duringNativeReadback:(cb:()=>void)=>{beforeNativeReadback=cb;},
     forgedNativeReceipt:(f:typeof forgedNativeReceipt)=>{forgedNativeReceipt=f;},
     nativeReceipt:()=>nativeReceipt,
     replaceNativeReceipt:(v:NativeCoreConsentProof)=>{nativeReceipt=v;},
@@ -411,4 +418,24 @@ test('non-enrollment signature v1 wire bytes remain backward compatible',()=>{
     request.action,request.deviceId,request.installationId,
     request.nonce,request.issuedAtMs,null,null,null,null]));
   assert.deepEqual(coreOperationBytes(request),legacy);
+});
+
+test('native readback completing after revoke, CORE OFF or re-pair never exposes stale enrollment',async()=>{
+  const races=[
+    "UPDATE device_maintenance_preferences SET enabled=0",
+    "UPDATE devices SET owner_account_id='another-owner-0001'",
+    "UPDATE device_core_console_authority SET enrollment_id=NULL,physical_active=0",
+  ];
+  for(const sql of races){
+    const f=fixture();try{
+      await enable(f);
+      await f.client.call(f.profile(),'report',{active:true});
+      const before=await f.authority.deviceStatus(deviceId,owner);
+      assert.equal(before.active,true,'synthetic enrolled baseline');
+      f.duringNativeReadback(()=>{f.db.exec(sql);});
+      const after=await f.authority.deviceStatus(deviceId,owner);
+      assert.equal(after.localEnrolled,false,sql);
+      assert.equal(after.active,false,sql);
+    }finally{f.db.close();}
+  }
 });
