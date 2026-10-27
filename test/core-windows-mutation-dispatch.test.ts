@@ -97,3 +97,62 @@ test('request fingerprint binds capability and every input field canonically',()
   const cyclic:Record<string,unknown>={};cyclic.self=cyclic;
   assert.throws(()=>coreWindowsEffectFingerprint('windows.registry.set',cyclic));
 });
+
+
+test('#03 Broker/CORE shell and nested task routes cannot reach raw spawn without #07',async()=>{
+  for(const capability of [
+    'shell.exec','wsl.exec','process.start','process.write',
+    'task.graph.run','runbook.run','workspace.checks',
+    'workspace.snapshot','workspace.detect',
+  ] as const){
+    await assert.rejects(
+      executeCapability(capability,{command:'do-not-execute'},policy,{
+        privilegeMode:'broker',accessMode:'full',
+      }),matchCode('OS_TASK_SANDBOX_UNAVAILABLE'),capability);
+  }
+});
+
+test('#03 CORE candidate cannot spoof direct mode to reach spawn or job subprocess',async()=>{
+  for(const capability of ['shell.exec','process.start','task.graph.run',
+    'runbook.run','workspace.checks'] as const){
+    await assert.rejects(
+      executeCapability(capability,{command:'do-not-execute'},policy,{
+        privilegeMode:'direct',coreWindowsDispatch:{} as never,
+      }),matchCode('OS_TASK_SANDBOX_UNAVAILABLE'),capability);
+  }
+});
+
+test('#03 each nested Windows/file/process effect has its own blocked boundary',async()=>{
+  for(const capability of [
+    'files.write','files.patch','files.delete','files.move','files.copy',
+    'nexowire.update.apply','process.stop','process.prune',
+    'windows.keyboard.type','windows.pointer.click',
+    'windows.private_desktop.launch','windows.private_display.profile.set',
+    'windows.private_clipboard.write',
+  ] as const){
+    await assert.rejects(executeCapability(capability,{},policy,{
+      privilegeMode:'broker',accessMode:'full',
+    }),matchCode('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED'),capability);
+  }
+});
+
+test('#03 #919 ticket alone never equals #01 signed nonce + monotonic CAS claim',async()=>{
+  const {assertNoSyntheticBrokerAdmission}=
+    await import('../src/agent/core-windows-mutation-dispatch.js');
+  assert.throws(()=>assertNoSyntheticBrokerAdmission({
+    state:'COMMITTED',ticket:'fixture-ticket',operationId:
+      '00000000-0000-4000-8000-000000000011',
+  }),matchCode('CORE_BROKER_NATIVE_EFFECT_PROVIDER_UNAVAILABLE'));
+});
+
+test('#03 missing native sandbox and CORE dispatch flag stay hard-disabled',async()=>{
+  const {CORE_SANDBOX_REQUIRED_CAPABILITIES,
+    CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES,
+    assertCoreSandboxRouteUnavailable}=
+    await import('../src/agent/core-windows-mutation-dispatch.js');
+  assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
+  assert.ok(CORE_SANDBOX_REQUIRED_CAPABILITIES.has('task.graph.run'));
+  assert.ok(CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES.has('files.write'));
+  // The untagged, non-CORE legacy execution path remains separate.
+  assert.doesNotThrow(()=>assertCoreSandboxRouteUnavailable('shell.exec',false));
+});
