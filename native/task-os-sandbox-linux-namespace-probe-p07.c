@@ -45,11 +45,21 @@ static int map_ids(uid_t outer_uid,gid_t outer_gid) {
   return 0;
 }
 static int kernel_child(const char *root) {
+  /* Self-observed namespace inode difference: NOT an independent attester. */
+  struct stat user_before, net_before, user_after, net_after;
+  if(stat("/proc/self/ns/user",&user_before)<0 ||
+     stat("/proc/self/ns/net",&net_before)<0)return 27;
   uid_t outer_uid=getuid();
   gid_t outer_gid=getgid();
   if(unshare(CLONE_NEWUSER|CLONE_NEWNS|CLONE_NEWNET|
              CLONE_NEWIPC|CLONE_NEWUTS|CLONE_NEWPID)<0)return 30;
   if(map_ids(outer_uid,outer_gid)<0)return 31;
+  if(stat("/proc/self/ns/user",&user_after)<0 ||
+     stat("/proc/self/ns/net",&net_after)<0 ||
+     (user_before.st_dev==user_after.st_dev &&
+      user_before.st_ino==user_after.st_ino) ||
+     (net_before.st_dev==net_after.st_dev &&
+      net_before.st_ino==net_after.st_ino))return 50;
   if(mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)<0)return 32;
   if(mount("tmpfs",root,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,
            "size=2m,mode=0700")<0)return 33;
@@ -72,7 +82,8 @@ static int kernel_child(const char *root) {
 #ifdef SYS_close_range
   if(syscall(SYS_close_range,3U,~0U,0U)<0)_exit(43);
 #else
-  for(int fd=3;fd<1024;fd++)(void)close(fd);
+  /* Never accept a finite-FD-loop as proof that all handles were closed. */
+  _exit(43);
 #endif
   if(prctl(PR_SET_NO_NEW_PRIVS,1,0,0,0)<0)_exit(44);
   struct stat st;

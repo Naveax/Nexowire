@@ -18,10 +18,12 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/NW07_SOURCE_ONLY_NO_TASK_EXEC/);
   for(const token of ['CLONE_NEWUSER','CLONE_NEWNS','CLONE_NEWNET',
     'CLONE_NEWIPC','CLONE_NEWUTS','CLONE_NEWPID','SYS_pivot_root',
+    'stat("/proc/self/ns/user"', 'stat("/proc/self/ns/net"',
     'MS_PRIVATE','PR_SET_NO_NEW_PRIVS','SYS_close_range','clearenv()']){
     assert.ok(source.includes(token),token);
   }
   assert.doesNotMatch(source,/\b(?:execve|execvp|execl|system|popen|posix_spawn)\s*\(/);
+  assert.doesNotMatch(source,/for\s*\(int fd=3;fd<1024/);
 });
 
 test('#07 native probe compiles and refuses arbitrary command',{
