@@ -137,9 +137,14 @@ test('#03 signed remote reserve+commit, current epoch and refreshed HIGH permit 
 });
 
 test('#03 expired, wrong generation, revoke and identity denial never execute callback',async()=>{
-  for(const fault of ['expired','scope-mismatch','revoke','identity-denied'] as const){
+  for(const [fault,code] of [
+    ['expired','DISPATCH_PROOF_EXPIRED'],
+    ['scope-mismatch','DISPATCH_PROOF_SCOPE_MISMATCH'],
+    ['revoke','DISPATCH_EXTERNAL_CAS_UNKNOWN'],
+    ['identity-denied','DISPATCH_IDENTITY_UNVERIFIED'],
+  ] as const){
     const h=harness(fault);
-    await assert.rejects(h.invoke(),/DISPATCH_/);
+    await assert.rejects(h.invoke(),{code},fault);
     assert.equal(h.metrics().effectCount,0,fault);
   }
 });
