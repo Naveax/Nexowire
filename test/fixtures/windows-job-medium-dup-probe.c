@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
+#include <stdint.h>
 
 static int blocked(const wchar_t *reason) {
   wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED %ls\n",reason);
@@ -70,9 +71,84 @@ static int child_probe(DWORD pid,HANDLE current) {
   DWORD error=GetLastError();
   return error==ERROR_ACCESS_DENIED?0:79;
 }
+
+/*
+ * Equal-HIGH same-logon attack fixture against the EXACT synthetic guardian.
+ * It first independently checks both kernel token objects, SID, integrity,
+ * elevation, logon LUID, session ID and a held guardian process HANDLE.
+ * Never enable SeDebugPrivilege or alter any process ACL. If SeDebug is already
+ * enabled, report BLOCKED instead of claiming a DACL result.
+ */
+static BOOL debug_privilege_enabled(HANDLE token,BOOL *enabled) {
+  *enabled=FALSE;
+  LUID debug={0};
+  if(!LookupPrivilegeValueW(NULL,SE_DEBUG_NAME,&debug))return FALSE;
+  DWORD bytes=0;
+  GetTokenInformation(token,TokenPrivileges,NULL,0,&bytes);
+  if(!bytes || bytes>128*1024)return FALSE;
+  TOKEN_PRIVILEGES *privileges=(TOKEN_PRIVILEGES*)calloc(1,bytes);
+  if(!privileges)return FALSE;
+  BOOL valid=GetTokenInformation(token,TokenPrivileges,privileges,bytes,&bytes);
+  if(valid){
+    for(DWORD i=0;i<privileges->PrivilegeCount;i++){
+      LUID luid=privileges->Privileges[i].Luid;
+      if(luid.HighPart==debug.HighPart && luid.LowPart==debug.LowPart)
+        *enabled=(privileges->Privileges[i].Attributes&SE_PRIVILEGE_ENABLED)!=0;
+    }
+  }
+  free(privileges);
+  return valid;
+}
+static int equal_high_probe(DWORD pid,uintptr_t jobValue,HANDLE current) {
+  DWORD level=0,elevated=0;
+  BOOL debug=FALSE;
+  if(!token_identity(current,&level,&elevated) ||
+     level<SECURITY_MANDATORY_HIGH_RID || !elevated ||
+     !debug_privilege_enabled(current,&debug) || debug)
+    return blocked(L"attacker_token_not_high_or_debug_enabled");
+  HANDLE guardian=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,
+    FALSE,pid);
+  if(!guardian)return blocked(L"guardian_query_denied");
+  HANDLE victimToken=NULL;
+  FILETIME created={0},after={0};
+  DWORD gLevel=0,gElevated=0;
+  BOOL verified=OpenProcessToken(guardian,TOKEN_QUERY,&victimToken) &&
+    token_identity(victimToken,&gLevel,&gElevated) &&
+    gLevel==level && gElevated && same_logon_session(current,victimToken) &&
+    process_identity(guardian,&created);
+  if(victimToken)CloseHandle(victimToken);
+  if(!verified) {CloseHandle(guardian);return blocked(L"high_equal_logon_not_verified");}
+
+  HANDLE source=OpenProcess(PROCESS_DUP_HANDLE,FALSE,pid);
+  DWORD error=source?ERROR_SUCCESS:GetLastError();
+  BOOL duplicateSucceeded=FALSE;
+  if(source) {
+    HANDLE copied=NULL;
+    duplicateSucceeded=DuplicateHandle(source,(HANDLE)jobValue,
+      GetCurrentProcess(),&copied,JOB_OBJECT_QUERY,FALSE,0);
+    if(copied)CloseHandle(copied);
+    CloseHandle(source);
+  }
+  BOOL sameObject=process_identity(guardian,&after) &&
+    created.dwHighDateTime==after.dwHighDateTime &&
+    created.dwLowDateTime==after.dwLowDateTime;
+  CloseHandle(guardian);
+  if(!sameObject)return blocked(L"guardian_pid_or_creation_changed");
+  if(source) {
+    wprintf(L"NX_EQUAL_HIGH_PROCESS_DUP_HANDLE_ALLOWED duplicate_success=%d\n",
+      duplicateSucceeded?1:0);
+    return 3;
+  }
+  if(error!=ERROR_ACCESS_DENIED)
+    return blocked(L"process_open_failed_without_access_denied");
+  wprintf(L"NX_EQUAL_HIGH_PROCESS_DUP_HANDLE_DENIED sid_luid_session_verified=1 sedebug_enabled=0\n");
+  return 0;
+}
+
 int wmain(int argc,wchar_t **argv) {
-  if(argc!=3 || (wcscmp(argv[1],L"--probe") &&
-                  wcscmp(argv[1],L"--child")))return 64;
+  BOOL highProbe=argc==4 && !wcscmp(argv[1],L"--probe-high");
+  if(!highProbe && (argc!=3 || (wcscmp(argv[1],L"--probe") &&
+                                  wcscmp(argv[1],L"--child"))))return 64;
   wchar_t *end=NULL;
   unsigned long parsed=wcstoul(argv[2],&end,10);
   if(!parsed || !end || *end)return 64;
@@ -83,6 +159,17 @@ int wmain(int argc,wchar_t **argv) {
   DWORD level=0,elevated=0;
   if(!token_identity(current,&level,&elevated)) {
     CloseHandle(current);return blocked(L"controller_token_unverifiable");
+  }
+  if(highProbe) {
+    wchar_t *handleEnd=NULL;
+    unsigned long long raw=_wcstoui64(argv[3],&handleEnd,10);
+    if(!argv[3][0] || !handleEnd || *handleEnd || !raw ||
+       (unsigned long long)(uintptr_t)raw!=raw) {
+      CloseHandle(current);return 64;
+    }
+    int result=equal_high_probe(pid,(uintptr_t)raw,current);
+    CloseHandle(current);
+    return result;
   }
   if(!wcscmp(argv[1],L"--child")) {
     int result=child_probe(pid,current);
