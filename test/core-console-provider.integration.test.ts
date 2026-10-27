@@ -10,7 +10,7 @@ import type {D1DatabaseLike,D1PreparedStatementLike} from '../src/product/d1-con
 import {createControlPlaneHttpHandler} from '../src/product/control-plane-http.js';
 import {CoreConsoleAdmission} from '../src/agent/core-console-admission.js';
 import {CoreConsoleAuthorityClient,WindowsCoreConsoleProvider,type CoreProfileStore,
-  type NativeCoreConsentProof} from '../src/agent/windows-core-console-provider.js';
+  type NativeCoreConsentProof,type NativeCoreConsentChallenge} from '../src/agent/windows-core-console-provider.js';
 import {executeCapability} from '../src/agent/executors.js';
 import {CoreNativeDenial} from '../src/agent/windows-core-console-native.js';
 import {NEXOWIRE_VERSION} from '../src/version.js';
@@ -67,7 +67,7 @@ function fixture(){
     // SYNTHETIC native receipt/readback fixture. It has no protected Windows
     // signer, human consent or real independent OS logon provenance.
     nativeConsent:{
-      approveAndConsume:async(challenge)=>{
+      approveAndConsume:async(challenge:NativeCoreConsentChallenge)=>{
         consents++;
         const next:NativeCoreConsentProof={...challenge,receiptId:randomUUID(),
           windowsSessionId:1,windowsLogonLuid:'0000000000000001',
