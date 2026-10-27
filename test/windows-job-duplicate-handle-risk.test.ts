@@ -6,6 +6,7 @@ import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {ProcessManager} from '../src/agent/process-manager.js';
 import {PathPolicy} from '../src/agent/path-policy.js';
+import {launchWindowsJob,requestWindowsJobStop} from '../src/agent/windows-job-owner.js';
 
 interface Proc { ProcessId:number;Name:string;CreationDate:string;CommandLine:string|null }
 function exact(pid:number):Proc|undefined {
@@ -116,5 +117,46 @@ test('same-tier high token remains privileged against high Job guardian; medium 
       if(holder.exitCode===null)holder.kill(); // only newly spawned fixture process
     }
     await manager.stop({session_id:started.sessionId}).catch(()=>undefined);
+  }
+});
+
+test('real UAC-linked medium attacker cannot duplicate HIGH guardian Job handle', {
+  skip:process.platform!=='win32',timeout:28000,
+},async(t)=>{
+  // Hosted runner fixture only. It does NOT verify an installed Broker's
+  // token, process ACL, code signing, or physical production acceptance.
+  const groups=execFileSync('whoami.exe',['/groups'],
+    {encoding:'utf8',windowsHide:true,timeout:8000});
+  const isHigh=/S-1-16-12288\\b/.test(groups);
+  const elevated=execFileSync('powershell.exe',['-NoProfile','-NonInteractive',
+    '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
+    {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
+  if (!isHigh || !elevated) {
+    t.skip('BLOCKED: no elevated HIGH caller; cannot create paired real medium attacker');
+    return;
+  }
+  const launch=await launchWindowsJob('powershell.exe',
+    ['-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 45'],
+    {guardOnParentExit:true});
+  try {
+    const probe=spawnSync(path.resolve('test/fixtures/windows-job-medium-dup-probe.exe'),
+      ['--probe',String(launch.guardianPid)],
+      {windowsHide:true,encoding:'utf8',timeout:16000,maxBuffer:8192});
+    if (probe.status===77) {
+      t.diagnostic('CROSS_INTEGRITY_BLOCKED: '+(probe.stdout??'')+' '+(probe.stderr??''));
+      t.skip('BLOCKED: OS did not supply genuine UAC-linked same-user medium token');
+      return;
+    }
+    assert.equal(probe.status,0,
+      'real medium peer must never open PROCESS_DUP_HANDLE: '+
+      (probe.stdout??'')+' '+(probe.stderr??'')+' status='+probe.status);
+    assert.match(probe.stdout,
+      /NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_DENIED same_user=1 elevated_guardian=1/,
+      'only a real medium token can produce the boundary proof marker');
+    t.diagnostic('P0 hosted synthetic boundary PASS; installed Broker remains BLOCKED');
+  } finally {
+    // Only this just-created isolated test Job is stopped.
+    requestWindowsJobStop(launch);
+    if (launch.child.exitCode===null)launch.child.kill();
   }
 });
