@@ -35,6 +35,17 @@ export interface DispatchRevokeRequest {
   deviceId:string;ownerId:string;deviceEpoch:string;sessionEpoch:string;
   expectedGeneration:number;signedOwnerApproval:string;
 }
+/**
+ * Scoped release of an existing dispatch admission. Revoke may already have
+ * invalidated the live owner credential: the remote authority MUST match the
+ * immutable reserved claim, rather than accepting dispatchId alone or
+ * reauthorizing a revoked grant. No retry after an unknown release outcome.
+ */
+export interface DispatchReleaseRequest {
+  dispatchId:string;
+  brokerId:string;
+  request:BrokerDispatchRequest;
+}
 export interface ExternalBrokerDispatchAuthority {
   /** Must be atomic with revoke/re-pair and single-use claim allocation. */
   beginIfCurrent(operation:BrokerDispatchRequest,
@@ -52,7 +63,7 @@ export interface ExternalBrokerDispatchAuthority {
    */
   revokeAndDrain(request:DispatchRevokeRequest):Promise<DispatchClaim>;
   /** Release a claim. Lost ACK is UNKNOWN, never execute the effect again. */
-  release(claimId:string):Promise<void>;
+  release(release:DispatchReleaseRequest):Promise<void>;
 }
 const permit=z.object({
   kind:z.literal('broker_dispatch_permit_v1'),
@@ -194,7 +205,8 @@ export class BrokerExternalDispatchFence {
     catch(e){this.locallyFenced.add(device);throw e}
     if(this.locallyFenced.has(device)){
       // Revoke began while this claim was only reserved.
-      try{await this.config.authority.release(proof.dispatchId)}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}
       catch{this.locallyFenced.add(device)}
       deny('DISPATCH_REVOKE_PENDING');
     }
@@ -207,7 +219,8 @@ export class BrokerExternalDispatchFence {
         request,broker,proof.dispatchId,commitNonce);
     }catch{
       this.locallyFenced.add(device);
-      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}catch{}
       deny('DISPATCH_COMMIT_UNKNOWN');
     }
     try{
@@ -217,11 +230,13 @@ export class BrokerExternalDispatchFence {
         deny('DISPATCH_COMMIT_IDENTITY_MISMATCH');
     }catch(e){
       this.locallyFenced.add(device);
-      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}catch{}
       throw e;
     }
     if(this.locallyFenced.has(device)){
-      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}catch{}
       deny('DISPATCH_REVOKE_PENDING');
     }
     // Exactly once: only after remotely committed dispatch admission.
@@ -231,7 +246,8 @@ export class BrokerExternalDispatchFence {
     finally{
       this.inFlight.delete(proof.dispatchId);
       // No local fallback if the remote release acknowledgment is lost.
-      try{await this.config.authority.release(proof.dispatchId)}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}
       catch{/* fail closed for future dispatch if remote reconciliation needed */
         this.locallyFenced.add(device);
       }
