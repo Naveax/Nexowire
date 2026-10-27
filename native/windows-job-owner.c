@@ -48,7 +48,7 @@ static BOOL enforce_guardian_isolation(void) {
     goto cleanup;
   if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,adminSid,&sidBytes))
     goto cleanup;
-  if(!CheckTokenMembership(token,adminSid,&admin) || !admin)goto cleanup;
+  if(!CheckTokenMembership(NULL,adminSid,&admin) || !admin)goto cleanup;
 
   // An OWNER_RIGHTS ACE suppresses the implicit WRITE_DAC privilege of
   // the creator SID. Only SYSTEM and an enabled Administrators SID get
