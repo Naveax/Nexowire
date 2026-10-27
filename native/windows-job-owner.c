@@ -7,6 +7,83 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <wchar.h>
+#include <aclapi.h>
+#include <sddl.h>
+
+// The Job handle is not safe in a medium-integrity same-logon guardian:
+// any peer that opens the guardian with PROCESS_DUP_HANDLE can retain it
+// after guardian death. The first P0 trust boundary is a genuinely HIGH
+// integrity, elevated Administrator token. The process is born HIGH (MIC)
+// before it can create a Job; the restrictive DACL is defense in depth.
+// This does NOT protect against high/SYSTEM/SeDebug peers and cannot serve
+// as installed-Broker or production acceptance evidence.
+static BOOL enforce_guardian_isolation(void) {
+  HANDLE token=NULL;
+  BYTE integrity[sizeof(TOKEN_MANDATORY_LABEL)+SECURITY_MAX_SID_SIZE]={0};
+  DWORD returned=0;
+  TOKEN_ELEVATION elevation={0};
+  TOKEN_MANDATORY_POLICY mandatory={0};
+  BOOL admin=FALSE;
+  BYTE adminSid[SECURITY_MAX_SID_SIZE]={0};
+  DWORD sidBytes=sizeof(adminSid);
+  SID_IDENTIFIER_AUTHORITY ntAuthority=SECURITY_NT_AUTHORITY;
+  BOOL trusted=FALSE;
+  PSECURITY_DESCRIPTOR descriptor=NULL;
+  PACL dacl=NULL;
+  HANDLE self=NULL;
+
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))goto cleanup;
+  if(!GetTokenInformation(token,TokenIntegrityLevel,integrity,sizeof(integrity),
+       &returned))goto cleanup;
+  TOKEN_MANDATORY_LABEL *label=(TOKEN_MANDATORY_LABEL*)integrity;
+  if(!IsValidSid(label->Label.Sid))goto cleanup;
+  DWORD count=*GetSidSubAuthorityCount(label->Label.Sid);
+  if(count==0)goto cleanup;
+  DWORD level=*GetSidSubAuthority(label->Label.Sid,count-1);
+  if(level<SECURITY_MANDATORY_HIGH_RID)goto cleanup;
+  if(!GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),
+       &returned) || !elevation.TokenIsElevated)goto cleanup;
+  if(!GetTokenInformation(token,TokenMandatoryPolicy,&mandatory,sizeof(mandatory),
+       &returned) || !(mandatory.Policy&TOKEN_MANDATORY_POLICY_NO_WRITE_UP))
+    goto cleanup;
+  if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,adminSid,&sidBytes))
+    goto cleanup;
+  if(!CheckTokenMembership(token,adminSid,&admin) || !admin)goto cleanup;
+
+  // An OWNER_RIGHTS ACE suppresses the implicit WRITE_DAC privilege of
+  // the creator SID. Only SYSTEM and an enabled Administrators SID get
+  // PROCESS_DUP_HANDLE. Medium filtered admin tokens are not enabled BA.
+  // Explicitly fail if the DACL cannot be applied and read back.
+  if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+       L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00101000;;;OW)",
+       SDDL_REVISION_1,&descriptor,NULL))goto cleanup;
+  BOOL present=FALSE,defaulted=FALSE;
+  if(!GetSecurityDescriptorDacl(descriptor,&present,&dacl,&defaulted) ||
+     !present || !dacl)goto cleanup;
+  self=OpenProcess(READ_CONTROL|WRITE_DAC,FALSE,GetCurrentProcessId());
+  if(!self)goto cleanup;
+  if(SetSecurityInfo(self,SE_KERNEL_OBJECT,
+       DACL_SECURITY_INFORMATION|PROTECTED_DACL_SECURITY_INFORMATION,
+       NULL,NULL,dacl,NULL)!=ERROR_SUCCESS)goto cleanup;
+  PSECURITY_DESCRIPTOR observed=NULL;
+  PACL installed=NULL;
+  DWORD verify=GetSecurityInfo(self,SE_KERNEL_OBJECT,DACL_SECURITY_INFORMATION,
+    NULL,NULL,&installed,NULL,&observed);
+  if(verify==ERROR_SUCCESS && installed && observed) {
+    SECURITY_DESCRIPTOR_CONTROL flags=0;DWORD revision=0;
+    if(GetSecurityDescriptorControl(observed,&flags,&revision) &&
+       (flags&SE_DACL_PROTECTED))trusted=TRUE;
+  }
+  if(observed)LocalFree(observed);
+
+cleanup:
+  if(self)CloseHandle(self);
+  if(descriptor)LocalFree(descriptor);
+  if(token)CloseHandle(token);
+  if(!trusted)fwprintf(stderr,
+    L"NEXOWIRE_WINJOB_ERROR guardian_high_token_or_acl_unverified\\n");
+  return trusted;
+}
 
 static int quote_arg(const wchar_t *src, wchar_t **pos, const wchar_t *end) {
   int needs=!*src;
@@ -53,6 +130,9 @@ int main(void){
   wchar_t *parentEnd=NULL;
   unsigned long parentPid=wcstoul(argv[6],&parentEnd,10);
   if(!argv[6][0]||*parentEnd)return 64;
+  // No Job is created, handle published, or root resumed on missing HIGH
+  // token/elevation/mandatory no-write-up or failed process DACL readback.
+  if(!enforce_guardian_isolation())return 79;
   // Guardian's handle to volatile parent prevents PID reuse while it lives.
   // Volatile sessions watch Agent; durable sidecars watch their own worker.
   // Neither mode may depend solely on ancestry after Agent exit.
@@ -71,8 +151,10 @@ int main(void){
   }
   *out=0;
 
-  // Unnamed Job: no OpenJobObject(name) surface for same-user processes to
-  // retain an extra query handle across forced guardian termination.
+  // Unnamed Job: no public OpenJobObject(name) surface.
+  // The guardian's HIGH integrity/token and protected process DACL form
+  // the separate boundary against MEDIUM-integrity PROCESS_DUP_HANDLE.
+  // A same-HIGH attacker can still duplicate and retain this handle.
   HANDLE job=CreateJobObjectW(NULL,NULL);
   if(!job){diagnostic(L"create_job");free(cmd);return 70;}
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit={0};
