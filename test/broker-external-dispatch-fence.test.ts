@@ -12,7 +12,8 @@ import {DatabaseSync,backup} from 'node:sqlite';
 import {signedOperatorGrantVerifier} from '../src/agent/witness-signed-provenance.js';
 import {BrokerExternalDispatchFence,type ExternalBrokerDispatchAuthority,
   type BrokerDispatchRequest,type DispatchClaim,
-  type ProtectedBrokerEvidence,type DispatchRevokeRequest}
+  type ProtectedBrokerEvidence,type DispatchRevokeRequest,
+  type DispatchReleaseRequest}
  from '../src/agent/broker-external-dispatch-fence.js';
 
 const fingerprint='a'.repeat(64);
@@ -32,6 +33,8 @@ function deferred(){
 class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   readonly dispatched=new Map<string,string>();
   readonly active=new Set<string>();
+  private readonly claimScopes=new Map<string,{
+    request:BrokerDispatchRequest;brokerId:string}>();
   readonly released=new Set<string>();
   generation=7;
   ownerEpoch=4;
@@ -69,6 +72,8 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
     if(this.dispatched.has(op.requestId))throw Error('DISPATCH_REPLAY');
     const dispatchId=randomUUID();
     this.dispatched.set(op.requestId,dispatchId);this.active.add(dispatchId);
+    this.claimScopes.set(dispatchId,{request:JSON.parse(JSON.stringify(op)) as
+      BrokerDispatchRequest,brokerId:broker.brokerId});
     if(this.stallBeginResponse)await this.holdBeginResponse.promise;
     const now=Date.now();
     const permit=signClaim({kind:'broker_dispatch_permit_v1',
@@ -112,8 +117,15 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
     }
     return claim;
   }
-  async release(claimId:string){
-    this.released.add(claimId);this.active.delete(claimId);
+  async release(value:DispatchReleaseRequest){
+    const record=this.claimScopes.get(value.dispatchId);
+    // Disposable test store only. Real server MUST perform this exact check
+    // against its durable immutable claim within the atomic release.
+    if(!record||record.brokerId!==value.brokerId||
+       JSON.stringify(record.request)!==JSON.stringify(value.request))
+      throw Error('RELEASE_SCOPE_MISMATCH');
+    this.claimScopes.delete(value.dispatchId);
+    this.released.add(value.dispatchId);this.active.delete(value.dispatchId);
     if(this.active.size===0){
       for(const waiter of this.drainWaiters.splice(0))waiter();
     }
@@ -187,6 +199,41 @@ function fixture(){
 }
 const code=async(p:Promise<unknown>,expected:string)=>
  assert.rejects(p,{code:expected});
+
+test('external release refuses wrong owner, session, grant generation and broker',async()=>{
+ const f=fixture(),op=f.request();
+ const broker:ProtectedBrokerEvidence={
+  verified:true,brokerId:f.remote.brokerId,ownerEpoch:4,grantGeneration:7,
+  highIntegrityToken:true,signedProtectedImage:true,
+  protectedParentAndImports:true,
+ };
+ const claimed=await f.remote.beginIfCurrent(op,broker,'1'.repeat(64));
+ const decoded=JSON.parse(Buffer.from(claimed.payload,'base64url').toString('utf8'))
+  as {dispatchId:string};
+ const id=decoded.dispatchId;
+ const different=(scope:Partial<BrokerDispatchRequest['scope']>)=>({
+  dispatchId:id,brokerId:broker.brokerId,
+  request:{...op,scope:{...op.scope,...scope}},
+ });
+ for(const invalid of [
+  different({ownerId:randomUUID()}),
+  different({deviceId:randomUUID()}),
+  different({deviceEpoch:randomUUID()}),
+  different({sessionEpoch:randomUUID()}),
+  different({expectedGeneration:8}),
+  different({ownerEpoch:5}),
+  {...different({}),brokerId:randomUUID()},
+  {...different({}),request:{...op,fingerprint:'b'.repeat(64)}},
+ ]){
+  await assert.rejects(f.remote.release(invalid),/RELEASE_SCOPE_MISMATCH/);
+  assert.equal(f.remote.active.has(id),true,'wrong owner must not drain claim');
+ }
+ await f.remote.release({dispatchId:id,brokerId:broker.brokerId,request:op});
+ assert.equal(f.remote.active.size,0);
+ await assert.rejects(f.remote.release({
+   dispatchId:id,brokerId:broker.brokerId,request:op,
+ }),/RELEASE_SCOPE_MISMATCH/);
+});
 
 test('verified high-token Broker executes once after new signed external CAS permit',async()=>{
  const f=fixture(),gate=f.broker();
