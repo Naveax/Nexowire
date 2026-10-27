@@ -146,11 +146,32 @@ export async function invokeBrokerEffectOnce<T>(
   verifyWindowsElevationNow:()=>boolean,
 ):Promise<T>{
   if(!authority||typeof operationId!=='string'||!UUID.test(operationId))deny();
+  // Anchor admission to elapsed monotonic time BEFORE any remote await.
+  // A frozen or backwards wall clock must never extend a signed permit.
+  let startedNs:bigint;
+  let startedAtMs:number;
+  try{startedNs=process.hrtime.bigint();startedAtMs=Date.now()}catch{deny()}
+  if(typeof startedNs!=='bigint'||startedNs<0n||
+     !Number.isSafeInteger(startedAtMs)||startedAtMs<=0)deny();
   const captured=frozenEffectInput(capability,input);
   if(!SHA.test(captured.inputSha256))deny();
   let first:BrokerVerifiedEffectBinding|null;
   try{first=await authority.readVerifiedBinding()}catch{deny()}
   if(!bindingValid(first))deny();
+  // Use the ORIGINAL wall-time budget, capped at the 30 s binding limit.
+  // Do not refresh the budget after begin/commit/readback awaits.
+  const remainingMs=Math.min(MAX_FUTURE_MS,first.expiresAtMs-startedAtMs);
+  if(!Number.isSafeInteger(remainingMs)||remainingMs<=0)deny();
+  const budgetNs=BigInt(remainingMs)*1_000_000n;
+  let lastNs=startedNs;
+  const assertMonotonicFresh=():void=>{
+    let nowNs:bigint;
+    try{nowNs=process.hrtime.bigint()}catch{deny()}
+    if(typeof nowNs!=='bigint'||nowNs<lastNs||
+       nowNs-startedNs>=budgetNs)deny();
+    lastNs=nowNs;
+  };
+  assertMonotonicFresh();
   const binding=Object.freeze({...first});
   const request:BrokerEffectRequest=Object.freeze({
     operationId,capability,inputSha256:captured.inputSha256,binding,
@@ -158,23 +179,30 @@ export async function invokeBrokerEffectOnce<T>(
   const reserveNonce=randomBytes(32).toString('hex');
   let reserved:BrokerEffectReceipt|null;
   try{reserved=await authority.begin(request,reserveNonce)}catch{deny()}
+  assertMonotonicFresh();
   if(!receiptMatches(reserved,'RESERVED',request,reserveNonce))deny();
   try{if(await authority.verifyReceipt(reserved)!==true)deny()}catch{deny()}
+  assertMonotonicFresh();
   const ticket=reserved.ticket;
   const commitNonce=randomBytes(32).toString('hex');
   let committed:BrokerEffectReceipt|null;
   try{committed=await authority.commit(request,ticket,commitNonce)}catch{deny()}
+  assertMonotonicFresh();
   if(!receiptMatches(committed,'COMMITTED',request,commitNonce,ticket))deny();
   try{if(await authority.verifyReceipt(committed)!==true)deny()}catch{deny()}
+  assertMonotonicFresh();
   let recent:BrokerVerifiedEffectBinding|null;
   try{recent=await authority.readVerifiedBinding()}catch{deny()}
+  assertMonotonicFresh();
   if(!bindingValid(recent)||!sameBinding(binding,recent))deny();
   // Elevation probe may synchronously spawn Windows tooling and take seconds.
   // Run it BEFORE the last protected readback, never after it. No await or
   // slow OS operation may separate the fresh authority state from callback.
   try{if(verifyWindowsElevationNow()!==true)deny()}catch{deny()}
+  assertMonotonicFresh();
   let immediate:BrokerVerifiedEffectBinding|null;
   try{immediate=authority.readVerifiedBindingNow()}catch{deny()}
   if(!bindingValid(immediate)||!sameBinding(binding,immediate))deny();
+  assertMonotonicFresh();
   return execute(captured.input);
 }
