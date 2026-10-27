@@ -85,7 +85,42 @@ static int install_probe_seccomp(void) {
   if(prctl(PR_SET_SECCOMP,SECCOMP_MODE_FILTER,&program)<0)return -1;
   return 0;
 }
-static int kernel_child(const char *root) {
+/*
+ * This is an OUTER PARENT process kernel readback of the disposable probe,
+ * independent from child stdout. It remains the SAME unsigned program,
+ * hence is NOT a trusted production verifier or protected principal.
+ */
+static int observe_kernel_namespaces(pid_t child,uid_t outer_uid) {
+  const char *names[]={"user","mnt","net","ipc","uts"};
+  for(size_t i=0;i<sizeof(names)/sizeof(names[0]);++i) {
+    char path[96];
+    struct stat observed, host;
+    int n=snprintf(path,sizeof(path),"/proc/%ld/ns/%s",(long)child,names[i]);
+    if(n<0 || (size_t)n>=sizeof(path) ||
+       stat(path,&observed)<0)return -1;
+    n=snprintf(path,sizeof(path),"/proc/self/ns/%s",names[i]);
+    if(n<0 || (size_t)n>=sizeof(path) ||
+       stat(path,&host)<0)return -1;
+    if(host.st_dev==observed.st_dev && host.st_ino==observed.st_ino)return -1;
+  }
+  char path[96],map[128];
+  int n=snprintf(path,sizeof(path),"/proc/%ld/uid_map",(long)child);
+  if(n<0 || (size_t)n>=sizeof(path))return -1;
+  int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
+  if(fd<0)return -1;
+  ssize_t got=read(fd,map,sizeof(map)-1);
+  int saved=errno;
+  if(close(fd)<0)return -1;
+  errno=saved;
+  if(got<=0)return -1;
+  map[got]='\0';
+  unsigned long inner=1,outer=0,count=0,extra=0;
+  if(sscanf(map," %lu %lu %lu %lu",&inner,&outer,&count,&extra)!=3 ||
+     inner!=0 || outer!=(unsigned long)outer_uid || count!=1)return -1;
+  return 0;
+}
+
+static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   /* Self-observed namespace inode difference: NOT an independent attester. */
   struct stat user_before, net_before, user_after, net_after;
   if(stat("/proc/self/ns/user",&user_before)<0 ||
@@ -101,6 +136,13 @@ static int kernel_child(const char *root) {
       user_before.st_ino==user_after.st_ino) ||
      (net_before.st_dev==net_after.st_dev &&
       net_before.st_ino==net_after.st_ino))return 50;
+  /* Parent must read real kernel namespace inodes and uid_map before resume.
+   * A forged stdout or local bool cannot satisfy this synchronized barrier. */
+  const char announced='R';
+  char approval=0;
+  if(write(ready_fd,&announced,1)!=1 ||
+     read(resume_fd,&approval,1)!=1 || approval!='Y')return 61;
+  if(close(ready_fd)<0||close(resume_fd)<0)return 62;
   if(mount(NULL,"/",NULL,MS_REC|MS_PRIVATE,NULL)<0)return 32;
   if(mount("tmpfs",root,"tmpfs",MS_NODEV|MS_NOSUID|MS_NOEXEC,
            "size=2m,mode=0700")<0)return 33;
@@ -150,18 +192,42 @@ int main(int argc,char **argv) {
   char template[]="/tmp/nw07-namespace-source-XXXXXX";
   char *root=mkdtemp(template);
   if(!root)return 70;
+  int ready[2],resume[2];
+  if(pipe2(ready,O_CLOEXEC)<0){(void)rmdir(root);return 75;}
+  if(pipe2(resume,O_CLOEXEC)<0){
+    (void)close(ready[0]);(void)close(ready[1]);
+    (void)rmdir(root);return 76;
+  }
+  uid_t outer_uid=getuid();
   pid_t pid=fork();
-  if(pid<0) {(void)rmdir(root);return 71;}
+  if(pid<0) {
+    (void)close(ready[0]);(void)close(ready[1]);
+    (void)close(resume[0]);(void)close(resume[1]);
+    (void)rmdir(root);return 71;
+  }
   if(pid==0) {
+    (void)close(ready[0]);(void)close(resume[1]);
     if(clearenv()!=0)_exit(72);
-    int code=kernel_child(root);
+    int code=kernel_child(root,ready[1],resume[0]);
     _exit(code);
   }
+  (void)close(ready[1]);(void)close(resume[0]);
+  char announcement=0;
+  ssize_t bytes;
+  do {bytes=read(ready[0],&announcement,1);}
+    while(bytes<0&&errno==EINTR);
+  int independently_observed=(bytes==1 && announcement=='R' &&
+    observe_kernel_namespaces(pid,outer_uid)==0);
+  (void)close(ready[0]);
+  const char approval=independently_observed?'Y':'N';
+  (void)write(resume[1],&approval,1);
+  (void)close(resume[1]);
   int status=0;
   pid_t got;
   do {got=waitpid(pid,&status,0);}while(got<0&&errno==EINTR);
   if(rmdir(root)<0)return 73;
   if(got<0||!WIFEXITED(status))return 74;
+  if(!independently_observed)return 77;
   int rc=WEXITSTATUS(status);
   if(rc!=0)fprintf(stderr,"NW07_NAMESPACE_PROBE_BLOCKED stage=%d\n",rc);
   return rc;

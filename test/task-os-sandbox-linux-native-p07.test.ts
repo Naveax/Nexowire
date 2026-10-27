@@ -28,6 +28,22 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.doesNotMatch(source,/for\s*\(int fd=3;fd<1024/);
 });
 
+test('#07 probe seccomp cannot allow task exec, networking, process creation or mount syscalls',()=>{
+  assert.match(source,/NW07_SECCOMP_ARCH/);
+  assert.match(source,/SECCOMP_RET_KILL_PROCESS/);
+  assert.match(source,/SECCOMP_RET_ERRNO\|EPERM/);
+  assert.match(source,/if\(s!=-1 \|\| errno!=EPERM\)_exit\(52\)/);
+  assert.match(source,/observe_kernel_namespaces\(pid,outer_uid\)/);
+  for(const denied of [
+    'execve','execveat','socket','connect','sendmsg','recvmsg',
+    'clone','clone3','fork','vfork','mount','umount2','open','openat',
+    'setns','unshare','ptrace','bpf','keyctl','memfd_create'
+  ]){
+    assert.doesNotMatch(source,new RegExp('NW07_SC_ALLOW\\('+denied+'\\)'),
+      'A disallowed syscall was added to the test-only seccomp whitelist: '+denied);
+  }
+});
+
 test('#07 native probe compiles and refuses arbitrary command',{
   skip:process.platform!=='linux'?'Linux-only source diagnostic':false,
 },()=>{
