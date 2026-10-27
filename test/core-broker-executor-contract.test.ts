@@ -199,7 +199,7 @@ test('CORE dispatch requires the authenticated session epoch and current owner-g
  }
  const oldSession=context();oldSession.authenticatedSessionEpoch=randomUUID();
  assert.equal(check(valid,oldSession).reason,'WRONG_SESSION_OR_GRANT_GENERATION');
- const revokedGeneration=context();revokedGeneration.authoritativeGrantGeneration++;
+ const revokedGeneration=context();revokedGeneration.authoritativeGrantGeneration=grantGeneration+1;
  assert.equal(check(valid,revokedGeneration).reason,'WRONG_SESSION_OR_GRANT_GENERATION');
  const invalidWitness=context();invalidWitness.authoritativeGrantGeneration=NaN;
  assert.equal(check(valid,invalidWitness).reason,'WRONG_SESSION_OR_GRANT_GENERATION');
