@@ -62,16 +62,21 @@ export const CoreAuthorityStateSchema=z.strictObject({ownerAccountId:id,deviceId
   enrollmentRequested:z.boolean(),enrollmentId:z.string().uuid().nullable(),publicKeySpki:z.string().length(60).nullable(),
   physicalActive:z.boolean(),statusObservedAtMs:z.number().int().nonnegative().safe().nullable()});
 export function coreOperationBytes(input:CoreAuthorityRequest):Buffer {
-  return Buffer.from(JSON.stringify(['nexowire.core-console.operation.v1',
+  // Existing read/report/reserve/claim/complete/revoke signatures must retain
+  // their v1 bytes. Only newly attested enrollment extends the signed fields.
+  const fields:unknown[]=['nexowire.core-console.operation.v1',
     input.action,input.deviceId,input.installationId,input.nonce,input.issuedAtMs,
-    input.requestId??null,input.fingerprint??null,input.outcome??null,input.active??null,
-    input.nativeConsent?[input.nativeConsent.version,input.nativeConsent.challengeId,
-      input.nativeConsent.receiptId,input.nativeConsent.ownerAccountId,
-      input.nativeConsent.deviceId,input.nativeConsent.installationId,
-      input.nativeConsent.enrollmentId,input.nativeConsent.ownerEpoch,
-      input.nativeConsent.grantGeneration,input.nativeConsent.revokeEpoch,
-      input.nativeConsent.windowsSessionId,input.nativeConsent.windowsLogonLuid,
-      input.nativeConsent.approvedAtMs,input.nativeConsent.consumed]:null]));
+    input.requestId??null,input.fingerprint??null,input.outcome??null,input.active??null];
+  if(input.action==='enroll'&&input.nativeConsent)fields.push([
+    input.nativeConsent.version,input.nativeConsent.challengeId,
+    input.nativeConsent.receiptId,input.nativeConsent.ownerAccountId,
+    input.nativeConsent.deviceId,input.nativeConsent.installationId,
+    input.nativeConsent.enrollmentId,input.nativeConsent.ownerEpoch,
+    input.nativeConsent.grantGeneration,input.nativeConsent.revokeEpoch,
+    input.nativeConsent.windowsSessionId,input.nativeConsent.windowsLogonLuid,
+    input.nativeConsent.approvedAtMs,input.nativeConsent.consumed,
+  ]);
+  return Buffer.from(JSON.stringify(fields));
 }
 export function corePublicKey(spki:string){
   const der=Buffer.from(spki,'base64');
