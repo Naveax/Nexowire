@@ -16,6 +16,10 @@ import {
   preflightVerifiedInstaller,
 } from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+import {
+  invokeBrokerEffectOnce,
+  type BrokerExternalEffectAdmission,
+} from './privileged-broker-effect-admission.js';
 
 const BROKER_ELEVATION_SYSTEM32='C:\\Windows\\System32';
 const BROKER_ELEVATION_POWERSHELL=BROKER_ELEVATION_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -37,6 +41,12 @@ export interface PrivilegedBrokerServerOptions {
   tokens: readonly string[];
   maxBodyBytes?: number;
   requireElevation?: boolean;
+  /**
+   * Production MUST use a physically accepted independent CAS authority.
+   * No authority is installed by default; every /execute effect denies.
+   * Neither the HTTP body nor the bearer token may supply this object.
+   */
+  effectAdmission?: BrokerExternalEffectAdmission;
   execute?: (
     capability: string,
     input: unknown,
@@ -221,6 +231,7 @@ export async function startPrivilegedBroker(
       )) as {
         capability?: unknown;
         input?: unknown;
+        operation_id?: unknown;
       };
       const capability =
         typeof decoded.capability === 'string'
@@ -291,9 +302,17 @@ export async function startPrivilegedBroker(
                   requestedInput,
                 ));
 
-      const data = await execute(
+      // The Broker owns this gate. It is applied equally to native Windows
+      // effects and injected execute / installer / updater callbacks. A
+      // successful bearer check or a trusted-looking HTTP field cannot skip it.
+      // An unprovisioned external monotonic CAS denies by default.
+      const data = await invokeBrokerEffectOnce(
+        options.effectAdmission,
+        decoded.operation_id,
         capability,
         decoded.input,
+        () => execute(capability, decoded.input),
+        () => options.requireElevation === false || isWindowsProcessElevated(),
       );
 
       response.writeHead(200, {
