@@ -21,6 +21,8 @@ export interface CoreConsoleEvidence {
   readonly nativeAdmission: 'verified' | 'unavailable';
   /** Verified from the on-device, authenticated elevated Broker health probe. */
   readonly brokerVersionVerified?: boolean;
+  /** Only the locally composed native consent verifier can set true. */
+  readonly nativeConsentProviderPresent?: boolean;
 }
 
 export interface CoreConsoleDispatch {
@@ -150,6 +152,7 @@ export class CoreConsoleAdmission {
         active,duration:'indefinite-revocable',expiresAt:null,
         state:active ? 'ACTIVE'
           : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
+          : evidence.nativeConsentProviderPresent === false ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.brokerVersionVerified === false &&
             evidence.current?.coreEnabled === true &&
             evidence.current.accessMode === 'full' &&
