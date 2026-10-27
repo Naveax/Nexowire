@@ -25,7 +25,9 @@ function evidence(): CoreConsoleEvidence {
     sign(null,canonicalCoreConsoleEnrollment(enrollment),privateKey).toString('base64')},
     pinnedLocalSpkiDer:der,current:{...binding,ownerEpoch:8,grantGeneration:4,
       revokeEpoch:2,coreEnabled:true,accessMode:'full',deviceOnline:true,bridgeVerified:true},
-    desktop:'default',observedAtMs:now,nativeAdmission:'verified'};
+    desktop:'default',observedAtMs:now,nativeAdmission:'verified',
+    // Synthetic test evidence only. Production has no consent provider installed.
+    nativeConsentProviderPresent:true};
 }
 function fixture(patch: Partial<CoreConsoleNativeProvider> = {}) {
   let calls=0;
@@ -61,6 +63,18 @@ test('production default cannot manufacture native authority from FULL or reques
   assert.equal(status.active,false);
   assert.equal(status.core.active,false);
   assert.equal(status.core.state,'CORE_CONSOLE_PROVIDER_UNAVAILABLE');
+});
+
+test('missing native consent provider cannot turn signed synthetic evidence into CORE authority',async()=>{
+  const f=fixture();
+  const e=evidence();
+  f.set({...e,nativeConsentProviderPresent:false});
+  const status=await f.controller.status('full');
+  assert.equal(status.active,false);
+  assert.equal(status.state,'LOCAL_ENROLLMENT_REQUIRED');
+  await assert.rejects(f.controller.execute('windows.pointer.click',{},randomUUID(),'full'),
+    code('LOCAL_ENROLLMENT_REQUIRED'));
+  assert.equal(f.calls(),0);
 });
 
 test('real executeCapability routes valid CORE input to the provider, not legacy GUI dispatch',async()=>{

@@ -217,7 +217,7 @@ test('external one-use operation IDs prevent replay across a completely new loca
 });
 
 test('a losing duplicate D1 claim cannot tombstone the winner during native readback',async()=>{
-  const f=fixture();try{
+  const f=fixture();let releaseGate:(()=>void)|undefined;try{
     await enable(f);
     const profile=f.profile(),requestId=randomUUID();
     const fingerprint=createHash('sha256').update(JSON.stringify([
@@ -225,7 +225,7 @@ test('a losing duplicate D1 claim cannot tombstone the winner during native read
       {ownerAccountId:owner,deviceId,installationId:profile.installationId},
     ])).digest('hex');
     await f.client.call(profile,'reserve',{requestId,fingerprint});
-    const gate=f.pauseNextAuthorityReadback();
+    const gate=f.pauseNextAuthorityReadback();releaseGate=gate.release;
     const winner=f.client.call(profile,'claim',{requestId,fingerprint});
     await gate.entered;
     await assert.rejects(f.client.call(profile,'claim',{requestId,fingerprint}),
@@ -240,7 +240,7 @@ test('a losing duplicate D1 claim cannot tombstone the winner during native read
       /CORE_AUTHORITY_DENIED_/);
     assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
       .get(requestId)?.state,'dispatched','replay remains terminal');
-  }finally{f.db.close();}
+  }finally{releaseGate?.();f.db.close();}
 });
 
 test('CORE OFF in the reserve->claim race prevents the actual native callback',async()=>{
@@ -500,6 +500,7 @@ test('changed native Windows logon session or missing independent readback canno
     await assert.rejects(input(controller));assert.equal(f.effects(),0);
     f.replaceNativeReceipt(proof);
     f.setNativeReadback(false);
+    f.setAuthorityReadback(false);
     assert.equal((await controller.status('full')).active,false);
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false,
       'D1 cannot treat a local DB certificate as native current readback');
