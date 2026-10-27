@@ -43,7 +43,7 @@ function fixture() {
   const run=(id:unknown=op)=>invokeBrokerEffectOnce(authority,id,capability,input,
     ()=>{events.push('invoke');return 'fixture-result';},()=>true);
   return {authority,events,run,mutate:(v:BrokerVerifiedEffectBinding)=>{current=v;},
-    admitted,ticketCount};
+    admitted,get ticketCount(){return ticketCount;}};
 }
 
 test('no external CAS port, no stable operation ID, or invalid proof fails closed',async()=>{
