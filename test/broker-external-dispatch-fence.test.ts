@@ -51,7 +51,9 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   private readonly drainWaiters:Array<()=>void>=[];
   readonly holdRevoke=deferred();
   readonly holdBeginResponse=deferred();
-  stallRevoke=false;stallBeginResponse=false;
+  readonly holdCommitResponse=deferred();
+  commitEntered=false;
+  stallRevoke=false;stallBeginResponse=false;stallCommitResponse=false;
   number=0;
   constructor(readonly authorityId:string,
     readonly brokerId:string,
@@ -111,6 +113,10 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
       deviceEpoch:x.deviceEpoch,sessionEpoch:x.sessionEpoch,
       ownerEpoch:x.ownerEpoch,generation:x.expectedGeneration,
       privilege:x.requiredPrivilege,issuedAtMs:now,expiresAtMs:now+2500});
+    if(this.stallCommitResponse){
+      this.commitEntered=true;
+      await this.holdCommitResponse.promise;
+    }
     if(this.loseDispatchCommitAck){
       this.loseDispatchCommitAck=false;
       throw Error('COMMIT_ACK_LOST_AFTER_EFFECT_ADMISSION');
@@ -245,6 +251,31 @@ test('verified high-token Broker executes once after new signed external CAS per
   'DISPATCH_EXTERNAL_CAS_UNKNOWN');
  assert.equal(effects,1);
 });
+test('HIGH token downgraded during begin CAS wait is rechecked before commit',async()=>{
+ const f=fixture(),gate=f.broker();f.remote.stallBeginResponse=true;
+ let effects=0;
+ const pending=gate.execute(f.request(),async()=>{effects++;return true});
+ for(let i=0;i<300&&f.remote.active.size===0;i++)await Promise.resolve();
+ assert.equal(f.remote.active.size,1,'external reservation is pending');
+ f.setHigh(false);
+ f.remote.holdBeginResponse.resolve();
+ await code(pending,'DISPATCH_HIGH_TOKEN_UNVERIFIED');
+ assert.equal(effects,0);
+ assert.equal(f.remote.active.size,0,'reserved claim released after stale evidence');
+});
+test('HIGH token downgraded during commit CAS wait is rechecked before effect',async()=>{
+ const f=fixture(),gate=f.broker();f.remote.stallCommitResponse=true;
+ let effects=0;
+ const pending=gate.execute(f.request(),async()=>{effects++;return true});
+ for(let i=0;i<300&&!f.remote.commitEntered;i++)await Promise.resolve();
+ assert.equal(f.remote.commitEntered,true,'external commit response is pending');
+ f.setHigh(false);
+ f.remote.holdCommitResponse.resolve();
+ await code(pending,'DISPATCH_HIGH_TOKEN_UNVERIFIED');
+ assert.equal(effects,0,'no effect may use pre-await HIGH evidence');
+ assert.equal(f.remote.active.size,0,'committed claim released after stale evidence');
+});
+
 test('unsigned/forged permit and restored stale local grant cannot execute',async()=>{
  const f=fixture(),gate=f.broker();f.remote.forged=true;
  let effects=0;
