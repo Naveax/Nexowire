@@ -50,7 +50,14 @@ function fixture(){
         .some(key=>proof[key]!==nativeReceipt![key])||
       proof.enrollmentId!==expected.enrollmentId)return false;
     consumedNativeReceipts.add(proof.receiptId);return true;
-  }});
+  },currentReadback:async expected=>readbackEnabled&&!!nativeReceipt&&
+    nativeReceipt.ownerAccountId===expected.ownerAccountId&&
+    nativeReceipt.deviceId===expected.deviceId&&
+    nativeReceipt.installationId===expected.installationId&&
+    nativeReceipt.enrollmentId===expected.enrollmentId&&
+    nativeReceipt.ownerEpoch===expected.ownerEpoch&&
+    nativeReceipt.grantGeneration===expected.grantGeneration&&
+    nativeReceipt.revokeEpoch===expected.revokeEpoch});
   const handler=createControlPlaneHttpHandler({} as never,{authenticate:async()=>null,coreConsoleAuthority:authority});
   let beforeRequest:((body:Record<string,unknown>)=>void)|undefined;
   const fetcher=(async(input,init)=>{const request=new Request(String(input),init);
@@ -340,6 +347,8 @@ test('changed native Windows logon session or missing independent readback canno
     f.replaceNativeReceipt(proof);
     f.setNativeReadback(false);
     assert.equal((await controller.status('full')).active,false);
+    assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false,
+      'D1 cannot treat a local DB certificate as native current readback');
     await assert.rejects(input(controller));assert.equal(f.effects(),0);
   }finally{f.db.close();}
 });
