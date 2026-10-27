@@ -103,6 +103,9 @@ test('trust audit fails closed when signature and ACL providers are unavailable'
     authenticodeEvidenceAvailable:boolean;
     aclEvidenceAvailable:boolean;fileAclProtected:boolean;
     parentAclProtected:boolean;broadWriteGrantFound:null|boolean;
+    fileOwnerPrivileged:boolean|null;parentOwnerPrivileged:boolean|null;
+    nonPrivilegedFileWriteGrantFound:boolean|null;
+    nonPrivilegedParentWriteGrantFound:boolean|null;
   };
   assert.equal(data.authenticodeStatus,'UNAVAILABLE');
   assert.equal(data.authenticodeEvidenceAvailable,false);
@@ -112,6 +115,10 @@ test('trust audit fails closed when signature and ACL providers are unavailable'
   assert.equal(data.parentAclProtected,false);
   assert.equal(data.broadWriteGrantFound,null,
     'unknown ACL is not evidence that no broad write grant exists');
+  assert.equal(data.fileOwnerPrivileged,null);
+  assert.equal(data.parentOwnerPrivileged,null);
+  assert.equal(data.nonPrivilegedFileWriteGrantFound,null);
+  assert.equal(data.nonPrivilegedParentWriteGrantFound,null);
   assert.equal(data.provisionalFileTrustChecksPassed,false);
   assert.equal(data.productionReady,false);
 });
@@ -220,6 +227,7 @@ test('inherited broad parent-directory write grant is independently production N
     const audit=JSON.parse(result.stdout.trim()) as {
       aclEvidenceAvailable:boolean;parentBroadWriteGrantFound:boolean|null;productionReady:boolean;
       signedReleaseManifestVerified:boolean;runningImageFileIdentityVerified:boolean;
+      nonPrivilegedParentWriteGrantFound:boolean|null;provisionalFileTrustChecksPassed:boolean;
     };
     if (!audit.aclEvidenceAvailable) {
       assert.equal(audit.parentBroadWriteGrantFound,null);
@@ -230,8 +238,59 @@ test('inherited broad parent-directory write grant is independently production N
     }
     assert.equal(audit.parentBroadWriteGrantFound,true,
       'synthetic inherited parent Modify grant is replacement/TOCTOU risk');
+    assert.equal(audit.nonPrivilegedParentWriteGrantFound,true,
+      'low-trust parent write ACE must also fail the general identity gate');
+    assert.equal(audit.provisionalFileTrustChecksPassed,false);
     assert.equal(audit.signedReleaseManifestVerified,false);
     assert.equal(audit.runningImageFileIdentityVerified,false);
     assert.equal(audit.productionReady,false);
   }finally{await fs.rm(dir,{recursive:true,force:true})}
+});
+
+test('read-only audit rejects nonprivileged owner or per-user write grant on disposable fixture', {
+  skip: process.platform !== 'win32', timeout: 16000,
+}, async (t) => {
+  // Creates only a disposable unsigned file. No ACL, task, installed
+  // Agent/Broker, service, process token or live Job handle is modified.
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nx-owner-acl-audit-'));
+  try {
+    const helper=path.join(temp,'windows-job-owner.exe');
+    const bytes=Buffer.from('unsigned user-owned static ACL fixture; do not execute');
+    await fs.writeFile(helper,bytes);
+    await fs.writeFile(path.join(temp,'windows-job-owner.sha256'),
+      createHash('sha256').update(bytes).digest('hex'));
+    const audit=spawnSync('powershell.exe',[
+      '-NoProfile','-NonInteractive','-File',
+      path.resolve('scripts/audit-windows-job-helper-trust.ps1'),
+      '-HelperPath',helper,
+    ],{windowsHide:true,encoding:'utf8',timeout:10000,maxBuffer:8192});
+    assert.equal(audit.status,0,(audit.stderr??'').slice(0,1200));
+    const evidence=JSON.parse(audit.stdout.trim()) as {
+      aclEvidenceAvailable:boolean;
+      fileOwnerPrivileged:boolean|null;parentOwnerPrivileged:boolean|null;
+      nonPrivilegedFileWriteGrantFound:boolean|null;
+      nonPrivilegedParentWriteGrantFound:boolean|null;
+      provisionalFileTrustChecksPassed:boolean;productionReady:boolean;
+    };
+    assert.equal(evidence.productionReady,false);
+    if (!evidence.aclEvidenceAvailable) {
+      assert.equal(evidence.fileOwnerPrivileged,null);
+      assert.equal(evidence.nonPrivilegedFileWriteGrantFound,null);
+      t.skip('ACL provider unavailable: explicit NO-GO retained');
+      return;
+    }
+    const lowTrustOwnerOrWriter=
+      evidence.fileOwnerPrivileged===false ||
+      evidence.parentOwnerPrivileged===false ||
+      evidence.nonPrivilegedFileWriteGrantFound===true ||
+      evidence.nonPrivilegedParentWriteGrantFound===true;
+    if (!lowTrustOwnerOrWriter) {
+      t.skip('test runner produced an administrator-only owner/DACL fixture');
+      return;
+    }
+    assert.equal(evidence.provisionalFileTrustChecksPassed,false,
+      'explicit user ACE or owner privilege must not be mislabeled protected trust');
+  } finally {
+    await fs.rm(temp,{recursive:true,force:true});
+  }
 });
