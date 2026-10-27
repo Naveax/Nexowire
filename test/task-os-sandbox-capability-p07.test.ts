@@ -84,12 +84,17 @@ test('#07 adapter has no spawn, native I/O, callback injection or shell fallback
   assert.match(src,/throw new OsTaskSandboxBlockedError\(/);
 });
 
-test('#07 real dispatch remains UNWIRED: native sandbox acceptance stays NO-GO',()=>{
+test('#07 records real effect capability cases without treating unsafe spawn as proof',()=>{
   const src=readFileSync(new URL('../src/agent/executors.ts',import.meta.url),'utf8');
-  // This is an audit tripwire, not protection of existing execution paths.
-  assert.match(src,/case 'shell.exec':/);
-  assert.match(src,/return await executeShell\(input, policy\)/);
-  assert.match(src,/env:\s*process\.env/);
-  assert.match(src,/case 'task.graph.run':/);
-  assert.doesNotMatch(src,/from ['"]\.\/task-os-sandbox-capability\.js['"]/);
+  for(const cap of ['shell.exec','wsl.exec','process.start','task.graph.run',
+    'runbook.run','workspace.checks','workspace.snapshot']){
+    assert.ok(src.includes("case '"+cap+"':"),cap);
+    assert.equal(prepareSandboxRequiredCapability(cap,{},intent).launchAllowed,false);
+  }
 });
+
+// TODO is intentionally visible in CI but never described as a passing
+// physical negative. #03 owns actual dispatch integration and must bring a
+// real native provider readback and cross-platform adversarial acceptance.
+test.todo('#03: guard every real shell/process/task effect before legacy spawn');
+test.todo('#02/#07: independent native low-privilege, file/network/IPC, descendant and revoke proof');
