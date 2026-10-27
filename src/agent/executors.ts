@@ -2252,7 +2252,7 @@ export async function executeCapability(
   const coreOrBrokerRouted=context.privilegeMode==='broker' ||
     context.coreWindowsDispatch!==undefined;
   assertCoreSandboxRouteUnavailable(capability,coreOrBrokerRouted);
-  assertCoreOtherNativeEffectUnavailable(capability,coreOrBrokerRouted);
+  assertCoreOtherNativeEffectUnavailable(capability,coreOrBrokerRouted,input);
 
   // Do this before physical console grant checks. An owner-console grant
   // is not a waiver of AI private-desktop isolation.
