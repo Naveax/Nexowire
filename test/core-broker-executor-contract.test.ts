@@ -11,10 +11,12 @@ import {isPrivilegedBrokerCapability,privilegeRequirement} from '../src/security
 const time=new Date('2026-10-21T13:00:00.000Z');
 const sha='a'.repeat(64),otherSha='b'.repeat(64);
 const vmId='2eb71c03-a5f2-4f16-bbbf-c0d29ee2a791';
+const sessionEpoch='5f62e71a-82c8-4ed3-9a13-d4c6b98d87eb';
+const grantGeneration=11;
 const request=(mode:'CORE'|'ROOT'='CORE',action='core.shell.exec')=>({
   type:'core-broker.execute',version:1,requestId:randomUUID(),
   deviceId:'device-1',ownerAccountId:'owner-1',ownerEpoch:17,
-  credentialBinding:sha,mode,action,
+  sessionEpoch,grantGeneration,credentialBinding:sha,mode,action,
   issuedAt:'2026-10-21T12:59:40.000Z',expiresAt:'2026-10-21T13:00:20.000Z',
   ...(action==='core.shell.exec'||action==='core.process.start'
     ? {shell:{executable:'C:\\Windows\\System32\\cmd.exe',arguments:['/C','echo test'],
@@ -27,9 +29,12 @@ const request=(mode:'CORE'|'ROOT'='CORE',action='core.shell.exec')=>({
 function context(mode:'CORE'|'ROOT'='CORE'):CoreBrokerContext{
   return {
     now:time,deviceId:'device-1',ownerAccountId:'owner-1',
-    credentialBinding:sha,authoritativeOwnerEpoch:17,ownerRevoked:false,
+    credentialBinding:sha,authoritativeOwnerEpoch:17,
+    authenticatedSessionEpoch:sessionEpoch,
+    authoritativeGrantGeneration:grantGeneration,ownerRevoked:false,
     enrollment:{deviceId:'device-1',ownerAccountId:'owner-1',
-      credentialBinding:sha,ownerEpoch:17,enrollmentId:randomUUID(),mode,
+      credentialBinding:sha,ownerEpoch:17,grantGeneration,
+      enrollmentId:randomUUID(),mode,
       activatedAt:'2026-10-21T12:55:00.000Z',
       expiresAt:mode==='ROOT'?'2026-10-21T13:10:00.000Z':null,
       ownerSignedGrantDigest:otherSha,brokerInstalledImageSha256:sha},
@@ -174,4 +179,53 @@ test('PID-only taskkill never counts as process termination proof',()=>{
  const invalid={...request('CORE','core.process.stop'),
    stopTarget:{pid:123,processCreationFiletime:'',expectedImageSha256:sha}};
  assert.equal(check(invalid).reason,'INVALID_TYPED_REQUEST');
+});
+
+
+test('CORE dispatch requires the authenticated session epoch and current owner-grant generation',()=>{
+ const valid=request();
+ assert.equal(check(valid).reason,'ELEVATED_DISPATCH_NOT_INSTALLED');
+ for(const patch of [
+   {sessionEpoch:randomUUID()},
+   {grantGeneration:grantGeneration+1},
+   {grantGeneration:0},
+   {sessionEpoch:'client-ui-core-enabled'},
+ ]){
+   const result=check({...valid,...patch});
+   assert.notEqual(result.reason,'ELEVATED_DISPATCH_NOT_INSTALLED',
+     JSON.stringify(patch));
+   assert.equal(result.privilegedExecutionOccurred,false);
+   assert.equal(result.automaticallyRetryable,false);
+ }
+ const oldSession=context();oldSession.authenticatedSessionEpoch=randomUUID();
+ assert.equal(check(valid,oldSession).reason,'WRONG_SESSION_OR_GRANT_GENERATION');
+ const revokedGeneration=context();revokedGeneration.authoritativeGrantGeneration++;
+ assert.equal(check(valid,revokedGeneration).reason,'WRONG_SESSION_OR_GRANT_GENERATION');
+ const invalidWitness=context();invalidWitness.authoritativeGrantGeneration=NaN;
+ assert.equal(check(valid,invalidWitness).reason,'WRONG_SESSION_OR_GRANT_GENERATION');
+ const staleEnrollment=context();
+ staleEnrollment.enrollment={...staleEnrollment.enrollment!,
+   grantGeneration:grantGeneration-1};
+ assert.equal(check(valid,staleEnrollment).reason,'MISSING_SIGNED_ENROLLMENT');
+});
+
+test('expired request, revoked owner and UNKNOWN/lost-ACK have no CORE side effect',()=>{
+ const expired={...request(),issuedAt:'2026-10-21T12:55:00.000Z',
+   expiresAt:'2026-10-21T12:56:00.000Z'};
+ assert.equal(check(expired).reason,'GRANT_NOT_ACTIVE');
+ const revoked=context();revoked.ownerRevoked=true;
+ assert.equal(check(request(),revoked).reason,'GRANT_REVOKED');
+ const unknown=context();unknown.pendingMutationUnknown=true;
+ const outcome=check(request(),unknown);
+ assert.equal(outcome.status,'unknown');
+ assert.equal(outcome.automaticallyRetryable,false);
+ assert.equal(outcome.privilegedExecutionOccurred,false);
+ const lostAck=context();lostAck.requestAlreadyReserved=()=>{
+   throw Error('external CAS lost ACK, state UNKNOWN');
+ };
+ const uncertain=check(request(),lostAck);
+ assert.equal(uncertain.status,'unknown');
+ assert.equal(uncertain.reason,'STALE_OR_REPLAYED_REQUEST');
+ assert.equal(uncertain.verifiedEffect,false);
+ assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
 });
