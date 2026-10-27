@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <wchar.h>
+#include <string.h>
 #include <aclapi.h>
 #include <sddl.h>
 
@@ -71,8 +72,17 @@ static BOOL enforce_guardian_isolation(void) {
     NULL,NULL,&installed,NULL,&observed);
   if(verify==ERROR_SUCCESS && installed && observed) {
     SECURITY_DESCRIPTOR_CONTROL flags=0;DWORD revision=0;
-    if(GetSecurityDescriptorControl(observed,&flags,&revision) &&
-       (flags&SE_DACL_PROTECTED))trusted=TRUE;
+    BOOL identical=(installed->AceCount==dacl->AceCount);
+    for(DWORD i=0;identical && i<dacl->AceCount;i++) {
+      LPVOID want=NULL,actual=NULL;
+      if(!GetAce(dacl,i,&want) || !GetAce(installed,i,&actual))
+        {identical=FALSE;break;}
+      ACE_HEADER *w=(ACE_HEADER*)want,*a=(ACE_HEADER*)actual;
+      if(w->AceSize!=a->AceSize || memcmp(w,a,w->AceSize)!=0)
+        identical=FALSE;
+    }
+    if(identical && GetSecurityDescriptorControl(observed,&flags,&revision)
+       && (flags&SE_DACL_PROTECTED))trusted=TRUE;
   }
   if(observed)LocalFree(observed);
 
@@ -81,7 +91,7 @@ cleanup:
   if(descriptor)LocalFree(descriptor);
   if(token)CloseHandle(token);
   if(!trusted)fwprintf(stderr,
-    L"NEXOWIRE_WINJOB_ERROR guardian_high_token_or_acl_unverified\\n");
+    L"NEXOWIRE_WINJOB_ERROR guardian_high_token_or_acl_unverified\n");
   return trusted;
 }
 
