@@ -312,7 +312,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       current:{...this.current(state),bridgeVerified:state.bridgeVerified&&bridge},
       observedAtMs,desktop:this.allowedDesktop()?'default':'unknown',
       nativeAdmission:!!certificate&&nativeValid&&bridge&&this.allowedDesktop()?'verified':'unavailable',
-      brokerVersionVerified:bridge} as CoreConsoleEvidence;
+      brokerVersionVerified:bridge,
+      nativeConsentProviderPresent:!!this.options.nativeConsent} as CoreConsoleEvidence;
   }
   private async currentNativeConsent(signal:AbortSignal):Promise<boolean>{
     const recorded=this.profile.nativeConsent;
