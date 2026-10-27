@@ -16,7 +16,7 @@ function signed(value:unknown,key:KeyObject){
  return {payload:bytes.toString('base64url'),
   signature:sign(null,bytes,key).toString('base64url')};
 }
-test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged receipts',async t=>{
+test('isolated TLS dispatch rejects lost begin ACK replay and forged receipts',async t=>{
  const dir=await mkdtemp(path.join(process.cwd(),'test','nx-587-tls-broker-'));
  const ca=await isolatedRemoteCas(dir);
  const prior=tls.getCACertificates('default');
@@ -25,7 +25,10 @@ test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged rec
  const impostor=generateKeyPairSync('ed25519');
  const authorityId=ca.authorityId,brokerId=randomUUID();
  const ownerId=randomUUID(),sessionEpoch=randomUUID(),deviceEpoch=ca.epoch;
- let generation=5,revoked=false,forged=false,released=0;
+ let generation=5,revoked=false,forged=false,released=0,lostBeginAck=false;
+ let beginCalls=0;
+ const beginChallenges:string[]=[];
+ const requestTombstones=new Map<string,{request:string;brokerId:string;dispatchId:string}>();
  let claims=new Map<string,{request:Record<string,unknown>;brokerId:string;committed:boolean}>();
  const server=createServer({
   key:await readFile(path.join(ca.root,'cas.key')),
@@ -44,12 +47,25 @@ test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged rec
    }
    if(req.url==='/v1/broker-dispatch/begin'){
     const op=payload.request,scope=op.scope;
+    beginCalls++;beginChallenges.push(payload.challengeNonce);
+    const prior=requestTombstones.get(op.requestId);
+    if(prior){
+     const same=prior.request===JSON.stringify(op)&&
+      prior.brokerId===brokerId;
+     respond({error:same?'request outcome unknown; reconcile':
+      'request UUID scope collision'},409);return;
+    }
     if(revoked||scope.expectedGeneration!==generation||scope.ownerEpoch!==4){
       respond({error:'grant revoked'},409);return;
     }
     const now=Date.now();
     const dispatchId=randomUUID();
     claims.set(dispatchId,{request:op,brokerId,committed:false});
+    requestTombstones.set(op.requestId,{request:JSON.stringify(op),
+      brokerId,dispatchId});
+    if(lostBeginAck){
+     lostBeginAck=false;res.socket?.destroy();return;
+    }
     respond(signed({kind:'broker_dispatch_permit_v1',
       authorityId,brokerId,dispatchId,
       challengeNonce:payload.challengeNonce,
@@ -166,6 +182,40 @@ test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged rec
  assert.equal(released,1);
  assert.equal(await fence.execute(request(),async()=>42),42);
  assert.equal(released,2);
+ const makeFence=()=>new BrokerExternalDispatchFence({
+  authority:remote,authorityId,
+  publicKeyPem:signer.publicKey.export({type:'spki',format:'pem'}).toString(),
+  verifyIdentity:async()=>true,
+  verifyEffectiveBroker:async()=>({verified:true,brokerId,
+    ownerEpoch:4,grantGeneration:5,
+    highIntegrityToken:true,signedProtectedImage:true,
+    protectedParentAndImports:true}),
+  verifyOwnerRevocation:async()=>true,
+ });
+ const uncertain=request(),hubA=makeFence(),hubB=makeFence();
+ const priorCalls=beginCalls,priorTombstones=requestTombstones.size,
+  priorClaims=claims.size;
+ let effects=0;
+ lostBeginAck=true;
+ await assert.rejects(hubA.execute(uncertain,async()=>++effects),
+  {code:'DISPATCH_EXTERNAL_CAS_UNKNOWN'});
+ assert.equal(effects,0,'lost HTTPS begin ACK must not invoke callback');
+ assert.equal(beginCalls,priorCalls+1,
+  'client sends one begin request; it has no hidden transport retry');
+ assert.equal(requestTombstones.size,priorTombstones+1,
+  'synthetic authority tombstone persists before ACK loss');
+ assert.equal(claims.size,priorClaims+1,
+  'synthetic reservation persists before ACK loss');
+ await assert.rejects(hubB.execute(uncertain,async()=>++effects),
+  {code:'DISPATCH_EXTERNAL_CAS_UNKNOWN'});
+ assert.equal(beginCalls,priorCalls+2,'only the explicit Hub B attempt is sent');
+ assert.notEqual(beginChallenges[priorCalls],beginChallenges[priorCalls+1],
+  'Hub B uses a fresh challenge nonce');
+ assert.equal(requestTombstones.size,priorTombstones+1,
+  'duplicate request UUID cannot create another tombstone');
+ assert.equal(claims.size,priorClaims+1,
+  'duplicate request UUID cannot mint another dispatch');
+ assert.equal(effects,0,'lost ACK never authorizes replay');
  forged=true;
  await assert.rejects(fence.execute(request(),async()=>false),
   {code:'DISPATCH_SIGNATURE_UNTRUSTED'});

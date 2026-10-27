@@ -143,6 +143,18 @@ not allocate a new dispatch ID or issue a new permit. A release must not erase
 the request tombstone. UNKNOWN is reconciled by inspection; never retry the
 mutation under a fresh request ID.
 
+An isolated HTTPS transport regression also persists a request tombstone,
+then destroys the first response after reservation. It verifies that the client
+does not retry by itself and that another Hub using a fresh nonce receives only
+a denial for the same request UUID. Its TLS server and storage are disposable
+in-memory fixtures, not a deployed or rollback-resistant provider.
+
+Within a single Broker process, the same request UUID is held in a local
+in-flight admission set through callback completion and remote release. A
+concurrent duplicate is denied before a second CAS call and cannot fence the
+winning attempt. This only prevents same-process races; the external durable
+tombstone remains mandatory across Hubs and restarts.
+
 The deterministic regression test forces the synthetic authority to persist
 the request UUID and claim, then lose the begin ACK. It verifies that Hub A's
 callback does not run, Hub A remains locally fenced without a second authority

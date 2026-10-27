@@ -373,6 +373,8 @@ test('concurrent duplicate reservation: only one dispatch, no replay',async()=>{
   gate.execute(op,async()=>{executed++;return true})));
  assert.equal(attempts.filter(x=>x.status==='fulfilled').length,1);
  assert.equal(executed,1);
+ assert.equal(f.remote.beginChallenges.length,1,
+  'one local request UUID can enter remote begin only once at a time');
 });
 test('two independent Hubs share remote CAS: duplicate UUID permits one effect',async()=>{
  const f=fixture(),hubA=f.broker(),hubB=f.broker();

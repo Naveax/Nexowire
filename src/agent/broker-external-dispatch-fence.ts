@@ -108,6 +108,8 @@ export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
   private readonly inFlight=new Map<string,string>();
   private readonly claimed=new Set<string>();
+  /** One request UUID may have only one in-flight local admission. */
+  private readonly pendingRequests=new Set<string>();
   private readonly locallyFenced=new Set<string>();
   constructor(private readonly config:{
     authority:ExternalBrokerDispatchAuthority;
@@ -205,6 +207,15 @@ export class BrokerExternalDispatchFence {
    */
   async execute<T>(raw:BrokerDispatchRequest,run:()=>Promise<T>):Promise<T>{
     const request=operation.parse(raw);
+    if(this.pendingRequests.has(request.requestId))
+      deny('DISPATCH_EXTERNAL_CAS_UNKNOWN');
+    this.pendingRequests.add(request.requestId);
+    return this.executeOnce(request,run).finally(()=>{
+      this.pendingRequests.delete(request.requestId);
+    });
+  }
+  private async executeOnce<T>(request:BrokerDispatchRequest,
+    run:()=>Promise<T>):Promise<T>{
     const device=request.scope.deviceId;
     if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
