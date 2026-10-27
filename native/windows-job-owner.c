@@ -141,6 +141,13 @@ static void diagnostic(const wchar_t *stage) {
 int main(void){
   int argc=0;
   wchar_t **argv=CommandLineToArgvW(GetCommandLineW(),&argc);
+  // Read-only-to-host test mode; only secures this temporary probe process.
+  // Does not create a Job, shell, root or any installed host object.
+  if(argv && argc==2 && !wcscmp(argv[1],L"--probe-isolation")) {
+    if(!enforce_guardian_isolation())return 79;
+    fwprintf(stdout,L"NX_GUARDIAN_HIGH_DACL_PROVISIONAL\\n");
+    return 0;
+  }
   if(!argv || argc<11 || wcscmp(argv[1],L"--status") ||
      wcscmp(argv[3],L"--cwd") || wcscmp(argv[5],L"--parent") ||
      wcscmp(argv[7],L"--release") || wcscmp(argv[9],L"--")){
