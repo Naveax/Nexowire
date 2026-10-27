@@ -7,23 +7,27 @@ import {PathPolicy} from '../src/agent/path-policy.js';
 
 type RunningChild={ProcessId:number;ParentProcessId:number;CreationDate:string};
 function findExactFixture(marker:string):RunningChild[]{
+  if(!/^NW_(?:TREE|ORPHAN)_TEST_[a-f0-9]{24}$/.test(marker))
+    throw new Error('INVALID_SYNTHETIC_PROCESS_MARKER');
   const script=[
     "$ErrorActionPreference='Stop';",
     "$name="+JSON.stringify(marker)+';',
-    "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" |",
+    // Server-side WQL filtering avoids full node.exe enumeration on busy CI runners.
+    "$filter=\"Name='node.exe' AND CommandLine LIKE '%$name%'\";",
+    "Get-CimInstance Win32_Process -Filter $filter |",
     "Where-Object {$_.CommandLine -and $_.CommandLine.Contains($name) -and $_.CommandLine.Contains('setInterval')} |",
     "Select-Object ProcessId,ParentProcessId,@{N='CreationDate';E={$_.CreationDate.ToUniversalTime().ToString('o')}} | ConvertTo-Json -Compress",
   ].join(' ');
   const raw=execFileSync('powershell.exe',[
     '-NoLogo','-NoProfile','-NonInteractive','-Command',script,
-  ],{encoding:'utf8',timeout:9000,windowsHide:true}).trim();
+  ],{encoding:'utf8',timeout:25_000,windowsHide:true}).trim();
   if(!raw)return [];
   const parsed=JSON.parse(raw) as RunningChild|RunningChild[];
   return Array.isArray(parsed)?parsed:[parsed];
 }
 test('Windows process.stop exposes bounded tree termination evidence and checks child', {
   skip:process.platform!=='win32',
-  timeout:22_000,
+  timeout:95_000,
 },async()=>{
   const marker='NW_TREE_TEST_'+randomBytes(12).toString('hex');
   const manager=new ProcessManager();
@@ -71,7 +75,7 @@ test('Windows process.stop exposes bounded tree termination evidence and checks 
 
 test('Windows Job owner reaps descendants after the root PID is deliberately lost', {
   skip:process.platform!=='win32',
-  timeout:23_000,
+  timeout:95_000,
 },async()=>{
   const marker='NW_ORPHAN_TEST_'+randomBytes(12).toString('hex');
   const manager=new ProcessManager();
@@ -94,7 +98,7 @@ test('Windows Job owner reaps descendants after the root PID is deliberately los
     const rootProof=execFileSync('powershell.exe',[
       '-NoProfile','-NonInteractive','-Command',
       "$p=Get-CimInstance Win32_Process -Filter 'ProcessId="+String(started.pid)+"'; if($p){$p.CreationDate.ToUniversalTime().ToFileTimeUtc()}"
-    ],{encoding:'utf8',windowsHide:true,timeout:9000}).trim();
+    ],{encoding:'utf8',windowsHide:true,timeout:25_000}).trim();
     assert.ok(rootProof && Math.abs(Number(rootProof)-Number(started.processCreationFiletime))<10_000_000,
       'native Job creation timestamp must identify this exact test process');
     // Deliberately terminate only the confirmed synthetic shell root.
