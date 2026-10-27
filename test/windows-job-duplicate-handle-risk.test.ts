@@ -26,9 +26,9 @@ async function ready(proc:ChildProcessWithoutNullStreams):Promise<void> {
   });
 }
 
-test('synthetic same-user PROCESS_DUP_HANDLE can retain unnamed Job across guardian crash', {
+test('same-tier high token remains privileged against high Job guardian; medium cannot launch', {
   skip:process.platform!=='win32',timeout:50000,
-},async()=>{
+},async(t)=>{
   // Independently report the *actual* token tier. A CI runner might run as
   // administrator; never claim its same-user test proves low-privilege access.
   const groups=execFileSync('whoami.exe',['/groups'],
@@ -39,8 +39,27 @@ test('synthetic same-user PROCESS_DUP_HANDLE can retain unnamed Job across guard
     '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
     {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
   const lowprivVerified=isMedium && !isHigh && !elevated;
-  // The fixture's independent holder inherits exactly this caller token.
-  // It exercises PROCESS_DUP_HANDLE on a uniquely marked synthetic guardian.
+  if (lowprivVerified) {
+    // A medium-integrity Agent no longer gets a Job owner or a root at all.
+    // Separate real medium attacker -> high guardian evidence is required.
+    const marker='NX_MEDIUM_GUARD_DENIED_'+randomBytes(12).toString('hex');
+    const manager=new ProcessManager();
+    await assert.rejects(
+      ()=>manager.start({shell:'powershell',
+        command:'node -e "const marker=\\''+marker+'\\';setInterval(()=>{},1000)"'},
+        new PathPolicy(['*'])),
+      /WINDOWS_JOB_LAUNCH_UNCONFIRMED|guardian_high_token_or_acl_unverified|WINDOWS_JOB/,
+      'medium-integrity guardian must fail closed before any root can run');
+    console.log('NX_GUARD_MEDIUM_FAIL_CLOSED; cross-integrity physical acceptance BLOCKED');
+    return;
+  }
+  if (!isHigh || !elevated) {
+    t.skip('caller token is neither verified medium nor elevated high');
+    return;
+  }
+  // This same-HIGH fixture deliberately remains a negative production
+  // finding: equal-privilege attackers can still retain Job handles.
+  // Never relabel this test as a Medium->High attack or production PASS.
   console.log('NX_JOB_CALLER_TOKEN lowprivVerified='+lowprivVerified+
     ' integrity='+ (isMedium?'medium':isHigh?'high':'unknown')+
     ' elevated='+elevated);
@@ -70,7 +89,7 @@ test('synthetic same-user PROCESS_DUP_HANDLE can retain unnamed Job across guard
     const killed=spawnSync('taskkill.exe',['/PID',String(guard.ProcessId),'/F'],
       {windowsHide:true,timeout:6000,stdio:'ignore'});
     assert.equal(killed.status,0,'exact marker-bound synthetic guardian is only force-killed PID');
-    // Security finding: a second query-only kernel Job handle suppresses
+    // Known residual high-to-high risk: second query-only handle suppresses
     // KILL_ON_JOB_CLOSE even for unnamed jobs. Never call it production PASS.
     const remaining=exact(started.pid);
     assert.equal(remaining?.CreationDate,root.CreationDate,
