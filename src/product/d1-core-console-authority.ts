@@ -170,22 +170,35 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
     }
   }
   async deviceStatus(deviceId:string,ownerAccountId:string){
-    const row=await this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
+    type StatusRow={enrollment_id:string|null;installation_id:string|null;
+      owner_epoch:number;grant_generation:number;revoke_epoch:number;
+      enrollment_requested:number;device_ready:number;physical_active:number;
+      status_observed_at_ms:number|null;fresh:number};
+    const readRow=()=>this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
       c.installation_id,c.owner_epoch,c.grant_generation,c.revoke_epoch,
       c.physical_active,c.status_observed_at_ms,
       CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready,
       CASE WHEN ${READY} AND c.status_observed_at_ms>=${DB_NOW}-15000 THEN 1 ELSE 0 END fresh
-      ${JOIN} WHERE d.id=? AND d.owner_account_id=?`).bind(deviceId,ownerAccountId)
-      .first<{enrollment_id:string|null;installation_id:string|null;owner_epoch:number;
-        grant_generation:number;revoke_epoch:number;enrollment_requested:number;
-        device_ready:number;physical_active:number;status_observed_at_ms:number|null;fresh:number}>();
+      ${JOIN} WHERE d.id=? AND d.owner_account_id=?`).bind(deviceId,ownerAccountId).first<StatusRow>();
+    let row=await readRow();
     let nativeCurrent=false;
     if(row?.enrollment_id&&row.installation_id&&this.nativeEnrollmentVerifier){
-      try{nativeCurrent=await this.nativeEnrollmentVerifier.currentReadback({
-        ownerAccountId,deviceId,installationId:row.installation_id,
-        enrollmentId:row.enrollment_id,ownerEpoch:row.owner_epoch,
-        grantGeneration:row.grant_generation,revokeEpoch:row.revoke_epoch})===true;
-      }catch{nativeCurrent=false;}
+      try {
+        nativeCurrent=await this.nativeEnrollmentVerifier.currentReadback({
+          ownerAccountId,deviceId,installationId:row.installation_id,
+          enrollmentId:row.enrollment_id,ownerEpoch:row.owner_epoch,
+          grantGeneration:row.grant_generation,revokeEpoch:row.revoke_epoch})===true;
+        // The independent OS readback is async. A revoke, CORE OFF or
+        // re-pair can occur while it runs. Never surface an old D1 row as
+        // current after that await; recheck identity/generation and readiness.
+        const latest=await readRow();
+        nativeCurrent=nativeCurrent&&!!latest&&latest.enrollment_id===row.enrollment_id&&
+          latest.installation_id===row.installation_id&&
+          latest.owner_epoch===row.owner_epoch&&
+          latest.grant_generation===row.grant_generation&&
+          latest.revoke_epoch===row.revoke_epoch&&latest.device_ready===1;
+        row=latest;
+      }catch{nativeCurrent=false;row=null;}
     }
     // Never infer OS-local human approval from a D1 row or signed Agent report.
     return {localEnrolled:nativeCurrent,
