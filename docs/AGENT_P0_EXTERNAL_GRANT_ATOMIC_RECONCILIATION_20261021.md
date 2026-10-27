@@ -136,3 +136,20 @@ cannot redirect an already authorized transition or alter local reconciliation.
 The regression tests use a synthetic PostgreSQL contract and remote authority;
 they do not prove a deployed independent CAS, secure credential custody, physical
 rollback resistance or native acceptance. Production remains **NO-GO**.
+
+
+## 2026-10-27 #01 fresh HTTPS grant CAS responses
+
+Reserve, revoke and re-pair requests carry a new 256-bit random challenge. The
+HTTPS response must echo it before the client accepts the scoped receipt. A
+previous `created:true` reservation response or old transition response cannot
+answer a new call. The challenge is consumed inside the client and is not added
+to the existing public receipt types. Providers must implement the updated wire
+contract; missing or mismatched challenges fail closed.
+
+These response bodies are authenticated by the HTTPS connection, not by an
+independent receipt signature. The disposable TLS server test is synthetic.
+A nonce cannot prevent a rolled-back or compromised authority from issuing a
+fresh false response. Independently durable monotonic state, protected TLS and
+credentials, physical restore testing, and operator acceptance remain required.
+Production remains **NO-GO**.

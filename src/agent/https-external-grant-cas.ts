@@ -1,3 +1,4 @@
+import {randomBytes} from 'node:crypto';
 import * as z from 'zod';
 import type {CasRequest} from './remote-mutation-cas.js';
 import type {AuthenticatedGrantScope,ExternalGrantCas,
@@ -5,7 +6,9 @@ import type {AuthenticatedGrantScope,ExternalGrantCas,
   ExternalRePairRequest,ExternalRePairReceipt} from './postgres-bound-grant-cas.js';
 
 const uuid=z.string().uuid();
+const challenge=z.string().regex(/^[0-9a-f]{64}$/);
 const result=z.object({
+  challengeNonce:challenge,
   authorityId:uuid,deviceId:uuid,epoch:uuid,requestId:uuid,
   ownerId:uuid,sessionEpoch:uuid,
   grantGeneration:z.number().int().positive().safe(),
@@ -27,6 +30,7 @@ const repairRequest=revokeRequest.extend({
   newOwnerId:uuid,newDeviceEpoch:uuid,newSessionEpoch:uuid,
 }).strict();
 const revokeReceipt=z.object({
+  challengeNonce:challenge,
   authorityId:uuid,deviceId:uuid,ownerId:uuid,deviceEpoch:uuid,
   sessionEpoch:uuid,previousGeneration:z.number().int().positive().safe(),
   generation:z.number().int().positive().safe(),revoked:z.literal(true),
@@ -88,12 +92,13 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       bound.deviceId,bound.deviceEpoch,bound.sessionEpoch)}
     catch{return reject('EXTERNAL_GRANT_CREDENTIAL_UNAVAILABLE')}
     if(!token||token.length<16)return reject('EXTERNAL_GRANT_CREDENTIAL_UNAVAILABLE');
+    const challengeNonce=randomBytes(32).toString('hex');
     let response:Response;
     try{
       response=await fetch(this.endpoint,{
         method:'POST',redirect:'error',cache:'no-store',
         headers:{authorization:'Bearer '+token,'content-type':'application/json'},
-        body:JSON.stringify({request:operation,scope:bound}),
+        body:JSON.stringify({request:operation,scope:bound,challengeNonce}),
         signal:AbortSignal.timeout(this.config.timeoutMs??3500),
       });
     }catch{return reject('EXTERNAL_GRANT_TRANSPORT_UNKNOWN')}
@@ -107,8 +112,9 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     catch{return reject('EXTERNAL_GRANT_PROOF_INVALID')}
     const validated=result.safeParse(decoded);
     if(!validated.success)return reject('EXTERNAL_GRANT_PROOF_INVALID');
-    const proof=validated.data;
-    if(proof.authorityId!==this.config.authorityId||
+    const {challengeNonce:responseNonce,...proof}=validated.data;
+    if(responseNonce!==challengeNonce||
+       proof.authorityId!==this.config.authorityId||
        proof.deviceId!==operation.deviceId||proof.epoch!==operation.epoch||
        proof.requestId!==operation.requestId||
        proof.fingerprint!==operation.fingerprint||
@@ -127,12 +133,13 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     catch{return reject('EXTERNAL_GRANT_CREDENTIAL_UNAVAILABLE')}
     if(!token||token.length<16)
       return reject('EXTERNAL_GRANT_CREDENTIAL_UNAVAILABLE');
+    const challengeNonce=randomBytes(32).toString('hex');
     let response:Response;
     try{
       response=await fetch(new URL('/v1/grant-cas/revoke',this.endpoint),{
         method:'POST',redirect:'error',cache:'no-store',
         headers:{authorization:'Bearer '+token,'content-type':'application/json'},
-        body:JSON.stringify(operation),
+        body:JSON.stringify({...operation,challengeNonce}),
         signal:AbortSignal.timeout(this.config.timeoutMs??3500),
       });
     }catch{return reject('EXTERNAL_REVOKE_OUTCOME_UNKNOWN')}
@@ -146,8 +153,9 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     catch{return reject('EXTERNAL_REVOKE_PROOF_INVALID')}
     const parsed=revokeReceipt.safeParse(decoded);
     if(!parsed.success)return reject('EXTERNAL_REVOKE_PROOF_INVALID');
-    const data=parsed.data;
-    if(data.authorityId!==this.config.authorityId||
+    const {challengeNonce:responseNonce,...data}=parsed.data;
+    if(responseNonce!==challengeNonce||
+       data.authorityId!==this.config.authorityId||
        data.deviceId!==operation.deviceId||
        data.ownerId!==operation.ownerId||
        data.deviceEpoch!==operation.deviceEpoch||
@@ -167,11 +175,12 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       operation.deviceId,operation.deviceEpoch,operation.sessionEpoch)}
     catch{return reject('EXTERNAL_GRANT_CREDENTIAL_UNAVAILABLE')}
     if(!token||token.length<16)return reject('EXTERNAL_GRANT_CREDENTIAL_UNAVAILABLE');
+    const challengeNonce=randomBytes(32).toString('hex');
     let response:Response;
     try{response=await fetch(new URL('/v1/grant-cas/re-pair',this.endpoint),{
       method:'POST',redirect:'error',cache:'no-store',
       headers:{authorization:'Bearer '+token,'content-type':'application/json'},
-      body:JSON.stringify(operation),
+      body:JSON.stringify({...operation,challengeNonce}),
       signal:AbortSignal.timeout(this.config.timeoutMs??3500),
     })}catch{return reject('EXTERNAL_REPAIR_OUTCOME_UNKNOWN')}
     if(!response.ok)return reject('EXTERNAL_REPAIR_AUTHORITY_REFUSED');
@@ -184,8 +193,9 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     catch{return reject('EXTERNAL_REPAIR_PROOF_INVALID')}
     const validated=repairReceipt.safeParse(parsed);
     if(!validated.success)return reject('EXTERNAL_REPAIR_PROOF_INVALID');
-    const data=validated.data;
-    if(data.authorityId!==this.config.authorityId||
+    const {challengeNonce:responseNonce,...data}=validated.data;
+    if(responseNonce!==challengeNonce||
+       data.authorityId!==this.config.authorityId||
        data.deviceId!==operation.deviceId||
        data.ownerId!==operation.ownerId||
        data.deviceEpoch!==operation.deviceEpoch||
