@@ -194,11 +194,12 @@ function fixture(){
  });
  const verifyApproval=signedOperatorGrantVerifier(
   ownerKeys.publicKey.export({type:'spki',format:'pem'}).toString());
- const broker=(opts?:{now?:()=>number;onReadback?:()=>void;maxPermitMs?:number;
+ const broker=(opts?:{now?:()=>number;monotonicNowNs?:()=>bigint;
+  onReadback?:()=>void;maxPermitMs?:number;
   onRevokeVerify?:(request:DispatchRevokeRequest)=>Promise<void>})=>
   new BrokerExternalDispatchFence({
   authority:remote,authorityId,publicKeyPem:keys,
-  now:opts?.now,maxPermitMs:opts?.maxPermitMs,
+  now:opts?.now,monotonicNowNs:opts?.monotonicNowNs,maxPermitMs:opts?.maxPermitMs,
   verifyIdentity:async()=>identity,
   verifyEffectiveBroker:async()=>{
     opts?.onReadback?.();
@@ -339,6 +340,56 @@ test('clock rollback during final protected readback denies effect',async()=>{
   onReadback:()=>{if(++readbacks===3)clock-=1}});
  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_CLOCK_UNTRUSTED');
  assert.equal(readbacks,3);
+ assert.equal(f.remote.commitCalls,1);
+ assert.equal(f.remote.active.size,0);
+ assert.equal(effects,0);
+});
+test('monotonic deadline blocks expired receipts when wall time freezes',async()=>{
+ for(const slowReadback of [2,3]){
+  const f=fixture();const wall=Date.now();
+  let elapsed=1_000_000_000n,readbacks=0,effects=0;
+  const gate=f.broker({now:()=>wall,monotonicNowNs:()=>elapsed,
+   onReadback:()=>{if(++readbacks===slowReadback)elapsed+=3_000_000_000n}});
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_PROOF_EXPIRED');
+  assert.equal(readbacks,slowReadback);
+  assert.equal(f.remote.commitCalls,slowReadback===2?0:1);
+  assert.equal(f.remote.active.size,0,'known claim released after elapsed deadline');
+  assert.equal(effects,0,'a frozen wall clock cannot extend receipt lifetime');
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_REVOKE_PENDING');
+ }
+});
+test('monotonic deadline includes a stalled begin response',async()=>{
+ const f=fixture();const wall=Date.now();let elapsed=1_000_000_000n,effects=0;
+ const gate=f.broker({now:()=>wall,monotonicNowNs:()=>elapsed});
+ f.remote.stallBeginResponse=true;
+ const pending=gate.execute(f.request(),async()=>++effects);
+ void pending.catch(()=>{});
+ for(let i=0;i<400&&f.remote.active.size===0;i++)await Promise.resolve();
+ assert.equal(f.remote.active.size,1);
+ elapsed+=3_000_000_000n;f.remote.holdBeginResponse.resolve();
+ await code(pending,'DISPATCH_PROOF_EXPIRED');
+ assert.equal(f.remote.commitCalls,0);
+ assert.equal(f.remote.active.size,0);
+ assert.equal(effects,0);
+});
+test('invalid monotonic time denies before external reservation',async()=>{
+ const clocks:Array<()=>bigint>=[
+  ()=>-1n,()=>(Number.NaN as unknown as bigint),
+  ()=>{throw Error('MONOTONIC_UNAVAILABLE')},
+ ];
+ for(const monotonicNowNs of clocks){
+  const f=fixture(),gate=f.broker({monotonicNowNs});let effects=0;
+  await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_CLOCK_UNTRUSTED');
+  assert.equal(f.remote.beginChallenges.length,0);
+  assert.equal(effects,0);
+ }
+});
+test('monotonic clock rollback during final readback denies effect',async()=>{
+ const f=fixture();const wall=Date.now();
+ let elapsed=10_000_000_000n,readbacks=0,effects=0;
+ const gate=f.broker({now:()=>wall,monotonicNowNs:()=>elapsed,
+  onReadback:()=>{if(++readbacks===3)elapsed-=1n}});
+ await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_CLOCK_UNTRUSTED');
  assert.equal(f.remote.commitCalls,1);
  assert.equal(f.remote.active.size,0);
  assert.equal(effects,0);

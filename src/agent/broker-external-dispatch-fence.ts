@@ -5,6 +5,7 @@ import {WitnessAuthorityError} from './postgres-monotonic-witness.js';
 
 const uuid=z.string().uuid();
 const MAX_PERMIT_MS=5_000;
+const NS_PER_MS=1_000_000n;
 const scopeSchema=z.object({
   ownerId:uuid,deviceId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
   ownerEpoch:z.number().int().positive().safe(),
@@ -115,7 +116,9 @@ export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
   private readonly maxPermitMs:number;
   private readonly readClock:()=>number;
+  private readonly readMonotonic:()=>bigint;
   private lastClockMs=0;
+  private lastMonotonicNs=0n;
   private clockUntrusted=false;
   private readonly inFlight=new Map<string,string>();
   private readonly claimed=new Set<string>();
@@ -129,6 +132,8 @@ export class BrokerExternalDispatchFence {
     authorityId:string;
     publicKeyPem:string;maxPermitMs?:number;
     now?:()=>number;
+    /** Test injection only; production requires a protected native time source. */
+    monotonicNowNs?:()=>bigint;
     /** Protected host must authenticate the calling device/session, not UI. */
     verifyIdentity:(request:BrokerDispatchRequest)=>Promise<boolean>;
     /** Must attest REAL signed, high-integrity Windows Broker + protected ACL. */
@@ -142,6 +147,7 @@ export class BrokerExternalDispatchFence {
       deny('DISPATCH_PERMIT_TTL_INVALID');
     this.maxPermitMs=max;
     this.readClock=config.now??Date.now;
+    this.readMonotonic=config.monotonicNowNs??process.hrtime.bigint;
     this.publicKey=createPublicKey(config.publicKeyPem);
     if(this.publicKey.asymmetricKeyType!=='ed25519')
       deny('DISPATCH_SIGNING_KEY_INVALID');
@@ -153,6 +159,19 @@ export class BrokerExternalDispatchFence {
       if(!Number.isSafeInteger(value)||value<=0||value<this.lastClockMs)
         throw new Error('CLOCK_INVALID');
       this.lastClockMs=value;
+      return value;
+    }catch{
+      this.clockUntrusted=true;
+      return deny('DISPATCH_CLOCK_UNTRUSTED');
+    }
+  }
+  private monotonicNow():bigint{
+    if(this.clockUntrusted)deny('DISPATCH_CLOCK_UNTRUSTED');
+    try{
+      const value=this.readMonotonic();
+      if(typeof value!=='bigint'||value<0n||value<this.lastMonotonicNs)
+        throw new Error('MONOTONIC_CLOCK_INVALID');
+      this.lastMonotonicNs=value;
       return value;
     }catch{
       this.clockUntrusted=true;
@@ -248,12 +267,16 @@ export class BrokerExternalDispatchFence {
     run:()=>Promise<T>):Promise<T>{
     const device=request.scope.deviceId;
     if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
-    try{this.now()}catch(e){this.locallyFenced.add(device);throw e}
+    try{this.now();this.monotonicNow()}
+    catch(e){this.locallyFenced.add(device);throw e}
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
     if(identity!==true)deny('DISPATCH_IDENTITY_UNVERIFIED');
     const broker=await this.verifyBrokerFor(request);
     // Fresh random challenge prevents an old *validly signed* claim copied
     // from a rolled-back WAL from being accepted by a new Broker process.
+    let beginStartedNs:bigint;
+    try{beginStartedNs=this.monotonicNow()}
+    catch(e){this.locallyFenced.add(device);throw e}
     const challengeNonce=randomBytes(32).toString('hex');
     let remote:DispatchClaim;
     try{remote=await this.config.authority.beginIfCurrent(
@@ -294,14 +317,16 @@ export class BrokerExternalDispatchFence {
     // A native readback can itself block. Never commit a reservation whose
     // signed lifetime ended during re-attestation; a remote authority must
     // enforce this too. UNKNOWN or expiry must not retry the OS effect.
-    let preCommitNow:number;
-    try{preCommitNow=this.now()}catch(e){
+    let preCommitNow:number,preCommitNs:bigint;
+    try{preCommitNow=this.now();preCommitNs=this.monotonicNow()}catch(e){
       this.locallyFenced.add(device);
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}
       throw e;
     }
-    if(proof.expiresAtMs<=preCommitNow){
+    if(proof.expiresAtMs<=preCommitNow||
+       preCommitNs-beginStartedNs>=
+        BigInt(proof.expiresAtMs-proof.issuedAtMs)*NS_PER_MS){
       this.locallyFenced.add(device);
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}
@@ -354,14 +379,16 @@ export class BrokerExternalDispatchFence {
     // The final asynchronous native HIGH readback may outlive the signed
     // commit lease. Recheck time synchronously directly before callback.
     // A once-valid commit receipt never permits a late effect.
-    let beforeEffectNow:number;
-    try{beforeEffectNow=this.now()}catch(e){
+    let beforeEffectNow:number,beforeEffectNs:bigint;
+    try{beforeEffectNow=this.now();beforeEffectNs=this.monotonicNow()}catch(e){
       this.locallyFenced.add(device);
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}
       throw e;
     }
-    if(committedProof.expiresAtMs<=beforeEffectNow){
+    if(committedProof.expiresAtMs<=beforeEffectNow||
+       beforeEffectNs-preCommitNs>=
+        BigInt(committedProof.expiresAtMs-committedProof.issuedAtMs)*NS_PER_MS){
       this.locallyFenced.add(device);
       try{await this.config.authority.release({dispatchId:proof.dispatchId,
         brokerId:commitBroker.brokerId,request})}catch{}
