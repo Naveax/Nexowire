@@ -156,25 +156,16 @@ test(
       token: 'broker-secret',
     });
 
-    const response = (await client.execute(
-      'windows.firewall.control',
-      {
-        name: 'test-rule',
-        action: 'enable',
-      },
-    )) as {
-      data?: {
-        routed?: boolean;
-        capability?: string;
-      };
-    };
-
-    assert.equal(response.data?.routed, true);
-    assert.equal(
-      response.data?.capability,
-      'windows.firewall.control',
+    // Legacy authenticated bearer may reach the Broker but cannot skip
+    // missing signed per-effect external CAS or the disabled CORE gate.
+    await assert.rejects(
+      client.execute('windows.firewall.control', {
+        name: 'test-rule', action: 'enable',
+      }),
+      (error:unknown)=>error instanceof PrivilegedBrokerError &&
+        error.code==='CORE_ELEVATED_DISPATCH_DISABLED',
     );
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length,0,'injected native callback must not run');
 
     const wrongToken = new PrivilegedBrokerClient({
       url: handle.url,
@@ -206,23 +197,15 @@ test(
     );
 
     const policy = new PathPolicy([os.homedir()]);
-    const routed = (await executeCapability(
-      'windows.firewall.control',
-      {
-        name: 'test-rule',
-        action: 'enable',
-      },
-      policy,
-      {
-        privilegeMode: 'broker',
-        privilegedBroker: client,
-      },
-    )) as {
-      data?: {
-        routed?: boolean;
-      };
-    };
-    assert.equal(routed.data?.routed, true);
-    assert.equal(calls.length, 2);
+    await assert.rejects(
+      executeCapability(
+        'windows.firewall.control',
+        {name:'test-rule',action:'enable'},
+        policy,{privilegeMode:'broker',privilegedBroker:client},
+      ),
+      (error:unknown)=>error instanceof PrivilegedBrokerError &&
+        error.code==='CORE_ELEVATED_DISPATCH_DISABLED',
+    );
+    assert.equal(calls.length,0);
   },
 );
