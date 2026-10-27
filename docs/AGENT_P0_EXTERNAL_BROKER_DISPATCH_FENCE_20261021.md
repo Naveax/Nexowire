@@ -206,3 +206,19 @@ receipt from an earlier call is rejected. This is a wire-contract change:
 providers must accept and sign `challengeNonce`; old responses fail closed.
 A nonce does not prove that a provider's storage survives rollback or that
 physical drain completed. Those external acceptance conditions remain open.
+
+
+## 2026-10-27 #01 elapsed-time receipt deadline
+
+The Broker additionally bounds each receipt by monotonic elapsed time from
+before the corresponding external begin or commit call. Even if wall time
+stops advancing, a reservation or commit older than its signed lifetime
+cannot reach the next admission boundary or effect callback. Invalid or
+backwards monotonic readings fence the device and attempt scoped release
+when a claim is known.
+
+The tests inject both clocks and a synthetic CAS. Process monotonic time is
+defense in depth, not proof of a protected clock across suspend, restart,
+tampering or restore. The independent authority still must enforce trusted
+time, generation, durable tombstones and revoke/drain; physical acceptance
+and production CORE remain **NO-GO**.
