@@ -63,3 +63,12 @@ test('CI keeps Node check phases in package order and schedules Windows Broker Q
   assert.match(job('browser-live'),
     /^\s+run:\s*node --import tsx scripts\/qa-windows-broker-admission\.ts\s*$/m);
 });
+
+test('Windows DPAPI and pre-logon Hub CI never hangs unbounded or silently skips',()=>{
+  const yaml=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
+  const step=/      - name: Verify Windows DPAPI and pre-logon Hub contracts\n((?:        .*\n)+)/.exec(yaml);
+  assert.ok(step,'dedicated Windows DPAPI step must exist');
+  assert.match(step[1]!,/^        timeout-minutes: 12$/m);
+  assert.match(step[1]!,/^        run: node --test --import tsx test\/windows-dpapi-secret\.test\.ts test\/protected-secret-files\.test\.ts test\/hub-lifecycle\.test\.ts$/m);
+  assert.doesNotMatch(step[1]!,/continue-on-error:\s*true|--test-skip-pattern|if:\s*false/);
+});
