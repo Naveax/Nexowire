@@ -43,9 +43,12 @@ const RunbookSchema = z.object({
   steps: z.array(StepSchema).min(1).max(64),
 });
 
+// Load the complete supported admission range across restart. Lowering the
+// configured limit must not discard previously recorded UNKNOWN effects.
+const MAX_RUNBOOK_JOURNAL_ENTRIES = 65_536;
 const StateSchema = z.object({
   version: z.literal(1),
-  runbooks: z.array(RunbookSchema).max(1000),
+  runbooks: z.array(RunbookSchema).max(MAX_RUNBOOK_JOURNAL_ENTRIES),
 });
 
 export type RunbookStepStatus = z.infer<typeof StepStatusSchema>;
@@ -104,14 +107,20 @@ export class RunbookStore {
   private readonly stateFile: string;
   private readonly retentionMs: number;
   private persistChain: Promise<void> = Promise.resolve();
+  private readonly maxEntries: number;
 
   constructor(options: {
     stateFile: string;
     retentionMs?: number;
+    maxEntries?: number;
   }) {
     this.stateFile = options.stateFile;
     this.retentionMs =
       options.retentionMs ?? 14 * 24 * 60 * 60 * 1000;
+    const maxEntries=options.maxEntries ?? 4096;
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>MAX_RUNBOOK_JOURNAL_ENTRIES)
+      throw new Error('RUNBOOK_JOURNAL_CAPACITY_CONFIG_INVALID');
+    this.maxEntries=maxEntries;
   }
 
   async initialize(): Promise<void> {
@@ -131,6 +140,20 @@ export class RunbookStore {
     }
 
     const state = StateSchema.parse(JSON.parse(raw));
+    // A corrupted or tampered journal must never silently overwrite an
+    // earlier UNKNOWN effect via Map.set on the same durable ID. Validate
+    // the complete snapshot BEFORE installing any entry into memory.
+    const seenIds=new Set<string>();
+    for(const entry of state.runbooks){
+      if(seenIds.has(entry.id))
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_DUPLICATE_ID',
+          'Duplicate durable runbook identity requires external reconciliation.');
+      seenIds.add(entry.id);
+      const stepIds=new Set(entry.steps.map(step=>step.id));
+      if(stepIds.size!==entry.steps.length)
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_DUPLICATE_STEP_ID',
+          'Duplicate nested step identity in persisted runbook requires reconciliation.');
+    }
     let changed = false;
 
     for (const persisted of state.runbooks) {
@@ -150,7 +173,8 @@ export class RunbookStore {
       this.runbooks.set(checkpoint.id, checkpoint);
     }
 
-    this.pruneExpiredInMemory();
+    // Expiry cannot discard prior UNKNOWN effects. Only independently
+    // reconciled tombstones may authorize native journal cleanup (#587).
     if (changed) await this.persist();
   }
 
@@ -167,10 +191,18 @@ export class RunbookStore {
     retryFailed: boolean;
     retryUnknown: boolean;
   }): Promise<RunbookCheckpoint> {
+    if(new Set(input.steps.map(step=>step.id)).size!==input.steps.length)
+      throw new RunbookStoreError('RUNBOOK_DUPLICATE_STEP_ID',
+        'Duplicate runbook step identity must not be admitted to native journal.');
     const existing = this.runbooks.get(input.id);
     const now = new Date().toISOString();
 
     if (!existing) {
+      // Preserve old UNKNOWN records; never evict a history entry to make
+      // room for new native-capable operations before external CAS (#587).
+      if(this.runbooks.size>=this.maxEntries)
+        throw new RunbookStoreError('RUNBOOK_JOURNAL_CAPACITY_REACHED',
+          'Runbook journal full; reconcile independently before admitting new work.');
       const checkpoint: RunbookCheckpoint = {
         id: input.id,
         specHash: input.specHash,
@@ -226,6 +258,17 @@ export class RunbookStore {
       );
     }
 
+    // Matching ID order and caller-supplied specHash alone cannot attest the
+    // native DAG. Compare the persisted immutable kind and ordered edges.
+    const changedGraph=existing.steps.some((stored,index)=>{
+      const requested=input.steps[index];
+      return requested?.kind!==stored.kind ||
+        requested.dependsOn.length!==stored.dependsOn.length ||
+        requested.dependsOn.some((dep,i)=>dep!==stored.dependsOn[i]);
+    });
+    if(changedGraph)
+      throw new RunbookStoreError('RUNBOOK_SPEC_MISMATCH',
+        'Resume cannot rewrite the persisted runbook kind or dependency DAG.');
     existing.status = 'running';
     existing.updatedAt = now;
     existing.runCount++;
@@ -280,6 +323,28 @@ export class RunbookStore {
       ...checkpoint,
       updatedAt: new Date().toISOString(),
     });
+    // save() is a checkpoint update, not an admission path: otherwise a
+    // caller can bypass the bounded prepare() journal and forge a fresh ID.
+    const original=this.runbooks.get(parsed.id);
+    if(!original)
+      throw new RunbookStoreError('RUNBOOK_NOT_PREPARED',
+        'Checkpoint must be admitted through prepare before it can be saved.');
+    const sameSteps=original.steps.length===parsed.steps.length && original.steps.every((old,index)=>{
+      const next=parsed.steps[index];
+      return next?.id===old.id && next.kind===old.kind &&
+        next.dependsOn.length===old.dependsOn.length &&
+        next.dependsOn.every((dep,i)=>dep===old.dependsOn[i]);
+    });
+    if(original.specHash!==parsed.specHash||!sameSteps)
+      throw new RunbookStoreError('RUNBOOK_SPEC_MISMATCH',
+        'Checkpoint update cannot rewrite persisted runbook specification or step identities.');
+    // UNKNOWN means an effect may already have executed. Only prepare() with
+    // an explicit retry/reconciliation decision may transition it to pending;
+    // a plain checkpoint save must not manufacture later success evidence.
+    if(original.steps.some((old,index)=>old.status==='unknown'&&parsed.steps[index]?.status!=='unknown')||
+      (parsed.status==='succeeded'&&parsed.steps.some(step=>step.status==='unknown')))
+      throw new RunbookStoreError('RUNBOOK_UNKNOWN_RECONCILIATION_REQUIRED',
+        'An UNKNOWN runbook step cannot change state through a checkpoint write.');
     this.runbooks.set(parsed.id, clone(parsed));
     await this.persist();
   }
@@ -297,37 +362,18 @@ export class RunbookStore {
   }
 
   list(): RunbookCheckpoint[] {
-    this.pruneExpiredInMemory();
+    // Read-only listing must preserve original unresolved mutation evidence.
     return [...this.runbooks.values()]
       .map(clone)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  async prune(input: { olderThanMs?: number } = {}) {
-    const cutoff =
-      Date.now() - (input.olderThanMs ?? this.retentionMs);
-    let removed = 0;
-
-    for (const [id, runbook] of this.runbooks) {
-      if (runbook.status === 'running') continue;
-      if (Date.parse(runbook.updatedAt) <= cutoff) {
-        this.runbooks.delete(id);
-        removed++;
-      }
-    }
-
-    await this.persist();
-    return { removed, remaining: this.runbooks.size };
-  }
-
-  private pruneExpiredInMemory(): void {
-    const cutoff = Date.now() - this.retentionMs;
-    for (const [id, runbook] of this.runbooks) {
-      if (runbook.status === 'running') continue;
-      if (Date.parse(runbook.updatedAt) <= cutoff) {
-        this.runbooks.delete(id);
-      }
-    }
+  /** No local TTL or terminal state proves rollback-independent native completion. */
+  async prune(_input: { olderThanMs?: number } = {}): Promise<never> {
+    throw new RunbookStoreError(
+      'RECONCILE_REQUIRED',
+      'Runbook pruning requires externally authenticated mutation tombstones.',
+    );
   }
 
   private async persist(): Promise<void> {

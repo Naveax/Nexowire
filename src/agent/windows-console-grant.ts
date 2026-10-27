@@ -1,17 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import * as z from 'zod';
+import type {CoreConsoleAdmission} from './core-console-admission.js';
+import {windowsDpapiChildEnvironment} from '../security/windows-dpapi.js';
 
 const GrantRequestSchema = z.object({
+  mode: z.literal('timed').default('timed'),
   duration_minutes: z.number().int().min(1).max(60).default(5),
   reason: z.string().trim().min(1).max(256).optional(),
-});
+}).strict();
 
 interface PhysicalConsoleGrant {
   id: string;
   grantedAtMs: number;
   expiresAtMs: number;
   durationMinutes: number;
+  // Rewinding the wall clock must not extend a timed grant.
+  monotonicExpiresAtMs: number;
 }
 
 export interface PhysicalConsoleGrantStatus {
@@ -27,12 +32,14 @@ export type ConsoleGrantDecisionProvider = (input: {
   durationMinutes: number;
   reason: string | null;
   timeoutMs: number;
+  signal: AbortSignal;
 }) => Promise<boolean>;
 
 export interface ConsoleGrantRequestOptions {
   now?: () => Date;
   decisionProvider?: ConsoleGrantDecisionProvider;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 class WindowsConsoleGrantError extends Error {
@@ -64,6 +71,8 @@ const PHYSICAL_CONSOLE_CAPABILITIES = new Set<string>([
 let activeGrant: PhysicalConsoleGrant | null = null;
 let promptInFlight = false;
 let lastPromptAtMs = 0;
+let grantEpoch = 0;
+let pendingPrompt: AbortController | null = null;
 
 function assertWindows(): void {
   if (process.platform !== 'win32') {
@@ -75,7 +84,9 @@ function assertWindows(): void {
 }
 
 function pruneExpired(nowMs: number): void {
-  if (activeGrant && activeGrant.expiresAtMs <= nowMs) {
+  if (activeGrant && (activeGrant.expiresAtMs <= nowMs ||
+      performance.now() >= activeGrant.monotonicExpiresAtMs ||
+      nowMs < activeGrant.grantedAtMs)) {
     activeGrant = null;
   }
 }
@@ -116,7 +127,8 @@ export function physicalConsoleGrantStatus(
     grantId: activeGrant.id,
     grantedAt: new Date(activeGrant.grantedAtMs).toISOString(),
     expiresAt: new Date(activeGrant.expiresAtMs).toISOString(),
-    remainingMs: Math.max(0, activeGrant.expiresAtMs - nowMs),
+    remainingMs: Math.max(0, Math.floor(Math.min(activeGrant.expiresAtMs - nowMs,
+      activeGrant.monotonicExpiresAtMs - performance.now()))),
     durationMinutes: activeGrant.durationMinutes,
   };
 }
@@ -139,8 +151,10 @@ export function revokePhysicalConsoleGrant(): {
   revoked: boolean;
   status: PhysicalConsoleGrantStatus;
 } {
-  const revoked = activeGrant !== null;
+  const revoked = activeGrant !== null || pendingPrompt !== null;
+  ++grantEpoch;
   activeGrant = null;
+  pendingPrompt?.abort();
   return {
     revoked,
     status: physicalConsoleGrantStatus(),
@@ -220,11 +234,13 @@ async function realDecisionProvider(input: {
   durationMinutes: number;
   reason: string | null;
   timeoutMs: number;
+  signal: AbortSignal;
 }): Promise<boolean> {
   assertWindows();
+  if (input.signal.aborted) return false;
   return await new Promise<boolean>((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       [
         '-NoLogo',
         '-NoProfile',
@@ -236,6 +252,9 @@ async function realDecisionProvider(input: {
       ],
       {
         windowsHide: false,
+        shell: false,
+        cwd: 'C:\\Windows\\System32',
+        env: windowsDpapiChildEnvironment(),
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
@@ -244,6 +263,7 @@ async function realDecisionProvider(input: {
     const stderr: Buffer[] = [];
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+    child.stdin.on('error', () => { /* Prompt may exit while cancelling stdin. */ });
 
     let settled = false;
     let timer: NodeJS.Timeout;
@@ -251,7 +271,12 @@ async function realDecisionProvider(input: {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      input.signal.removeEventListener('abort', cancel);
       callback();
+    };
+    const cancel = (): void => {
+      try { child.kill(); } catch { /* Already exited. */ }
+      finish(() => resolve(false));
     };
 
     timer = setTimeout(() => {
@@ -262,6 +287,8 @@ async function realDecisionProvider(input: {
       }
       finish(() => resolve(false));
     }, input.timeoutMs);
+    input.signal.addEventListener('abort', cancel, {once:true});
+    if (input.signal.aborted) cancel();
 
     child.once('error', (error) => {
       finish(() => reject(error));
@@ -315,9 +342,21 @@ export async function requestPhysicalConsoleGrant(
   status: PhysicalConsoleGrantStatus;
 }> {
   assertWindows();
+  if (typeof input === 'object' && input !== null && 'mode' in input &&
+      input.mode === 'core') {
+    throw new WindowsConsoleGrantError('CORE_CONSOLE_ENROLLMENT_UNAVAILABLE',
+      'A protected local CORE enrollment provider is not installed. No timed fallback or automatic approval was performed.');
+  }
   const parsed = GrantRequestSchema.parse(input);
+  if (options.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1))
+    throw new WindowsConsoleGrantError('CONSOLE_GRANT_TIMEOUT_INVALID',
+      'Approval timeout must be a positive integer.');
   const now = options.now ?? (() => new Date());
   const nowMs = now().getTime();
+  if (!Number.isSafeInteger(nowMs) || nowMs <= 0 || options.signal?.aborted)
+    throw new WindowsConsoleGrantError('CONSOLE_GRANT_REQUEST_CANCELLED',
+      'The console approval request is cancelled or its clock is invalid.');
   pruneExpired(nowMs);
 
   if (promptInFlight) {
@@ -335,16 +374,30 @@ export async function requestPhysicalConsoleGrant(
 
   promptInFlight = true;
   lastPromptAtMs = nowMs;
+  const epoch = grantEpoch;
+  const abort = new AbortController();
+  pendingPrompt = abort;
+  const cancel = (): void => { revokePhysicalConsoleGrant(); };
+  options.signal?.addEventListener('abort', cancel, {once:true});
+  const timeoutMs = Math.min(120_000,Math.max(1,options.timeoutMs ?? 120_000));
+  let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   try {
-    const approved = await (
-      options.decisionProvider ?? realDecisionProvider
-    )({
-      durationMinutes: parsed.duration_minutes,
-      reason: parsed.reason ?? null,
-      timeoutMs: options.timeoutMs ?? 120_000,
+    const cancelled = new Promise<false>(resolve => {
+      onAbort = () => resolve(false);
+      abort.signal.addEventListener('abort', onAbort, {once:true});
+      timer = setTimeout(() => abort.abort(),timeoutMs);
     });
+    const approved = await Promise.race([
+      cancelled,
+      (options.decisionProvider ?? realDecisionProvider)({
+        durationMinutes: parsed.duration_minutes,
+        reason: parsed.reason ?? null,timeoutMs,signal:abort.signal,
+      }),
+    ]);
 
-    if (!approved) {
+    if (!approved || abort.signal.aborted || epoch !== grantEpoch ||
+        options.signal?.aborted) {
       activeGrant = null;
       return {
         approved: false,
@@ -353,21 +406,27 @@ export async function requestPhysicalConsoleGrant(
     }
 
     const grantedAtMs = now().getTime();
+    if (!Number.isSafeInteger(grantedAtMs) || grantedAtMs < nowMs)
+      throw new WindowsConsoleGrantError('CONSOLE_GRANT_CLOCK_INVALID',
+        'The clock changed during approval; request new local consent.');
     activeGrant = {
       id: randomUUID(),
       grantedAtMs,
       expiresAtMs:
         grantedAtMs + parsed.duration_minutes * 60_000,
       durationMinutes: parsed.duration_minutes,
+      monotonicExpiresAtMs: performance.now() + parsed.duration_minutes * 60_000,
     };
 
     return {
       approved: true,
-      status: physicalConsoleGrantStatus(
-        new Date(grantedAtMs),
-      ),
+      status: physicalConsoleGrantStatus(new Date(grantedAtMs)),
     };
   } finally {
+    clearTimeout(timer);
+    if (onAbort) abort.signal.removeEventListener('abort',onAbort);
+    options.signal?.removeEventListener('abort',cancel);
+    if (pendingPrompt === abort) pendingPrompt = null;
     promptInFlight = false;
   }
 }
@@ -375,19 +434,46 @@ export async function requestPhysicalConsoleGrant(
 export async function executeWindowsConsoleControlCapability(
   capability: string,
   input: unknown,
-  _accessMode: 'safe' | 'full' = 'safe',
+  accessMode: 'safe' | 'full' = 'safe',
+  coreConsole?: CoreConsoleAdmission,
+  signal?: AbortSignal,
 ): Promise<{ data: unknown }> {
   switch (capability) {
-    case 'windows.console_control.status':
-      return { data: physicalConsoleGrantStatus() };
+    case 'windows.console_control.status': {
+      const timed = physicalConsoleGrantStatus();
+      const core = coreConsole ? await coreConsole.status(accessMode) : {
+          preferenceEnabled:null,localEnrolled:false,active:false,
+          duration:'indefinite-revocable',expiresAt:null,
+          state:'CORE_CONSOLE_PROVIDER_UNAVAILABLE',
+        };
+      return {data:{...timed,active:timed.active || core.active,
+        // A persistent CORE grant supersedes any concurrent temporary grant.
+        // Never display a 60-minute expiry for a valid indefinite CORE grant.
+        mode:core.active?'core':timed.active?'timed':null,
+        remainingMs:core.active?null:timed.active?timed.remainingMs:0,
+        core}};
+    }
     case 'windows.console_control.request':
       // Even FULL must get a real, time-bounded local physical-console
       // approval. Never synthesize an owner grant from API access alone.
+      if(typeof input==='object'&&input!==null&&'mode' in input&&input.mode==='core'){
+        z.strictObject({mode:z.literal('core'),reason:z.string().max(256).optional()}).parse(input);
+        if(accessMode!=='full')throw new WindowsConsoleGrantError('CORE_REQUIRES_FULL','CORE console requires FULL mode.');
+        if(!coreConsole)throw new WindowsConsoleGrantError('CORE_CONSOLE_PROVIDER_UNAVAILABLE','Local CORE provider is unavailable.');
+        const approved=await coreConsole.enroll(signal??new AbortController().signal);
+        const core=await coreConsole.status(accessMode);
+        return {data:{approved:approved&&core.active,localDecisionApproved:approved,
+          mode:'core',status:{active:core.active,expiresAt:null,core}}};
+      }
       return {
-        data: await requestPhysicalConsoleGrant(input),
+        data: await requestPhysicalConsoleGrant(input, {signal}),
       };
-    case 'windows.console_control.revoke':
-      return { data: revokePhysicalConsoleGrant() };
+    case 'windows.console_control.revoke': {
+      const result = revokePhysicalConsoleGrant();
+      await coreConsole?.revoke();
+      return { data: {...result,revoked:result.revoked||coreConsole?.installed===true,
+        ...(coreConsole?{core:await coreConsole.status(accessMode)}:{})} };
+    }
     default:
       throw new WindowsConsoleGrantError(
         'UNSUPPORTED',

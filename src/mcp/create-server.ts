@@ -4418,9 +4418,10 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     {
       title: 'Request physical console override',
       description:
-        'Exceptional visible-desktop override only. Never use this during connection, onboarding, or routine automation; prefer private desktop, browser, and structured controls. In SAFE mode, an explicit local ALLOW/DENY dialog is required. When the owner has enabled FULL ACCESS for this device, approval is already authorized and this call does not display a dialog.',
+        'Use for explicitly requested physical-desktop control. mode=timed requests a separate local grant for 1–60 minutes. mode=core requests one local enrollment for indefinite, revocable control after the owner enables CORE; SAFE and unverified ownership deny CORE. FULL alone never auto-approves a console grant. Windows lock/UAC and OS privileges remain separate. Prefer private desktop/browser tools for routine AI work.',
       inputSchema: {
         ...targetFields,
+        mode:z.enum(['timed','core']).optional(),
         duration_minutes: z
           .number()
           .int()
@@ -4433,6 +4434,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
     async ({
       device_id,
       provider_id,
+      mode,
       duration_minutes,
       reason,
     }) =>
@@ -4440,6 +4442,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         ctx,
         'windows.console_control.request',
         {
+          ...(mode?{mode}:{}),
           ...(duration_minutes !== undefined
             ? { duration_minutes }
             : {}),
@@ -4447,7 +4450,7 @@ export function createNexowireMcpServer(ctx: McpContext): McpServer {
         },
         device_id,
         provider_id,
-        130_000,
+        180_000,
       ),
   );
 

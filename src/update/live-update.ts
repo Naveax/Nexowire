@@ -156,7 +156,7 @@ export async function readLiveUpdateState(
 ): Promise<LiveUpdateState> {
   try {
     return UpdateStateSchema.parse(
-      JSON.parse(await fs.readFile(statePath(options), 'utf8')),
+      JSON.parse((await fs.readFile(statePath(options), 'utf8')).replace(/^\uFEFF/, '')),
     );
   } catch (error) {
     if (
@@ -307,6 +307,16 @@ async function runPowerShell(
   });
 }
 
+/** Stage on the target release volume. User TEMP may be a different drive. */
+export function windowsUpdateStagingParent(versionsRootPath:string, requestedTempDir?:string):string {
+  const destination=path.win32.resolve(versionsRootPath);
+  if(!requestedTempDir)return destination;
+  const requested=path.win32.resolve(requestedTempDir);
+  const expectedVolume=path.win32.parse(destination).root.toLowerCase();
+  if(path.win32.parse(requested).root.toLowerCase()!==expectedVolume)return destination;
+  return requested;
+}
+
 async function stageWindowsRelease(
   release: ReleaseInfo,
   options: LiveUpdateOptions,
@@ -372,8 +382,12 @@ async function stageWindowsRelease(
     await fs.access(targetCli);
     await fs.access(targetNode);
   } catch {
+    const stagingParent = windowsUpdateStagingParent(
+      versionsRoot(options), options.tempDir,
+    );
+    await fs.mkdir(stagingParent, { recursive: true });
     const tempRoot = await fs.mkdtemp(
-      path.join(options.tempDir ?? os.tmpdir(), 'nexowire-update-'),
+      path.join(stagingParent, 'nexowire-update-'),
     );
     try {
       const zipFile = path.join(tempRoot, 'Nexowire-Windows-x64.zip');
@@ -473,13 +487,14 @@ export function renderWindowsCutoverScript(input: {
     '  foreach($entry in $backups.GetEnumerator()){Copy-Item -LiteralPath $entry.Value -Destination $entry.Key -Force}',
     '}',
     'function Task-Exists([string]$name){return $null -ne (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue)}',
+    'function Task-Enabled([string]$name){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;return ($null -ne $task) -and ([string]$task.State -ne "Disabled")}',
     'function Wait-Port([int]$port,[int]$seconds){$until=(Get-Date).AddSeconds($seconds);while((Get-Date)-lt $until){if(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue){return $true};Start-Sleep -Milliseconds 500};return $false}',
     'function Wait-Agent([int]$seconds){$until=(Get-Date).AddSeconds($seconds);while((Get-Date)-lt $until){$p=Get-CimInstance Win32_Process -Filter "Name=\'node.exe\'" -ErrorAction SilentlyContinue|Where-Object{$_.CommandLine -match [regex]::Escape($NewRoot) -and $_.CommandLine -match \'cli\\.js agent run\'};if($p){return $true};Start-Sleep -Milliseconds 500};return $false}',
     'Start-Sleep -Seconds 2',
     "$HubBootTask='Nexowire Hub Boot'",
     '$hubBootInstalled=Task-Exists $HubBootTask',
     '$hadAgent=Task-Exists $AgentTask',
-    '$hadHub=(Task-Exists $HubTask) -and -not $hubBootInstalled',
+    '$hadHub=(Task-Enabled $HubTask) -and -not $hubBootInstalled',
     'try {',
     '  if($hadAgent){Stop-ScheduledTask -TaskName $AgentTask -ErrorAction SilentlyContinue}',
     '  if($hadHub){Stop-ScheduledTask -TaskName $HubTask -ErrorAction SilentlyContinue}',

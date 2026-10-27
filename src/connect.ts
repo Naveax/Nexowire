@@ -588,6 +588,7 @@ export async function connectNexowire(
     const enrollment = await enrollAgent(
       {
         hubUrl: registered.agentUrl,
+        ...(controlPlaneUrl.startsWith('https:')?{coreAuthorityUrl:controlPlaneUrl}:{}),
         deviceName: registered.device.name,
         allowedRoots: [os.homedir()],
         secretFile: credentialFile,

@@ -46,7 +46,9 @@ $trusted[$me]=$true
 $rights=[Security.AccessControl.FileSystemRights]
 $writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor
  [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor
- [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+ [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor
+ [int]$rights::WriteExtendedAttributes -bor [int]$rights::WriteAttributes -bor
+ [int64]0x40000000 -bor [int64]0x10000000)
 function Check-SafePath([string]$p){
  $item=Get-Item -LiteralPath $p -Force -ErrorAction Stop
  if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'RECOVERY_REPARSE_POINT'}
@@ -55,8 +57,11 @@ function Check-SafePath([string]$p){
   throw 'RECOVERY_OWNER_UNTRUSTED'
  }
  foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+  # InheritOnly grant templates do not apply to this path. Real descendants
+  # are independently checked for actual owner and effective ACL rules.
+  if((([int]$ace.PropagationFlags -band [int][Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
   if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
-   ([int]$ace.FileSystemRights -band $writeMask) -ne 0 -and
+   ([int64]$ace.FileSystemRights -band $writeMask) -ne 0 -and
    -not $trusted.ContainsKey($ace.IdentityReference.Value)){
    throw 'RECOVERY_UNTRUSTED_WRITE_GRANT'
   }

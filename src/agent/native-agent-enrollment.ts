@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
+import {normalizeCoreAuthorityUrl} from '../protocol/core-console-authority.js';
 import {
   agentTokenFromEnv,
   parseHubEndpoints,
@@ -84,6 +85,7 @@ export interface AgentDoctorReport {
 }
 
 export interface AgentEnrollOptions {
+  coreAuthorityUrl?: string;
   hubUrl: string;
   deviceName?: string;
   allowedRoots?: string[];
@@ -778,6 +780,12 @@ export function parseAgentEnrollArgs(
       index++;
       continue;
     }
+    if(arg==='--core-authority-url'){
+      options.coreAuthorityUrl=valueAfter(index,arg);index++;continue;
+    }
+    if(arg.startsWith('--core-authority-url=')){
+      options.coreAuthorityUrl=arg.slice('--core-authority-url='.length);continue;
+    }
     if (arg.startsWith('--hub-url=')) {
       options.hubUrl = arg.slice('--hub-url='.length);
       continue;
@@ -833,6 +841,7 @@ export function parseAgentEnrollArgs(
   }
 
   options.hubUrl = validateAgentHubUrl(options.hubUrl);
+  if(options.coreAuthorityUrl)options.coreAuthorityUrl=normalizeCoreAuthorityUrl(options.coreAuthorityUrl);
   if (allowedRoots.length > 0) {
     options.allowedRoots = [
       ...new Set(
@@ -965,6 +974,7 @@ export async function enrollNativeAgent(
   }
 
   const hubUrl = validateAgentHubUrl(options.hubUrl);
+  const coreAuthorityUrl=options.coreAuthorityUrl?normalizeCoreAuthorityUrl(options.coreAuthorityUrl):undefined;
   const deviceName =
     options.deviceName?.trim() || os.hostname();
   if (!deviceName || deviceName.length > 128) {
@@ -1017,6 +1027,7 @@ export async function enrollNativeAgent(
     ).join(path.delimiter),
     NEXOWIRE_AGENT_TOKEN_DPAPI_FILE: secretFile,
   };
+  if(coreAuthorityUrl)lifecycleEnv.NEXOWIRE_CORE_AUTHORITY_URL=coreAuthorityUrl;
   delete lifecycleEnv.NEXOWIRE_AGENT_TOKEN;
   delete lifecycleEnv.NEXOWIRE_AGENT_TOKENS;
   delete lifecycleEnv.NEXOWIRE_AGENT_TOKEN_FILE;

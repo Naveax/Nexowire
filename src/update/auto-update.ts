@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
-import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
+import { readExistingPrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import {
   applyLatestLiveUpdate,
   checkLiveUpdate,
@@ -37,6 +37,7 @@ type AutomaticUpdateAction =
   | 'up_to_date'
   | 'update_scheduled'
   | 'broker_unavailable'
+  | 'broker_version_mismatch'
   | 'failed';
 
 export interface AutomaticUpdateResult {
@@ -60,15 +61,8 @@ export async function executeAutomaticUpdate(
 ): Promise<AutomaticUpdateResult> {
   const checkedAt = new Date().toISOString();
   const check = await input.check();
-  if (!check.updateAvailable) {
-    return {
-      checkedAt,
-      action: 'up_to_date',
-      currentVersion: check.currentVersion,
-      latestVersion: check.latestVersion,
-      detail: null,
-    };
-  }
+  // Even when the user-side Agent matches the latest release, the elevated
+  // machine Broker may still be stale. Probe it on EVERY hourly check.
   // Never partially update the user-side runtime while the machine's
   // SYSTEM Hub / elevated Broker path cannot be reached and authorized.
   const client = await input.broker();
@@ -89,6 +83,29 @@ export async function executeAutomaticUpdate(
       currentVersion: check.currentVersion,
       latestVersion: check.latestVersion,
       detail: 'Authorized elevated Broker is offline; update deferred without UAC.',
+    };
+  }
+  // Older Broker binaries do not implement current protected-update trust
+  // admission. A stale HIGH process cannot safely update itself merely
+  // because it is reachable and elevated.
+  if (!check.currentVersion || status.version !== check.currentVersion) {
+    return {
+      checkedAt,
+      action: 'broker_version_mismatch',
+      currentVersion: check.currentVersion,
+      latestVersion: check.latestVersion,
+      detail: 'Installed Agent ' + (check.currentVersion ?? 'unknown') +
+        ' does not match elevated Broker ' + (status.version ?? 'unknown') +
+        '; owner-authorized trusted Broker repair required before automatic updates.',
+    };
+  }
+  if (!check.updateAvailable) {
+    return {
+      checkedAt,
+      action: 'up_to_date',
+      currentVersion: check.currentVersion,
+      latestVersion: check.latestVersion,
+      detail: null,
     };
   }
   const result = await input.apply(client);
@@ -275,7 +292,16 @@ async function runAutoUpdateOnce(): Promise<AutomaticUpdateResult> {
       broker: async () => {
         // The same DPAPI CurrentUser token used by the existing elevated
         // Broker is loaded for the same user; never write it to task XML.
-        const token = await loadOrCreatePrivilegedBrokerToken();
+        // Hourly health checks are read-only. Never mint a new DPAPI token
+        // when no canonical owner-installed Broker credential exists:
+        // a fresh token cannot authenticate the already-running Broker.
+        let token: string;
+        try {
+          token = await readExistingPrivilegedBrokerToken();
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+          throw error;
+        }
         return new PrivilegedBrokerClient({
           url: 'http://127.0.0.1:43112',
           token,

@@ -158,6 +158,16 @@ test('Windows trust check fails closed with unsigned/mutable executable paths in
   assert.ok(source.includes("'GH_UNTRUSTED_WRITE_ACE'"));
   assert.ok(source.includes("'GH_UNTRUSTED_AUTHENTICODE_PUBLISHER'"));
   assert.ok(source.includes('Get-AuthenticodeSignature'));
+  assert.ok(source.includes('[int64]0x40000000'),
+    'trusted gh CLI path ACL audit must detect GENERIC_WRITE');
+  assert.ok(source.includes('[int64]0x10000000'),
+    'trusted gh CLI path ACL audit must detect GENERIC_ALL');
+  assert.ok(source.includes("$ace.IdentityReference.Value -eq 'S-1-3-0'"),
+    'CREATOR OWNER placeholder is handled explicitly, not universally trusted');
+  assert.ok(source.includes('PropagationFlags]::InheritOnly'),
+    'only non-effective inherited owner templates may be excluded');
+  assert.ok(source.includes('[int64]$ace.FileSystemRights -band $mask'),
+    'the full write-bit ACL mask must be applied to every allowed ACE');
   assert.ok(source.includes('GH_EXECUTABLE_UNTRUSTED'));
   assert.ok(source.includes("const run=spawnSync(executable,buildAttestationArgs"));
   assert.ok(!source.includes("spawnSync('gh',buildAttestationArgs"));

@@ -7,7 +7,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 export const PINNED_BACKEND_COMMIT =
-  '6f5863363b4ad25bbecceca5b5c78e8ffdd8fffd';
+  'd6bf09a4da37042096427d415782902b97e5e87a';
 export const UI_ONLY_FILES = Object.freeze(['web/app.js','web/styles.css']);
 const LIVE_ORIGIN='https://nexowire-control-plane.nexowire-naveax.workers.dev';
 const LIMIT_BYTES=256 * 1024;
@@ -27,18 +27,19 @@ export function verifyUiOnlyRelease({backendSha,modifiedPaths,baseline,candidate
     throw new Error('UI_ONLY_BACKEND_COMMIT_CHANGED');
   }
   const modified=[...modifiedPaths].sort();
-  const allowlisted=[...UI_ONLY_FILES].sort();
-  if (JSON.stringify(modified)!==JSON.stringify(allowlisted)) {
+  const allowlisted=new Set(UI_ONLY_FILES);
+  if (!modified.length || modified.some(file=>!allowlisted.has(file))) {
     throw new Error('UI_ONLY_UNEXPECTED_FILE_CHANGES');
   }
   const manifest={backendCommit:backendSha,files:[],newApiRoutes:[]};
+  const changed=[];
   for (const file of UI_ONLY_FILES) {
     const old=baseline[file],next=candidate[file];
     if (!Buffer.isBuffer(old)||!Buffer.isBuffer(next) ||
-        old.length===0 || next.length===0 || next.length>LIMIT_BYTES ||
-        old.equals(next)) {
+        old.length===0 || next.length===0 || next.length>LIMIT_BYTES) {
       throw new Error('UI_ONLY_ASSET_MISSING_UNCHANGED_OR_UNBOUNDED:'+file);
     }
+    if(!old.equals(next)) changed.push(file);
     if (live!==null) {
       const served=live[file];
       if (!Buffer.isBuffer(served) || !served.equals(old)) {
@@ -49,6 +50,11 @@ export function verifyUiOnlyRelease({backendSha,modifiedPaths,baseline,candidate
       path:file,oldSha256:sha256(old),newSha256:sha256(next),
       oldBytes:old.length,newBytes:next.length,
     });
+  }
+  // The candidate may change only app.js while styles.css remains byte-identical.
+  // Match the exact diff set, not just membership in an allowlist.
+  if (JSON.stringify(modified)!==JSON.stringify(changed.sort())) {
+    throw new Error('UI_ONLY_UNEXPECTED_FILE_CHANGES');
   }
   const oldApi=endpoints(baseline['web/app.js'].toString('utf8'));
   const newApi=endpoints(candidate['web/app.js'].toString('utf8'));
