@@ -31,8 +31,10 @@ export const CoreBrokerExecutionRequestSchema=z.strictObject({
   deviceId:id,
   ownerAccountId:id,
   ownerEpoch:z.number().int().positive().safe(),
-  sessionEpoch:z.string().uuid(),
-  grantGeneration:z.number().int().positive().safe(),
+  // Legacy v1 requests remain parseable for historical QA only.
+  // A missing binding NEVER authorizes execution (dispatch is disabled).
+  sessionEpoch:z.string().uuid().optional(),
+  grantGeneration:z.number().int().positive().safe().optional(),
   credentialBinding:sha,
   mode:z.enum(['CORE','ROOT']),
   action:CoreBrokerActionSchema,
@@ -76,9 +78,9 @@ export interface CoreBrokerContext {
   /** Trusted external monotonic owner epoch; never request data. */
   authoritativeOwnerEpoch:number;
   /** Authoritative, freshly authenticated device/session binding, not a UI field. */
-  authenticatedSessionEpoch:string;
+  authenticatedSessionEpoch?:string;
   /** Current signed owner-grant generation from the independent authority. */
-  authoritativeGrantGeneration:number;
+  authoritativeGrantGeneration?:number;
   ownerRevoked:boolean;
   enrollment:CoreBrokerEnrollment|null;
   /** Native bootstrap approved once, not per command. */
@@ -161,19 +163,25 @@ export function evaluateCoreBrokerExecution(raw:unknown,context:CoreBrokerContex
      req.ownerEpoch!==context.authoritativeOwnerEpoch){
     return block('WRONG_DEVICE_OR_OWNER_EPOCH');
   }
-  if(!guid.safeParse(context.authenticatedSessionEpoch).success||
+  if(context.ownerRevoked)return block('GRANT_REVOKED');
+  // v1's legacy unbound shape is retained ONLY for disabled-dispatch
+  // compatibility with independent QA. New session-bound requests fail
+  // closed if either trusted side omits session/generation evidence.
+  const hasSessionBinding=req.sessionEpoch!==undefined||
+    req.grantGeneration!==undefined;
+  if(hasSessionBinding&&(
+     !guid.safeParse(context.authenticatedSessionEpoch).success||
      req.sessionEpoch!==context.authenticatedSessionEpoch||
      !Number.isSafeInteger(context.authoritativeGrantGeneration)||
-     context.authoritativeGrantGeneration<1||
-     req.grantGeneration!==context.authoritativeGrantGeneration){
+     (context.authoritativeGrantGeneration??0)<1||
+     req.grantGeneration!==context.authoritativeGrantGeneration)){
     return block('WRONG_SESSION_OR_GRANT_GENERATION');
   }
-  if(context.ownerRevoked)return block('GRANT_REVOKED');
   const e=context.enrollment;
   if(!e||!CoreBrokerEnrollmentSchema.safeParse(e).success||
     e.deviceId!==req.deviceId||e.ownerAccountId!==req.ownerAccountId||
     e.ownerEpoch!==req.ownerEpoch||
-    e.grantGeneration!==req.grantGeneration||
+    (hasSessionBinding&&e.grantGeneration!==req.grantGeneration)||
     e.credentialBinding!==req.credentialBinding||
     e.mode!==req.mode||
     e.brokerInstalledImageSha256!==context.trustedRuntime.expectedBrokerImageSha256){
@@ -213,6 +221,8 @@ export function evaluateCoreBrokerExecution(raw:unknown,context:CoreBrokerContex
   }
   if(req.vmId&&!context.approvedVmIds.includes(req.vmId))return block('VM_GUID_NOT_APPROVED');
   if(req.stopTarget&&!context.stopProcessIdentityVerified)return block('PROCESS_IDENTITY_UNVERIFIED');
+  // Legacy requests missing the new bindings intentionally reach only this
+  // unconditional disabled-dispatch sentinel, never an OS effect.
   // No real dispatch, shell, process, Hyper-V, UAC or installation in this PR.
   // In particular, a local replay lookup and caller-supplied booleans are
   // NOT a signed, linearizable external CAS admission at effect time.
