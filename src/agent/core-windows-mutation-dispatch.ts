@@ -148,6 +148,10 @@ export function assertCoreSandboxRouteUnavailable(
 export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=new Set([
   'files.write','files.mkdir','files.copy','files.move','files.delete',
   'files.patch','nexowire.update.apply','process.stop','process.prune',
+  // Even HKCU/user/process-scoped writes are effects; CORE is not an
+  // exemption from per-effect provenance just because OS elevation is absent.
+  'windows.registry.set','windows.registry.delete',
+  'windows.environment.set','windows.environment.delete',
   'task.graph.prune','runbook.prune',
   'windows.window.focus','windows.clipboard.write','windows.clipboard.clear',
   'windows.keyboard.type','windows.keyboard.hotkey',
