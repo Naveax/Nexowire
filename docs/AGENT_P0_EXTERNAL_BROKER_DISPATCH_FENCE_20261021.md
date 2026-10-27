@@ -16,7 +16,7 @@ The new \`src/agent/broker-external-dispatch-fence.ts\` makes executing the effe
 4. Only then does the injected effect callback run. It is never invoked for denial, UNKNOWN or receipt mismatch. After completion the external claim is released. A failed release fences further local dispatch pending reconciliation.
 
 The new \`src/agent/https-broker-dispatch-authority.ts\` implements real HTTPS-only, bounded deadline, protected broker credential resolver, no redirects or HTTP fallback; endpoints:
-\`/v1/broker-dispatch/begin\`, \`/revoke-and-drain\`, \`/release\`.
+\`/v1/broker-dispatch/begin\`, \`/commit\`, \`/revoke-and-drain\`, \`/release\`.
 No hosted remote authority was deployed. The external service MUST atomically check/retain state; this client does NOT make a second SQLite directory or signed claim rollback-independent.
 
 ## Concurrent dispatch and revocation contract

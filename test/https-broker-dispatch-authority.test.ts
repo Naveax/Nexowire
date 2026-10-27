@@ -16,7 +16,7 @@ function signed(value:unknown,key:KeyObject){
  return {payload:bytes.toString('base64url'),
   signature:sign(null,bytes,key).toString('base64url')};
 }
-test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',async t=>{
+test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged receipts',async t=>{
  const dir=await mkdtemp(path.join(process.cwd(),'test','nx-587-tls-broker-'));
  const ca=await isolatedRemoteCas(dir);
  const prior=tls.getCACertificates('default');
@@ -26,6 +26,7 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
  const authorityId=ca.authorityId,brokerId=randomUUID();
  const ownerId=randomUUID(),sessionEpoch=randomUUID(),deviceEpoch=ca.epoch;
  let generation=5,revoked=false,forged=false,released=0;
+ let claims=new Map<string,{request:Record<string,unknown>;brokerId:string;committed:boolean}>();
  const server=createServer({
   key:await readFile(path.join(ca.root,'cas.key')),
   cert:await readFile(ca.certificate),
@@ -43,28 +44,55 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
    }
    if(req.url==='/v1/broker-dispatch/begin'){
     const op=payload.request,scope=op.scope;
-    if(revoked||scope.expectedGeneration!==generation){
+    if(revoked||scope.expectedGeneration!==generation||scope.ownerEpoch!==4){
       respond({error:'grant revoked'},409);return;
     }
     const now=Date.now();
+    const dispatchId=randomUUID();
+    claims.set(dispatchId,{request:op,brokerId,committed:false});
     respond(signed({kind:'broker_dispatch_permit_v1',
-      authorityId,brokerId,dispatchId:randomUUID(),
+      authorityId,brokerId,dispatchId,
+      challengeNonce:payload.challengeNonce,
       requestId:op.requestId,fingerprint:op.fingerprint,
       capability:op.capability,ownerId:scope.ownerId,
       deviceId:scope.deviceId,deviceEpoch:scope.deviceEpoch,
-      sessionEpoch:scope.sessionEpoch,generation:scope.expectedGeneration,
+      sessionEpoch:scope.sessionEpoch,ownerEpoch:scope.ownerEpoch,
+      generation:scope.expectedGeneration,
       privilege:scope.requiredPrivilege,issuedAtMs:now,
       expiresAtMs:now+1500},forged?impostor.privateKey:signer.privateKey));
     return;
    }
+   if(req.url==='/v1/broker-dispatch/commit'){
+    const op=payload.request,scope=op.scope;
+    const entry=claims.get(payload.dispatchId);
+    if(revoked||scope.expectedGeneration!==generation||scope.ownerEpoch!==4||
+       !entry||entry.committed||entry.brokerId!==payload.broker?.brokerId||
+       JSON.stringify(entry.request)!==JSON.stringify(op)){
+      respond({error:'dispatch not reserved'},409);return;
+    }
+    entry.committed=true;
+    const now=Date.now();
+    respond(signed({kind:'broker_dispatch_commit_v1',
+      authorityId,brokerId,dispatchId:payload.dispatchId,
+      challengeNonce:payload.challengeNonce,requestId:op.requestId,
+      fingerprint:op.fingerprint,capability:op.capability,
+      ownerId:scope.ownerId,deviceId:scope.deviceId,
+      deviceEpoch:scope.deviceEpoch,sessionEpoch:scope.sessionEpoch,
+      ownerEpoch:scope.ownerEpoch,generation:scope.expectedGeneration,
+      privilege:scope.requiredPrivilege,issuedAtMs:now,expiresAtMs:now+1500},
+      signer.privateKey));
+    return;
+   }
    if(req.url==='/v1/broker-dispatch/release'){
-    released++;res.writeHead(204);res.end();return;
+    released++;claims.delete(payload.dispatchId);
+    res.writeHead(204);res.end();return;
    }
    if(req.url==='/v1/broker-dispatch/revoke-and-drain'){
-    if(revoked||payload.expectedGeneration!==generation){
-      respond({error:'stale'},409);return;
+    if(revoked||payload.expectedGeneration!==generation||
+       [...claims.values()].some(x=>x.committed)){
+      respond({error:'stale or active dispatch'},409);return;
     }
-    revoked=true;const before=generation++;
+    revoked=true;claims.clear();const before=generation++;
     respond(signed({kind:'broker_dispatch_revocation_v1',authorityId,
       deviceId:payload.deviceId,ownerId:payload.ownerId,
       deviceEpoch:payload.deviceEpoch,sessionEpoch:payload.sessionEpoch,
@@ -95,13 +123,14 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
   publicKeyPem:signer.publicKey.export({type:'spki',format:'pem'}).toString(),
   verifyIdentity:async()=>true,
   verifyEffectiveBroker:async()=>({verified:true,brokerId,
+    ownerEpoch:4,grantGeneration:5,
     highIntegrityToken:true,signedProtectedImage:true,
     protectedParentAndImports:true}),
   verifyOwnerRevocation:async()=>true,
  });
  const request=()=>({requestId:randomUUID(),fingerprint:'b'.repeat(64),
   capability:'shell.exec',scope:{ownerId,deviceId:ca.deviceId,
-    deviceEpoch,sessionEpoch,expectedGeneration:5,
+    deviceEpoch,sessionEpoch,ownerEpoch:4,expectedGeneration:5,
     requiredPrivilege:'CORE' as const}});
  assert.equal(await fence.execute(request(),async()=>42),42);
  assert.equal(released,1);
@@ -116,6 +145,7 @@ test('real isolated TLS dispatch begin/release/revoke, rejects forged receipts',
   publicKeyPem:signer.publicKey.export({type:'spki',format:'pem'}).toString(),
   verifyIdentity:async()=>true,
   verifyEffectiveBroker:async()=>({verified:true,brokerId,
+    ownerEpoch:4,grantGeneration:5,
     highIntegrityToken:true,signedProtectedImage:true,
     protectedParentAndImports:true}),
   verifyOwnerRevocation:async()=>true,

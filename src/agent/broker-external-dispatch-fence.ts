@@ -1,4 +1,4 @@
-import {createPublicKey,verify,type KeyObject} from 'node:crypto';
+import {createPublicKey,verify,randomBytes,type KeyObject} from 'node:crypto';
 import * as z from 'zod';
 import type {AuthenticatedGrantScope} from './postgres-bound-grant-cas.js';
 import {WitnessAuthorityError} from './postgres-monotonic-witness.js';
@@ -6,6 +6,7 @@ import {WitnessAuthorityError} from './postgres-monotonic-witness.js';
 const uuid=z.string().uuid();
 const scopeSchema=z.object({
   ownerId:uuid,deviceId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
+  ownerEpoch:z.number().int().positive().safe(),
   expectedGeneration:z.number().int().positive().safe(),
   requiredPrivilege:z.enum(['CORE','ROOT']),
 }).strict();
@@ -18,6 +19,9 @@ export type BrokerDispatchRequest=z.infer<typeof operation>;
 export interface ProtectedBrokerEvidence {
   verified:true;
   brokerId:string;
+  /** Separately authenticated native owner epoch; Access UI state is not proof. */
+  ownerEpoch:number;
+  grantGeneration:number;
   highIntegrityToken:true;
   signedProtectedImage:true;
   protectedParentAndImports:true;
@@ -34,7 +38,14 @@ export interface DispatchRevokeRequest {
 export interface ExternalBrokerDispatchAuthority {
   /** Must be atomic with revoke/re-pair and single-use claim allocation. */
   beginIfCurrent(operation:BrokerDispatchRequest,
-    broker:ProtectedBrokerEvidence):Promise<DispatchClaim>;
+    broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>;
+  /**
+   * Remote atomic linearization of actual effect ADMISSION against
+   * revokeAndDrain. A pre-revoke RESERVED claim is not executable.
+   */
+  commitIfCurrent(operation:BrokerDispatchRequest,
+    broker:ProtectedBrokerEvidence,dispatchId:string,
+    challengeNonce:string):Promise<DispatchClaim>;
   /**
    * Revoke and fence NEW claims immediately. Return only after all
    * previously admitted claims finish, or return UNKNOWN without replay.
@@ -46,13 +57,18 @@ export interface ExternalBrokerDispatchAuthority {
 const permit=z.object({
   kind:z.literal('broker_dispatch_permit_v1'),
   authorityId:uuid,brokerId:uuid,dispatchId:uuid,
+  challengeNonce:z.string().regex(/^[0-9a-f]{64}$/),
   requestId:uuid,fingerprint:z.string().regex(/^[0-9a-f]{64}$/),
   capability:z.string().min(1).max(128),
   ownerId:uuid,deviceId:uuid,deviceEpoch:uuid,sessionEpoch:uuid,
+  ownerEpoch:z.number().int().positive().safe(),
   generation:z.number().int().positive().safe(),
   privilege:z.enum(['CORE','ROOT']),
   issuedAtMs:z.number().int().positive().safe(),
   expiresAtMs:z.number().int().positive().safe(),
+}).strict();
+const committed=permit.extend({
+  kind:z.literal('broker_dispatch_commit_v1'),
 }).strict();
 const revoked=z.object({
   kind:z.literal('broker_dispatch_revocation_v1'),
@@ -62,6 +78,7 @@ const revoked=z.object({
   drained:z.literal(true),revoked:z.literal(true),
 }).strict();
 type Permit=z.infer<typeof permit>;
+type Commit=z.infer<typeof committed>;
 type RevokeProof=z.infer<typeof revoked>;
 function deny(code:string):never{throw new WitnessAuthorityError(code)}
 /** Source gate: does not modify #03/#04 Broker/Access owner implementation. */
@@ -105,18 +122,29 @@ export class BrokerExternalDispatchFence {
     }catch{return deny('DISPATCH_SIGNATURE_UNTRUSTED')}
   }
   private checkPermit(value:unknown,req:BrokerDispatchRequest,
-    broker:ProtectedBrokerEvidence):Permit {
-    const parse=permit.safeParse(value);
+    broker:ProtectedBrokerEvidence,challengeNonce:string):Permit;
+  private checkPermit(value:unknown,req:BrokerDispatchRequest,
+    broker:ProtectedBrokerEvidence,challengeNonce:string,
+    mode:'reserve'):Permit;
+  private checkPermit(value:unknown,req:BrokerDispatchRequest,
+    broker:ProtectedBrokerEvidence,challengeNonce:string,
+    mode:'commit'):Commit;
+  private checkPermit(value:unknown,req:BrokerDispatchRequest,
+    broker:ProtectedBrokerEvidence,challengeNonce:string,
+    mode:'reserve'|'commit'='reserve'):Permit|Commit {
+    const parse=(mode==='reserve'?permit:committed).safeParse(value);
     if(!parse.success)deny('DISPATCH_PROOF_INVALID');
     const p=parse.data;
     if(p.authorityId!==this.config.authorityId||
        p.brokerId!==broker.brokerId||
+       p.challengeNonce!==challengeNonce||
        p.requestId!==req.requestId||p.fingerprint!==req.fingerprint||
        p.capability!==req.capability||
        p.ownerId!==req.scope.ownerId||
        p.deviceId!==req.scope.deviceId||
        p.deviceEpoch!==req.scope.deviceEpoch||
        p.sessionEpoch!==req.scope.sessionEpoch||
+       p.ownerEpoch!==req.scope.ownerEpoch||
        p.generation!==req.scope.expectedGeneration||
        p.privilege!==req.scope.requiredPrivilege)
       deny('DISPATCH_PROOF_SCOPE_MISMATCH');
@@ -150,20 +178,53 @@ export class BrokerExternalDispatchFence {
        broker.signedProtectedImage!==true||
        broker.protectedParentAndImports!==true)
       deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+    if(broker.ownerEpoch!==request.scope.ownerEpoch||
+       broker.grantGeneration!==request.scope.expectedGeneration)
+      deny('DISPATCH_OWNER_EPOCH_MISMATCH');
+    // Fresh random challenge prevents an old *validly signed* claim copied
+    // from a rolled-back WAL from being accepted by a new Broker process.
+    const challengeNonce=randomBytes(32).toString('hex');
     let remote:DispatchClaim;
-    try{remote=await this.config.authority.beginIfCurrent(request,broker)}
+    try{remote=await this.config.authority.beginIfCurrent(
+      request,broker,challengeNonce)}
     catch{return deny('DISPATCH_EXTERNAL_CAS_UNKNOWN')}
     let proof:Permit;
-    try{proof=this.checkPermit(this.decode(remote),request,broker)}
+    try{proof=this.checkPermit(this.decode(remote),request,broker,
+      challengeNonce)}
     catch(e){this.locallyFenced.add(device);throw e}
     if(this.locallyFenced.has(device)){
-      // Revoke began while a claim was in flight. Release it so remote
-      // drain cannot wait indefinitely for an abandoned dispatch lease.
+      // Revoke began while this claim was only reserved.
       try{await this.config.authority.release(proof.dispatchId)}
       catch{this.locallyFenced.add(device)}
       deny('DISPATCH_REVOKE_PENDING');
     }
-    // Execute only once. A revoked/UNKNOWN request is never replayed.
+    // Required remote dispatch admission linearized against revoke.
+    // A pre-revoke reservation alone cannot authorize an OS effect.
+    const commitNonce=randomBytes(32).toString('hex');
+    let acknowledged:DispatchClaim;
+    try{
+      acknowledged=await this.config.authority.commitIfCurrent(
+        request,broker,proof.dispatchId,commitNonce);
+    }catch{
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      deny('DISPATCH_COMMIT_UNKNOWN');
+    }
+    try{
+      const committedProof=this.checkPermit(this.decode(acknowledged),
+        request,broker,commitNonce,'commit');
+      if(committedProof.dispatchId!==proof.dispatchId)
+        deny('DISPATCH_COMMIT_IDENTITY_MISMATCH');
+    }catch(e){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      throw e;
+    }
+    if(this.locallyFenced.has(device)){
+      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      deny('DISPATCH_REVOKE_PENDING');
+    }
+    // Exactly once: only after remotely committed dispatch admission.
     this.claimed.add(proof.dispatchId);
     this.inFlight.set(proof.dispatchId,device);
     try{return await run()}
