@@ -133,3 +133,54 @@ test('provider-side errors are redacted, no callback fallback',async()=>{
     (e:unknown)=>e instanceof Error&&e.message==='BROKER_EFFECT_ADMISSION_REQUIRED');
   assert.equal(f.events.includes('invoke'),false);
 });
+
+test('Broker HTTP route fences native/injected callback, installer and update before dispatch', {
+  skip:process.platform !== 'win32',
+},async()=>{
+  const {startPrivilegedBroker}=await import('../src/agent/privileged-broker.js');
+  const kinds=[
+    'windows.firewall.control',
+    'windows.installer.apply',
+    'nexowire.machine_update.apply',
+  ];
+  for(const kind of kinds) {
+    const f=fixture();
+    let callbackCount=0;
+    const broker=await startPrivilegedBroker({
+      host:'127.0.0.1',port:0,tokens:['fixture-only-broker-token'],
+      requireElevation:false, // non-production synthetic test server
+      effectAdmission:f.authority,
+      execute:async()=>{callbackCount++;return {executed:true};},
+    });
+    try {
+      const send=(operation_id?:unknown)=>
+        fetch(broker.url+'/execute',{
+          method:'POST',
+          headers:{authorization:'Bearer fixture-only-broker-token',
+            'content-type':'application/json'},
+          body:JSON.stringify({capability:kind,input,operation_id}),
+        });
+      const missing=await send();
+      assert.equal(missing.status,400);
+      assert.equal((await missing.json() as {error?:{code:string}}).error?.code,
+        'BROKER_EFFECT_ADMISSION_REQUIRED');
+      assert.equal(callbackCount,0);
+
+      const first=await send(op);
+      assert.equal(first.status,200,kind);
+      assert.equal((await first.json() as {ok:boolean}).ok,true);
+      assert.equal(callbackCount,1);
+
+      const duplicate=await send(op);
+      assert.equal(duplicate.status,400);
+      assert.equal((await duplicate.json() as {error?:{code:string}}).error?.code,
+        'BROKER_EFFECT_ADMISSION_REQUIRED');
+      assert.equal(callbackCount,1,'same operation ID cannot replay '+kind);
+
+      assert.deepEqual(f.events.slice(0,6),
+        ['initial','begin','commit','readback','sync','invoke']);
+    } finally {
+      await broker.close();
+    }
+  }
+});
