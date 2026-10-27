@@ -10,6 +10,7 @@
  */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <signal.h>
 #include <stddef.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
@@ -220,7 +221,12 @@ int main(int argc,char **argv) {
     observe_kernel_namespaces(pid,outer_uid)==0);
   (void)close(ready[0]);
   const char approval=independently_observed?'Y':'N';
-  (void)write(resume[1],&approval,1);
+  if(bytes==1 && announcement=='R') {
+    /* An early child exit must never kill the parent via SIGPIPE, leak the
+     * temporary root, or permit a false positive resume. */
+    if(signal(SIGPIPE,SIG_IGN)==SIG_ERR ||
+       write(resume[1],&approval,1)!=1)independently_observed=0;
+  }
   (void)close(resume[1]);
   int status=0;
   pid_t got;
