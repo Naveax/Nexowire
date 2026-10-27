@@ -47,6 +47,7 @@ function fixture(){
   let currentLogon={windowsUserSid:'S-1-5-21-101-202-303-1001',windowsSessionId:1,
     windowsLogonLuid:'0000000000000001',windowsLogonSessionEpoch:randomUUID()};
   let beforeNativeReadback:(()=>void)|undefined;
+  let pauseNextAuthorityReadback:(()=>Promise<void>)|undefined;
   const consumedNativeReceipts=new Set<string>();
   const sameLogon=(proof:NativeCoreConsentProof)=>proof.windowsUserSid===currentLogon.windowsUserSid&&
     proof.windowsSessionId===currentLogon.windowsSessionId&&
@@ -59,6 +60,10 @@ function fixture(){
       proof.enrollmentId!==expected.enrollmentId||!sameLogon(proof))return false;
     consumedNativeReceipts.add(proof.receiptId);return true;
   },currentReadback:async expected=>{
+    // Tests can hold one independent readback open to interleave duplicate
+    // claim attempts; the fixture remains synthetic and is never OS evidence.
+    const pause=pauseNextAuthorityReadback;pauseNextAuthorityReadback=undefined;
+    if(pause)await pause();
     // Negative QA hook models a remote revoke/re-pair while native OS
     // verification is pending. The synthetic native side may still say yes.
     const hook=beforeNativeReadback;beforeNativeReadback=undefined;hook?.();
@@ -118,6 +123,13 @@ function fixture(){
     setAuthorityReadback:(v:boolean)=>{authorityReadbackEnabled=v;},
     setCurrentLogon:(v:typeof currentLogon)=>{currentLogon={...v};},
     duringNativeReadback:(cb:()=>void)=>{beforeNativeReadback=cb;},
+    pauseNextAuthorityReadback:()=>{
+      let entered!:()=>void,release!:()=>void;
+      const enteredPromise=new Promise<void>(resolve=>{entered=resolve;});
+      const gate=new Promise<void>(resolve=>{release=resolve;});
+      pauseNextAuthorityReadback=async()=>{entered();await gate;};
+      return {entered:enteredPromise,release};
+    },
     forgedNativeReceipt:(f:typeof forgedNativeReceipt)=>{forgedNativeReceipt=f;},
     nativeReceipt:()=>nativeReceipt,
     replaceNativeReceipt:(v:NativeCoreConsentProof)=>{nativeReceipt=v;},
@@ -201,6 +213,33 @@ test('external one-use operation IDs prevent replay across a completely new loca
   const f=fixture();try{const a=await enable(f);const id=randomUUID();await input(a.controller,id);
     const b=await f.make();await assert.rejects(input(b.controller,id));assert.equal(f.effects(),1);
     assert.equal(f.db.prepare('SELECT count(*) n FROM device_core_console_operations').get()?.n,1);
+  }finally{f.db.close();}
+});
+
+test('a losing duplicate D1 claim cannot tombstone the winner during native readback',async()=>{
+  const f=fixture();try{
+    await enable(f);
+    const profile=f.profile(),requestId=randomUUID();
+    const fingerprint=createHash('sha256').update(JSON.stringify([
+      requestId,'windows.pointer.move',{hwnd:'0x123',x:0,y:0},
+      {ownerAccountId:owner,deviceId,installationId:profile.installationId},
+    ])).digest('hex');
+    await f.client.call(profile,'reserve',{requestId,fingerprint});
+    const gate=f.pauseNextAuthorityReadback();
+    const winner=f.client.call(profile,'claim',{requestId,fingerprint});
+    await gate.entered;
+    await assert.rejects(f.client.call(profile,'claim',{requestId,fingerprint}),
+      /CORE_AUTHORITY_DENIED_/);
+    assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
+      .get(requestId)?.state,'dispatched','losing claim must not rewrite the winning claim');
+    gate.release();
+    await winner;
+    assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
+      .get(requestId)?.state,'dispatched','one-shot claim remains consumed');
+    await assert.rejects(f.client.call(profile,'claim',{requestId,fingerprint}),
+      /CORE_AUTHORITY_DENIED_/);
+    assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
+      .get(requestId)?.state,'dispatched','replay remains terminal');
   }finally{f.db.close();}
 });
 

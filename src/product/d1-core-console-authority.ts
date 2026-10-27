@@ -153,15 +153,22 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
             SELECT ?,?,c.device_id,c.installation_id,c.enrollment_id,c.owner_epoch,c.grant_generation,c.revoke_epoch,'reserved',${DB_NOW}
             ${JOIN} WHERE ${currentPredicate} ON CONFLICT(request_id) DO NOTHING`,[r.requestId,r.fingerprint,...currentArgs]);
         }else if(r.action==='claim'){
-          const tombstoneClaim=async()=>{
+          // A losing duplicate claim may only tombstone its own still-reserved
+          // operation. It must never rewrite another worker's dispatched claim.
+          const tombstoneReserved=async()=>{
             try{await this.db.prepare(`UPDATE device_core_console_operations SET state='unknown'
-              WHERE request_id=? AND fingerprint=? AND device_id=? AND state IN('reserved','dispatched')`)
+              WHERE request_id=? AND fingerprint=? AND device_id=? AND state='reserved'`)
+              .bind(r.requestId,r.fingerprint,r.deviceId).run();}catch{}
+          };
+          const tombstoneDispatched=async()=>{
+            try{await this.db.prepare(`UPDATE device_core_console_operations SET state='unknown'
+              WHERE request_id=? AND fingerprint=? AND device_id=? AND state='dispatched'`)
               .bind(r.requestId,r.fingerprint,r.deviceId).run();}catch{}
           };
           if(!this.nativeEnrollmentVerifier||!before.installation_id||!before.enrollment_id||
             !before.native_consent_receipt_id||!before.windows_user_sid||!before.windows_session_id||
             !before.windows_logon_luid||!before.windows_logon_session_epoch){
-            await tombstoneClaim();throw new Error('CORE_NATIVE_CONSENT_SESSION_REQUIRED');
+            await tombstoneReserved();throw new Error('CORE_NATIVE_CONSENT_SESSION_REQUIRED');
           }
           const nativeBinding={ownerAccountId:before.owner_account_id,deviceId:before.device_id,
             installationId:before.installation_id,enrollmentId:before.enrollment_id,
@@ -169,6 +176,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
             nativeConsentReceiptId:before.native_consent_receipt_id,windowsUserSid:before.windows_user_sid,
             windowsSessionId:before.windows_session_id,windowsLogonLuid:before.windows_logon_luid,
             windowsLogonSessionEpoch:before.windows_logon_session_epoch};
+          let claimed=false;
           try{
             // Consume the one-shot reservation before async native readback. If
             // the ACK is lost or the verifier is UNKNOWN, this ID cannot replay.
@@ -181,6 +189,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
                   AND c.windows_logon_luid=? AND c.windows_logon_session_epoch=?)`,
               [...opArgs,...currentArgs,before.native_consent_receipt_id,before.windows_user_sid,
                 before.windows_session_id,before.windows_logon_luid,before.windows_logon_session_epoch]);
+            claimed=true;
             if(await this.nativeEnrollmentVerifier.currentReadback(nativeBinding)!==true)
               throw new Error('CORE_NATIVE_CONSENT_SESSION_STALE');
             const latest=await this.row(hash,r.deviceId);
@@ -192,7 +201,12 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
               latest.windows_logon_luid!==before.windows_logon_luid||
               latest.windows_logon_session_epoch!==before.windows_logon_session_epoch)
               throw new Error('CORE_NATIVE_CONSENT_SESSION_CHANGED');
-          }catch(error){await tombstoneClaim();throw error;}
+          }catch(error){
+            // Only the worker that won the reservation may downgrade its
+            // dispatch. A losing contender cannot revoke that worker's claim.
+            if(claimed)await tombstoneDispatched();else await tombstoneReserved();
+            throw error;
+          }
         }else if(r.action==='complete'){
           if(!r.outcome)throw new Error('CORE_OUTCOME_REQUIRED');
           await changed(`UPDATE device_core_console_operations SET state=?
