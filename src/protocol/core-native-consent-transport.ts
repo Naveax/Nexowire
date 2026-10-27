@@ -94,6 +94,11 @@ export async function callProtectedCoreNativeAuthority(
   if(!Number.isInteger(max)||max<100||max>10000)throw new Error('CORE_NATIVE_TIMEOUT_INVALID');
   const abort=AbortSignal.any([AbortSignal.timeout(max),...(signal?[signal]:[])]);
   if(abort.aborted)throw new Error('CORE_NATIVE_CALL_ABORTED');
+  // Reject bad trust bootstrap BEFORE any credential is sent to a server.
+  const signerDer=Buffer.from(options.pinnedSpkiBase64,'base64');
+  if(signerDer.length!==44||signerDer.toString('base64')!==options.pinnedSpkiBase64||
+    createPublicKey({key:signerDer,format:'der',type:'spki'}).asymmetricKeyType!=='ed25519')
+    throw new Error('CORE_NATIVE_SIGNER_NOT_PINNED');
   const response=await (options.fetchImpl??fetch)(url.origin+'/v1/core-native-consent',{
     method:'POST',cache:'no-store',redirect:'error',
     headers:{'content-type':'application/json','authorization':'Bearer '+options.credential},
@@ -102,8 +107,22 @@ export async function callProtectedCoreNativeAuthority(
   if(!response.ok||response.redirected)throw new Error('CORE_NATIVE_AUTHORITY_UNAVAILABLE');
   if(!response.headers.get('content-type')?.toLowerCase().includes('application/json'))
     throw new Error('CORE_NATIVE_RESPONSE_NOT_JSON');
-  const body=await response.text();
-  if(Buffer.byteLength(body,'utf8')>8192)throw new Error('CORE_NATIVE_RESPONSE_TOO_LARGE');
+  const reader=response.body?.getReader();
+  if(!reader)throw new Error('CORE_NATIVE_RESPONSE_EMPTY');
+  const chunks:Uint8Array[]=[];let bytes=0;
+  try{
+    for(;;){
+      const part=await reader.read();
+      if(part.done)break;
+      bytes+=part.value.byteLength;
+      if(bytes>8192){await reader.cancel();throw new Error('CORE_NATIVE_RESPONSE_TOO_LARGE');}
+      chunks.push(part.value);
+    }
+  }finally{reader.releaseLock();}
   if(abort.aborted)throw new Error('CORE_NATIVE_CALL_ABORTED');
-  return parseTrustedCoreNativeResponse(JSON.parse(body) as unknown,request,options.pinnedSpkiBase64);
+  const merged=new Uint8Array(bytes);let offset=0;
+  for(const part of chunks){merged.set(part,offset);offset+=part.length;}
+  return parseTrustedCoreNativeResponse(
+    JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(merged)) as unknown,
+    request,options.pinnedSpkiBase64);
 }
