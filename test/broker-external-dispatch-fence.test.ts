@@ -45,6 +45,7 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   revoked=false;revoking=false;unknown=false;forged=false;
   staleSignature=false;claimReplay=false;releaseLost=false;
   loseRevokeAckAfterCommit=false;
+  loseBeginAckAfterReservation=false;
   loseDispatchCommitAck=false;
   wrongSignedOwnerEpoch=false;
   lastClaim:DispatchClaim|undefined;
@@ -62,8 +63,10 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
     this.owner=identity.owner;this.device=identity.device;
     this.deviceEpoch=identity.epoch;this.session=identity.session;
   }
+  readonly beginChallenges:string[]=[];
   async beginIfCurrent(op:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>{
+    this.beginChallenges.push(challengeNonce);
     if(this.unknown)throw Error('EXTERNAL_TIMEOUT');
     if(this.claimReplay&&this.lastClaim)return this.lastClaim;
     const x=op.scope;
@@ -92,6 +95,10 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
       expiresAtMs:now+2500},this.forged
       ?generateKeyPairSync('ed25519').privateKey:authorityKeys.privateKey);
     this.lastClaim=permit;
+    if(this.loseBeginAckAfterReservation){
+      this.loseBeginAckAfterReservation=false;
+      throw Error('BEGIN_ACK_LOST_AFTER_DURABLE_RESERVATION');
+    }
     return permit;
   }
   async commitIfCurrent(op:BrokerDispatchRequest,
@@ -288,6 +295,32 @@ test('commit expires during final async HIGH readback, callback is not invoked',
   'DISPATCH_REVOKE_PENDING');
  assert.equal(effects,0);
 });
+test('lost begin ACK after durable reservation cannot mint a second permit across Hubs',async()=>{
+ const f=fixture(),op=f.request(),hubA=f.broker(),hubB=f.broker();
+ let effects=0;
+ f.remote.loseBeginAckAfterReservation=true;
+ await code(hubA.execute(op,async()=>++effects),
+  'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(f.remote.dispatched.size,1,
+  'request UUID must be tombstoned before reservation ACK');
+ assert.equal(f.remote.active.size,1,
+  'lost ACK remains reserved/UNKNOWN until explicit reconciliation');
+ assert.equal(effects,0,'lost begin ACK never reaches the OS callback');
+ await code(hubA.execute(op,async()=>++effects),
+  'DISPATCH_REVOKE_PENDING');
+ assert.equal(f.remote.beginChallenges.length,1,
+  'same Broker stays fenced and must not retry the unknown begin');
+ await code(hubB.execute(op,async()=>++effects),
+  'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(f.remote.beginChallenges.length,2,
+  'a second Hub attempts a fresh begin with a fresh challenge');
+ assert.notEqual(f.remote.beginChallenges[0],f.remote.beginChallenges[1]);
+ assert.equal(f.remote.dispatched.size,1,
+  'same requestId cannot allocate a new dispatchId after lost ACK');
+ assert.equal(f.remote.active.size,1,
+  'retry must not replace or erase the original reservation');
+ assert.equal(effects,0,'UNKNOWN is never replayed');
+});
 test('HIGH token downgraded during begin CAS wait is rechecked before commit',async()=>{
  const f=fixture(),gate=f.broker();f.remote.stallBeginResponse=true;
  let effects=0;
@@ -340,6 +373,8 @@ test('concurrent duplicate reservation: only one dispatch, no replay',async()=>{
   gate.execute(op,async()=>{executed++;return true})));
  assert.equal(attempts.filter(x=>x.status==='fulfilled').length,1);
  assert.equal(executed,1);
+ assert.equal(f.remote.beginChallenges.length,1,
+  'one local request UUID can enter remote begin only once at a time');
 });
 test('two independent Hubs share remote CAS: duplicate UUID permits one effect',async()=>{
  const f=fixture(),hubA=f.broker(),hubB=f.broker();

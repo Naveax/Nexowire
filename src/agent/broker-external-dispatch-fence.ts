@@ -47,7 +47,18 @@ export interface DispatchReleaseRequest {
   request:BrokerDispatchRequest;
 }
 export interface ExternalBrokerDispatchAuthority {
-  /** Must be atomic with revoke/re-pair and single-use claim allocation. */
+  /**
+   * Atomically serialize against revoke/re-pair and allocate a single-use
+   * claim. Before acknowledging a reservation, persist an independent durable
+   * tombstone keyed by the immutable requestId and bind it to the complete
+   * request and Broker scope. Repeated begin calls for that requestId,
+   * including after a lost ACK, restart, failover or restore, MUST reject or
+   * return a non-authorizing UNKNOWN outcome; they MUST NEVER mint a new
+   * dispatchId or permit, even with a fresh challengeNonce. Release cannot
+   * delete the tombstone. Reconcile an unknown outcome by inspection; never
+   * replay it as a new mutation or substitute a fresh requestId. Missing or
+   * ambiguous authority state fails closed.
+   */
   beginIfCurrent(operation:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,challengeNonce:string):Promise<DispatchClaim>;
   /**
@@ -97,6 +108,8 @@ export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
   private readonly inFlight=new Map<string,string>();
   private readonly claimed=new Set<string>();
+  /** One request UUID may have only one in-flight local admission. */
+  private readonly pendingRequests=new Set<string>();
   private readonly locallyFenced=new Set<string>();
   constructor(private readonly config:{
     authority:ExternalBrokerDispatchAuthority;
@@ -194,6 +207,15 @@ export class BrokerExternalDispatchFence {
    */
   async execute<T>(raw:BrokerDispatchRequest,run:()=>Promise<T>):Promise<T>{
     const request=operation.parse(raw);
+    if(this.pendingRequests.has(request.requestId))
+      deny('DISPATCH_EXTERNAL_CAS_UNKNOWN');
+    this.pendingRequests.add(request.requestId);
+    return this.executeOnce(request,run).finally(()=>{
+      this.pendingRequests.delete(request.requestId);
+    });
+  }
+  private async executeOnce<T>(request:BrokerDispatchRequest,
+    run:()=>Promise<T>):Promise<T>{
     const device=request.scope.deviceId;
     if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
@@ -205,7 +227,13 @@ export class BrokerExternalDispatchFence {
     let remote:DispatchClaim;
     try{remote=await this.config.authority.beginIfCurrent(
       request,broker,challengeNonce)}
-    catch{return deny('DISPATCH_EXTERNAL_CAS_UNKNOWN')}
+    catch{
+      // The reservation may have committed remotely despite a lost ACK.
+      // Keep this Broker instance fenced; new instances still rely on the
+      // external authority's durable requestId tombstone for global safety.
+      this.locallyFenced.add(device);
+      return deny('DISPATCH_EXTERNAL_CAS_UNKNOWN');
+    }
     let proof:Permit;
     try{proof=this.checkPermit(this.decode(remote),request,broker,
       challengeNonce)}
