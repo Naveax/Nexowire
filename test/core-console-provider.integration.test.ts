@@ -41,14 +41,21 @@ function fixture(){
   db.exec(readFileSync(new URL('../cloudflare/migrations/0019_core_console_authority.sql',import.meta.url),'utf8'));
   const d1:D1DatabaseLike={prepare:sql=>new Statement(db.prepare(sql)),
     batch:async statements=>{db.exec('BEGIN');try{const r=await Promise.all(statements.map(s=>s.run()));db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}}};
-  const authority=new D1CoreConsoleAuthority(d1);
+  // In-memory fixture is explicitly NOT a trusted native OS approval source.
+  let nativeReceipt:NativeCoreConsentProof|null=null,readbackEnabled=true;
+  const consumedNativeReceipts=new Set<string>();
+  const authority=new D1CoreConsoleAuthority(d1,{verifyAndConsume:async(proof,expected)=>{
+    if(!readbackEnabled||!nativeReceipt||consumedNativeReceipts.has(proof.receiptId)||
+      JSON.stringify(proof)!==JSON.stringify(nativeReceipt)||
+      proof.enrollmentId!==expected.enrollmentId)return false;
+    consumedNativeReceipts.add(proof.receiptId);return true;
+  }});
   const handler=createControlPlaneHttpHandler({} as never,{authenticate:async()=>null,coreConsoleAuthority:authority});
   let beforeRequest:((body:Record<string,unknown>)=>void)|undefined;
   const fetcher=(async(input,init)=>{const request=new Request(String(input),init);
     beforeRequest?.(JSON.parse(String(init?.body)));return handler(request);}) as typeof fetch;
   const client=new CoreConsoleAuthorityClient('https://core.example',credential,fetcher);
   let record:Profile|null=null,stopped=false,blocked=false,consents=0,effects=0,desktop=true,bridge=true;
-  let nativeReceipt:NativeCoreConsentProof|null=null,readbackEnabled=true;
   let forgedNativeReceipt:((value:NativeCoreConsentProof)=>NativeCoreConsentProof)|undefined;
   let onNative:(()=>Promise<void>)|undefined;
   const store:CoreProfileStore={stopFile:'fixture-only-STOP',load:async()=>structuredClone(record),
@@ -79,7 +86,7 @@ function fixture(){
     await provider.initialize();
     return {provider,controller:new CoreConsoleAdmission(undefined,provider)};
   };
-  return {db,authority,client,store,make,consents:()=>consents,effects:()=>effects,
+  return {db,d1,authority,client,store,make,consents:()=>consents,effects:()=>effects,
     profile:()=>structuredClone(record)!,setProfile:(p:Profile)=>{record=structuredClone(p);},
     setDesktop:(v:boolean)=>{desktop=v;},setBridge:(v:boolean)=>{bridge=v;},
     setNativeReadback:(v:boolean)=>{readbackEnabled=v;},
@@ -268,6 +275,7 @@ test('enrollment is registered once: a new nonce cannot re-register the same sig
     const spki=createPublicKey(key).export({format:'der',type:'spki'}).toString('base64');
     await assert.rejects(f.client.call(profile,'enroll',{
       certificate:profile.certificate,publicKeySpki:spki,
+      nativeConsent:profile.nativeConsent,
     }),/CORE_AUTHORITY_DENIED_/);
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,true);
   }finally{f.db.close();}
@@ -355,5 +363,23 @@ test('forged owner/session native receipts and absent native readback never regi
     await assert.rejects(controller.enroll(new AbortController().signal),
       /CORE_NATIVE_CONSENT_READBACK_REQUIRED/);
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
+  }finally{f.db.close();}
+});
+
+test('default D1 authority denies self-signed enrollment, even with correct device credentials',async()=>{
+  const f=fixture();try{
+    await enable(f);
+    const p=f.profile();
+    const bare=new D1CoreConsoleAuthority(f.d1); // production: no trusted OS native verifier
+    const key=createPrivateKey({key:Buffer.from(p.privateKey!,'base64'),type:'pkcs8',format:'der'});
+    const spki=createPublicKey(key).export({type:'spki',format:'der'}).toString('base64');
+    const request={action:'enroll' as const,deviceId,installationId:p.installationId,
+      nonce:randomUUID(),issuedAtMs:Date.now(),certificate:p.certificate,
+      publicKeySpki:spki,nativeConsent:p.nativeConsent};
+    const signature=sign(null,coreOperationBytes(request),key).toString('base64');
+    await assert.rejects(bare.handle(credential,{...request,signature}),
+      /CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE/);
+    assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,true,
+      'the fixture authority was configured separately; production verifier still denied');
   }finally{f.db.close();}
 });
