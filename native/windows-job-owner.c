@@ -64,9 +64,16 @@ static BOOL enforce_guardian_isolation(void) {
   // PROCESS_DUP_HANDLE. Medium filtered admin tokens are not enabled BA.
   // Explicitly fail if the DACL cannot be applied and read back.
   stage=L"dacl_sddl";
+  // Use the exact PROCESS_ALL_ACCESS mask, not generic "GA". Windows
+  // translates generic rights when applying a process DACL, so a raw GA
+  // comparison on readback falsely disagrees with the installed ACE.
+  wchar_t processDacl[160]={0};
+  if(swprintf(processDacl,160,
+       L"D:P(A;;0x%08lx;;;SY)(A;;0x%08lx;;;BA)(A;;0x00101000;;;OW)",
+       (unsigned long)PROCESS_ALL_ACCESS,(unsigned long)PROCESS_ALL_ACCESS)<0)
+    goto cleanup;
   if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-       L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00101000;;;OW)",
-       SDDL_REVISION_1,&descriptor,NULL))goto cleanup;
+       processDacl,SDDL_REVISION_1,&descriptor,NULL))goto cleanup;
   stage=L"dacl_parse";
   BOOL present=FALSE,defaulted=FALSE;
   if(!GetSecurityDescriptorDacl(descriptor,&present,&dacl,&defaulted) ||
