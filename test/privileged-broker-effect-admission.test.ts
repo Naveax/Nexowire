@@ -221,6 +221,10 @@ test('Broker HTTP route gates native, injected, installer, updater and no-provid
   const {startPrivilegedBroker}=await import('../src/agent/privileged-broker.js');
   for(const kind of ['windows.firewall.control','windows.environment.set',
     'windows.installer.apply','nexowire.machine_update.apply']) {
+    // The machine scope is elevated; a user-scoped environment edit is not.
+    // Exercise each classification without weakening the Broker admission gate.
+    const privilegedInput=kind==='windows.environment.set'
+      ? {...input,scope:'machine'} : input;
     const f=fixture();
     let invoked=0;
     const broker=await startPrivilegedBroker({
@@ -232,12 +236,19 @@ test('Broker HTTP route gates native, injected, installer, updater and no-provid
         return {accepted:verifiedInput};
       },
     });
-    const send=(operation_id:unknown,payload:unknown=input)=>
+    const send=(operation_id:unknown,payload:unknown=privilegedInput)=>
       fetch(broker.url+'/execute',{method:'POST',
         headers:{authorization:'Bearer fixture-only-broker-token',
           'content-type':'application/json'},
         body:JSON.stringify({capability:kind,input:payload,operation_id})});
     try {
+      if(kind==='windows.environment.set'){
+        const standard=await send(undefined,input);
+        assert.equal(standard.status,400);
+        assert.equal((await standard.json() as {error:{code:string}}).error.code,
+          'PRIVILEGED_BROKER_NOT_REQUIRED');
+        assert.equal(invoked,0);
+      }
       for(const bad of [undefined,'bearer-only',null]){
         const denied=await send(bad);
         assert.equal(denied.status,400);
