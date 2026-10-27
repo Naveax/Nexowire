@@ -183,6 +183,9 @@ export async function invokeBrokerEffectOnce<T>(
   if(!receiptMatches(reserved,'RESERVED',request,reserveNonce))deny();
   try{if(await authority.verifyReceipt(reserved)!==true)deny()}catch{deny()}
   assertMonotonicFresh();
+  // Verification is asynchronous: the original receipt must still match
+  // the exact signed reservation AFTER the verifier returns.
+  if(!receiptMatches(reserved,'RESERVED',request,reserveNonce))deny();
   const ticket=reserved.ticket;
   const commitNonce=randomBytes(32).toString('hex');
   let committed:BrokerEffectReceipt|null;
@@ -191,6 +194,7 @@ export async function invokeBrokerEffectOnce<T>(
   if(!receiptMatches(committed,'COMMITTED',request,commitNonce,ticket))deny();
   try{if(await authority.verifyReceipt(committed)!==true)deny()}catch{deny()}
   assertMonotonicFresh();
+  if(!receiptMatches(committed,'COMMITTED',request,commitNonce,ticket))deny();
   let recent:BrokerVerifiedEffectBinding|null;
   try{recent=await authority.readVerifiedBinding()}catch{deny()}
   assertMonotonicFresh();
