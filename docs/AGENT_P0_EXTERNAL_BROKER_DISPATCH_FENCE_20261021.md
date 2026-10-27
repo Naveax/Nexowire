@@ -56,3 +56,49 @@ Parent #676 CAS adapter and P0 #587 negative tests remain separate; no independe
 | External CAS storage rolled back | **UNSAFE** if revoked generation / UUID is forgotten | Independently operated non-co-restorable monotonic authority |
 
 **PRODUCTION NO-GO / #587 OPEN**: No independent non-restorable witness, no signed protected Broker dispatch integration, no physical two-device test. Work PC and Naveax live Agents are still v1.0.5; no live upgrade was performed.
+
+## #01 2026-10-27 release owner-scope hardening (source contract only)
+
+Previously `release(dispatchId)` allowed the HTTPS client to send only the UUID.
+A remote implementation that trusts a shared Broker credential could let a caller
+release/drain another owner's claim. The `release` contract now sends:
+`{dispatchId, brokerId, request:{requestId, fingerprint, capability,
+scope:{ownerId,deviceId,deviceEpoch,sessionEpoch,ownerEpoch,
+expectedGeneration,requiredPrivilege}}}`.
+The provider MUST match **every field** against the claim's **immutable
+original reservation**, and authenticate the credential as the enrolled Broker
+for that same owner/device/session. It MUST NOT accept release by guessing
+a claim UUID, and MUST NOT reauthorize using an already revoked live grant:
+releasing the original claim must still be possible during revoke-and-drain.
+
+The disposable CAS fixture and isolated TLS test server now reject different
+owner/device/session/generation, broker, and fingerprint release. Successful
+release is single-use; unknown or lost release acknowledgement fences subsequent
+dispatches in the current process. Remote tombstones and drain history MUST
+survive Broker, Hub, database, VM and backup rollback, or remain unavailable
+(fail closed). A `409`, timeout, bad receipt or release outcome UNKNOWN does
+not authorize replay. A revoked owner may **reconcile by inspection** with
+operator supervision, never by retrying the OS effect.
+
+### Required independent provider and operator evidence (NOT provided)
+
+1. Deploy a physically separate owner-authorized provider offering durable,
+   linearizable `reserveIfCurrent`, `revokeIfCurrent`, `rePairIfCurrent`,
+   `beginIfCurrent`, `commitIfCurrent`, `revokeAndDrain`, and scoped
+   `release`. All use one independent monotonic owner/device/session fence and
+   request UUID / dispatch tombstone domain, atomic against revocation.
+2. Supply the actual immutable/non-co-restorable high-water anchor and prove
+   restoration of BOTH the Agent/Hub persistence AND remote service backup
+   cannot reinstate an already consumed UUID or revoked generation. Disjoint
+   directory or separate database instances are not sufficient.
+3. Protect the authority signing private key, pinned public key, TLS identity,
+   per-Broker credential and owner enrollment outside untrusted Agent/VM
+   snapshots. Rotate/revoke compromised credentials using operator-controlled
+   procedures with independent audit events.
+4. Produce signed exact-scope reserve/commit/revoke receipts, authenticated
+   Broker evidence from #03/#04, and physical two-device contention,
+   lost-ACK, forced-crash and rollback canary logs. Neither CI nor tests here
+   supply an independently deployed server, credential or physical proof.
+5. No live CORE enablement, release, deployment or main merge until independent
+   acceptance. Any missing/ambiguous evidence remains **PRODUCTION NO-GO**.
+
