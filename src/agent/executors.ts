@@ -47,6 +47,8 @@ import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { inspectWindowsUacStatus } from './windows-uac-status.js';
 import { privilegeRequirement } from '../security/privilege.js';
+import {executeCoreWindowsMutation,type CoreWindowsDispatchAdmission}
+  from './core-windows-mutation-dispatch.js';
 import { detectWsl } from './wsl-detection.js';
 import { executeLiveUpdateCapability } from '../update/live-update.js';
 
@@ -2123,6 +2125,8 @@ export interface AgentExecutionContext {
   runbooks?: RunbookStore;
   privilegeMode?: 'direct' | 'broker';
   privilegedBroker?: PrivilegedBrokerClient;
+  /** Native Broker-owned fence; never deserialize from a client request. */
+  coreWindowsDispatch?: CoreWindowsDispatchAdmission;
   accessMode?: 'safe' | 'full';
 }
 
@@ -2225,6 +2229,14 @@ export function assertPrivateAiScheduledTaskBoundary(
       capability,action:request.action});
 }
 
+/** #03: Windows OS side effects cannot use legacy bearer-only admission. */
+const CORE_WINDOWS_MUTATION_CAPABILITIES = new Set<string>([
+  'windows.service.control','windows.registry.set','windows.registry.delete',
+  'windows.task.control','windows.firewall.control',
+  'windows.environment.set','windows.environment.delete',
+  'windows.installer.apply','nexowire.machine_update.apply',
+]);
+
 export async function executeCapability(
   capability: Capability,
   input: unknown,
@@ -2264,6 +2276,22 @@ export async function executeCapability(
     context.privilegeMode !== 'broker'
   ) {
     throw new Error('Installer status requires an existing privileged Broker.');
+  }
+
+  // P0 native dispatch boundary. In CORE mode the independent
+  // Broker/owner/epoch/generation CAS must commit before even invoking
+  // the remote Broker callback. Direct and bearer-only routes fail closed.
+  // This cannot replace a SECOND in-process Broker-side check; native
+  // low-level Windows executors independently reject missing admission.
+  if (CORE_WINDOWS_MUTATION_CAPABILITIES.has(capability) &&
+      privilegeRequirement(capability,input)==='elevated') {
+    if(context.privilegeMode!=='broker'||!context.privilegedBroker) {
+      throw Object.assign(new Error('CORE Broker dispatcher required'),
+        {code:'CORE_DISPATCH_BROKER_REQUIRED'});
+    }
+    return await executeCoreWindowsMutation(capability,input,
+      context.coreWindowsDispatch,
+      async()=>await context.privilegedBroker!.execute(capability,input));
   }
 
   if (
