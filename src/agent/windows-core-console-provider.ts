@@ -318,13 +318,29 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     // A legacy DPAPI certificate or native-looking JS fixture is NOT physical
     // consent. No shipped native authority means enrollment remains required.
     const nativeValid=await this.currentNativeConsent(signal,state);
-    const certificate=this.revoked||!localValid||!nativeValid||!this.matches(state)||
+    // Native OS readback is an async trust boundary. Owner re-pair, CORE OFF,
+    // revoke, session rotation or Broker loss during it must not publish an
+    // evidence snapshot based on the older authority/bridge observations.
+    const latest=await this.options.authority.call(this.profile,'read',{},signal);
+    const latestProbe=await this.options.broker.probe();
+    const latestBridge=latestProbe.reachable===true&&latestProbe.elevated===true&&
+      latestProbe.version===NEXOWIRE_VERSION;
+    const unchanged=JSON.stringify(this.current(state))===JSON.stringify(this.current(latest))&&
+      state.enrollmentId===latest.enrollmentId&&
+      state.publicKeySpki===latest.publicKeySpki&&
+      state.nativeConsentReceiptId===latest.nativeConsentReceiptId&&
+      state.windowsUserSid===latest.windowsUserSid&&
+      state.windowsSessionId===latest.windowsSessionId&&
+      state.windowsLogonLuid===latest.windowsLogonLuid&&
+      state.windowsLogonSessionEpoch===latest.windowsLogonSessionEpoch;
+    const certificate=this.revoked||signal.aborted||!localValid||!nativeValid||
+      !unchanged||!bridge||!latestBridge||!this.matches(latest)||
       await this.options.store.stopped()||await this.options.store.blocked?.()?null:this.profile.certificate;
     return {certificate,pinnedLocalSpkiDer:pinned,
-      current:{...this.current(state),bridgeVerified:state.bridgeVerified&&bridge},
+      current:{...this.current(latest),bridgeVerified:latest.bridgeVerified&&latestBridge},
       observedAtMs,desktop:this.allowedDesktop()?'default':'unknown',
-      nativeAdmission:!!certificate&&nativeValid&&bridge&&this.allowedDesktop()?'verified':'unavailable',
-      brokerVersionVerified:bridge,
+      nativeAdmission:!!certificate&&nativeValid&&latestBridge&&this.allowedDesktop()?'verified':'unavailable',
+      brokerVersionVerified:latestBridge,
       nativeConsentProviderPresent:!!this.options.nativeConsent} as CoreConsoleEvidence;
   }
   private async currentNativeConsent(signal:AbortSignal,authorityState:CoreAuthorityState):Promise<boolean>{
