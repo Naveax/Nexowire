@@ -29,11 +29,11 @@ $trusted=@{
   'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true
 }
 $rights=[System.Security.AccessControl.FileSystemRights]
-$writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x40000000 -bor [int64]0x10000000)
 # Shared OS ancestors may legitimately allow creation of unrelated siblings.
 # They must not permit an untrusted identity to replace the *existing*
 # protected update root via delete-child, delete, DACL or ownership control.
-$ancestorMask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$ancestorMask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x10000000)
 # First reject reparse/junction ancestors before entering the update tree.
 $cur=$root
 while($cur){
@@ -49,7 +49,7 @@ while($cur){
         continue
       }
       if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
-         ([int]$ace.FileSystemRights -band $ancestorMask) -ne 0 -and
+         ([int64]$ace.FileSystemRights -band $ancestorMask) -ne 0 -and
          -not $trusted.ContainsKey($ace.IdentityReference.Value)){
         throw 'MACHINE_UPDATE_ANCESTOR_REPLACEMENT_RIGHTS'
       }
@@ -74,8 +74,11 @@ while($dirs.Count -gt 0){
     $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
     if(-not $trusted.ContainsKey($owner)){throw 'MACHINE_UPDATE_UNTRUSTED_OWNER'}
     foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
+      # InheritOnly is a child template, not an effective ACE on THIS node.
+      # Every actual child is enumerated and independently owner/ACL-audited.
+      if((([int]$ace.PropagationFlags -band [int][Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
       if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
-         ([int]$ace.FileSystemRights -band $writeMask) -ne 0 -and
+         ([int64]$ace.FileSystemRights -band $writeMask) -ne 0 -and
          -not $trusted.ContainsKey($ace.IdentityReference.Value)){
         throw 'MACHINE_UPDATE_UNTRUSTED_WRITE_ACE'
       }
