@@ -83,19 +83,29 @@ static BOOL enforce_guardian_isolation(void) {
   PACL installed=NULL;
   DWORD verify=GetSecurityInfo(self,SE_KERNEL_OBJECT,DACL_SECURITY_INFORMATION,
     NULL,NULL,&installed,NULL,&observed);
-  if(verify==ERROR_SUCCESS && installed && observed) {
+  if(verify!=ERROR_SUCCESS) {
+    stage=L"dacl_readback_api";win32=verify;
+  } else if(!installed || !observed) {
+    stage=L"dacl_readback_empty";
+  } else {
     SECURITY_DESCRIPTOR_CONTROL flags=0;DWORD revision=0;
     BOOL identical=(installed->AceCount==dacl->AceCount);
+    if(!identical)stage=L"dacl_readback_ace_count";
     for(DWORD i=0;identical && i<dacl->AceCount;i++) {
       LPVOID want=NULL,actual=NULL;
-      if(!GetAce(dacl,i,&want) || !GetAce(installed,i,&actual))
-        {identical=FALSE;break;}
+      if(!GetAce(dacl,i,&want) || !GetAce(installed,i,&actual)) {
+        identical=FALSE;stage=L"dacl_readback_get_ace";break;
+      }
       ACE_HEADER *w=(ACE_HEADER*)want,*a=(ACE_HEADER*)actual;
-      if(w->AceSize!=a->AceSize || memcmp(w,a,w->AceSize)!=0)
-        identical=FALSE;
+      if(w->AceSize!=a->AceSize || memcmp(w,a,w->AceSize)!=0) {
+        identical=FALSE;stage=L"dacl_readback_ace_bytes";
+      }
     }
-    if(identical && GetSecurityDescriptorControl(observed,&flags,&revision)
-       && (flags&SE_DACL_PROTECTED))trusted=TRUE;
+    if(identical && !GetSecurityDescriptorControl(observed,&flags,&revision)) {
+      stage=L"dacl_readback_control";
+    } else if(identical && !(flags&SE_DACL_PROTECTED)) {
+      stage=L"dacl_readback_unprotected";
+    } else if(identical) trusted=TRUE;
   }
   if(observed)LocalFree(observed);
 
