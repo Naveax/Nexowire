@@ -88,32 +88,53 @@ try {
   $parentAcl = $null
 }
 $aclAvailable = $null -ne $acl -and $null -ne $parentAcl
+# A DACL alone is not a trustworthy write boundary. A file/directory
+# owner can modify its DACL without an explicit Allow WRITE_DAC ACE.
+# Only SYSTEM and Administrators are eligible owners for provisional trust.
+$trustedOwnerSids=@('S-1-5-18','S-1-5-32-544')
+$fileOwnerPrivileged=$null
+$parentOwnerPrivileged=$null
+if ($aclAvailable) {
+  try {
+    $fileOwnerSid=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    $parentOwnerSid=$parentAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    $fileOwnerPrivileged=($fileOwnerSid -in $trustedOwnerSids)
+    $parentOwnerPrivileged=($parentOwnerSid -in $trustedOwnerSids)
+  } catch {
+    $aclError=$_.Exception.GetType().Name
+    $aclAvailable=$false
+  }
+}
 # Deny broad low-trust groups WRITE_DAC/WRITE_OWNER/DELETE and data writes.
 # These SIDs are stable across localized Windows installations.
 $untrustedSids=@('S-1-1-0','S-1-5-11','S-1-5-32-545','S-1-5-4','S-1-5-7')
 $unsafe=@()
+$untrustedFileWriters=@()
 foreach($entry in $(if ($aclAvailable) { $acl.Access } else { @() })) {
   if ($entry.AccessControlType -ne 'Allow') { continue }
   $identity=try { $entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
     catch { $entry.IdentityReference.Value }
   $bits=[int64]$entry.FileSystemRights
   $writeMask=0x2 -bor 0x4 -bor 0x10 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
-  if ($identity -in $untrustedSids -and (($bits -band $writeMask) -ne 0)) {
-    $unsafe+= $identity
+  if (($bits -band $writeMask) -ne 0) {
+    if ($identity -in $untrustedSids) { $unsafe+= $identity }
+    if ($identity -notin $trustedOwnerSids) { $untrustedFileWriters+= $identity }
   }
 }
 # Directory replacement is possible even when the EXE DACL is restricted:
 # inherited/create/delete grants on the *parent* are independently dangerous.
 # This is read-only detection, not Windows effective-permissions attestation.
 $unsafeParent=@()
+$untrustedParentWriters=@()
 foreach($entry in $(if ($aclAvailable) { $parentAcl.Access } else { @() })) {
   if ($entry.AccessControlType -ne 'Allow') { continue }
   $identity=try { $entry.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
     catch { $entry.IdentityReference.Value }
   $rights=[int64]$entry.FileSystemRights
-  $replaceMask=0x2 -bor 0x4 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
-  if ($identity -in $untrustedSids -and (($rights -band $replaceMask) -ne 0)) {
-    $unsafeParent+= $identity
+  $replaceMask=0x2 -bor 0x4 -bor 0x10 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000
+  if (($rights -band $replaceMask) -ne 0) {
+    if ($identity -in $untrustedSids) { $unsafeParent+= $identity }
+    if ($identity -notin $trustedOwnerSids) { $untrustedParentWriters+= $identity }
   }
 }
 $expectedShaOK = $ExpectedReleaseSha256 -match '^[0-9a-fA-F]{64}$' -and
@@ -136,6 +157,10 @@ $evidence=[ordered]@{
   aclEvidenceError=$aclError
   fileAclProtected=[bool]($aclAvailable -and $acl.AreAccessRulesProtected)
   parentAclProtected=[bool]($aclAvailable -and $parentAcl.AreAccessRulesProtected)
+  fileOwnerPrivileged=$(if ($aclAvailable) { [bool]$fileOwnerPrivileged } else { $null })
+  parentOwnerPrivileged=$(if ($aclAvailable) { [bool]$parentOwnerPrivileged } else { $null })
+  nonPrivilegedFileWriteGrantFound=$(if ($aclAvailable) { $untrustedFileWriters.Count -gt 0 } else { $null })
+  nonPrivilegedParentWriteGrantFound=$(if ($aclAvailable) { $untrustedParentWriters.Count -gt 0 } else { $null })
   broadWriteGrantFound=$(if ($aclAvailable) { $unsafe.Count -gt 0 } else { $null })
   parentBroadWriteGrantFound=$(if ($aclAvailable) { $unsafeParent.Count -gt 0 } else { $null })
   signedReleaseManifestVerified=$false
@@ -145,7 +170,9 @@ $evidence=[ordered]@{
 $ready= $hashMatches -and (-not $linked) -and $validSigner -and
   $expectedPublisherOK -and $expectedShaOK -and
   $aclAvailable -and $acl.AreAccessRulesProtected -and $parentAcl.AreAccessRulesProtected -and
-  ($unsafe.Count -eq 0) -and ($unsafeParent.Count -eq 0)
+  ($fileOwnerPrivileged -eq $true) -and ($parentOwnerPrivileged -eq $true) -and
+  ($unsafe.Count -eq 0) -and ($unsafeParent.Count -eq 0) -and
+  ($untrustedFileWriters.Count -eq 0) -and ($untrustedParentWriters.Count -eq 0)
 # Deliberately do NOT declare productionReady based solely on file-level
 # evidence: the caller's signer trust anchor, installation identity, rollback
 # proof, runtime image race and PROCESS_DUP_HANDLE boundary must still be reviewed.
