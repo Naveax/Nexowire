@@ -34,38 +34,42 @@ reclassify online Agent / stored preference / UI checkbox as active CORE.
 CORE physical console is a separate, time-unbounded **revocable** grant. FULL and
 a stored CORE preference do not grant input by themselves. ROOT expiry is not used.
 
-## Implemented path
+## Source contract (protected native provider not installed)
 
 1. Cloud pairing (`connect`) records the authenticated control-plane HTTPS origin
    in the Agent launcher. Explicit enrollment also accepts `--core-authority-url`.
    Existing local-only tokens cannot impersonate paired cloud device credentials.
-2. Owner CORE enablement queues a local enrollment request. The Windows Agent
-   verifies current owner/device state and matching authenticated Broker health,
-   then displays a real local Yes/No dialog (default No). `mode: core` on the
-   console-request tool also requests enrollment; a valid existing grant is reused.
-3. After local consent, re-read current authority. Generate an Ed25519 key and
-   signed certificate bound to owner, device, installation and all three epochs.
-   Seal the private profile with purpose-bound **CurrentUser DPAPI**, under a
-   dedicated owner/SYSTEM/Administrators ACL. No caller supplies a key or pin.
-4. Register the enrollment in independent D1 state. Every native input request
-   rechecks it, reserves an externally durable one-use ID, atomically claims only
-   the current enabled generation, then runs the typed native actuator. Local
-   backup restoration cannot reset server generations or operation tombstones.
-5. The local non-focusing tray monitor supplies desktop status and a **KAPAT**
-   action. STOP writes a persistent marker immediately; native input checks it
-   before each key-down/mouse effect. Renewed local consent drains old native work
-   before clearing STOP. Lost ACK is UNKNOWN and never blindly replayed.
-6. The physical actuator runs only at Medium integrity, on WinSta0/Default. It
-   checks target session, PID/creation identity and foreground, holds process
-   handles, and refuses elevated targets. Parent Agent death, native deadline,
-   STOP/BLOCKED, lock or Secure Desktop stops further input. Key releases are
-   permitted for cleanup. UAC, administrator permissions and private AI routing
-   are not bypassed. The HIGH Broker is queried for health, not used for input.
+2. Owner CORE enablement may queue a local enrollment request, but the current
+   production composition root has no protected native approval provider. The
+   Agent therefore shows no approval dialog and keeps
+   `LOCAL_ENROLLMENT_REQUIRED`; a JavaScript Yes/No result is not accepted.
+3. A future protected native provider must bind each one-use receipt to owner,
+   device, installation, authority epochs, a separately provisioned Windows user
+   SID, WTS session ID, token `AuthenticationId` LUID and a per-logon session
+   epoch. D1 persists that exact binding and an independent verifier checks it
+   against the current OS logon on every status/admission. Only then can an
+   enrollment key and certificate be registered.
+4. Once an independently verified native receipt exists, D1 stores the receipt
+   ID and exact owner SID/session ID/AuthenticationId/session epoch. At `claim`,
+   D1 consumes the operation ID before async OS readback and makes any stale or
+   UNKNOWN attempt terminal. The Agent repeats readback after claim and before its
+   actuator call. Native Windows code still needs its own final logon/target check.
+   The production verifier is absent.
+5. The native input source path uses a local STOP marker, typed actuator inputs,
+   target/session checks and no blind replay after UNKNOWN. These source checks
+   do not establish the missing physical enrollment provider.
+6. The source actuator is constrained to Medium integrity and WinSta0/Default;
+   it checks target session, PID/creation identity and foreground and refuses
+   elevated targets. UAC and administrator permissions are not bypassed. These
+   are source/CI properties, not physical acceptance of the installed Broker.
 
 ## Authority and revocation
 
 Migration `0019_core_console_authority.sql` adds generation/revoke rows, status,
-nonce replay protection and durable operation tombstones. Triggers invalidate
+nonce replay protection and durable operation tombstones. Migration
+`0020_core_console_native_logon_binding.sql` stores the native receipt and exact
+Windows owner/logon binding. A trigger clears it on owner, enrollment or epoch
+invalidation. Other triggers invalidate
 records on CORE OFF, SAFE, bridge OFF, credential/owner change and preference
 removal. New admission after OFF is synchronously denied by the D1 claim CAS.
 Already admitted input is cancelled through the local marker/watch path: authority
@@ -82,8 +86,10 @@ current native status returns `localDecisionApproved` separately from `approved`
 
 ## Required deployment configuration
 
-Apply migration 0019 **before** deploying the Worker that instantiates
-`D1CoreConsoleAuthority`. Deploy a matching Agent/Broker package afterwards.
+Apply migrations 0019 and 0020 **before** deploying the Worker that instantiates
+`D1CoreConsoleAuthority`. The current build still has no production native
+consent provider or independent D1 verifier; migration alone cannot enable
+enrollment. Deploy a matching Agent/Broker package afterwards.
 New cloud `connect` enrollment persists the correct authority automatically.
 Existing paired Agents need the same trusted origin in
 `NEXOWIRE_CORE_AUTHORITY_URL`. No remote tool payload can select another origin.

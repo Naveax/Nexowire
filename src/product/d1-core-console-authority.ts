@@ -5,17 +5,24 @@ import {CoreAuthorityRequestSchema,verifyCoreCertificate,verifyCoreOperation,
 import type {CoreConsoleEnrollmentV1} from '../agent/core-console-enrollment-policy.js';
 
 export interface TrustedNativeCoreEnrollmentVerifier {
-  /** Must independently verify protected Windows approval, owner/device/logon
-   * and consume receipt ID atomically across concurrent Workers. Never trust
-   * an Agent-provided JSON witness or merely its timestamp. */
+  /** Independently verify protected Windows approval, owner/device/logon and
+   * atomically consume the receipt across concurrent Workers. Resolve owner
+   * identity to the provisioned Windows SID, compare every proof field to the
+   * native receipt, and reject if the interactive logon changed before consume.
+   * Never trust Agent JSON or merely its timestamp. */
   verifyAndConsume(
     proof:NonNullable<CoreAuthorityRequest['nativeConsent']>,
     expected:CoreConsoleEnrollmentV1,
   ):Promise<boolean>;
-  /** Independent fresh native OS/session readback, not Agent-signed report. */
+  /** Independent fresh native OS/session readback, not Agent-signed report.
+   * Resolve ownerAccountId through a separately provisioned SID mapping and
+   * compare token AuthenticationId, WTS session ID and session epoch against
+   * the live interactive owner logon. */
   currentReadback(expected:{ownerAccountId:string;deviceId:string;
     installationId:string;enrollmentId:string;ownerEpoch:number;
-    grantGeneration:number;revokeEpoch:number}):Promise<boolean>;
+    grantGeneration:number;revokeEpoch:number;nativeConsentReceiptId:string;
+    windowsUserSid:string;windowsSessionId:number;windowsLogonLuid:string;
+    windowsLogonSessionEpoch:string}):Promise<boolean>;
 }
 
 const DB_NOW="(CAST(strftime('%s','now') AS INTEGER)*1000)";
@@ -27,7 +34,9 @@ const READY=`d.access_mode='full' AND d.online=1 AND d.platform='win32' AND d.pr
 type Row={device_id:string;owner_account_id:string;installation_id:string|null;authority_time_ms:number;
   enrollment_id:string|null;public_key_spki:string|null;owner_epoch:number;grant_generation:number;
   revoke_epoch:number;core_enabled:number;access_mode:'safe'|'full';online:number;bridge_verified:number;
-  physical_active:number;status_observed_at_ms:number|null;enrollment_requested:number};
+  physical_active:number;status_observed_at_ms:number|null;enrollment_requested:number;
+  native_consent_receipt_id:string|null;windows_user_sid:string|null;windows_session_id:number|null;
+  windows_logon_luid:string|null;windows_logon_session_epoch:string|null};
 export interface CoreConsoleAuthority {
   requestEnrollment?(deviceId:string,ownerAccountId:string):Promise<void>;
   handle(credential:string,raw:unknown):Promise<{nonce:string;state:CoreAuthorityState}>;
@@ -42,6 +51,8 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
   private async row(hash:string,id:string):Promise<Row>{
     const row=await this.db.prepare(`SELECT ${DB_NOW} authority_time_ms,d.id device_id,d.owner_account_id,c.installation_id,
       c.enrollment_id,c.public_key_spki,c.owner_epoch,c.grant_generation,c.revoke_epoch,
+      c.native_consent_receipt_id,c.windows_user_sid,c.windows_session_id,
+      c.windows_logon_luid,c.windows_logon_session_epoch,
       CASE WHEN p.enabled=1 AND COALESCE(b.desired_mode,'auto')<>'off' THEN 1 ELSE 0 END core_enabled,
       d.access_mode,d.online,CASE WHEN d.privilege_mode='broker' AND d.admin_bridge_ready=1 THEN 1 ELSE 0 END bridge_verified,
       c.physical_active,c.status_observed_at_ms,c.enrollment_requested ${JOIN} WHERE d.id=? AND d.credential_hash=?`)
@@ -98,18 +109,33 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       // and a durable one-shot CAS. No dev fixture is a production verifier.
       if(await this.nativeEnrollmentVerifier.verifyAndConsume(proof,e)!==true)
         throw new Error('CORE_NATIVE_CONSENT_NOT_VERIFIED');
-      await changed(`UPDATE device_core_console_authority SET installation_id=?,enrollment_id=?,public_key_spki=?,enrollment_requested=0,physical_active=0
+      const nativeBinding={ownerAccountId:e.ownerAccountId,deviceId:e.deviceId,
+        installationId:e.installationId,enrollmentId:e.enrollmentId,
+        ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,revokeEpoch:e.revokeEpoch,
+        nativeConsentReceiptId:proof.receiptId,windowsUserSid:proof.windowsUserSid,
+        windowsSessionId:proof.windowsSessionId,windowsLogonLuid:proof.windowsLogonLuid,
+        windowsLogonSessionEpoch:proof.windowsLogonSessionEpoch};
+      if(await this.nativeEnrollmentVerifier.currentReadback(nativeBinding)!==true)
+        throw new Error('CORE_NATIVE_CONSENT_SESSION_STALE');
+      await changed(`UPDATE device_core_console_authority SET installation_id=?,enrollment_id=?,public_key_spki=?,
+        native_consent_receipt_id=?,windows_user_sid=?,windows_session_id=?,windows_logon_luid=?,windows_logon_session_epoch=?,
+        enrollment_requested=0,physical_active=0
         WHERE device_id=? AND owner_epoch=? AND grant_generation=? AND revoke_epoch=?
         AND enrollment_id IS NULL AND EXISTS(SELECT 1 ${JOIN}
           WHERE d.id=? AND d.credential_hash=? AND ${READY})`,
-        [r.installationId,e.enrollmentId,r.publicKeySpki,r.deviceId,e.ownerEpoch,e.grantGeneration,e.revokeEpoch,r.deviceId,hash]);
+        [r.installationId,e.enrollmentId,r.publicKeySpki,proof.receiptId,proof.windowsUserSid,
+          proof.windowsSessionId,proof.windowsLogonLuid,proof.windowsLogonSessionEpoch,
+          r.deviceId,e.ownerEpoch,e.grantGeneration,e.revokeEpoch,r.deviceId,hash]);
     }else if(r.action==='dismiss'){
       await changed(`UPDATE device_core_console_authority SET enrollment_requested=0 WHERE device_id=? AND owner_epoch=?
         AND EXISTS(SELECT 1 FROM devices WHERE id=? AND credential_hash=?)`,[r.deviceId,before.owner_epoch,r.deviceId,hash]);
     }else if(r.action==='revoke'){
       // Cleanup is allowed in SAFE and after CORE OFF; paired credential still required.
       await changed(`UPDATE device_core_console_authority SET revoke_epoch=revoke_epoch+1,
-        installation_id=NULL,enrollment_id=NULL,public_key_spki=NULL,enrollment_requested=0,physical_active=0
+        installation_id=NULL,enrollment_id=NULL,public_key_spki=NULL,
+        native_consent_receipt_id=NULL,windows_user_sid=NULL,windows_session_id=NULL,
+        windows_logon_luid=NULL,windows_logon_session_epoch=NULL,
+        enrollment_requested=0,physical_active=0
         WHERE device_id=? AND EXISTS(SELECT 1 FROM devices WHERE id=? AND credential_hash=?)`,[r.deviceId,r.deviceId,hash]);
     }else if(r.action!=='read'){
       if(!before.public_key_spki||before.installation_id!==r.installationId||
@@ -127,11 +153,46 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
             SELECT ?,?,c.device_id,c.installation_id,c.enrollment_id,c.owner_epoch,c.grant_generation,c.revoke_epoch,'reserved',${DB_NOW}
             ${JOIN} WHERE ${currentPredicate} ON CONFLICT(request_id) DO NOTHING`,[r.requestId,r.fingerprint,...currentArgs]);
         }else if(r.action==='claim'){
-          await changed(`UPDATE device_core_console_operations SET state='dispatched'
-            WHERE request_id=? AND fingerprint=? AND device_id=? AND installation_id=? AND enrollment_id=?
-              AND owner_epoch=? AND grant_generation=? AND revoke_epoch=? AND state='reserved'
-              AND reserved_at_ms>=${DB_NOW}-30000 AND reserved_at_ms<=${DB_NOW}
-              AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate})`,[...opArgs,...currentArgs]);
+          const tombstoneClaim=async()=>{
+            try{await this.db.prepare(`UPDATE device_core_console_operations SET state='unknown'
+              WHERE request_id=? AND fingerprint=? AND device_id=? AND state IN('reserved','dispatched')`)
+              .bind(r.requestId,r.fingerprint,r.deviceId).run();}catch{}
+          };
+          if(!this.nativeEnrollmentVerifier||!before.installation_id||!before.enrollment_id||
+            !before.native_consent_receipt_id||!before.windows_user_sid||!before.windows_session_id||
+            !before.windows_logon_luid||!before.windows_logon_session_epoch){
+            await tombstoneClaim();throw new Error('CORE_NATIVE_CONSENT_SESSION_REQUIRED');
+          }
+          const nativeBinding={ownerAccountId:before.owner_account_id,deviceId:before.device_id,
+            installationId:before.installation_id,enrollmentId:before.enrollment_id,
+            ownerEpoch:before.owner_epoch,grantGeneration:before.grant_generation,revokeEpoch:before.revoke_epoch,
+            nativeConsentReceiptId:before.native_consent_receipt_id,windowsUserSid:before.windows_user_sid,
+            windowsSessionId:before.windows_session_id,windowsLogonLuid:before.windows_logon_luid,
+            windowsLogonSessionEpoch:before.windows_logon_session_epoch};
+          try{
+            // Consume the one-shot reservation before async native readback. If
+            // the ACK is lost or the verifier is UNKNOWN, this ID cannot replay.
+            await changed(`UPDATE device_core_console_operations SET state='dispatched'
+              WHERE request_id=? AND fingerprint=? AND device_id=? AND installation_id=? AND enrollment_id=?
+                AND owner_epoch=? AND grant_generation=? AND revoke_epoch=? AND state='reserved'
+                AND reserved_at_ms>=${DB_NOW}-30000 AND reserved_at_ms<=${DB_NOW}
+                AND device_id IN(SELECT c.device_id ${JOIN} WHERE ${currentPredicate}
+                  AND c.native_consent_receipt_id=? AND c.windows_user_sid=? AND c.windows_session_id=?
+                  AND c.windows_logon_luid=? AND c.windows_logon_session_epoch=?)`,
+              [...opArgs,...currentArgs,before.native_consent_receipt_id,before.windows_user_sid,
+                before.windows_session_id,before.windows_logon_luid,before.windows_logon_session_epoch]);
+            if(await this.nativeEnrollmentVerifier.currentReadback(nativeBinding)!==true)
+              throw new Error('CORE_NATIVE_CONSENT_SESSION_STALE');
+            const latest=await this.row(hash,r.deviceId);
+            if(latest.installation_id!==before.installation_id||latest.enrollment_id!==before.enrollment_id||
+              latest.owner_epoch!==before.owner_epoch||latest.grant_generation!==before.grant_generation||
+              latest.revoke_epoch!==before.revoke_epoch||
+              latest.native_consent_receipt_id!==before.native_consent_receipt_id||
+              latest.windows_user_sid!==before.windows_user_sid||latest.windows_session_id!==before.windows_session_id||
+              latest.windows_logon_luid!==before.windows_logon_luid||
+              latest.windows_logon_session_epoch!==before.windows_logon_session_epoch)
+              throw new Error('CORE_NATIVE_CONSENT_SESSION_CHANGED');
+          }catch(error){await tombstoneClaim();throw error;}
         }else if(r.action==='complete'){
           if(!r.outcome)throw new Error('CORE_OUTCOME_REQUIRED');
           await changed(`UPDATE device_core_console_operations SET state=?
@@ -152,7 +213,11 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       accessMode:row.access_mode,deviceOnline:row.online===1,
       bridgeVerified:row.bridge_verified===1,enrollmentId:row.enrollment_id,
       publicKeySpki:row.public_key_spki,physicalActive:row.physical_active===1,
-      statusObservedAtMs:row.status_observed_at_ms};
+      statusObservedAtMs:row.status_observed_at_ms,
+      nativeConsentReceiptId:row.native_consent_receipt_id,
+      windowsUserSid:row.windows_user_sid,windowsSessionId:row.windows_session_id,
+      windowsLogonLuid:row.windows_logon_luid,
+      windowsLogonSessionEpoch:row.windows_logon_session_epoch};
   }
   async requestEnrollment(deviceId:string,ownerAccountId:string){
     if(!this.nativeEnrollmentVerifier)throw new Error('CORE_NATIVE_CONSENT_PROVIDER_UNAVAILABLE');
@@ -173,21 +238,29 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
     type StatusRow={enrollment_id:string|null;installation_id:string|null;
       owner_epoch:number;grant_generation:number;revoke_epoch:number;
       enrollment_requested:number;device_ready:number;physical_active:number;
-      status_observed_at_ms:number|null;fresh:number};
+      status_observed_at_ms:number|null;fresh:number;native_consent_receipt_id:string|null;
+      windows_user_sid:string|null;windows_session_id:number|null;windows_logon_luid:string|null;
+      windows_logon_session_epoch:string|null};
     const readRow=()=>this.db.prepare(`SELECT c.enrollment_id,c.enrollment_requested,
       c.installation_id,c.owner_epoch,c.grant_generation,c.revoke_epoch,
-      c.physical_active,c.status_observed_at_ms,
+      c.physical_active,c.status_observed_at_ms,c.native_consent_receipt_id,
+      c.windows_user_sid,c.windows_session_id,c.windows_logon_luid,c.windows_logon_session_epoch,
       CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready,
       CASE WHEN ${READY} AND c.status_observed_at_ms>=${DB_NOW}-15000 THEN 1 ELSE 0 END fresh
       ${JOIN} WHERE d.id=? AND d.owner_account_id=?`).bind(deviceId,ownerAccountId).first<StatusRow>();
     let row=await readRow();
     let nativeCurrent=false;
-    if(row?.enrollment_id&&row.installation_id&&this.nativeEnrollmentVerifier){
+    if(row?.enrollment_id&&row.installation_id&&row.native_consent_receipt_id&&
+      row.windows_user_sid&&row.windows_session_id&&row.windows_logon_luid&&
+      row.windows_logon_session_epoch&&this.nativeEnrollmentVerifier){
       try {
-        nativeCurrent=await this.nativeEnrollmentVerifier.currentReadback({
-          ownerAccountId,deviceId,installationId:row.installation_id,
+        const nativeBinding={ownerAccountId,deviceId,installationId:row.installation_id,
           enrollmentId:row.enrollment_id,ownerEpoch:row.owner_epoch,
-          grantGeneration:row.grant_generation,revokeEpoch:row.revoke_epoch})===true;
+          grantGeneration:row.grant_generation,revokeEpoch:row.revoke_epoch,
+          nativeConsentReceiptId:row.native_consent_receipt_id,windowsUserSid:row.windows_user_sid,
+          windowsSessionId:row.windows_session_id,windowsLogonLuid:row.windows_logon_luid,
+          windowsLogonSessionEpoch:row.windows_logon_session_epoch};
+        nativeCurrent=await this.nativeEnrollmentVerifier.currentReadback(nativeBinding)===true;
         // The independent OS readback is async. A revoke, CORE OFF or
         // re-pair can occur while it runs. Never surface an old D1 row as
         // current after that await; recheck identity/generation and readiness.
@@ -196,7 +269,10 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
           latest.installation_id===row.installation_id&&
           latest.owner_epoch===row.owner_epoch&&
           latest.grant_generation===row.grant_generation&&
-          latest.revoke_epoch===row.revoke_epoch&&latest.device_ready===1;
+          latest.revoke_epoch===row.revoke_epoch&&latest.native_consent_receipt_id===row.native_consent_receipt_id&&
+          latest.windows_user_sid===row.windows_user_sid&&latest.windows_session_id===row.windows_session_id&&
+          latest.windows_logon_luid===row.windows_logon_luid&&
+          latest.windows_logon_session_epoch===row.windows_logon_session_epoch&&latest.device_ready===1;
         row=latest;
       }catch{nativeCurrent=false;row=null;}
     }

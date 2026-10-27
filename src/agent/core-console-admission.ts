@@ -144,15 +144,17 @@ export class CoreConsoleAdmission {
       const evaluation=evaluateCoreConsoleEnrollment({...evaluationInput,desktop:evidence.desktop});
       const enrollment=evidence.desktop==='default'?evaluation:
         evaluateCoreConsoleEnrollment({...evaluationInput,desktop:'default'});
-      const active = evaluation.policyEligible && evidence.nativeAdmission === 'verified';
+      const nativeProviderPresent=evidence.nativeConsentProviderPresent===true;
+      const localEnrolled=nativeProviderPresent&&enrollment.policyEligible;
+      const active = nativeProviderPresent&&evaluation.policyEligible&&evidence.nativeAdmission === 'verified';
       return {evidence,status:{
         preferenceEnabled: typeof evidence.current?.coreEnabled === 'boolean'
           ? evidence.current.coreEnabled : null,
-        localEnrolled:enrollment.policyEligible,
+        localEnrolled,
         active,duration:'indefinite-revocable',expiresAt:null,
         state:active ? 'ACTIVE'
+          : evidence.nativeConsentProviderPresent !== true ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.current?.coreEnabled === false ? 'CORE_NOT_EFFECTIVE'
-          : evidence.nativeConsentProviderPresent === false ? 'LOCAL_ENROLLMENT_REQUIRED'
           : evidence.brokerVersionVerified === false &&
             evidence.current?.coreEnabled === true &&
             evidence.current.accessMode === 'full' &&
