@@ -88,10 +88,14 @@ $acl=Get-Acl -LiteralPath $target -ErrorAction Stop
 $allowed=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
 if(-not $allowed.ContainsKey($acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value)){throw 'UNTRUSTED_OWNER'}
 $rights=[System.Security.AccessControl.FileSystemRights]
-$writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$writeMask=([int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x40000000 -bor [int64]0x10000000)
 foreach($ace in $acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){
+  # CREATOR OWNER with InheritOnly is a non-effective child template.
+  # Actual current owner is checked above; effective user grants still fail.
+  if($ace.IdentityReference.Value -eq 'S-1-3-0' -and
+     (($ace.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
   if($ace.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
-     ([int]$ace.FileSystemRights -band $writeMask) -ne 0 -and
+     ([int64]$ace.FileSystemRights -band $writeMask) -ne 0 -and
      -not $allowed.ContainsKey($ace.IdentityReference.Value)){throw 'UNTRUSTED_WRITE_ACE'}
 }
 Write-Output 'PRIVATE_ACL_VERIFIED'
@@ -141,12 +145,12 @@ $trusted=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-
 $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
 if(-not $trusted.ContainsKey($owner)){throw 'STACK_OUTER_ANCESTOR_OWNER_UNTRUSTED'}
 $rights=[Security.AccessControl.FileSystemRights]
-$mask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership)
+$mask=([int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership -bor [int64]0x10000000)
 foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
   # Inherit-only ACEs do not apply to the inspected ancestor itself.
   if((([int]$ace.PropagationFlags -band [int][Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)){continue}
   if($ace.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and
-     ([int]$ace.FileSystemRights -band $mask) -ne 0 -and
+     ([int64]$ace.FileSystemRights -band $mask) -ne 0 -and
      -not $trusted.ContainsKey($ace.IdentityReference.Value)){
     throw 'STACK_OUTER_ANCESTOR_REPLACEMENT_RIGHTS'
   }

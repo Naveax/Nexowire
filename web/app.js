@@ -34,9 +34,16 @@ function syncFolders(folders) {
   $('folder-delete').disabled = selectedFolder === 'all' || selectedFolder === 'unassigned';
 }
 
+// Fail-closed release latch: client snapshots or synthetic local receipts
+// cannot verify a signed installed HIGH Broker plus independent native CAS.
+// Only a separately reviewed server-authenticated verifier may replace this.
+const physicalCoreStatusVerifierInstalled = false;
+// ROOT is currently a stored maintenance request, not a session-bound,
+// authenticated HIGH token. No browser JSON field can promote it to active.
+const physicalRootStatusVerifierInstalled = false;
 function getDeviceTier(device) {
-  if (device.persistentMaintenance?.active === true) return 'persistent';
-  if (device.rootMode?.active === true &&
+  if (physicalCoreStatusVerifierInstalled && device.persistentMaintenance?.active === true) return 'persistent';
+  if (physicalRootStatusVerifierInstalled && device.rootMode?.active === true &&
       Date.parse(device.rootMode.expiresAt ?? '') > Date.now()) return 'root';
   return device.accessMode === 'full' ? 'full' : 'safe';
 }
@@ -195,6 +202,26 @@ async function setDeviceCorePreference(deviceId, enabled, row) {
     status.textContent = error.message;
     action.disabled = false;
     approve.disabled = false;
+  }
+}
+
+async function retryCoreEnrollmentRequest(deviceId, row) {
+  const button=row.querySelector('.core-enrollment-retry');
+  const status=row.querySelector('.core-copy');
+  if(button.disabled)return;
+  button.disabled=true;
+  status.textContent='Yerel CORE onayı bu bilgisayardan isteniyor…';
+  try {
+    const result=await postDeviceMode(
+      '/api/v1/me/devices/core-enrollment-request',deviceId,{},
+      'core-enrollment-request-v1');
+    if(result.deviceId!==deviceId||result.enrollmentRequested!==true)
+      throw new Error('CORE kayıt isteği doğrulanamadı.');
+    status.textContent='Yerel onay isteği gönderildi. Cihazdaki Nexowire CORE penceresinden ilk onayı ver.';
+  } catch(error) {
+    status.textContent=error.message;
+  } finally {
+    button.disabled=false;
   }
 }
 
@@ -413,6 +440,7 @@ function render(snapshot) {
         '  <div class="core-head"><strong>CORE ACCESS</strong><span class="core-duration">SÜRESİZ</span></div>',
         '  <small class="core-copy" role="status" aria-live="polite"></small>',
         '  <button type="button" class="secondary core-toggle">CORE aç</button>',
+        '  <button type="button" class="secondary core-enrollment-retry" hidden>Yerel CORE kaydını yeniden iste</button>',
         '  <div class="core-confirm-panel" hidden>',
         '   <small>CORE süresiz bir tercih kaydıdır. Yönetici yetkisi için ayrıca Broker, Windows UAC ve işlem denetimi gerekir.</small>',
         '   <label>Onaylamak için CORE UNLIMITED yaz<input class="core-phrase" maxlength="32" autocomplete="off" placeholder="CORE UNLIMITED"></label>',
@@ -491,7 +519,8 @@ function render(snapshot) {
       modeChip.textContent = mode === 'full' ? 'Full Access açık' : 'SAFE açık';
       modeChip.classList.add(mode);
       const rootStateChip = row.querySelector('.root-state-chip');
-      const rootLeaseActive = device.rootMode?.active === true &&
+      const rootLeaseActive = physicalRootStatusVerifierInstalled &&
+        device.rootMode?.active === true &&
         Date.parse(device.rootMode?.expiresAt ?? '') > Date.now();
       rootStateChip.textContent = rootLeaseActive ? 'ROOT izni açık' : 'ROOT kapalı';
       if (!rootLeaseActive && device.rootMode?.expiresAt &&
@@ -512,7 +541,8 @@ function render(snapshot) {
 
       const expiresAt = device.rootMode?.expiresAt;
       const pending = Boolean(expiresAt && Date.parse(expiresAt) > Date.now());
-      const active = pending && device.rootMode?.active === true;
+      const active = physicalRootStatusVerifierInstalled &&
+        pending && device.rootMode?.active === true;
       const rootPanel = row.querySelector('.root-confirm-panel');
       const rootButton = row.querySelector('.root-toggle');
       const rootApprove = row.querySelector('.root-approve');
@@ -571,16 +601,38 @@ function render(snapshot) {
       const coreText = row.querySelector('.core-copy');
       const coreShortcut = row.querySelector('.core-shortcut');
       const coreContainer = row.querySelector('.core-access');
-      coreContainer.classList.toggle('active', core.active === true);
-      coreShortcut.classList.toggle('active', core.active === true);
-      coreShortcut.setAttribute('aria-pressed', String(core.active === true));
-      coreShortcut.textContent = core.active ? 'CORE AÇIK' : core.enabled ? 'CORE BEKLEMEDE' : 'CORE';
+      // A preference or browser-provided active flag is not physical CORE.
+      const coreEffective = physicalCoreStatusVerifierInstalled && core.active === true;
+      coreContainer.classList.toggle('active', coreEffective);
+      coreShortcut.classList.toggle('active', coreEffective);
+      coreShortcut.setAttribute('aria-pressed', String(coreEffective));
+      coreShortcut.textContent = coreEffective ? 'CORE AÇIK' : core.enabled ? 'CORE BEKLEMEDE' : 'CORE';
       coreButton.textContent = core.enabled ? 'CORE kapat' : 'CORE aç';
-      coreText.textContent = core.active
+      coreText.textContent = coreEffective
         ? 'CORE tercihi süresiz etkin. Her yönetici işlemi ayrıca Broker ve Windows denetiminden geçer.'
         : core.enabled
           ? 'CORE tercih kaydı duruyor, ancak cihaz veya Admin Bridge hazır olmadığı için etkin değil.'
           : 'CORE kapalı. Full Access ve çalışan Admin Bridge varsa açılabilir.';
+      const physical=device.physicalConsole;
+      const coreRetry=row.querySelector('.core-enrollment-retry');
+      coreRetry.hidden=!(core.enabled&&!physical?.localEnrolled&&device.online&&mode==='full'&&ready&&
+        physical?.deviceReady!==false);
+      const physicalFresh=physicalCoreStatusVerifierInstalled&&
+        physical?.localEnrolled===true&&physical.active===true&&
+        Number.isFinite(physical.observedAtMs)&&Date.now()-physical.observedAtMs>=0&&
+        Date.now()-physical.observedAtMs<15000&&core.enabled&&mode==='full'&&device.online&&ready;
+      if(physicalFresh){
+        coreShortcut.textContent='CORE FİZİKSEL AÇIK';
+        coreText.textContent='Yerel onaylı fiziksel kontrol süresiz etkin. PC tepsisindeki Nexowire CORE → KAPAT ile iptal edilir. Yönetici ve UAC izinleri ayrıdır.';
+      }else if(core.enabled){
+        coreText.textContent=physical?.localEnrolled
+          ? 'Yerel CORE kaydı var; güncel fiziksel erişim doğrulanamadı. Kilit, bağlantı veya Broker durumunu kontrol et.'
+          : physical?.enrollmentRequested
+            ? 'CORE isteği cihaz kuyruğunda. İlk yerel onay henüz doğrulanmadı; işlem tekrarlanmayacak.'
+            : physical?.deviceReady===false
+              ? 'CORE kaydı başlatılamadı: cihazın FULL/Broker hazır durumunu denetle.'
+              : 'CORE tercihi açık fakat yerel kayıt bekliyor. Kurulumu yeniden iste.';
+      }
       corePanel.hidden = true;
       coreShortcut.addEventListener('click', () => {
         setSettingsOpen(true);
@@ -600,6 +652,9 @@ function render(snapshot) {
       });
       row.querySelector('.core-approve').addEventListener('click', () => {
         void setDeviceCorePreference(device.id, true, row);
+      });
+      row.querySelector('.core-enrollment-retry').addEventListener('click', () => {
+        void retryCoreEnrollmentRequest(device.id, row);
       });
       const bridgeLabel = row.querySelector('.bridge-live-status');
       bridgeLabel.textContent = ready ? 'HAZIR BİLDİRİMİ' :

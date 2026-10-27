@@ -8,7 +8,7 @@ const service = readFileSync(new URL('../src/product/control-plane-service.ts', 
 test('ROOT stored lease never implies effective access without logout-bound session proof', () => {
   assert.match(service,/const active = false;\/\/|const active = false;/);
   assert.match(service,/rootMode:\s*\{\s*\/\/ Persisted owner request is not a session-bound authorization grant.[\s\S]*?active: false/);
-  assert.match(app,/const rootLeaseActive = device\.rootMode\?\.active === true/);
+  assert.match(app,/const rootLeaseActive = physicalRootStatusVerifierInstalled &&\s*device\.rootMode\?\.active === true/);
   assert.match(app,/ROOT BEKLEMEDE \(oturum doğrulanmadı\)/);
   assert.match(app,/if \(!active\)\s*\{\s*rootCopy\.textContent/);
   assert.match(app,/ROOT yetkisi ETKİN DEĞİL/);

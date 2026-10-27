@@ -12,9 +12,10 @@ param(
   [ValidateRange(1,65535)][int]$BrokerPort = 43112,
   [ValidateRange(1,65535)][int]$HubPort = 43110,
   [ValidateNotNullOrEmpty()][string]$TaskName = 'Nexowire Privileged Broker',
+  [Parameter(Mandatory=$true)][ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$ExpectedVersion,
   [ValidateNotNullOrEmpty()][string]$StackRoot = 'C:\ProgramData\NexowireStack\nexowire\node_modules\nexowire',
   [string]$StackSupervisor = "$env:LOCALAPPDATA\NexowireStack\run-stack.ps1",
-  [string]$Staging = "$env:USERPROFILE\NexowireWork\broker-stage-v105-20261008"
+  [string]$Staging = "$env:USERPROFILE\NexowireWork\broker-stage"
 )
 $ErrorActionPreference = 'Stop'
 function Get-Listener([int]$Port) {
@@ -116,7 +117,7 @@ try {
   }
 } catch { }
 
-$archiveOK = Get-VerifiedRelease 'nexowire-1.0.5.tgz' 'SHA256SUMS'
+$archiveOK = Get-VerifiedRelease ('nexowire-' + $ExpectedVersion + '.tgz') 'SHA256SUMS'
 $windowsBundleOK = Get-VerifiedRelease 'Nexowire-Windows-x64.zip' 'SHA256SUMS-Windows'
 $stagedVersion = $null
 $stagedHealthRoute = $false
@@ -149,9 +150,14 @@ $report = [ordered]@{
   brokerTaskHighest = $taskHighest
   brokerTaskLastResult = $taskLastResult
   brokerTaskLauncherHashReadable = $taskLauncherHashReadable
+  expectedReleaseVersion = $ExpectedVersion
   stagedArchiveChecksumMatches = $archiveOK
   stagedWindowsBundleChecksumMatches = $windowsBundleOK
   stagedPackageVersion = $stagedVersion
+  stagedVersionMatchesExpected = $null -ne $stagedVersion -and $stagedVersion -ceq $ExpectedVersion
+  # Local checksums do not authenticate the publisher or a signed rollback.
+  stagedPublisherSignatureVerified = $false
+  rollbackChainVerified = $false
   stagedCodeHasHealthRoute = $stagedHealthRoute
   safeToChangeProcesses = $false
   blocker = 'AUTHENTICATED_ELEVATED_TASK_AND_ROLLBACK_NOT_YET_VERIFIED'
