@@ -27,6 +27,28 @@ async function ready(proc:ChildProcessWithoutNullStreams):Promise<void> {
   });
 }
 
+test('native guardian does not advertise token/DACL isolation without actual OS proof', {
+  skip:process.platform!=='win32',timeout:10000,
+},()=>{
+  const probe=spawnSync(path.resolve('native/windows-job-owner.exe'),
+    ['--probe-isolation'],
+    {windowsHide:true,encoding:'utf8',timeout:7000,maxBuffer:8192});
+  const text=(probe.stderr??'')+' '+(probe.stdout??'');
+  const groups=execFileSync('whoami.exe',['/groups'],
+    {windowsHide:true,encoding:'utf8',timeout:8000});
+  const isHigh=/S-1-16-12288\b/.test(groups);
+  const elevated=execFileSync('powershell.exe',['-NoProfile','-NonInteractive',
+    '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
+    {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
+  if(!isHigh || !elevated) {
+    assert.equal(probe.status,79,'non-elevated token may not get trusted guardian');
+    assert.match(text,/guardian_high_token_or_acl_unverified/);
+  } else {
+    assert.equal(probe.status,0,'verified HIGH guardian denied: '+text);
+    assert.match(probe.stdout,/NX_GUARDIAN_HIGH_DACL_PROVISIONAL/);
+  }
+});
+
 test('same-tier high token remains privileged against high Job guardian; medium cannot launch', {
   skip:process.platform!=='win32',timeout:50000,
 },async(t)=>{
