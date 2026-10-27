@@ -16,6 +16,10 @@ import {
   preflightVerifiedInstaller,
 } from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+import {
+  executeServerCoreBrokerMutation,
+  type TrustedCoreBrokerDispatch,
+} from './core-broker-dispatch-admission.js';
 
 const BROKER_ELEVATION_SYSTEM32='C:\\Windows\\System32';
 const BROKER_ELEVATION_POWERSHELL=BROKER_ELEVATION_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -37,6 +41,8 @@ export interface PrivilegedBrokerServerOptions {
   tokens: readonly string[];
   maxBodyBytes?: number;
   requireElevation?: boolean;
+  /** Protected server-side CAS + signed native Broker evidence. NEVER HTTP fields. */
+  protectedDispatch?: TrustedCoreBrokerDispatch;
   execute?: (
     capability: string,
     input: unknown,
@@ -291,9 +297,14 @@ export async function startPrivilegedBroker(
                   requestedInput,
                 ));
 
-      const data = await execute(
+      // This wraps the final OS side-effect callback. Legacy bearer-only
+      // /execute requests MUST NOT jump around the external CAS fence,
+      // including when an injected execute callback is supplied by tests.
+      const data = await executeServerCoreBrokerMutation(
+        options.protectedDispatch,
         capability,
         decoded.input,
+        () => execute(capability, decoded.input),
       );
 
       response.writeHead(200, {
