@@ -122,9 +122,12 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
     if(!proof)deny('BROKER_COMMIT_RECEIPT_MISSING');
     return proof;
   }
-  async revokeAndDrain(request:DispatchRevokeRequest):Promise<DispatchClaim>{
+  async revokeAndDrain(request:DispatchRevokeRequest,
+    challengeNonce:string):Promise<DispatchClaim>{
     const input=revocation.parse(request);
-    const result=await this.send('revoke-and-drain',input,true);
+    if(!/^[0-9a-f]{64}$/.test(challengeNonce))
+      deny('BROKER_DISPATCH_CHALLENGE_INVALID');
+    const result=await this.send('revoke-and-drain',{...input,challengeNonce},true);
     if(!result)return deny('BROKER_REVOKE_RECEIPT_MISSING');
     return result;
   }

@@ -55,6 +55,11 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   readonly holdCommitResponse=deferred();
   commitEntered=false;
   commitCalls=0;
+  revokeCalls=0;
+  replayRevocation=false;
+  lastRevocation:DispatchClaim|undefined;
+  lastRevokeRequest:DispatchRevokeRequest|undefined;
+  readonly revokeChallenges:string[]=[];
   stallRevoke=false;stallBeginResponse=false;stallCommitResponse=false;
   number=0;
   constructor(readonly authorityId:string,
@@ -146,7 +151,11 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
     }
     if(this.releaseLost)throw Error('ACK_LOST_AFTER_RELEASE');
   }
-  async revokeAndDrain(req:DispatchRevokeRequest):Promise<DispatchClaim>{
+  async revokeAndDrain(req:DispatchRevokeRequest,challengeNonce:string):Promise<DispatchClaim>{
+    this.revokeCalls++;
+    this.revokeChallenges.push(challengeNonce);
+    this.lastRevokeRequest={...req};
+    if(this.replayRevocation&&this.lastRevocation)return this.lastRevocation;
     if(this.unknown)throw Error('REVOKE_TIMEOUT');
     if(this.revoked||this.revoking||req.ownerId!==this.owner||
        req.deviceId!==this.device||req.deviceEpoch!==this.deviceEpoch||
@@ -161,11 +170,13 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
       this.loseRevokeAckAfterCommit=false;
       throw Error('ACK_LOST_AFTER_DURABLE_REVOKE');
     }
-    return signClaim({kind:'broker_dispatch_revocation_v1',
+    const receipt=signClaim({kind:'broker_dispatch_revocation_v1',
       authorityId:this.authorityId,deviceId:this.device,
       ownerId:this.owner,deviceEpoch:this.deviceEpoch,sessionEpoch:this.session,
-      previousGeneration:req.expectedGeneration,generation:this.generation,
-      drained:true,revoked:true});
+      challengeNonce,previousGeneration:req.expectedGeneration,
+      generation:this.generation,drained:true,revoked:true});
+    this.lastRevocation=receipt;
+    return receipt;
   }
 }
 function fixture(){
@@ -183,7 +194,8 @@ function fixture(){
  });
  const verifyApproval=signedOperatorGrantVerifier(
   ownerKeys.publicKey.export({type:'spki',format:'pem'}).toString());
- const broker=(opts?:{now?:()=>number;onReadback?:()=>void;maxPermitMs?:number})=>
+ const broker=(opts?:{now?:()=>number;onReadback?:()=>void;maxPermitMs?:number;
+  onRevokeVerify?:(request:DispatchRevokeRequest)=>Promise<void>})=>
   new BrokerExternalDispatchFence({
   authority:remote,authorityId,publicKeyPem:keys,
   now:opts?.now,maxPermitMs:opts?.maxPermitMs,
@@ -196,10 +208,13 @@ function fixture(){
       signedProtectedImage:true,protectedParentAndImports:true,
     };
   },
-  verifyOwnerRevocation:async r=>approval&&verifyApproval({
+  verifyOwnerRevocation:async r=>{
+   if(opts?.onRevokeVerify)await opts.onRevokeVerify(r);
+   return approval&&verifyApproval({
     kind:'revoke',authorityId,deviceId,ownerId,epoch:deviceEpoch,
     sessionEpoch,generation:r.expectedGeneration,
-  },r.signedOwnerApproval),
+   },r.signedOwnerApproval);
+  },
  });
  const revoke=():DispatchRevokeRequest=>{
   const intent={kind:'revoke',authorityId,deviceId,ownerId,
@@ -569,10 +584,87 @@ test('unknown revoke and lost-release ACK remain locally fail closed',async()=>{
  await code(other.execute(second.request(),async()=>true),
   'DISPATCH_REVOKE_PENDING');
 });
+test('revoke snapshots owner scope before asynchronous approval verification',async()=>{
+ const f=fixture(),entered=deferred(),resume=deferred();
+ const gate=f.broker({onRevokeVerify:async()=>{entered.resolve();await resume.promise}});
+ const input=f.revoke(),originalSession=input.sessionEpoch;
+ const pending=gate.revoke(input);
+ await entered.promise;
+ input.expectedGeneration=8;
+ input.sessionEpoch=randomUUID();
+ resume.resolve();
+ const receipt=await pending;
+ assert.equal(receipt.previousGeneration,7);
+ assert.equal(f.remote.lastRevokeRequest?.expectedGeneration,7);
+ assert.equal(f.remote.lastRevokeRequest?.sessionEpoch,originalSession);
+ assert.equal(f.remote.revoked,true);
+});
+test('a signed old revoke receipt cannot answer a new challenge',async()=>{
+ const f=fixture(),hubA=f.broker(),hubB=f.broker();
+ assert.equal((await hubA.revoke(f.revoke())).drained,true);
+ f.remote.replayRevocation=true;
+ await code(hubB.revoke(f.revoke()),'DISPATCH_REVOKE_PROOF_MISMATCH');
+ assert.equal(f.remote.revokeCalls,2);
+ assert.notEqual(f.remote.revokeChallenges[0],f.remote.revokeChallenges[1]);
+ let effects=0;
+ await code(hubB.execute(f.request(),async()=>++effects),'DISPATCH_REVOKE_PENDING');
+ assert.equal(effects,0);
+});
+test('lost begin ACK still allows owner revoke and drains after reconciliation',async()=>{
+ const f=fixture(),gate=f.broker(),op=f.request();let effects=0;
+ f.remote.loseBeginAckAfterReservation=true;
+ await code(gate.execute(op,async()=>++effects),'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(f.remote.active.size,1);
+ const revoking=gate.revoke(f.revoke());
+ void revoking.catch(()=>{});
+ for(let i=0;i<400&&!f.remote.revoking;i++)await Promise.resolve();
+ assert.equal(f.remote.revoking,true,'owner revoke must reach remote authority');
+ assert.equal(f.remote.revoked,false,'drain cannot acknowledge an active claim');
+ await code(f.broker().execute(op,async()=>++effects),'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(effects,0);
+ const saved=f.remote.lastClaim;assert.ok(saved);
+ const claim=JSON.parse(Buffer.from(saved.payload,'base64url').toString('utf8')) as
+  {dispatchId:string};
+ // Test fixture inspection represents explicit reconciliation, not an OS effect.
+ await f.remote.release({dispatchId:claim.dispatchId,
+  brokerId:f.remote.brokerId,request:op});
+ assert.equal((await revoking).drained,true);
+ assert.equal(f.remote.revoked,true);
+ assert.equal(f.remote.revokeCalls,1);
+ await code(gate.revoke(f.revoke()),'DISPATCH_REVOKE_PENDING');
+ await code(f.broker().execute(op,async()=>++effects),'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(effects,0,'neither UNKNOWN reservation nor revoke replays an effect');
+});
+test('lost release ACK does not prevent a signed owner revoke',async()=>{
+ const f=fixture(),gate=f.broker(),op=f.request();let effects=0;
+ f.remote.releaseLost=true;
+ assert.equal(await gate.execute(op,async()=>++effects),1);
+ assert.equal(effects,1);
+ assert.equal(f.remote.active.size,0,'remote release committed before ACK loss');
+ await code(gate.execute(f.request(),async()=>++effects),'DISPATCH_REVOKE_PENDING');
+ assert.equal((await gate.revoke(f.revoke())).drained,true);
+ assert.equal(f.remote.revoked,true);
+ await code(f.broker().execute(op,async()=>++effects),'DISPATCH_EXTERNAL_CAS_UNKNOWN');
+ assert.equal(effects,1,'the effect is not replayed');
+});
+test('lost revoke ACK stays fenced and is never sent again by the same Broker',async()=>{
+ const f=fixture(),gate=f.broker();
+ f.remote.loseRevokeAckAfterCommit=true;
+ await code(gate.revoke(f.revoke()),'DISPATCH_REVOKE_OUTCOME_UNKNOWN');
+ assert.equal(f.remote.revoked,true);
+ await code(gate.revoke(f.revoke()),'DISPATCH_REVOKE_PENDING');
+ assert.equal(f.remote.revokeCalls,1,'UNKNOWN revoke is not retried');
+ await code(gate.execute(f.request(),async()=>true),'DISPATCH_REVOKE_PENDING');
+});
 test('invalid owner signature blocks revoke and keeps local fence closed',async()=>{
  const f=fixture(),gate=f.broker();f.setApproval(false);
  await code(gate.revoke(f.revoke()),'DISPATCH_REVOKE_SIGNATURE_UNTRUSTED');
  await code(gate.execute(f.request(),async()=>true),'DISPATCH_REVOKE_PENDING');
+ assert.equal(f.remote.revokeCalls,0,'invalid approval never reaches authority');
+ f.setApproval(true);
+ assert.equal((await gate.revoke(f.revoke())).revoked,true,
+  'a new valid owner approval can revoke while execution remains fenced');
+ assert.equal(f.remote.revokeCalls,1);
 });
 test('forged Ed25519 owner revoke approval is rejected before remote CAS',async()=>{
  const f=fixture(),gate=f.broker(),revoke=f.revoke();
