@@ -127,7 +127,7 @@ test('real UAC-linked medium attacker cannot duplicate HIGH guardian Job handle'
   // token, process ACL, code signing, or physical production acceptance.
   const groups=execFileSync('whoami.exe',['/groups'],
     {encoding:'utf8',windowsHide:true,timeout:8000});
-  const isHigh=/S-1-16-12288\\b/.test(groups);
+  const isHigh=/S-1-16-12288\b/.test(groups);
   const elevated=execFileSync('powershell.exe',['-NoProfile','-NonInteractive',
     '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
     {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
