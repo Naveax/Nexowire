@@ -147,6 +147,7 @@ test('real UAC-linked medium attacker cannot duplicate HIGH guardian Job handle'
 },async(t)=>{
   // Hosted runner fixture only. It does NOT verify an installed Broker's
   // token, process ACL, code signing, or physical production acceptance.
+  const strictFixture = process.env.NEXOWIRE_REQUIRE_CROSS_INTEGRITY_FIXTURE === '1';
   const groups=execFileSync('whoami.exe',['/groups'],
     {encoding:'utf8',windowsHide:true,timeout:8000});
   const isHigh=/S-1-16-12288\b/.test(groups);
@@ -154,7 +155,9 @@ test('real UAC-linked medium attacker cannot duplicate HIGH guardian Job handle'
     '-Command','([Security.Principal.WindowsPrincipal]([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
     {encoding:'utf8',windowsHide:true,timeout:8000}).trim()==='True';
   if (!isHigh || !elevated) {
-    t.skip('BLOCKED: no elevated HIGH caller; cannot create paired real medium attacker');
+    const reason='BLOCKED: no elevated HIGH caller for paired medium fixture';
+    if (strictFixture) assert.fail(reason);
+    t.skip(reason);
     return;
   }
   const launch=await launchWindowsJob('powershell.exe',
@@ -165,17 +168,20 @@ test('real UAC-linked medium attacker cannot duplicate HIGH guardian Job handle'
       ['--probe',String(launch.guardianPid)],
       {windowsHide:true,encoding:'utf8',timeout:16000,maxBuffer:8192});
     if (probe.status===77) {
-      t.diagnostic('CROSS_INTEGRITY_BLOCKED: '+(probe.stdout??'')+' '+(probe.stderr??''));
-      t.skip('BLOCKED: OS did not supply genuine UAC-linked same-user medium token');
+      const reason='BLOCKED: OS-issued UAC-linked medium process or guardian token evidence unavailable: '+
+        (probe.stdout??'')+' '+(probe.stderr??'');
+      t.diagnostic('CROSS_INTEGRITY_BLOCKED: '+reason);
+      if (strictFixture) assert.fail(reason);
+      t.skip(reason);
       return;
     }
     assert.equal(probe.status,0,
       'real medium peer must never open PROCESS_DUP_HANDLE: '+
       (probe.stdout??'')+' '+(probe.stderr??'')+' status='+probe.status);
     assert.match(probe.stdout,
-      /NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_DENIED same_user=1 elevated_guardian=1/,
+      /NX_FIXTURE_MEDIUM_TO_HIGH_PROCESS_DUP_HANDLE_DENIED same_logon_luid=1 guardian_token=high child_token=medium/,
       'only a real medium token can produce the boundary proof marker');
-    t.diagnostic('P0 hosted synthetic boundary PASS; installed Broker remains BLOCKED');
+    t.diagnostic('SOURCE_FIXTURE_ONLY: kernel-token medium/high boundary observed; independently installed Broker, equal-HIGH attacker and full physical acceptance remain BLOCKED');
   } finally {
     // Only this just-created isolated test Job is stopped.
     requestWindowsJobStop(launch);
