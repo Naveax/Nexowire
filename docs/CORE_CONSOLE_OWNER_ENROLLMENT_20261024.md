@@ -1,5 +1,36 @@
 # CORE physical console: implementation and rollout
 
+## SECURITY HOLD (2026-10-27, #04 / #911)
+
+**Production default: LOCAL_ENROLLMENT_REQUIRED / CORE.active=false.**
+The former Agent-spawned Windows Forms Yes/No prompt, device-signed
+`approvedLocallyAtMs` and D1/SQLite fixture are **not** independently
+attested human physical consent. The JavaScript prompt fallback has been
+removed. Old DPAPI-signed certificates with no independent native session
+readback no longer authorize physical input.
+
+Before enabling enrollment, a genuinely protected native Windows component
+must (1) bind owner account + device + installation + current owner/revoke
+generations and a unique challenge to the real WinSta0/Default human approval;
+(2) bind that approval to the active Windows logon LUID and session;
+(3) atomically consume a one-shot receipt in an independently protected,
+rollback-resistant ledger; (4) provide fresh OS-readback on every admission,
+rejecting logoff/session swaps and replay; (5) be authenticated by the D1
+enrollment verifier, not merely by the Agent's own Ed25519 key/JSON payload.
+The current production composition roots install **neither** a native approval
+provider nor the independent server-side verifier. The default D1
+`enroll` endpoint therefore rejects even a correctly device-signed request.
+A source-only synthetic adapter is used solely inside regression tests. It
+cannot attest real Windows approval.
+
+Physical operator step **after** a trusted native component and signed Broker
+have been installed and independently verified: at each Windows PC's
+unlocked **local** default desktop, initiate a fresh owner-bound CORE enrollment,
+inspect owner/device/session details and accept the protected native prompt.
+Verify one-use consumption, independent readback and STOP/revoke on each device.
+Until those prerequisites exist, do not attempt to simulate approval or
+reclassify online Agent / stored preference / UI checkbox as active CORE.
+
 CORE physical console is a separate, time-unbounded **revocable** grant. FULL and
 a stored CORE preference do not grant input by themselves. ROOT expiry is not used.
 
