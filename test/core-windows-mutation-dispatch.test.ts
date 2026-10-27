@@ -156,3 +156,19 @@ test('#03 missing native sandbox and CORE dispatch flag stay hard-disabled',asyn
   // The untagged, non-CORE legacy execution path remains separate.
   assert.doesNotThrow(()=>assertCoreSandboxRouteUnavailable('shell.exec',false));
 });
+
+
+test('#03 CORE HKCU and user environment writes never fall into standard path',async()=>{
+  const scenarios:[string,unknown][]=[
+    ['windows.registry.set',{hive:'HKCU',path:'Software\\Test',
+      name:'Test',type:'string',value:'x'}],
+    ['windows.registry.delete',{hive:'HKCU',path:'Software\\Test',name:'Test'}],
+    ['windows.environment.set',{scope:'user',name:'TEST',value:'x'}],
+    ['windows.environment.delete',{scope:'process',name:'TEST'}],
+  ];
+  for(const [capability,input] of scenarios){
+    await assert.rejects(executeCapability(capability as never,input,policy,{
+      privilegeMode:'broker',accessMode:'full',
+    }),matchCode('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED'),capability);
+  }
+});
