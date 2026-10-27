@@ -34,6 +34,68 @@ reclassify online Agent / stored preference / UI checkbox as active CORE.
 CORE physical console is a separate, time-unbounded **revocable** grant. FULL and
 a stored CORE preference do not grant input by themselves. ROOT expiry is not used.
 
+## Protected provider integration adapters (2026-10-27 source-only)
+
+#04 now includes buildable, opt-in **transport adapters**, not a native service
+or permission grant:
+
+- `src/protocol/core-native-consent-transport.ts`: domain-separated Ed25519
+  signed v1 protocol. Requests bind an unpredictable UUID nonce, canonical SHA-256
+  request hash, operation, and exact expected receipt/owner scope. Responses
+  bind request nonce/hash, a strictly parsed full Windows native receipt,
+  signed acceptance and a bounded 5-second freshness window. A pinned
+  verifier key is checked **before** sending the trusted service credential.
+  JSON response bodies are streamed with an 8 KiB hard cap, no redirects.
+- `src/agent/windows-core-consent-transport.ts`:
+  `ProtectedWindowsCoreConsentClient` implements the actual #04
+  `NativeCoreConsentAuthority` calling **HTTPS loopback only**
+  (`127.0.0.1` or `::1`); verifies the pinned service signer independently
+  of the Agent profile, checks challenge/receipt identity, then requires a
+  separate signed `current-readback` each time. It is NOT installed by the
+  production Agent composition root.
+- `src/product/core-native-consent-verifier.ts`:
+  `RemoteTrustedNativeCoreEnrollmentVerifier` implements D1's independent
+  `TrustedNativeCoreEnrollmentVerifier`, performing remote one-use consume
+  and current-logon readback over HTTPS. Signed assertions come from a separately
+  pinned protected key, not the Agent's Ed25519 certificate. This verifier
+  is NOT installed in the production Worker composition root.
+
+### Wire contract for a future audited native service
+
+A trusted native authority implements `POST /v1/core-native-consent` with
+JSON body `{version:1,operation,nonce,expected}`. Operations are
+`approve-and-consume`, `verify-and-consume`, `current-readback`.
+Reply: `{version:1,operation,nonce,requestSha256,observedAtMs,accepted,proof,signatureBase64}`.
+`requestSha256` is the SHA-256 of the domain-separated canonical (sorted-JSON)
+request bytes. The Ed25519 signature covers the domain-separated canonical
+response without `signatureBase64`. The protected issuer must keep the
+private signing key outside the Agent, its profile/credential, and D1.
+A signed response can still be a **lie** if the issuer does not actually inspect
+the OS logon and protected local desktop: signature verification alone is not
+human-presence verification.
+
+**Required native service work, not completed by the adapters:** authenticated
+IPC peer identity and protected service ACLs, separately provisioned
+`ownerAccountId -> Windows SID`, `WTSGetActiveConsoleSessionId`, active
+logon user token SID and `TokenStatistics.AuthenticationId` LUID,
+per-logon unforgeable epoch, prevention of remote/RDP/locked/UAC desktop
+approvals outside policy, cryptographically protected prompt details and
+approval decision, durable rollback-resistant atomic receipt consumption,
+authoritative replay-resistant readback, signed expiry/epoch revocation, and
+an independently reachable D1 verification gateway. The D1 gateway must
+*itself* query the protected native ledger, not relay Agent state.
+The service needs a trusted provisioning and signed update procedure.
+These adapters deliberately accept explicit trusted signer/origin/credential
+dependencies but contain **no production credentials or default endpoint**.
+Never wire fake fetch callbacks or user-configurable keys into production.
+
+No native provider or independent D1 verifier is provisioned as of this
+source patch. Agent and D1 continue to fail closed. Real logon LUID/session
+and physical approval cannot be claimed from CI fixtures. The next single
+device-local user action, **only after** independent installer/verifier proof:
+on each PC separately, unlock the console desktop and inspect/approve a
+new owner/device/session-specific protected native enrollment prompt.
+
 ## Source contract (protected native provider not installed)
 
 1. Cloud pairing (`connect`) records the authenticated control-plane HTTPS origin
