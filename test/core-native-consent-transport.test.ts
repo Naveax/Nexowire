@@ -4,7 +4,7 @@ import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {ProtectedWindowsCoreConsentClient} from '../src/agent/windows-core-consent-transport.js';
 import {RemoteTrustedNativeCoreEnrollmentVerifier} from '../src/product/core-native-consent-verifier.js';
 import {coreNativeSignedResponseBytes,coreNativeWireRequestHash,
-  type CoreNativeProof,type CoreNativeWireRequest} from '../src/protocol/core-native-consent-transport.js';
+  type CoreNativeProof,type CoreNativeWireRequest,type CoreNativeWireResponse} from '../src/protocol/core-native-consent-transport.js';
 
 const owner='owner-account-0001',deviceId='device-core-0001';
 const signer=generateKeyPairSync('ed25519');
@@ -20,13 +20,9 @@ function signed(request:CoreNativeWireRequest,proof:CoreNativeProof|null,overrid
   const data={version:1 as const,operation:request.operation,nonce:request.nonce,
     requestSha256:coreNativeWireRequestHash(request),observedAtMs:Date.now(),
     accepted:!!proof,proof,...override};
-  const signatureBase64=sign(null,coreNativeSignedResponseBytes(data as ReturnType<typeof typedReply>),
-    signer.privateKey).toString('base64');
+  const signatureBase64=sign(null,coreNativeSignedResponseBytes(
+    data as Omit<CoreNativeWireResponse,'signatureBase64'>),signer.privateKey).toString('base64');
   return {...data,signatureBase64};
-}
-function typedReply(){
-  return {version:1 as const,operation:'current-readback' as const,nonce:'',
-    requestSha256:'',observedAtMs:0,accepted:false,proof:null as CoreNativeProof|null};
 }
 const http=(receive:(r:CoreNativeWireRequest)=>unknown):typeof fetch=>
   (async(_input,init)=>Response.json(receive(JSON.parse(String(init?.body)) as CoreNativeWireRequest))) as typeof fetch;
