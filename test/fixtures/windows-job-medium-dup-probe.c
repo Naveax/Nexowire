@@ -1,8 +1,11 @@
-// Isolated Windows P0 security regression, never bundled into a release.
-// Uses a real UAC-linked MEDIUM token belonging to this HIGH caller.
-// Does not install software, alter token/ACL of a running host process,
-// or manipulate any Job. Child only requests PROCESS_DUP_HANDLE on the
-// exact disposable guardian PID supplied by the test harness.
+// Disposable native Windows Job security fixture. Never ship in a release.
+// Verifies the exact HIGH guardian kernel process token from a process handle,
+// creates a real OS-issued UAC-linked MEDIUM process in the same logon/session,
+// independently reads the child token, and probes PROCESS_DUP_HANDLE.
+// No installed Broker, UAC prompt, ACL or service is ever modified.
+// Exit 0 = bounded cross-integrity synthetic Job fixture only.
+// Exit 3 = SECURITY FAILURE (medium peer received PROCESS_DUP_HANDLE).
+// Exit 77 = BLOCKED (missing/unverifiable OS token or process evidence).
 #define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0601
 #include <windows.h>
@@ -10,7 +13,11 @@
 #include <stdlib.h>
 #include <wchar.h>
 
-static BOOL token_identity(HANDLE token, DWORD *level, DWORD *elevated) {
+static int blocked(const wchar_t *reason) {
+  wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED %ls\n",reason);
+  return 77;
+}
+static BOOL token_identity(HANDLE token,DWORD *level,DWORD *elevated) {
   BYTE raw[sizeof(TOKEN_MANDATORY_LABEL)+SECURITY_MAX_SID_SIZE]={0};
   DWORD size=0;
   TOKEN_ELEVATION elevation={0};
@@ -19,104 +26,160 @@ static BOOL token_identity(HANDLE token, DWORD *level, DWORD *elevated) {
     return FALSE;
   PSID sid=((TOKEN_MANDATORY_LABEL*)raw)->Label.Sid;
   if(!IsValidSid(sid))return FALSE;
-  DWORD parts=*GetSidSubAuthorityCount(sid);
-  if(!parts)return FALSE;
-  *level=*GetSidSubAuthority(sid,parts-1);
+  DWORD count=*GetSidSubAuthorityCount(sid);
+  if(!count)return FALSE;
+  *level=*GetSidSubAuthority(sid,count-1);
   *elevated=elevation.TokenIsElevated;
   return TRUE;
 }
-
-static BOOL same_logon_session(HANDLE a, HANDLE b) {
+static BOOL same_logon_session(HANDLE a,HANDLE b) {
   BYTE left[1024]={0},right[1024]={0};
   DWORD bytes=0;
   if(!GetTokenInformation(a,TokenUser,left,sizeof(left),&bytes) ||
-     !GetTokenInformation(b,TokenUser,right,sizeof(right),&bytes))return FALSE;
-  if(!EqualSid(((TOKEN_USER*)left)->User.Sid,((TOKEN_USER*)right)->User.Sid))
+     !GetTokenInformation(b,TokenUser,right,sizeof(right),&bytes))
     return FALSE;
-  TOKEN_STATISTICS high={0},medium={0};
-  DWORD first=0,second=0;
-  DWORD highSession=0,mediumSession=0;
-  if(!GetTokenInformation(a,TokenStatistics,&high,sizeof(high),&first) ||
-     !GetTokenInformation(b,TokenStatistics,&medium,sizeof(medium),&second) ||
-     !GetTokenInformation(a,TokenSessionId,&highSession,sizeof(highSession),&first) ||
-     !GetTokenInformation(b,TokenSessionId,&mediumSession,sizeof(mediumSession),&second))
+  if(!EqualSid(((TOKEN_USER*)left)->User.Sid,
+               ((TOKEN_USER*)right)->User.Sid))return FALSE;
+  TOKEN_STATISTICS one={0},two={0};
+  DWORD size1=0,size2=0;
+  DWORD session1=0,session2=0;
+  if(!GetTokenInformation(a,TokenStatistics,&one,sizeof(one),&size1) ||
+     !GetTokenInformation(b,TokenStatistics,&two,sizeof(two),&size2) ||
+     !GetTokenInformation(a,TokenSessionId,&session1,sizeof(session1),&size1) ||
+     !GetTokenInformation(b,TokenSessionId,&session2,sizeof(session2),&size2))
     return FALSE;
-  return high.AuthenticationId.HighPart==medium.AuthenticationId.HighPart &&
-    high.AuthenticationId.LowPart==medium.AuthenticationId.LowPart &&
-    highSession==mediumSession;
+  return one.AuthenticationId.HighPart==two.AuthenticationId.HighPart &&
+         one.AuthenticationId.LowPart==two.AuthenticationId.LowPart &&
+         session1==session2;
 }
-
+static BOOL process_identity(HANDLE process,FILETIME *birth) {
+  FILETIME exitTime={0},kernel={0},user={0};
+  if(!GetProcessTimes(process,birth,&exitTime,&kernel,&user))return FALSE;
+  if(WaitForSingleObject(process,0)!=WAIT_TIMEOUT)return FALSE;
+  return TRUE;
+}
+static int child_probe(DWORD pid,HANDLE current) {
+  DWORD level=0,elevated=0;
+  if(!token_identity(current,&level,&elevated) ||
+     level!=SECURITY_MANDATORY_MEDIUM_RID || elevated)
+    return 78;
+  // A successful open is already a security failure: the caller could
+  // duplicate any readable guardian Job handle. No real Job is touched.
+  HANDLE dup=OpenProcess(PROCESS_DUP_HANDLE,FALSE,pid);
+  if(dup) {CloseHandle(dup);return 3;}
+  DWORD error=GetLastError();
+  return error==ERROR_ACCESS_DENIED?0:79;
+}
 int wmain(int argc,wchar_t **argv) {
   if(argc!=3 || (wcscmp(argv[1],L"--probe") &&
-                   wcscmp(argv[1],L"--child")))return 64;
+                  wcscmp(argv[1],L"--child")))return 64;
   wchar_t *end=NULL;
-  unsigned long guardian=wcstoul(argv[2],&end,10);
-  if(!guardian || !end || *end)return 64;
+  unsigned long parsed=wcstoul(argv[2],&end,10);
+  if(!parsed || !end || *end)return 64;
+  DWORD pid=(DWORD)parsed;
   HANDLE current=NULL;
-  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&current))return 77;
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&current))
+    return blocked(L"controller_token_unavailable");
   DWORD level=0,elevated=0;
-  if(!token_identity(current,&level,&elevated)){CloseHandle(current);return 77;}
+  if(!token_identity(current,&level,&elevated)) {
+    CloseHandle(current);return blocked(L"controller_token_unverifiable");
+  }
   if(!wcscmp(argv[1],L"--child")) {
+    int result=child_probe(pid,current);
     CloseHandle(current);
-    // Not even a filtered HIGH token or a forged environment variable counts.
-    if(level!=SECURITY_MANDATORY_MEDIUM_RID || elevated)return 78;
-    HANDLE stolen=OpenProcess(PROCESS_DUP_HANDLE,FALSE,(DWORD)guardian);
-    if(stolen){CloseHandle(stolen);return 3;}
-    return GetLastError()==ERROR_ACCESS_DENIED?0:79;
+    return result;
   }
   if(level<SECURITY_MANDATORY_HIGH_RID || !elevated) {
-    CloseHandle(current);return 77;
+    CloseHandle(current);return blocked(L"controller_not_elevated_high");
   }
-  TOKEN_LINKED_TOKEN link={0};DWORD returned=0;
-  if(!GetTokenInformation(current,TokenLinkedToken,&link,sizeof(link),&returned) ||
-     !link.LinkedToken) {
-    CloseHandle(current);
-    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_token_unavailable\n");
-    return 77;
+
+  // Kernel process handle stays open across spawning and token verification.
+  // PID reuse cannot substitute a different process for the tested guardian.
+  HANDLE guardian=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,
+                             FALSE,pid);
+  if(!guardian) {CloseHandle(current);return blocked(L"guardian_process_unavailable");}
+  HANDLE targetToken=NULL;
+  if(!OpenProcessToken(guardian,TOKEN_QUERY,&targetToken)) {
+    CloseHandle(guardian);CloseHandle(current);
+    return blocked(L"guardian_token_unavailable");
+  }
+  FILETIME birth={0};
+  DWORD targetLevel=0,targetElevation=0;
+  BOOL validated=token_identity(targetToken,&targetLevel,&targetElevation) &&
+    targetLevel>=SECURITY_MANDATORY_HIGH_RID && targetElevation &&
+    same_logon_session(current,targetToken) &&
+    process_identity(guardian,&birth);
+  if(!validated) {
+    CloseHandle(targetToken);CloseHandle(guardian);CloseHandle(current);
+    return blocked(L"guardian_high_token_or_logon_not_verified");
+  }
+  TOKEN_LINKED_TOKEN linked={0};DWORD returned=0;
+  if(!GetTokenInformation(current,TokenLinkedToken,&linked,sizeof(linked),&returned)
+     || !linked.LinkedToken) {
+    CloseHandle(targetToken);CloseHandle(guardian);CloseHandle(current);
+    return blocked(L"linked_token_unavailable");
   }
   DWORD medium=0,lowElevation=0;
-  BOOL matched=same_logon_session(current,link.LinkedToken);
-  BOOL realMedium=token_identity(link.LinkedToken,&medium,&lowElevation) &&
-    medium==SECURITY_MANDATORY_MEDIUM_RID && !lowElevation && matched;
+  BOOL validMedium=token_identity(linked.LinkedToken,&medium,&lowElevation) &&
+    medium==SECURITY_MANDATORY_MEDIUM_RID && !lowElevation &&
+    same_logon_session(linked.LinkedToken,targetToken);
   CloseHandle(current);
-  if(!realMedium) {
-    CloseHandle(link.LinkedToken);
-    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_token_not_medium_same_user\n");
-    return 77;
+  if(!validMedium) {
+    CloseHandle(linked.LinkedToken);CloseHandle(targetToken);CloseHandle(guardian);
+    return blocked(L"linked_token_not_medium_same_logon");
   }
-  wchar_t binary[MAX_PATH]={0};
-  if(!GetModuleFileNameW(NULL,binary,MAX_PATH) ||
-     wcslen(binary)>=MAX_PATH-1) {
-    CloseHandle(link.LinkedToken);return 77;
-  }
-  wchar_t command[2*MAX_PATH]={0};
-  if(swprintf(command,2*MAX_PATH,L"\"%ls\" --child %lu",binary,guardian)<0) {
-    CloseHandle(link.LinkedToken);return 77;
+  wchar_t image[MAX_PATH]={0},command[2*MAX_PATH]={0};
+  if(!GetModuleFileNameW(NULL,image,MAX_PATH) ||
+     wcslen(image)>=MAX_PATH-1 ||
+     swprintf(command,2*MAX_PATH,L"\"%ls\" --child %lu",image,pid)<0) {
+    CloseHandle(linked.LinkedToken);CloseHandle(targetToken);CloseHandle(guardian);
+    return blocked(L"fixture_image_unavailable");
   }
   STARTUPINFOW startup={0};startup.cb=sizeof(startup);
-  PROCESS_INFORMATION process={0};
-  BOOL spawned=CreateProcessWithTokenW(link.LinkedToken,0,binary,command,
-    CREATE_NO_WINDOW,NULL,NULL,&startup,&process);
-  DWORD error=spawned?ERROR_SUCCESS:GetLastError();
-  CloseHandle(link.LinkedToken);
-  if(!spawned) {
-    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_spawn_win32_%lu\n",error);
+  PROCESS_INFORMATION child={0};
+  BOOL started=CreateProcessWithTokenW(linked.LinkedToken,0,image,command,
+    CREATE_NO_WINDOW,NULL,NULL,&startup,&child);
+  DWORD spawnError=started?ERROR_SUCCESS:GetLastError();
+  CloseHandle(linked.LinkedToken);
+  if(!started) {
+    CloseHandle(targetToken);CloseHandle(guardian);
+    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED linked_medium_spawn_win32_%lu\n",spawnError);
     return 77;
   }
-  DWORD wait=WaitForSingleObject(process.hProcess,10000);
+
+  // The child's own kernel token must be checked by the HIGH verifier.
+  // Child-returned text or exit code is not evidence of medium integrity.
+  HANDLE childToken=NULL;
+  DWORD childLevel=0,childElevation=0;
+  BOOL childVerified=OpenProcessToken(child.hProcess,TOKEN_QUERY,&childToken) &&
+    token_identity(childToken,&childLevel,&childElevation) &&
+    childLevel==SECURITY_MANDATORY_MEDIUM_RID && !childElevation &&
+    same_logon_session(childToken,targetToken);
+  if(childToken)CloseHandle(childToken);
+  DWORD waited=WaitForSingleObject(child.hProcess,10000);
   DWORD status=79;
-  if(wait==WAIT_OBJECT_0)GetExitCodeProcess(process.hProcess,&status);
-  if(wait!=WAIT_OBJECT_0)TerminateProcess(process.hProcess,79);
-  CloseHandle(process.hThread);
-  CloseHandle(process.hProcess);
-  if(status==0) {
-    wprintf(L"NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_DENIED same_user=1 elevated_guardian=1\n");
-    return 0;
-  }
+  if(waited==WAIT_OBJECT_0)GetExitCodeProcess(child.hProcess,&status);
+  if(waited!=WAIT_OBJECT_0)TerminateProcess(child.hProcess,79);
+  CloseHandle(child.hThread);
+  CloseHandle(child.hProcess);
+
+  // The original guardian must be the exact same live kernel object.
+  FILETIME after={0};
+  BOOL sameGuardian=process_identity(guardian,&after) &&
+    birth.dwHighDateTime==after.dwHighDateTime &&
+    birth.dwLowDateTime==after.dwLowDateTime;
+  CloseHandle(targetToken);
+  CloseHandle(guardian);
+  if(!childVerified || !sameGuardian)
+    return blocked(L"child_medium_token_or_guardian_identity_unverified");
   if(status==3) {
     wprintf(L"NX_REAL_MEDIUM_TO_HIGH_DUP_HANDLE_ALLOWED SECURITY_FAILURE\n");
     return 3;
   }
-  wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_status_%lu\n",status);
-  return 77;
+  if(status!=0) {
+    wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED child_probe_status_%lu\n",status);
+    return 77;
+  }
+  wprintf(L"NX_FIXTURE_MEDIUM_TO_HIGH_PROCESS_DUP_HANDLE_DENIED same_logon_luid=1 guardian_token=high child_token=medium\n");
+  return 0;
 }
