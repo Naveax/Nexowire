@@ -35,6 +35,17 @@ export interface DispatchRevokeRequest {
   deviceId:string;ownerId:string;deviceEpoch:string;sessionEpoch:string;
   expectedGeneration:number;signedOwnerApproval:string;
 }
+/**
+ * Scoped release of an existing dispatch admission. Revoke may already have
+ * invalidated the live owner credential: the remote authority MUST match the
+ * immutable reserved claim, rather than accepting dispatchId alone or
+ * reauthorizing a revoked grant. No retry after an unknown release outcome.
+ */
+export interface DispatchReleaseRequest {
+  dispatchId:string;
+  brokerId:string;
+  request:BrokerDispatchRequest;
+}
 export interface ExternalBrokerDispatchAuthority {
   /** Must be atomic with revoke/re-pair and single-use claim allocation. */
   beginIfCurrent(operation:BrokerDispatchRequest,
@@ -52,7 +63,7 @@ export interface ExternalBrokerDispatchAuthority {
    */
   revokeAndDrain(request:DispatchRevokeRequest):Promise<DispatchClaim>;
   /** Release a claim. Lost ACK is UNKNOWN, never execute the effect again. */
-  release(claimId:string):Promise<void>;
+  release(release:DispatchReleaseRequest):Promise<void>;
 }
 const permit=z.object({
   kind:z.literal('broker_dispatch_permit_v1'),
@@ -105,6 +116,24 @@ export class BrokerExternalDispatchFence {
       deny('DISPATCH_SIGNING_KEY_INVALID');
   }
   private now():number{return (this.config.now??Date.now)()}
+  /** Refresh native Broker evidence after every remote CAS await before effect admission. */
+  private async verifyBrokerFor(request:BrokerDispatchRequest,
+    expectedBrokerId?:string):Promise<ProtectedBrokerEvidence>{
+    let broker:ProtectedBrokerEvidence;
+    try{broker=await this.config.verifyEffectiveBroker()}
+    catch{return deny('DISPATCH_EFFECTIVE_BROKER_UNAVAILABLE')}
+    if(!broker||broker.verified!==true||
+       !uuid.safeParse(broker.brokerId).success||
+       broker.highIntegrityToken!==true||
+       broker.signedProtectedImage!==true||
+       broker.protectedParentAndImports!==true||
+       (expectedBrokerId!==undefined&&broker.brokerId!==expectedBrokerId))
+      deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
+    if(broker.ownerEpoch!==request.scope.ownerEpoch||
+       broker.grantGeneration!==request.scope.expectedGeneration)
+      deny('DISPATCH_OWNER_EPOCH_MISMATCH');
+    return broker;
+  }
   private decode(raw:DispatchClaim):unknown {
     if(typeof raw?.payload!=='string'||raw.payload.length>4096||
        typeof raw?.signature!=='string'||raw.signature.length>1024)
@@ -169,18 +198,7 @@ export class BrokerExternalDispatchFence {
     if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
     const identity=await this.config.verifyIdentity(request).catch(()=>false);
     if(identity!==true)deny('DISPATCH_IDENTITY_UNVERIFIED');
-    let broker:ProtectedBrokerEvidence;
-    try{broker=await this.config.verifyEffectiveBroker()}
-    catch{return deny('DISPATCH_EFFECTIVE_BROKER_UNAVAILABLE')}
-    if(!broker||broker.verified!==true||
-       !uuid.safeParse(broker.brokerId).success||
-       broker.highIntegrityToken!==true||
-       broker.signedProtectedImage!==true||
-       broker.protectedParentAndImports!==true)
-      deny('DISPATCH_HIGH_TOKEN_UNVERIFIED');
-    if(broker.ownerEpoch!==request.scope.ownerEpoch||
-       broker.grantGeneration!==request.scope.expectedGeneration)
-      deny('DISPATCH_OWNER_EPOCH_MISMATCH');
+    const broker=await this.verifyBrokerFor(request);
     // Fresh random challenge prevents an old *validly signed* claim copied
     // from a rolled-back WAL from being accepted by a new Broker process.
     const challengeNonce=randomBytes(32).toString('hex');
@@ -194,8 +212,24 @@ export class BrokerExternalDispatchFence {
     catch(e){this.locallyFenced.add(device);throw e}
     if(this.locallyFenced.has(device)){
       // Revoke began while this claim was only reserved.
-      try{await this.config.authority.release(proof.dispatchId)}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}
       catch{this.locallyFenced.add(device)}
+      deny('DISPATCH_REVOKE_PENDING');
+    }
+    // The begin CAS may wait on the network; refresh the native evidence before
+    // committing admission, and never pass the pre-await snapshot onward.
+    let commitBroker:ProtectedBrokerEvidence;
+    try{commitBroker=await this.verifyBrokerFor(request,broker.brokerId)}
+    catch(e){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}catch{}
+      throw e;
+    }
+    if(this.locallyFenced.has(device)){
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{this.locallyFenced.add(device)}
       deny('DISPATCH_REVOKE_PENDING');
     }
     // Required remote dispatch admission linearized against revoke.
@@ -204,34 +238,53 @@ export class BrokerExternalDispatchFence {
     let acknowledged:DispatchClaim;
     try{
       acknowledged=await this.config.authority.commitIfCurrent(
-        request,broker,proof.dispatchId,commitNonce);
+        request,commitBroker,proof.dispatchId,commitNonce);
     }catch{
       this.locallyFenced.add(device);
-      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}catch{}
       deny('DISPATCH_COMMIT_UNKNOWN');
     }
     try{
       const committedProof=this.checkPermit(this.decode(acknowledged),
-        request,broker,commitNonce,'commit');
+        request,commitBroker,commitNonce,'commit');
       if(committedProof.dispatchId!==proof.dispatchId)
         deny('DISPATCH_COMMIT_IDENTITY_MISMATCH');
     }catch(e){
       this.locallyFenced.add(device);
-      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}catch{}
       throw e;
     }
     if(this.locallyFenced.has(device)){
-      try{await this.config.authority.release(proof.dispatchId)}catch{}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
       deny('DISPATCH_REVOKE_PENDING');
     }
-    // Exactly once: only after remotely committed dispatch admission.
+    // A valid remote commit receipt cannot prove the OS token stayed HIGH
+    // while CAS I/O was pending. Refresh immediately before any effect callback.
+    try{await this.verifyBrokerFor(request,commitBroker.brokerId)}
+    catch(e){
+      this.locallyFenced.add(device);
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
+      throw e;
+    }
+    if(this.locallyFenced.has(device)){
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:commitBroker.brokerId,request})}catch{}
+      deny('DISPATCH_REVOKE_PENDING');
+    }
+    // Exactly once: only after remotely committed dispatch admission and fresh
+    // native Broker readback.
     this.claimed.add(proof.dispatchId);
     this.inFlight.set(proof.dispatchId,device);
     try{return await run()}
     finally{
       this.inFlight.delete(proof.dispatchId);
       // No local fallback if the remote release acknowledgment is lost.
-      try{await this.config.authority.release(proof.dispatchId)}
+      try{await this.config.authority.release({dispatchId:proof.dispatchId,
+        brokerId:broker.brokerId,request})}
       catch{/* fail closed for future dispatch if remote reconciliation needed */
         this.locallyFenced.add(device);
       }

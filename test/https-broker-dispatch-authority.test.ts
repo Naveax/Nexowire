@@ -84,6 +84,11 @@ test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged rec
     return;
    }
    if(req.url==='/v1/broker-dispatch/release'){
+    const prior=claims.get(payload.dispatchId);
+    if(!prior||prior.brokerId!==payload.brokerId||
+       JSON.stringify(prior.request)!==JSON.stringify(payload.request)){
+      respond({error:'release scope mismatch'},409);return;
+    }
     released++;claims.delete(payload.dispatchId);
     res.writeHead(204);res.end();return;
    }
@@ -132,8 +137,35 @@ test('real isolated TLS dispatch begin/commit/release/revoke, rejects forged rec
   capability:'shell.exec',scope:{ownerId,deviceId:ca.deviceId,
     deviceEpoch,sessionEpoch,ownerEpoch:4,expectedGeneration:5,
     requiredPrivilege:'CORE' as const}});
- assert.equal(await fence.execute(request(),async()=>42),42);
+ // Independently test the actual TLS request body. The disposable server is
+ // a negative contract fixture, NOT an attested monotonic CAS provider.
+ const op=request();
+ const brokerProof={
+  verified:true as const,brokerId,ownerEpoch:4,grantGeneration:5,
+  highIntegrityToken:true as const,signedProtectedImage:true as const,
+  protectedParentAndImports:true as const,
+ };
+ const reservation=await remote.beginIfCurrent(op,brokerProof,'0'.repeat(64));
+ const dispatchId=(JSON.parse(Buffer.from(reservation.payload,'base64url')
+  .toString('utf8')) as {dispatchId:string}).dispatchId;
+ for(const wrong of [
+  {...op,scope:{...op.scope,ownerId:randomUUID()}},
+  {...op,scope:{...op.scope,sessionEpoch:randomUUID()}},
+  {...op,scope:{...op.scope,expectedGeneration:6}},
+ ]){
+  await assert.rejects(remote.release({dispatchId,brokerId,request:wrong}),
+   {code:'BROKER_DISPATCH_REMOTE_REFUSED'});
+  assert.equal(claims.has(dispatchId),true);
+ }
+ await assert.rejects(remote.release({
+  dispatchId,brokerId:randomUUID(),request:op,
+ }),{code:'BROKER_DISPATCH_REMOTE_REFUSED'});
+ assert.equal(claims.has(dispatchId),true);
+ await remote.release({dispatchId,brokerId,request:op});
+ assert.equal(claims.has(dispatchId),false);
  assert.equal(released,1);
+ assert.equal(await fence.execute(request(),async()=>42),42);
+ assert.equal(released,2);
  forged=true;
  await assert.rejects(fence.execute(request(),async()=>false),
   {code:'DISPATCH_SIGNATURE_UNTRUSTED'});

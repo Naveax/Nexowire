@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import type {ExternalBrokerDispatchAuthority,BrokerDispatchRequest,
-  ProtectedBrokerEvidence,DispatchRevokeRequest,DispatchClaim}
+  ProtectedBrokerEvidence,DispatchRevokeRequest,DispatchReleaseRequest,
+  DispatchClaim}
   from './broker-external-dispatch-fence.js';
 
 const id=z.string().uuid();
@@ -17,6 +18,9 @@ const op=z.object({
     expectedGeneration:z.number().int().positive().safe(),
     requiredPrivilege:z.enum(['CORE','ROOT']),
   }).strict(),
+}).strict();
+const releaseScope=z.object({
+  dispatchId:id,brokerId:id,request:op,
 }).strict();
 const revocation=z.object({
   deviceId:id,ownerId:id,deviceEpoch:id,sessionEpoch:id,
@@ -124,7 +128,8 @@ export class HttpsBrokerDispatchAuthority implements ExternalBrokerDispatchAutho
     if(!result)return deny('BROKER_REVOKE_RECEIPT_MISSING');
     return result;
   }
-  async release(claimId:string):Promise<void>{
-    await this.send('release',{dispatchId:id.parse(claimId)},false);
+  async release(value:DispatchReleaseRequest):Promise<void>{
+    const input=releaseScope.parse(value);
+    await this.send('release',input,false);
   }
 }
