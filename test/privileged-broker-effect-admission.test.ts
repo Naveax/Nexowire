@@ -5,182 +5,253 @@ import {
   type BrokerExternalEffectAdmission,
   type BrokerVerifiedEffectBinding,
   type BrokerEffectRequest,
+  type BrokerEffectReceipt,
 } from '../src/agent/privileged-broker-effect-admission.js';
 
-const op = 'de935b67-516b-411e-948b-37ae22072f41';
-const capability = 'windows.firewall.control';
-const input = {action:'enable',name:'only-fixture'};
-const proof = (): BrokerVerifiedEffectBinding => ({
-  ownerId:'owner_1',deviceId:'device_1',sessionId:'session_1',
-  ownerEpoch:4,deviceEpoch:8,sessionEpoch:6,generation:9,
-  highTokenProofId:'kernel_proof_opaque_v1',expiresAtMs:Date.now()+30_000,
+const op='de935b67-516b-411e-948b-37ae22072f41';
+const capability='windows.firewall.control';
+const input={action:'enable',name:'only-fixture'};
+const proof=():BrokerVerifiedEffectBinding=>({
+  authorityId:'authority_fixture',ownerId:'owner_1',deviceId:'device_1',
+  sessionId:'session_1',ownerEpoch:4,deviceEpoch:8,sessionEpoch:6,
+  generation:9,highTokenProofId:'kernel_proof_opaque_v1',
+  protectedBrokerProofId:'protected_image_opaque_v1',
+  expiresAtMs:Date.now()+24_000,
 });
-type Phase = 'initial' | 'begin' | 'commit' | 'readback' | 'sync' | 'invoke';
+const deny=(e:unknown)=>e instanceof Error &&
+  'code' in e && e.code==='BROKER_EFFECT_ADMISSION_REQUIRED';
 function fixture() {
-  const events: Phase[]=[];
+  const events:string[]=[];
   let current=proof();
-  const admitted=new Set<string>();
-  let ticketCount=0;
-  let last:BrokerEffectRequest | undefined;
+  const committed=new Set<string>();
+  const challenges:string[]=[];
+  let lastRequest:BrokerEffectRequest|undefined;
+  let reserveReceipt:BrokerEffectReceipt|undefined;
+  let commitReceipt:BrokerEffectReceipt|undefined;
+  const ticket='test_fixture_nonce_bound_ticket_0123456789';
+  const receipt=(state:'RESERVED'|'COMMITTED',req:BrokerEffectRequest,
+    challengeNonce:string):BrokerEffectReceipt=>({
+      state,operationId:req.operationId,capability:req.capability,
+      inputSha256:req.inputSha256,challengeNonce,ticket,binding:{...req.binding},
+      proof:'signed_fixture_only_not_a_real_signature',
+    });
   const authority:BrokerExternalEffectAdmission={
     readVerifiedBinding:async()=>{
-      events.push(last?'readback':'initial'); return current;
+      events.push(lastRequest?'readback':'initial');
+      return {...current};
     },
-    begin:async(request)=>{
-      events.push('begin');last=request;
-      if(admitted.has(request.operationId))return null;
-      return {state:'RESERVED',operationId:request.operationId,
-        ticket:'only_a_nonproduction_test_fixture_ticket_012345'};
+    begin:async(req,nonce)=>{
+      events.push('begin');lastRequest=req;challenges.push(nonce);
+      if(committed.has(req.operationId))return null;
+      reserveReceipt=receipt('RESERVED',req,nonce);return reserveReceipt;
     },
-    commit:async(request,ticket)=>{
-      events.push('commit');ticketCount++;
-      if(admitted.has(request.operationId))return null;
-      admitted.add(request.operationId);
-      return {state:'COMMITTED',operationId:request.operationId,ticket};
+    commit:async(req,issuedTicket,nonce)=>{
+      events.push('commit');challenges.push(nonce);
+      if(committed.has(req.operationId)||issuedTicket!==ticket)return null;
+      committed.add(req.operationId);
+      commitReceipt=receipt('COMMITTED',req,nonce);return commitReceipt;
     },
-    readVerifiedBindingNow:()=>{events.push('sync');return current;},
+    verifyReceipt:async()=>{
+      events.push('verify');return true;
+    },
+    readVerifiedBindingNow:()=>{events.push('sync');return {...current};},
   };
-  const run=(id:unknown=op)=>invokeBrokerEffectOnce(authority,id,capability,input,
-    ()=>{events.push('invoke');return 'fixture-result';},()=>true);
-  return {authority,events,run,mutate:(v:BrokerVerifiedEffectBinding)=>{current=v;},
-    admitted,get ticketCount(){return ticketCount;}};
+  const run=(id:unknown=op,raw:unknown=input)=>
+    invokeBrokerEffectOnce(authority,id,capability,raw,
+      (verifiedInput)=>{events.push('invoke');return verifiedInput;},()=>true);
+  return {authority,events,run,challenges,committed,
+    get reserveReceipt(){return reserveReceipt;},
+    get commitReceipt(){return commitReceipt;},
+    get lastRequest(){return lastRequest;},
+    setBinding:(b:BrokerVerifiedEffectBinding)=>{current=b;},
+  };
 }
 
-test('no external CAS port, no stable operation ID, or invalid proof fails closed',async()=>{
+test('no external authority, missing UUID, malformed proof or input denies',async()=>{
   let invoked=0;
   for(const id of [op,undefined,'caller-can-retry',{}]){
     await assert.rejects(invokeBrokerEffectOnce(undefined,id,capability,input,
-      ()=>{invoked++;return 'unsafe';},()=>true),
-      (err:unknown)=>!!err&&typeof err==='object'&&'code' in err&&
-        err.code==='BROKER_EFFECT_ADMISSION_REQUIRED');
+      ()=>{invoked++;return true;},()=>true),deny);
   }
   const f=fixture();
-  await assert.rejects(f.run('not-uuid'),/BROKER_EFFECT_ADMISSION_REQUIRED/);
-  assert.equal(invoked,0);assert.deepEqual(f.events,[]);
+  await assert.rejects(f.run('not-a-uuid'),deny);
+  const bad={...proof(),protectedBrokerProofId:''};
+  f.setBinding(bad);
+  await assert.rejects(f.run(),deny);
+  assert.equal(invoked,0);
+  assert.deepEqual(f.events,['initial']);
 });
 
-test('fixture CAS sequence is begin/commit/recheck/sync then exactly one callback',async()=>{
+test('external fixture reserve/commit use distinct 256-bit nonce and exact scope',async()=>{
   const f=fixture();
-  assert.equal(await f.run(),'fixture-result');
-  assert.deepEqual(f.events,['initial','begin','commit','readback','sync','invoke']);
-  assert.equal(f.ticketCount,1);
-  await assert.rejects(f.run(),/BROKER_EFFECT_ADMISSION_REQUIRED/);
+  assert.deepEqual(await f.run(),input);
+  assert.deepEqual(f.events,
+    ['initial','begin','verify','commit','verify','readback','sync','invoke']);
+  assert.equal(f.challenges.length,2);
+  assert.match(f.challenges[0]!,/^[0-9a-f]{64}$/);
+  assert.match(f.challenges[1]!,/^[0-9a-f]{64}$/);
+  assert.notEqual(f.challenges[0],f.challenges[1]);
+  assert.equal(f.lastRequest?.binding.generation,9);
+  assert.equal(f.lastRequest?.binding.sessionId,'session_1');
+  assert.equal(f.reserveReceipt?.inputSha256,f.commitReceipt?.inputSha256);
+  await assert.rejects(f.run(),deny);
   assert.equal(f.events.filter(x=>x==='invoke').length,1);
 });
 
-test('lost ACK denies without callback and same operation cannot replay',async()=>{
-  const f=fixture();
-  f.authority.commit=async(req,ticket)=>{
-    f.admitted.add(req.operationId);
-    throw new Error('COMMIT_LOST_ACK');
-  };
-  let effects=0;
-  await assert.rejects(invokeBrokerEffectOnce(f.authority,op,capability,input,
-    ()=>{effects++;return true;},()=>true),/BROKER_EFFECT_ADMISSION_REQUIRED/);
-  await assert.rejects(invokeBrokerEffectOnce(f.authority,op,capability,input,
-    ()=>{effects++;return true;},()=>true),/BROKER_EFFECT_ADMISSION_REQUIRED/);
-  assert.equal(effects,0);
-});
-
-test('revoke, epoch rollover, stale HIGH and expiry after async commit deny',async()=>{
-  for(const mutate of [
-    (b:BrokerVerifiedEffectBinding)=>({...b,sessionEpoch:b.sessionEpoch+1}),
-    (b:BrokerVerifiedEffectBinding)=>({...b,ownerEpoch:b.ownerEpoch+1}),
-    (b:BrokerVerifiedEffectBinding)=>({...b,deviceEpoch:b.deviceEpoch+1}),
-    (b:BrokerVerifiedEffectBinding)=>({...b,generation:b.generation+1}),
-    (b:BrokerVerifiedEffectBinding)=>({...b,highTokenProofId:'kernel_proof_replaced'}),
-    (b:BrokerVerifiedEffectBinding)=>({...b,expiresAtMs:Date.now()-1}),
-  ]){
-    const f=fixture(),original=f.authority.commit.bind(f.authority);
-    f.authority.commit=async(req,ticket)=>{const result=await original(req,ticket);
-      f.mutate(mutate(req.binding));return result;};
-    await assert.rejects(f.run(),/BROKER_EFFECT_ADMISSION_REQUIRED/);
+test('lost begin/commit ACK or provider error never reaches a callback',async()=>{
+  for(const stage of ['begin','commit','verify'] as const) {
+    const f=fixture();
+    if(stage==='begin')f.authority.begin=async(req)=>{
+      f.committed.add(req.operationId);
+      throw Error('BEGIN_ACK_UNKNOWN_AFTER_RESERVE');
+    };
+    if(stage==='commit')f.authority.commit=async(req)=>{
+      f.committed.add(req.operationId);
+      throw Error('COMMIT_ACK_UNKNOWN_AFTER_COMMIT');
+    };
+    if(stage==='verify')f.authority.verifyReceipt=async()=>{throw Error('SIGNATURE_MISSING');};
+    await assert.rejects(f.run(),deny);
+    await assert.rejects(f.run(),deny);
     assert.equal(f.events.includes('invoke'),false);
   }
 });
 
-test('fresh sync readback rejects changes after last async verification',async()=>{
+test('replayed signed reserve and commit receipts fail fresh challenge',async()=>{
   const f=fixture();
-  f.authority.readVerifiedBindingNow=()=>{f.events.push('sync');
-    return {...proof(),ownerEpoch:10};};
-  await assert.rejects(f.run(),/BROKER_EFFECT_ADMISSION_REQUIRED/);
+  await f.run();
+  const oldReserve=f.reserveReceipt!;
+  const oldCommit=f.commitReceipt!;
+  const g=fixture();
+  g.authority.begin=async()=>oldReserve;
+  await assert.rejects(g.run(),deny);
+  assert.equal(g.events.includes('invoke'),false);
+  const h=fixture();
+  h.authority.commit=async()=>oldCommit;
+  await assert.rejects(h.run(),deny);
+  assert.equal(h.events.includes('invoke'),false);
+});
+
+test('receipt must exactly bind capability, fingerprint, ticket and current epochs',async()=>{
+  for(const tamper of [
+    (r:BrokerEffectReceipt)=>({...r,capability:'windows.task.control'}),
+    (r:BrokerEffectReceipt)=>({...r,inputSha256:'0'.repeat(64)}),
+    (r:BrokerEffectReceipt)=>({...r,operationId:'1e935b67-516b-411e-948b-37ae22072f41'}),
+    (r:BrokerEffectReceipt)=>({...r,ticket:'mismatched_fixture_ticket_0123456789'}),
+    (r:BrokerEffectReceipt)=>({...r,binding:{...r.binding,generation:11}}),
+    (r:BrokerEffectReceipt)=>({...r,binding:{...r.binding,ownerId:'other_owner'}}),
+    (r:BrokerEffectReceipt)=>({...r,binding:{...r.binding,protectedBrokerProofId:'other_protected_id'}}),
+  ]) {
+    const f=fixture(),commit=f.authority.commit.bind(f.authority);
+    f.authority.commit=async(req,ticket,nonce)=>{
+      const receipt=await commit(req,ticket,nonce);
+      return receipt?tamper(receipt):null;
+    };
+    await assert.rejects(f.run(),deny);
+    assert.equal(f.events.includes('invoke'),false);
+  }
+});
+
+test('a receipt is not authorized by matching strings without verification',async()=>{
+  const f=fixture();
+  f.authority.verifyReceipt=async()=>false;
+  await assert.rejects(f.run(),deny);
   assert.equal(f.events.includes('invoke'),false);
 });
 
-test('stale elevation proof at synchronous callback edge denies',async()=>{
-  const f=fixture();
-  let invoked=false;
-  await assert.rejects(invokeBrokerEffectOnce(f.authority,op,capability,input,
-    ()=>{invoked=true;},()=>false),/BROKER_EFFECT_ADMISSION_REQUIRED/);
-  assert.equal(invoked,false);
+test('revoked generation, device/session/owner epochs and HIGH proof reject after awaits',async()=>{
+  for(const mutate of [
+    (b:BrokerVerifiedEffectBinding)=>({...b,ownerEpoch:b.ownerEpoch+1}),
+    (b:BrokerVerifiedEffectBinding)=>({...b,deviceEpoch:b.deviceEpoch+1}),
+    (b:BrokerVerifiedEffectBinding)=>({...b,sessionEpoch:b.sessionEpoch+1}),
+    (b:BrokerVerifiedEffectBinding)=>({...b,generation:b.generation+1}),
+    (b:BrokerVerifiedEffectBinding)=>({...b,highTokenProofId:'stale_high'}),
+    (b:BrokerVerifiedEffectBinding)=>({...b,protectedBrokerProofId:'untrusted_image'}),
+    (b:BrokerVerifiedEffectBinding)=>({...b,expiresAtMs:Date.now()-10}),
+  ]) {
+    const f=fixture(),before=f.authority.commit.bind(f.authority);
+    f.authority.commit=async(req,ticket,nonce)=>{
+      const result=await before(req,ticket,nonce);
+      f.setBinding(mutate(req.binding));
+      return result;
+    };
+    await assert.rejects(f.run(),deny);
+    assert.equal(f.events.includes('invoke'),false);
+  }
 });
 
-test('external CAS RESERVED/COMMITTED forged or unknown ACK cannot authorize',async()=>{
+test('fresh synchronous readback and final elevation check prevent dispatch',async()=>{
   const f=fixture();
-  f.authority.begin=async()=>null;
-  await assert.rejects(f.run(),/BROKER_EFFECT_ADMISSION_REQUIRED/);
+  f.authority.readVerifiedBindingNow=()=>({...proof(),generation:10});
+  await assert.rejects(f.run(),deny);
   assert.equal(f.events.includes('invoke'),false);
   const g=fixture();
-  g.authority.commit=async()=>null;
-  await assert.rejects(g.run(),/BROKER_EFFECT_ADMISSION_REQUIRED/);
-  assert.equal(g.events.includes('invoke'),false);
+  let invoked=0;
+  await assert.rejects(invokeBrokerEffectOnce(g.authority,op,capability,input,
+    ()=>{invoked++;return true;},()=>false),deny);
+  assert.equal(invoked,0);
 });
 
-test('provider-side errors are redacted, no callback fallback',async()=>{
+test('callback consumes exactly fingerprinted immutable snapshot under async mutation',async()=>{
+  const f=fixture(),original={command:'approved',args:['safe']};
+  const begin=f.authority.begin.bind(f.authority);
+  f.authority.begin=async(req,nonce)=>{
+    original.command='tampered';
+    original.args.push('unexpected');
+    return begin(req,nonce);
+  };
+  const result=await f.run(op,original) as {command:string;args:string[]};
+  assert.deepEqual(result,{command:'approved',args:['safe']});
+  assert.equal(Object.isFrozen(result),true);
+  assert.equal(Object.isFrozen(result.args),true);
+  assert.equal(f.lastRequest?.inputSha256,f.commitReceipt?.inputSha256);
+});
+
+test('fixture sees independent operation UUID per effect boundary',async()=>{
   const f=fixture();
-  f.authority.readVerifiedBinding=async()=>{throw new Error('sensitive OS path');};
-  await assert.rejects(f.run(),
-    (e:unknown)=>e instanceof Error&&e.message==='BROKER_EFFECT_ADMISSION_REQUIRED');
-  assert.equal(f.events.includes('invoke'),false);
+  assert.deepEqual(await f.run(),input);
+  const later='89615b67-516b-411e-948b-37ae22072f41';
+  assert.deepEqual(await f.run(later),input);
+  assert.equal(f.events.filter(x=>x==='invoke').length,2);
+  await assert.rejects(f.run(later),deny);
 });
 
-test('Broker HTTP route fences native/injected callback, installer and update before dispatch', {
-  skip:process.platform !== 'win32',
+test('Broker HTTP route gates native, injected, installer, updater and no-provider', {
+  skip:process.platform!=='win32',
 },async()=>{
   const {startPrivilegedBroker}=await import('../src/agent/privileged-broker.js');
-  const kinds=[
-    'windows.firewall.control',
-    'windows.installer.apply',
-    'nexowire.machine_update.apply',
-  ];
-  for(const kind of kinds) {
+  for(const kind of ['windows.firewall.control','windows.environment.set',
+    'windows.installer.apply','nexowire.machine_update.apply']) {
     const f=fixture();
-    let callbackCount=0;
+    let invoked=0;
     const broker=await startPrivilegedBroker({
       host:'127.0.0.1',port:0,tokens:['fixture-only-broker-token'],
-      requireElevation:false, // non-production synthetic test server
+      requireElevation:false, // test-only synthetic server, not deployment
       effectAdmission:f.authority,
-      execute:async()=>{callbackCount++;return {executed:true};},
+      execute:async(_capability,verifiedInput)=>{
+        invoked++;
+        return {accepted:verifiedInput};
+      },
     });
+    const send=(operation_id:unknown,payload:unknown=input)=>
+      fetch(broker.url+'/execute',{method:'POST',
+        headers:{authorization:'Bearer fixture-only-broker-token',
+          'content-type':'application/json'},
+        body:JSON.stringify({capability:kind,input:payload,operation_id})});
     try {
-      const send=(operation_id?:unknown)=>
-        fetch(broker.url+'/execute',{
-          method:'POST',
-          headers:{authorization:'Bearer fixture-only-broker-token',
-            'content-type':'application/json'},
-          body:JSON.stringify({capability:kind,input,operation_id}),
-        });
-      const missing=await send();
-      assert.equal(missing.status,400);
-      assert.equal((await missing.json() as {error?:{code:string}}).error?.code,
-        'BROKER_EFFECT_ADMISSION_REQUIRED');
-      assert.equal(callbackCount,0);
-
+      for(const bad of [undefined,'bearer-only',null]){
+        const denied=await send(bad);
+        assert.equal(denied.status,400);
+        assert.equal((await denied.json() as {error:{code:string}}).error.code,
+          'BROKER_EFFECT_ADMISSION_REQUIRED');
+      }
+      assert.equal(invoked,0);
       const first=await send(op);
       assert.equal(first.status,200,kind);
       assert.equal((await first.json() as {ok:boolean}).ok,true);
-      assert.equal(callbackCount,1);
-
-      const duplicate=await send(op);
-      assert.equal(duplicate.status,400);
-      assert.equal((await duplicate.json() as {error?:{code:string}}).error?.code,
-        'BROKER_EFFECT_ADMISSION_REQUIRED');
-      assert.equal(callbackCount,1,'same operation ID cannot replay '+kind);
-
-      assert.deepEqual(f.events.slice(0,6),
-        ['initial','begin','commit','readback','sync','invoke']);
-    } finally {
-      await broker.close();
-    }
+      assert.equal(invoked,1);
+      const replay=await send(op);
+      assert.equal(replay.status,400);
+      assert.equal(invoked,1);
+    }finally{await broker.close();}
   }
 });
