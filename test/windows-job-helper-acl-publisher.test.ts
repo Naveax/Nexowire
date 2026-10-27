@@ -141,7 +141,7 @@ test('forged PowerShell Authenticode and ACL functions cannot invent trust evide
 
 test('real Windows-signed surrogate survives copy but replaced manifest or EXE fails trust audit', {
   skip:process.platform!=='win32',timeout:22000,
-},async()=>{
+},async(t)=>{
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'nx-auth-signed-'));
   try{
     const source=path.join(process.env.SystemRoot??'C:\\Windows',
@@ -160,10 +160,18 @@ test('real Windows-signed surrogate survives copy but replaced manifest or EXE f
     const original=run();
     assert.equal(original.status,0,(original.stderr??'').slice(0,1500));
     const verified=JSON.parse(original.stdout.trim()) as {
-      authenticodeStatus:string;publisherValid:boolean;
+      authenticodeStatus:string;authenticodeEvidenceAvailable:boolean;publisherValid:boolean;
       companionManifestMatches:boolean;externallyPinnedReleaseSha256Matches:boolean;
       productionReady:boolean;
     };
+    if (!verified.authenticodeEvidenceAvailable) {
+      assert.equal(verified.authenticodeStatus,'UNAVAILABLE');
+      assert.equal(verified.publisherValid,false);
+      assert.equal(verified.productionReady,false,
+        'missing OS evidence must remain production NO-GO');
+      t.skip('OS Authenticode provider unavailable; valid-signature surrogate cannot be evaluated on this runner');
+      return;
+    }
     assert.equal(verified.authenticodeStatus,'Valid',
       'must use the OS to validate a real signature, not a mocked signature');
     assert.equal(verified.publisherValid,true);
@@ -192,7 +200,7 @@ test('real Windows-signed surrogate survives copy but replaced manifest or EXE f
 
 test('inherited broad parent-directory write grant is independently production NO-GO', {
   skip:process.platform!=='win32',timeout:18000,
-},async()=>{
+},async(t)=>{
   // Only mutate the DACL on this test-created directory, never ProgramData,
   // installed Nexowire directories, running files or actual service objects.
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nx-parent-dacl-'));
@@ -210,9 +218,16 @@ test('inherited broad parent-directory write grant is independently production N
     ],{windowsHide:true,encoding:'utf8',timeout:10000,maxBuffer:8192});
     assert.equal(result.status,0,(result.stderr??'').slice(0,1300));
     const audit=JSON.parse(result.stdout.trim()) as {
-      parentBroadWriteGrantFound:boolean|null;productionReady:boolean;
+      aclEvidenceAvailable:boolean;parentBroadWriteGrantFound:boolean|null;productionReady:boolean;
       signedReleaseManifestVerified:boolean;runningImageFileIdentityVerified:boolean;
     };
+    if (!audit.aclEvidenceAvailable) {
+      assert.equal(audit.parentBroadWriteGrantFound,null);
+      assert.equal(audit.productionReady,false,
+        'missing OS ACL evidence must remain production NO-GO');
+      t.skip('OS ACL provider unavailable; inherited grant cannot be evaluated on this runner');
+      return;
+    }
     assert.equal(audit.parentBroadWriteGrantFound,true,
       'synthetic inherited parent Modify grant is replacement/TOCTOU risk');
     assert.equal(audit.signedReleaseManifestVerified,false);
