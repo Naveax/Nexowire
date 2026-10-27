@@ -8,6 +8,21 @@ param(
   [string]$ExpectedReleaseSha256 = ''
 )
 $ErrorActionPreference='Stop'
+# Node-launched Windows PowerShell 5.1 can inherit PowerShell 7 module
+# directories first in PSModulePath. That can make the built-in security
+# provider fail to load with duplicate type data. Limit this process to the
+# Windows PowerShell module roots; this is not a persistent environment change.
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  $windowsPowerShellModuleRoots = @(
+    (Join-Path $PSHOME 'Modules'),
+    (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules')
+  )
+  $windowsPowerShellModuleRoots = @($windowsPowerShellModuleRoots |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Container })
+  if ($windowsPowerShellModuleRoots.Count -gt 0) {
+    $env:PSModulePath = [string]::Join(';',[string[]]$windowsPowerShellModuleRoots)
+  }
+}
 if ($env:OS -ne 'Windows_NT') { throw 'WINDOWS_JOB_WINDOWS_ONLY' }
 if (-not $HelperPath) {
   $HelperPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'native\windows-job-owner.exe'
