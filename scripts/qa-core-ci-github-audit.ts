@@ -29,6 +29,11 @@ const sha40=(value:unknown):value is string=>
   typeof value==='string'&&/^[0-9a-f]{40}$/.test(value);
 const repoName=(value:unknown):value is string=>
   typeof value==='string'&&/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value);
+function nestedRecord(parent:unknown,key:string):JsonRecord|null{
+  if(!record(parent))return null;
+  const child=parent[key];
+  return record(child)?child:null;
+}
 
 export interface GitHubCiAuditInput {
   readonly repositoryFullName:string;
@@ -107,39 +112,47 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
       pullRequestState=typeof pr.state==='string'?pr.state:null;
       draft=typeof pr.draft==='boolean'?pr.draft:null;
       if(pr.state!=='open')addOnce(findings,'PR_NOT_OPEN');
-      if(!record(pr.head)||!sha40(pr.head.sha)){
+      const prHead=nestedRecord(pr,'head');
+      const prBase=nestedRecord(pr,'base');
+      const prHeadRepo=nestedRecord(prHead,'repo');
+      const prBaseRepo=nestedRecord(prBase,'repo');
+      if(!prHead||!sha40(prHead.sha)){
         addOnce(findings,'PR_HEAD_INVALID');
       }else{
-        headSha=pr.head.sha;
+        headSha=prHead.sha;
       }
-      if(!record(pr.base)||!sha40(pr.base.sha)){
+      if(!prBase||!sha40(prBase.sha)){
         addOnce(findings,'PR_BASE_INVALID');
       }else{
-        baseSha=pr.base.sha;
+        baseSha=prBase.sha;
       }
-      if(typeof pr.head.ref!=='string'||pr.head.ref.length<1){
+      if(!prHead||typeof prHead.ref!=='string'||prHead.ref.length<1){
         addOnce(findings,'PR_HEAD_REF_INVALID');
       }
-      if(!record(pr.head)||!record(pr.head.repo)||
-         pr.head.repo.full_name!==CORE_CI_REPOSITORY){
+      if(!prHeadRepo||prHeadRepo.full_name!==CORE_CI_REPOSITORY){
         addOnce(findings,'PR_HEAD_REPOSITORY_MISMATCH');
       }
-      if(!record(pr.base)||!record(pr.base.repo)||
-         pr.base.repo.full_name!==CORE_CI_REPOSITORY){
+      if(!prBaseRepo||prBaseRepo.full_name!==CORE_CI_REPOSITORY){
         addOnce(findings,'PR_BASE_REPOSITORY_MISMATCH');
       }
     }
 
     if(!record(recheckedPr)){
       addOnce(findings,'PR_RECHECK_MISSING');
-    }else if(!record(pr)||!record(pr.head)||!record(pr.base)||
-      !record(recheckedPr.head)||!record(recheckedPr.base)||
-      recheckedPr.number!==pr.number||
-      recheckedPr.state!==pr.state||
-      recheckedPr.draft!==pr.draft||
-      recheckedPr.head.sha!==pr.head.sha||
-      recheckedPr.base.sha!==pr.base.sha){
-      addOnce(findings,'PR_CHANGED_DURING_AUDIT');
+    }else{
+      const initialHead=nestedRecord(pr,'head');
+      const initialBase=nestedRecord(pr,'base');
+      const finalHead=nestedRecord(recheckedPr,'head');
+      const finalBase=nestedRecord(recheckedPr,'base');
+      if(!record(pr)||!initialHead||!initialBase||
+         !finalHead||!finalBase||
+         recheckedPr.number!==pr.number||
+         recheckedPr.state!==pr.state||
+         recheckedPr.draft!==pr.draft||
+         finalHead.sha!==initialHead.sha||
+         finalBase.sha!==initialBase.sha){
+        addOnce(findings,'PR_CHANGED_DURING_AUDIT');
+      }
     }
 
     if(!record(run)){
@@ -166,13 +179,15 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
       if(event!=='pull_request'&&event!=='workflow_dispatch'){
         addOnce(findings,'EVENT_INVALID');
       }
-      if(!record(pr)||typeof pr.head.ref!=='string'||
-         run.head_branch!==pr.head.ref){
+      const prHead=nestedRecord(pr,'head');
+      const prHeadRepo=nestedRecord(prHead,'repo');
+      const runHeadRepo=nestedRecord(run,'head_repository');
+      const prHeadRef=prHead?.ref;
+      if(typeof prHeadRef!=='string'||run.head_branch!==prHeadRef){
         addOnce(findings,'RUN_BRANCH_MISMATCH');
       }
-      if(!record(pr)||!record(pr.head)||!record(pr.head.repo)||
-         !record(run.head_repository)||
-         run.head_repository.full_name!==pr.head.repo.full_name){
+      if(!prHeadRepo||!runHeadRepo||
+         runHeadRepo.full_name!==prHeadRepo.full_name){
         addOnce(findings,'RUN_HEAD_REPOSITORY_MISMATCH');
       }
 

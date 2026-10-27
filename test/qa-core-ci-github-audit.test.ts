@@ -193,7 +193,7 @@ test('duplicate, missing, skipped, failed and foreign-run jobs block evidence',(
 
 test('job pagination truncation and attempt mismatch block evidence',()=>{
   const fixture=fixtures();
-  fixture.jobs.total_count=8;
+  (fixture.jobs as {total_count:number}).total_count=8;
   fixture.jobs.jobs[0]!.run_attempt=2;
   const report=auditGitHubCiPayload({
     repositoryFullName:repo,pullRequestNumber:prNumber,runId,
