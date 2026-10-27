@@ -177,6 +177,10 @@ export class TaskGraphStore {
         throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_DUPLICATE_ID',
           'Duplicate durable task-graph identity requires external reconciliation.');
       seenIds.add(entry.id);
+      const jobIds=new Set(entry.jobs.map(job=>job.id));
+      if(jobIds.size!==entry.jobs.length)
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_DUPLICATE_JOB_ID',
+          'Duplicate nested job identity in persisted graph requires reconciliation.');
     }
     let changed = false;
     for (const graph of parsed.graphs) {
@@ -212,6 +216,9 @@ export class TaskGraphStore {
       retryUnknown: boolean;
     },
   ): Promise<TaskGraphCheckpoint> {
+    if(new Set(input.jobs.map(job=>job.id)).size!==input.jobs.length)
+      throw new TaskGraphStoreError('TASK_GRAPH_DUPLICATE_JOB_ID',
+        'Duplicate graph job identity must not be admitted to native journal.');
     const existing = this.graphs.get(input.id);
     const now = new Date().toISOString();
 
