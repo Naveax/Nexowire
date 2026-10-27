@@ -2266,10 +2266,19 @@ export async function executeCapability(
     throw new Error('Installer status requires an existing privileged Broker.');
   }
 
-  if (
-    context.privilegeMode === 'broker' &&
-    privilegeRequirement(capability, input) === 'elevated'
-  ) {
+  // There is no safe elevated "direct" fallback. A request classified as
+  // elevated must pass through the protected Broker's remote-CAS admission.
+  // Running the Agent itself as admin never substitutes for owner/session
+  // epoch, current grant generation and an atomic single-use external commit.
+  if (privilegeRequirement(capability, input) === 'elevated') {
+    if (context.privilegeMode !== 'broker') {
+      const error = new Error(
+        'Elevated capability requires the external CAS protected Broker.',
+      ) as Error & { code?: string; details?: unknown };
+      error.code = 'CORE_EXTERNAL_CAS_BROKER_REQUIRED';
+      error.details = { capability };
+      throw error;
+    }
     if (!context.privilegedBroker) {
       const error = new Error(
         'Elevated capability requires the Nexowire privileged broker.',
@@ -2278,6 +2287,8 @@ export async function executeCapability(
       error.details = { capability };
       throw error;
     }
+    // The Broker's server-side /execute callback always enforces the closed
+    // admission gate. A client-provided token or UI flag is not CAS proof.
     return await context.privilegedBroker.execute(
       capability,
       input,
