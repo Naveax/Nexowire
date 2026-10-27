@@ -155,7 +155,9 @@ if($checked.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $owner -
     const plaintext=await unprotectWindowsUserSecretForPurpose(envelope.ciphertext,PURPOSE);
     const parsed=ProfileSchema.parse(JSON.parse(plaintext));
     const consent=NativeProofSchema.safeParse(parsed.nativeConsent);
-    const profile={...parsed,nativeConsent:consent.success?consent.data:undefined} as Profile;
+    const profile={...parsed} as Profile;
+    if(consent.success)profile.nativeConsent=consent.data;
+    else delete profile.nativeConsent;
     if(profile.certificate){
       if(!profile.privateKey)throw new Error('CORE_PRIVATE_KEY_MISSING');
       const key=createPrivateKey({key:Buffer.from(profile.privateKey,'base64'),type:'pkcs8',format:'der'});
