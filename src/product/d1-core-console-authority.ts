@@ -62,11 +62,16 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       if(e.ownerAccountId!==before.owner_account_id||e.deviceId!==r.deviceId||e.installationId!==r.installationId||
         e.ownerEpoch!==before.owner_epoch||e.grantGeneration!==before.grant_generation||e.revokeEpoch!==before.revoke_epoch||
         !verifyCoreOperation(r,r.publicKeySpki!))throw new Error('CORE_ENROLLMENT_BINDING_INVALID');
+      // Verify local-decision freshness against the independent DB clock.
+      // The timestamp is signed but is not independent proof of Windows consent.
+      if(e.approvedLocallyAtMs<before.authority_time_ms-300000||
+         e.approvedLocallyAtMs>before.authority_time_ms+5000)
+        throw new Error('CORE_LOCAL_DECISION_NOT_FRESH');
       await changed(`UPDATE device_core_console_authority SET installation_id=?,enrollment_id=?,public_key_spki=?,enrollment_requested=0,physical_active=0
         WHERE device_id=? AND owner_epoch=? AND grant_generation=? AND revoke_epoch=?
-        AND (enrollment_id IS NULL OR enrollment_id=?) AND EXISTS(SELECT 1 ${JOIN}
+        AND enrollment_id IS NULL AND EXISTS(SELECT 1 ${JOIN}
           WHERE d.id=? AND d.credential_hash=? AND ${READY})`,
-        [r.installationId,e.enrollmentId,r.publicKeySpki,r.deviceId,e.ownerEpoch,e.grantGeneration,e.revokeEpoch,e.enrollmentId,r.deviceId,hash]);
+        [r.installationId,e.enrollmentId,r.publicKeySpki,r.deviceId,e.ownerEpoch,e.grantGeneration,e.revokeEpoch,r.deviceId,hash]);
     }else if(r.action==='dismiss'){
       await changed(`UPDATE device_core_console_authority SET enrollment_requested=0 WHERE device_id=? AND owner_epoch=?
         AND EXISTS(SELECT 1 FROM devices WHERE id=? AND credential_hash=?)`,[r.deviceId,before.owner_epoch,r.deviceId,hash]);
