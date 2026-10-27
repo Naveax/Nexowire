@@ -209,3 +209,20 @@ test(
     assert.equal(calls.length,0);
   },
 );
+
+test('direct Agent privilege mode cannot bypass external CAS protected Broker',async()=>{
+  const policy=new PathPolicy([os.homedir()]);
+  const attempts=[
+    ['windows.firewall.control',{action:'enable',name:'never-run'}],
+    ['windows.registry.set',{hive:'HKLM',path:'SOFTWARE\\\\Nexowire',name:'X',value:'Y'}],
+    ['windows.environment.set',{scope:'machine',name:'NEXOWIRE_QA',value:'never'}],
+  ] as const;
+  for(const [capability,input] of attempts){
+    await assert.rejects(
+      executeCapability(capability,input,policy,{privilegeMode:'direct'}),
+      (error:unknown)=>typeof error==='object'&&error!==null&&
+        'code' in error&&error.code==='CORE_EXTERNAL_CAS_BROKER_REQUIRED',
+      capability,
+    );
+  }
+});
