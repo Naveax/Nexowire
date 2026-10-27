@@ -26,8 +26,23 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - run: npm run check
-      - run: npm run build
+      # Keep the same checks as npm run check, with separate bounded steps so
+      # a stalled Node matrix job identifies which phase did not complete.
+      - name: Typecheck Node sources
+        timeout-minutes: 10
+        run: npm run typecheck
+      - name: Check continuation state
+        timeout-minutes: 10
+        run: npm run continuation:check
+      - name: Audit AI Screen launch paths
+        timeout-minutes: 10
+        run: npm run ai-screen:launch-audit
+      - name: Run Node test suite
+        timeout-minutes: 15
+        run: npm test
+      - name: Build Node sources
+        timeout-minutes: 10
+        run: npm run build
 
   browser-live:
     runs-on: windows-latest
@@ -39,6 +54,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      # These suites use a disposable loopback fixture with injected callbacks;
+      # they do not attest an installed elevated Broker or a production CAS.
+      - name: Verify Windows Broker admission fixtures
+        timeout-minutes: 5
+        run: node --import tsx scripts/qa-windows-broker-admission.ts
       - name: Compile native Windows Job guardian
         shell: pwsh
         run: ./scripts/build-windows-job-owner.ps1
