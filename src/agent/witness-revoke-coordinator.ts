@@ -22,6 +22,19 @@ function number(v:unknown,min=1):number{
 }
 type Transition='revoke'|'re_pair';
 type Receipt=ExternalRevokeReceipt|ExternalRePairReceipt;
+/** Pin every transition field before the first asynchronous authorization. */
+function snapshotChange(change:DelegationChange):DelegationChange{
+  if(!change||typeof change!=='object')deny('TRANSITION_INVALID');
+  const copy:DelegationChange={
+    action:change.action,deviceId:change.deviceId,ownerId:change.ownerId,
+    deviceEpoch:change.deviceEpoch,sessionEpoch:change.sessionEpoch,
+    expectedGeneration:change.expectedGeneration,signedProof:change.signedProof,
+    newOwnerId:change.newOwnerId,newDeviceEpoch:change.newDeviceEpoch,
+    newSessionEpoch:change.newSessionEpoch,
+  };
+  Object.freeze(copy);
+  return copy;
+}
 /**
  * Remote-first grant transition. A signed owner approval is verified before
  * the remote external CAS. Local PostgreSQL only materializes an already
@@ -166,33 +179,43 @@ export class WitnessRevokeCoordinator {
   async revoke(change:DelegationChange):Promise<{
     external:ExternalRevokeReceipt;local:DelegationStatus;
   }>{
-    await this.authorize(change,'revoke');
+    const request=snapshotChange(change);
+    await this.authorize(request,'revoke');
     let receipt:ExternalRevokeReceipt;
-    try{receipt=await this.config.external.revokeIfCurrent({
-      deviceId:change.deviceId,ownerId:change.ownerId,
-      deviceEpoch:change.deviceEpoch,sessionEpoch:change.sessionEpoch,
-      expectedGeneration:change.expectedGeneration,
-      signedOwnerApproval:change.signedProof,
-    })}catch{throw new RevokeOutcomeUnknown('REVOKE_EXTERNAL_OUTCOME_UNKNOWN')}
-    this.verifyReceipt(change,receipt,'revoke');
-    const local=await this.applyConfirmed(change,receipt,'revoke');
+    try{
+      const confirmed=await this.config.external.revokeIfCurrent({
+        deviceId:request.deviceId,ownerId:request.ownerId,
+        deviceEpoch:request.deviceEpoch,sessionEpoch:request.sessionEpoch,
+        expectedGeneration:request.expectedGeneration,
+        signedOwnerApproval:request.signedProof,
+      });
+      receipt={...confirmed};
+      Object.freeze(receipt);
+    }catch{throw new RevokeOutcomeUnknown('REVOKE_EXTERNAL_OUTCOME_UNKNOWN')}
+    this.verifyReceipt(request,receipt,'revoke');
+    const local=await this.applyConfirmed(request,receipt,'revoke');
     return {external:receipt,local};
   }
   async rePair(change:DelegationChange):Promise<{
     external:ExternalRePairReceipt;local:DelegationStatus;
   }>{
-    await this.authorize(change,'re_pair');
+    const request=snapshotChange(change);
+    await this.authorize(request,'re_pair');
     let receipt:ExternalRePairReceipt;
-    try{receipt=await this.config.external.rePairIfCurrent({
-      deviceId:change.deviceId,ownerId:change.ownerId,
-      deviceEpoch:change.deviceEpoch,sessionEpoch:change.sessionEpoch,
-      expectedGeneration:change.expectedGeneration,
-      signedOwnerApproval:change.signedProof,
-      newOwnerId:change.newOwnerId!,newDeviceEpoch:change.newDeviceEpoch!,
-      newSessionEpoch:change.newSessionEpoch!,
-    })}catch{throw new RevokeOutcomeUnknown('REPAIR_EXTERNAL_OUTCOME_UNKNOWN')}
-    this.verifyReceipt(change,receipt,'re_pair');
-    const local=await this.applyConfirmed(change,receipt,'re_pair');
+    try{
+      const confirmed=await this.config.external.rePairIfCurrent({
+        deviceId:request.deviceId,ownerId:request.ownerId,
+        deviceEpoch:request.deviceEpoch,sessionEpoch:request.sessionEpoch,
+        expectedGeneration:request.expectedGeneration,
+        signedOwnerApproval:request.signedProof,
+        newOwnerId:request.newOwnerId!,newDeviceEpoch:request.newDeviceEpoch!,
+        newSessionEpoch:request.newSessionEpoch!,
+      });
+      receipt={...confirmed};
+      Object.freeze(receipt);
+    }catch{throw new RevokeOutcomeUnknown('REPAIR_EXTERNAL_OUTCOME_UNKNOWN')}
+    this.verifyReceipt(request,receipt,'re_pair');
+    const local=await this.applyConfirmed(request,receipt,'re_pair');
     return {external:receipt,local};
   }
 }
