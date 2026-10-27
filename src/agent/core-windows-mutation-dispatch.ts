@@ -140,6 +140,45 @@ export function assertCoreSandboxRouteUnavailable(
 }
 
 /**
+ * CORE authority is not a blanket Windows GUI, file, update, or process
+ * mutation permit. A shell/graph can also hide arbitrarily many writes.
+ * No #02 native per-effect callback is installed for these #03 routes.
+ * Keep the separate owner-console/private-GUI checks; this denies earlier.
+ */
+export const CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES:ReadonlySet<string>=new Set([
+  'files.write','files.mkdir','files.copy','files.move','files.delete',
+  'files.patch','nexowire.update.apply','process.stop','process.prune',
+  'task.graph.prune','runbook.prune',
+  'windows.window.focus','windows.clipboard.write','windows.clipboard.clear',
+  'windows.keyboard.type','windows.keyboard.hotkey',
+  'windows.accessibility.invoke','windows.accessibility.set_value',
+  'windows.pointer.move','windows.pointer.click','windows.pointer.scroll',
+  'windows.virtual_pointer.start','windows.virtual_pointer.move',
+  'windows.virtual_pointer.style','windows.virtual_pointer.visibility',
+  'windows.private_display.profile.set','windows.private_display.profile.reset',
+  'windows.private_clipboard.write','windows.private_clipboard.clear',
+  'windows.private_clipboard.paste',
+  'windows.private_desktop.start','windows.private_desktop.launch',
+  'windows.private_desktop.window.close','windows.private_desktop.show',
+  'windows.private_pointer.move','windows.private_pointer.click',
+  'windows.private_pointer.scroll','windows.private_keyboard.type',
+  'windows.private_keyboard.hotkey',
+  'windows.private_desktop.accessibility.invoke_button',
+  'windows.private_desktop.accessibility.set_edit_value',
+  'windows.private_desktop.accessibility.set_checkbox',
+  'windows.private_desktop.accessibility.select_radio',
+]);
+
+export function assertCoreOtherNativeEffectUnavailable(
+  capability:string,
+  coreOrBrokerRouted:boolean,
+):void{
+  if(coreOrBrokerRouted &&
+     CORE_OTHER_UNADMITTED_EFFECT_CAPABILITIES.has(capability))
+    deny('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED');
+}
+
+/**
  * #02's BrokerEffectRequest/operationId and #01's signed dispatch request are
  * NOT interchangeable: #919 reserves an effect ticket but #926 binds signed
  * receipts, nonce and monotonic deadlines. This source-only #03 compatibility
