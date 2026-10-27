@@ -311,7 +311,7 @@ export async function startPrivilegedBroker(
         decoded.operation_id,
         capability,
         decoded.input,
-        () => execute(capability, decoded.input),
+        (boundInput) => execute(capability, boundInput),
         () => options.requireElevation === false || isWindowsProcessElevated(),
       );
 
