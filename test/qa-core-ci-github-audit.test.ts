@@ -249,3 +249,22 @@ test('malformed caller-supplied records never become authenticated or accepted',
   assert.equal(report.physicalAcceptance,'NOT_PROVEN');
   assert.equal(report.productionCore,'NO_GO');
 });
+
+test('successful run metadata and forged flags cannot prove checked-out tree or Windows cases',()=>{
+  const fixture=fixtures();
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,jobs:fixture.jobs,
+    checkoutRevisionEvidence:'VERIFIED',
+    checkoutTreeMatchesHead:'MATCHED',
+    windowsBrokerFixtureCases:'PASSED',
+  });
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.equal(report.checkoutRevisionEvidence,'NOT_COLLECTED');
+  assert.equal(report.checkoutTreeMatchesHead,'NOT_PROVEN');
+  assert.equal(report.windowsBrokerFixtureCases,'NOT_PROVEN');
+  assert.equal(report.githubOriginAuthenticated,false);
+  assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(report.productionCore,'NO_GO');
+});

@@ -112,3 +112,31 @@ Usage from a checkout:
 Provide a GitHub user token accepted by \`GET /user\` with read access to pull requests and Actions. The tool makes GET requests only; it does not dispatch, rerun, cancel or modify workflows. It never prints the token. Tests use an injected synthetic fetcher and therefore always report \`githubOriginAuthenticated=false\`. A live run may report authenticated GitHub source evidence, but \`physicalAcceptance=NOT_PROVEN\` and \`productionCore=NO_GO\` remain unconditional.
 
 The audit reads separate GitHub endpoints and cannot create an atomic cross-endpoint snapshot. It rereads the PR at the end and fails closed if the head, base, state or draft status changed while it was running.
+
+## Checkout and per-case evidence are separate from run metadata
+
+The API audit's `snapshotConsistency` assesses only the PR/run/job metadata
+it fetches. A pull-request run can report the PR head in `head_sha` while
+`actions/checkout` checks out a GitHub-generated merge commit. This helper
+does not fetch job logs or compare Git trees, so it always reports
+`checkoutRevisionEvidence=NOT_COLLECTED` and
+`checkoutTreeMatchesHead=NOT_PROVEN`. Seven successful jobs also do not prove
+that any particular Windows Broker test executed; the helper always reports
+`windowsBrokerFixtureCases=NOT_PROVEN`.
+
+For a concrete example, #932 HEAD
+`be541a10f01c79cb035b78d3525955da6f62d170` had run `40556146804`;
+its Node 24 log checked out merge commit
+`c9f814fadf22d140aa285021e137adcdf6e62320`. Separately fetched Git
+commit metadata shows that merge and the recorded HEAD both have tree
+`4568fe7eedaf7470915c2c113eb66947a524c47f`. That equivalence applies only
+to those exact commits and does not establish Windows case coverage.
+
+In #932's completed Windows job, the two Windows Broker admission cases were
+not scheduled; the Linux jobs reported them SKIP. The separate #933 QA step
+runs them on a disposable Windows runner and rejects skipped cases. Its
+`87f806163d745949655f33e97d63f6bd352345bf` run `40563535611` is RED
+on an existing test-input mismatch. A future source change requires its own
+run and evidence; do not reuse that RED or a prior PASS for another SHA.
+None of these records proves production CAS, installed Broker or physical
+acceptance.
