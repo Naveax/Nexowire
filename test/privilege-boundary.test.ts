@@ -156,25 +156,17 @@ test(
       token: 'broker-secret',
     });
 
-    const response = (await client.execute(
-      'windows.firewall.control',
-      {
-        name: 'test-rule',
-        action: 'enable',
-      },
-    )) as {
-      data?: {
-        routed?: boolean;
-        capability?: string;
-      };
-    };
-
-    assert.equal(response.data?.routed, true);
-    assert.equal(
-      response.data?.capability,
-      'windows.firewall.control',
+    // #03 P0: the old loopback bearer route is no longer an elevation
+    // permit. Without a protected native session/epoch and external CAS
+    // fence, not even a synthetic execute callback may run.
+    await assert.rejects(
+      () => client.execute('windows.firewall.control', {
+        name: 'test-rule', action: 'enable',
+      }),
+      (error:unknown) => error instanceof PrivilegedBrokerError &&
+        error.code === 'CORE_EXTERNAL_CAS_DISPATCH_REQUIRED',
     );
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length,0);
 
     const wrongToken = new PrivilegedBrokerClient({
       url: handle.url,
@@ -206,23 +198,15 @@ test(
     );
 
     const policy = new PathPolicy([os.homedir()]);
-    const routed = (await executeCapability(
-      'windows.firewall.control',
-      {
-        name: 'test-rule',
-        action: 'enable',
-      },
-      policy,
-      {
-        privilegeMode: 'broker',
-        privilegedBroker: client,
-      },
-    )) as {
-      data?: {
-        routed?: boolean;
-      };
-    };
-    assert.equal(routed.data?.routed, true);
-    assert.equal(calls.length, 2);
+    await assert.rejects(
+      () => executeCapability(
+        'windows.firewall.control',
+        {name:'test-rule',action:'enable'},policy,
+        {privilegeMode:'broker',privilegedBroker:client},
+      ),
+      (error:unknown)=>error instanceof PrivilegedBrokerError &&
+        error.code==='CORE_EXTERNAL_CAS_DISPATCH_REQUIRED',
+    );
+    assert.equal(calls.length,0);
   },
 );
