@@ -46,7 +46,8 @@ function fixture(){
   const consumedNativeReceipts=new Set<string>();
   const authority=new D1CoreConsoleAuthority(d1,{verifyAndConsume:async(proof,expected)=>{
     if(!readbackEnabled||!nativeReceipt||consumedNativeReceipts.has(proof.receiptId)||
-      JSON.stringify(proof)!==JSON.stringify(nativeReceipt)||
+      (Object.keys(nativeReceipt) as Array<keyof NativeCoreConsentProof>)
+        .some(key=>proof[key]!==nativeReceipt![key])||
       proof.enrollmentId!==expected.enrollmentId)return false;
     consumedNativeReceipts.add(proof.receiptId);return true;
   }});
