@@ -14,6 +14,8 @@
     "src/agent/process-worker.ts#spawn": 2,
     "src/agent/process-worker.ts#spawnSync": 1,
     "src/agent/windows-accessibility.ts#spawn": 1,
+    "src/agent/windows-core-console-native.ts#spawn": 1,
+    "src/agent/windows-core-console-provider.ts#spawn": 1,
     "src/agent/windows-console-grant.ts#spawn": 1,
     "src/agent/windows-control.ts#spawn": 1,
     "src/agent/windows-control.ts#spawnSync": 1,

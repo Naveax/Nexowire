@@ -19,7 +19,7 @@ const digest='a'.repeat(64);
 const chunkHash='b'.repeat(64);
 const fileBytes=ARTIFACT_CHUNK_BYTES*2;
 const freeBytes=8*1024**3;
-function fixture(){
+function fixture(writerStopAuthority={verifyWriterFence:()=>true}){
  const folder=mkdtempSync(path.join(tmpdir(),'nx-artifact-cancel-'));
  const name=path.join(folder,'quota.sqlite');
  const x=new DatabaseSync(name),y=new DatabaseSync(name);
@@ -29,8 +29,8 @@ function fixture(){
  const sum=(sql:string,...params:(number|string)[])=>Number(
     (x.prepare(sql).get(...params) as {n:number}|undefined)?.n??0);
  return {
-   p:new StagingArtifactByteBudget(x),
-   q:new StagingArtifactByteBudget(y),
+   p:new StagingArtifactByteBudget(x,undefined,writerStopAuthority),
+   q:new StagingArtifactByteBudget(y,undefined,writerStopAuthority),
    sum,
    close(){y.close();x.close();rmSync(folder,{recursive:true,force:true})},
  };
@@ -139,7 +139,9 @@ test('ordinary completed-file deletion behavior stays unchanged and cannot be ca
      storedSizeBytes:fileBytes,storedSha256:digest,durableStorageVerified:true}),
      'COMPLETE');
    assert.equal(f.q.requestCancel(cancelled(a,fileBytes)),'DENIED_STATE');
-   assert.equal(f.q.acknowledgeDeletion(deleted(a,false)),'RELEASED');
+   assert.throws(()=>f.q.acknowledgeDeletion(deleted(a,false)),/WRITER_FENCE_REQUIRED/);
+   assert.equal(activeStorage(f),fileBytes);
+   assert.equal(f.q.acknowledgeDeletion(deleted(a,true)),'RELEASED');
    assert.equal(activeStorage(f),0);
  }finally{f.close()}
 });

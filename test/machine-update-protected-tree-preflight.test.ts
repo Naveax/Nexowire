@@ -46,7 +46,7 @@ test('machine-update audit rejects ancestor replace and DACL-takeover rights',()
     assert.ok((required==='DeleteSubdirectoriesAndFiles'?source:guard).includes(required),required);
   }
   // Full source tree files/dirs retain the stricter write ACL mask.
-  assert.match(source,/\[int\]\$ace\.FileSystemRights -band \$writeMask/);
+  assert.match(source,/\[int64\]\$ace\.FileSystemRights -band \$writeMask/);
   assert.doesNotMatch(source,/Set-Acl|icacls\.exe|Register-ScheduledTask|Start-ScheduledTask/);
 });
 

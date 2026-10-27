@@ -35,6 +35,8 @@ import {
   executeWindowsConsoleControlCapability,
   needsPhysicalConsoleApproval,
 } from './windows-console-grant.js';
+import type {CoreConsoleAdmission} from './core-console-admission.js';
+import {physicalConsoleGrantStatus} from './windows-console-grant.js';
 import { executeBrowserCapability } from './browser-control.js';
 import { executePostconditions } from './postconditions.js';
 import { executeDurableRunbook } from './runbooks.js';
@@ -2116,6 +2118,9 @@ async function workspaceSnapshot(
 }
 
 export interface AgentExecutionContext {
+  coreConsole?: CoreConsoleAdmission;
+  requestId?: string;
+  requestSignal?: AbortSignal;
   processes?: ProcessManager;
   progressSupervisor?: ProgressSupervisor;
   operationJournal?: AgentOperationJournal;
@@ -2241,6 +2246,10 @@ export async function executeCapability(
       context.accessMode ?? 'safe',
     )
   ) {
+    if (!physicalConsoleGrantStatus().active && context.coreConsole) {
+      return await context.coreConsole.execute(capability,input,
+        context.requestId,context.accessMode ?? 'safe',context.requestSignal);
+    }
     assertPhysicalConsoleGrant(capability);
   }
 
@@ -2625,6 +2634,8 @@ case 'windows.private_desktop.process_audit':
         capability,
         input,
         context.accessMode ?? 'safe',
+        context.coreConsole,
+        context.requestSignal,
       );
     case 'browser.session.start':
     case 'browser.session.list':

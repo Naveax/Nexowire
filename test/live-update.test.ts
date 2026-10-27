@@ -10,6 +10,7 @@ import {
   parseWindowsSetupMetadata,
   readLiveUpdateState,
   renderWindowsCutoverScript,
+  windowsUpdateStagingParent,
 } from '../src/update/live-update.js';
 
 test('live updater compares stable release versions numerically', () => {
@@ -92,6 +93,31 @@ test('live update check persists official release state without applying it', as
   }
 });
 
+test('live update status accepts UTF-8 BOM from Windows PowerShell without masking invalid JSON', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'nexowire-status-bom-'));
+  const file = path.join(temp, 'Nexowire', 'update', 'status.json');
+  try {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const state = {
+      schemaVersion: 1,
+      state: 'succeeded',
+      currentVersion: '1.0.6',
+      targetVersion: '1.0.6',
+      buildId: '1.0.6-7b27b5acdcfa',
+      targetRoot: 'C:\\Users\\test\\AppData\\Local\\Nexowire\\versions\\1.0.6-7b27b5acdcfa',
+      machineComponentsPending: true,
+      updatedAt: '2026-10-25T15:00:00.000Z',
+      error: null,
+    };
+    await fs.writeFile(file, '\uFEFF' + JSON.stringify(state), 'utf8');
+    assert.deepEqual(await readLiveUpdateState({ localAppData: temp }), state);
+    await fs.writeFile(file, '\uFEFF' + '{not-json', 'utf8');
+    await assert.rejects(() => readLiveUpdateState({ localAppData: temp }), SyntaxError);
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
 test('Windows live cutover is side-by-side, health checked and rollback capable', () => {
   const script = renderWindowsCutoverScript({
     targetVersion: '1.0.4',
@@ -113,6 +139,20 @@ test('Windows live cutover is side-by-side, health checked and rollback capable'
   assert.doesNotMatch(script, /Remove-Item.+versions.+Recurse/i);
 });
 
+
+test('Windows cutover does not restart a deliberately disabled per-user Hub task', () => {
+  const script=renderWindowsCutoverScript({
+    targetVersion:'1.0.7',
+    buildId:'1.0.7-012345abcdef',
+    targetRoot:'C:\\Users\\test\\AppData\\Local\\Nexowire\\versions\\1.0.7-012345abcdef',
+    localAppData:'C:\\Users\\test\\AppData\\Local',
+  });
+  assert.match(script,/function Task-Enabled/);
+  assert.match(script,/State -ne "Disabled"/);
+  assert.match(script,/\$hadHub=\(Task-Enabled \$HubTask\) -and -not \$hubBootInstalled/);
+  assert.doesNotMatch(script,/\$hadHub=\(Task-Exists \$HubTask\)/);
+  assert.match(script,/if\(\$hadHub\)\{Start-ScheduledTask -TaskName \$HubTask/);
+});
 
 test('automatic update requires elevated Broker and skips absent/unreachable authority', async () => {
   const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
@@ -157,19 +197,69 @@ test('automatic update requires elevated Broker and skips absent/unreachable aut
   assert.equal(calls, 1);
 });
 
-test('automatic update skips already-current releases without Broker or writes', async () => {
+test('automatic update verifies elevated Broker even when Agent is current; no update writes', async () => {
   const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  let probes=0;
   const result = await executeAutomaticUpdate({
     check: async () => ({
-      currentVersion: '1.0.5',
-      latestVersion: '1.0.5',
+      currentVersion: '1.0.6',
+      latestVersion: '1.0.6',
       updateAvailable: false,
-      release: { version: '1.0.5', tag: 'v1.0.5', htmlUrl: '', publishedAt: null },
+      release: { version: '1.0.6', tag: 'v1.0.6', htmlUrl: '', publishedAt: null },
     }),
-    broker: async () => { throw new Error('should not request broker'); },
+    broker: async () => ({
+      probe: async () => { probes++; return {reachable:true,elevated:true,version:'1.0.6'}; },
+    }) as never,
     apply: async () => { throw new Error('should not apply'); },
   });
   assert.equal(result.action, 'up_to_date');
+  assert.equal(probes,1);
+});
+
+test('hourly updater reports obsolete and missing Broker versions without invoking privileged cutover', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  for (const version of ['1.0.4','1.0.5',null]) {
+    for (const updateAvailable of [false,true]) {
+      let calls=0;
+      const result = await executeAutomaticUpdate({
+        check: async () => ({
+          currentVersion:'1.0.6',
+          latestVersion:updateAvailable?'1.0.7':'1.0.6',
+          updateAvailable,
+          release:{version:updateAvailable?'1.0.7':'1.0.6',
+            tag:updateAvailable?'v1.0.7':'v1.0.6',htmlUrl:'',publishedAt:null},
+        }),
+        broker: async () => ({probe:async () => ({reachable:true,elevated:true,version})}) as never,
+        apply:async () => {calls++;return {scheduled:true};},
+      });
+      assert.equal(result.action,'broker_version_mismatch');
+      assert.match(result.detail ?? '', /trusted Broker repair required/);
+      assert.equal(calls,0);
+    }
+  }
+});
+
+test('hourly updater must not claim whole-device ready when Broker is unavailable', async () => {
+  const { executeAutomaticUpdate } = await import('../src/update/auto-update.js');
+  const result=await executeAutomaticUpdate({
+    check:async () => ({currentVersion:'1.0.6',latestVersion:'1.0.6',updateAvailable:false,
+      release:{version:'1.0.6',tag:'v1.0.6',htmlUrl:'',publishedAt:null}}),
+    broker:async()=>null,
+    apply:async()=>{throw new Error('no updates');},
+  });
+  assert.equal(result.action,'broker_unavailable');
+});
+
+test('hourly update never creates a replacement DPAPI Broker identity when missing', async () => {
+  const {readFileSync} = await import('node:fs');
+  const source=readFileSync(new URL('../src/update/auto-update.ts',import.meta.url),'utf8');
+  const start=source.indexOf('async function runAutoUpdateOnce():');
+  const end=source.indexOf('async function installAutoUpdateTask()',start);
+  assert.ok(start>=0 && end>start);
+  const hourly=source.slice(start,end);
+  assert.match(hourly,/readExistingPrivilegedBrokerToken\(\)/);
+  assert.doesNotMatch(hourly,/loadOrCreatePrivilegedBrokerToken\(/);
+  assert.match(hourly,/code === 'ENOENT'\) return null/);
 });
 
 test('automatic Windows task is hourly, indefinite, user-limited and singleton', async () => {
@@ -240,4 +330,13 @@ test('reinstall cannot override the owners explicit disabled updater state', asy
   assert.match(script, /ownerDisabled=\$true/);
   assert.match(script, /\$existing\.Settings\.Enabled -eq \$false/);
   assert.match(script, /exit 0/);
+});
+
+
+test('Windows updater stages on target volume when TEMP uses another drive', () => {
+  const versions='C:\\Users\\navea\\AppData\\Local\\Nexowire\\versions';
+  assert.equal(windowsUpdateStagingParent(versions),versions);
+  assert.equal(windowsUpdateStagingParent(versions,'D:\\Temp'),versions);
+  assert.equal(windowsUpdateStagingParent(versions,'C:\\Temp'),'C:\\Temp');
+  assert.equal(windowsUpdateStagingParent(versions,'d:\\Temp'),versions);
 });

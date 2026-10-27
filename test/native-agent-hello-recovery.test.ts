@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
-import { sendAgentHelloWhenReady } from '../src/agent/native-agent.js';
+import { isBridgeReadyForAgent, sendAgentHelloWhenReady } from '../src/agent/native-agent.js';
 
 function fakeSocket() {
   const frames: string[] = [];
@@ -85,4 +85,25 @@ test('hung Admin Bridge probe has a strict pre-hello budget', async () => {
   assert.ok(Date.now() - started < 800, 'probe budget should finish far before default hub hello timeout');
   assert.deepEqual(JSON.parse(f.frames[0]!), { type: 'hello', adminBridgeReady: false });
   assert.equal(f.terminated, 0);
+});
+
+
+test('Admin Bridge refuses stale, missing and mismatched privileged Broker versions', () => {
+  const current = '1.0.6';
+  assert.equal(isBridgeReadyForAgent({reachable:true,elevated:true,version:current},current),true);
+  for (const version of ['1.0.4', '1.0.5', null, undefined]) {
+    assert.equal(isBridgeReadyForAgent({reachable:true,elevated:true,version},current),false);
+  }
+  assert.equal(isBridgeReadyForAgent({reachable:true,elevated:false,version:current},current),false);
+  assert.equal(isBridgeReadyForAgent({reachable:false,elevated:true,version:current},current),false);
+});
+
+test('version mismatch survives async hello and produces fail-closed bridge telemetry', async () => {
+  const f = fakeSocket();
+  assert.equal(await sendAgentHelloWhenReady(
+    f.socket as unknown as WebSocket,
+    async () => ({reachable:true,elevated:true,version:'1.0.4'}),
+    result => ({adminBridgeReady:isBridgeReadyForAgent(result,'1.0.6')}),
+  ),true);
+  assert.deepEqual(JSON.parse(f.frames[0]!),{adminBridgeReady:false});
 });

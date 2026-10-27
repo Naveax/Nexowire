@@ -28,6 +28,8 @@ import { resolveProtectedSingleSecret } from '../security/protected-secret-files
 import { optionalPlatformSecretSync } from '../security/platform-secret-store.js';
 import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
+import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
+import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
 
 export interface AgentIdentity {
   id: string;
@@ -243,12 +245,21 @@ async function privilegedBrokerFromEnv(
   return new PrivilegedBrokerClient({ url, token });
 }
 
+/** Do not advertise privileged readiness for a stale or incompatible Broker. */
+export function isBridgeReadyForAgent(
+  broker: { reachable: boolean; elevated: boolean; version?: string | null },
+  expectedVersion: string,
+): boolean {
+  return broker.reachable === true && broker.elevated === true &&
+    typeof broker.version === 'string' && broker.version === expectedVersion;
+}
+
 // An asynchronously probed Admin Bridge must not turn a dropped WSS
 // connection into an unhandled error or falsely advertise elevation.
 export async function sendAgentHelloWhenReady(
   socket: Pick<WebSocket, 'readyState' | 'send' | 'terminate'>,
-  probeBridge: () => Promise<{ reachable: boolean; elevated: boolean }>,
-  createHello: (bridge: { reachable: boolean; elevated: boolean }) => unknown,
+  probeBridge: () => Promise<{ reachable: boolean; elevated: boolean; version?: string | null }>,
+  createHello: (bridge: { reachable: boolean; elevated: boolean; version: string | null }) => unknown,
   probeTimeoutMs = 1_000,
 ): Promise<boolean> {
   // Hub helloTimeoutMs defaults to 5000ms; the bridge health probe can
@@ -256,7 +267,7 @@ export async function sendAgentHelloWhenReady(
   const deadline = Number.isFinite(probeTimeoutMs)
     ? Math.min(1_500, Math.max(25, probeTimeoutMs))
     : 1_000;
-  const notReady = { reachable: false, elevated: false };
+  const notReady = { reachable: false, elevated: false, version: null };
   let timeout: NodeJS.Timeout | undefined;
   const timeoutResult = new Promise<typeof notReady>((resolve) => {
     timeout = setTimeout(() => resolve(notReady), deadline);
@@ -267,6 +278,7 @@ export async function sendAgentHelloWhenReady(
   const bridge = {
     reachable: result.reachable === true,
     elevated: result.reachable === true && result.elevated === true,
+    version: typeof result.version === 'string' ? result.version : null,
   };
   if (socket.readyState !== WebSocket.OPEN) return false;
   try {
@@ -414,6 +426,9 @@ export async function runNativeAgent(
     await singletonLock?.close();
     throw error;
   }
+  // Start local CORE UI/authority polling only after winning the singleton.
+  const coreConsole = await createWindowsCoreConsoleAdmission({deviceId:identity.id,
+    credential:token,broker:privilegedBroker,env});
   progressSupervisor.recover(processes.list());
   const progressWatchdogTimer = setInterval(() => {
     // Do not consume de-duplicated alerts while the Hub is unreachable.
@@ -429,6 +444,7 @@ export async function runNativeAgent(
   let endpointIndex = 0;
 
   const stop = (): void => {
+    coreConsole.close();
     stopped = true;
     clearInterval(progressWatchdogTimer);
     currentSocket?.close(1001, 'Agent shutting down');
@@ -445,12 +461,15 @@ export async function runNativeAgent(
     let openedAt: number | undefined;
 
     await new Promise<void>((resolve) => {
+      const requestLifetime = new AbortController();
       let heartbeatTimer: NodeJS.Timeout | undefined;
       let lastPongAt = Date.now();
       let settled = false;
       const finish = (): void => {
         if (settled) return;
         settled = true;
+        requestLifetime.abort();
+        revokePhysicalConsoleGrant();
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         resolve();
       };
@@ -494,8 +513,7 @@ export async function runNativeAgent(
               privilegeMode: activePrivilegeMode,
               adminBridgeReady:
                 activePrivilegeMode === 'broker' &&
-                bridgeProbe.reachable &&
-                bridgeProbe.elevated,
+                isBridgeReadyForAgent(bridgeProbe, agentVersion()),
             },
           }),
         );
@@ -570,6 +588,9 @@ export async function runNativeAgent(
                       runbooks,
                       privilegeMode: activePrivilegeMode,
                       accessMode: request.data.accessMode,
+                      requestId: request.data.requestId,
+                      requestSignal: requestLifetime.signal,
+                      coreConsole,
                       ...(privilegedBroker
                         ? { privilegedBroker }
                         : {}),

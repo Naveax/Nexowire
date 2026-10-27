@@ -50,9 +50,12 @@ const PersistedGraphSchema = z.object({
   jobs: z.array(PersistedJobSchema).min(1).max(32),
 });
 
+// Load the complete supported admission range across restart. Lowering the
+// configured limit must not discard previously recorded UNKNOWN effects.
+const MAX_TASK_GRAPH_JOURNAL_ENTRIES = 65_536;
 const PersistedStateSchema = z.object({
   version: z.literal(1),
-  graphs: z.array(PersistedGraphSchema).max(1000),
+  graphs: z.array(PersistedGraphSchema).max(MAX_TASK_GRAPH_JOURNAL_ENTRIES),
 });
 
 export type PersistedTaskJobStatus = z.infer<typeof JobStatusSchema>;
@@ -114,6 +117,7 @@ export class TaskGraphStoreError extends Error {
 export interface TaskGraphStoreOptions {
   stateFile: string;
   retentionMs?: number;
+  maxEntries?: number;
 }
 
 function cloneGraph(graph: TaskGraphCheckpoint): TaskGraphCheckpoint {
@@ -136,11 +140,16 @@ export class TaskGraphStore {
   private readonly graphs = new Map<string, TaskGraphCheckpoint>();
   private readonly stateFile: string;
   private readonly retentionMs: number;
+  private readonly maxEntries: number;
   private persistChain: Promise<void> = Promise.resolve();
 
   constructor(options: TaskGraphStoreOptions) {
     this.stateFile = options.stateFile;
     this.retentionMs = options.retentionMs ?? 7 * 24 * 60 * 60 * 1000;
+    const maxEntries=options.maxEntries ?? 4096;
+    if(!Number.isSafeInteger(maxEntries)||maxEntries<1||maxEntries>MAX_TASK_GRAPH_JOURNAL_ENTRIES)
+      throw new Error('TASK_GRAPH_JOURNAL_CAPACITY_CONFIG_INVALID');
+    this.maxEntries=maxEntries;
   }
 
   async initialize(): Promise<void> {
@@ -160,6 +169,19 @@ export class TaskGraphStore {
     }
 
     const parsed = PersistedStateSchema.parse(JSON.parse(raw));
+    // Validate all identity keys before state restoration; otherwise a
+    // repeated JSON graph ID can overwrite the earlier UNKNOWN in Map.set.
+    const seenIds=new Set<string>();
+    for(const entry of parsed.graphs){
+      if(seenIds.has(entry.id))
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_DUPLICATE_ID',
+          'Duplicate durable task-graph identity requires external reconciliation.');
+      seenIds.add(entry.id);
+      const jobIds=new Set(entry.jobs.map(job=>job.id));
+      if(jobIds.size!==entry.jobs.length)
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_DUPLICATE_JOB_ID',
+          'Duplicate nested job identity in persisted graph requires reconciliation.');
+    }
     let changed = false;
     for (const graph of parsed.graphs) {
       const checkpoint: TaskGraphCheckpoint = cloneGraph(graph);
@@ -180,7 +202,7 @@ export class TaskGraphStore {
       this.graphs.set(checkpoint.id, checkpoint);
     }
 
-    this.pruneExpiredInMemory();
+    // Local TTL must not erase unreconciled native-effect history on startup.
     if (changed) await this.persistState();
   }
 
@@ -194,10 +216,18 @@ export class TaskGraphStore {
       retryUnknown: boolean;
     },
   ): Promise<TaskGraphCheckpoint> {
+    if(new Set(input.jobs.map(job=>job.id)).size!==input.jobs.length)
+      throw new TaskGraphStoreError('TASK_GRAPH_DUPLICATE_JOB_ID',
+        'Duplicate graph job identity must not be admitted to native journal.');
     const existing = this.graphs.get(input.id);
     const now = new Date().toISOString();
 
     if (!existing) {
+      // Never silently evict unresolved effects at capacity, even when the
+      // prior graph appears locally completed. Require external reconciliation.
+      if(this.graphs.size>=this.maxEntries)
+        throw new TaskGraphStoreError('TASK_GRAPH_JOURNAL_CAPACITY_REACHED',
+          'Task graph journal full; independent mutation reconciliation required.');
       const graph: TaskGraphCheckpoint = {
         id: input.id,
         specHash: input.specHash,
@@ -250,6 +280,16 @@ export class TaskGraphStore {
       );
     }
 
+    // Caller-supplied specHash and matching job IDs are not enough to prove
+    // the same previously admitted native dependency graph on resume.
+    const changedGraph=existing.jobs.some((stored,index)=>{
+      const requested=input.jobs[index];
+      return requested?.dependsOn.length!==stored.dependsOn.length ||
+        requested.dependsOn.some((dep,i)=>dep!==stored.dependsOn[i]);
+    });
+    if(changedGraph)
+      throw new TaskGraphStoreError('TASK_GRAPH_SPEC_MISMATCH',
+        'Resume cannot rewrite the persisted native dependency DAG.');
     existing.status = 'running';
     existing.updatedAt = now;
     existing.runCount++;
@@ -280,6 +320,26 @@ export class TaskGraphStore {
       ...graph,
       updatedAt: new Date().toISOString(),
     });
+    // A checkpoint update cannot create an unreserved mutation identity.
+    // Reserve it first through prepare(), which enforces journal capacity.
+    const original=this.graphs.get(parsed.id);
+    if(!original)
+      throw new TaskGraphStoreError('TASK_GRAPH_NOT_PREPARED',
+        'Checkpoint must be admitted through prepare before it can be saved.');
+    const sameJobs=original.jobs.length===parsed.jobs.length && original.jobs.every((old,index)=>{
+      const next=parsed.jobs[index];
+      return next?.id===old.id && next.dependsOn.length===old.dependsOn.length &&
+        next.dependsOn.every((dep,i)=>dep===old.dependsOn[i]);
+    });
+    if(original.specHash!==parsed.specHash||!sameJobs)
+      throw new TaskGraphStoreError('TASK_GRAPH_SPEC_MISMATCH',
+        'Checkpoint update cannot rewrite persisted task-graph specification or job identities.');
+    // Native UNKNOWN persists until prepare() performs explicit retry admission
+    // or an independent reconciliation source establishes the actual effect.
+    if(original.jobs.some((old,index)=>old.status==='unknown'&&parsed.jobs[index]?.status!=='unknown')||
+      (parsed.status==='succeeded'&&parsed.jobs.some(job=>job.status==='unknown')))
+      throw new TaskGraphStoreError('TASK_GRAPH_UNKNOWN_RECONCILIATION_REQUIRED',
+        'An UNKNOWN native job cannot change state through a checkpoint write.');
     this.graphs.set(parsed.id, cloneGraph(parsed));
     await this.persistState();
   }
@@ -297,7 +357,7 @@ export class TaskGraphStore {
   }
 
   list(): TaskGraphCheckpoint[] {
-    this.pruneExpiredInMemory();
+    // Enumeration alone must never retire UNKNOWN/native mutation history.
     return [...this.graphs.values()]
       .map(cloneGraph)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -308,7 +368,7 @@ export class TaskGraphStore {
     jobId?: string;
     limit?: number;
   } = {}): TaskArtifactRecord[] {
-    this.pruneExpiredInMemory();
+    // Artifact reads cannot garbage-collect unrelated mutation checkpoints.
     if (input.graphId && !this.graphs.has(input.graphId)) {
       throw new TaskGraphStoreError(
         'TASK_GRAPH_NOT_FOUND',
@@ -342,29 +402,12 @@ export class TaskGraphStore {
     return records;
   }
 
-  async prune(input: { olderThanMs?: number } = {}) {
-    const cutoff =
-      Date.now() - (input.olderThanMs ?? this.retentionMs);
-    let removed = 0;
-
-    for (const [id, graph] of this.graphs) {
-      if (graph.status === 'running') continue;
-      if (Date.parse(graph.updatedAt) <= cutoff) {
-        this.graphs.delete(id);
-        removed++;
-      }
-    }
-
-    await this.persistState();
-    return { removed, remaining: this.graphs.size };
-  }
-
-  private pruneExpiredInMemory(): void {
-    const cutoff = Date.now() - this.retentionMs;
-    for (const [id, graph] of this.graphs) {
-      if (graph.status === 'running') continue;
-      if (Date.parse(graph.updatedAt) <= cutoff) this.graphs.delete(id);
-    }
+  /** Native mutation history may be pruned only after independent CAS/tombstones. */
+  async prune(_input: { olderThanMs?: number } = {}): Promise<never> {
+    throw new TaskGraphStoreError(
+      'RECONCILE_REQUIRED',
+      'Task graph pruning needs off-host mutation tombstones and reconciliation.',
+    );
   }
 
   private async persistState(): Promise<void> {

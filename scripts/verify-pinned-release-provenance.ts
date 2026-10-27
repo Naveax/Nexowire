@@ -47,7 +47,7 @@ Import-Module -Name 'C:\Windows\System32\WindowsPowerShell\v1.0\Modules\Microsof
 $targets=@('C:\Program Files','C:\Program Files\GitHub CLI','C:\Program Files\GitHub CLI\gh.exe')
 $trusted=@{'S-1-5-18'=$true;'S-1-5-32-544'=$true;'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'=$true}
 $rights=[System.Security.AccessControl.FileSystemRights]
-$mask=[int]$rights::WriteData -bor [int]$rights::AppendData -bor [int]$rights::WriteAttributes -bor [int]$rights::WriteExtendedAttributes -bor [int]$rights::Delete -bor [int]$rights::DeleteSubdirectoriesAndFiles -bor [int]$rights::ChangePermissions -bor [int]$rights::TakeOwnership
+$mask=[int64]$rights::WriteData -bor [int64]$rights::AppendData -bor [int64]$rights::WriteAttributes -bor [int64]$rights::WriteExtendedAttributes -bor [int64]$rights::Delete -bor [int64]$rights::DeleteSubdirectoriesAndFiles -bor [int64]$rights::ChangePermissions -bor [int64]$rights::TakeOwnership -bor [int64]0x40000000 -bor [int64]0x10000000
 foreach($path in $targets){
  $item=Get-Item -LiteralPath $path -Force -ErrorAction Stop
  if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'GH_REPARSE_POINT'}
@@ -56,7 +56,13 @@ foreach($path in $targets){
  if(-not $trusted.ContainsKey($owner)){throw 'GH_UNTRUSTED_OWNER'}
  foreach($ace in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
   if($ace.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow){continue}
-  if(([int]$ace.FileSystemRights -band $mask) -eq 0){continue}
+  # Windows Program Files commonly contains CREATOR OWNER GENERIC_ALL with
+  # InheritOnly: the template is not effective on this directory, and each
+  # path's current owner is checked separately above. Do not exempt a direct
+  # or effective CREATOR OWNER write ACE, or any other untrusted SID.
+  if($ace.IdentityReference.Value -eq 'S-1-3-0' -and
+     ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0){continue}
+  if(([int64]$ace.FileSystemRights -band $mask) -eq 0){continue}
   if(-not $trusted.ContainsKey($ace.IdentityReference.Value)){throw 'GH_UNTRUSTED_WRITE_ACE'}
  }
 }
