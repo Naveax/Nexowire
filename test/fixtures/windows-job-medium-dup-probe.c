@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
+#include <stdint.h>
 
 static int blocked(const wchar_t *reason) {
   wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED %ls\n",reason);
