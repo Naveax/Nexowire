@@ -300,3 +300,26 @@ test('frozen wall clock cannot extend Broker admission after async waits',async(
     }finally{Date.now=genuineDateNow}
   }
 });
+
+test('Broker health never confuses synthetic startup with actual HIGH token',{
+  skip:process.platform!=='win32',
+},async()=>{
+  const {startPrivilegedBroker,isWindowsProcessElevated,brokerHealthElevationClaim}=
+    await import('../src/agent/privileged-broker.js');
+  assert.equal(brokerHealthElevationClaim(()=>false),false);
+  assert.equal(brokerHealthElevationClaim(()=>true),true);
+  assert.equal(brokerHealthElevationClaim(()=>{throw Error('TOKEN_UNAVAILABLE')}),false);
+  const broker=await startPrivilegedBroker({
+    host:'127.0.0.1',port:0,tokens:['fixture-only-health-token'],
+    requireElevation:false,
+  });
+  try{
+    const response=await fetch(broker.url+'/health',{
+      headers:{authorization:'Bearer fixture-only-health-token'},
+    });
+    assert.equal(response.status,200);
+    const body=await response.json() as {ok:boolean;elevated:boolean};
+    assert.equal(body.ok,true);
+    assert.equal(body.elevated,isWindowsProcessElevated());
+  }finally{await broker.close()}
+});
