@@ -55,7 +55,9 @@ export type CoreBrokerExecutionRequest=z.infer<typeof CoreBrokerExecutionRequest
 
 export const CoreBrokerEnrollmentSchema=z.strictObject({
   deviceId:id,ownerAccountId:id,ownerEpoch:z.number().int().positive().safe(),
-  grantGeneration:z.number().int().positive().safe(),
+  // Legacy QA fixtures may omit this field, but evaluation MUST deny them.
+  // Optional here preserves source compatibility, never execution authority.
+  grantGeneration:z.number().int().positive().safe().optional(),
   credentialBinding:sha,
   enrollmentId:z.string().uuid(),
   activatedAt:datetime,
