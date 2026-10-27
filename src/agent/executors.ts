@@ -47,7 +47,8 @@ import type { RunbookStore } from './runbook-store.js';
 import type { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { inspectWindowsUacStatus } from './windows-uac-status.js';
 import { privilegeRequirement } from '../security/privilege.js';
-import {executeCoreWindowsMutation,type CoreWindowsDispatchAdmission}
+import {executeCoreWindowsMutation,assertCoreSandboxRouteUnavailable,
+  assertCoreOtherNativeEffectUnavailable,type CoreWindowsDispatchAdmission}
   from './core-windows-mutation-dispatch.js';
 import { detectWsl } from './wsl-detection.js';
 import { executeLiveUpdateCapability } from '../update/live-update.js';
@@ -2244,6 +2245,15 @@ export async function executeCapability(
   policy: PathPolicy,
   context: AgentExecutionContext = {},
 ): Promise<unknown> {
+  // A CORE candidate/Broker route must never reach a legacy raw process,
+  // WSL, graph/runbook child or unadmitted Windows/file effect. #07 has no
+  // accepted OS worker. #02's admission is not an Agent-local CAS ticket.
+  // Merely adding a context flag can cause DENIAL, never grant execution.
+  const coreOrBrokerRouted=context.privilegeMode==='broker' ||
+    context.coreWindowsDispatch!==undefined;
+  assertCoreSandboxRouteUnavailable(capability,coreOrBrokerRouted);
+  assertCoreOtherNativeEffectUnavailable(capability,coreOrBrokerRouted);
+
   // Do this before physical console grant checks. An owner-console grant
   // is not a waiver of AI private-desktop isolation.
   assertPrivateAiGuiBoundary(capability);
