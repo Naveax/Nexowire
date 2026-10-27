@@ -42,11 +42,9 @@ test('same-tier high token remains privileged against high Job guardian; medium 
   if (lowprivVerified) {
     // A medium-integrity Agent no longer gets a Job owner or a root at all.
     // Separate real medium attacker -> high guardian evidence is required.
-    const marker='NX_MEDIUM_GUARD_DENIED_'+randomBytes(12).toString('hex');
     const manager=new ProcessManager();
     await assert.rejects(
-      ()=>manager.start({shell:'powershell',
-        command:'node -e "const marker=\\''+marker+'\\';setInterval(()=>{},1000)"'},
+      ()=>manager.start({shell:'powershell', command:'exit 0'},
         new PathPolicy(['*'])),
       /WINDOWS_JOB_LAUNCH_UNCONFIRMED|guardian_high_token_or_acl_unverified|WINDOWS_JOB/,
       'medium-integrity guardian must fail closed before any root can run');
