@@ -2234,7 +2234,8 @@ const CORE_WINDOWS_MUTATION_CAPABILITIES = new Set<string>([
   'windows.service.control','windows.registry.set','windows.registry.delete',
   'windows.task.control','windows.firewall.control',
   'windows.environment.set','windows.environment.delete',
-  'windows.installer.apply','nexowire.machine_update.apply',
+  // Installer/update handlers execute inside #02-owned Broker server. Their
+  // in-process CAS integration remains a separate BLOCKER, not claimed here.
 ]);
 
 export async function executeCapability(
@@ -2285,7 +2286,11 @@ export async function executeCapability(
   // low-level Windows executors independently reject missing admission.
   if (CORE_WINDOWS_MUTATION_CAPABILITIES.has(capability) &&
       privilegeRequirement(capability,input)==='elevated') {
-    if(context.privilegeMode!=='broker'||!context.privilegedBroker) {
+    if(context.privilegeMode==='broker'&&!context.privilegedBroker) {
+      throw Object.assign(new Error('Elevated capability requires the Nexowire privileged broker.'),
+        {code:'PRIVILEGED_BROKER_REQUIRED'});
+    }
+    if(context.privilegeMode!=='broker') {
       throw Object.assign(new Error('CORE Broker dispatcher required'),
         {code:'CORE_DISPATCH_BROKER_REQUIRED'});
     }
