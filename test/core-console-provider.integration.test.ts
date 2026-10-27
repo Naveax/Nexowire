@@ -9,7 +9,8 @@ import {coreOperationBytes} from '../src/protocol/core-console-authority.js';
 import type {D1DatabaseLike,D1PreparedStatementLike} from '../src/product/d1-control-plane-store.js';
 import {createControlPlaneHttpHandler} from '../src/product/control-plane-http.js';
 import {CoreConsoleAdmission} from '../src/agent/core-console-admission.js';
-import {CoreConsoleAuthorityClient,WindowsCoreConsoleProvider,type CoreProfileStore} from '../src/agent/windows-core-console-provider.js';
+import {CoreConsoleAuthorityClient,WindowsCoreConsoleProvider,type CoreProfileStore,
+  type NativeCoreConsentProof} from '../src/agent/windows-core-console-provider.js';
 import {executeCapability} from '../src/agent/executors.js';
 import {CoreNativeDenial} from '../src/agent/windows-core-console-native.js';
 import {NEXOWIRE_VERSION} from '../src/version.js';
@@ -47,21 +48,44 @@ function fixture(){
     beforeRequest?.(JSON.parse(String(init?.body)));return handler(request);}) as typeof fetch;
   const client=new CoreConsoleAuthorityClient('https://core.example',credential,fetcher);
   let record:Profile|null=null,stopped=false,blocked=false,consents=0,effects=0,desktop=true,bridge=true;
+  let nativeReceipt:NativeCoreConsentProof|null=null,readbackEnabled=true;
+  let forgedNativeReceipt:((value:NativeCoreConsentProof)=>NativeCoreConsentProof)|undefined;
   let onNative:(()=>Promise<void>)|undefined;
   const store:CoreProfileStore={stopFile:'fixture-only-STOP',load:async()=>structuredClone(record),
     save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},clearStop:async()=>{stopped=false;},stopped:async()=>stopped,
     block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},blocked:async()=>blocked};
   const options={deviceId,authority:client,store,
     broker:{probe:async()=>({reachable:bridge,elevated:bridge,version:NEXOWIRE_VERSION})},
-    consent:async()=>{consents++;return true;},
+    // SYNTHETIC native receipt/readback fixture. It has no protected Windows
+    // signer, human consent or real independent OS logon provenance.
+    nativeConsent:{
+      approveAndConsume:async(challenge)=>{
+        consents++;
+        const next:NativeCoreConsentProof={...challenge,receiptId:randomUUID(),
+          windowsSessionId:1,windowsLogonLuid:'0000000000000001',
+          approvedAtMs:Date.now(),consumed:true};
+        nativeReceipt=forgedNativeReceipt?.(next)??next;
+        return structuredClone(nativeReceipt);
+      },
+      currentReadback:async(receiptId:string)=>readbackEnabled&&nativeReceipt?.receiptId===receiptId
+        ?structuredClone(nativeReceipt):null,
+    },
     native:async()=>{effects++;await onNative?.();return {data:{syntheticNativeEffect:true}};},
     monitor:{desktopAllowed:()=>desktop,close:()=>{}},
   };
-  const make=async()=>{const provider=new WindowsCoreConsoleProvider(options);await provider.initialize();
-    return {provider,controller:new CoreConsoleAdmission(undefined,provider)};};
+  const make=async(withNativeConsent=true)=>{
+    const provider=new WindowsCoreConsoleProvider({...options,
+      nativeConsent:withNativeConsent?options.nativeConsent:undefined});
+    await provider.initialize();
+    return {provider,controller:new CoreConsoleAdmission(undefined,provider)};
+  };
   return {db,authority,client,store,make,consents:()=>consents,effects:()=>effects,
     profile:()=>structuredClone(record)!,setProfile:(p:Profile)=>{record=structuredClone(p);},
     setDesktop:(v:boolean)=>{desktop=v;},setBridge:(v:boolean)=>{bridge=v;},
+    setNativeReadback:(v:boolean)=>{readbackEnabled=v;},
+    forgedNativeReceipt:(f:typeof forgedNativeReceipt)=>{forgedNativeReceipt=f;},
+    nativeReceipt:()=>nativeReceipt,
+    replaceNativeReceipt:(v:NativeCoreConsentProof)=>{nativeReceipt=v;},
     before:(cb:typeof beforeRequest)=>{beforeRequest=cb;},native:(cb:typeof onNative)=>{onNative=cb;}};
 }
 async function enable(f:ReturnType<typeof fixture>){const runtime=await f.make();
@@ -273,6 +297,63 @@ test('external DB clock rejects signed stale and future local enrollment decisio
       await assert.rejects(f.authority.handle(credential,{...request,signature}),
         /CORE_LOCAL_DECISION_NOT_FRESH/);
     }
+    assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
+  }finally{f.db.close();}
+});
+
+test('missing protected native consent provider cannot show local approval or reuse a legacy certificate',async()=>{
+  const f=fixture();try{
+    const bare=await f.make(false);
+    assert.equal((await bare.controller.status('full')).localEnrolled,false);
+    assert.equal((await bare.controller.status('full')).state,'LOCAL_ENROLLMENT_REQUIRED');
+    assert.equal(await bare.controller.enroll(new AbortController().signal),false);
+    assert.equal(f.consents(),0);
+    assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
+    const approved=await enable(f);
+    assert.equal((await approved.controller.status('full')).active,true,'synthetic fixture only');
+    const after=await f.make(false);
+    const status=await after.controller.status('full');
+    assert.equal(status.localEnrolled,false,'legacy DPAPI certificate alone never satisfies native readback');
+    assert.equal(status.active,false);
+    assert.equal(status.state,'LOCAL_ENROLLMENT_REQUIRED');
+    await assert.rejects(input(after.controller));assert.equal(f.effects(),0);
+  }finally{f.db.close();}
+});
+
+test('changed native Windows logon session or missing independent readback cannot reuse certificate',async()=>{
+  const f=fixture();try{
+    const {controller}=await enable(f);
+    const proof=f.nativeReceipt()!;
+    f.replaceNativeReceipt({...proof,windowsLogonLuid:'0000000000000002'});
+    assert.equal((await controller.status('full')).active,false);
+    assert.equal((await controller.status('full')).localEnrolled,false);
+    await assert.rejects(input(controller));assert.equal(f.effects(),0);
+    f.replaceNativeReceipt(proof);
+    f.setNativeReadback(false);
+    assert.equal((await controller.status('full')).active,false);
+    await assert.rejects(input(controller));assert.equal(f.effects(),0);
+  }finally{f.db.close();}
+});
+
+test('forged owner/session native receipts and absent native readback never register enrollment',async()=>{
+  for(const tamper of [
+    (x:NativeCoreConsentProof)=>({...x,ownerEpoch:x.ownerEpoch+1}),
+    (x:NativeCoreConsentProof)=>({...x,deviceId:'foreign-device-0001'}),
+    (x:NativeCoreConsentProof)=>({...x,windowsLogonLuid:'nonsense'}),
+  ]){
+    const f=fixture();try{
+      f.forgedNativeReceipt(tamper);
+      const {controller}=await f.make();
+      await assert.rejects(controller.enroll(new AbortController().signal));
+      assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
+      assert.equal((await controller.status('full')).active,false);
+    }finally{f.db.close();}
+  }
+  const f=fixture();try{
+    f.setNativeReadback(false);
+    const {controller}=await f.make();
+    await assert.rejects(controller.enroll(new AbortController().signal),
+      /CORE_NATIVE_CONSENT_READBACK_REQUIRED/);
     assert.equal((await f.authority.deviceStatus(deviceId,owner)).localEnrolled,false);
   }finally{f.db.close();}
 });
