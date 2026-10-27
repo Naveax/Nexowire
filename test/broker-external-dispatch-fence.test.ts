@@ -53,6 +53,7 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   readonly holdBeginResponse=deferred();
   readonly holdCommitResponse=deferred();
   commitEntered=false;
+  commitCalls=0;
   stallRevoke=false;stallBeginResponse=false;stallCommitResponse=false;
   number=0;
   constructor(readonly authorityId:string,
@@ -96,6 +97,7 @@ class FakeRemoteCAS implements ExternalBrokerDispatchAuthority{
   async commitIfCurrent(op:BrokerDispatchRequest,
     broker:ProtectedBrokerEvidence,dispatchId:string,
     challengeNonce:string):Promise<DispatchClaim>{
+    this.commitCalls++;
     const x=op.scope;
     // This is the second, atomically serialized admission barrier.
     // Reservations from before revoke are not executable afterwards.
@@ -174,14 +176,19 @@ function fixture(){
  });
  const verifyApproval=signedOperatorGrantVerifier(
   ownerKeys.publicKey.export({type:'spki',format:'pem'}).toString());
- const broker=()=>new BrokerExternalDispatchFence({
+ const broker=(opts?:{now?:()=>number;onReadback?:()=>void})=>
+  new BrokerExternalDispatchFence({
   authority:remote,authorityId,publicKeyPem:keys,
+  now:opts?.now,
   verifyIdentity:async()=>identity,
-  verifyEffectiveBroker:async()=>({
-    verified:true,brokerId,highIntegrityToken:high as true,
-    ownerEpoch:4,grantGeneration:7,
-    signedProtectedImage:true,protectedParentAndImports:true,
-  }),
+  verifyEffectiveBroker:async()=>{
+    opts?.onReadback?.();
+    return {
+      verified:true,brokerId,highIntegrityToken:high as true,
+      ownerEpoch:4,grantGeneration:7,
+      signedProtectedImage:true,protectedParentAndImports:true,
+    };
+  },
   verifyOwnerRevocation:async r=>approval&&verifyApproval({
     kind:'revoke',authorityId,deviceId,ownerId,epoch:deviceEpoch,
     sessionEpoch,generation:r.expectedGeneration,
@@ -250,6 +257,36 @@ test('verified high-token Broker executes once after new signed external CAS per
  await code(gate.execute(f.request([...f.remote.dispatched.keys()][0]!),async()=>++effects),
   'DISPATCH_EXTERNAL_CAS_UNKNOWN');
  assert.equal(effects,1);
+});
+test('begin permit expiry during async HIGH reattestation blocks remote commit',async()=>{
+ const f=fixture();
+ let readbacks=0,clock=Date.now(),effects=0;
+ const gate=f.broker({now:()=>clock,
+  onReadback:()=>{if(++readbacks===2)clock+=10_000}});
+ await code(gate.execute(f.request(),async()=>++effects),
+  'DISPATCH_PROOF_EXPIRED');
+ assert.equal(readbacks,2);
+ assert.equal(f.remote.commitCalls,0,'expired reserve must never commit');
+ assert.equal(f.remote.active.size,0,'reserved claim is released');
+ assert.equal(effects,0);
+ await code(gate.execute(f.request(),async()=>++effects),
+  'DISPATCH_REVOKE_PENDING');
+ assert.equal(effects,0,'expiry must not replay the mutation');
+});
+test('commit expires during final async HIGH readback, callback is not invoked',async()=>{
+ const f=fixture();
+ let readbacks=0,clock=Date.now(),effects=0;
+ const gate=f.broker({now:()=>clock,
+  onReadback:()=>{if(++readbacks===3)clock+=10_000}});
+ await code(gate.execute(f.request(),async()=>++effects),
+  'DISPATCH_PROOF_EXPIRED');
+ assert.equal(readbacks,3,'native evidence must be refreshed after commit');
+ assert.equal(f.remote.commitCalls,1,'admission completed before expiry');
+ assert.equal(f.remote.active.size,0,'committed claim is released');
+ assert.equal(effects,0,'expired signed receipt may not reach OS');
+ await code(gate.execute(f.request(),async()=>++effects),
+  'DISPATCH_REVOKE_PENDING');
+ assert.equal(effects,0);
 });
 test('HIGH token downgraded during begin CAS wait is rechecked before commit',async()=>{
  const f=fixture(),gate=f.broker();f.remote.stallBeginResponse=true;

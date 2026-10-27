@@ -102,3 +102,30 @@ operator supervision, never by retrying the OS effect.
 5. No live CORE enablement, release, deployment or main merge until independent
    acceptance. Any missing/ambiguous evidence remains **PRODUCTION NO-GO**.
 
+
+## 2026-10-27 #01 async HIGH readback vs signed receipt expiration
+
+The protected Broker proof must be freshly re-read after the asynchronous
+`beginIfCurrent` and `commitIfCurrent` admission, and **immediately before**
+the effect callback. The reattestation owner epoch, grant generation, signed
+protected image, effective HIGH token, parent/import protection and Broker ID
+must match the original request and claim. Failure fences the device locally
+and releases the reserved claim without replaying the effect.
+
+Even the final protected token readback is asynchronous. An Ed25519 reserve or
+commit receipt that was valid *before* that await may expire *during* it.
+Therefore the source gate independently rechecks (a) the reserve receipt expiry
+after the pre-commit HIGH readback and (b) the committed receipt expiry after the
+final HIGH readback, synchronously before the callback. Expiry denies and
+locally fences subsequent dispatches. The external authority must also enforce
+its own atomic lease/epoch/revoke/ROOT-expiry policy.
+
+Deterministic negative tests in `test/broker-external-dispatch-fence.test.ts`
+advance an injected clock during the second/third protected readback. They
+assert **zero OS callbacks**, no remote commit after an expired reservation,
+release of expired claims, and no mutation replay on retry. This is source
+contract evidence only. A JavaScript callback cannot prevent kernel-native
+token downgrade or revoke after the last readback: real protected Broker
+admission/cancel barriers and effective Windows token evidence are still
+required from #02/#03, together with independent durable CAS and physical
+two-device rollback/revocation acceptance. Production remains **NO-GO**.
