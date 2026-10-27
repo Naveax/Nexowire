@@ -169,10 +169,12 @@ export async function invokeBrokerEffectOnce<T>(
   let recent:BrokerVerifiedEffectBinding|null;
   try{recent=await authority.readVerifiedBinding()}catch{deny()}
   if(!bindingValid(recent)||!sameBinding(binding,recent))deny();
-  // NO await between final protected OS readback and first callback invocation.
+  // Elevation probe may synchronously spawn Windows tooling and take seconds.
+  // Run it BEFORE the last protected readback, never after it. No await or
+  // slow OS operation may separate the fresh authority state from callback.
+  try{if(verifyWindowsElevationNow()!==true)deny()}catch{deny()}
   let immediate:BrokerVerifiedEffectBinding|null;
   try{immediate=authority.readVerifiedBindingNow()}catch{deny()}
   if(!bindingValid(immediate)||!sameBinding(binding,immediate))deny();
-  try{if(verifyWindowsElevationNow()!==true)deny()}catch{deny()}
   return execute(captured.input);
 }
