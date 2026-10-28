@@ -34,6 +34,7 @@ const READY=`d.access_mode='full' AND d.online=1 AND d.platform='win32' AND d.pr
 type Row={device_id:string;owner_account_id:string;installation_id:string|null;authority_time_ms:number;
   enrollment_id:string|null;public_key_spki:string|null;owner_epoch:number;grant_generation:number;
   revoke_epoch:number;core_enabled:number;access_mode:'safe'|'full';online:number;bridge_verified:number;
+  device_platform:string;device_ready:number;
   physical_active:number;status_observed_at_ms:number|null;enrollment_requested:number;
   native_consent_receipt_id:string|null;windows_user_sid:string|null;windows_session_id:number|null;
   windows_logon_luid:string|null;windows_logon_session_epoch:string|null};
@@ -54,7 +55,9 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       c.native_consent_receipt_id,c.windows_user_sid,c.windows_session_id,
       c.windows_logon_luid,c.windows_logon_session_epoch,
       CASE WHEN p.enabled=1 AND COALESCE(b.desired_mode,'auto')<>'off' THEN 1 ELSE 0 END core_enabled,
-      d.access_mode,d.online,CASE WHEN d.privilege_mode='broker' AND d.admin_bridge_ready=1 THEN 1 ELSE 0 END bridge_verified,
+      d.access_mode,d.online,d.platform device_platform,
+      CASE WHEN ${READY} THEN 1 ELSE 0 END device_ready,
+      CASE WHEN d.privilege_mode='broker' AND d.admin_bridge_ready=1 THEN 1 ELSE 0 END bridge_verified,
       c.physical_active,c.status_observed_at_ms,c.enrollment_requested ${JOIN} WHERE d.id=? AND d.credential_hash=?`)
       .bind(id,hash).first<Row>();
     if(!row)throw new Error('CORE_DEVICE_UNAUTHENTICATED');
@@ -193,7 +196,13 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
             if(await this.nativeEnrollmentVerifier.currentReadback(nativeBinding)!==true)
               throw new Error('CORE_NATIVE_CONSENT_SESSION_STALE');
             const latest=await this.row(hash,r.deviceId);
-            if(latest.installation_id!==before.installation_id||latest.enrollment_id!==before.enrollment_id||
+            // Async native readback may outlive a device going offline, a
+            // broker privilege/readiness change or a Windows -> Linux re-pair.
+            // Re-evaluate ALL READY predicates against current D1 source rows,
+            // not just stable enrollment and native receipt identifiers.
+            if(latest.device_ready!==1||latest.device_platform!=='win32'||
+              latest.owner_account_id!==before.owner_account_id||
+              latest.installation_id!==before.installation_id||latest.enrollment_id!==before.enrollment_id||
               latest.owner_epoch!==before.owner_epoch||latest.grant_generation!==before.grant_generation||
               latest.revoke_epoch!==before.revoke_epoch||
               latest.native_consent_receipt_id!==before.native_consent_receipt_id||
@@ -225,6 +234,7 @@ export class D1CoreConsoleAuthority implements CoreConsoleAuthority {
       grantGeneration:row.grant_generation,revokeEpoch:row.revoke_epoch,
       coreEnabled:row.core_enabled===1,enrollmentRequested:row.enrollment_requested===1,
       accessMode:row.access_mode,deviceOnline:row.online===1,
+      devicePlatform:row.device_platform,deviceReady:row.device_ready===1,
       bridgeVerified:row.bridge_verified===1,enrollmentId:row.enrollment_id,
       publicKeySpki:row.public_key_spki,physicalActive:row.physical_active===1,
       statusObservedAtMs:row.status_observed_at_ms,
