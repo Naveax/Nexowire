@@ -15,11 +15,12 @@ export interface CoreConsoleBinding {
 export interface CoreConsoleEvidence {
   readonly certificate: SignedCoreConsoleEnrollmentV1 | null;
   readonly pinnedLocalSpkiDer: Uint8Array | null;
-  // Additional D1-sourced readiness fields are optional on the wire for
-  // older peers but MUST be present and valid for #04 Windows admission.
-  readonly current: (CoreConsoleCurrentReadback & {
-    readonly devicePlatform?: string;readonly deviceReady?: boolean;
-  }) | null;
+  // Kept OUTSIDE the strict ten-field CoreConsoleCurrentReadback contract.
+  // The real Windows provider must source these from a fresh D1 read; missing
+  // values fail closed at its own native admission boundary.
+  readonly current: CoreConsoleCurrentReadback | null;
+  readonly devicePlatform?: string;
+  readonly deviceReady?: boolean;
   readonly observedAtMs: number;
   readonly desktop: 'default' | 'private' | 'secure' | 'locked' | 'unknown';
   readonly nativeAdmission: 'verified' | 'unavailable';
