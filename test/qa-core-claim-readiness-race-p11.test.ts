@@ -104,7 +104,7 @@ function fixture() {
   const store:CoreProfileStore={stopFile:'qa-fixture-only',load:async()=>structuredClone(record),
     save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},
     clearStop:async()=>{stopped=false;},stopped:async()=>stopped};
-  const provider=new WindowsCoreConsoleProvider({deviceId:device,authority:client,store,
+  const createProvider=()=>new WindowsCoreConsoleProvider({deviceId:device,authority:client,store,
     broker:{probe:async()=>({reachable:true,elevated:true,version:NEXOWIRE_VERSION})},
     nativeConsent:{approveAndConsume:async()=>null,currentReadback:async()=>{
       if(claimStarted&&afterClaimReadback){const hook=afterClaimReadback;afterClaimReadback=undefined;hook();}
@@ -115,10 +115,12 @@ function fixture() {
       if(nativeAckLost){nativeAckLost=false;throw new Error('synthetic native ACK lost after possible input');}
       return {synthetic:true};
     },monitor:{desktopAllowed:()=>true,close:()=>{}}});
-  const controller=new CoreConsoleAdmission(undefined,provider);
+  let provider=createProvider();
+  let controller=new CoreConsoleAdmission(undefined,provider);
   const execute=(id:string)=>controller.execute('windows.pointer.move',{hwnd:'0x123',x:0,y:0},id,'full');
   return {db,call,execute,effects:()=>effects,hold:(fn:()=>Promise<void>)=>{hold=fn;},
     status:()=>controller.status('full'),stopped:()=>stopped,
+    restart:()=>{provider.close();provider=createProvider();controller=new CoreConsoleAdmission(undefined,provider);},
     loseNativeAck:()=>{nativeAckLost=true;},
     loseCompletion:(phase:'before'|'after')=>{completionFault=phase;},
     afterClaimReadback:(fn:()=>void)=>{afterClaimReadback=fn;},state:()=>
@@ -229,4 +231,23 @@ for (const scenario of [
     assert.equal(f.state(),'unknown','an uncertain, already consumed claim must be tombstoned');
     await assert.rejects(f.call('claim'));
   }finally{g.release();f.db.close();}
+});
+
+
+for(const phase of ['before','after'] as const)
+test('synthetic native UNKNOWN must stay fenced after provider restart when completion fails '+phase+' D1 transition',async()=>{
+  const f=fixture(),id=randomUUID();try{
+    f.loseNativeAck();f.loseCompletion(phase);
+    await assert.rejects(f.execute(id));
+    assert.equal(f.effects(),1);
+    // Reconstruct only the JS provider; the fixture store/D1 survive.
+    // This is not a physical Agent, Windows session or service restart.
+    f.restart();
+    const stoppedAfterRestart=f.stopped();
+    const activeAfterRestart=(await f.status()).active;
+    const nextAccepted=await f.execute(randomUUID()).then(()=>true,()=>false);
+    assert.deepEqual({stoppedAfterRestart,activeAfterRestart,nextAccepted,effects:f.effects()},
+      {stoppedAfterRestart:true,activeAfterRestart:false,nextAccepted:false,effects:1},
+      'remote completion failure must not allow a persisted enrollment to resume after provider reconstruction');
+  }finally{f.db.close();}
 });
