@@ -11,7 +11,7 @@ import {
   type ProtectedBrokerEvidence,
 } from '../src/agent/broker-external-dispatch-fence.js';
 
-function fixture(mutateRequest:boolean){
+function fixture(mode:'none'|'payload'|'scope'){
   const key=generateKeyPairSync('ed25519');
   const authorityId=randomUUID(),brokerId=randomUUID(),dispatchId=randomUUID();
   const original:BrokerDispatchRequest={
@@ -59,9 +59,14 @@ function fixture(mutateRequest:boolean){
     beginIfCurrent:async(req,_broker,nonce)=>{
       // Only the in-process client adapter can mutate this shared object;
       // this does not model a network peer mutating memory remotely.
-      if(mutateRequest){
+      if(mode==='payload'){
         Reflect.set(req,'capability','windows.task.control');
         Reflect.set(req,'fingerprint','b'.repeat(64));
+      }
+      if(mode==='scope'){
+        Reflect.set(req.scope,'ownerId','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+        Reflect.set(req.scope,'deviceId','cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+        Reflect.set(req.scope,'sessionEpoch','dddddddd-dddd-4ddd-8ddd-dddddddddddd');
       }
       return backend.begin(req,nonce);
     },
@@ -85,7 +90,7 @@ function fixture(mutateRequest:boolean){
 }
 
 test('positive exact request is authenticated, signed and runs only its fixture callback',async()=>{
-  const f=fixture(false);
+  const f=fixture('none');
   assert.equal(await f.run(),'synthetic-effect');
   assert.equal(f.effects,1);
   assert.deepEqual(f.remoteRequest,f.original);
@@ -93,7 +98,7 @@ test('positive exact request is authenticated, signed and runs only its fixture 
 });
 
 test('a shared adapter cannot substitute the signed capability and fingerprint before callback',async()=>{
-  const f=fixture(true);
+  const f=fixture('payload');
   let denied=false;
   try{await f.run()}catch{denied=true;}
   if(denied){
@@ -110,3 +115,17 @@ test('a shared adapter cannot substitute the signed capability and fingerprint b
   );
 });
 
+
+test('a shared adapter cannot substitute nested owner, device or session scope',async()=>{
+  const f=fixture('scope');
+  let denied=false;
+  try{await f.run()}catch{denied=true;}
+  if(denied){
+    assert.equal(f.effects,0,'denial must not invoke the synthetic callback');
+    return;
+  }
+  assert.equal(f.effects,1);
+  assert.deepEqual(f.identitySeen?.scope,f.original.scope);
+  assert.deepEqual(f.remoteRequest?.scope,f.original.scope,
+    'signed CAS owner, device and session must match the callback request');
+});
