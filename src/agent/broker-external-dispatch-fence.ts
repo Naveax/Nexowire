@@ -255,12 +255,21 @@ export class BrokerExternalDispatchFence {
    * the deployed broker must expose cancellation and dispatch barriers.
    */
   async execute<T>(raw:BrokerDispatchRequest,run:()=>Promise<T>):Promise<T>{
+    // Zod provides a validated deep copy, not an immutable one. Neither the
+    // caller nor an injected same-process identity/CAS adapter may rewrite
+    // the admission identity after validation. Freeze the nested scope first:
+    // freezing only the outer object permits owner/session substitution.
     const request=operation.parse(raw);
-    if(this.pendingRequests.has(request.requestId))
+    Object.freeze(request.scope);
+    Object.freeze(request);
+    const requestId=request.requestId;
+    if(this.pendingRequests.has(requestId))
       deny('DISPATCH_EXTERNAL_CAS_UNKNOWN');
-    this.pendingRequests.add(request.requestId);
+    this.pendingRequests.add(requestId);
     return this.executeOnce(request,run).finally(()=>{
-      this.pendingRequests.delete(request.requestId);
+      // The UUID used for cleanup is the validated ORIGINAL value, never a
+      // property subsequently read from an untrusted/shared reference.
+      this.pendingRequests.delete(requestId);
     });
   }
   private async executeOnce<T>(request:BrokerDispatchRequest,
