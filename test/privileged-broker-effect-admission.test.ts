@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {generateKeyPairSync,sign,verify} from 'node:crypto';
 import {
   invokeBrokerEffectOnce,
   type BrokerExternalEffectAdmission,
@@ -330,14 +331,144 @@ test('receipt mutated during async verification denies before native effect',asy
   for(const state of ['RESERVED','COMMITTED'] as const){
     const f=fixture();
     const original=f.authority.verifyReceipt.bind(f.authority);
-    f.authority.verifyReceipt=async(receipt)=>{
+    f.authority.verifyReceipt=async(receipt,signedPayloadUtf8)=>{
       await Promise.resolve();
       if(receipt.state===state){
         (receipt as {capability:string}).capability='windows.task.control';
       }
-      return original(receipt);
+      return original(receipt,signedPayloadUtf8);
     };
     await assert.rejects(f.run(),deny,state);
     assert.equal(f.events.includes('invoke'),false,state);
   }
+});
+
+
+/**
+ * #02B independent immutable-byte regressions. #11's original
+ * test/qa-broker-receipt-aba-p11.test.ts remains unchanged.
+ * This fixture uses disposable Ed25519 keys, NOT a real external CAS.
+ */
+test('snapshot verification sees exact immutable signed bytes and consumes the same ticket',async()=>{
+  const f=fixture();
+  const keys=generateKeyPairSync('ed25519');
+  const begin=f.authority.begin.bind(f.authority);
+  const commit=f.authority.commit.bind(f.authority);
+  const signed=(r:BrokerEffectReceipt|null):BrokerEffectReceipt|null=>{
+    if(!r)return null;
+    const {proof: _discard,...payload}=r;
+    return {...r,proof:sign(null,Buffer.from(JSON.stringify(payload)),
+      keys.privateKey).toString('base64')};
+  };
+  f.authority.begin=async(...args)=>signed(await begin(...args));
+  f.authority.commit=async(...args)=>signed(await commit(...args));
+  const verified:string[]=[];
+  f.authority.verifyReceipt=async(receipt,bytes)=>{
+    assert.ok(Object.isFrozen(receipt),'receipt must be immutable before verification');
+    assert.ok(Object.isFrozen(receipt.binding),'nested binding must be immutable');
+    const {proof: _discard,...payload}=receipt;
+    assert.equal(bytes,JSON.stringify(payload),'signature bytes must describe consumed fields');
+    assert.equal(Reflect.set(receipt,'capability','windows.task.control'),false);
+    assert.equal(Reflect.set(receipt.binding,'generation',100),false);
+    assert.equal(Reflect.set(receipt,'ticket','stolen_ticket'),false);
+    verified.push(receipt.state);
+    return verify(null,Buffer.from(bytes),keys.publicKey,
+      Buffer.from(receipt.proof,'base64'));
+  };
+  assert.deepEqual(await f.run(),input);
+  assert.deepEqual(verified,['RESERVED','COMMITTED']);
+  assert.equal(f.events.filter(x=>x==='invoke').length,1);
+});
+
+for(const state of ['RESERVED','COMMITTED'] as const) {
+  for(const field of ['capability','ticket','nested-generation'] as const) {
+    test('signature ABA '+state+' '+field+' mutation-and-restore denies', {
+      timeout:8000,
+    },async()=>{
+      const f=fixture(),keys=generateKeyPairSync('ed25519');
+      const begin=f.authority.begin.bind(f.authority);
+      const commit=f.authority.commit.bind(f.authority);
+      let transported:BrokerEffectReceipt|undefined;
+      const wrap=(r:BrokerEffectReceipt|null):BrokerEffectReceipt|null=>{
+        if(!r)return null;
+        const {proof: _discard,...correct}=r;
+        const signed={...correct,binding:{...correct.binding}};
+        if(state===r.state){
+          transported=r;
+          if(field==='capability')signed.capability='windows.task.control';
+          if(field==='ticket')signed.ticket='synthetic_altered_ticket_0123456789';
+          if(field==='nested-generation')signed.binding.generation=17;
+        }
+        const result:BrokerEffectReceipt={...r,binding:{...r.binding},
+          proof:sign(null,Buffer.from(JSON.stringify(signed)),
+            keys.privateKey).toString('base64')};
+        if(state===r.state)transported=result;
+        return result;
+      };
+      f.authority.begin=async(...args)=>wrap(await begin(...args));
+      f.authority.commit=async(...args)=>wrap(await commit(...args));
+      const deferred=()=>{
+        let resolve!:()=>void;
+        const promise=new Promise<void>(done=>{resolve=done});
+        return {promise,resolve};
+      };
+      const ready=deferred(),release=deferred();
+      const observed=deferred(),finish=deferred();
+      f.authority.verifyReceipt=async(receipt,bytes)=>{
+        if(receipt.state===state){
+          assert.ok(Object.isFrozen(receipt));
+          assert.ok(Object.isFrozen(receipt.binding));
+          ready.resolve();
+          await release.promise;
+        }
+        const good=verify(null,Buffer.from(bytes),
+          keys.publicKey,Buffer.from(receipt.proof,'base64'));
+        if(receipt.state===state){
+          observed.resolve();
+          await finish.promise;
+        }
+        return good;
+      };
+      const pending=f.run().then(()=>true,()=>false);
+      await ready.promise;
+      assert.ok(transported);
+      // Mutate the transport-owned receipt while verification is suspended.
+      // Old code verifies the transient malicious field, then consumes the
+      // restored clean one: invalid signed scope can reach a callback.
+      let changed=false;
+      if(field==='capability'){
+        changed=Reflect.set(transported,'capability','windows.task.control');
+      } else if(field==='ticket'){
+        changed=Reflect.set(transported,'ticket','synthetic_altered_ticket_0123456789');
+      } else {
+        changed=Reflect.set(transported.binding,'generation',17);
+      }
+      release.resolve();
+      await observed.promise;
+      if(changed) {
+        if(field==='capability')Reflect.set(transported,'capability',capability);
+        else if(field==='ticket')Reflect.set(transported,'ticket',
+          'test_fixture_nonce_bound_ticket_0123456789');
+        else Reflect.set(transported.binding,'generation',9);
+      }
+      finish.resolve();
+      assert.equal(await pending,false,'signed mismatch must not authorize');
+      assert.equal(f.events.includes('invoke'),false);
+    });
+  }
+}
+
+test('malformed or cyclic transport receipt never reaches verifier or effect',async()=>{
+  const f=fixture();
+  let verified=0;
+  f.authority.verifyReceipt=async()=>{verified++;return true};
+  f.authority.begin=async(req,nonce)=>{
+    const cyclic:Record<string,unknown>={state:'RESERVED',
+      operationId:req.operationId,challengeNonce:nonce};
+    cyclic.self=cyclic;
+    return cyclic as unknown as BrokerEffectReceipt;
+  };
+  await assert.rejects(f.run(),deny);
+  assert.equal(verified,0);
+  assert.equal(f.events.includes('invoke'),false);
 });

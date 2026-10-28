@@ -54,7 +54,14 @@ export interface BrokerExternalEffectAdmission {
    * Authenticated proof verification using pinned external authority identity.
    * Caller-supplied fields/proofs must not satisfy this in production.
    */
-  verifyReceipt(receipt: BrokerEffectReceipt): Promise<boolean>;
+  /**
+   * Verify the immutable snapshot against EXACTLY these UTF-8 signed payload
+   * bytes (all receipt fields except `proof`, in snapshot field order).
+   * Implementations must verify the supplied bytes, not reread the
+   * transport-owned response or derive their own mutable payload.
+   */
+  verifyReceipt(receipt: BrokerEffectReceipt, signedPayloadUtf8: string):
+    Promise<boolean>;
   /** Protected synchronous OS evidence at the exact callback boundary. */
   readVerifiedBindingNow(): BrokerVerifiedEffectBinding | null;
 }
@@ -132,6 +139,51 @@ function receiptMatches(receipt:BrokerEffectReceipt|null,
 }
 
 /**
+ * Capture an untrusted transport receipt ONCE before any signature-verification
+ * await. Copy via JSON round-trip to discard attacker-owned references,
+ * prototypes, getters and nested object identities. Deep-freeze every object
+ * (not just the top-level receipt) so a verifier cannot mutate its own input.
+ *
+ * The verifier must sign-check `signedPayloadUtf8`; it is derived from this
+ * *same* snapshot and is a primitive string, immutable across awaits.
+ * No field of the raw transport response is ever read again.
+ */
+function snapshotReceipt(raw:BrokerEffectReceipt|null):
+  {readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string} {
+  if(!raw || typeof raw!=='object')deny();
+  let rawJson:string|undefined;
+  try{rawJson=JSON.stringify(raw)}catch{deny()}
+  if(!rawJson || Buffer.byteLength(rawJson,'utf8')>16*1024)deny();
+  let parsed:unknown;
+  try{parsed=JSON.parse(rawJson)}catch{deny()}
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))deny();
+  const deepFreeze=(value:unknown,depth:number):void=>{
+    if(depth>32)deny();
+    if(value && typeof value==='object'){
+      for(const child of Object.values(value))deepFreeze(child,depth+1);
+      Object.freeze(value);
+    }
+  };
+  deepFreeze(parsed,0);
+  const receipt=parsed as BrokerEffectReceipt;
+  // The receipt interface is a payload plus an opaque proof. The exact bytes
+  // sent to the verifier are the same frozen fields later read by the gate.
+  const {proof: _proof,...signedPayload}=receipt;
+  let signedPayloadUtf8:string|undefined;
+  try{signedPayloadUtf8=JSON.stringify(signedPayload)}catch{deny()}
+  if(!signedPayloadUtf8)deny();
+  return {receipt,signedPayloadUtf8};
+}
+function sameSignedPayload(snapshot:{
+  readonly receipt:BrokerEffectReceipt;readonly signedPayloadUtf8:string,
+}):boolean{
+  try {
+    const {proof: _proof,...payload}=snapshot.receipt;
+    return JSON.stringify(payload)===snapshot.signedPayloadUtf8;
+  }catch{return false}
+}
+
+/**
  * Exactly ONE effect callback. #03 must call this function separately for
  * EVERY real side-effect step with a NEW stable operation UUID. A single
  * outer gate is NOT a multi-step execution sandbox.
@@ -177,24 +229,36 @@ export async function invokeBrokerEffectOnce<T>(
     operationId,capability,inputSha256:captured.inputSha256,binding,
   });
   const reserveNonce=randomBytes(32).toString('hex');
-  let reserved:BrokerEffectReceipt|null;
-  try{reserved=await authority.begin(request,reserveNonce)}catch{deny()}
+  let untrustedReservation:BrokerEffectReceipt|null;
+  try{untrustedReservation=await authority.begin(request,reserveNonce)}catch{deny()}
   assertMonotonicFresh();
-  if(!receiptMatches(reserved,'RESERVED',request,reserveNonce))deny();
-  try{if(await authority.verifyReceipt(reserved)!==true)deny()}catch{deny()}
+  // Never pass the transport-owned receipt to an async verifier.
+  const reserved=snapshotReceipt(untrustedReservation);
+  if(!receiptMatches(reserved.receipt,'RESERVED',request,reserveNonce)||
+     !sameSignedPayload(reserved))deny();
+  try {
+    if(await authority.verifyReceipt(
+      reserved.receipt,reserved.signedPayloadUtf8)!==true)deny();
+  }catch{deny()}
   assertMonotonicFresh();
-  // Verification is asynchronous: the original receipt must still match
-  // the exact signed reservation AFTER the verifier returns.
-  if(!receiptMatches(reserved,'RESERVED',request,reserveNonce))deny();
-  const ticket=reserved.ticket;
+  if(!sameSignedPayload(reserved)||
+     !receiptMatches(reserved.receipt,'RESERVED',request,reserveNonce))deny();
+  // Consume ticket ONLY from the immutable signature-verified snapshot.
+  const ticket=reserved.receipt.ticket;
   const commitNonce=randomBytes(32).toString('hex');
-  let committed:BrokerEffectReceipt|null;
-  try{committed=await authority.commit(request,ticket,commitNonce)}catch{deny()}
+  let untrustedCommit:BrokerEffectReceipt|null;
+  try{untrustedCommit=await authority.commit(request,ticket,commitNonce)}catch{deny()}
   assertMonotonicFresh();
-  if(!receiptMatches(committed,'COMMITTED',request,commitNonce,ticket))deny();
-  try{if(await authority.verifyReceipt(committed)!==true)deny()}catch{deny()}
+  const committed=snapshotReceipt(untrustedCommit);
+  if(!receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket)||
+     !sameSignedPayload(committed))deny();
+  try {
+    if(await authority.verifyReceipt(
+      committed.receipt,committed.signedPayloadUtf8)!==true)deny();
+  }catch{deny()}
   assertMonotonicFresh();
-  if(!receiptMatches(committed,'COMMITTED',request,commitNonce,ticket))deny();
+  if(!sameSignedPayload(committed)||
+     !receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket))deny();
   let recent:BrokerVerifiedEffectBinding|null;
   try{recent=await authority.readVerifiedBinding()}catch{deny()}
   assertMonotonicFresh();
