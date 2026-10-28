@@ -79,10 +79,20 @@ function fixture() {
     windowsLogonLuid:'0000000000000001',windowsLogonSessionEpoch,approvedAtMs,consumed:true};
   const handler=createControlPlaneHttpHandler({} as never,{authenticate:async()=>null,coreConsoleAuthority:authority});
   let claimStarted=false,afterClaimReadback:(()=>void)|undefined;
+  let completionFault:'none'|'before'|'after'='none',nativeAckLost=false;
   const fetcher=(async(input,init)=>{
     const body=JSON.parse(String(init?.body)) as {action?:string};
     if(body.action==='claim')claimStarted=true;
-    return handler(new Request(String(input),init));
+    if(body.action==='complete'&&completionFault==='before'){
+      completionFault='none';
+      throw new Error('synthetic completion request unavailable before D1 transition');
+    }
+    const response=await handler(new Request(String(input),init));
+    if(body.action==='complete'&&completionFault==='after'){
+      completionFault='none';
+      throw new Error('synthetic completion ACK lost after D1 transition');
+    }
+    return response;
   }) as typeof fetch;
   const client=new CoreConsoleAuthorityClient('https://qa-fixture.example',credential,fetcher);
   type Profile=NonNullable<Awaited<ReturnType<CoreProfileStore['load']>>>;
@@ -94,16 +104,25 @@ function fixture() {
   const store:CoreProfileStore={stopFile:'qa-fixture-only',load:async()=>structuredClone(record),
     save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},
     clearStop:async()=>{stopped=false;},stopped:async()=>stopped};
-  const provider=new WindowsCoreConsoleProvider({deviceId:device,authority:client,store,
+  const createProvider=()=>new WindowsCoreConsoleProvider({deviceId:device,authority:client,store,
     broker:{probe:async()=>({reachable:true,elevated:true,version:NEXOWIRE_VERSION})},
     nativeConsent:{approveAndConsume:async()=>null,currentReadback:async()=>{
       if(claimStarted&&afterClaimReadback){const hook=afterClaimReadback;afterClaimReadback=undefined;hook();}
       return structuredClone(nativeProof);
     }},
-    native:async()=>{effects++;return {synthetic:true};},monitor:{desktopAllowed:()=>true,close:()=>{}}});
-  const controller=new CoreConsoleAdmission(undefined,provider);
+    native:async()=>{
+      effects++;
+      if(nativeAckLost){nativeAckLost=false;throw new Error('synthetic native ACK lost after possible input');}
+      return {synthetic:true};
+    },monitor:{desktopAllowed:()=>true,close:()=>{}}});
+  let provider=createProvider();
+  let controller=new CoreConsoleAdmission(undefined,provider);
   const execute=(id:string)=>controller.execute('windows.pointer.move',{hwnd:'0x123',x:0,y:0},id,'full');
   return {db,call,execute,effects:()=>effects,hold:(fn:()=>Promise<void>)=>{hold=fn;},
+    status:()=>controller.status('full'),stopped:()=>stopped,
+    restart:()=>{provider.close();provider=createProvider();controller=new CoreConsoleAdmission(undefined,provider);},
+    loseNativeAck:()=>{nativeAckLost=true;},
+    loseCompletion:(phase:'before'|'after')=>{completionFault=phase;},
     afterClaimReadback:(fn:()=>void)=>{afterClaimReadback=fn;},state:()=>
     db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?').get(requestId)?.state};
 }
@@ -117,6 +136,37 @@ test('synthetic D1 claim succeeds once while native readback and readiness remai
     assert.equal(f.state(),'dispatched');
     await assert.rejects(f.call('claim'));
     assert.equal(f.state(),'dispatched');
+  }finally{f.db.close();}
+});
+
+test('synthetic native UNKNOWN latches STOP when completion reporting succeeds',async()=>{
+  const f=fixture(),id=randomUUID();try{
+    f.loseNativeAck();
+    await assert.rejects(f.execute(id));
+    assert.equal(f.effects(),1);
+    assert.equal(f.stopped(),true);
+    assert.equal((await f.status()).active,false);
+    await assert.rejects(f.execute(id));
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),1);
+  }finally{f.db.close();}
+});
+
+for(const phase of ['before','after'] as const)
+test('synthetic native UNKNOWN must latch locally if completion fails '+phase+' D1 transition',async()=>{
+  const f=fixture(),id=randomUUID();try{
+    f.loseNativeAck();f.loseCompletion(phase);
+    await assert.rejects(f.execute(id));
+    const stoppedAfterUnknown=f.stopped();
+    const activeAfterUnknown=(await f.status()).active;
+    await assert.rejects(f.execute(id),'the same ID is still rejected by the local replay cache');
+    // Explicitly issued by this test: the product did not automatically retry.
+    // A fresh UUID is a separate operation and cannot bypass a required local
+    // UNKNOWN/STOP latch without recovery or a new valid local enrollment.
+    const nextAccepted=await f.execute(randomUUID()).then(()=>true,()=>false);
+    assert.deepEqual({stoppedAfterUnknown,activeAfterUnknown,nextAccepted,effects:f.effects()},
+      {stoppedAfterUnknown:true,activeAfterUnknown:false,nextAccepted:false,effects:1},
+      'local UNKNOWN/STOP must survive an unavailable completion report and deny further synthetic effects');
   }finally{f.db.close();}
 });
 
@@ -181,4 +231,23 @@ for (const scenario of [
     assert.equal(f.state(),'unknown','an uncertain, already consumed claim must be tombstoned');
     await assert.rejects(f.call('claim'));
   }finally{g.release();f.db.close();}
+});
+
+
+for(const phase of ['before','after'] as const)
+test('synthetic native UNKNOWN must stay fenced after provider restart when completion fails '+phase+' D1 transition',async()=>{
+  const f=fixture(),id=randomUUID();try{
+    f.loseNativeAck();f.loseCompletion(phase);
+    await assert.rejects(f.execute(id));
+    assert.equal(f.effects(),1);
+    // Reconstruct only the JS provider; the fixture store/D1 survive.
+    // This is not a physical Agent, Windows session or service restart.
+    f.restart();
+    const stoppedAfterRestart=f.stopped();
+    const activeAfterRestart=(await f.status()).active;
+    const nextAccepted=await f.execute(randomUUID()).then(()=>true,()=>false);
+    assert.deepEqual({stoppedAfterRestart,activeAfterRestart,nextAccepted,effects:f.effects()},
+      {stoppedAfterRestart:true,activeAfterRestart:false,nextAccepted:false,effects:1},
+      'remote completion failure must not allow a persisted enrollment to resume after provider reconstruction');
+  }finally{f.db.close();}
 });
