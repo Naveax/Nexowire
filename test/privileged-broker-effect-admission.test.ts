@@ -357,9 +357,8 @@ test('snapshot verification sees exact immutable signed bytes and consumes the s
   const signed=(r:BrokerEffectReceipt|null):BrokerEffectReceipt|null=>{
     if(!r)return null;
     const {proof: _discard,...payload}=r;
-    r.proof=sign(null,Buffer.from(JSON.stringify(payload)),
-      keys.privateKey).toString('base64');
-    return r;
+    return {...r,proof:sign(null,Buffer.from(JSON.stringify(payload)),
+      keys.privateKey).toString('base64')};
   };
   f.authority.begin=async(...args)=>signed(await begin(...args));
   f.authority.commit=async(...args)=>signed(await commit(...args));
@@ -400,16 +399,21 @@ for(const state of ['RESERVED','COMMITTED'] as const) {
           if(field==='ticket')signed.ticket='synthetic_altered_ticket_0123456789';
           if(field==='nested-generation')signed.binding.generation=17;
         }
-        r.proof=sign(null,Buffer.from(JSON.stringify(signed)),
-          keys.privateKey).toString('base64');
-        return r;
+        const result:BrokerEffectReceipt={...r,binding:{...r.binding},
+          proof:sign(null,Buffer.from(JSON.stringify(signed)),
+            keys.privateKey).toString('base64')};
+        if(state===r.state)transported=result;
+        return result;
       };
       f.authority.begin=async(...args)=>wrap(await begin(...args));
       f.authority.commit=async(...args)=>wrap(await commit(...args));
-      const ready=Promise.withResolvers<void>();
-      const release=Promise.withResolvers<void>();
-      const observed=Promise.withResolvers<void>();
-      const finish=Promise.withResolvers<void>();
+      const deferred=()=>{
+        let resolve!:()=>void;
+        const promise=new Promise<void>(done=>{resolve=done});
+        return {promise,resolve};
+      };
+      const ready=deferred(),release=deferred();
+      const observed=deferred(),finish=deferred();
       f.authority.verifyReceipt=async(receipt,bytes)=>{
         if(receipt.state===state){
           assert.ok(Object.isFrozen(receipt));
