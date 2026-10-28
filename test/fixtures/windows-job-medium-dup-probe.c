@@ -198,7 +198,7 @@ int wmain(int argc,wchar_t **argv) {
     BOOL verified=debug_privilege_enabled(token,&enabled);
     CloseHandle(token);
     if(!verified)return blocked(L"sedebug_unicode_lookup_or_os_readback_unverified");
-    wprintf(L"NX_SEDEBUG_PRIVILEGE_OS_READBACK name=SeDebugPrivilege verified=1 enabled=%u\\n",
+    wprintf(L"NX_SEDEBUG_PRIVILEGE_OS_READBACK name=SeDebugPrivilege verified=1 enabled=%u\n",
       (unsigned)(enabled!=FALSE));
     return 0;
   }
