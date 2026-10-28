@@ -490,8 +490,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
         // code must still enforce its own final logon/target checks.
         const finalEvidence=await this.inspect(signal);
         const finalEnrollment=finalEvidence.certificate?.enrollment;
-        if(finalEvidence.current.devicePlatform!=='win32'||
-          finalEvidence.current.deviceReady!==true||
+        if(finalEvidence.current?.devicePlatform!=='win32'||
+          finalEvidence.current?.deviceReady!==true||
           !this.eligible(finalEvidence)||finalEvidence.nativeAdmission!=='verified'||
           finalEvidence.nativeConsentProviderPresent!==true||!finalEnrollment||
           finalEnrollment.enrollmentId!==request.enrollmentId||
