@@ -291,9 +291,13 @@ test('validated nested admission remains immutable across identity, CAS, release
   }),
   verifyOwnerRevocation:async()=>false,
  });
- assert.equal(await gate.execute(raw,async()=>{
+ assert.equal(await gate.execute(raw,async approved=>{
   assert.ok(identityRequest);
   verify(identityRequest);
+  assert.notStrictEqual(approved,raw,'callback receives a detached snapshot');
+  assert.strictEqual(approved,identityRequest,
+   'callback receives the same immutable admission used by identity/CAS');
+  verify(approved);
   effects++;
   return 'effect';
  }), 'effect');
