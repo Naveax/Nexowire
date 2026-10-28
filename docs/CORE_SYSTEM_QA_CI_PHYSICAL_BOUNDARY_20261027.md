@@ -166,3 +166,14 @@ output order is not a diagnosis. Both files have the same blob SHA in #919 and
 #933, and the different #933 Node 22 run completed those cases. That result
 neither proves nor rules out a transient #919-specific issue. The old run
 was not canceled or rerun by this QA work.
+
+## Run-attempt recheck after jobs
+
+A workflow rerun or PR base change can happen while a live audit is reading
+the old attempt's jobs. The auditor re-fetches both PR and run metadata after
+the attempt-scoped jobs arrive. A changed or missing PR recheck blocks; so does
+a missing run recheck or a change to run ID, attempt, HEAD, branch, workflow,
+event, status, conclusion or head repository. This narrows the observation
+window; GitHub does not provide an atomic lock, so the report does not
+guarantee that PR or run state cannot change after the final reads. It still
+cannot prove the runner's checkout tree or Windows case coverage.
