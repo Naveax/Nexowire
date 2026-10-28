@@ -135,6 +135,9 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
       if(!prHead||typeof prHead.ref!=='string'||prHead.ref.length<1){
         addOnce(findings,'PR_HEAD_REF_INVALID');
       }
+      if(!prBase||typeof prBase.ref!=='string'||prBase.ref.length<1){
+        addOnce(findings,'PR_BASE_REF_INVALID');
+      }
       if(!prHeadRepo||prHeadRepo.full_name!==CORE_CI_REPOSITORY){
         addOnce(findings,'PR_HEAD_REPOSITORY_MISMATCH');
       }
@@ -156,7 +159,13 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
          recheckedPr.state!==pr.state||
          recheckedPr.draft!==pr.draft||
          finalHead.sha!==initialHead.sha||
-         finalBase.sha!==initialBase.sha){
+         finalHead.ref!==initialHead.ref||
+         finalBase.sha!==initialBase.sha||
+         finalBase.ref!==initialBase.ref||
+         nestedRecord(finalHead,'repo')?.full_name!==
+           nestedRecord(initialHead,'repo')?.full_name||
+         nestedRecord(finalBase,'repo')?.full_name!==
+           nestedRecord(initialBase,'repo')?.full_name){
         addOnce(findings,'PR_CHANGED_DURING_AUDIT');
       }
     }
@@ -216,6 +225,14 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
         if(!record(pr)||!record(pr.base)||!record(association.base)||
            association.base.sha!==pr.base.sha){
           addOnce(findings,'RUN_PR_BASE_MISMATCH');
+        }
+        if(!record(pr)||!record(pr.head)||!record(association.head)||
+           association.head.ref!==pr.head.ref){
+          addOnce(findings,'RUN_PR_HEAD_REF_MISMATCH');
+        }
+        if(!record(pr)||!record(pr.base)||!record(association.base)||
+           association.base.ref!==pr.base.ref){
+          addOnce(findings,'RUN_PR_BASE_REF_MISMATCH');
         }
       }
     }

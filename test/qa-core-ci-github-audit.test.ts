@@ -344,3 +344,64 @@ test('PR base movement during job retrieval blocks the live snapshot',async()=>{
   assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
 });
 
+
+test('PR base branch changes at the same commit invalidate rechecked context',()=>{
+  const fixture=fixtures();
+  const changed={...fixture.pullRequest,base:{
+    ...fixture.pullRequest.base,ref:'release-branch',
+  }};
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:changed,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+});
+
+test('run association branch names must match PR refs even when SHAs match',()=>{
+  const fixture=fixtures();
+  const changed={...fixture.pullRequest,base:{
+    ...fixture.pullRequest.base,ref:'release-branch',
+  }};
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:changed,recheckedPullRequest:changed,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('RUN_PR_BASE_REF_MISMATCH'));
+});
+
+
+test('PR head and repository changes at the same SHA invalidate rechecked context',()=>{
+  const fixture=fixtures();
+  for(const changed of [
+    {...fixture.pullRequest,head:{...fixture.pullRequest.head,ref:'renamed-head'}},
+    {...fixture.pullRequest,head:{...fixture.pullRequest.head,repo:{full_name:'other/repo'}}},
+    {...fixture.pullRequest,base:{...fixture.pullRequest.base,repo:{full_name:'other/repo'}}},
+  ]){
+    const report=auditGitHubCiPayload({
+      repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+      pullRequest:fixture.pullRequest,recheckedPullRequest:changed,
+      run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+    });
+    assert.equal(report.snapshotConsistency,'BLOCKED');
+    assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+  }
+});
+
+test('missing PR base ref and a mismatched run head ref block evidence',()=>{
+  const fixture=fixtures();
+  fixture.pullRequest.base.ref='';
+  fixture.run.pull_requests[0]!.head.ref='other-head';
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('PR_BASE_REF_INVALID'));
+  assert.ok(report.findings.includes('RUN_PR_HEAD_REF_MISMATCH'));
+});
+
