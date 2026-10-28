@@ -55,6 +55,8 @@ export interface CoreAuthorityState extends CoreConsoleCurrentReadback {
   enrollmentRequested:boolean;
   enrollmentId:string|null; publicKeySpki:string|null;
   physicalActive:boolean; statusObservedAtMs:number|null;
+  /** D1-sourced device platform and complete readiness; absent legacy fields deny CORE. */
+  devicePlatform?:string;deviceReady?:boolean;
   nativeConsentReceiptId:string|null; windowsUserSid:string|null;
   windowsSessionId:number|null; windowsLogonLuid:string|null;
   windowsLogonSessionEpoch:string|null;
@@ -67,6 +69,7 @@ export const CoreAuthorityStateSchema=z.strictObject({ownerAccountId:id,deviceId
   coreEnabled:z.boolean(),accessMode:z.enum(['safe','full']),deviceOnline:z.boolean(),bridgeVerified:z.boolean(),
   enrollmentRequested:z.boolean(),enrollmentId:z.string().uuid().nullable(),publicKeySpki:z.string().length(60).nullable(),
   physicalActive:z.boolean(),statusObservedAtMs:z.number().int().nonnegative().safe().nullable(),
+  devicePlatform:z.string().min(1).max(32).optional(),deviceReady:z.boolean().optional(),
   nativeConsentReceiptId:z.string().uuid().nullable(),
   windowsUserSid:z.string().regex(/^S-\d-\d+(?:-\d+)+$/i).nullable(),
   windowsSessionId:z.number().int().positive().safe().nullable(),
