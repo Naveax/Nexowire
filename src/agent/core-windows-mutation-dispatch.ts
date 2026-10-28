@@ -31,28 +31,139 @@ function deny(code:string):never{
   throw Object.assign(new Error(code),{code});
 }
 
-function canonical(value:unknown):string {
-  if(value===null||typeof value==='string'||typeof value==='boolean') {
+/**
+ * Encode ONLY JSON data. The input is untrusted and may contain getters,
+ * sparse arrays, circular references or post-admission mutable objects.
+ * Never invoke accessor properties to discover what is being authorized.
+ */
+function canonical(value:unknown,ancestors=new Set<object>()):string {
+  if(value===null||typeof value==='string'||typeof value==='boolean')
     return JSON.stringify(value);
-  }
-  if(typeof value==='number'&&Number.isFinite(value))return JSON.stringify(value);
-  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
-  if(typeof value==='object'&&value!==null&&
-     Object.getPrototypeOf(value)===Object.prototype){
-    const obj=value as Record<string,unknown>;
-    return '{'+Object.keys(obj).filter(key=>obj[key]!==undefined).sort()
-      .map(key=>JSON.stringify(key)+':'+canonical(obj[key])).join(',')+'}';
-  }
-  deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  if(typeof value==='number'&&Number.isFinite(value))
+    return JSON.stringify(value);
+  if(typeof value!=='object')deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  if(ancestors.has(value))deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  const proto=Object.getPrototypeOf(value);
+  if(!Array.isArray(value)&&proto!==Object.prototype&&proto!==null)
+    deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  ancestors.add(value);
+  try{
+    const descriptors=Object.getOwnPropertyDescriptors(value);
+    const keys=Reflect.ownKeys(value);
+    if(keys.some(key=>typeof key!=='string'))
+      deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+    if(Array.isArray(value)){
+      if(proto!==Array.prototype||!Number.isSafeInteger(value.length))
+        deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+      if(keys.length!==value.length+1)
+        deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+      const items:string[]=[];
+      for(let i=0;i<value.length;i++){
+        const item=descriptors[String(i)];
+        if(!item||!('value' in item))
+          deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+        items.push(canonical(item.value,ancestors));
+      }
+      return '['+items.join(',')+']';
+    }
+    return '{'+(keys as string[]).sort().map(key=>{
+      const item=descriptors[key];
+      if(!item||!('value' in item))
+        deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+      return JSON.stringify(key)+':'+canonical(item.value,ancestors);
+    }).join(',')+'}';
+  }finally{ancestors.delete(value)}
 }
 
-/** Bind exactly the capability and parsed JSON input to the remote CAS claim. */
+function frozenJsonCopy<T>(value:T):T{
+  // JSON.parse creates an independent tree even when the caller later mutates
+  // the original object while remote CAS and native readbacks are awaited.
+  const result=JSON.parse(canonical(value)) as T;
+  const freeze=(item:unknown):void=>{
+    if(item===null||typeof item!=='object')return;
+    if(Array.isArray(item)){
+      for(const child of item)freeze(child);
+    }else{
+      // A null prototype prevents inherited toJSON methods from changing the
+      // exact bytes that PrivilegedBrokerClient.execute will serialize.
+      Object.setPrototypeOf(item,null);
+      for(const child of Object.values(item))freeze(child);
+    }
+    Object.freeze(item);
+  };
+  freeze(result);
+  return result;
+}
+
+export interface PreparedCoreWindowsMutation {
+  readonly capability:string;
+  readonly input:unknown;
+  readonly fingerprint:string;
+  /** Exact JSON that the legacy Broker client will serialize on /execute. */
+  readonly brokerBody:string;
+}
+
+/**
+ * Snapshot BEFORE any async CAS. One immutable value supplies the fingerprint
+ * and the exact capability/input sent to #02's separate Broker admission.
+ * No caller-owned input reference survives in the callback.
+ */
+export function prepareCoreWindowsMutation(
+  capability:string,input:unknown,
+):PreparedCoreWindowsMutation{
+  if(typeof capability!=='string'||capability.length<1||
+     capability.length>128)deny('CORE_DISPATCH_CAPABILITY_INVALID');
+  const snapshot=frozenJsonCopy(input);
+  const brokerBody=canonical({capability,input:snapshot});
+  if(Buffer.byteLength(brokerBody,'utf8')>4*1024*1024)
+    deny('CORE_DISPATCH_INPUT_TOO_LARGE');
+  if(JSON.stringify({capability,input:snapshot})!==brokerBody)
+    deny('CORE_DISPATCH_WIRE_FINGERPRINT_MISMATCH');
+  return Object.freeze({capability,input:snapshot,
+    fingerprint:createHash('sha256').update(brokerBody).digest('hex'),
+    brokerBody});
+}
+
+/** Bind the same exact JSON bytes the Broker client sends over the wire. */
 export function coreWindowsEffectFingerprint(
   capability:string,input:unknown,
 ):string{
-  if(typeof capability!=='string'||capability.length<1||
-     capability.length>128)deny('CORE_DISPATCH_CAPABILITY_INVALID');
-  return createHash('sha256').update(canonical({capability,input})).digest('hex');
+  return prepareCoreWindowsMutation(capability,input).fingerprint;
+}
+
+/**
+ * #947's detached and frozen approved request is the only post-CAS source of
+ * identity. #916's older #910 fence has no approved callback argument: if
+ * called with that older implementation, deny rather than use a mutable
+ * caller-owned request or run a privileged effect.
+ */
+export function assertCoreApprovedDispatchRequest(
+  approved:BrokerDispatchRequest|undefined,
+  expected:Readonly<BrokerDispatchRequest>,
+  prepared:PreparedCoreWindowsMutation,
+):void{
+  if(!approved||!Object.isFrozen(approved)||
+     !approved.scope||!Object.isFrozen(approved.scope)||
+     approved.requestId!==expected.requestId||
+     approved.capability!==prepared.capability||
+     approved.fingerprint!==prepared.fingerprint||
+     expected.capability!==prepared.capability||
+     expected.fingerprint!==prepared.fingerprint)
+    deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+  const a=approved.scope,b=expected.scope;
+  if(a.ownerId!==b.ownerId||a.deviceId!==b.deviceId||
+     a.deviceEpoch!==b.deviceEpoch||a.sessionEpoch!==b.sessionEpoch||
+     a.ownerEpoch!==b.ownerEpoch||a.expectedGeneration!==b.expectedGeneration||
+     a.requiredPrivilege!==b.requiredPrivilege)
+    deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+  if(!Object.isFrozen(prepared.input) && typeof prepared.input==='object' &&
+     prepared.input!==null)
+    deny('CORE_DISPATCH_INPUT_NOT_IMMUTABLE');
+  if(JSON.stringify({capability:prepared.capability,input:prepared.input})!==
+     prepared.brokerBody||
+     createHash('sha256').update(prepared.brokerBody).digest('hex')!==
+       prepared.fingerprint)
+    deny('CORE_DISPATCH_WIRE_FINGERPRINT_MISMATCH');
 }
 
 /**
@@ -82,23 +193,38 @@ export function assertCoreWindowsMutationAdmission(
 export async function executeCoreWindowsMutation<T>(
   capability:string,input:unknown,
   admission:CoreWindowsDispatchAdmission|undefined,
-  run:()=>Promise<T>,
+  run:(immutableApprovedInput:unknown)=>Promise<T>,
 ):Promise<T>{
   if(!CORE_EXECUTOR_DISPATCH_ENABLED)
     deny('CORE_EXECUTOR_DISPATCH_NOT_INSTALLED');
   if(!admission||!(admission.fence instanceof BrokerExternalDispatchFence))
     deny('CORE_DISPATCH_TRUSTED_FENCE_REQUIRED');
-  const request=admission.request;
-  if(!request||request.scope?.requiredPrivilege!=='CORE'||
-     request.capability!==capability||
-     request.fingerprint!==coreWindowsEffectFingerprint(capability,input)||
-     privilegeRequirement(capability,input)!=='elevated')
+  // All input and scope snapshots happen synchronously BEFORE the first CAS
+  // await. The source input object may change afterwards without affecting
+  // the approved bytes or the Broker callback.
+  const prepared=prepareCoreWindowsMutation(capability,input);
+  const source=admission.request;
+  if(!source||!source.scope)deny('CORE_DISPATCH_REQUEST_BINDING_MISMATCH');
+  const request=Object.freeze({
+    requestId:source.requestId,capability:source.capability,
+    fingerprint:source.fingerprint,scope:Object.freeze({...source.scope}),
+  }) as BrokerDispatchRequest;
+  if(request.scope.requiredPrivilege!=='CORE'||
+     request.capability!==prepared.capability||
+     request.fingerprint!==prepared.fingerprint||
+     privilegeRequirement(capability,prepared.input)!=='elevated')
     deny('CORE_DISPATCH_REQUEST_BINDING_MISMATCH');
-  return await admission.fence.execute(request,async()=>{
-    const state:ActiveEffect={capability,
-      fingerprint:request.fingerprint,active:true};
-    try{return await activeEffect.run(state,run)}
-    finally{state.active=false}
+  // #947 forwards the detached, frozen approved request to the callback.
+  // #910 does not. A missing approved request cannot authorize an effect.
+  return await admission.fence.execute(request,async(
+    approved?:BrokerDispatchRequest,
+  )=>{
+    assertCoreApprovedDispatchRequest(approved,request,prepared);
+    const state:ActiveEffect={capability:prepared.capability,
+      fingerprint:prepared.fingerprint,active:true};
+    try{
+      return await activeEffect.run(state,()=>run(prepared.input));
+    }finally{state.active=false}
   });
 }
 
