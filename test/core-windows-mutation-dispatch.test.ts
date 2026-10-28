@@ -172,3 +172,115 @@ test('#03 CORE HKCU and user environment writes never fall into standard path',a
     }),matchCode('CORE_NATIVE_EFFECT_ADMISSION_REQUIRED'),capability);
   }
 });
+
+
+test('#03 pre-CAS snapshot is detached, deep-frozen and exactly matches Broker wire hash',async()=>{
+  const {createHash}=await import('node:crypto');
+  const {prepareCoreWindowsMutation,assertCoreApprovedDispatchRequest}=
+    await import('../src/agent/core-windows-mutation-dispatch.js');
+  const capability='windows.registry.set';
+  const mutable={hive:'HKLM',path:'SOFTWARE\\Nexowire',
+    name:'P0',type:'string',value:'before',
+    nested:{second:{flag:true},first:[{step:'original'}]}};
+  const snapshot=prepareCoreWindowsMutation(capability,mutable);
+  assert.notStrictEqual(snapshot.input,mutable);
+  assert.ok(Object.isFrozen(snapshot));
+  assert.ok(Object.isFrozen(snapshot.input));
+  const captured=snapshot.input as typeof mutable;
+  assert.ok(Object.isFrozen(captured.nested));
+  assert.ok(Object.isFrozen(captured.nested.first));
+  assert.ok(Object.isFrozen(captured.nested.first[0]));
+  const expectedBody=JSON.stringify({capability,input:snapshot.input});
+  assert.equal(snapshot.brokerBody,expectedBody);
+  assert.equal(snapshot.fingerprint,
+    createHash('sha256').update(expectedBody).digest('hex'));
+
+  // The attacker changes original input after the snapshot, while a remote
+  // CAS begin/commit, native HIGH readback or network response is pending.
+  await Promise.resolve();
+  mutable.value='changed-after-CAS';
+  mutable.nested.first[0].step='rotated';
+  mutable.nested.second.flag=false;
+  mutable.nested.first.push({step:'extra'});
+  assert.equal(captured.value,'before');
+  assert.equal(captured.nested.first[0].step,'original');
+  assert.equal(captured.nested.first.length,1);
+  assert.equal(captured.nested.second.flag,true);
+  assert.equal(JSON.stringify({capability,input:snapshot.input}),expectedBody);
+  assert.notEqual(snapshot.fingerprint,
+    createHash('sha256').update(
+      JSON.stringify({capability,input:mutable})).digest('hex'));
+
+  const scope=Object.freeze({
+    ownerId:'00000000-0000-4000-8000-000000000001',
+    deviceId:'00000000-0000-4000-8000-000000000002',
+    deviceEpoch:'00000000-0000-4000-8000-000000000003',
+    sessionEpoch:'00000000-0000-4000-8000-000000000004',
+    ownerEpoch:4,expectedGeneration:7,requiredPrivilege:'CORE' as const,
+  });
+  const expected=Object.freeze({
+    requestId:'00000000-0000-4000-8000-000000000005',
+    capability,fingerprint:snapshot.fingerprint,scope,
+  });
+  const approved=Object.freeze({...expected,scope:Object.freeze({...scope})});
+  assert.doesNotThrow(()=>assertCoreApprovedDispatchRequest(
+    approved,expected,snapshot));
+  // #947 must provide a frozen approved request and matching nested scope.
+  assert.throws(()=>assertCoreApprovedDispatchRequest(
+    undefined,expected,snapshot),
+    matchCode('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH'));
+  assert.throws(()=>assertCoreApprovedDispatchRequest(
+    {...approved},expected,snapshot),
+    matchCode('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH'));
+  assert.throws(()=>assertCoreApprovedDispatchRequest(
+    Object.freeze({...approved,scope:{...scope}}),expected,snapshot),
+    matchCode('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH'));
+  assert.throws(()=>assertCoreApprovedDispatchRequest(
+    Object.freeze({...approved,requestId:
+      '00000000-0000-4000-8000-000000000006'}),expected,snapshot),
+    matchCode('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH'));
+  assert.throws(()=>assertCoreApprovedDispatchRequest(
+    Object.freeze({...approved,scope:Object.freeze({...scope,
+      sessionEpoch:'00000000-0000-4000-8000-000000000007'})}),
+    expected,snapshot),matchCode('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH'));
+  assert.throws(()=>assertCoreApprovedDispatchRequest(
+    Object.freeze({...approved,fingerprint:'b'.repeat(64)}),
+    expected,snapshot),matchCode('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH'));
+});
+
+test('#03 hostile getters, sparse arrays, non-JSON values and cycles cannot be admitted',async()=>{
+  const {prepareCoreWindowsMutation}=await import(
+    '../src/agent/core-windows-mutation-dispatch.js');
+  let access=0;
+  const withGetter:Record<string,unknown>={hive:'HKLM'};
+  Object.defineProperty(withGetter,'value',{enumerable:true,
+    get(){access++;return 'MUTATED';}});
+  assert.throws(()=>prepareCoreWindowsMutation('windows.registry.set',withGetter),
+    matchCode('CORE_DISPATCH_INPUT_NOT_CANONICAL'));
+  assert.equal(access,0,'do not invoke getters during input admission');
+  const sparse=Array(2);sparse[0]='only-one';
+  for(const bad of [sparse,{value:undefined},{value:Infinity},
+    {value:BigInt(2)},{value:new Date()},()=>42]){
+    assert.throws(()=>prepareCoreWindowsMutation(
+      'windows.registry.set',bad),
+      matchCode('CORE_DISPATCH_INPUT_NOT_CANONICAL'));
+  }
+  const loop:Record<string,unknown>={};loop.child=loop;
+  assert.throws(()=>prepareCoreWindowsMutation('windows.registry.set',loop),
+    matchCode('CORE_DISPATCH_INPUT_NOT_CANONICAL'));
+});
+
+test('#03 frozen snapshot cannot be modified through approved callback references',async()=>{
+  const {prepareCoreWindowsMutation}=await import(
+    '../src/agent/core-windows-mutation-dispatch.js');
+  const raw={hive:'HKLM',path:'SOFTWARE\\Nexowire',
+    nested:[{name:'original'}]};
+  const accepted=prepareCoreWindowsMutation('windows.registry.set',raw);
+  const sent=accepted.input as typeof raw;
+  assert.throws(()=>{sent.nested[0].name='forged'},TypeError);
+  assert.throws(()=>{sent.nested.push({name:'forged'})},TypeError);
+  assert.equal(sent.nested[0].name,'original');
+  assert.equal(JSON.stringify({capability:accepted.capability,input:sent}),
+    accepted.brokerBody);
+  assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
+});
