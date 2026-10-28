@@ -2304,9 +2304,14 @@ export async function executeCapability(
       throw Object.assign(new Error('CORE Broker dispatcher required'),
         {code:'CORE_DISPATCH_BROKER_REQUIRED'});
     }
+    // Capture the Broker client method before CAS as well as the input. The
+    // callback must use ONLY #03's immutable, fingerprinted snapshot, never
+    // the caller's mutable input or a late-swapped context Broker reference.
+    const broker=context.privilegedBroker!;
+    const brokerExecute=broker.execute.bind(broker);
     return await executeCoreWindowsMutation(capability,input,
       context.coreWindowsDispatch,
-      async()=>await context.privilegedBroker!.execute(capability,input));
+      async approvedInput=>await brokerExecute(capability,approvedInput));
   }
 
   if (
