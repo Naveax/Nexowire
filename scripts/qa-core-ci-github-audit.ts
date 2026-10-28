@@ -399,7 +399,6 @@ export async function auditCurrentGitHubCi(
       null;
   const requests=[
     fetchGitHubJson(jobsUrl,token,fetcher,trustedNativeFetch),
-    fetchGitHubJson(pullsUrl,token,fetcher,trustedNativeFetch),
   ];
   if(dispatchAssociationsUrl){
     requests.push(fetchGitHubJson(
@@ -408,13 +407,13 @@ export async function auditCurrentGitHubCi(
   }
   const results=await Promise.all(requests);
   const jobsResult=results[0]!;
-  const recheckedPrResult=results[1]!;
-  const dispatchResult=results[2];
-  // Read the current run only after the attempt-scoped jobs have arrived.
+  const dispatchResult=results[1];
+  // Read current PR and run metadata after the attempt-scoped jobs arrive.
   // This is a bounded snapshot, not an atomic lock against later changes.
-  const recheckedRunResult=await fetchGitHubJson(
-    runUrl,token,fetcher,trustedNativeFetch,
-  );
+  const [recheckedPrResult,recheckedRunResult]=await Promise.all([
+    fetchGitHubJson(pullsUrl,token,fetcher,trustedNativeFetch),
+    fetchGitHubJson(runUrl,token,fetcher,trustedNativeFetch),
+  ]);
   const report=auditGitHubCiPayload({
     repositoryFullName:input.repositoryFullName,
     pullRequestNumber:input.pullRequestNumber,

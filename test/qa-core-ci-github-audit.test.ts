@@ -150,8 +150,8 @@ test('workflow_dispatch must resolve its exact commit to the current PR',async()
   fixture.run.pull_requests=[];
   const fake=fakeFetch([
     {login:'synthetic-test-user',id:1},
-    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
-    [fixture.pullRequest],fixture.run,
+    fixture.pullRequest,fixture.run,fixture.jobs,[fixture.pullRequest],
+    fixture.pullRequest,fixture.run,
   ]);
   const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
   assert.equal(report.snapshotConsistency,'CONSISTENT');
@@ -303,3 +303,44 @@ test('missing run recheck never yields a consistent live metadata snapshot',()=>
   assert.equal(report.snapshotConsistency,'BLOCKED');
   assert.ok(report.findings.includes('RUN_RECHECK_MISSING'));
 });
+
+test('PR base movement during job retrieval blocks the live snapshot',async()=>{
+  const fixture=fixtures();
+  let releaseJobs!:()=>void;
+  let signalJobStart!:()=>void;
+  const jobsHeld=new Promise<void>(resolve=>{releaseJobs=resolve;});
+  const jobsStarted=new Promise<void>(resolve=>{signalJobStart=resolve;});
+  let prReads=0;
+  let currentPr=fixture.pullRequest;
+  const response=(payload:unknown)=>new Response(JSON.stringify(payload),{
+    status:200,headers:{'content-type':'application/json'},
+  });
+  const fetcher:typeof fetch=async(input)=>{
+    const url=typeof input==='string'?input:
+      input instanceof URL?input.href:input.url;
+    if(url.endsWith('/user'))return response({login:'synthetic-test-user',id:1});
+    if(url.includes('/attempts/1/jobs?')){
+      signalJobStart();
+      await jobsHeld;
+      return response(fixture.jobs);
+    }
+    if(url.endsWith('/pulls/'+prNumber)){
+      prReads++;
+      return response(currentPr);
+    }
+    if(url.endsWith('/actions/runs/'+runId))return response(fixture.run);
+    throw new Error('Unexpected request');
+  };
+  const pending=auditCurrentGitHubCi(auditInput(),fetcher);
+  await jobsStarted;
+  const readsBeforeJobsCompleted=prReads;
+  currentPr={...fixture.pullRequest,base:{
+    ...fixture.pullRequest.base,sha:'d'.repeat(40),
+  }};
+  releaseJobs();
+  const report=await pending;
+  assert.equal(readsBeforeJobsCompleted,1);
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+});
+

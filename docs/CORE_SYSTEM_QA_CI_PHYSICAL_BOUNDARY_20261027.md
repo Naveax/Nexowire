@@ -169,10 +169,11 @@ was not canceled or rerun by this QA work.
 
 ## Run-attempt recheck after jobs
 
-A workflow rerun can start while a live audit is reading the old attempt's
-jobs. The auditor re-fetches the run after the attempt-scoped jobs arrive and
-blocks its result if the run ID, attempt, HEAD, branch, workflow, event,
-status, conclusion or head repository differs. A missing recheck also blocks.
-This narrows the observation window; GitHub does not provide an atomic lock,
-so the report does not guarantee the run cannot change after the final read.
-It still cannot prove the runner's checkout tree or Windows case coverage.
+A workflow rerun or PR base change can happen while a live audit is reading
+the old attempt's jobs. The auditor re-fetches both PR and run metadata after
+the attempt-scoped jobs arrive. A changed or missing PR recheck blocks; so does
+a missing run recheck or a change to run ID, attempt, HEAD, branch, workflow,
+event, status, conclusion or head repository. This narrows the observation
+window; GitHub does not provide an atomic lock, so the report does not
+guarantee that PR or run state cannot change after the final reads. It still
+cannot prove the runner's checkout tree or Windows case coverage.
