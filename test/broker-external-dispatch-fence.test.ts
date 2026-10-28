@@ -236,6 +236,84 @@ function fixture(){
 const code=async(p:Promise<unknown>,expected:string)=>
  assert.rejects(p,{code:expected});
 
+test('validated nested admission remains immutable across identity, CAS, release and callback',async()=>{
+ const f=fixture(),raw=f.request();
+ const original=JSON.parse(JSON.stringify(raw)) as BrokerDispatchRequest;
+ const brokerId=f.remote.brokerId;
+ let effects=0,beginCount=0,commitCount=0,releaseCount=0;
+ let identityRequest:BrokerDispatchRequest|undefined;
+ const verify=(req:BrokerDispatchRequest)=>{
+  assert.ok(Object.isFrozen(req),'validated request is frozen');
+  assert.ok(Object.isFrozen(req.scope),'nested owner scope is frozen');
+  assert.deepEqual(req,original,'all stages retain the original scope');
+  assert.equal(Reflect.set(req,'requestId',randomUUID()),false);
+  assert.equal(Reflect.set(req,'capability','different.command'),false);
+  assert.equal(Reflect.set(req,'fingerprint','b'.repeat(64)),false);
+  assert.equal(Reflect.set(req.scope,'ownerId',randomUUID()),false);
+  assert.equal(Reflect.set(req.scope,'deviceId',randomUUID()),false);
+  assert.equal(Reflect.set(req.scope,'sessionEpoch',randomUUID()),false);
+  assert.equal(Reflect.set(req.scope,'expectedGeneration',8),false);
+  assert.equal(Reflect.set(req,'scope',{...req.scope,ownerId:randomUUID()}),false);
+  assert.deepEqual(req,original);
+ };
+ const begin=f.remote.beginIfCurrent.bind(f.remote);
+ const commit=f.remote.commitIfCurrent.bind(f.remote);
+ const release=f.remote.release.bind(f.remote);
+ f.remote.beginIfCurrent=async(req,broker,nonce)=>{
+  verify(req);beginCount++;
+  return begin(req,broker,nonce);
+ };
+ f.remote.commitIfCurrent=async(req,broker,id,nonce)=>{
+  verify(req);commitCount++;
+  return commit(req,broker,id,nonce);
+ };
+ f.remote.release=async value=>{
+  verify(value.request);releaseCount++;
+  return release(value);
+ };
+ const gate=new BrokerExternalDispatchFence({
+  authority:f.remote,authorityId:f.remote.authorityId,publicKeyPem:keys,
+  verifyIdentity:async req=>{
+   identityRequest=req;
+   verify(req);
+   // Caller may mutate its ORIGINAL mutable input after validation.
+   raw.requestId=randomUUID();
+   raw.fingerprint='b'.repeat(64);
+   raw.scope.ownerId=randomUUID();
+   raw.scope.deviceId=randomUUID();
+   raw.scope.sessionEpoch=randomUUID();
+   return true;
+  },
+  verifyEffectiveBroker:async()=>({
+   verified:true,brokerId,ownerEpoch:4,grantGeneration:7,
+   highIntegrityToken:true,signedProtectedImage:true,
+   protectedParentAndImports:true,
+  }),
+  verifyOwnerRevocation:async()=>false,
+ });
+ assert.equal(await gate.execute(raw,async approved=>{
+  assert.ok(identityRequest);
+  verify(identityRequest);
+  assert.notStrictEqual(approved,raw,'callback receives a detached snapshot');
+  assert.strictEqual(approved,identityRequest,
+   'callback receives the same immutable admission used by identity/CAS');
+  verify(approved);
+  effects++;
+  return 'effect';
+ }), 'effect');
+ assert.equal(effects,1);
+ assert.equal(beginCount,1);
+ assert.equal(commitCount,1);
+ assert.equal(releaseCount,1);
+ assert.ok(f.remote.dispatched.has(original.requestId));
+ assert.equal(f.remote.dispatched.has(raw.requestId),false);
+ // Original UUID must be cleared from the in-process pending guard even
+ // if the caller mutated its own raw request in an async callback.
+ const pending=Reflect.get(gate,'pendingRequests') as Set<string>;
+ assert.equal(pending.has(original.requestId),false);
+ assert.equal(pending.size,0);
+});
+
 test('external release refuses wrong owner, session, grant generation and broker',async()=>{
  const f=fixture(),op=f.request();
  const broker:ProtectedBrokerEvidence={
