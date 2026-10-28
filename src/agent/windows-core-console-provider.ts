@@ -293,9 +293,12 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private current(state:CoreAuthorityState){return {ownerAccountId:state.ownerAccountId,deviceId:state.deviceId,
     installationId:state.installationId,ownerEpoch:state.ownerEpoch,grantGeneration:state.grantGeneration,
     revokeEpoch:state.revokeEpoch,coreEnabled:state.coreEnabled,accessMode:state.accessMode,
-    deviceOnline:state.deviceOnline,bridgeVerified:state.bridgeVerified};}
+    deviceOnline:state.deviceOnline,devicePlatform:state.devicePlatform,
+    deviceReady:state.deviceReady,bridgeVerified:state.bridgeVerified};}
   private matches(state:CoreAuthorityState){const e=this.profile.certificate?.enrollment;
-    return !!e&&state.coreEnabled&&state.accessMode==='full'&&state.ownerAccountId===e.ownerAccountId&&
+    return !!e&&state.coreEnabled&&state.accessMode==='full'&&
+      state.devicePlatform==='win32'&&state.deviceReady===true&&
+      state.ownerAccountId===e.ownerAccountId&&
       state.deviceId===e.deviceId&&state.installationId===e.installationId&&state.enrollmentId===e.enrollmentId&&
       state.ownerEpoch===e.ownerEpoch&&state.grantGeneration===e.grantGeneration&&state.revokeEpoch===e.revokeEpoch&&
       !!state.publicKeySpki&&createHash('sha256').update(Buffer.from(state.publicKeySpki,'base64')).digest('hex')===e.issuerSpkiSha256;}
@@ -325,7 +328,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     const latestProbe=await this.options.broker.probe();
     const latestBridge=latestProbe.reachable===true&&latestProbe.elevated===true&&
       latestProbe.version===NEXOWIRE_VERSION;
-    const unchanged=JSON.stringify(this.current(state))===JSON.stringify(this.current(latest))&&
+    const unchanged=latest.devicePlatform==='win32'&&latest.deviceReady===true&&
+      JSON.stringify(this.current(state))===JSON.stringify(this.current(latest))&&
       state.enrollmentId===latest.enrollmentId&&
       state.publicKeySpki===latest.publicKeySpki&&
       state.nativeConsentReceiptId===latest.nativeConsentReceiptId&&
@@ -486,7 +490,9 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
         // code must still enforce its own final logon/target checks.
         const finalEvidence=await this.inspect(signal);
         const finalEnrollment=finalEvidence.certificate?.enrollment;
-        if(!this.eligible(finalEvidence)||finalEvidence.nativeAdmission!=='verified'||
+        if(finalEvidence.current.devicePlatform!=='win32'||
+          finalEvidence.current.deviceReady!==true||
+          !this.eligible(finalEvidence)||finalEvidence.nativeAdmission!=='verified'||
           finalEvidence.nativeConsentProviderPresent!==true||!finalEnrollment||
           finalEnrollment.enrollmentId!==request.enrollmentId||
           finalEnrollment.ownerEpoch!==request.ownerEpoch||
