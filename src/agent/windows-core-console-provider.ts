@@ -293,8 +293,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private current(state:CoreAuthorityState){return {ownerAccountId:state.ownerAccountId,deviceId:state.deviceId,
     installationId:state.installationId,ownerEpoch:state.ownerEpoch,grantGeneration:state.grantGeneration,
     revokeEpoch:state.revokeEpoch,coreEnabled:state.coreEnabled,accessMode:state.accessMode,
-    deviceOnline:state.deviceOnline,devicePlatform:state.devicePlatform,
-    deviceReady:state.deviceReady,bridgeVerified:state.bridgeVerified};}
+    deviceOnline:state.deviceOnline,bridgeVerified:state.bridgeVerified};}
   private matches(state:CoreAuthorityState){const e=this.profile.certificate?.enrollment;
     return !!e&&state.coreEnabled&&state.accessMode==='full'&&
       state.devicePlatform==='win32'&&state.deviceReady===true&&
@@ -329,6 +328,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     const latestBridge=latestProbe.reachable===true&&latestProbe.elevated===true&&
       latestProbe.version===NEXOWIRE_VERSION;
     const unchanged=latest.devicePlatform==='win32'&&latest.deviceReady===true&&
+      state.devicePlatform===latest.devicePlatform&&state.deviceReady===latest.deviceReady&&
       JSON.stringify(this.current(state))===JSON.stringify(this.current(latest))&&
       state.enrollmentId===latest.enrollmentId&&
       state.publicKeySpki===latest.publicKeySpki&&
@@ -342,6 +342,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       await this.options.store.stopped()||await this.options.store.blocked?.()?null:this.profile.certificate;
     return {certificate,pinnedLocalSpkiDer:pinned,
       current:{...this.current(latest),bridgeVerified:latest.bridgeVerified&&latestBridge},
+      devicePlatform:latest.devicePlatform,deviceReady:latest.deviceReady,
       observedAtMs,desktop:this.allowedDesktop()?'default':'unknown',
       nativeAdmission:!!certificate&&nativeValid&&latestBridge&&this.allowedDesktop()?'verified':'unavailable',
       brokerVersionVerified:latestBridge,
@@ -490,8 +491,8 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
         // code must still enforce its own final logon/target checks.
         const finalEvidence=await this.inspect(signal);
         const finalEnrollment=finalEvidence.certificate?.enrollment;
-        if(finalEvidence.current?.devicePlatform!=='win32'||
-          finalEvidence.current?.deviceReady!==true||
+        if(finalEvidence.devicePlatform!=='win32'||
+          finalEvidence.deviceReady!==true||
           !this.eligible(finalEvidence)||finalEvidence.nativeAdmission!=='verified'||
           finalEvidence.nativeConsentProviderPresent!==true||!finalEnrollment||
           finalEnrollment.enrollmentId!==request.enrollmentId||
