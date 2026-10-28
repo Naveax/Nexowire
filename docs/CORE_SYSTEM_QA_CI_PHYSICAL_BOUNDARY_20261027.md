@@ -177,3 +177,15 @@ event, status, conclusion or head repository. This narrows the observation
 window; GitHub does not provide an atomic lock, so the report does not
 guarantee that PR or run state cannot change after the final reads. It still
 cannot prove the runner's checkout tree or Windows case coverage.
+
+## PR branch identity is part of CI context
+
+The same base or head commit can be reachable through a different branch.
+Comparing only SHA values can therefore accept a retargeted PR or associate a
+run with the wrong PR branch. The live audit requires a nonempty PR base ref,
+matches the run association's head and base refs against the current PR and
+rechecks both refs and repository names alongside their SHAs. Missing or
+changed context blocks the metadata snapshot.
+
+These checks still cannot prove the runner checkout tree, a particular Windows
+case or physical acceptance; they operate on the bounded GitHub metadata view.
