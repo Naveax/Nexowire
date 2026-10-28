@@ -23,6 +23,11 @@ const revokeInput=z.object({
   signedOwnerApproval:z.string().min(32).max(8192),
 }).strict();
 export type BrokerDispatchRequest=z.infer<typeof operation>;
+/** Validated, detached and frozen dispatch input passed into the effect boundary. */
+export type FrozenBrokerDispatchRequest=Readonly<
+  Omit<BrokerDispatchRequest,'scope'>&{
+    scope:Readonly<BrokerDispatchRequest['scope']>;
+  }>;
 export interface ProtectedBrokerEvidence {
   verified:true;
   brokerId:string;
@@ -254,7 +259,8 @@ export class BrokerExternalDispatchFence {
    * UNKNOWN effect. It cannot abort an already executing native operation;
    * the deployed broker must expose cancellation and dispatch barriers.
    */
-  async execute<T>(raw:BrokerDispatchRequest,run:()=>Promise<T>):Promise<T>{
+  async execute<T>(raw:BrokerDispatchRequest,
+    run:(approved:FrozenBrokerDispatchRequest)=>Promise<T>):Promise<T>{
     // Zod provides a validated deep copy, not an immutable one. Neither the
     // caller nor an injected same-process identity/CAS adapter may rewrite
     // the admission identity after validation. Freeze the nested scope first:
@@ -273,7 +279,7 @@ export class BrokerExternalDispatchFence {
     });
   }
   private async executeOnce<T>(request:BrokerDispatchRequest,
-    run:()=>Promise<T>):Promise<T>{
+    run:(approved:FrozenBrokerDispatchRequest)=>Promise<T>):Promise<T>{
     const device=request.scope.deviceId;
     if(this.locallyFenced.has(device))deny('DISPATCH_REVOKE_PENDING');
     try{this.now();this.monotonicNow()}
@@ -407,7 +413,7 @@ export class BrokerExternalDispatchFence {
     // native Broker readback.
     this.claimed.add(proof.dispatchId);
     this.inFlight.set(proof.dispatchId,device);
-    try{return await run()}
+    try{return await run(request)}
     finally{
       this.inFlight.delete(proof.dispatchId);
       // No local fallback if the remote release acknowledgment is lost.
