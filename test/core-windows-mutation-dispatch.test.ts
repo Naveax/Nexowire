@@ -199,11 +199,11 @@ test('#03 pre-CAS snapshot is detached, deep-frozen and exactly matches Broker w
   // CAS begin/commit, native HIGH readback or network response is pending.
   await Promise.resolve();
   mutable.value='changed-after-CAS';
-  mutable.nested.first[0].step='rotated';
+  mutable.nested.first[0]!.step='rotated';
   mutable.nested.second.flag=false;
   mutable.nested.first.push({step:'extra'});
   assert.equal(captured.value,'before');
-  assert.equal(captured.nested.first[0].step,'original');
+  assert.equal(captured.nested.first[0]!.step,'original');
   assert.equal(captured.nested.first.length,1);
   assert.equal(captured.nested.second.flag,true);
   assert.equal(JSON.stringify({capability,input:snapshot.input}),expectedBody);
@@ -277,9 +277,9 @@ test('#03 frozen snapshot cannot be modified through approved callback reference
     nested:[{name:'original'}]};
   const accepted=prepareCoreWindowsMutation('windows.registry.set',raw);
   const sent=accepted.input as typeof raw;
-  assert.throws(()=>{sent.nested[0].name='forged'},TypeError);
+  assert.throws(()=>{sent.nested[0]!.name='forged'},TypeError);
   assert.throws(()=>{sent.nested.push({name:'forged'})},TypeError);
-  assert.equal(sent.nested[0].name,'original');
+  assert.equal(sent.nested[0]!.name,'original');
   assert.equal(JSON.stringify({capability:accepted.capability,input:sent}),
     accepted.brokerBody);
   assert.equal(CORE_EXECUTOR_DISPATCH_ENABLED,false);
