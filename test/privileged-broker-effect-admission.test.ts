@@ -331,12 +331,12 @@ test('receipt mutated during async verification denies before native effect',asy
   for(const state of ['RESERVED','COMMITTED'] as const){
     const f=fixture();
     const original=f.authority.verifyReceipt.bind(f.authority);
-    f.authority.verifyReceipt=async(receipt)=>{
+    f.authority.verifyReceipt=async(receipt,signedPayloadUtf8)=>{
       await Promise.resolve();
       if(receipt.state===state){
         (receipt as {capability:string}).capability='windows.task.control';
       }
-      return original(receipt);
+      return original(receipt,signedPayloadUtf8);
     };
     await assert.rejects(f.run(),deny,state);
     assert.equal(f.events.includes('invoke'),false,state);
