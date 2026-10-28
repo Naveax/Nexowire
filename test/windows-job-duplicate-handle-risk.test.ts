@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync, execFileSync} from 'node:child_process';
 import {readFile} from 'node:fs/promises';
+import {readFileSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {ProcessManager} from '../src/agent/process-manager.js';
@@ -16,6 +17,47 @@ function exact(pid:number):Proc|undefined {
     {windowsHide:true,encoding:'utf8',timeout:8000}).trim();
   return txt?JSON.parse(txt) as Proc:undefined;
 }
+
+test('native SeDebugPrivilege uses Unicode lookup and independent OS readback',()=>{
+  // A static cross-platform regression for the exact MSVC C4133 call site.
+  // Static source inspection is never a Windows token or Broker proof.
+  const source=readFileSync(new URL('./fixtures/windows-job-medium-dup-probe.c',
+    import.meta.url),'utf8');
+  assert.match(source,/LookupPrivilegeValueW\(NULL,L"SeDebugPrivilege",&debug\)/);
+  assert.doesNotMatch(source,/LookupPrivilegeValueW\(NULL,SE_DEBUG_NAME/);
+  assert.match(source,/LookupPrivilegeNameW\(NULL,&debug,canonical,&characters\)/);
+  assert.match(source,/GetTokenInformation\(token,TokenPrivileges,/);
+  assert.match(source,/PrivilegeCheck\(token,&required,&enabledByKernel\)/);
+  assert.doesNotMatch(source,/AdjustTokenPrivileges\s*\(/,
+    'test fixture must not enable a privileged token');
+});
+
+test('real Windows SeDebugPrivilege LUID, token attributes and PrivilegeCheck agree', {
+  skip:process.platform!=='win32',timeout:12000,
+},t=>{
+  // Disposable process only: no local ACL, UAC, service, privileged Job or
+  // installed Broker state is inspected or modified by this self-token probe.
+  const result=spawnSync(path.resolve('test/fixtures/windows-job-medium-dup-probe.exe'),
+    ['--probe-sedebug-readback'],
+    {windowsHide:true,encoding:'utf8',timeout:8000,maxBuffer:8192});
+  const output=(result.stdout??'')+' '+(result.stderr??'');
+  if(result.status===77){
+    const reason='BLOCKED: actual Windows SeDebugPrivilege Unicode lookup or '+
+      'TokenPrivileges/PrivilegeCheck readback unavailable: '+output;
+    t.diagnostic(reason);
+    t.skip(reason);
+    return;
+  }
+  assert.equal(result.status,0,
+    'unverifiable OS SeDebug token evidence must never return success: '+output);
+  assert.match(result.stdout,
+    /NX_SEDEBUG_PRIVILEGE_OS_READBACK name=SeDebugPrivilege verified=1 enabled=[01]/);
+  if(/enabled=1/.test(result.stdout))
+    t.diagnostic('BLOCKED: SeDebugPrivilege is enabled; equal-HIGH isolation cannot be accepted');
+  else
+    t.diagnostic('SOURCE_FIXTURE_ONLY: OS token SeDebugPrivilege verified disabled; no installed Broker or equal-HIGH acceptance');
+});
+
 test('native guardian does not advertise token/DACL isolation without actual OS proof', {
   skip:process.platform!=='win32',timeout:10000,
 },()=>{

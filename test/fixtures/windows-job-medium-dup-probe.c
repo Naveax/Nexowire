@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 #include <stdint.h>
+#include <stddef.h>
 
 static int blocked(const wchar_t *reason) {
   wprintf(L"NX_MEDIUM_HIGH_PROOF_BLOCKED %ls\n",reason);
@@ -79,25 +80,66 @@ static int child_probe(DWORD pid,HANDLE current) {
  * Never enable SeDebugPrivilege or alter any process ACL. If SeDebug is already
  * enabled, report BLOCKED instead of claiming a DACL result.
  */
+/*
+ * All names passed to explicit Win32 W functions MUST be UTF-16 literals.
+ * SE_DEBUG_NAME is a narrow char[] in the Windows headers and previously
+ * compiled with MSVC C4133 when passed to LookupPrivilegeValueW.
+ *
+ * Read the kernel token's privilege attributes and independently cross-check
+ * the effective state with PrivilegeCheck. No AdjustTokenPrivileges or UAC.
+ * Missing/ambiguous/unverifiable proof is BLOCKED, never "debug disabled".
+ */
 static BOOL debug_privilege_enabled(HANDLE token,BOOL *enabled) {
+  if(!enabled)return FALSE;
   *enabled=FALSE;
   LUID debug={0};
-  if(!LookupPrivilegeValueW(NULL,SE_DEBUG_NAME,&debug))return FALSE;
+  if(!LookupPrivilegeValueW(NULL,L"SeDebugPrivilege",&debug))return FALSE;
+  // Reverse lookup verifies this is the OS-owned SeDebugPrivilege LUID,
+  // not a caller-supplied string or a fabricated privilege identity.
+  WCHAR canonical[80]={0};
+  DWORD characters=(DWORD)(sizeof(canonical)/sizeof(canonical[0]));
+  if(!LookupPrivilegeNameW(NULL,&debug,canonical,&characters) ||
+     wcscmp(canonical,L"SeDebugPrivilege")!=0)return FALSE;
+
   DWORD bytes=0;
-  GetTokenInformation(token,TokenPrivileges,NULL,0,&bytes);
-  if(!bytes || bytes>128*1024)return FALSE;
+  if(GetTokenInformation(token,TokenPrivileges,NULL,0,&bytes) ||
+     GetLastError()!=ERROR_INSUFFICIENT_BUFFER ||
+     bytes<offsetof(TOKEN_PRIVILEGES,Privileges) || bytes>128*1024)
+    return FALSE;
   TOKEN_PRIVILEGES *privileges=(TOKEN_PRIVILEGES*)calloc(1,bytes);
   if(!privileges)return FALSE;
-  BOOL valid=GetTokenInformation(token,TokenPrivileges,privileges,bytes,&bytes);
-  if(valid){
-    for(DWORD i=0;i<privileges->PrivilegeCount;i++){
-      LUID luid=privileges->Privileges[i].Luid;
-      if(luid.HighPart==debug.HighPart && luid.LowPart==debug.LowPart)
-        *enabled=(privileges->Privileges[i].Attributes&SE_PRIVILEGE_ENABLED)!=0;
+  BOOL verified=FALSE;
+  DWORD received=0;
+  if(!GetTokenInformation(token,TokenPrivileges,privileges,bytes,&received) ||
+     received<offsetof(TOKEN_PRIVILEGES,Privileges) || received>bytes)
+    goto done;
+  DWORD available=(DWORD)((received-
+     offsetof(TOKEN_PRIVILEGES,Privileges))/sizeof(LUID_AND_ATTRIBUTES));
+  if(privileges->PrivilegeCount>available)goto done;
+  BOOL found=FALSE,enabledByToken=FALSE;
+  for(DWORD i=0;i<privileges->PrivilegeCount;i++){
+    const LUID_AND_ATTRIBUTES *entry=&privileges->Privileges[i];
+    if(entry->Luid.HighPart==debug.HighPart &&
+       entry->Luid.LowPart==debug.LowPart){
+      if(found)goto done; // duplicate/ambiguous LUID is not evidence
+      found=TRUE;
+      enabledByToken=(entry->Attributes&SE_PRIVILEGE_ENABLED)!=0;
     }
   }
+  // A missing SeDebugPrivilege means disabled, not an implicit grant.
+  // This second OS API independently reports effective privilege enablement.
+  PRIVILEGE_SET required={0};
+  required.PrivilegeCount=1;
+  required.Control=PRIVILEGE_SET_ALL_NECESSARY;
+  required.Privilege[0].Luid=debug;
+  BOOL enabledByKernel=FALSE;
+  if(!PrivilegeCheck(token,&required,&enabledByKernel) ||
+     (enabledByToken!=FALSE)!=(enabledByKernel!=FALSE))goto done;
+  *enabled=enabledByKernel;
+  verified=TRUE;
+done:
   free(privileges);
-  return valid;
+  return verified;
 }
 static int equal_high_probe(DWORD pid,uintptr_t jobValue,HANDLE current) {
   DWORD level=0,elevated=0;
@@ -146,6 +188,20 @@ static int equal_high_probe(DWORD pid,uintptr_t jobValue,HANDLE current) {
 }
 
 int wmain(int argc,wchar_t **argv) {
+  // Read-only self-token regression. Does NOT infer HIGH, Medium->High,
+  // guardian isolation or an installed Broker from this source-only probe.
+  if(argc==2 && !wcscmp(argv[1],L"--probe-sedebug-readback")){
+    HANDLE token=NULL;
+    if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))
+      return blocked(L"sedebug_token_open_unavailable");
+    BOOL enabled=FALSE;
+    BOOL verified=debug_privilege_enabled(token,&enabled);
+    CloseHandle(token);
+    if(!verified)return blocked(L"sedebug_unicode_lookup_or_os_readback_unverified");
+    wprintf(L"NX_SEDEBUG_PRIVILEGE_OS_READBACK name=SeDebugPrivilege verified=1 enabled=%u\n",
+      (unsigned)(enabled!=FALSE));
+    return 0;
+  }
   BOOL highProbe=argc==4 && !wcscmp(argv[1],L"--probe-high");
   if(!highProbe && (argc!=3 || (wcscmp(argv[1],L"--probe") &&
                                   wcscmp(argv[1],L"--child"))))return 64;
