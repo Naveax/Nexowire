@@ -64,6 +64,17 @@ A revoke/logon change during signing suppresses the response without resetting
 the receipt. A bounded wall/monotonic deadline and disconnect checks suppress
 all late responses. An already started database commit can still finish after
 a client times out; the resulting UNKNOWN is never retried automatically.
+The new-enrollment approval TTL is checked once more after the final signer and
+current-readback awaits, immediately before returning success. This is distinct
+from the HTTP request timeout and indefinite read-only reconciliation: signing
+can cross the approval deadline while the HTTP request is still timely. The
+regression reproduced an incorrect HTTP 200 on exact parent
+`547a11159be60508fab1320eba003ac2438f0940`; the correction returns UNKNOWN without
+clearing its permanent handoff, rejects consume replay, and preserves scoped
+read-only reconciliation. The controlled clock is explicitly a test fixture.
+Both wall time and monotonic elapsed time enforce this final approval deadline;
+freezing the wall clock cannot extend a short remaining approval TTL. A separate
+regression freezes the fixture wall clock while the signer actually awaits.
 
 The production Worker default verifier remains absent. No CLI service,
 background task, public port, Windows service, install hook or live client

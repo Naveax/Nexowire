@@ -146,6 +146,15 @@ export function createCoreNativeEnrollmentVerifierHandler(config:{
         CoreApprovalBindingSchema.parse(Object.fromEntries(Object.keys(CoreApprovalBindingSchema.shape)
           .map(k=>[k,(proof as Record<string,unknown>)[k]])))));
       checked();if(!same(proof,current))throw new Error('CORE_NATIVE_VERIFIER_PROOF_CHANGED');
+      // readEnrollmentProof remains valid for indefinite current-session
+      // reconciliation. A NEW enrollment response must still meet its separate
+      // approval TTL after every signer and readback await, just before return.
+      if(request.operation==='verify-and-consume'){
+        const remainingMs=BigInt(proof.approvedAtMs)+120000n-BigInt(started);
+        if(Date.now()-proof.approvedAtMs>=120000||remainingMs<=0n||
+          process.hrtime.bigint()-ticks>=remainingMs*1000000n)
+          throw new CoreApprovalLedgerError('CORE_APPROVAL_ENROLLMENT_ACK_EXPIRED_OR_UNKNOWN');
+      }
       const response:CoreNativeWireResponse={...unsigned,signatureBase64:signature.toString('base64')};
       respond(200,response);
     })().catch(error=>{

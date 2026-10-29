@@ -196,6 +196,33 @@ test('independent native enrollment verifier enforces real TLS transport and sco
       assert.equal((await post(consume(),{origin:shortOrigin})).status,403);
     }finally{short.closeAllConnections();await new Promise<void>(r=>short.close(()=>r()))}
   });
+  await t.test('approval expiring during final signing cannot produce a usable enrollment response',async()=>{
+    reset();const original=p.approvedAtMs,realNow=Date.now;let time=realNow();
+    try{
+      // Entry/consume is still in time. The real request remains well within
+      // its 3.5s timeout while the approval's separate 120s handoff TTL expires.
+      // Controlled wall-clock fixture, NOT a physical clock/rollback proof.
+      p.approvedAtMs=time-119900;Date.now=()=>time;
+      holdSign=async()=>{time+=200};
+      assert.equal((await post(consume())).status,503,'expired handoff must be denied after the last async read');
+      holdSign=undefined;
+      assert.equal(tombstones.has(p.receiptId),true);
+      assert.equal((await post(consume())).status,403,'late ACK must not reopen enrollment consume');
+      assert.equal((await post(wire('current-readback',readback(p)))).status,200,
+        'read-only reconciliation of an already committed handoff is not a fresh enrollment');
+    }finally{Date.now=realNow;p.approvedAtMs=original;holdSign=undefined}
+  });
+  await t.test('approval TTL expires monotonically even while the controlled wall clock is frozen',async()=>{
+    reset();const original=p.approvedAtMs,realNow=Date.now,time=realNow();
+    try{
+      p.approvedAtMs=time-119900;Date.now=()=>time;
+      holdSign=async()=>{await new Promise<void>(r=>setTimeout(r,180))};
+      assert.equal((await post(consume())).status,503,'monotonic approval TTL is shorter than the HTTP deadline');
+      holdSign=undefined;assert.equal(tombstones.has(p.receiptId),true);
+      assert.equal((await post(consume())).status,403);
+      assert.equal((await post(wire('current-readback',readback(p)))).status,200);
+    }finally{Date.now=realNow;p.approvedAtMs=original;holdSign=undefined}
+  });
   assert.ok(reads>0);
 });
 
