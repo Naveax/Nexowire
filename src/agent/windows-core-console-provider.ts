@@ -66,14 +66,17 @@ function sameNativeProof(value:unknown,expected:NativeCoreConsentProof):value is
 }
 interface Profile {version:1;installationId:string;deviceId:string;authorityUrl:string;
   certificate:SignedCoreConsoleEnrollmentV1|null;privateKey:string|null;
-  nativeConsent?:NativeCoreConsentProof;pendingRevoke:boolean}
+  nativeConsent?:NativeCoreConsentProof;pendingRevoke:boolean;
+  pendingDispatch?:{requestId:string;fingerprint:string}}
 const ProfileSchema=z.strictObject({version:z.literal(1),installationId:z.string().uuid(),
   deviceId:z.string().min(8).max(128),authorityUrl:z.string().url(),
   certificate:z.unknown().nullable(),privateKey:z.string().max(256).nullable(),
   // Accept legacy profile shapes only so they can remain revocable. The proof is
   // separately validated below; an old/incomplete proof becomes absent and can
   // never authorize enrollment or admission.
-  nativeConsent:z.unknown().optional(),pendingRevoke:z.boolean()});
+  nativeConsent:z.unknown().optional(),pendingRevoke:z.boolean(),
+  pendingDispatch:z.strictObject({requestId:z.string().uuid(),
+    fingerprint:z.string().regex(/^[0-9a-f]{64}$/)}).optional()});
 export interface CoreProfileStore {load():Promise<Profile|null>;save(profile:Profile):Promise<void>;
   stop():Promise<void>;clearStop():Promise<void>;stopped():Promise<boolean>;readonly stopFile:string;
   block?():Promise<void>;clearBlock?():Promise<void>;blocked?():Promise<boolean>}
@@ -171,9 +174,14 @@ if($checked.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $owner -
   async save(profile:Profile){
     await this.protectDirectory();
     await writeProtectedSecretFile(this.file,PURPOSE,JSON.stringify(profile),{overwrite:true});
+    // Flush the replaced profile before any native effect can be admitted.
+    // Filesystem/power-loss durability still needs independent OS acceptance.
+    const handle=await fs.open(this.file,'r+');
+    try{await handle.sync();}finally{await handle.close();}
   }
   async stop(){await fs.mkdir(this.root,{recursive:true,mode:0o700});
-    try{await fs.writeFile(this.stopFile,'STOP',{flag:'wx',mode:0o600});}
+    try{const handle=await fs.open(this.stopFile,'wx',0o600);
+      try{await handle.writeFile('STOP');await handle.sync();}finally{await handle.close();}}
     catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}}
   async clearStop(){await fs.rm(this.stopFile,{force:true});}
   async stopped(){try{await fs.lstat(this.stopFile);return true;}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return false;throw e;}}
@@ -248,6 +256,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
   private timer?:NodeJS.Timeout;private lastReport=0;private pollBusy=false;
   private readonly lifetime=new AbortController();
   private revoking?:Promise<void>;
+  private inFlightDispatch?:{requestId:string;fingerprint:string};
   private initialization?:Promise<void>;
   onEnrollmentRequested?:()=>Promise<void>;
   constructor(private readonly options:WindowsCoreProviderOptions){}
@@ -261,7 +270,7 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       throw new Error('CORE_AUTHORITY_OR_DEVICE_REBOUND');
     if(this.profile.certificate){const e=this.profile.certificate.enrollment;
       this.binding={ownerAccountId:e.ownerAccountId,deviceId:e.deviceId,installationId:e.installationId};}
-    if(this.profile.pendingRevoke)this.revoked=true;
+    if(this.profile.pendingRevoke||this.profile.pendingDispatch)this.revoked=true;
   }
   start(){
     if(this.closed)return;
@@ -316,7 +325,11 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     const probe=await this.options.broker.probe();
     const bridge=probe.reachable===true&&probe.elevated===true&&probe.version===NEXOWIRE_VERSION;
     const pinned=this.spki();
-    const localValid=local?.certificate?.signatureBase64===this.profile.certificate?.signatureBase64&&!local?.pendingRevoke;
+    const pendingIsOurs=!local?.pendingDispatch||
+      (!!this.inFlightDispatch&&local.pendingDispatch.requestId===this.inFlightDispatch.requestId&&
+        local.pendingDispatch.fingerprint===this.inFlightDispatch.fingerprint);
+    const localValid=local?.certificate?.signatureBase64===this.profile.certificate?.signatureBase64&&
+      !local?.pendingRevoke&&pendingIsOurs;
     // A legacy DPAPI certificate or native-looking JS fixture is NOT physical
     // consent. No shipped native authority means enrollment remains required.
     const nativeValid=await this.currentNativeConsent(signal,state);
@@ -481,10 +494,19 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       if(request.enrollmentId!==e.enrollmentId||request.ownerEpoch!==e.ownerEpoch||request.grantGeneration!==e.grantGeneration||request.revokeEpoch!==e.revokeEpoch||
         JSON.stringify(request.binding)!==JSON.stringify(this.binding))throw new Error('CORE_DISPATCH_BINDING_CHANGED');
       const fields={requestId:request.requestId,fingerprint:request.fingerprint};
-      await this.options.authority.call(this.profile,'reserve',fields,signal);
-      const cancel=()=>{void this.options.store.stop();};signal.addEventListener('abort',cancel,{once:true});
+      const cancel=()=>{this.latchLocalStop();void this.options.store.stop().catch(()=>{});};
+      signal.addEventListener('abort',cancel,{once:true});
       let outcome:'succeeded'|'denied'|'unknown'='unknown';let data:unknown;
+      let profilePrepared=false,reservationOwned=false;
       try{
+        // Persist uncertainty BEFORE reserve/claim/native execution. A new
+        // provider cannot resume an old certificate after crash or lost ACK.
+        this.inFlightDispatch=fields;
+        this.profile={...this.profile,pendingDispatch:fields};
+        await this.options.store.save(this.profile);
+        profilePrepared=true;
+        await this.options.authority.call(this.profile,'reserve',fields,signal);
+        reservationOwned=true;
         await this.options.authority.call(this.profile,'claim',fields,signal);
         // Session/owner readback is repeated after external admission and as
         // close as this source path can get to the native effect. Native OS
@@ -507,30 +529,65 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
           await executeCoreConsoleNative('probe',{},this.options.store.stopFile,new AbortController().signal);
           data=await executeWindowsPrivateViewerCapability(request.capability,request.input);
         }else data=await native(request.capability,request.input,this.options.store.stopFile,new AbortController().signal);
-        outcome=signal.aborted?'unknown':'succeeded';
-      }catch(error){outcome=error instanceof CoreNativeDenial?'denied':'unknown';}
-      finally{signal.removeEventListener('abort',cancel);}
-      await this.options.authority.call(this.profile,'complete',{...fields,outcome});
-      if(outcome==='unknown')await this.revoke();
+        outcome=signal.aborted||this.revoked||this.closed?'unknown':'succeeded';
+      }catch(error){
+        if(profilePrepared&&!reservationOwned){
+          // This provider does not own admission. In particular, a losing
+          // duplicate must not complete/revoke the winner's operation.
+          // Retain the persistent marker and fence this provider locally.
+          this.latchLocalStop();
+          throw error;
+        }
+        outcome=error instanceof CoreNativeDenial?'denied':'unknown';
+      }
+      finally{this.inFlightDispatch=undefined;signal.removeEventListener('abort',cancel);}
+      const completionProfile=this.profile;
+      try{
+        if(outcome==='unknown')await this.persistLocalStop();
+        await this.options.authority.call(completionProfile,'complete',{...fields,outcome});
+        if(outcome==='unknown')await this.revoke();
+        else{
+          const settled={...this.profile};delete settled.pendingDispatch;
+          await this.options.store.save(settled);this.profile=settled;
+        }
+      }catch(error){
+        // A reporting or local-settlement failure cannot bypass local fencing.
+        // The write-ahead marker is not cleared until known completion.
+        await this.persistLocalStop();
+        await this.revoke().catch(()=>{});
+        throw error;
+      }
       return {requestId:request.requestId,fingerprint:request.fingerprint,outcome,data};
     });
     this.tail=work.catch(()=>{});return work;
   }
-  revoke():Promise<void>{
+  private latchLocalStop():void{
     this.revoked=true;const monitor=this.monitor;this.monitor=undefined;this.desktop=false;monitor?.kill();
+  }
+  private async persistLocalStop():Promise<void>{
+    this.latchLocalStop();
+    await this.initialize();
+    this.profile={...this.profile,pendingRevoke:true};
+    // Independent local writes: one failed path cannot skip the other or the
+    // subsequent external revoke. Failure never clears the pre-effect marker.
+    await Promise.allSettled([this.options.store.stop(),this.options.store.save(this.profile)]);
+  }
+  revoke():Promise<void>{
+    this.latchLocalStop();
     if(this.revoking)return this.revoking;
     const work=(async()=>{
-      await this.options.store.stop();
-      await this.initialize();
-      this.profile={...this.profile,pendingRevoke:true};await this.options.store.save(this.profile);
+      await this.persistLocalStop();
       await this.options.authority.call(this.profile,'revoke');
-      this.profile={...this.profile,certificate:null,privateKey:null,pendingRevoke:false};await this.options.store.save(this.profile);
+      const cleared={...this.profile,certificate:null,privateKey:null,pendingRevoke:false};
+      delete cleared.pendingDispatch;
+      await this.options.store.save(cleared);this.profile=cleared;
     })();
     this.revoking=work;
     void work.finally(()=>{if(this.revoking===work)this.revoking=undefined;}).catch(()=>{});
     return work;
   }
-  async resumeMonitor(){await this.initialize();if(!this.closed&&this.profile.certificate&&!this.profile.pendingRevoke)await this.startMonitor();}
+  async resumeMonitor(){await this.initialize();if(!this.closed&&!this.revoked&&this.profile.certificate&&
+    !this.profile.pendingRevoke&&!this.profile.pendingDispatch)await this.startMonitor();}
   close(){this.closed=true;this.lifetime.abort();clearInterval(this.timer);this.monitor?.kill();this.options.monitor?.close();}
 }
 
