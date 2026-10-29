@@ -285,10 +285,22 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     const state=await this.options.authority.call(this.profile,'read');
     const broker=await this.options.broker.probe();
     if(!broker.reachable||!broker.elevated||broker.version!==NEXOWIRE_VERSION){await this.options.store.block?.();return;}
-    if(this.profile.certificate&&!this.matches(state))await this.revoke();
-    if(this.profile.certificate){const disk=await this.options.store.load();
-      if(!disk?.certificate||disk.pendingRevoke||disk.certificate.signatureBase64!==this.profile.certificate.signatureBase64)await this.revoke();}
-    if(this.profile.certificate&&this.matches(state))await this.options.store.clearBlock?.();
+    if(this.profile.certificate&&!this.sameEnrollment(state))await this.revoke();
+    const disk=this.profile.certificate?await this.options.store.load():null;
+    if(this.profile.certificate&&(!disk?.certificate||disk.pendingRevoke||
+      disk.certificate.signatureBase64!==this.profile.certificate.signatureBase64))await this.revoke();
+    if(this.profile.certificate&&state.deviceReady!==true){
+      // A transient idle Hub/readiness loss is not withdrawal of the owner's
+      // existing approval. Pause all input until fresh authority/native/Broker
+      // readback succeeds, without deleting the certificate or re-prompting.
+      await this.options.store.block?.();
+      // An admitted/pending operation is different: its outcome may already
+      // be UNKNOWN. Keep the durable STOP/revoke fence and never resume it.
+      if(this.inFlightDispatch||this.profile.pendingDispatch||disk?.pendingDispatch)await this.revoke();
+      return;
+    }
+    if(this.profile.certificate&&this.matches(state)&&!this.revoked&&
+      !this.profile.pendingDispatch&&!disk?.pendingDispatch)await this.options.store.clearBlock?.();
     if(state.enrollmentRequested&&!this.pending){
       if(this.profile.certificate&&this.matches(state))await this.options.authority.call(this.profile,'dismiss');
       else await this.onEnrollmentRequested?.();
@@ -303,13 +315,16 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
     installationId:state.installationId,ownerEpoch:state.ownerEpoch,grantGeneration:state.grantGeneration,
     revokeEpoch:state.revokeEpoch,coreEnabled:state.coreEnabled,accessMode:state.accessMode,
     deviceOnline:state.deviceOnline,bridgeVerified:state.bridgeVerified};}
-  private matches(state:CoreAuthorityState){const e=this.profile.certificate?.enrollment;
+  private sameEnrollment(state:CoreAuthorityState){const e=this.profile.certificate?.enrollment;
     return !!e&&state.coreEnabled&&state.accessMode==='full'&&
-      state.devicePlatform==='win32'&&state.deviceReady===true&&
+      state.devicePlatform==='win32'&&
       state.ownerAccountId===e.ownerAccountId&&
       state.deviceId===e.deviceId&&state.installationId===e.installationId&&state.enrollmentId===e.enrollmentId&&
       state.ownerEpoch===e.ownerEpoch&&state.grantGeneration===e.grantGeneration&&state.revokeEpoch===e.revokeEpoch&&
       !!state.publicKeySpki&&createHash('sha256').update(Buffer.from(state.publicKeySpki,'base64')).digest('hex')===e.issuerSpkiSha256;}
+  private matches(state:CoreAuthorityState){
+    return this.sameEnrollment(state)&&state.deviceReady===true;
+  }
   private spki(){if(!this.profile.privateKey)return null;
     // Derive the public key from the DPAPI-protected private key, never a request pin.
     return createPublicKey(createPrivateKey({key:Buffer.from(this.profile.privateKey,'base64'),format:'der',type:'pkcs8'})).export({format:'der',type:'spki'});}
