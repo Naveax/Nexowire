@@ -77,6 +77,9 @@ jobs:
         run: node --test --import tsx test/task-os-sandbox-windows-native-p07.test.ts
         env:
           NEXOWIRE_RUN_WINDOWS_APPCONTAINER_DIAGNOSTIC: "1"
+      - name: Verify signed runtime manifest and rollback candidate boundaries
+        timeout-minutes: 2
+        run: node --test --import tsx test/core-runtime-package-manifest.test.ts
       - name: Verify CORE console admission and local consent cancellation
         run: node --test --import tsx --test-concurrency=1 test/core-console-enrollment-policy.test.ts test/core-console-admission.test.ts test/core-console-provider.integration.test.ts test/windows-core-console-native.test.ts test/windows-console-grant.test.ts test/privileged-broker-lifecycle.test.ts
       # These suites use a disposable loopback fixture with injected callbacks;
