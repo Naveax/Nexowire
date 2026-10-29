@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {CoreNativeProofSchema,callProtectedCoreNativeAuthority,
+import {CoreNativeProofSchema,callProtectedCoreNativeAuthority,snapshotCoreNativeWireRequest,
   type CoreNativeProof,type CoreNativeWireRequest} from '../protocol/core-native-consent-transport.js';
 import type {NativeCoreConsentAuthority,NativeCoreConsentChallenge,
   NativeCoreConsentProof} from './windows-core-console-provider.js';
@@ -21,10 +21,12 @@ export class ProtectedWindowsCoreConsentClient implements NativeCoreConsentAutho
   }
   async approveAndConsume(challenge:NativeCoreConsentChallenge,
     signal:AbortSignal):Promise<NativeCoreConsentProof|null>{
-    const response=await this.call('approve-and-consume',challenge,signal);
+    const original=snapshotCoreNativeWireRequest({version:1,operation:'approve-and-consume',
+      nonce:randomUUID(),expected:challenge}).expected as NativeCoreConsentChallenge;
+    const response=await this.call('approve-and-consume',original,signal);
     const proof=CoreNativeProofSchema.parse(response.proof);
-    if((Object.keys(challenge) as Array<keyof NativeCoreConsentChallenge>)
-      .some(k=>proof[k]!==challenge[k])||
+    if((Object.keys(original) as Array<keyof NativeCoreConsentChallenge>)
+      .some(k=>proof[k]!==original[k])||
       proof.approvedAtMs>Date.now()+2000||proof.approvedAtMs<Date.now()-120000)
       throw new Error('CORE_NATIVE_APPROVAL_SCOPE_MISMATCH');
     return proof;

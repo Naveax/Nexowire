@@ -4,6 +4,7 @@ import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {ProtectedWindowsCoreConsentClient} from '../src/agent/windows-core-consent-transport.js';
 import {RemoteTrustedNativeCoreEnrollmentVerifier} from '../src/product/core-native-consent-verifier.js';
 import {coreNativeSignedResponseBytes,coreNativeWireRequestHash,
+  callProtectedCoreNativeAuthority,snapshotCoreNativeWireRequest,
   type CoreNativeProof,type CoreNativeWireRequest,type CoreNativeWireResponse} from '../src/protocol/core-native-consent-transport.js';
 
 const owner='owner-account-0001',deviceId='device-core-0001';
@@ -129,4 +130,76 @@ test('insecure origin, absent trust bootstrap and unresponsive verifier never au
     fetchImpl:fake}).currentReadback(binding(p)),false);
   assert.equal(await remote((async()=>{throw new Error('service unreachable');}) as typeof fetch)
     .currentReadback(binding(p)),false);
+});
+
+test('approval response cannot follow a caller owner/session change during transport await',async()=>{
+  const c=challenge(),original={...c};
+  const forged=proofFor({...c,ownerAccountId:'other-owner-account',grantGeneration:22});
+  const client=local(http(r=>{
+    c.ownerAccountId=forged.ownerAccountId;c.grantGeneration=forged.grantGeneration;
+    assert.deepEqual(r.expected,original);
+    return signed(r,forged);
+  }));
+  await assert.rejects(client.approveAndConsume(c,new AbortController().signal),
+    /CORE_NATIVE_(APPROVAL_SCOPE_MISMATCH|RESPONSE_STALE_OR_UNBOUND)/);
+});
+
+test('independent readback cannot match a caller-mutated SID, LUID or receipt',async()=>{
+  const p=proofFor(challenge()),expected=binding(p);
+  const changed={...p,windowsUserSid:'S-1-5-18',windowsLogonLuid:'000000000000b202',
+    receiptId:randomUUID()};
+  const verifier=remote(http(r=>{
+    expected.windowsUserSid=changed.windowsUserSid;
+    expected.windowsLogonLuid=changed.windowsLogonLuid;
+    expected.nativeConsentReceiptId=changed.receiptId;
+    return signed(r,changed);
+  }));
+  assert.equal(await verifier.currentReadback(expected),false);
+});
+
+test('in-flight signing pin replacement cannot authenticate another issuer',async()=>{
+  const p=proofFor(challenge()),replacement=generateKeyPairSync('ed25519');
+  const trust={origin:'https://127.0.0.1:18764',credential:'fixture-test-only',
+    pinnedSpkiBase64:pin,fetchImpl:undefined as typeof fetch|undefined};
+  trust.fetchImpl=http(r=>{
+    trust.pinnedSpkiBase64=replacement.publicKey.export({type:'spki',format:'der'}).toString('base64');
+    const data={version:1 as const,operation:r.operation,nonce:r.nonce,
+      requestSha256:coreNativeWireRequestHash(r),observedAtMs:Date.now(),accepted:true,proof:p};
+    return {...data,signatureBase64:sign(null,coreNativeSignedResponseBytes(data),
+      replacement.privateKey).toString('base64')};
+  });
+  await assert.rejects(callProtectedCoreNativeAuthority(trust,
+    {version:1,operation:'current-readback',nonce:randomUUID(),expected:{receiptId:p.receiptId}}),
+    /CORE_NATIVE_SIGNED_RESPONSE_REQUIRED/);
+});
+
+test('valid original signed response survives later mutation of caller-owned nested request',async()=>{
+  const p=proofFor(challenge());
+  const request:CoreNativeWireRequest={version:1,operation:'current-readback',nonce:randomUUID(),
+    expected:{receiptId:p.receiptId,nested:{generation:1},list:[1,2]}};
+  const fetcher=http(r=>{
+    const expected=request.expected as {receiptId:string;nested:{generation:number};list:number[]};
+    expected.receiptId=randomUUID();expected.nested.generation=99;expected.list.push(3);
+    request.nonce=randomUUID();
+    return signed(r,p);
+  });
+  const response=await callProtectedCoreNativeAuthority({origin:'https://127.0.0.1:18764',
+    credential:'fixture-test-only',pinnedSpkiBase64:pin,fetchImpl:fetcher},request);
+  assert.deepEqual(response.proof,p);
+});
+
+test('native request snapshot is detached, deeply immutable, bounded and rejects cycles',()=>{
+  const value:CoreNativeWireRequest={version:1,operation:'current-readback',nonce:randomUUID(),
+    expected:{nested:{items:[1,2]}}};
+  const frozen=snapshotCoreNativeWireRequest(value);
+  assert.notEqual(frozen,value);assert.notEqual(frozen.expected,value.expected);
+  assert.equal(Object.isFrozen(frozen),true);
+  const nested=(frozen.expected as {nested:{items:number[]}}).nested;
+  assert.equal(Object.isFrozen(nested.items),true);
+  assert.throws(()=>nested.items.push(3),TypeError);
+  assert.throws(()=>snapshotCoreNativeWireRequest({...value,expected:'x'.repeat(16384)}),
+    /CORE_NATIVE_REQUEST_TOO_LARGE/);
+  const cycle:{self?:unknown}={};cycle.self=cycle;
+  assert.throws(()=>snapshotCoreNativeWireRequest({...value,expected:cycle}),
+    /CORE_NATIVE_WIRE_NESTING_LIMIT/);
 });
