@@ -78,14 +78,17 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
     assert.equal(report.privateDesktopObserved,true);
     assert.equal(report.configuredDefaultUserAccess,true);
     assert.equal(report.wfpPackagePolicyVerified,true);
-    assert.equal(report.descendantInJob,true);assert.equal(report.jobMemberCount,1);
+    assert.equal(report.descendantInJob,true);assert.equal(report.verifiedLiveJobMembers,1);
+    assert.ok(Number(report.jobMemberCount)>=1&&Number(report.jobMemberCount)<=4);
+    assert.equal(Number(report.verifiedExitedJobMembers)+1,report.jobMemberCount);
+    assert.equal(report.unexpectedLiveMembers,0);assert.equal(report.zeroAssociationDrainProven,false);
     assert.equal(report.descendantExit,259);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
     assert.equal(report.integrityRid,4096);assert.equal(report.capabilityCount,0);
     assert.equal(report.unexpectedEnabledPrivileges,0);
     assert.equal(report.unexpectedPrivileges,0);
     assert.ok(report.adminGroupMode===0||report.adminGroupMode===1);
-    assert.equal(report.stage,'job_close_and_kernel_drain');
-    t.diagnostic('FIXED_TEST_PAYLOAD_ONLY: token, private station/desktop, canary ACL, parent DUP_HANDLE, loopback, breakaway, descendant and Job-close checks; no production sandbox acceptance');
+    assert.equal(report.stage,'job_close_and_descendant_exit');
+    t.diagnostic('FIXED_TEST_PAYLOAD_ONLY: actual token/private desktop/file/handle/WFP/network/breakaway/descendant checks and held descendant exit after Job close. Exited process objects are reported separately; zero-association/I/O drain NOT_PROVEN. No production sandbox acceptance.');
   }finally{rmSync(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
 });

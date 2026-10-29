@@ -396,6 +396,8 @@ int wmain(int argc,wchar_t **argv) {
   DWORD descendantExit=0xffffffffUL,jobMemberCount=0xffffffffUL;BOOL descendantInJob=FALSE;
   DWORD maxJobMemberCount=0,exitedMemberObservations=0,missingMemberObservations=0,unexpectedLiveMembers=0;
   DWORD unexpectedMemberExit=0xffffffffUL;BOOL unexpectedMemberInJob=FALSE,unexpectedImageMatches=FALSE;
+  HANDLE exitedMembers[4]={0};DWORD verifiedLiveJobMembers=0,verifiedExitedJobMembers=0;
+  DWORD associatedProcessObjects=0xffffffffUL;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
@@ -514,39 +516,45 @@ int wmain(int argc,wchar_t **argv) {
   union {JOBOBJECT_BASIC_PROCESS_ID_LIST alignment;BYTE bytes[sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST)+sizeof(ULONG_PTR)*4];} list={0};
   ULONGLONG membershipDeadline=GetTickCount64()+1000;
   for(;;){
+    for(DWORD i=0;i<verifiedExitedJobMembers;i++){CloseHandle(exitedMembers[i]);exitedMembers[i]=NULL;}
+    verifiedLiveJobMembers=verifiedExitedJobMembers=0;BOOL unresolved=FALSE;
     if(!QueryInformationJobObject(job,JobObjectBasicProcessIdList,list.bytes,sizeof(list.bytes),NULL)){result=1;goto cleanup;}
     JOBOBJECT_BASIC_PROCESS_ID_LIST *pids=(JOBOBJECT_BASIC_PROCESS_ID_LIST *)list.bytes;
     jobMemberCount=pids->NumberOfProcessIdsInList;
     if(jobMemberCount>maxJobMemberCount)maxJobMemberCount=jobMemberCount;
-    if(jobMemberCount>4){result=1;goto cleanup;}
+    if(jobMemberCount<1||jobMemberCount>4||pids->NumberOfAssignedProcesses!=jobMemberCount){result=1;goto cleanup;}
     for(DWORD i=0;i<jobMemberCount;i++){
       ULONG_PTR pidValue=pids->ProcessIdList[i];
-      if(pidValue==(ULONG_PTR)childPid||pidValue==(ULONG_PTR)child.dwProcessId)continue;
+      if(pidValue==(ULONG_PTR)childPid){verifiedLiveJobMembers++;continue;}
       if(pidValue>MAXDWORD){result=1;goto cleanup;}
       // Read-only attestation only. Never terminate or resume a PID obtained
-      // from a list/file. Unknown LIVE or wrong-scope members fail immediately;
-      // exited own-image objects may only be waited on, never accepted as PASS.
+      // from a list/file. Unknown LIVE/wrong-Job/unresolved members never pass.
+      // A held SIGNALED process in this exact Job cannot execute. Its image may
+      // already be unavailable after exit; keep its handle to prevent PID reuse.
       HANDLE extra=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,(DWORD)pidValue);
       if(!extra){
-        if(GetLastError()==ERROR_INVALID_PARAMETER){missingMemberObservations++;continue;}
+        if(GetLastError()==ERROR_INVALID_PARAMETER){missingMemberObservations++;unresolved=TRUE;continue;}
         stage="unexpected_job_member_open_denied";result=1;goto cleanup;
       }
       wchar_t image[32768]={0};DWORD imageChars=32768;
-      BOOL observed=GetExitCodeProcess(extra,&unexpectedMemberExit)&&
-        IsProcessInJob(extra,job,&unexpectedMemberInJob)&&QueryFullProcessImageNameW(extra,0,image,&imageChars);
-      unexpectedImageMatches=observed&&_wcsicmp(image,exe)==0;
-      CloseHandle(extra);
-      if(!observed||!unexpectedMemberInJob||!unexpectedImageMatches){stage="unexpected_job_member_scope";result=1;goto cleanup;}
-      if(unexpectedMemberExit==STILL_ACTIVE){unexpectedLiveMembers++;stage="unexpected_live_job_member";result=1;goto cleanup;}
-      exitedMemberObservations++;
+      BOOL observed=GetExitCodeProcess(extra,&unexpectedMemberExit)&&IsProcessInJob(extra,job,&unexpectedMemberInJob);
+      unexpectedImageMatches=QueryFullProcessImageNameW(extra,0,image,&imageChars)&&_wcsicmp(image,exe)==0;
+      if(!observed||!unexpectedMemberInJob){CloseHandle(extra);stage="unexpected_job_member_scope";result=1;goto cleanup;}
+      if(unexpectedMemberExit==STILL_ACTIVE||WaitForSingleObject(extra,0)!=WAIT_OBJECT_0){
+        CloseHandle(extra);unexpectedLiveMembers++;stage="unexpected_live_job_member";result=1;goto cleanup;
+      }
+      exitedMembers[verifiedExitedJobMembers++]=extra;exitedMemberObservations++;
     }
-    if(jobMemberCount==1&&pids->ProcessIdList[0]==(ULONG_PTR)childPid)break;
+    if(!unresolved&&verifiedLiveJobMembers==1&&verifiedExitedJobMembers+1==jobMemberCount)break;
     if(GetTickCount64()>=membershipDeadline){result=1;goto cleanup;}
     Sleep(1);
   }
   if(WaitForSingleObject(descendant,0)!=WAIT_TIMEOUT){result=1;goto cleanup;}
+  JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting={0};
+  if(!QueryInformationJobObject(job,JobObjectBasicAccountingInformation,&accounting,sizeof(accounting),NULL)){result=1;goto cleanup;}
+  associatedProcessObjects=accounting.ActiveProcesses;
   descendantVerified=TRUE;
-  stage="job_close_and_kernel_drain";
+  stage="job_close_and_descendant_exit";
   CloseHandle(job);job=NULL;
   if(WaitForSingleObject(descendant,5000)!=WAIT_OBJECT_0){result=1;goto cleanup;}
   char canary[64]={0};
@@ -566,6 +574,7 @@ cleanup:
     }
     CloseHandle(descendant);
   }
+  for(DWORD i=0;i<verifiedExitedJobMembers;i++)if(exitedMembers[i])CloseHandle(exitedMembers[i]);
   if(attributesInitialized)DeleteProcThreadAttributeList(attributes);
   if(attributes)HeapFree(GetProcessHeap(),0,attributes);
   if(listener!=INVALID_SOCKET)closesocket(listener);if(socketsStarted)WSACleanup();
@@ -599,6 +608,8 @@ cleanup:
     "\"wfpPackagePolicyVerified\":%s,"
     "\"descendantExit\":%lu,\"descendantInJob\":%s,\"jobMemberCount\":%lu,"
     "\"maxJobMemberCount\":%lu,\"exitedMemberObservations\":%lu,\"missingMemberObservations\":%lu,"
+    "\"verifiedLiveJobMembers\":%lu,\"verifiedExitedJobMembers\":%lu,\"associatedProcessObjects\":%lu,"
+    "\"zeroAssociationDrainProven\":false,"
     "\"unexpectedLiveMembers\":%lu,\"unexpectedMemberExit\":%lu,\"unexpectedMemberInJob\":%s,\"unexpectedImageMatches\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
@@ -610,6 +621,7 @@ cleanup:
     workerStep,(unsigned long)workerWait,wfpPackagePolicyVerified?"true":"false",
     (unsigned long)descendantExit,descendantInJob?"true":"false",(unsigned long)jobMemberCount,
     (unsigned long)maxJobMemberCount,(unsigned long)exitedMemberObservations,(unsigned long)missingMemberObservations,
+    (unsigned long)verifiedLiveJobMembers,(unsigned long)verifiedExitedJobMembers,(unsigned long)associatedProcessObjects,
     (unsigned long)unexpectedLiveMembers,(unsigned long)unexpectedMemberExit,unexpectedMemberInJob?"true":"false",
     unexpectedImageMatches?"true":"false");
   return result;

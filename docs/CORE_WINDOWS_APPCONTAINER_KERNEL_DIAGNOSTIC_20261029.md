@@ -146,6 +146,27 @@ or path is printed, and no listed PID is terminated or resumed. The original
 single-descendant final requirement stays unchanged. Breakaway and normal
 CreateProcess calls also use separate mutable command buffers so a failed
 negative invocation cannot alter the next fixed child's arguments.
+At head `2be3f68dc5232821823ad991cd9a97007243724f`, CI `40927977310`, an
+extra member was actually exited (code 0) in the exact Job, while its post-exit
+image lookup failed with access denied. The prior assumption that a raw PID
+count of one was necessary for one live descendant was too strict for process
+objects that can remain associated until references are released. This corrects
+that newly introduced positive bookkeeping assertion; it does not relax a
+negative execution/admission check. Every current returned member must now be
+accounted for by held process identity: the one live contained descendant, or
+an exact-Job process whose handle is SIGNALED and whose exit code is observed.
+Dead handles remain held until after Job close, excluding PID reuse. Any other
+live, wrong-Job, unresolved or truncated membership still fails; no listed PID
+is killed or resumed. The held descendant must be live before closing the sole
+Job handle and signaled afterwards.
+
+Raw membership, verified live/exited members and kernel associated-object
+accounting are reported separately. Crucially, this does **not** establish
+zero-association, pending I/O cleanup, general descendant containment or native
+production drain. `zeroAssociationDrainProven=false` is unconditional; production
+execution remains unavailable. Microsoft documents that associated accounting
+may retain terminated objects until references are released. Full physical
+drain remains a separate external acceptance gate; no UNKNOWN is made active.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
@@ -169,3 +190,5 @@ Primary platform references:
 - https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmengineopen0
 - https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
 - https://learn.microsoft.com/en-us/windows/win32/fwp/filter-arbitration
+- https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information
+- https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list
