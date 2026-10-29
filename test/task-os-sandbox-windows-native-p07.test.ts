@@ -78,6 +78,8 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
     assert.equal(report.privateDesktopObserved,true);
     assert.equal(report.configuredDefaultUserAccess,true);
     assert.equal(report.wfpPackagePolicyVerified,true);
+    assert.equal(report.descendantInJob,true);assert.equal(report.jobMemberCount,1);
+    assert.equal(report.descendantExit,259);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
     assert.equal(report.integrityRid,4096);assert.equal(report.capabilityCount,0);
     assert.equal(report.unexpectedEnabledPrivileges,0);

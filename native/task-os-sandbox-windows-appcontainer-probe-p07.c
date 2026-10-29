@@ -390,6 +390,7 @@ int wmain(int argc,wchar_t **argv) {
 #else
   if(argc!=3||wcscmp(argv[1],L"--selftest-only")||wcslen(argv[2])>1000||!empty_test_root(argv[2]))return 64;
   const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE,workerWait=0xffffffffUL;int result=77;
+  DWORD descendantExit=0xffffffffUL,jobMemberCount=0xffffffffUL;BOOL descendantInJob=FALSE;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
@@ -487,17 +488,40 @@ int wmain(int argc,wchar_t **argv) {
   workerWait=WaitForSingleObject(child.hProcess,20000);
   if(!GetExitCodeProcess(child.hProcess,&childExit)||workerWait!=WAIT_OBJECT_0){result=1;goto cleanup;}
   if(childExit!=0){result=childExit==77?77:1;goto cleanup;}
+  // The worker has exited at its held handle. Release its remaining references
+  // before requiring the Job's final live membership to be only its descendant.
+  CloseHandle(child.hThread);child.hThread=NULL;
+  CloseHandle(child.hProcess);child.hProcess=NULL;
   char pid[32]={0};DWORD read=0;
   if(!read_fixture(pidFile,pid,sizeof(pid),&read)){result=1;goto cleanup;}
   DWORD childPid=(DWORD)strtoul(pid,NULL,10);
   if(!childPid){result=1;goto cleanup;}
+  stage="independent_descendant_handle_open";
   descendant=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE|PROCESS_TERMINATE,FALSE,childPid);
+  if(!descendant){result=1;goto cleanup;}
+  stage="independent_descendant_liveness";
+  if(!GetExitCodeProcess(descendant,&descendantExit)||descendantExit!=STILL_ACTIVE){result=1;goto cleanup;}
   stage="independent_descendant_readback";
-  if(!descendant||!token_is_contained(descendant,appSid)||!IsProcessInJob(descendant,job,&member)||!member){result=1;goto cleanup;}
+  if(!token_is_contained(descendant,appSid)){result=1;goto cleanup;}
+  stage="independent_descendant_job_membership";
+  if(!IsProcessInJob(descendant,job,&descendantInJob)||!descendantInJob){result=1;goto cleanup;}
+  stage="single_live_descendant_job_readback";
   union {JOBOBJECT_BASIC_PROCESS_ID_LIST alignment;BYTE bytes[sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST)+sizeof(ULONG_PTR)*4];} list={0};
-  if(!QueryInformationJobObject(job,JobObjectBasicProcessIdList,list.bytes,sizeof(list.bytes),NULL)){result=1;goto cleanup;}
-  JOBOBJECT_BASIC_PROCESS_ID_LIST *pids=(JOBOBJECT_BASIC_PROCESS_ID_LIST *)list.bytes;
-  if(pids->NumberOfProcessIdsInList!=1||pids->ProcessIdList[0]!=(ULONG_PTR)childPid){result=1;goto cleanup;}
+  ULONGLONG membershipDeadline=GetTickCount64()+1000;
+  for(;;){
+    if(!QueryInformationJobObject(job,JobObjectBasicProcessIdList,list.bytes,sizeof(list.bytes),NULL)){result=1;goto cleanup;}
+    JOBOBJECT_BASIC_PROCESS_ID_LIST *pids=(JOBOBJECT_BASIC_PROCESS_ID_LIST *)list.bytes;
+    jobMemberCount=pids->NumberOfProcessIdsInList;
+    if(jobMemberCount>4){result=1;goto cleanup;}
+    BOOL knownOnly=TRUE;
+    for(DWORD i=0;i<jobMemberCount;i++)
+      if(pids->ProcessIdList[i]!=(ULONG_PTR)childPid&&pids->ProcessIdList[i]!=(ULONG_PTR)child.dwProcessId)knownOnly=FALSE;
+    if(!knownOnly){result=1;goto cleanup;}
+    if(jobMemberCount==1&&pids->ProcessIdList[0]==(ULONG_PTR)childPid)break;
+    if(GetTickCount64()>=membershipDeadline){result=1;goto cleanup;}
+    Sleep(1);
+  }
+  if(WaitForSingleObject(descendant,0)!=WAIT_TIMEOUT){result=1;goto cleanup;}
   descendantVerified=TRUE;
   stage="job_close_and_kernel_drain";
   CloseHandle(job);job=NULL;
@@ -550,6 +574,7 @@ cleanup:
     "\"initialDefaultUserAccess\":%s,\"configuredDefaultUserAccess\":%s,"
     "\"workerStep\":\"%s\",\"workerWait\":%lu,"
     "\"wfpPackagePolicyVerified\":%s,"
+    "\"descendantExit\":%lu,\"descendantInJob\":%s,\"jobMemberCount\":%lu,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
     tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
@@ -557,7 +582,8 @@ cleanup:
     (unsigned long)observedUnexpectedPrivileges,(unsigned long)observedUnexpectedEnabledPrivileges,
     (unsigned long)observedAdminMode,result==0?"true":"false",
     initialDefaultUserAccess?"true":"false",configuredDefaultUserAccess?"true":"false",
-    workerStep,(unsigned long)workerWait,wfpPackagePolicyVerified?"true":"false");
+    workerStep,(unsigned long)workerWait,wfpPackagePolicyVerified?"true":"false",
+    (unsigned long)descendantExit,descendantInJob?"true":"false",(unsigned long)jobMemberCount);
   return result;
 #endif
 }

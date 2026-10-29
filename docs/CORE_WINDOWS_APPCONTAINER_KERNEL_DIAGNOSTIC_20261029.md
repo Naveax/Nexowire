@@ -126,6 +126,16 @@ drains owned processes before closing its dynamic WFP session. Missing BFE/API
 permission is explicitly unavailable, never simulated network proof. Guardian
 crash ordering, brokered DNS/COM/IPC and production service acceptance remain
 separate open requirements. These filters run only on the disposable CI runner.
+At WFP head `6b27e2326ebd718b4f56b573200c5961c05cdd84`, CI `40925759806`,
+the actual fixed worker passed its network/fixed-boundary checks and exited 0,
+with WFP scope verified. The diagnostic still failed at descendant readback.
+The next source releases held references to the already-signaled/exited worker,
+records descendant handle/liveness/token/Job stages separately, and bounds Job
+accounting reconciliation to one second. The final invariant is unchanged:
+exactly the held live descendant must be the only member before Job close;
+unknown PIDs fail immediately and a still-present exited worker is never
+accepted as success. Descendant must be live immediately before Job closure
+and signaled afterwards. The earlier failure's precise substage is not invented.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
