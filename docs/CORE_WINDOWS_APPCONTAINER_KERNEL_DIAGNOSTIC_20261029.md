@@ -102,6 +102,15 @@ diagnostic only. The parent copies one exact sibling fixture name, never an
 arbitrary caller executable. The child accepts only the two fixed internal
 test modes; it cannot create profiles or act as the parent launcher. Both
 binaries are unsigned disposable CI artifacts, not installed publisher proof.
+At head `bee12679b759867b2795cc60f217c3a3cfbb195d`, CI `40923177997`, actual
+default-owner access changed from absent to present and native token checks
+remained contained, but the worker did not exit within the existing 20-second
+deadline. This is still RED and does not prove entry into main. The next source
+adds bounded, sanitized fixed worker-stage checkpoints (diagnostic only, never
+authority or PID-termination evidence) and separately records wait/exit status.
+Loopback connect uses nonblocking I/O with a one-second bound; only the same
+exact WSAEACCES result remains acceptable. Timeout/refusal/other errors still
+fail, with no network denial or physical containment fabricated.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and

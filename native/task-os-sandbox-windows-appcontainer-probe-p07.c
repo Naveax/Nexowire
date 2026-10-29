@@ -244,6 +244,11 @@ static BOOL create_private_test_desktop(const wchar_t *name,const wchar_t *owner
 }
 #endif
 #ifdef NEXOWIRE_FIXED_SANDBOX_CHILD
+static void worker_progress(const wchar_t *file,const char *step) {
+  HANDLE h=CreateFileW(file,GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+  if(h==INVALID_HANDLE_VALUE)return;
+  DWORD written=0;WriteFile(h,step,(DWORD)strlen(step),&written,NULL);CloseHandle(h);
+}
 static BOOL on_private_test_desktop(const wchar_t *station,const wchar_t *desktop) {
   wchar_t actualStation[256]={0},actualDesktop[256]={0};DWORD bytes=0;
   return GetUserObjectInformationW(GetProcessWindowStation(),UOI_NAME,actualStation,sizeof(actualStation),&bytes)&&
@@ -251,8 +256,10 @@ static BOOL on_private_test_desktop(const wchar_t *station,const wchar_t *deskto
     _wcsicmp(actualStation,station)==0&&_wcsicmp(actualDesktop,desktop)==0&&_wcsicmp(actualStation,L"WinSta0")!=0;
 }
 static int fixed_worker(int argc,wchar_t **argv) {
-  if(argc!=9||!token_is_contained(GetCurrentProcess(),NULL))return 10;
+  if(argc!=10||!token_is_contained(GetCurrentProcess(),NULL))return 10;
+  worker_progress(argv[9],"token_verified");
   if(!on_private_test_desktop(argv[7],argv[8]))return 26;
+  worker_progress(argv[9],"private_desktop_verified");
   BOOL inJob=FALSE;if(!IsProcessInJob(GetCurrentProcess(),NULL,&inJob)||!inJob)return 11;
   wchar_t leak[8]={0};
   SetLastError(ERROR_SUCCESS);
@@ -262,29 +269,48 @@ static int fixed_worker(int argc,wchar_t **argv) {
   HANDLE denied=CreateFileW(argv[3],GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
   if(denied!=INVALID_HANDLE_VALUE){CloseHandle(denied);return 14;}
   if(GetLastError()!=ERROR_ACCESS_DENIED)return 15;
+  worker_progress(argv[9],"file_scope_verified");
   DWORD parent=(DWORD)wcstoul(argv[4],NULL,10);
   HANDLE stolen=OpenProcess(PROCESS_DUP_HANDLE,FALSE,parent);
   if(stolen){CloseHandle(stolen);return 16;}
   if(GetLastError()!=ERROR_ACCESS_DENIED)return 17;
+  worker_progress(argv[9],"parent_handle_denied");
+  worker_progress(argv[9],"winsock_start");
   WSADATA wsa={0};if(WSAStartup(MAKEWORD(2,2),&wsa))return 77;
+  worker_progress(argv[9],"winsock_ready");
   SOCKET socketHandle=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
   if(socketHandle==INVALID_SOCKET){WSACleanup();return 77;}
   struct sockaddr_in address={0};address.sin_family=AF_INET;
   address.sin_addr.s_addr=htonl(INADDR_LOOPBACK);address.sin_port=htons((u_short)wcstoul(argv[5],NULL,10));
+  u_long nonblocking=1;
+  if(ioctlsocket(socketHandle,FIONBIO,&nonblocking)){closesocket(socketHandle);WSACleanup();return 19;}
+  worker_progress(argv[9],"network_connect");
   int connected=connect(socketHandle,(const struct sockaddr *)&address,sizeof(address));
-  int networkError=WSAGetLastError();closesocket(socketHandle);WSACleanup();
+  int networkError=connected==0?0:WSAGetLastError();
+  if(connected==SOCKET_ERROR&&networkError==WSAEWOULDBLOCK){
+    fd_set writeSet,errorSet;FD_ZERO(&writeSet);FD_ZERO(&errorSet);
+    FD_SET(socketHandle,&writeSet);FD_SET(socketHandle,&errorSet);
+    struct timeval deadline={1,0};int selected=select(0,NULL,&writeSet,&errorSet,&deadline);
+    if(selected>0){int bytes=sizeof(networkError);
+      if(getsockopt(socketHandle,SOL_SOCKET,SO_ERROR,(char *)&networkError,&bytes))networkError=WSAGetLastError();
+      if(networkError==0)connected=0;
+    }else networkError=selected==0?WSAETIMEDOUT:WSAGetLastError();
+  }
+  closesocket(socketHandle);WSACleanup();worker_progress(argv[9],"network_result");
   if(connected==0)return 18;
   if(networkError!=WSAEACCES)return 19;
   wchar_t exe[32768]={0},command[32768]={0};
   if(!GetModuleFileNameW(NULL,exe,32768)||
     _snwprintf_s(command,32768,_TRUNCATE,L"\"%ls\" --grandchild-fixed %ls %ls",exe,argv[7],argv[8])<=0)return 20;
   STARTUPINFOW si={0};si.cb=sizeof(si);PROCESS_INFORMATION child={0};
+  worker_progress(argv[9],"breakaway_probe");
   if(CreateProcessW(exe,command,NULL,NULL,FALSE,CREATE_BREAKAWAY_FROM_JOB|CREATE_SUSPENDED|CREATE_NO_WINDOW,
     NULL,NULL,&si,&child)){
     TerminateProcess(child.hProcess,99);WaitForSingleObject(child.hProcess,3000);
     CloseHandle(child.hThread);CloseHandle(child.hProcess);return 21;
   }
   if(GetLastError()!=ERROR_ACCESS_DENIED)return 22;
+  worker_progress(argv[9],"descendant_create");
   if(!CreateProcessW(exe,command,NULL,NULL,FALSE,CREATE_SUSPENDED|CREATE_NO_WINDOW,NULL,NULL,&si,&child))return 77;
   char pid[32]={0};
   int n=_snprintf_s(pid,sizeof(pid),_TRUNCATE,"%lu",(unsigned long)child.dwProcessId);
@@ -292,12 +318,15 @@ static int fixed_worker(int argc,wchar_t **argv) {
     TerminateProcess(child.hProcess,99);WaitForSingleObject(child.hProcess,3000);
     CloseHandle(child.hThread);CloseHandle(child.hProcess);return 23;
   }
-  CloseHandle(child.hThread);CloseHandle(child.hProcess);return 0;
+  CloseHandle(child.hThread);CloseHandle(child.hProcess);worker_progress(argv[9],"descendant_ready");return 0;
 }
 #endif
 int wmain(int argc,wchar_t **argv) {
 #ifdef NEXOWIRE_FIXED_SANDBOX_CHILD
-  if(argc>=2&&wcscmp(argv[1],L"--inside-fixed")==0)return fixed_worker(argc,argv);
+  if(argc>=2&&wcscmp(argv[1],L"--inside-fixed")==0){
+    if(argc==10)worker_progress(argv[9],"entered_main");
+    return fixed_worker(argc,argv);
+  }
   if(argc==4&&wcscmp(argv[1],L"--grandchild-fixed")==0){
     BOOL member=FALSE;
     if(!token_is_contained(GetCurrentProcess(),NULL)||!IsProcessInJob(GetCurrentProcess(),NULL,&member)||!member||
@@ -307,10 +336,11 @@ int wmain(int argc,wchar_t **argv) {
   return 64;
 #else
   if(argc!=3||wcscmp(argv[1],L"--selftest-only")||wcslen(argv[2])>1000||!empty_test_root(argv[2]))return 64;
-  const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE;int result=77;
+  const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE,workerWait=0xffffffffUL;int result=77;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
+  wchar_t progressFile[1300]={0};char workerStep[64]="not_observed";
   HANDLE token=NULL,workerToken=NULL,job=NULL,descendant=NULL;PSID appSid=NULL;
   LPWSTR ownerSid=NULL,appText=NULL;BOOL profileCreated=FALSE,descendantVerified=FALSE;
   PROCESS_INFORMATION child={0};
@@ -323,7 +353,8 @@ int wmain(int argc,wchar_t **argv) {
     _snwprintf_s(exe,1300,_TRUNCATE,L"%ls\\probe.exe",code)<=0||
     _snwprintf_s(allowed,1300,_TRUNCATE,L"%ls\\allowed.txt",data)<=0||
     _snwprintf_s(denied,1300,_TRUNCATE,L"%ls\\outside-canary.txt",fixture)<=0||
-    _snwprintf_s(pidFile,1300,_TRUNCATE,L"%ls\\child.pid",data)<=0)goto cleanup;
+    _snwprintf_s(pidFile,1300,_TRUNCATE,L"%ls\\child.pid",data)<=0||
+    _snwprintf_s(progressFile,1300,_TRUNCATE,L"%ls\\progress.txt",data)<=0)goto cleanup;
   union {TOKEN_USER alignment;BYTE bytes[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE];} user={0};DWORD returned=0;
   /* CreateRestrictedToken retains the source handle rights. ADJUST_DEFAULT is
    * needed only to lower the NEW token; ASSIGN_PRIMARY launches that new
@@ -380,8 +411,8 @@ int wmain(int argc,wchar_t **argv) {
   stage="minimal_os_profile_environment";
   if(!SetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",L"ci-parent-only-not-a-real-secret"))goto cleanup;
   if(!minimal_worker_environment(token,environment,sizeof(environment)/sizeof(environment[0])))goto cleanup;
-  if(_snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\" %ls FixedWorker",
-    exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile,profile)<=0)goto cleanup;
+  if(_snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\" %ls FixedWorker \"%ls\"",
+    exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile,profile,progressFile)<=0)goto cleanup;
   workerToken=restricted_worker_token(token,&stage);
   if(!workerToken)goto cleanup;
   stage="restricted_worker_default_dacl";
@@ -396,7 +427,8 @@ int wmain(int argc,wchar_t **argv) {
   if(!token_is_contained(child.hProcess,appSid)||!IsProcessInJob(child.hProcess,job,&member)||!member){result=1;goto cleanup;}
   if(ResumeThread(child.hThread)==(DWORD)-1)goto cleanup;
   stage="fixed_worker_negatives";
-  if(WaitForSingleObject(child.hProcess,20000)!=WAIT_OBJECT_0||!GetExitCodeProcess(child.hProcess,&childExit)){result=1;goto cleanup;}
+  workerWait=WaitForSingleObject(child.hProcess,20000);
+  if(!GetExitCodeProcess(child.hProcess,&childExit)||workerWait!=WAIT_OBJECT_0){result=1;goto cleanup;}
   if(childExit!=0){result=childExit==77?77:1;goto cleanup;}
   char pid[32]={0};DWORD read=0;
   if(!read_fixture(pidFile,pid,sizeof(pid),&read)){result=1;goto cleanup;}
@@ -434,6 +466,13 @@ cleanup:
   if(attributes)HeapFree(GetProcessHeap(),0,attributes);
   if(listener!=INVALID_SOCKET)closesocket(listener);if(socketsStarted)WSACleanup();
   if(workerToken)CloseHandle(workerToken);
+  if(progressFile[0]){
+    char observed[64]={0};DWORD count=0;
+    if(read_fixture(progressFile,observed,sizeof(observed),&count)&&count>0&&count<sizeof(observed)){
+      BOOL safe=TRUE;for(DWORD i=0;i<count;i++)if((observed[i]<'a'||observed[i]>'z')&&observed[i]!='_')safe=FALSE;
+      if(safe)strcpy_s(workerStep,sizeof(workerStep),observed);
+    }
+  }
   if(testDesktop&&!CloseDesktop(testDesktop)){result=1;stage="private_desktop_cleanup_failed";error=GetLastError();}
   if(testStation&&!CloseWindowStation(testStation)){result=1;stage="private_station_cleanup_failed";error=GetLastError();}
   if(token)CloseHandle(token);if(ownerSid)LocalFree(ownerSid);if(appText)LocalFree(appText);
@@ -446,13 +485,15 @@ cleanup:
     "\"unexpectedPrivileges\":%lu,\"unexpectedEnabledPrivileges\":%lu,\"adminGroupMode\":%lu,"
     "\"privateDesktopObserved\":%s,"
     "\"initialDefaultUserAccess\":%s,\"configuredDefaultUserAccess\":%s,"
+    "\"workerStep\":\"%s\",\"workerWait\":%lu,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
     tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
     (unsigned long)observedIntegrity,(unsigned long)observedCapabilities,observedPackageMatches?"true":"false",
     (unsigned long)observedUnexpectedPrivileges,(unsigned long)observedUnexpectedEnabledPrivileges,
     (unsigned long)observedAdminMode,result==0?"true":"false",
-    initialDefaultUserAccess?"true":"false",configuredDefaultUserAccess?"true":"false");
+    initialDefaultUserAccess?"true":"false",configuredDefaultUserAccess?"true":"false",
+    workerStep,(unsigned long)workerWait);
   return result;
 #endif
 }
