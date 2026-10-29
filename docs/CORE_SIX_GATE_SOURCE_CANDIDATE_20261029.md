@@ -24,8 +24,12 @@ owner branches. It does not install or enable CORE on either PC.
    `3a43e3bbd8416a48c19f333dedebd49289cc1d66`, preserving its
    initial `2d94909d7980a0d50d01019eb7ddaef8d94e5b4c` and common #962 parent.
 3. AppContainer profile-environment correction #967:
-   `b2e3b5f20c1644931efcfead43eebc217868cfd7`, directly based on the exact
-   #965 head. Its native/test/doc blobs are preserved; no #965/#966 ref moved.
+   `b82d3b738197c8d3ee829fa4efe64fa18088e197`, preserving the first environment
+   head `b2e3b5f20c1644931efcfead43eebc217868cfd7` and coarse-token diagnostic
+   `3a727b277b6a04cab94aa2df0a520efe74bae914`, all based on exact #965.
+   No #965/#966 ref moved. This integration additionally sets the parent-only
+   secret fixture BEFORE constructing the environment and requires actual
+   absence in the child, making the leakage negative meaningful.
 
 The only overlapping path is `.github/workflows/ci.yml`: one parent adds early
 bounded Windows native/manifest steps, the other adds the Linux PostgreSQL
@@ -61,6 +65,14 @@ AppContainer case was BLOCKED/SKIP at process creation with Win32 error 203.
 That is explicitly not a containment PASS. #967 supplies allowlisted OS
 profile paths without parent environment inheritance; final native evidence
 must identify OBSERVED versus UNAVAILABLE without weakening any invariant.
+The first environment and coarse-token heads then failed strictly before
+resume: real Windows reported AppContainer/LOW/zero capabilities but elevation
+still present. The final #967 source uses a separate restricted LOW token,
+Administrators deny-only and CreateProcessAsUser; additionally, no privilege
+beyond SeChangeNotify may remain, including disabled entries. Every previous
+kernel rejection and native worker block stays intact. Historical #968 head
+`bbd626ae4ed06daf13668ab64c7866f67329de61`, CI `40912911651`, remains RED;
+its separate Release Readiness `40912911791` succeeded without tag/publishing.
 
 The original uploaded Broker ZIP is not executed, republished as a signed
 installer or changed. No actual server, credential, certificate, Windows Hello
