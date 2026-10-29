@@ -9,6 +9,7 @@ import {
   buildNativeAgentLauncher,
   nativeAgentLifecycleStatus,
   persistedNativeAgentEnvironment,
+  WINDOWS_NATIVE_AGENT_TASK_SETTINGS,
 } from '../src/agent/native-agent-lifecycle.js';
 
 test('native-agent launcher persists only safe configuration references', () => {
@@ -164,4 +165,17 @@ test('unsupported lifecycle platforms fail closed', async () => {
       }),
     /supports Windows, Linux, and macOS/,
   );
+});
+
+test('Windows native Agent lifecycle remains available on battery power', () => {
+  const settings = WINDOWS_NATIVE_AGENT_TASK_SETTINGS;
+  assert.match(settings, /New-ScheduledTaskSettingsSet/);
+  assert.match(settings, /-AllowStartIfOnBatteries(?:\\s|$)/);
+  assert.match(settings, /-DontStopIfGoingOnBatteries(?:\\s|$)/);
+  // Preserve the existing single-instance, restart and unbounded agent lifetime.
+  assert.match(settings, /-MultipleInstances IgnoreNew/);
+  assert.match(settings, /-RestartCount 999/);
+  assert.match(settings, /-RestartInterval \\(New-TimeSpan -Minutes 1\\)/);
+  assert.match(settings, /-ExecutionTimeLimit \\(New-TimeSpan -Seconds 0\\)/);
+  assert.doesNotMatch(settings, /-DisallowDemandStart|-Disable(?:\\s|$)/);
 });
