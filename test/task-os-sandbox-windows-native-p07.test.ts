@@ -14,6 +14,7 @@ test('#07 Windows diagnostic uses real AppContainer token readback before resumi
     'TokenCapabilities','TokenIntegrityLevel','TokenPrivileges','TokenGroups','CREATE_SUSPENDED','AssignProcessToJobObject',
     'CreateRestrictedToken','DISABLE_MAX_PRIVILEGE','LUA_TOKEN','SE_GROUP_USE_FOR_DENY_ONLY','CreateProcessAsUserW',
     'TOKEN_ADJUST_DEFAULT','TOKEN_ASSIGN_PRIMARY','restricted_worker_integrity_lower',
+    'CreateWindowStationW','CWF_CREATE_ONLY','CreateDesktopW','GetUserObjectInformationW','lpDesktop=desktopPath',
     'PROCESS_DUP_HANDLE','CREATE_BREAKAWAY_FROM_JOB','JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE',
     'JobObjectBasicProcessIdList','WSAEACCES','independent_descendant_readback'])assert.ok(source.includes(api),api);
   assert.ok(source.indexOf('independent_suspended_token_readback')<source.lastIndexOf('ResumeThread(child.hThread)'));
@@ -67,12 +68,13 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
       t.skip('OS_DIAGNOSTIC_BLOCKED at '+String(report.stage)+' error '+String(report.win32Error));return;
     }
     assert.equal(report.state,'OBSERVED');assert.equal(report.workerExit,0);
+    assert.equal(report.privateDesktopObserved,true);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
     assert.equal(report.integrityRid,4096);assert.equal(report.capabilityCount,0);
     assert.equal(report.unexpectedEnabledPrivileges,0);
     assert.equal(report.unexpectedPrivileges,0);
     assert.ok(report.adminGroupMode===0||report.adminGroupMode===1);
     assert.equal(report.stage,'job_close_and_kernel_drain');
-    t.diagnostic('FIXED_TEST_PAYLOAD_ONLY: token, canary ACL, parent DUP_HANDLE, loopback, breakaway, descendant and Job-close checks; no production sandbox acceptance');
+    t.diagnostic('FIXED_TEST_PAYLOAD_ONLY: token, private station/desktop, canary ACL, parent DUP_HANDLE, loopback, breakaway, descendant and Job-close checks; no production sandbox acceptance');
   }finally{rmSync(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
 });

@@ -178,8 +178,43 @@ done:
   {DWORD error=GetLastError();DestroyEnvironmentBlock(block);if(!ok)SetLastError(error);}
   return ok;
 }
+static BOOL create_private_test_desktop(const wchar_t *name,const wchar_t *owner,const wchar_t *app,
+  HWINSTA *station,HDESK *desktop) {
+  /* ONLY brand-new noninteractive test objects; never edit WinSta0/Default.
+   * The process station is restored before launching the fixed worker. No
+   * SwitchDesktop/input operation or inheritable handle is used. */
+  HWINSTA original=GetProcessWindowStation();
+  HDESK originalDesktop=GetThreadDesktop(GetCurrentThreadId());
+  if(!original||!originalDesktop)return FALSE;
+  wchar_t sddl[1024]={0};PSECURITY_DESCRIPTOR sd=NULL;
+  if(_snwprintf_s(sddl,1024,_TRUNCATE,
+    L"D:P(A;;GA;;;SY)(A;;GA;;;%ls)(A;;GA;;;%ls)S:(ML;;NW;;;LW)",owner,app)<=0||
+    !ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,SDDL_REVISION_1,&sd,NULL))return FALSE;
+  SECURITY_ATTRIBUTES sa={sizeof(sa),sd,FALSE};
+  *station=CreateWindowStationW(name,CWF_CREATE_ONLY,WINSTA_ALL_ACCESS,&sa);
+  DWORD error=GetLastError();BOOL changed=FALSE,ok=FALSE;
+  if(*station){
+    if(SetProcessWindowStation(*station)){
+      changed=TRUE;
+      *desktop=CreateDesktopW(L"FixedWorker",NULL,NULL,0,GENERIC_ALL,&sa);
+      error=GetLastError();ok=*desktop!=NULL;
+    }else error=GetLastError();
+  }
+  if(changed&&!SetProcessWindowStation(original)){error=GetLastError();ok=FALSE;}
+  if(GetThreadDesktop(GetCurrentThreadId())!=originalDesktop&&!SetThreadDesktop(originalDesktop)){
+    error=GetLastError();ok=FALSE;
+  }
+  LocalFree(sd);if(!ok)SetLastError(error);return ok;
+}
+static BOOL on_private_test_desktop(const wchar_t *station,const wchar_t *desktop) {
+  wchar_t actualStation[256]={0},actualDesktop[256]={0};DWORD bytes=0;
+  return GetUserObjectInformationW(GetProcessWindowStation(),UOI_NAME,actualStation,sizeof(actualStation),&bytes)&&
+    GetUserObjectInformationW(GetThreadDesktop(GetCurrentThreadId()),UOI_NAME,actualDesktop,sizeof(actualDesktop),&bytes)&&
+    _wcsicmp(actualStation,station)==0&&_wcsicmp(actualDesktop,desktop)==0&&_wcsicmp(actualStation,L"WinSta0")!=0;
+}
 static int fixed_worker(int argc,wchar_t **argv) {
-  if(argc!=7||!token_is_contained(GetCurrentProcess(),NULL))return 10;
+  if(argc!=9||!token_is_contained(GetCurrentProcess(),NULL))return 10;
+  if(!on_private_test_desktop(argv[7],argv[8]))return 26;
   BOOL inJob=FALSE;if(!IsProcessInJob(GetCurrentProcess(),NULL,&inJob)||!inJob)return 11;
   wchar_t leak[8]={0};
   SetLastError(ERROR_SUCCESS);
@@ -204,7 +239,7 @@ static int fixed_worker(int argc,wchar_t **argv) {
   if(networkError!=WSAEACCES)return 19;
   wchar_t exe[32768]={0},command[32768]={0};
   if(!GetModuleFileNameW(NULL,exe,32768)||
-    _snwprintf_s(command,32768,_TRUNCATE,L"\"%ls\" --grandchild-fixed",exe)<=0)return 20;
+    _snwprintf_s(command,32768,_TRUNCATE,L"\"%ls\" --grandchild-fixed %ls %ls",exe,argv[7],argv[8])<=0)return 20;
   STARTUPINFOW si={0};si.cb=sizeof(si);PROCESS_INFORMATION child={0};
   if(CreateProcessW(exe,command,NULL,NULL,FALSE,CREATE_BREAKAWAY_FROM_JOB|CREATE_SUSPENDED|CREATE_NO_WINDOW,
     NULL,NULL,&si,&child)){
@@ -223,15 +258,17 @@ static int fixed_worker(int argc,wchar_t **argv) {
 }
 int wmain(int argc,wchar_t **argv) {
   if(argc>=2&&wcscmp(argv[1],L"--inside-fixed")==0)return fixed_worker(argc,argv);
-  if(argc==2&&wcscmp(argv[1],L"--grandchild-fixed")==0){
+  if(argc==4&&wcscmp(argv[1],L"--grandchild-fixed")==0){
     BOOL member=FALSE;
-    if(!token_is_contained(GetCurrentProcess(),NULL)||!IsProcessInJob(GetCurrentProcess(),NULL,&member)||!member)return 24;
+    if(!token_is_contained(GetCurrentProcess(),NULL)||!IsProcessInJob(GetCurrentProcess(),NULL,&member)||!member||
+      !on_private_test_desktop(argv[2],argv[3]))return 24;
     Sleep(INFINITE);return 25;
   }
   if(argc!=3||wcscmp(argv[1],L"--selftest-only")||wcslen(argv[2])>1000||!empty_test_root(argv[2]))return 64;
   const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE;int result=77;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
+  wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
   HANDLE token=NULL,workerToken=NULL,job=NULL,descendant=NULL;PSID appSid=NULL;
   LPWSTR ownerSid=NULL,appText=NULL;BOOL profileCreated=FALSE,descendantVerified=FALSE;
   PROCESS_INFORMATION child={0};
@@ -265,6 +302,9 @@ int wmain(int argc,wchar_t **argv) {
   if(!GetModuleFileNameW(NULL,self,32768)||!CopyFileW(self,exe,TRUE)||!set_test_acl(exe,ownerSid,appText,FALSE)||
     !write_fixture(allowed,"allowed-fixture")||!write_fixture(denied,"outside-canary")||
     !set_test_acl(denied,ownerSid,NULL,FALSE))goto cleanup;
+  stage="private_test_desktop_create";
+  if(!create_private_test_desktop(profile,ownerSid,appText,&testStation,&testDesktop)||
+    _snwprintf_s(desktopPath,160,_TRUNCATE,L"%ls\\FixedWorker",profile)<=0)goto cleanup;
   stage="loopback_positive_control";
   if(WSAStartup(MAKEWORD(2,2),&wsa)){error=(DWORD)WSAGetLastError();goto cleanup;}
   socketsStarted=TRUE;listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
@@ -288,12 +328,13 @@ int wmain(int argc,wchar_t **argv) {
   if(!UpdateProcThreadAttribute(attributes,0,PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
     &capabilities,sizeof(capabilities),NULL,NULL))goto cleanup;
   STARTUPINFOEXW start={0};start.StartupInfo.cb=sizeof(start);start.lpAttributeList=attributes;
+  start.StartupInfo.lpDesktop=desktopPath;
   wchar_t command[8192]={0},environment[16384]={0};
   stage="minimal_os_profile_environment";
   if(!SetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",L"ci-parent-only-not-a-real-secret"))goto cleanup;
   if(!minimal_worker_environment(token,environment,sizeof(environment)/sizeof(environment[0])))goto cleanup;
-  if(_snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\"",
-    exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile)<=0)goto cleanup;
+  if(_snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\" %ls FixedWorker",
+    exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile,profile)<=0)goto cleanup;
   workerToken=restricted_worker_token(token,&stage);
   if(!workerToken)goto cleanup;
   stage="suspended_appcontainer_create";
@@ -344,6 +385,8 @@ cleanup:
   if(attributes)HeapFree(GetProcessHeap(),0,attributes);
   if(listener!=INVALID_SOCKET)closesocket(listener);if(socketsStarted)WSACleanup();
   if(workerToken)CloseHandle(workerToken);
+  if(testDesktop&&!CloseDesktop(testDesktop)){result=1;stage="private_desktop_cleanup_failed";error=GetLastError();}
+  if(testStation&&!CloseWindowStation(testStation)){result=1;stage="private_station_cleanup_failed";error=GetLastError();}
   if(token)CloseHandle(token);if(ownerSid)LocalFree(ownerSid);if(appText)LocalFree(appText);
   if(appSid)FreeSid(appSid);
   if(profileCreated){HRESULT deleted=DeleteAppContainerProfile(profile);if(FAILED(deleted)){result=1;stage="profile_cleanup_failed";error=(DWORD)deleted;}}
@@ -352,11 +395,12 @@ cleanup:
     "\"tokenFailure\":\"%s\",\"tokenAppContainer\":%lu,\"tokenElevated\":%lu,"
     "\"integrityRid\":%lu,\"capabilityCount\":%lu,\"packageMatches\":%s,"
     "\"unexpectedPrivileges\":%lu,\"unexpectedEnabledPrivileges\":%lu,\"adminGroupMode\":%lu,"
+    "\"privateDesktopObserved\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
     tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
     (unsigned long)observedIntegrity,(unsigned long)observedCapabilities,observedPackageMatches?"true":"false",
     (unsigned long)observedUnexpectedPrivileges,(unsigned long)observedUnexpectedEnabledPrivileges,
-    (unsigned long)observedAdminMode);
+    (unsigned long)observedAdminMode,result==0?"true":"false");
   return result;
 }

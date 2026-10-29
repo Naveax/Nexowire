@@ -74,6 +74,17 @@ child: Administrators was deny-only and privileged entries were absent, but
 TokenIsElevated still equaled 1. The next source requests LUA_TOKEN explicitly
 in addition to DISABLE_MAX_PRIVILEGE; the kernel must independently report
 non-elevation or execution remains denied. No fact is synthesized from a flag.
+At follow-up head `a1a533b15df9a844c6b0b834d7d84d0404cb2ad4`, CI
+`40920509967`, actual readback finally showed non-elevation, LOW, zero ambient
+privileges/capabilities, matching package and deny-only Administrators. The fixed
+child then failed during native startup with 0xC0000142. That remains RED.
+The next source creates a unique noninteractive test window station and desktop
+with explicit owner/AppContainer access and a LOW label, passes that exact path
+to CreateProcessAsUser and verifies OS station/desktop names inside the fixed
+child and descendant. This addresses the documented desktop access requirement;
+the cause of 0xC0000142 is not presented as proven until the actual rerun of the
+NEW source head completes. WinSta0/Default ACL and input desktop are never
+modified or switched; temporary objects/handles belong only to the diagnostic.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
@@ -91,3 +102,5 @@ Primary platform references:
 - https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
 - https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken
 - https://learn.microsoft.com/en-us/windows/win32/secauthz/access-rights-for-access-token-objects
+- https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasuserw
+- https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowstationw
