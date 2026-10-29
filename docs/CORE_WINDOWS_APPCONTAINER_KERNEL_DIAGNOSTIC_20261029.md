@@ -111,6 +111,21 @@ authority or PID-termination evidence) and separately records wait/exit status.
 Loopback connect uses nonblocking I/O with a one-second bound; only the same
 exact WSAEACCES result remains acceptable. Timeout/refusal/other errors still
 fail, with no network denial or physical containment fabricated.
+Head `3d74ab45c511d27da4a0873deb6e491d68117cbd`, CI `40924158038`, proved
+entry into the fixed payload through token/private-desktop/file/parent-handle
+checks, but failed at bounded network result (exit 19). AppContainer labeling
+alone did not supply the required observed network-denial evidence. The next
+source installs actual WFP outbound BLOCK filters at IPv4/IPv6 ALE_AUTH_CONNECT,
+conditioned ONLY on the newly created unique test package SID. One dynamic
+session and private sublayer are created atomically; both actual filters are
+queried back for exact SID/layer/action/scope. No persistent object, existing
+filter/provider or other package's policy is changed. The unsandboxed parent
+positive control must still connect AFTER these filters exist. The child must
+still obtain exact WSAEACCES, and no test rejection is relaxed. Normal cleanup
+drains owned processes before closing its dynamic WFP session. Missing BFE/API
+permission is explicitly unavailable, never simulated network proof. Guardian
+crash ordering, brokered DNS/COM/IPC and production service acceptance remain
+separate open requirements. These filters run only on the disposable CI runner.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
@@ -131,3 +146,6 @@ Primary platform references:
 - https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasuserw
 - https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowstationw
 - https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_default_dacl
+- https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmengineopen0
+- https://learn.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
+- https://learn.microsoft.com/en-us/windows/win32/fwp/filter-arbitration

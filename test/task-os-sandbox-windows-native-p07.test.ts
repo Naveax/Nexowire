@@ -16,6 +16,8 @@ test('#07 Windows diagnostic uses real AppContainer token readback before resumi
     'TOKEN_ADJUST_DEFAULT','TOKEN_ASSIGN_PRIMARY','restricted_worker_integrity_lower',
     'CreateWindowStationW','CWF_CREATE_ONLY','CreateDesktopW','GetUserObjectInformationW','lpDesktop=desktopPath',
     'TokenDefaultDacl','set_worker_default_dacl','configuredDefaultUserAccess',
+    'FWPM_SESSION_FLAG_DYNAMIC','FWPM_CONDITION_ALE_PACKAGE_ID','FwpmFilterGetById0',
+    'FWPM_LAYER_ALE_AUTH_CONNECT_V4','FWPM_LAYER_ALE_AUTH_CONNECT_V6','FWP_ACTION_BLOCK',
     'PROCESS_DUP_HANDLE','CREATE_BREAKAWAY_FROM_JOB','JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE',
     'JobObjectBasicProcessIdList','WSAEACCES','independent_descendant_readback'])assert.ok(source.includes(api),api);
   assert.ok(source.indexOf('independent_suspended_token_readback')<source.lastIndexOf('ResumeThread(child.hThread)'));
@@ -75,6 +77,7 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
     assert.equal(report.state,'OBSERVED');assert.equal(report.workerExit,0);
     assert.equal(report.privateDesktopObserved,true);
     assert.equal(report.configuredDefaultUserAccess,true);
+    assert.equal(report.wfpPackagePolicyVerified,true);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
     assert.equal(report.integrityRid,4096);assert.equal(report.capabilityCount,0);
     assert.equal(report.unexpectedEnabledPrivileges,0);

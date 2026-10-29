@@ -16,6 +16,11 @@
 #include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef NEXOWIRE_FIXED_SANDBOX_CHILD
+#include <rpc.h>
+#include <initguid.h>
+#include <fwpmu.h>
+#endif
 
 static const char *tokenFailure="not_observed";
 static DWORD observedApp=0xffffffffUL,observedElevation=0xffffffffUL;
@@ -25,6 +30,51 @@ static DWORD observedUnexpectedPrivileges=0xffffffffUL,observedAdminMode=0xfffff
 static DWORD observedUnexpectedEnabledPrivileges=0xffffffffUL;
 #ifndef NEXOWIRE_FIXED_SANDBOX_CHILD
 static BOOL initialDefaultUserAccess=FALSE,configuredDefaultUserAccess=FALSE;
+static BOOL wfpPackagePolicyVerified=FALSE;
+static DWORD install_unique_test_network_guard(PSID package,HANDLE *engine) {
+  /* Only the just-created unique test AppContainer SID. Dynamic session,
+   * private sublayer and two exact package conditions; no machine-wide rule,
+   * persistent object or mutation of any existing provider/filter. */
+  if(!package||!IsValidSid(package))return ERROR_INVALID_SID;
+  FWPM_SESSION0 session={0};session.flags=FWPM_SESSION_FLAG_DYNAMIC;
+  session.txnWaitTimeoutInMSec=1000;
+  session.displayData.name=L"Nexowire disposable fixed test only";
+  DWORD error=FwpmEngineOpen0(NULL,RPC_C_AUTHN_WINNT,NULL,&session,engine);
+  if(error!=ERROR_SUCCESS)return error;
+  error=FwpmTransactionBegin0(*engine,0);if(error!=ERROR_SUCCESS)return error;
+  FWPM_SUBLAYER0 sublayer={0};
+  if(UuidCreate(&sublayer.subLayerKey)!=RPC_S_OK){error=ERROR_GEN_FAILURE;goto abort;}
+  sublayer.displayData.name=L"Nexowire unique CI AppContainer only";sublayer.weight=0xffff;
+  error=FwpmSubLayerAdd0(*engine,&sublayer,NULL);if(error!=ERROR_SUCCESS)goto abort;
+  const GUID *layers[]={&FWPM_LAYER_ALE_AUTH_CONNECT_V4,&FWPM_LAYER_ALE_AUTH_CONNECT_V6};
+  UINT64 ids[2]={0};
+  for(DWORD i=0;i<2;i++){
+    FWPM_FILTER_CONDITION0 condition={0};condition.fieldKey=FWPM_CONDITION_ALE_PACKAGE_ID;
+    condition.matchType=FWP_MATCH_EQUAL;condition.conditionValue.type=FWP_SID;condition.conditionValue.sid=package;
+    FWPM_FILTER0 filter={0};filter.layerKey=*layers[i];filter.subLayerKey=sublayer.subLayerKey;
+    filter.displayData.name=L"Deny outbound for one disposable AppContainer";
+    filter.weight.type=FWP_UINT8;filter.weight.uint8=15;
+    // Default filter BLOCK is hard. Do not set CLEAR_ACTION_RIGHT or an allow.
+    filter.action.type=FWP_ACTION_BLOCK;filter.numFilterConditions=1;filter.filterCondition=&condition;
+    error=FwpmFilterAdd0(*engine,&filter,NULL,&ids[i]);if(error!=ERROR_SUCCESS)goto abort;
+  }
+  error=FwpmTransactionCommit0(*engine);if(error!=ERROR_SUCCESS)return error;
+  for(DWORD i=0;i<2;i++){
+    FWPM_FILTER0 *observed=NULL;error=FwpmFilterGetById0(*engine,ids[i],&observed);
+    if(error!=ERROR_SUCCESS)return error;
+    BOOL scoped=observed&&observed->action.type==FWP_ACTION_BLOCK&&
+      memcmp(&observed->layerKey,layers[i],sizeof(GUID))==0&&
+      memcmp(&observed->subLayerKey,&sublayer.subLayerKey,sizeof(GUID))==0&&observed->numFilterConditions==1&&
+      observed->filterCondition&&memcmp(&observed->filterCondition[0].fieldKey,&FWPM_CONDITION_ALE_PACKAGE_ID,sizeof(GUID))==0&&
+      observed->filterCondition[0].matchType==FWP_MATCH_EQUAL&&observed->filterCondition[0].conditionValue.type==FWP_SID&&
+      IsValidSid(observed->filterCondition[0].conditionValue.sid)&&
+      EqualSid(observed->filterCondition[0].conditionValue.sid,package);
+    FwpmFreeMemory0((void **)&observed);if(!scoped)return ERROR_INVALID_DATA;
+  }
+  wfpPackagePolicyVerified=TRUE;return ERROR_SUCCESS;
+abort:
+  FwpmTransactionAbort0(*engine);return error;
+}
 static BOOL token_default_allows_user(HANDLE token,PSID userSid) {
   union {TOKEN_DEFAULT_DACL alignment;BYTE bytes[8192];} info={0};DWORD returned=0;
   if(!GetTokenInformation(token,TokenDefaultDacl,info.bytes,sizeof(info.bytes),&returned))return FALSE;
@@ -298,7 +348,10 @@ static int fixed_worker(int argc,wchar_t **argv) {
   }
   closesocket(socketHandle);WSACleanup();worker_progress(argv[9],"network_result");
   if(connected==0)return 18;
-  if(networkError!=WSAEACCES)return 19;
+  if(networkError!=WSAEACCES){
+    worker_progress(argv[9],networkError==WSAETIMEDOUT?"network_timeout":
+      networkError==WSAECONNREFUSED?"network_refused":"network_error");return 19;
+  }
   wchar_t exe[32768]={0},command[32768]={0};
   if(!GetModuleFileNameW(NULL,exe,32768)||
     _snwprintf_s(command,32768,_TRUNCATE,L"\"%ls\" --grandchild-fixed %ls %ls",exe,argv[7],argv[8])<=0)return 20;
@@ -342,6 +395,7 @@ int wmain(int argc,wchar_t **argv) {
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
   wchar_t progressFile[1300]={0};char workerStep[64]="not_observed";
   HANDLE token=NULL,workerToken=NULL,job=NULL,descendant=NULL;PSID appSid=NULL;
+  HANDLE networkGuard=NULL;
   LPWSTR ownerSid=NULL,appText=NULL;BOOL profileCreated=FALSE,descendantVerified=FALSE;
   PROCESS_INFORMATION child={0};
   LPPROC_THREAD_ATTRIBUTE_LIST attributes=NULL;BOOL attributesInitialized=FALSE;
@@ -383,6 +437,9 @@ int wmain(int argc,wchar_t **argv) {
   stage="private_test_desktop_create";
   if(!create_private_test_desktop(profile,ownerSid,appText,&testStation,&testDesktop)||
     _snwprintf_s(desktopPath,160,_TRUNCATE,L"%ls\\FixedWorker",profile)<=0)goto cleanup;
+  stage="unique_package_wfp_guard";
+  error=install_unique_test_network_guard(appSid,&networkGuard);
+  if(error!=ERROR_SUCCESS){if(error==ERROR_INVALID_DATA)result=1;goto cleanup;}
   stage="loopback_positive_control";
   if(WSAStartup(MAKEWORD(2,2),&wsa)){error=(DWORD)WSAGetLastError();goto cleanup;}
   socketsStarted=TRUE;listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
@@ -469,12 +526,18 @@ cleanup:
   if(progressFile[0]){
     char observed[64]={0};DWORD count=0;
     if(read_fixture(progressFile,observed,sizeof(observed),&count)&&count>0&&count<sizeof(observed)){
-      BOOL safe=TRUE;for(DWORD i=0;i<count;i++)if((observed[i]<'a'||observed[i]>'z')&&observed[i]!='_')safe=FALSE;
-      if(safe)strcpy_s(workerStep,sizeof(workerStep),observed);
+      const char *known[]={"entered_main","token_verified","private_desktop_verified","file_scope_verified",
+        "parent_handle_denied","winsock_start","winsock_ready","network_connect","network_result",
+        "network_timeout","network_refused","network_error","breakaway_probe","descendant_create","descendant_ready"};
+      for(size_t i=0;i<sizeof(known)/sizeof(known[0]);i++)
+        if(strcmp(observed,known[i])==0){strcpy_s(workerStep,sizeof(workerStep),observed);break;}
     }
   }
   if(testDesktop&&!CloseDesktop(testDesktop)){result=1;stage="private_desktop_cleanup_failed";error=GetLastError();}
   if(testStation&&!CloseWindowStation(testStation)){result=1;stage="private_station_cleanup_failed";error=GetLastError();}
+  // Normal cleanup retains the policy until owned processes have drained.
+  if(networkGuard){DWORD closed=FwpmEngineClose0(networkGuard);
+    if(closed!=ERROR_SUCCESS){result=1;stage="unique_wfp_guard_cleanup_failed";error=closed;}}
   if(token)CloseHandle(token);if(ownerSid)LocalFree(ownerSid);if(appText)LocalFree(appText);
   if(appSid)FreeSid(appSid);
   if(profileCreated){HRESULT deleted=DeleteAppContainerProfile(profile);if(FAILED(deleted)){result=1;stage="profile_cleanup_failed";error=(DWORD)deleted;}}
@@ -486,6 +549,7 @@ cleanup:
     "\"privateDesktopObserved\":%s,"
     "\"initialDefaultUserAccess\":%s,\"configuredDefaultUserAccess\":%s,"
     "\"workerStep\":\"%s\",\"workerWait\":%lu,"
+    "\"wfpPackagePolicyVerified\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
     tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
@@ -493,7 +557,7 @@ cleanup:
     (unsigned long)observedUnexpectedPrivileges,(unsigned long)observedUnexpectedEnabledPrivileges,
     (unsigned long)observedAdminMode,result==0?"true":"false",
     initialDefaultUserAccess?"true":"false",configuredDefaultUserAccess?"true":"false",
-    workerStep,(unsigned long)workerWait);
+    workerStep,(unsigned long)workerWait,wfpPackagePolicyVerified?"true":"false");
   return result;
 #endif
 }
