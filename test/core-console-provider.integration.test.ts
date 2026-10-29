@@ -156,7 +156,7 @@ async function backgroundTick(provider:WindowsCoreConsoleProvider){
 }
 
 for(const column of ['online','admin_bridge_ready'] as const)
-test('idle transient '+column+' loss pauses CORE without discarding the existing approval',async()=>{
+test('idle transient '+column+' loss pauses CORE without discarding the existing approval',{timeout:10000},async()=>{
   const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
   try{
     runtime=await enable(f);
@@ -185,7 +185,7 @@ test('idle transient '+column+' loss pauses CORE without discarding the existing
   }finally{runtime?.provider.close();f.db.close();}
 });
 
-test('idle readiness recovery still requires current independent native readback',async()=>{
+test('idle readiness recovery still requires current independent native readback',{timeout:10000},async()=>{
   const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
   try{
     runtime=await enable(f);
@@ -203,7 +203,50 @@ test('idle readiness recovery still requires current independent native readback
   }finally{runtime?.provider.close();f.db.close();}
 });
 
-test('readiness loss with an admitted effect still latches STOP and prevents replay',async()=>{
+test('an enrollment retry during idle readiness loss cannot discard the existing approval',{timeout:10000},async()=>{
+  const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
+  try{
+    runtime=await enable(f);const certificate=f.profile().certificate?.signatureBase64;
+    assert.ok(certificate);
+    f.db.exec('UPDATE devices SET admin_bridge_ready=0');
+    await assert.rejects(runtime.controller.enroll(new AbortController().signal),/CORE_DEVICE_NOT_READY/);
+    assert.equal(f.profile().certificate?.signatureBase64,certificate,
+      'a retry while the device is not ready must not erase an existing idle approval');
+    assert.equal(f.consents(),1);
+    f.db.exec('UPDATE devices SET admin_bridge_ready=1');
+    assert.equal(await runtime.controller.enroll(new AbortController().signal),true);
+    assert.equal(f.consents(),1);
+    assert.equal((await runtime.controller.status('full')).active,true);
+  }finally{runtime?.provider.close();f.db.close();}
+});
+
+test('an enrollment retry with pending work still revokes and drains before any new approval',{timeout:10000},async()=>{
+  const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
+  let entered!:()=>void,release!:()=>void,revokeStarted!:()=>void;
+  const arrived=new Promise<void>(resolve=>{entered=resolve;});
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const revocation=new Promise<void>(resolve=>{revokeStarted=resolve;});
+  let pending:Promise<unknown>|undefined,renewal:Promise<{accepted:boolean}>|undefined;
+  try{
+    runtime=await enable(f);
+    f.native(async()=>{entered();await gate;});
+    pending=input(runtime.controller);await arrived;
+    f.db.exec('UPDATE devices SET admin_bridge_ready=0');
+    f.before(body=>{if(body.action==='revoke')revokeStarted();});
+    let settled=false;
+    renewal=runtime.controller.enroll(new AbortController().signal)
+      .then(()=>{settled=true;return {accepted:true};},()=>{settled=true;return {accepted:false};});
+    await revocation;
+    assert.equal(await f.store.stopped(),true);assert.equal(settled,false);
+    assert.equal(f.consents(),1);
+    release();await assert.rejects(pending);pending=undefined;
+    assert.equal((await renewal).accepted,false);renewal=undefined;
+    assert.equal(f.consents(),1);assert.equal(f.effects(),1);
+    assert.equal((await runtime.controller.status('full')).active,false);
+  }finally{release();await pending?.catch(()=>{});await renewal;runtime?.provider.close();f.db.close();}
+});
+
+test('readiness loss with an admitted effect still latches STOP and prevents replay',{timeout:10000},async()=>{
   const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
   let entered!:()=>void,release!:()=>void;
   const arrived=new Promise<void>(resolve=>{entered=resolve;});
@@ -226,7 +269,7 @@ test('readiness loss with an admitted effect still latches STOP and prevents rep
   }finally{release();await pending?.catch(()=>{});runtime?.provider.close();f.db.close();}
 });
 
-test('an idle stale provider cannot mistake another provider pending effect for an idle grant',async()=>{
+test('an idle stale provider cannot mistake another provider pending effect for an idle grant',{timeout:10000},async()=>{
   const f=fixture();let owner:Awaited<ReturnType<typeof enable>>|undefined;
   let stale:Awaited<ReturnType<typeof enable>>|undefined;
   let entered!:()=>void,release!:()=>void;
@@ -249,7 +292,7 @@ test('an idle stale provider cannot mistake another provider pending effect for 
   }finally{release();await pending?.catch(()=>{});owner?.provider.close();stale?.provider.close();f.db.close();}
 });
 
-test('a stale ready provider cannot clear another pending operation block marker',async()=>{
+test('a stale ready provider cannot clear another pending operation block marker',{timeout:10000},async()=>{
   const f=fixture();let owner:Awaited<ReturnType<typeof enable>>|undefined;
   let stale:Awaited<ReturnType<typeof enable>>|undefined;
   let entered!:()=>void,release!:()=>void;
@@ -273,7 +316,7 @@ test('a stale ready provider cannot clear another pending operation block marker
 for(const change of [
   {name:'owner change',sql:"UPDATE devices SET owner_account_id='other-owner-0001'"},
   {name:'CORE OFF',sql:'UPDATE device_maintenance_preferences SET enabled=0'},
-])test('idle unready state never hides actual '+change.name+' revocation',async()=>{
+])test('idle unready state never hides actual '+change.name+' revocation',{timeout:10000},async()=>{
   const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
   try{
     runtime=await enable(f);

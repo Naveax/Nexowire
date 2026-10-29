@@ -439,6 +439,16 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       if(!state.coreEnabled||state.accessMode!=='full'||!state.deviceOnline)throw new Error('CORE_OWNER_ENABLE_REQUIRED');
       const bridge=await this.options.broker.probe();
       if(!bridge.reachable||!bridge.elevated||bridge.version!==NEXOWIRE_VERSION)throw new Error('CORE_BROKER_VERIFICATION_REQUIRED');
+      if(this.profile.certificate&&this.sameEnrollment(state)&&state.deviceReady!==true&&
+        !this.revoked&&!this.inFlightDispatch&&!this.profile.pendingDispatch&&
+        !this.profile.pendingRevoke&&!(await this.options.store.stopped())){
+        const disk=await this.options.store.load();
+        if(disk?.certificate&&disk.certificate.signatureBase64===this.profile.certificate.signatureBase64&&
+          !disk.pendingDispatch&&!disk.pendingRevoke)
+          // Retrying enable is not an instruction to delete an idle approval.
+          // Deny current execution until readiness recovers; do not prompt.
+          throw new Error('CORE_DEVICE_NOT_READY');
+      }
       if(this.profile.certificate&&this.matches(state)&&!this.revoked&&
         !(await this.options.store.stopped())&&await this.currentNativeConsent(signal,state))return true;
       if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
