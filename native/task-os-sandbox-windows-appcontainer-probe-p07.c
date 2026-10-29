@@ -87,6 +87,37 @@ static BOOL empty_test_root(const wchar_t *path) {
   }while(FindNextFileW(search,&found));
   FindClose(search);return empty;
 }
+static BOOL minimal_worker_environment(HANDLE token,wchar_t *out,size_t capacity) {
+  /* AppContainer creation needs normal OS profile paths. Build them from the
+   * token's OS environment, WITHOUT inheriting parent process variables, then
+   * copy only this fixed path whitelist. Never pass the complete block. */
+  LPVOID block=NULL;
+  if(!CreateEnvironmentBlock(&block,token,FALSE))return FALSE;
+  const wchar_t *names[]={L"APPDATA",L"LOCALAPPDATA",L"PATH",L"SystemDrive",L"SystemRoot",
+    L"TEMP",L"TMP",L"USERPROFILE",L"windir"};
+  size_t offset=0;BOOL ok=FALSE;wchar_t windows[1024]={0};
+  if(!GetWindowsDirectoryW(windows,1024))goto done;
+  for(size_t i=0;i<sizeof(names)/sizeof(names[0]);i++){
+    const wchar_t *value=NULL;size_t nameLength=wcslen(names[i]);
+    if(wcscmp(names[i],L"PATH")){
+      for(const wchar_t *entry=(const wchar_t *)block;*entry;entry+=wcslen(entry)+1){
+        if(_wcsnicmp(entry,names[i],nameLength)==0&&entry[nameLength]==L'='){
+          value=entry+nameLength+1;break;
+        }
+      }
+      if(!value||!*value){SetLastError(ERROR_ENVVAR_NOT_FOUND);goto done;}
+    }
+    int written=wcscmp(names[i],L"PATH")
+      ?_snwprintf_s(out+offset,capacity-offset,_TRUNCATE,L"%ls=%ls",names[i],value)
+      :_snwprintf_s(out+offset,capacity-offset,_TRUNCATE,L"PATH=%ls\\System32",windows);
+    if(written<=0||offset+(size_t)written+2>capacity){SetLastError(ERROR_BUFFER_OVERFLOW);goto done;}
+    offset+=(size_t)written+1;
+  }
+  out[offset]=L'\0';ok=TRUE;
+done:
+  {DWORD error=GetLastError();DestroyEnvironmentBlock(block);if(!ok)SetLastError(error);}
+  return ok;
+}
 static int fixed_worker(int argc,wchar_t **argv) {
   if(argc!=7||!token_is_contained(GetCurrentProcess(),NULL))return 10;
   BOOL inJob=FALSE;if(!IsProcessInJob(GetCurrentProcess(),NULL,&inJob)||!inJob)return 11;
@@ -193,13 +224,9 @@ int wmain(int argc,wchar_t **argv) {
   if(!UpdateProcThreadAttribute(attributes,0,PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
     &capabilities,sizeof(capabilities),NULL,NULL))goto cleanup;
   STARTUPINFOEXW start={0};start.StartupInfo.cb=sizeof(start);start.lpAttributeList=attributes;
-  wchar_t command[8192]={0},windows[1024]={0},environment[4096]={0};
-  if(!GetWindowsDirectoryW(windows,1024))goto cleanup;
-  int length=_snwprintf_s(environment,4096,_TRUNCATE,L"PATH=%ls\\System32",windows);
-  if(length<=0)goto cleanup;
-  int second=_snwprintf_s(environment+length+1,4096-(size_t)length-1,_TRUNCATE,L"SystemRoot=%ls",windows);
-  if(second<=0)goto cleanup;
-  environment[length+1+second+1]=L'\0';
+  wchar_t command[8192]={0},environment[16384]={0};
+  stage="minimal_os_profile_environment";
+  if(!minimal_worker_environment(token,environment,sizeof(environment)/sizeof(environment[0])))goto cleanup;
   if(!SetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",L"ci-parent-only-not-a-real-secret")||
     _snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\"",
     exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile)<=0)goto cleanup;

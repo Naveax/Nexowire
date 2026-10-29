@@ -25,6 +25,16 @@ test('#07 a successful-looking AppContainer diagnostic cannot enable arbitrary p
     (e:unknown)=>!!e&&typeof e==='object'&&'code' in e&&e.code==='OS_TASK_SANDBOX_UNAVAILABLE');
 });
 
+test('#07 minimal Windows profile environment never inherits the parent process block',()=>{
+  assert.match(source,/CreateEnvironmentBlock\(&block,token,FALSE\)/);
+  assert.match(source,/DestroyEnvironmentBlock\(block\)/);
+  assert.match(source,/L"APPDATA",L"LOCALAPPDATA",L"PATH",L"SystemDrive",L"SystemRoot"/);
+  assert.match(source,/L"TEMP",L"TMP",L"USERPROFILE",L"windir"/);
+  assert.match(source,/PATH=%ls\\\\System32/);
+  assert.match(source,/NEXOWIRE_SANDBOX_PARENT_SECRET/);
+  assert.doesNotMatch(source,/environment=\s*block/);
+});
+
 test('#07 real Windows AppContainer fixed-payload isolation, descendant and cleanup diagnostic',{
   skip:process.platform!=='win32'||process.env.NEXOWIRE_RUN_WINDOWS_APPCONTAINER_DIAGNOSTIC!=='1'
     ?'Disposable Windows AppContainer diagnostic not requested; production containment NOT_PROVEN':false,
