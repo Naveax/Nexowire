@@ -80,14 +80,25 @@ function fixture() {
   const handler=createControlPlaneHttpHandler({} as never,{authenticate:async()=>null,coreConsoleAuthority:authority});
   let claimStarted=false,afterClaimReadback:(()=>void)|undefined;
   let completionFault:'none'|'before'|'after'='none',nativeAckLost=false;
+  let admissionFault:{action:'reserve'|'claim';phase:'before'|'after'}|undefined;
+  let finalizationUnavailable=false,stopUnavailable=false,saveCount=0,saveLimit=Infinity;
+  let nativeHold:(()=>Promise<void>)|undefined;
   const fetcher=(async(input,init)=>{
     const body=JSON.parse(String(init?.body)) as {action?:string};
+    if(finalizationUnavailable&&(body.action==='complete'||body.action==='revoke'))
+      throw new Error('synthetic finalization transport unavailable');
+    if(admissionFault&&admissionFault.action===body.action&&admissionFault.phase==='before'){
+      admissionFault=undefined;throw new Error('synthetic admission request unavailable');
+    }
     if(body.action==='claim')claimStarted=true;
     if(body.action==='complete'&&completionFault==='before'){
       completionFault='none';
       throw new Error('synthetic completion request unavailable before D1 transition');
     }
     const response=await handler(new Request(String(input),init));
+    if(admissionFault&&admissionFault.action===body.action&&admissionFault.phase==='after'){
+      admissionFault=undefined;throw new Error('synthetic admission ACK lost');
+    }
     if(body.action==='complete'&&completionFault==='after'){
       completionFault='none';
       throw new Error('synthetic completion ACK lost after D1 transition');
@@ -102,7 +113,9 @@ function fixture() {
       signatureBase64:sign(null,canonicalCoreConsoleEnrollment(enrollment),signer.privateKey).toString('base64')}};
   let stopped=false,effects=0;
   const store:CoreProfileStore={stopFile:'qa-fixture-only',load:async()=>structuredClone(record),
-    save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},
+    save:async p=>{if(++saveCount>saveLimit)throw new Error('synthetic profile write unavailable');
+      record=structuredClone(p);},
+    stop:async()=>{if(stopUnavailable)throw new Error('synthetic STOP write unavailable');stopped=true;},
     clearStop:async()=>{stopped=false;},stopped:async()=>stopped};
   const createProvider=()=>new WindowsCoreConsoleProvider({deviceId:device,authority:client,store,
     broker:{probe:async()=>({reachable:true,elevated:true,version:NEXOWIRE_VERSION})},
@@ -112,6 +125,7 @@ function fixture() {
     }},
     native:async()=>{
       effects++;
+      if(nativeHold)await nativeHold();
       if(nativeAckLost){nativeAckLost=false;throw new Error('synthetic native ACK lost after possible input');}
       return {synthetic:true};
     },monitor:{desktopAllowed:()=>true,close:()=>{}}});
@@ -121,6 +135,12 @@ function fixture() {
   return {db,call,execute,effects:()=>effects,hold:(fn:()=>Promise<void>)=>{hold=fn;},
     status:()=>controller.status('full'),stopped:()=>stopped,
     restart:()=>{provider.close();provider=createProvider();controller=new CoreConsoleAdmission(undefined,provider);},
+    persistedPending:()=>!!record.pendingDispatch||record.pendingRevoke,
+    failStop:()=>{stopUnavailable=true;},
+    failSaveAfter:(successfulWrites:number)=>{saveLimit=successfulWrites;},
+    failFinalization:()=>{finalizationUnavailable=true;},
+    holdNative:(fn:()=>Promise<void>)=>{nativeHold=fn;},
+    loseAdmission:(action:'reserve'|'claim',phase:'before'|'after')=>{admissionFault={action,phase};},
     loseNativeAck:()=>{nativeAckLost=true;},
     loseCompletion:(phase:'before'|'after')=>{completionFault=phase;},
     afterClaimReadback:(fn:()=>void)=>{afterClaimReadback=fn;},state:()=>
@@ -249,5 +269,92 @@ test('synthetic native UNKNOWN must stay fenced after provider restart when comp
     assert.deepEqual({stoppedAfterRestart,activeAfterRestart,nextAccepted,effects:f.effects()},
       {stoppedAfterRestart:true,activeAfterRestart:false,nextAccepted:false,effects:1},
       'remote completion failure must not allow a persisted enrollment to resume after provider reconstruction');
+  }finally{f.db.close();}
+});
+
+test('a known completed synthetic operation preserves the indefinite grant across provider reconstruction',async()=>{
+  const f=fixture();try{
+    await f.execute(randomUUID());
+    assert.equal(f.persistedPending(),false);
+    f.restart();
+    const status=await f.status();
+    assert.equal(status.active,true);
+    assert.equal(status.duration,'indefinite-revocable');
+    assert.equal(status.expiresAt,null);
+    await f.execute(randomUUID());
+    assert.equal(f.effects(),2);
+    assert.equal(f.persistedPending(),false);
+  }finally{f.db.close();}
+});
+
+test('an unavailable pre-effect profile write denies the native callback and survives reconstruction via STOP',async()=>{
+  const f=fixture();try{
+    f.failSaveAfter(0);
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),0);
+    assert.equal(f.stopped(),true);
+    f.restart();
+    assert.equal((await f.status()).active,false);
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),0);
+  }finally{f.db.close();}
+});
+
+test('UNKNOWN remains fenced with STOP I/O failure and unavailable completion plus revoke transport',async()=>{
+  const f=fixture();try{
+    f.failStop();f.failFinalization();f.loseNativeAck();
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),1);
+    assert.equal(f.stopped(),false,'the fixture really rejected the STOP write');
+    assert.equal(f.persistedPending(),true);
+    f.restart();
+    assert.equal((await f.status()).active,false);
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),1);
+  }finally{f.db.close();}
+});
+
+test('a failed post-effect profile settlement retains the pre-effect pending marker after reconstruction',async()=>{
+  const f=fixture();try{
+    f.failSaveAfter(1);
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),1);
+    assert.equal(f.persistedPending(),true);
+    f.restart();
+    assert.equal((await f.status()).active,false);
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),1);
+  }finally{f.db.close();}
+});
+
+test('a reconstructed provider cannot use an enrollment with a still-running synthetic dispatch',async()=>{
+  const f=fixture(),g=gate();
+  f.holdNative(g.wait);
+  const pending=f.execute(randomUUID());
+  try{
+    await g.entered;
+    assert.equal(f.effects(),1);
+    assert.equal(f.persistedPending(),true);
+    f.restart();
+    assert.equal((await f.status()).active,false);
+    await assert.rejects(f.execute(randomUUID()));
+    g.release();
+    await assert.rejects(pending);
+    assert.equal(f.effects(),1);
+  }finally{g.release();await pending.catch(()=>{});f.db.close();}
+});
+
+for(const action of ['reserve','claim'] as const)
+for(const phase of ['before','after'] as const)
+test('synthetic '+action+' '+phase+' transport failure cannot run or replay native work after reconstruction',async()=>{
+  const f=fixture(),id=randomUUID();try{
+    f.loseAdmission(action,phase);
+    await assert.rejects(f.execute(id));
+    assert.equal(f.effects(),0);
+    f.restart();
+    assert.equal((await f.status()).active,false);
+    await assert.rejects(f.execute(id));
+    await assert.rejects(f.execute(randomUUID()));
+    assert.equal(f.effects(),0);
   }finally{f.db.close();}
 });
