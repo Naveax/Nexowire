@@ -54,6 +54,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Build read-only CORE session witness
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/build-windows-core-session-readback.ps1
+      - name: Verify CORE kernel session readback without granting authority
+        timeout-minutes: 2
+        run: node --test --import tsx test/core-native-session-readback.test.ts
       - name: Verify CORE console admission and local consent cancellation
         run: node --test --import tsx --test-concurrency=1 test/core-console-enrollment-policy.test.ts test/core-console-admission.test.ts test/core-console-provider.integration.test.ts test/windows-core-console-native.test.ts test/windows-console-grant.test.ts test/privileged-broker-lifecycle.test.ts
       # These suites use a disposable loopback fixture with injected callbacks;
