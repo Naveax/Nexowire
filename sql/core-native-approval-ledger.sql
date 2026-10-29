@@ -54,6 +54,27 @@ CREATE TABLE IF NOT EXISTS core_approval.challenges (
 -- Earlier experimental records without authenticator bytes remain unusable:
 -- the verifier fails closed instead of synthesizing or resetting their proof.
 ALTER TABLE core_approval.challenges ADD COLUMN IF NOT EXISTS assertion jsonb;
+-- A WebAuthn assertion and the D1 enrollment handoff have DIFFERENT one-use
+-- boundaries. Read-only retrieval of an assertion receipt must never consume
+-- it on behalf of the independent enrollment verifier. Lost handoff ACKs remain
+-- permanently consumed. No runtime update/delete/truncate rights are granted.
+CREATE TABLE IF NOT EXISTS core_approval.enrollment_consumptions (
+ receipt_id uuid PRIMARY KEY REFERENCES core_approval.challenges(receipt_id),
+ authority_id uuid NOT NULL,device_id text NOT NULL,
+ proof_sha256 text NOT NULL CHECK(proof_sha256 ~ '^[a-f0-9]{64}$'),
+ issuer_spki_sha256 text NOT NULL CHECK(issuer_spki_sha256 ~ '^[a-f0-9]{64}$'),
+ consumed_ms bigint NOT NULL CHECK(consumed_ms>0),
+ FOREIGN KEY(authority_id,device_id) REFERENCES core_approval.bindings
+);
+CREATE OR REPLACE FUNCTION core_approval.guard_enrollment_history() RETURNS trigger
+ LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+BEGIN
+ RAISE EXCEPTION 'CORE_APPROVAL_ENROLLMENT_HISTORY_REWRITE_DENIED';
+END;
+$$;
+DROP TRIGGER IF EXISTS immutable_enrollment_history ON core_approval.enrollment_consumptions;
+CREATE TRIGGER immutable_enrollment_history BEFORE UPDATE OR DELETE
+ ON core_approval.enrollment_consumptions FOR EACH ROW EXECUTE FUNCTION core_approval.guard_enrollment_history();
 CREATE OR REPLACE FUNCTION core_approval.guard_challenge_history() RETURNS trigger
  LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 BEGIN
@@ -103,3 +124,5 @@ COMMIT;
 --   ON core_approval.challenges TO protected_approval_service;
 -- GRANT UPDATE(state,receipt_id,assertion_sha256,assertion,previous_counter,next_counter,consumed_ms)
 --   ON core_approval.challenges TO protected_approval_service;
+-- GRANT INSERT(receipt_id,authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms)
+--   ON core_approval.enrollment_consumptions TO protected_approval_service;

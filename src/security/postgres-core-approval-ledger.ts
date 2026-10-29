@@ -3,7 +3,8 @@ import * as z from 'zod';
 import {CoreWebAuthnIntentSchema,coreWebAuthnIntentHash,prepareCoreWebAuthnChallenge,
   verifyCoreWebAuthnAssertion,type CoreWebAuthnIntent,type CoreWebAuthnConsumeReceipt,
   type VerifiedCoreWebAuthnAssertion} from './core-webauthn-approval.js';
-import {snapshotCoreNativeWireRequest} from '../protocol/core-native-consent-transport.js';
+import {CoreNativeProofSchema,coreNativeWireRequestHash,snapshotCoreNativeWireRequest,
+  type CoreNativeProof} from '../protocol/core-native-consent-transport.js';
 import type {DispatchStoreConnection,DispatchStorePool}
   from '../agent/postgres-broker-dispatch-authority.js';
 import type {IndependentProvenanceCheck} from '../agent/postgres-monotonic-witness.js';
@@ -111,10 +112,14 @@ export class PostgresCoreApprovalLedger {
         "has_any_column_privilege(current_user,'core_approval.credentials','INSERT') AS provision,"+
         "has_any_column_privilege(current_user,'core_approval.bindings','INSERT') AS enroll,"+
         "has_column_privilege(current_user,'core_approval.credentials','public_key_pem','UPDATE') AS key_rewrite,"+
-        "has_column_privilege(current_user,'core_approval.bindings','binding','UPDATE') AS owner_rewrite")).rows[0];
+        "has_column_privilege(current_user,'core_approval.bindings','binding','UPDATE') AS owner_rewrite,"+
+        "has_any_column_privilege(current_user,'core_approval.enrollment_consumptions','UPDATE') AS handoff_rewrite,"+
+        "has_table_privilege(current_user,'core_approval.enrollment_consumptions','DELETE') AS handoff_erase,"+
+        "has_table_privilege(current_user,'core_approval.enrollment_consumptions','TRUNCATE') AS handoff_truncate")).rows[0];
       if(!s||s.fsync!=='on'||s.full_page_writes!=='on'||s.recovery!==false)return fail('DURABILITY_UNVERIFIED');
       if(s.privileged!==false||s.ddl!==false||s.erase!==false||s.truncate_history!==false||
-        s.provision!==false||s.enroll!==false||s.key_rewrite!==false||s.owner_rewrite!==false)
+        s.provision!==false||s.enroll!==false||s.key_rewrite!==false||s.owner_rewrite!==false||
+        s.handoff_rewrite!==false||s.handoff_erase!==false||s.handoff_truncate!==false)
         fail('ROLE_OVERPRIVILEGED');
       const a=(await db.query('SELECT max_seen_ms FROM core_approval.authorities '+
         'WHERE authority_id=$1 FOR UPDATE',[this.authorityId])).rows[0];
@@ -227,26 +232,83 @@ export class PostgresCoreApprovalLedger {
     z.string().uuid().parse(receiptId);const expected=binding(value);
     await this.trusted(expected);
     return this.transaction(async tx=>{
-      await this.current(tx,expected);
-      const row=(await tx.db.query('SELECT * FROM core_approval.challenges WHERE receipt_id=$1',
-        [receiptId])).rows[0];
-      if(!row||row.state!=='CONSUMED'||row.authority_id!==this.authorityId||row.device_id!==expected.deviceId)
-        fail('RECEIPT_UNAVAILABLE');
-      const i=CoreWebAuthnIntentSchema.parse(row?.intent);
-      if(!sameBinding(binding(i),expected)||coreWebAuthnIntentHash(i)!==row?.intent_sha256)
-        fail('RECEIPT_SCOPE_INVALID');
-      const c=await this.credential(tx,i);
-      // A DB consumed flag/UUID alone is not proof. Independently reverify the
-      // stored authenticator bytes at their original consume time. The original
-      // challenge may have expired since then; current native/grant binding is
-      // still checked independently for this readback.
-      const verified=verifyCoreWebAuthnAssertion(row!.assertion,i,
-        {credentialId:i.credentialId,publicKeyPem:String(c.public_key_pem),userHandle:c.user_handle as string|null,
-          previousSignatureCounter:integer(row!.previous_counter)},integer(row!.consumed_ms,1));
-      if(verified.assertionSha256!==row!.assertion_sha256||verified.nextSignatureCounter!==integer(row!.next_counter)||
-        integer(c.signature_counter)<verified.nextSignatureCounter)fail('RECEIPT_CRYPTOGRAPHY_INVALID');
+      const {receipt}=await this.stored(tx,receiptId,expected);
       await this.trusted(expected);await this.current(tx,expected);
-      return this.receipt(verified,receiptId,integer(row!.consumed_ms,1));
+      return receipt;
+    });
+  }
+  private async stored(tx:Tx,receiptId:string,expected:CoreApprovalBinding){
+    await this.current(tx,expected);
+    const row=(await tx.db.query('SELECT * FROM core_approval.challenges WHERE receipt_id=$1',
+      [receiptId])).rows[0];
+    if(!row||row.state!=='CONSUMED'||row.authority_id!==this.authorityId||row.device_id!==expected.deviceId)
+      return fail('RECEIPT_UNAVAILABLE');
+    const i=CoreWebAuthnIntentSchema.parse(row.intent);
+    if(!sameBinding(binding(i),expected)||coreWebAuthnIntentHash(i)!==row.intent_sha256)
+      fail('RECEIPT_SCOPE_INVALID');
+    const c=await this.credential(tx,i);
+    // A database flag/UUID cannot replace the original authenticator bytes.
+    // Reverify at the original consume time, then require CURRENT native scope.
+    const verified=verifyCoreWebAuthnAssertion(row.assertion,i,
+      {credentialId:i.credentialId,publicKeyPem:String(c.public_key_pem),userHandle:c.user_handle as string|null,
+        previousSignatureCounter:integer(row.previous_counter)},integer(row.consumed_ms,1));
+    if(verified.assertionSha256!==row.assertion_sha256||verified.nextSignatureCounter!==integer(row.next_counter)||
+      integer(c.signature_counter)<verified.nextSignatureCounter)fail('RECEIPT_CRYPTOGRAPHY_INVALID');
+    const receipt=this.receipt(verified,receiptId,integer(row.consumed_ms,1));
+    const proof=Object.freeze(CoreNativeProofSchema.parse({...binding(i),challengeId:i.challengeId,
+      receiptId,approvedAtMs:receipt.consumedAtMs,consumed:true}));
+    return {receipt,proof};
+  }
+  /** Second, independent one-use stage for the D1 enrollment verifier. Readback
+   * of the first WebAuthn consume is deliberately NOT this authorization.
+   * There is no successful retry after a lost/late COMMIT acknowledgement. */
+  async consumeForEnrollment(value:CoreNativeProof,issuerSpkiSha256:string):Promise<Readonly<CoreNativeProof>>{
+    const proof=Object.freeze(CoreNativeProofSchema.parse(value)),expected=binding(proof);
+    const issuer=z.string().regex(/^[a-f0-9]{64}$/).parse(issuerSpkiSha256);
+    const started=Date.now(),ticks=process.hrtime.bigint();
+    await this.trusted(expected);
+    await this.transaction(async tx=>{
+      const stored=await this.stored(tx,proof.receiptId,expected);
+      if(!Object.keys(proof).every(k=>proof[k as keyof CoreNativeProof]===stored.proof[k as keyof CoreNativeProof]))
+        fail('ENROLLMENT_PROOF_MISMATCH');
+      await this.trusted(expected);await this.current(tx,expected);
+      const time=await tx.now();
+      if(time<proof.approvedAtMs||time-proof.approvedAtMs>=120000)fail('ENROLLMENT_PROOF_EXPIRED');
+      const inserted=await tx.db.query('INSERT INTO core_approval.enrollment_consumptions '+
+        '(receipt_id,authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms) '+
+        'VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(receipt_id) DO NOTHING RETURNING receipt_id',
+        [proof.receiptId,this.authorityId,proof.deviceId,this.proofHash(proof),issuer,time]);
+      if(inserted.rows.length!==1)fail('ENROLLMENT_REPLAY');
+    });
+    // A post-commit revoke/readback failure consumes the authorization but never
+    // grants it. The tombstone cannot be reopened by another service instance.
+    const current=await this.readEnrollmentProof(proof.receiptId,expected);
+    const now=Date.now(),elapsed=process.hrtime.bigint()-ticks;
+    if(now<started||now-proof.approvedAtMs>=120000||elapsed<0n||
+      elapsed>=BigInt(Math.max(0,proof.approvedAtMs+120000-started))*1000000n)
+      fail('ENROLLMENT_ACK_EXPIRED_OR_UNKNOWN');
+    return current;
+  }
+  private proofHash(proof:CoreNativeProof):string{
+    // Existing domain-separated canonical request hashing, no mutable caller
+    // JSON or ambiguous object property order in the permanent handoff record.
+    return coreNativeWireRequestHash({version:1,operation:'verify-and-consume',
+      nonce:proof.challengeId,expected:proof});
+  }
+  /** Only already-consumed enrollment handoffs can be read here. The proof is
+   * reconstructed from the stored signed assertion, not from an HTTP request. */
+  async readEnrollmentProof(receiptId:string,value:CoreApprovalBinding):Promise<Readonly<CoreNativeProof>>{
+    z.string().uuid().parse(receiptId);const expected=binding(value);
+    await this.trusted(expected);
+    return this.transaction(async tx=>{
+      const {proof}=await this.stored(tx,receiptId,expected);
+      const row=(await tx.db.query('SELECT authority_id,device_id,proof_sha256,consumed_ms '+
+        'FROM core_approval.enrollment_consumptions WHERE receipt_id=$1',[receiptId])).rows[0];
+      if(!row||row.authority_id!==this.authorityId||row.device_id!==expected.deviceId||
+        row.proof_sha256!==this.proofHash(proof)||integer(row.consumed_ms,1)<proof.approvedAtMs)
+        fail('ENROLLMENT_NOT_CONSUMED');
+      await this.trusted(expected);await this.current(tx,expected);
+      return proof;
     });
   }
 }
