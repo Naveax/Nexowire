@@ -12,7 +12,12 @@ test('#07 Windows diagnostic uses real AppContainer token readback before resumi
   for(const api of ['CreateAppContainerProfile','DeleteAppContainerProfile',
     'PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES','TokenIsAppContainer','TokenAppContainerSid',
     'TokenCapabilities','TokenIntegrityLevel','TokenPrivileges','TokenGroups','CREATE_SUSPENDED','AssignProcessToJobObject',
-    'CreateRestrictedToken','DISABLE_MAX_PRIVILEGE','SE_GROUP_USE_FOR_DENY_ONLY','CreateProcessAsUserW',
+    'CreateRestrictedToken','DISABLE_MAX_PRIVILEGE','LUA_TOKEN','SE_GROUP_USE_FOR_DENY_ONLY','CreateProcessAsUserW',
+    'TOKEN_ADJUST_DEFAULT','TOKEN_ASSIGN_PRIMARY','restricted_worker_integrity_lower',
+    'CreateWindowStationW','CWF_CREATE_ONLY','CreateDesktopW','GetUserObjectInformationW','lpDesktop=desktopPath',
+    'TokenDefaultDacl','set_worker_default_dacl','configuredDefaultUserAccess',
+    'FWPM_SESSION_FLAG_DYNAMIC','FWPM_CONDITION_ALE_PACKAGE_ID','FwpmFilterGetById0',
+    'FWPM_LAYER_ALE_AUTH_CONNECT_V4','FWPM_LAYER_ALE_AUTH_CONNECT_V6','FWP_ACTION_BLOCK',
     'PROCESS_DUP_HANDLE','CREATE_BREAKAWAY_FROM_JOB','JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE',
     'JobObjectBasicProcessIdList','WSAEACCES','independent_descendant_readback'])assert.ok(source.includes(api),api);
   assert.ok(source.indexOf('independent_suspended_token_readback')<source.lastIndexOf('ResumeThread(child.hThread)'));
@@ -44,10 +49,17 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
   timeout:45000,
 },t=>{
   const exe=fileURLToPath(new URL('../native/task-os-sandbox-windows-appcontainer-probe-p07.exe',import.meta.url));
+  const payload=fileURLToPath(new URL('../native/task-os-sandbox-windows-appcontainer-fixed-p07.exe',import.meta.url));
+  const pe=readFileSync(payload),header=pe.readUInt32LE(0x3c);
+  assert.equal(pe.readUInt32LE(header),0x00004550); // actual PE\0\0
+  assert.equal(pe.readUInt16LE(header+24+68),2,'fixed child must use the no-console WINDOWS subsystem');
   for(const args of [[],['--run','cmd.exe'],['--selftest-only'],['--grandchild-fixed'],['--selftest-only',os.tmpdir()]]){
     const denied=spawnSync(exe,args,{encoding:'utf8',timeout:3000,windowsHide:true});
     assert.ok(denied.status===64||denied.status===24,String(denied.error??denied.stderr));
     assert.equal(denied.stdout,'');
+    const payloadDenied=spawnSync(payload,args,{encoding:'utf8',timeout:3000,windowsHide:true});
+    assert.equal(payloadDenied.status,64,String(payloadDenied.error??payloadDenied.stderr));
+    assert.equal(payloadDenied.stdout,'');
   }
   const root=mkdtempSync(path.join(os.tmpdir(),'nw07-appcontainer-ci-'));
   try{
@@ -66,12 +78,21 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
       t.skip('OS_DIAGNOSTIC_BLOCKED at '+String(report.stage)+' error '+String(report.win32Error));return;
     }
     assert.equal(report.state,'OBSERVED');assert.equal(report.workerExit,0);
+    assert.equal(report.privateDesktopObserved,true);
+    assert.equal(report.configuredDefaultUserAccess,true);
+    assert.equal(report.wfpPackagePolicyVerified,true);
+    assert.equal(report.descendantInJob,true);assert.equal(report.verifiedLiveJobMembers,1);
+    assert.ok(Number(report.jobMemberCount)>=1&&Number(report.jobMemberCount)<=4);
+    assert.equal(Number(report.verifiedExitedJobMembers)+1,report.jobMemberCount);
+    if(Number(report.verifiedExitedJobMembers)>0)assert.equal(report.unexpectedWaitResult,0);
+    assert.equal(report.unexpectedLiveMembers,0);assert.equal(report.zeroAssociationDrainProven,false);
+    assert.equal(report.descendantExit,259);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
     assert.equal(report.integrityRid,4096);assert.equal(report.capabilityCount,0);
     assert.equal(report.unexpectedEnabledPrivileges,0);
     assert.equal(report.unexpectedPrivileges,0);
     assert.ok(report.adminGroupMode===0||report.adminGroupMode===1);
-    assert.equal(report.stage,'job_close_and_kernel_drain');
-    t.diagnostic('FIXED_TEST_PAYLOAD_ONLY: token, canary ACL, parent DUP_HANDLE, loopback, breakaway, descendant and Job-close checks; no production sandbox acceptance');
+    assert.equal(report.stage,'job_close_and_descendant_exit');
+    t.diagnostic('FIXED_TEST_PAYLOAD_ONLY: actual token/private desktop/file/handle/WFP/network/breakaway/descendant checks and held descendant exit after Job close. Exited process objects are reported separately; zero-association/I/O drain NOT_PROVEN. No production sandbox acceptance.');
   }finally{rmSync(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
 });
