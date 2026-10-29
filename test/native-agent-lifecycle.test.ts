@@ -169,13 +169,14 @@ test('unsupported lifecycle platforms fail closed', async () => {
 
 test('Windows native Agent lifecycle remains available on battery power', () => {
   const settings = WINDOWS_NATIVE_AGENT_TASK_SETTINGS;
-  assert.match(settings, /New-ScheduledTaskSettingsSet/);
-  assert.match(settings, /-AllowStartIfOnBatteries(?:\\s|$)/);
-  assert.match(settings, /-DontStopIfGoingOnBatteries(?:\\s|$)/);
-  // Preserve the existing single-instance, restart and unbounded agent lifetime.
-  assert.match(settings, /-MultipleInstances IgnoreNew/);
-  assert.match(settings, /-RestartCount 999/);
-  assert.match(settings, /-RestartInterval \\(New-TimeSpan -Minutes 1\\)/);
-  assert.match(settings, /-ExecutionTimeLimit \\(New-TimeSpan -Seconds 0\\)/);
-  assert.doesNotMatch(settings, /-DisallowDemandStart|-Disable(?:\\s|$)/);
+  assert.ok(settings.startsWith('$settings=New-ScheduledTaskSettingsSet '));
+  assert.ok(settings.includes(' -AllowStartIfOnBatteries'));
+  assert.ok(settings.includes(' -DontStopIfGoingOnBatteries'));
+  // Preserve existing single-instance, restart, and unbounded agent lifetime.
+  assert.ok(settings.includes(' -MultipleInstances IgnoreNew'));
+  assert.ok(settings.includes(' -RestartCount 999'));
+  assert.ok(settings.includes(' -RestartInterval (New-TimeSpan -Minutes 1)'));
+  assert.ok(settings.includes(' -ExecutionTimeLimit (New-TimeSpan -Seconds 0)'));
+  assert.ok(!settings.includes(' -DisallowDemandStart'));
+  assert.ok(!settings.includes(' -Disable '));
 });
