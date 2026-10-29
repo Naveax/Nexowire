@@ -122,6 +122,29 @@ test('broker privilege mode fails closed when no broker is configured', async ()
   );
 });
 
+test('executor hard stop rejects bearer-only forwarding before Broker transport', async () => {
+  let brokerCalls = 0;
+  const client = {
+    execute: async () => {
+      brokerCalls++;
+      throw new Error('Unexpected Broker transport');
+    },
+  } as unknown as PrivilegedBrokerClient;
+
+  await assert.rejects(
+    () => executeCapability(
+      'windows.firewall.control',
+      { name: 'test-rule', action: 'enable' },
+      new PathPolicy([os.homedir()]),
+      { privilegeMode: 'broker', privilegedBroker: client },
+    ),
+    (error: unknown) => typeof error === 'object' && error !== null &&
+      'code' in error && error.code === 'CORE_EXECUTOR_DISPATCH_NOT_INSTALLED',
+  );
+  assert.equal(brokerCalls, 0,
+    'the disabled executor must not reach even the Broker transport');
+});
+
 test(
   'Windows privileged broker refuses bearer-only elevated callbacks',
   { skip: process.platform !== 'win32' },
@@ -196,6 +219,7 @@ test(
     );
 
     const policy = new PathPolicy([os.homedir()]);
+    const brokerExecute = t.mock.method(client, 'execute');
     await assert.rejects(
       () => executeCapability(
         'windows.firewall.control',
@@ -203,9 +227,13 @@ test(
         policy,
         {privilegeMode:'broker',privilegedBroker:client},
       ),
-      (error: unknown) => error instanceof PrivilegedBrokerError &&
-        error.code === 'BROKER_EFFECT_ADMISSION_REQUIRED',
+      // #03's hard stop precedes #02's independent HTTP admission gate.
+      // The direct HTTP checks above still require the exact Broker errors.
+      (error: unknown) => typeof error === 'object' && error !== null &&
+        'code' in error && error.code === 'CORE_EXECUTOR_DISPATCH_NOT_INSTALLED',
     );
+    assert.equal(brokerExecute.mock.callCount(), 0,
+      'executor denial must happen before the Broker HTTP request');
     assert.equal(calls.length, 0,
       'Broker client and executor cannot turn bearer into admission');
   },
