@@ -67,6 +67,74 @@ test('verified GitHub owner has unlimited Free tool credits without unlocking pa
   assert.equal(safeDefault.usage.monthlyCredits, 1_000);
 });
 
+test('operator-pinned solkaun GitHub ID gets unlimited hosted credits but no special permissions', async () => {
+  const store = new MemoryControlPlaneStore();
+  const service = new ControlPlaneService(store, {
+    freeOnly: true,
+    ownerGithubId: '79841922',
+    unmeteredGithubIds: ['55827920', 'solkaun', '0', '55827920'],
+  });
+  const { account: solkaun } = await service.loginExternalIdentity({
+    provider: 'github', subject: '55827920', displayName: 'solkaun',
+  });
+  const dashboard = await service.dashboard({ accountId: solkaun.id, role: 'user' });
+  assert.equal(dashboard.planId, 'free');
+  assert.equal(dashboard.usage.monthlyCredits, null);
+  assert.equal(dashboard.privateControlsIncluded, false);
+
+  const charged = await service.chargeUsage({
+    accountId: solkaun.id, eventId: 'solkaun-big',
+    toolName: 'machine_health', baseCredits: 1_001,
+  });
+  assert.equal(charged.status, 'charged');
+  assert.equal(charged.remainingCredits, null);
+  const repeated = await service.chargeUsage({
+    accountId: solkaun.id, eventId: 'solkaun-big',
+    toolName: 'machine_health', baseCredits: 1_001,
+  });
+  assert.equal(repeated.status, 'duplicate');
+  assert.equal(repeated.chargedCredits, 0);
+  const deniedPremium = await service.chargeUsage({
+    accountId: solkaun.id, eventId: 'solkaun-premium',
+    toolName: 'windows_private_desktop_start',
+  });
+  assert.equal(deniedPremium.status, 'denied');
+  assert.equal(deniedPremium.reason, 'feature-not-in-plan');
+
+  // A display-name impostor with admin role is still a normal Free user.
+  const impostor = await service.ensureAccount({
+    id: 'fake-solkaun', displayName: 'solkaun', admin: true,
+  });
+  const impostorDashboard = await service.dashboard({
+    accountId: impostor.id, role: 'admin',
+  });
+  assert.equal(impostorDashboard.usage.monthlyCredits, 1_000);
+  const impostorCharge = await service.chargeUsage({
+    accountId: impostor.id, eventId: 'fake-solkaun-over-limit',
+    toolName: 'machine_health', baseCredits: 1_001,
+  });
+  assert.equal(impostorCharge.status, 'denied');
+  assert.equal(impostorCharge.reason, 'quota-exhausted');
+
+  // An identical numeric subject from a non-GitHub provider never qualifies.
+  const { account: wrongProvider } = await service.loginExternalIdentity({
+    provider: 'google', subject: '55827920', displayName: 'solkaun',
+  });
+  const nonGithubDashboard = await service.dashboard({
+    accountId: wrongProvider.id, role: 'user',
+  });
+  assert.equal(nonGithubDashboard.usage.monthlyCredits, 1_000);
+
+  // Without the operator's pinned ID, Free usage remains bounded.
+  const noGrant = new ControlPlaneService(store, {
+    freeOnly: true, ownerGithubId: '79841922',
+  });
+  const noGrantDashboard = await noGrant.dashboard({
+    accountId: solkaun.id, role: 'user',
+  });
+  assert.equal(noGrantDashboard.usage.monthlyCredits, 1_000);
+});
+
 test('free-only mode enforces 1,000 weighted calls, idempotency and UTC reset', async () => {
   let clock = new Date('2026-10-31T23:59:59.000Z');
   const store = new MemoryControlPlaneStore();
