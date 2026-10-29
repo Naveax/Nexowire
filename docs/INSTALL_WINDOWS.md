@@ -8,14 +8,19 @@ Windows’un kendi PowerShell’i kullanılır; PowerShell 7 ayrıca kurulmaz.
 **ChatGPT eklentisi bağlı**. Birinin tamamlanması diğerlerini otomatik olarak
 tamamlamaz. Aşağıdaki sırayı takip et.
 
-## 1. Resmî kurulum dosyasını indir
+## 1. Kurulum dosyasını indir
 
-**[Nexowire-Setup.cmd indir](https://github.com/Naveax/Nexowire/releases/latest/download/Nexowire-Setup.cmd)**
+**[Nexowire-Setup.cmd indir](../installers/Nexowire-Setup.cmd?raw=true)**
 
-Bu bağlantı son yayımlanmış kararlı sürümün kurulum dosyasına gider. Kurucu,
-kendi içinde sabitlenen sürümün `Nexowire-Windows-x64.zip` dosyasını indirir ve
+Bu, depodaki düzeltilmiş kurucudur. **Yayımlanmış v1.0.7** sürümünün değişmeyen
+`Nexowire-Windows-x64.zip` dosyasını indirir ve
 paketin SHA-256 değerini kontrol eder. Node çalıştırıcısı ve uygulama bağımlılıkları
 bu pakettedir; boş bir PC’ye önce Node/npm kurman gerekmez.
+
+Bu kurucu kısayol kaydını Türkçe kullanıcı yollarına uygun Windows Unicode API’siyle
+yapar. Önceki resmî yayın dosyaları değiştirilmedi. Bu dosya yeni bir uygulama
+yayını veya Nexowire yayıncısı tarafından imzalanmış installer olarak sunulmaz.
+[Kaynak ve dosya doğrulaması](../installers/README.md).
 
 GitHub **Code → Download ZIP** kaynak kodu indirir ve bu kurulumun yerine geçmez.
 `nexowire-*.tgz` geliştirici paketidir. Ayrı Broker yardımcı ZIP’i ilk kurulum
@@ -116,6 +121,7 @@ doğrulandığı anlamına gelmez. Bu durumlar bağlantı kontrolünden ayrı g�
 | Dosya `.cmd.txt` olmuş. | Dosya Gezgini’nde dosya uzantılarını göster; resmî `.cmd` dosyasını yeniden indir. |
 | Tarayıcı veya SmartScreen dosyayı engelliyor. | Resmî GitHub yayınını ve dosyayı kontrol et. Güvenlik yazılımını veya kurumsal politikayı kapatma; engelin tam metnini kaydet. |
 | Kurucu hata veriyor. | Açık kalan hata penceresindeki metni kaydet. GitHub indirmesi, ağ/proxy, disk alanı veya güvenlik engeli olabilir; hata görülmeden “kuruldu” denmez. |
+| Eski kurucu `Unable to save shortcut` hatası veriyor. | Bu sayfanın başındaki düzeltilmiş kurucuyu kullan. Var olan cihaz kayıtlarını veya `.nexowire` klasörünü silme. |
 | Kurucu bitti, tarayıcı açılmadı. | Başlat → Nexowire ile bir kez daha aç. Yine açılmıyorsa Windows Script Host/politika veya uygulama başlatma hatasını incele; yönetici Broker yardımcı ZIP’ine geçme. |
 | Eşleme süresi doldu. | Başlat → Nexowire ile yeni bağlantı isteği aç; yeni tarayıcı sayfasında BAĞLA’yı kullan. Eski sayfayı tekrar tekrar onaylama. |
 | Cihaz panelde çevrimdışı. | PC’nin açık ve internete bağlı olduğunu kontrol et. ChatGPT eklentisini yeniden yüklemek Agent’ın başlamama nedenini çözmez. |

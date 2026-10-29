@@ -17,8 +17,13 @@ adımlar kendi başına da kullanılabilir; yayımlanmamış bir özelliği var 
 Yapılacak sıra:
 1. Windows’un desteklenen x64 sürümünde olduğumu doğrula. Normal kullanıcı
    kurulumunu kullan; kendi sunucumu, Tailscale’i veya yönetici Broker’ı kurdurma.
-2. Resmî son kararlı Nexowire-Setup.cmd dosyasını kullan:
-   https://github.com/Naveax/Nexowire/releases/latest/download/Nexowire-Setup.cmd
+2. Bu kılavuzla aynı dalın README'sindeki Nexowire-Setup.cmd indirmesini kullan.
+   Düzeltilmiş kurucu: installers/Nexowire-Setup.cmd (dosya görünümünde Download raw).
+   Bu kılavuzun yayımlandığı dal:
+   https://github.com/Naveax/Nexowire/tree/fix/first-pc-onboarding-guide-20261029
+   Kurucu yayımlanmış v1.0.7 uygulamasını kullanır; yeni sürüm veya imzalı
+   installer diye sunma. Önceki resmî yayın:
+   https://github.com/Naveax/Nexowire/releases/tag/v1.0.7
    Kaynak ZIP’ini veya geliştirici .tgz paketini ilk kurulum gibi kullanma.
    Paket kendi Node çalıştırıcısını getirir; önceden npm/Node kurdurma.
 3. Bilgisayarımda yetkili yerel araçların varsa indirme ve kurulum durumunu

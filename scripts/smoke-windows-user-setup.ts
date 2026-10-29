@@ -26,10 +26,11 @@ function argValue(
 
 function parseArgs(args: readonly string[]): {
   bundleDir: string;
+  profile: 'ascii' | 'unicode';
 } {
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
-    if (arg === '--bundle-dir') {
+    if (arg === '--bundle-dir' || arg === '--profile') {
       index++;
       if (index >= args.length) fail(arg + ' requires a value.');
       continue;
@@ -37,10 +38,13 @@ function parseArgs(args: readonly string[]): {
     fail('Unknown Windows setup smoke option: ' + arg);
   }
 
+  const profile = argValue(args, '--profile') ?? 'unicode';
+  if (profile !== 'ascii' && profile !== 'unicode') fail('Invalid smoke profile.');
   return {
     bundleDir: path.resolve(
       argValue(args, '--bundle-dir') ?? 'release-windows',
     ),
+    profile,
   };
 }
 
@@ -91,7 +95,7 @@ async function waitForChild(
       stderr += chunk;
     });
     child.once('error', reject);
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       resolve({
         exitCode: code ?? -1,
         stdout,
@@ -106,7 +110,7 @@ async function main(): Promise<void> {
     fail('Windows setup smoke must run on Windows.');
   }
 
-  const { bundleDir } = parseArgs(process.argv.slice(2));
+  const { bundleDir, profile: profileKind } = parseArgs(process.argv.slice(2));
   const payload = path.join(
     bundleDir,
     'Nexowire-Windows-x64.zip',
@@ -154,10 +158,8 @@ async function main(): Promise<void> {
   const tempRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), 'nexowire-setup-e2e-'),
   );
-  const fakeLocalAppData = path.join(
-    tempRoot,
-    'Empty Profile Çığ', 'AppData', 'Local',
-  );
+  const profile = path.join(tempRoot, profileKind === 'unicode' ? 'Empty Profile Çığ' : 'Empty Profile');
+  const fakeLocalAppData = path.join(profile, 'AppData', 'Local');
   await fs.mkdir(fakeLocalAppData, { recursive: true });
   // Hosted Windows runners already have Node/npm/Git/pwsh. A successful setup
   // on that inherited PATH did not establish the promised empty-PC bootstrap.
@@ -165,7 +167,6 @@ async function main(): Promise<void> {
   const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
   if (!windowsRoot || !path.isAbsolute(windowsRoot)) fail('Windows system root is unavailable.');
   const system32 = path.join(windowsRoot, 'System32');
-  const profile = path.join(tempRoot, 'Empty Profile Çığ');
   const appData = path.join(profile, 'AppData', 'Roaming');
   await fs.mkdir(appData, { recursive: true });
   const cleanEnv: NodeJS.ProcessEnv = {
@@ -323,6 +324,32 @@ async function main(): Promise<void> {
     assert.equal(runtime.exitCode, 0, runtime.stderr);
     assert.equal(runtime.stdout.trim(), version);
 
+    // Test the actual hidden launcher with a disposable sentinel CLI, after
+    // verifying the real packaged CLI version. Never start an Agent or OAuth
+    // flow from CI, and never equate this fixture with account connectivity.
+    const originalCli = await fs.readFile(cli);
+    const marker = path.join(profile, 'launcher-result.json');
+    try {
+      await fs.writeFile(cli, [
+        "import { writeFileSync } from 'node:fs';",
+        'writeFileSync(process.env.NEXOWIRE_SMOKE_MARKER, JSON.stringify({args:process.argv.slice(2),executable:process.execPath}));',
+      ].join('\n'));
+      const hidden = await waitForChild(path.join(system32, 'wscript.exe'), [launcher], {
+        cwd: installRoot,
+        env: { ...cleanEnv, NEXOWIRE_SMOKE_MARKER: marker },
+      });
+      assert.equal(hidden.exitCode, 0, hidden.stderr);
+      const deadline = Date.now() + 20_000;
+      while (!(await fs.stat(marker).catch(() => null)) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      const readback = JSON.parse(await fs.readFile(marker, 'utf8')) as { args: string[]; executable: string };
+      assert.deepEqual(readback.args, ['connect']);
+      assert.equal(readback.executable.toLowerCase(), nodeExe.toLowerCase());
+    } finally {
+      await fs.writeFile(cli, originalCli);
+    }
+
     process.stdout.write(
       JSON.stringify(
         {
@@ -333,8 +360,10 @@ async function main(): Promise<void> {
           bundledRuntimeVerified: true,
           ambientNodeNpmGitPwshAbsent: true,
           profileIsolated: true,
+          profileKind,
           taskRegistrationAndBrowserSimulated: true,
           oauthOrDevicePairingVerified: false,
+          hiddenLauncherFixtureVerified: true,
           launcherVerified: true,
           shortcutVerified: true,
         },

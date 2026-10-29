@@ -8,14 +8,18 @@
 
 ### 1. İndir ve aç
 
-**[Nexowire-Setup.cmd dosyasını indir](https://github.com/Naveax/Nexowire/releases/latest/download/Nexowire-Setup.cmd)**, ardından indirilen dosyaya çift tıkla.
+**[Nexowire-Setup.cmd dosyasını indir](installers/Nexowire-Setup.cmd?raw=true)**, ardından indirilen dosyaya çift tıkla.
+
+Bu depodaki kurucu, yayımlanmış **v1.0.7** uygulama paketini indirir. Türkçe
+karakter içeren kullanıcı yolları için kısayol oluşturma düzeltmesi içerir;
+yeni bir uygulama yayını veya imzalı installer değildir. [Dosyanın kaynağı ve doğrulaması](installers/README.md).
 
 - GitHub’daki **Code → Download ZIP** düğmesi kurulum paketi değildir.
 - Dosyanın adı `Nexowire-Setup.cmd` olmalı; `Nexowire-Setup.cmd.txt` olmamalı.
 - Kurulum kendi Node.js çalıştırıcısını indirilen paketin içinden kullanır. Terminalde `npm install` çalıştırma.
 - Windows dosyayı engellerse yayının kaynağını kontrol et. Kurumsal güvenlik politikasını veya antivirüsü kapatma. [Ayrıntılı yardım](docs/INSTALL_WINDOWS.md#sorun-yaşarsan).
 
-[Resmî yayınlar ve Windows dosya doğrulama bilgisi](https://github.com/Naveax/Nexowire/releases/latest).
+[Resmî yayınlar ve önceki kurulum dosyası](https://github.com/Naveax/Nexowire/releases/latest).
 
 ### 2. Bilgisayarı hesabına bağla
 
@@ -56,7 +60,7 @@ sağlık ve makine bilgisi kontrollerini yap; henüz dosya veya sistem değişti
 | --- | --- |
 | Başka birinin GitHub hesabını mı kullanacağım? | Hayır. Cihazı ve ChatGPT bağlantısını kendi hesabınla kur. |
 | Node.js, Git, npm, Tailscale veya sunucu kuracak mıyım? | Windows son kullanıcı yolu için hayır. Çalıştırıcı paketle gelir; mevcut barındırılan hizmet kullanılır. |
-| İndirdikten sonra ne çalıştıracağım? | Yalnız resmî `Nexowire-Setup.cmd`. Kaynak kod ZIP’i, `.tgz` veya ayrı Broker yardımcı ZIP’i ilk kurulum değildir. |
+| İndirdikten sonra ne çalıştıracağım? | Yukarıdaki `Nexowire-Setup.cmd`. Kaynak kod ZIP’i, `.tgz` veya ayrı Broker yardımcı ZIP’i ilk kurulum değildir. |
 | Eklenti var ama cihaz yok. | Önce bilgisayarda Agent kurulumu ve BAĞLA adımını tamamla; iki tarafta da aynı GitHub hesabını kullan. |
 | Bilgisayar panelde var ama ChatGPT erişemiyor. | Eklentiyi ayrıca bağla, yeni sohbette seç ve doğru cihazı belirt. |
 | macOS / Linux için aynı dosya çalışır mı? | Hayır. Bu kolay kurulum Windows x64 içindir. Diğer platformlar için [geliştirici/self-host kılavuzunu](docs/SELF_HOST.md) kullan; Windows `connect` akışıyla otomatik eşleme vaat edilmez. |
