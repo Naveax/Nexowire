@@ -33,18 +33,33 @@ export const CoreNativeWireResponseSchema=z.strictObject({
 });
 export type CoreNativeWireResponse=z.infer<typeof CoreNativeWireResponseSchema>;
 
-function canonical(value:unknown):string{
+function canonical(value:unknown,depth=0):string{
+  if(depth>32)throw new Error('CORE_NATIVE_WIRE_NESTING_LIMIT');
   if(value===null||typeof value==='string'||typeof value==='boolean')return JSON.stringify(value);
   if(typeof value==='number'&&Number.isFinite(value))return JSON.stringify(value);
-  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
+  if(Array.isArray(value))return '['+value.map(v=>canonical(v,depth+1)).join(',')+']';
   if(typeof value==='object'){
     const obj=value as Record<string,unknown>;
     return '{'+Object.keys(obj).sort().map(key=>{
       if(obj[key]===undefined)throw new Error('CORE_NATIVE_UNDEFINED_WIRE_VALUE');
-      return JSON.stringify(key)+':'+canonical(obj[key]);
+      return JSON.stringify(key)+':'+canonical(obj[key],depth+1);
     }).join(',')+'}';
   }
   throw new Error('CORE_NATIVE_INVALID_WIRE_VALUE');
+}
+/** Detach all nested scope values before the first asynchronous trust call. */
+export function snapshotCoreNativeWireRequest(value:CoreNativeWireRequest):CoreNativeWireRequest{
+  const wire=canonical(CoreNativeWireRequestSchema.parse(value));
+  if(Buffer.byteLength(wire,'utf8')>16384)throw new Error('CORE_NATIVE_REQUEST_TOO_LARGE');
+  const detached=JSON.parse(wire) as CoreNativeWireRequest;
+  const freeze=(v:unknown):void=>{
+    if(v&&typeof v==='object'){
+      for(const child of Object.values(v))freeze(child);
+      Object.freeze(v);
+    }
+  };
+  freeze(detached);
+  return detached;
 }
 export function coreNativeWireRequestHash(value:CoreNativeWireRequest):string{
   return createHash('sha256').update('nexowire.native.consent.request.v1\0')
@@ -84,25 +99,29 @@ export async function callProtectedCoreNativeAuthority(
     timeoutMs?:number;loopbackOnly?:boolean},request:CoreNativeWireRequest,
   signal?:AbortSignal,
 ):Promise<CoreNativeWireResponse>{
-  const url=new URL(options.origin);
+  // Configuration and request aliases may be retained by callers. Neither
+  // the signing pin nor the scope compared after await may follow those aliases.
+  const {origin,credential,pinnedSpkiBase64,fetchImpl,timeoutMs,loopbackOnly}=options;
+  const original=snapshotCoreNativeWireRequest(request);
+  const url=new URL(origin);
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/'||
-    (options.loopbackOnly&&url.hostname!=='127.0.0.1'&&url.hostname!=='[::1]'))
+    (loopbackOnly&&url.hostname!=='127.0.0.1'&&url.hostname!=='[::1]'))
     throw new Error('CORE_NATIVE_AUTHORITY_ORIGIN_INVALID');
-  if(!options.credential||options.credential.length>2048||/[\r\n]/.test(options.credential)||
-    !options.pinnedSpkiBase64)throw new Error('CORE_NATIVE_TRUST_BOOTSTRAP_REQUIRED');
-  const max=options.timeoutMs??3500;
+  if(!credential||credential.length>2048||/[\r\n]/.test(credential)||
+    !pinnedSpkiBase64)throw new Error('CORE_NATIVE_TRUST_BOOTSTRAP_REQUIRED');
+  const max=timeoutMs??3500;
   if(!Number.isInteger(max)||max<100||max>10000)throw new Error('CORE_NATIVE_TIMEOUT_INVALID');
   const abort=AbortSignal.any([AbortSignal.timeout(max),...(signal?[signal]:[])]);
   if(abort.aborted)throw new Error('CORE_NATIVE_CALL_ABORTED');
   // Reject bad trust bootstrap BEFORE any credential is sent to a server.
-  const signerDer=Buffer.from(options.pinnedSpkiBase64,'base64');
-  if(signerDer.length!==44||signerDer.toString('base64')!==options.pinnedSpkiBase64||
+  const signerDer=Buffer.from(pinnedSpkiBase64,'base64');
+  if(signerDer.length!==44||signerDer.toString('base64')!==pinnedSpkiBase64||
     createPublicKey({key:signerDer,format:'der',type:'spki'}).asymmetricKeyType!=='ed25519')
     throw new Error('CORE_NATIVE_SIGNER_NOT_PINNED');
-  const response=await (options.fetchImpl??fetch)(url.origin+'/v1/core-native-consent',{
+  const response=await (fetchImpl??fetch)(url.origin+'/v1/core-native-consent',{
     method:'POST',cache:'no-store',redirect:'error',
-    headers:{'content-type':'application/json','authorization':'Bearer '+options.credential},
-    body:JSON.stringify(CoreNativeWireRequestSchema.parse(request)),signal:abort,
+    headers:{'content-type':'application/json','authorization':'Bearer '+credential},
+    body:JSON.stringify(original),signal:abort,
   });
   if(!response.ok||response.redirected)throw new Error('CORE_NATIVE_AUTHORITY_UNAVAILABLE');
   if(!response.headers.get('content-type')?.toLowerCase().includes('application/json'))
@@ -124,5 +143,5 @@ export async function callProtectedCoreNativeAuthority(
   for(const part of chunks){merged.set(part,offset);offset+=part.length;}
   return parseTrustedCoreNativeResponse(
     JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(merged)) as unknown,
-    request,options.pinnedSpkiBase64);
+    original,pinnedSpkiBase64);
 }

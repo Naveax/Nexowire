@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {CoreNativeProofSchema,callProtectedCoreNativeAuthority,
+import {CoreNativeProofSchema,callProtectedCoreNativeAuthority,snapshotCoreNativeWireRequest,
   type CoreNativeProof,type CoreNativeWireRequest} from '../protocol/core-native-consent-transport.js';
 import type {TrustedNativeCoreEnrollmentVerifier} from './d1-core-console-authority.js';
 
@@ -50,14 +50,18 @@ export class RemoteTrustedNativeCoreEnrollmentVerifier implements TrustedNativeC
       candidate=>sameFields(candidate,local.data));
   }
   async currentReadback(binding:NativeBinding):Promise<boolean>{
-    return this.check('current-readback',binding,candidate=>sameFields(candidate,{
-      ownerAccountId:binding.ownerAccountId,deviceId:binding.deviceId,
-      installationId:binding.installationId,enrollmentId:binding.enrollmentId,
-      ownerEpoch:binding.ownerEpoch,grantGeneration:binding.grantGeneration,
-      revokeEpoch:binding.revokeEpoch,receiptId:binding.nativeConsentReceiptId,
-      windowsUserSid:binding.windowsUserSid,windowsSessionId:binding.windowsSessionId,
-      windowsLogonLuid:binding.windowsLogonLuid,
-      windowsLogonSessionEpoch:binding.windowsLogonSessionEpoch,
+    let original:NativeBinding;
+    try{original=snapshotCoreNativeWireRequest({version:1,operation:'current-readback',
+      nonce:randomUUID(),expected:binding}).expected as NativeBinding;}
+    catch{return false;}
+    return this.check('current-readback',original,candidate=>sameFields(candidate,{
+      ownerAccountId:original.ownerAccountId,deviceId:original.deviceId,
+      installationId:original.installationId,enrollmentId:original.enrollmentId,
+      ownerEpoch:original.ownerEpoch,grantGeneration:original.grantGeneration,
+      revokeEpoch:original.revokeEpoch,receiptId:original.nativeConsentReceiptId,
+      windowsUserSid:original.windowsUserSid,windowsSessionId:original.windowsSessionId,
+      windowsLogonLuid:original.windowsLogonLuid,
+      windowsLogonSessionEpoch:original.windowsLogonSessionEpoch,
     }));
   }
 }
