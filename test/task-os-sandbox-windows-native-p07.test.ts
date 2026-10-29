@@ -17,6 +17,8 @@ test('#07 Windows diagnostic uses real AppContainer token readback before resumi
   assert.ok(source.indexOf('independent_suspended_token_readback')<source.lastIndexOf('ResumeThread(child.hThread)'));
   assert.doesNotMatch(source,/\b(?:ShellExecute|CreateService|SwitchDesktop|SendInput|system|popen)\w*\s*\(/);
   assert.match(source,/productionWorkerInstalled/);assert.match(source,/NOT_PROVEN/);
+  for(const field of ['tokenFailure','tokenAppContainer','tokenElevated','integrityRid','capabilityCount','packageMatches'])
+    assert.ok(source.includes(field),field);
 });
 
 test('#07 a successful-looking AppContainer diagnostic cannot enable arbitrary production task execution',async()=>{

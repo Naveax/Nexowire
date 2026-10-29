@@ -17,24 +17,39 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char *tokenFailure="not_observed";
+static DWORD observedApp=0xffffffffUL,observedElevation=0xffffffffUL;
+static DWORD observedIntegrity=0xffffffffUL,observedCapabilities=0xffffffffUL;
+static BOOL observedPackageMatches=FALSE;
 static BOOL token_is_contained(HANDLE process,PSID expected) {
   HANDLE token=NULL;DWORD returned=0,isApp=0;
   TOKEN_ELEVATION elevation={0};BOOL ok=FALSE;
   union {TOKEN_MANDATORY_LABEL alignment;BYTE bytes[sizeof(TOKEN_MANDATORY_LABEL)+SECURITY_MAX_SID_SIZE];} label={0};
   union {TOKEN_APPCONTAINER_INFORMATION alignment;BYTE bytes[sizeof(TOKEN_APPCONTAINER_INFORMATION)+SECURITY_MAX_SID_SIZE];} app={0};
   union {TOKEN_GROUPS alignment;BYTE bytes[4096];} capabilities={0};
+  tokenFailure="token_open";observedApp=observedElevation=observedIntegrity=observedCapabilities=0xffffffffUL;
+  observedPackageMatches=FALSE;
   if(!OpenProcessToken(process,TOKEN_QUERY,&token))return FALSE;
-  if(!GetTokenInformation(token,TokenIsAppContainer,&isApp,sizeof(isApp),&returned)||isApp!=1||
-    !GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&returned)||elevation.TokenIsElevated||
+  tokenFailure="token_information";
+  if(!GetTokenInformation(token,TokenIsAppContainer,&isApp,sizeof(isApp),&returned)||
+    !GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&returned)||
     !GetTokenInformation(token,TokenIntegrityLevel,label.bytes,sizeof(label.bytes),&returned)||
     !GetTokenInformation(token,TokenAppContainerSid,app.bytes,sizeof(app.bytes),&returned)||
     !GetTokenInformation(token,TokenCapabilities,capabilities.bytes,sizeof(capabilities.bytes),&returned))goto done;
   PSID integrity=((TOKEN_MANDATORY_LABEL *)label.bytes)->Label.Sid;
   PSID package=((TOKEN_APPCONTAINER_INFORMATION *)app.bytes)->TokenAppContainer;
-  if(!IsValidSid(integrity)||!*GetSidSubAuthorityCount(integrity)||!IsValidSid(package)||
-    *GetSidSubAuthority(integrity,*GetSidSubAuthorityCount(integrity)-1)>SECURITY_MANDATORY_LOW_RID||
-    ((TOKEN_GROUPS *)capabilities.bytes)->GroupCount!=0||(expected&&!EqualSid(package,expected)))goto done;
-  ok=TRUE;
+  observedApp=isApp;observedElevation=elevation.TokenIsElevated;
+  observedCapabilities=((TOKEN_GROUPS *)capabilities.bytes)->GroupCount;
+  tokenFailure="token_sid_invalid";
+  if(!IsValidSid(integrity)||!*GetSidSubAuthorityCount(integrity)||!IsValidSid(package))goto done;
+  observedIntegrity=*GetSidSubAuthority(integrity,*GetSidSubAuthorityCount(integrity)-1);
+  observedPackageMatches=!expected||EqualSid(package,expected);
+  tokenFailure="not_appcontainer";if(isApp!=1)goto done;
+  tokenFailure="elevated_token_inherited";if(elevation.TokenIsElevated)goto done;
+  tokenFailure="integrity_above_low";if(observedIntegrity>SECURITY_MANDATORY_LOW_RID)goto done;
+  tokenFailure="ambient_capabilities";if(observedCapabilities!=0)goto done;
+  tokenFailure="package_sid_mismatch";if(!observedPackageMatches)goto done;
+  ok=TRUE;tokenFailure="contained";
 done:
   CloseHandle(token);return ok;
 }
@@ -282,7 +297,11 @@ cleanup:
   if(profileCreated){HRESULT deleted=DeleteAppContainerProfile(profile);if(FAILED(deleted)){result=1;stage="profile_cleanup_failed";error=(DWORD)deleted;}}
   printf("{\"version\":1,\"kind\":\"windows_appcontainer_fixed_probe_v1\",\"state\":\"%s\","
     "\"stage\":\"%s\",\"win32Error\":%lu,\"workerExit\":%lu,"
+    "\"tokenFailure\":\"%s\",\"tokenAppContainer\":%lu,\"tokenElevated\":%lu,"
+    "\"integrityRid\":%lu,\"capabilityCount\":%lu,\"packageMatches\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
-    result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit);
+    result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
+    tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
+    (unsigned long)observedIntegrity,(unsigned long)observedCapabilities,observedPackageMatches?"true":"false");
   return result;
 }
