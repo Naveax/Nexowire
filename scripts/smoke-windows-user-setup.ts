@@ -156,9 +156,32 @@ async function main(): Promise<void> {
   );
   const fakeLocalAppData = path.join(
     tempRoot,
-    'LocalAppData',
+    'Empty Profile Çığ', 'AppData', 'Local',
   );
   await fs.mkdir(fakeLocalAppData, { recursive: true });
+  // Hosted Windows runners already have Node/npm/Git/pwsh. A successful setup
+  // on that inherited PATH did not establish the promised empty-PC bootstrap.
+  // Keep only Windows' own tools and a disposable user profile for ALL children.
+  const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  if (!windowsRoot || !path.isAbsolute(windowsRoot)) fail('Windows system root is unavailable.');
+  const system32 = path.join(windowsRoot, 'System32');
+  const profile = path.join(tempRoot, 'Empty Profile Çığ');
+  const appData = path.join(profile, 'AppData', 'Roaming');
+  await fs.mkdir(appData, { recursive: true });
+  const cleanEnv: NodeJS.ProcessEnv = {
+    SystemRoot: windowsRoot, WINDIR: windowsRoot,
+    ComSpec: path.join(system32, 'cmd.exe'),
+    PATH: [system32, windowsRoot, path.join(system32, 'WindowsPowerShell', 'v1.0')].join(';'),
+    PATHEXT: '.COM;.EXE;.BAT;.CMD',
+    USERPROFILE: profile, APPDATA: appData, LOCALAPPDATA: fakeLocalAppData,
+    TEMP: tempRoot, TMP: tempRoot,
+  };
+  for (const tool of ['node', 'npm', 'git', 'pwsh']) {
+    const probe = await waitForChild(path.join(system32, 'where.exe'), [tool], {
+      cwd: tempRoot, env: cleanEnv,
+    });
+    assert.notEqual(probe.exitCode, 0, 'Fresh-PC smoke unexpectedly inherited ' + tool);
+  }
 
   const server = http.createServer((request, response) => {
     if (request.url !== '/Nexowire-Windows-x64.zip') {
@@ -227,7 +250,7 @@ async function main(): Promise<void> {
       'ascii',
     );
 
-    const command = process.env.ComSpec ?? 'cmd.exe';
+    const command = path.join(system32, 'cmd.exe');
     const installed = await waitForChild(
       command,
       [
@@ -237,10 +260,7 @@ async function main(): Promise<void> {
       ],
       {
         cwd: tempRoot,
-        env: {
-          ...process.env,
-          LOCALAPPDATA: fakeLocalAppData,
-        },
+        env: cleanEnv,
       },
     );
 
@@ -297,7 +317,7 @@ async function main(): Promise<void> {
       [cli, '--version'],
       {
         cwd: installRoot,
-        env: process.env,
+        env: cleanEnv,
       },
     );
     assert.equal(runtime.exitCode, 0, runtime.stderr);
@@ -311,6 +331,10 @@ async function main(): Promise<void> {
           buildId,
           setupExitCode: installed.exitCode,
           bundledRuntimeVerified: true,
+          ambientNodeNpmGitPwshAbsent: true,
+          profileIsolated: true,
+          taskRegistrationAndBrowserSimulated: true,
+          oauthOrDevicePairingVerified: false,
           launcherVerified: true,
           shortcutVerified: true,
         },

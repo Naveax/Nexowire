@@ -84,6 +84,18 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows
+      - name: Verify published v1.0.7 setup without preinstalled Node or npm
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $stable = Join-Path $env:RUNNER_TEMP 'nexowire-published-v1.0.7'
+          gh release download v1.0.7 --repo Naveax/Nexowire --dir $stable --pattern Nexowire-Setup.cmd --pattern Nexowire-Windows-x64.zip --pattern SHA256SUMS-Windows
+          if ($LASTEXITCODE -ne 0) { throw 'Published v1.0.7 installer download failed.' }
+          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable
+          if ($LASTEXITCODE -ne 0) { throw 'Published v1.0.7 clean-profile setup failed.' }
       - name: Upload Windows user bundle
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4

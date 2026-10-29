@@ -6,8 +6,9 @@ const state = params.get('state') ?? '';
 const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
-const RELEASE = 'https://github.com/Naveax/Nexowire/releases/download/v1.0.5/';
-const ARCHIVE = RELEASE + 'nexowire-1.0.5.tgz';
+const RELEASE = 'https://github.com/Naveax/Nexowire/releases/latest/download/';
+const RELEASE_PAGE = 'https://github.com/Naveax/Nexowire/releases/latest';
+let chatgptAddress = '';
 
 function detectedOS(ua = navigator.userAgent) {
   if (/windows/i.test(ua)) return 'windows';
@@ -18,30 +19,30 @@ function detectedOS(ua = navigator.userAgent) {
 const installers = {
   windows: {
     heading: 'Windows kurulumu',
-    description: 'Resmî Nexowire v1.0.5 Windows kurulum dosyasını indir, çalıştır ve uygulamadaki BAĞLA düğmesini kullan.',
+    description: 'Windows 10/11 x64 için indir ve çift tıkla. Node.js, npm, Git veya PowerShell 7 kurman gerekmez. Açılan tarayıcıda giriş yapıp BAĞLA’ya bas.',
     command: "Invoke-WebRequest -Uri '" + RELEASE + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
     url: RELEASE + 'Nexowire-Setup.cmd',
     label: 'Windows kurulumunu indir ↗',
     checksum: RELEASE + 'SHA256SUMS-Windows',
-    note: 'Komut yalnızca indirir; güvenliğin için tarayıcıdan sessiz komut çalıştırılmaz. Dosyayı çalıştırmadan önce SHA-256 değerini doğrula.',
+    note: 'Ana yol indirme düğmesidir; yönetici olarak çalıştırman gerekmez. İstersen komutla da yalnızca indirebilirsin. Resmî kurucu kendi paketini SHA-256 ile doğrular.',
   },
   macos: {
     heading: 'macOS kurulumu',
-    description: 'Node.js 22 veya üzeri ve npm gerekli. Resmî arşivden CLI kurulumu sonrası Nexowire bağlantı akışını başlat.',
-    command: 'npm install -g ' + ARCHIVE + ' && nexowire connect',
-    url: ARCHIVE,
-    label: 'Resmî CLI arşivi ↗',
-    checksum: RELEASE + 'SHA256SUMS',
-    note: 'macOS için tek tıklamalı kurulum paketi henüz doğrulanmış değil. Terminal komutunu yalnızca kendi cihazında çalıştır.',
+    description: 'Bu kolay kurulum Windows x64 içindir. macOS için geliştirici ve kendi sunucunu kurma kılavuzunu kullan.',
+    command: '',
+    url: 'https://github.com/Naveax/Nexowire/blob/main/docs/SELF_HOST.md',
+    label: 'macOS geliştirici kılavuzu ↗',
+    checksum: RELEASE_PAGE,
+    note: 'Windows kurucusunu macOS’ta çalıştırma. Windows bağlantı komutu burada otomatik eşleme sağlamaz.',
   },
   linux: {
     heading: 'Linux kurulumu',
-    description: 'Node.js 22 veya üzeri ve npm gerekli. Resmî arşivden CLI kurulumu sonrası Nexowire bağlantı akışını başlat.',
-    command: 'npm install -g ' + ARCHIVE + ' && nexowire connect',
-    url: ARCHIVE,
-    label: 'Resmî CLI arşivi ↗',
-    checksum: RELEASE + 'SHA256SUMS',
-    note: 'Linux için tek tıklamalı kurulum paketi henüz doğrulanmış değil. Terminal komutunu yalnızca kendi cihazında çalıştır.',
+    description: 'Bu kolay kurulum Windows x64 içindir. Linux için geliştirici ve kendi sunucunu kurma kılavuzunu kullan.',
+    command: '',
+    url: 'https://github.com/Naveax/Nexowire/blob/main/docs/SELF_HOST.md',
+    label: 'Linux geliştirici kılavuzu ↗',
+    checksum: RELEASE_PAGE,
+    note: 'Windows kurucusunu Linux’ta çalıştırma. Windows bağlantı komutu burada otomatik eşleme sağlamaz.',
   },
 };
 
@@ -56,6 +57,8 @@ function selectInstallOS(os) {
   $('install-heading').textContent = setup.heading;
   $('install-description').textContent = setup.description;
   $('install-command').value = setup.command;
+  $('install-command').closest('.install-command-row').classList.toggle('hidden', !setup.command);
+  document.querySelector('label[for="install-command"]').classList.toggle('hidden', !setup.command);
   $('download-installer').href = setup.url;
   $('download-installer').textContent = setup.label;
   $('verify-installer').href = setup.checksum;
@@ -86,6 +89,47 @@ $('copy-command').addEventListener('click', async () => {
   }
 });
 selectInstallOS(detectedOS());
+
+async function loadChatGPTSetup() {
+  chatgptAddress = '';
+  let httpStatus = 0;
+  $('chatgpt-address').value = '';
+  $('copy-chatgpt-address').disabled = true;
+  try {
+    const response = await fetch('/.well-known/oauth-protected-resource', {
+      credentials: 'omit', redirect: 'error', cache: 'no-store',
+      headers: { accept: 'application/json' }, signal: AbortSignal.timeout(5000),
+    });
+    httpStatus = response.status;
+    if (!response.ok || response.redirected ||
+        !response.headers.get('content-type')?.toLowerCase().includes('application/json')) throw new Error();
+    const metadata = await response.json();
+    if (typeof metadata.resource !== 'string' || metadata.resource.length > 2048 ||
+        !Array.isArray(metadata.authorization_servers) ||
+        !metadata.authorization_servers.includes(window.location.origin)) throw new Error();
+    const url = new URL(metadata.resource);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash ||
+        ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error();
+    chatgptAddress = url.href;
+    $('chatgpt-address').value = chatgptAddress;
+    $('copy-chatgpt-address').disabled = false;
+    $('chatgpt-status').textContent = 'Bu adresi ChatGPT’deki sunucu alanına yapıştır. Kimlik doğrulama: OAuth.';
+  } catch {
+    $('chatgpt-status').textContent = httpStatus >= 400
+      ? 'Bağlantı adresi alınamadı (HTTP ' + httpStatus + '). Hizmete erişimi kontrol et; Windows kurulumunu tekrarlama.'
+      : 'Bağlantı adresi alınamadı. Sayfayı yenile veya bağlantı bilgisini aç. Rastgele adresle ilerleme.';
+  }
+}
+$('copy-chatgpt-address').addEventListener('click', async () => {
+  if (!chatgptAddress) return;
+  try {
+    await navigator.clipboard.writeText(chatgptAddress);
+    $('chatgpt-status').textContent = 'Adres kopyalandı. ChatGPT’de OAuth seçerek devam et.';
+  } catch {
+    $('chatgpt-address').focus(); $('chatgpt-address').select();
+    $('chatgpt-status').textContent = 'Adresi seçip Ctrl+C veya Cmd+C ile kopyala.';
+  }
+});
 
 function setPill(text, stateClass) {
   const pill = $('connect-pill');
@@ -133,8 +177,10 @@ async function loadAccount() {
     $('install-panel').classList.remove('hidden');
     $('pair-panel').classList.add('hidden');
     setPill('Kurulum', 'muted');
+    void loadChatGPTSetup();
     return;
   }
+  $('chatgpt-panel').classList.add('hidden');
   $('install-panel').classList.add('hidden');
   $('pair-panel').classList.remove('hidden');
 
