@@ -143,12 +143,12 @@ jobs:
       - run: npm run typecheck
       - name: Verify dispatch transactions on disposable real PostgreSQL
         timeout-minutes: 5
-        run: node --test --test-concurrency=1 --import tsx test/postgres-broker-dispatch-authority.test.ts
+        run: node --test --test-concurrency=1 --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
         env:
           NEXOWIRE_PG_DISPATCH_INTEGRATION: "1"
       - name: Seed a durable dispatch tombstone before disposable database restart
         timeout-minutes: 2
-        run: node --test --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts
+        run: node --test --test-concurrency=1 --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
         env:
           NEXOWIRE_PG_DISPATCH_INTEGRATION: "1"
           NEXOWIRE_PG_DISPATCH_RESTART_PHASE: seed
@@ -159,7 +159,7 @@ jobs:
           POSTGRES_CONTAINER_ID: ${{ job.services['dispatch-postgres'].id }}
       - name: Verify no replay after the real disposable PostgreSQL restart
         timeout-minutes: 2
-        run: node --test --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts
+        run: node --test --test-concurrency=1 --test-name-pattern='real PostgreSQL restart:' --import tsx test/postgres-broker-dispatch-authority.test.ts test/postgres-core-approval-ledger.test.ts
         env:
           NEXOWIRE_PG_DISPATCH_INTEGRATION: "1"
           NEXOWIRE_PG_DISPATCH_RESTART_PHASE: verify

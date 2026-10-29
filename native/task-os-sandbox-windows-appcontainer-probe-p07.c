@@ -23,14 +23,16 @@ static DWORD observedIntegrity=0xffffffffUL,observedCapabilities=0xffffffffUL;
 static BOOL observedPackageMatches=FALSE;
 static DWORD observedUnexpectedPrivileges=0xffffffffUL,observedAdminMode=0xffffffffUL;
 static DWORD observedUnexpectedEnabledPrivileges=0xffffffffUL;
-static HANDLE restricted_worker_token(HANDLE source) {
+static HANDLE restricted_worker_token(HANDLE source,const char **stage) {
   union {SID alignment;BYTE bytes[SECURITY_MAX_SID_SIZE];} admin={0};DWORD bytes=sizeof(admin.bytes);
   if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,admin.bytes,&bytes))return NULL;
   SID_AND_ATTRIBUTES disabled={admin.bytes,SE_GROUP_USE_FOR_DENY_ONLY};HANDLE token=NULL;
+  *stage="restricted_worker_token_create";
   if(!CreateRestrictedToken(source,DISABLE_MAX_PRIVILEGE,1,&disabled,0,NULL,0,NULL,&token))return NULL;
   PSID low=NULL;
   if(!ConvertStringSidToSidW(L"S-1-16-4096",&low)){CloseHandle(token);return NULL;}
   TOKEN_MANDATORY_LABEL label={0};label.Label.Sid=low;label.Label.Attributes=SE_GROUP_INTEGRITY;
+  *stage="restricted_worker_integrity_lower";
   BOOL lowered=SetTokenInformation(token,TokenIntegrityLevel,&label,(DWORD)(sizeof(label)+GetLengthSid(low)));
   DWORD error=GetLastError();LocalFree(low);
   if(!lowered){CloseHandle(token);SetLastError(error);return NULL;}
@@ -244,7 +246,10 @@ int wmain(int argc,wchar_t **argv) {
     _snwprintf_s(denied,1300,_TRUNCATE,L"%ls\\outside-canary.txt",fixture)<=0||
     _snwprintf_s(pidFile,1300,_TRUNCATE,L"%ls\\child.pid",data)<=0)goto cleanup;
   union {TOKEN_USER alignment;BYTE bytes[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE];} user={0};DWORD returned=0;
-  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY|TOKEN_DUPLICATE,&token)||
+  /* CreateRestrictedToken retains the source handle rights. ADJUST_DEFAULT is
+   * needed only to lower the NEW token; ASSIGN_PRIMARY launches that new
+   * token. The parent token is never adjusted. */
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY|TOKEN_DUPLICATE|TOKEN_ADJUST_DEFAULT|TOKEN_ASSIGN_PRIMARY,&token)||
     !GetTokenInformation(token,TokenUser,user.bytes,sizeof(user.bytes),&returned)||
     !ConvertSidToStringSidW(((TOKEN_USER *)user.bytes)->User.Sid,&ownerSid))goto cleanup;
   _snwprintf_s(profile,100,_TRUNCATE,L"Nexowire.Core.Probe.%lu.%llx",(unsigned long)GetCurrentProcessId(),GetTickCount64());
@@ -289,9 +294,9 @@ int wmain(int argc,wchar_t **argv) {
   if(!minimal_worker_environment(token,environment,sizeof(environment)/sizeof(environment[0])))goto cleanup;
   if(_snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\"",
     exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile)<=0)goto cleanup;
+  workerToken=restricted_worker_token(token,&stage);
+  if(!workerToken)goto cleanup;
   stage="suspended_appcontainer_create";
-  workerToken=restricted_worker_token(token);
-  if(!workerToken){stage="restricted_worker_token_create";goto cleanup;}
   if(!CreateProcessAsUserW(workerToken,exe,command,NULL,NULL,FALSE,EXTENDED_STARTUPINFO_PRESENT|CREATE_SUSPENDED|
     CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,environment,data,&start.StartupInfo,&child))goto cleanup;
   stage="nested_job_assignment";

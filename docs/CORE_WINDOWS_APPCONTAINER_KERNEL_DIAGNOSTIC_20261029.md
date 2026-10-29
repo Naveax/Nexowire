@@ -60,6 +60,16 @@ rejected. No existing check is weakened, no parent
 token or machine privilege is changed, and no new account/logon/password,
 linked-UAC impersonation, credential or fallback is created.
 
+The restricted-token head `b82d3b738197c8d3ee829fa4efe64fa18088e197`, CI
+`40915123658`, completed its workflow while the native case remained BLOCKED
+at token setup with ERROR_ACCESS_DENIED (5). This is not containment success.
+Source inspection identified that CreateRestrictedToken preserves source
+handle access rights: QUERY|DUPLICATE was insufficient to lower the NEW token
+or attach it as primary. The follow-up requests the exact ADJUST_DEFAULT and
+ASSIGN_PRIMARY handle rights too, without modifying the parent's token. It
+also reports token creation versus integrity lowering as distinct stages.
+All AppContainer/LOW/non-elevation/privilege/group/Job checks remain mandatory.
+
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
 hardlink/reparse race resistance; private desktop/input isolation; complete
@@ -74,3 +84,5 @@ Primary platform references:
 - https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer
 - https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation
 - https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects
+- https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken
+- https://learn.microsoft.com/en-us/windows/win32/secauthz/access-rights-for-access-token-objects
