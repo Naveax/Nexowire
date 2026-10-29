@@ -28,7 +28,7 @@ static HANDLE restricted_worker_token(HANDLE source,const char **stage) {
   if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,admin.bytes,&bytes))return NULL;
   SID_AND_ATTRIBUTES disabled={admin.bytes,SE_GROUP_USE_FOR_DENY_ONLY};HANDLE token=NULL;
   *stage="restricted_worker_token_create";
-  if(!CreateRestrictedToken(source,DISABLE_MAX_PRIVILEGE,1,&disabled,0,NULL,0,NULL,&token))return NULL;
+  if(!CreateRestrictedToken(source,DISABLE_MAX_PRIVILEGE|LUA_TOKEN,1,&disabled,0,NULL,0,NULL,&token))return NULL;
   PSID low=NULL;
   if(!ConvertStringSidToSidW(L"S-1-16-4096",&low)){CloseHandle(token);return NULL;}
   TOKEN_MANDATORY_LABEL label={0};label.Label.Sid=low;label.Label.Attributes=SE_GROUP_INTEGRITY;

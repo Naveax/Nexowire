@@ -1,4 +1,4 @@
-import {createHash,createPublicKey,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
 import * as z from 'zod';
 import {CoreWebAuthnIntentSchema,coreWebAuthnIntentHash,prepareCoreWebAuthnChallenge,
   verifyCoreWebAuthnAssertion,type CoreWebAuthnIntent,type CoreWebAuthnConsumeReceipt,
@@ -11,6 +11,11 @@ import type {IndependentProvenanceCheck} from '../agent/postgres-monotonic-witne
 export const CoreApprovalBindingSchema=CoreWebAuthnIntentSchema.omit({challengeId:true,
   rpId:true,credentialId:true,nonce:true,issuedAtMs:true,expiresAtMs:true});
 export type CoreApprovalBinding=z.infer<typeof CoreApprovalBindingSchema>;
+/** Credential registration survives a fresh logon but never migrates to a
+ * different owner/installation/enrollment/SID or owner epoch. The assertion
+ * itself still binds every current grant/revoke/logon field. */
+export const CoreApprovalCredentialBindingSchema=CoreApprovalBindingSchema.pick({ownerAccountId:true,
+  deviceId:true,installationId:true,enrollmentId:true,ownerEpoch:true,windowsUserSid:true});
 const issueSchema=CoreWebAuthnIntentSchema.omit({nonce:true,issuedAtMs:true,expiresAtMs:true});
 type IssueInput=z.infer<typeof issueSchema>;
 export interface CoreApprovalNativeReadback {
@@ -103,8 +108,8 @@ export class PostgresCoreApprovalLedger {
         "has_schema_privilege(current_user,'core_approval','CREATE') AS ddl,"+
         "has_table_privilege(current_user,'core_approval.challenges','DELETE') AS erase,"+
         "has_table_privilege(current_user,'core_approval.challenges','TRUNCATE') AS truncate_history,"+
-        "has_table_privilege(current_user,'core_approval.credentials','INSERT') AS provision,"+
-        "has_table_privilege(current_user,'core_approval.bindings','INSERT') AS enroll,"+
+        "has_any_column_privilege(current_user,'core_approval.credentials','INSERT') AS provision,"+
+        "has_any_column_privilege(current_user,'core_approval.bindings','INSERT') AS enroll,"+
         "has_column_privilege(current_user,'core_approval.credentials','public_key_pem','UPDATE') AS key_rewrite,"+
         "has_column_privilege(current_user,'core_approval.bindings','binding','UPDATE') AS owner_rewrite")).rows[0];
       if(!s||s.fsync!=='on'||s.full_page_writes!=='on'||s.recovery!==false)return fail('DURABILITY_UNVERIFIED');
@@ -142,7 +147,9 @@ export class PostgresCoreApprovalLedger {
   private async credential(tx:Tx,intent:IssueInput):Promise<Credential>{
     const c=(await tx.db.query('SELECT * FROM core_approval.credentials WHERE credential_id=$1 FOR UPDATE',
       [intent.credentialId])).rows[0];
-    if(!c||c.authority_id!==this.authorityId||c.device_id!==intent.deviceId||
+    const pin=CoreApprovalCredentialBindingSchema.safeParse(c?.credential_binding);
+    if(!c||!pin.success||!Object.keys(pin.data).every(k=>(pin.data as Record<string,unknown>)[k]===
+      (intent as Record<string,unknown>)[k])||c.authority_id!==this.authorityId||c.device_id!==intent.deviceId||
       c.rp_id!==intent.rpId||c.active!==true||typeof c.public_key_pem!=='string'||
       (c.user_handle!==null&&typeof c.user_handle!=='string')||integer(c.signature_counter)>0xffffffff)
       return fail('CREDENTIAL_NOT_PROVISIONED');
@@ -191,8 +198,9 @@ export class PostgresCoreApprovalLedger {
       await tx.db.query('UPDATE core_approval.credentials SET signature_counter=$2 WHERE credential_id=$1',
         [intent.credentialId,verified.nextSignatureCounter]);
       await tx.db.query("UPDATE core_approval.challenges SET state='CONSUMED',receipt_id=$2,"+
-        'assertion_sha256=$3,previous_counter=$4,next_counter=$5,consumed_ms=$6 WHERE challenge_id=$1',
-        [intent.challengeId,r.receiptId,r.assertionSha256,previous,verified.nextSignatureCounter,time]);
+        'assertion_sha256=$3,previous_counter=$4,next_counter=$5,consumed_ms=$6,assertion=$7::jsonb WHERE challenge_id=$1',
+        [intent.challengeId,r.receiptId,r.assertionSha256,previous,verified.nextSignatureCounter,time,
+          JSON.stringify(original.assertion)]);
       return r;
     });
     // Independently read back the committed tombstone with CURRENT native and
@@ -228,13 +236,17 @@ export class PostgresCoreApprovalLedger {
       if(!sameBinding(binding(i),expected)||coreWebAuthnIntentHash(i)!==row?.intent_sha256)
         fail('RECEIPT_SCOPE_INVALID');
       const c=await this.credential(tx,i);
+      // A DB consumed flag/UUID alone is not proof. Independently reverify the
+      // stored authenticator bytes at their original consume time. The original
+      // challenge may have expired since then; current native/grant binding is
+      // still checked independently for this readback.
+      const verified=verifyCoreWebAuthnAssertion(row!.assertion,i,
+        {credentialId:i.credentialId,publicKeyPem:String(c.public_key_pem),userHandle:c.user_handle as string|null,
+          previousSignatureCounter:integer(row!.previous_counter)},integer(row!.consumed_ms,1));
+      if(verified.assertionSha256!==row!.assertion_sha256||verified.nextSignatureCounter!==integer(row!.next_counter)||
+        integer(c.signature_counter)<verified.nextSignatureCounter)fail('RECEIPT_CRYPTOGRAPHY_INVALID');
       await this.trusted(expected);await this.current(tx,expected);
-      return Object.freeze({receiptId,challengeId:i.challengeId,nonce:i.nonce,intentSha256:row!.intent_sha256 as string,
-        assertionSha256:row!.assertion_sha256 as string,
-        credentialSpkiSha256:createHash('sha256').update(createPublicKey(String(c.public_key_pem))
-          .export({format:'der',type:'spki'})).digest('hex'),
-        previousSignatureCounter:integer(row!.previous_counter),nextSignatureCounter:integer(row!.next_counter),
-        consumedAtMs:integer(row!.consumed_ms,1),consumed:true,coreAuthority:false,physicalAcceptance:'NOT_PROVEN'});
+      return this.receipt(verified,receiptId,integer(row!.consumed_ms,1));
     });
   }
 }

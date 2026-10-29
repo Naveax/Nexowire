@@ -5,7 +5,7 @@ import {readFile,writeFile,rm} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {Pool} from 'pg';
-import {PostgresCoreApprovalLedger,CoreApprovalBindingSchema,type CoreApprovalBinding}
+import {PostgresCoreApprovalLedger,CoreApprovalBindingSchema,CoreApprovalCredentialBindingSchema,type CoreApprovalBinding}
   from '../src/security/postgres-core-approval-ledger.js';
 import {coreWebAuthnIntentHash as coreHash,type CoreWebAuthnIntent,type CoreWebAuthnAssertion}
   from '../src/security/core-webauthn-approval.js';
@@ -46,21 +46,23 @@ async function fixture(){
     await admin.query('GRANT USAGE ON SCHEMA core_approval TO nexowire_approval_runtime; '+
       'GRANT SELECT ON ALL TABLES IN SCHEMA core_approval TO nexowire_approval_runtime; '+
       'GRANT UPDATE(max_seen_ms) ON core_approval.authorities TO nexowire_approval_runtime; '+
+      'GRANT UPDATE(read_lock_guard) ON core_approval.bindings TO nexowire_approval_runtime; '+
       'GRANT UPDATE(signature_counter) ON core_approval.credentials TO nexowire_approval_runtime; '+
       'GRANT INSERT(challenge_id,nonce,authority_id,device_id,credential_id,intent,intent_sha256,issued_ms,expires_ms) '+
       'ON core_approval.challenges TO nexowire_approval_runtime; '+
-      'GRANT UPDATE(state,receipt_id,assertion_sha256,previous_counter,next_counter,consumed_ms) '+
+      'GRANT UPDATE(state,receipt_id,assertion_sha256,assertion,previous_counter,next_counter,consumed_ms) '+
       'ON core_approval.challenges TO nexowire_approval_runtime;');
   }catch(error){await admin.end();throw error;}
   const authorityId=randomUUID(),binding=scope(),keys=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
   const credentialId=randomBytes(32).toString('base64url'),rpId='core.fixture.invalid';
   await admin.query('INSERT INTO core_approval.authorities VALUES($1,$2)',[authorityId,Date.now()-1000]);
-  await admin.query("INSERT INTO core_approval.bindings VALUES($1,$2,$3::jsonb,'ACTIVE')",
+  await admin.query("INSERT INTO core_approval.bindings(authority_id,device_id,binding,state) VALUES($1,$2,$3::jsonb,'ACTIVE')",
     [authorityId,binding.deviceId,JSON.stringify(binding)]);
   await admin.query('INSERT INTO core_approval.credentials '+
-    '(credential_id,authority_id,device_id,rp_id,public_key_pem,user_handle,signature_counter,active) '+
-    'VALUES($1,$2,$3,$4,$5,NULL,0,true)',[credentialId,authorityId,binding.deviceId,rpId,
-      keys.publicKey.export({format:'pem',type:'spki'}).toString()]);
+    '(credential_id,authority_id,device_id,rp_id,public_key_pem,user_handle,signature_counter,active,credential_binding) '+
+    'VALUES($1,$2,$3,$4,$5,NULL,0,true,$6::jsonb)',[credentialId,authorityId,binding.deviceId,rpId,
+      keys.publicKey.export({format:'pem',type:'spki'}).toString(),JSON.stringify(Object.fromEntries(
+        Object.keys(CoreApprovalCredentialBindingSchema.shape).map(k=>[k,(binding as Record<string,unknown>)[k]])))]);
   const runtime=pool('nexowire_approval_runtime');let native:CoreApprovalBinding|null={...binding},trusted=true;
   const config:ConstructorParameters<typeof PostgresCoreApprovalLedger>[0]={authorityId,pool:runtime as DispatchStorePool,
     verifyProvenance:async()=>({verified:trusted,authorityId,validUntil:Date.now()+10000}),
@@ -157,6 +159,8 @@ test('real PostgreSQL approval: stale native witness, revoke and re-pair invalid
     await f.admin.query("UPDATE core_approval.bindings SET state='ACTIVE',binding=$2::jsonb WHERE authority_id=$1",
       [f.authorityId,JSON.stringify(other)]);f.setNative(other);
     await assert.rejects(f.create().readConsumed(r.receiptId,other),/CORE_APPROVAL_RECEIPT_SCOPE_INVALID/);
+    await assert.rejects(f.create().issueChallenge({...other,credentialId:f.credentialId,rpId:f.rpId,
+      challengeId:randomUUID()}),/CORE_APPROVAL_CREDENTIAL_NOT_PROVISIONED/);
   }finally{await f.close()}
 });
 
@@ -236,6 +240,19 @@ test('real PostgreSQL approval: revoke after COMMIT blocks final readback and pr
   }finally{await f.close()}
 });
 
+test('real PostgreSQL approval: even a forged consumed DB flag cannot replace the authenticator signature in readback',integration,async()=>{
+  const f=await fixture();try{
+    const {intent}=await f.issue(),raw=assertion(intent,f.keys.privateKey,0),receiptId=randomUUID();
+    const signature=Buffer.from(raw.signature,'base64url');signature[signature.length-1]=signature[signature.length-1]!^1;
+    const forged={...raw,signature:signature.toString('base64url')};
+    await f.runtime.query("UPDATE core_approval.challenges SET state='CONSUMED',receipt_id=$2,"+
+      'assertion_sha256=$3,assertion=$4::jsonb,previous_counter=0,next_counter=0,consumed_ms=$5 WHERE challenge_id=$1',
+      [intent.challengeId,receiptId,'f'.repeat(64),JSON.stringify(forged),Date.now()]);
+    await assert.rejects(f.create().readConsumed(receiptId,f.binding),/CORE_WEBAUTHN_SIGNATURE_INVALID/);
+    await assert.rejects(f.create().consumeAssertion(raw,intent),/CORE_APPROVAL_CHALLENGE_REPLAY_OR_SCOPE/);
+  }finally{await f.close()}
+});
+
 test('real PostgreSQL approval: key rewrite, history erase/reopen and counter rollback are denied',integration,async()=>{
   const f=await fixture();try{
     const {intent}=await f.issue();await f.create().consumeAssertion(assertion(intent,f.keys.privateKey),intent);
@@ -247,6 +264,10 @@ test('real PostgreSQL approval: key rewrite, history erase/reopen and counter ro
       [intent.challengeId]),/CORE_APPROVAL_HISTORY_REWRITE_DENIED/);
     await assert.rejects(f.runtime.query('DELETE FROM core_approval.challenges WHERE challenge_id=$1',
       [intent.challengeId]),/permission denied/i);
+    await assert.rejects(f.runtime.query('UPDATE core_approval.bindings SET binding=$2::jsonb WHERE authority_id=$1',
+      [f.authorityId,JSON.stringify({...f.binding,ownerEpoch:2})]),/permission denied/i);
+    await assert.rejects(f.runtime.query('UPDATE core_approval.bindings SET read_lock_guard=true WHERE authority_id=$1',
+      [f.authorityId]),/check constraint/i);
     await assert.rejects(f.create({pool:f.admin as DispatchStorePool}).issueChallenge({...f.binding,
       credentialId:f.credentialId,rpId:f.rpId,challengeId:randomUUID()}),/CORE_APPROVAL_ROLE_OVERPRIVILEGED/);
   }finally{await f.close()}

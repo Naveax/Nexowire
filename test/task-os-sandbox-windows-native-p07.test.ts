@@ -12,7 +12,7 @@ test('#07 Windows diagnostic uses real AppContainer token readback before resumi
   for(const api of ['CreateAppContainerProfile','DeleteAppContainerProfile',
     'PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES','TokenIsAppContainer','TokenAppContainerSid',
     'TokenCapabilities','TokenIntegrityLevel','TokenPrivileges','TokenGroups','CREATE_SUSPENDED','AssignProcessToJobObject',
-    'CreateRestrictedToken','DISABLE_MAX_PRIVILEGE','SE_GROUP_USE_FOR_DENY_ONLY','CreateProcessAsUserW',
+    'CreateRestrictedToken','DISABLE_MAX_PRIVILEGE','LUA_TOKEN','SE_GROUP_USE_FOR_DENY_ONLY','CreateProcessAsUserW',
     'TOKEN_ADJUST_DEFAULT','TOKEN_ASSIGN_PRIMARY','restricted_worker_integrity_lower',
     'PROCESS_DUP_HANDLE','CREATE_BREAKAWAY_FROM_JOB','JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE',
     'JobObjectBasicProcessIdList','WSAEACCES','independent_descendant_readback'])assert.ok(source.includes(api),api);

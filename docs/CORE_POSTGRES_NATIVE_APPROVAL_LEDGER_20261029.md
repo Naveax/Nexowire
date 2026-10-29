@@ -14,6 +14,14 @@ ES256 credential. The application cannot provision/rebind owners, replace keys,
 reset signature counters, erase history or create a credential from an incoming
 assertion. Credential pins cannot be rewritten in place; registration must use
 a distinct credential and independently accepted provisioning.
+Each credential also pins owner/device/installation/enrollment, owner epoch and
+Windows SID. A re-pair cannot carry the old owner's authenticator key into the
+new owner's current binding. A fresh logon may reuse the same registered key,
+but its new assertion still signs the exact current session/LUID/epochs.
+PostgreSQL requires an UPDATE privilege even for SELECT FOR UPDATE. The runtime
+gets only UPDATE of a permanently false row-lock sentinel on bindings; owner,
+epoch and state columns remain unwritable. The sentinel cannot be set true or
+used as any approval input. Provisioning checks include per-column INSERT rights.
 
 The service requires current independent restore/provenance and protected native
 binding witnesses before DB access and again inside the transaction. Callbacks
@@ -41,6 +49,11 @@ Consume performs that fresh scoped readback AFTER COMMIT before returning; a
 concurrent revoke or missing witness then denies the response and leaves the
 tombstone consumed. The receipt and signature counter are never rolled back to
 make a delayed response look successful.
+Readback also independently re-verifies the stored authenticator bytes with the
+provisioned key and original consumption time/counter. A DB `CONSUMED` flag or
+invented receipt UUID alone cannot become a cryptographic approval receipt,
+even if a writer can write a tombstone. That remains distinct from proving the
+authenticator's hardware, the native service and actual human participation.
 
 Every returned receipt retains `coreAuthority=false` and
 `physicalAcceptance=NOT_PROVEN`. This storage component does not sign a fake
@@ -69,6 +82,12 @@ token handle rights identified by actual #967/#968 Windows BLOCKED results.
 CreateRestrictedToken retains source handle access; lowering/launching its new
 token requires ADJUST_DEFAULT/ASSIGN_PRIMARY. No parent token is modified and
 no AppContainer/LOW/non-elevation/privilege/group/Job invariant is loosened.
+The initial child CI `40918967777` is historical RED, never rerun: Linux exposed
+the missing binding row-lock privilege; Windows independently reported that an
+AppContainer/LOW token with Administrators deny-only and zero privileged entries
+still had TokenIsElevated=1. The follow-up explicitly requests the documented
+LUA_TOKEN restriction too. The independent child readback still requires actual
+non-elevation before resume, with no label substitution or assertion relaxation.
 
 No existing source branch/main is rewritten; this is a Draft child of the exact
 six-gate source candidate. No install, enrollment, Windows Hello ceremony,

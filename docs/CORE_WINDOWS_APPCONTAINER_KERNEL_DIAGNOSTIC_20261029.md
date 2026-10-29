@@ -69,6 +69,11 @@ or attach it as primary. The follow-up requests the exact ADJUST_DEFAULT and
 ASSIGN_PRIMARY handle rights too, without modifying the parent's token. It
 also reports token creation versus integrity lowering as distinct stages.
 All AppContainer/LOW/non-elevation/privilege/group/Job checks remain mandatory.
+After handle correction, actual CI `40918967777` again rejected the suspended
+child: Administrators was deny-only and privileged entries were absent, but
+TokenIsElevated still equaled 1. The next source requests LUA_TOKEN explicitly
+in addition to DISABLE_MAX_PRIVILEGE; the kernel must independently report
+non-elevation or execution remains denied. No fact is synthesized from a flag.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
