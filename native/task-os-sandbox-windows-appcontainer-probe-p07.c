@@ -23,6 +23,40 @@ static DWORD observedIntegrity=0xffffffffUL,observedCapabilities=0xffffffffUL;
 static BOOL observedPackageMatches=FALSE;
 static DWORD observedUnexpectedPrivileges=0xffffffffUL,observedAdminMode=0xffffffffUL;
 static DWORD observedUnexpectedEnabledPrivileges=0xffffffffUL;
+#ifndef NEXOWIRE_FIXED_SANDBOX_CHILD
+static BOOL initialDefaultUserAccess=FALSE,configuredDefaultUserAccess=FALSE;
+static BOOL token_default_allows_user(HANDLE token,PSID userSid) {
+  union {TOKEN_DEFAULT_DACL alignment;BYTE bytes[8192];} info={0};DWORD returned=0;
+  if(!GetTokenInformation(token,TokenDefaultDacl,info.bytes,sizeof(info.bytes),&returned))return FALSE;
+  PACL acl=((TOKEN_DEFAULT_DACL *)info.bytes)->DefaultDacl;
+  if(!acl||!IsValidAcl(acl))return FALSE;
+  for(DWORD i=0;i<acl->AceCount;i++){
+    LPVOID raw=NULL;
+    if(!GetAce(acl,i,&raw))return FALSE;
+    ACE_HEADER *header=(ACE_HEADER *)raw;
+    if(header->AceType==ACCESS_ALLOWED_ACE_TYPE){
+      ACCESS_ALLOWED_ACE *ace=(ACCESS_ALLOWED_ACE *)raw;
+      if(IsValidSid(&ace->SidStart)&&EqualSid(&ace->SidStart,userSid)&&(ace->Mask&GENERIC_ALL))return TRUE;
+    }
+  }
+  return FALSE;
+}
+static BOOL set_worker_default_dacl(HANDLE token,const wchar_t *owner,const wchar_t *app,PSID userSid) {
+  /* The parent token/default ACL is untouched. A deny-only Administrators SID
+   * must not leave this NEW token dependent on an administrator-only default
+   * DACL for the worker's own startup/synchronization objects. */
+  initialDefaultUserAccess=token_default_allows_user(token,userSid);
+  wchar_t sddl[1024]={0};PSECURITY_DESCRIPTOR sd=NULL;
+  if(_snwprintf_s(sddl,1024,_TRUNCATE,L"D:P(A;;GA;;;SY)(A;;GA;;;%ls)(A;;GA;;;%ls)",owner,app)<=0||
+    !ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,SDDL_REVISION_1,&sd,NULL))return FALSE;
+  PACL dacl=NULL;BOOL present=FALSE,defaulted=FALSE;
+  TOKEN_DEFAULT_DACL value={0};
+  BOOL ok=GetSecurityDescriptorDacl(sd,&present,&dacl,&defaulted)&&present&&dacl;
+  if(ok){value.DefaultDacl=dacl;ok=SetTokenInformation(token,TokenDefaultDacl,&value,sizeof(value));}
+  DWORD error=GetLastError();LocalFree(sd);
+  if(ok){configuredDefaultUserAccess=token_default_allows_user(token,userSid);ok=configuredDefaultUserAccess;}
+  if(!ok)SetLastError(error);return ok;
+}
 static HANDLE restricted_worker_token(HANDLE source,const char **stage) {
   union {SID alignment;BYTE bytes[SECURITY_MAX_SID_SIZE];} admin={0};DWORD bytes=sizeof(admin.bytes);
   if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,admin.bytes,&bytes))return NULL;
@@ -38,6 +72,7 @@ static HANDLE restricted_worker_token(HANDLE source,const char **stage) {
   if(!lowered){CloseHandle(token);SetLastError(error);return NULL;}
   return token;
 }
+#endif
 static BOOL token_is_contained(HANDLE process,PSID expected) {
   HANDLE token=NULL;DWORD returned=0,isApp=0;
   TOKEN_ELEVATION elevation={0};BOOL ok=FALSE;
@@ -111,6 +146,7 @@ static BOOL read_fixture(const wchar_t *file,char *out,DWORD capacity,DWORD *rea
   BOOL ok=ReadFile(h,out,capacity-1,read,NULL);
   if(ok)out[*read]='\0';CloseHandle(h);return ok;
 }
+#ifndef NEXOWIRE_FIXED_SANDBOX_CHILD
 static BOOL set_test_acl(const wchar_t *path,const wchar_t *owner,const wchar_t *app,BOOL writable) {
   wchar_t sddl[1024]={0};
   int n=app?_snwprintf_s(sddl,1024,_TRUNCATE,
@@ -206,6 +242,8 @@ static BOOL create_private_test_desktop(const wchar_t *name,const wchar_t *owner
   }
   LocalFree(sd);if(!ok)SetLastError(error);return ok;
 }
+#endif
+#ifdef NEXOWIRE_FIXED_SANDBOX_CHILD
 static BOOL on_private_test_desktop(const wchar_t *station,const wchar_t *desktop) {
   wchar_t actualStation[256]={0},actualDesktop[256]={0};DWORD bytes=0;
   return GetUserObjectInformationW(GetProcessWindowStation(),UOI_NAME,actualStation,sizeof(actualStation),&bytes)&&
@@ -256,7 +294,9 @@ static int fixed_worker(int argc,wchar_t **argv) {
   }
   CloseHandle(child.hThread);CloseHandle(child.hProcess);return 0;
 }
+#endif
 int wmain(int argc,wchar_t **argv) {
+#ifdef NEXOWIRE_FIXED_SANDBOX_CHILD
   if(argc>=2&&wcscmp(argv[1],L"--inside-fixed")==0)return fixed_worker(argc,argv);
   if(argc==4&&wcscmp(argv[1],L"--grandchild-fixed")==0){
     BOOL member=FALSE;
@@ -264,6 +304,8 @@ int wmain(int argc,wchar_t **argv) {
       !on_private_test_desktop(argv[2],argv[3]))return 24;
     Sleep(INFINITE);return 25;
   }
+  return 64;
+#else
   if(argc!=3||wcscmp(argv[1],L"--selftest-only")||wcslen(argv[2])>1000||!empty_test_root(argv[2]))return 64;
   const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE;int result=77;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
@@ -298,8 +340,13 @@ int wmain(int argc,wchar_t **argv) {
   stage="fixture_acl";
   if(!set_test_acl(argv[2],ownerSid,appText,FALSE)||!set_test_acl(fixture,ownerSid,appText,FALSE)||
     !set_test_acl(code,ownerSid,appText,FALSE)||!set_test_acl(data,ownerSid,appText,TRUE))goto cleanup;
+  /* Fixed separately compiled payload: no AppContainer/profile-creation or
+   * userenv initialization code is loaded inside the restricted process. */
   wchar_t self[32768]={0};
-  if(!GetModuleFileNameW(NULL,self,32768)||!CopyFileW(self,exe,TRUE)||!set_test_acl(exe,ownerSid,appText,FALSE)||
+  if(!GetModuleFileNameW(NULL,self,32768))goto cleanup;
+  wchar_t *separator=wcsrchr(self,L'\\');if(!separator)goto cleanup;separator[1]=L'\0';
+  if(wcscat_s(self,32768,L"task-os-sandbox-windows-appcontainer-fixed-p07.exe")||
+    !CopyFileW(self,exe,TRUE)||!set_test_acl(exe,ownerSid,appText,FALSE)||
     !write_fixture(allowed,"allowed-fixture")||!write_fixture(denied,"outside-canary")||
     !set_test_acl(denied,ownerSid,NULL,FALSE))goto cleanup;
   stage="private_test_desktop_create";
@@ -337,6 +384,8 @@ int wmain(int argc,wchar_t **argv) {
     exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile,profile)<=0)goto cleanup;
   workerToken=restricted_worker_token(token,&stage);
   if(!workerToken)goto cleanup;
+  stage="restricted_worker_default_dacl";
+  if(!set_worker_default_dacl(workerToken,ownerSid,appText,((TOKEN_USER *)user.bytes)->User.Sid))goto cleanup;
   stage="suspended_appcontainer_create";
   if(!CreateProcessAsUserW(workerToken,exe,command,NULL,NULL,FALSE,EXTENDED_STARTUPINFO_PRESENT|CREATE_SUSPENDED|
     CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,environment,data,&start.StartupInfo,&child))goto cleanup;
@@ -396,11 +445,14 @@ cleanup:
     "\"integrityRid\":%lu,\"capabilityCount\":%lu,\"packageMatches\":%s,"
     "\"unexpectedPrivileges\":%lu,\"unexpectedEnabledPrivileges\":%lu,\"adminGroupMode\":%lu,"
     "\"privateDesktopObserved\":%s,"
+    "\"initialDefaultUserAccess\":%s,\"configuredDefaultUserAccess\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
     tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
     (unsigned long)observedIntegrity,(unsigned long)observedCapabilities,observedPackageMatches?"true":"false",
     (unsigned long)observedUnexpectedPrivileges,(unsigned long)observedUnexpectedEnabledPrivileges,
-    (unsigned long)observedAdminMode,result==0?"true":"false");
+    (unsigned long)observedAdminMode,result==0?"true":"false",
+    initialDefaultUserAccess?"true":"false",configuredDefaultUserAccess?"true":"false");
   return result;
+#endif
 }

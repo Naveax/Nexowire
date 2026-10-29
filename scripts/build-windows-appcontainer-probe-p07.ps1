@@ -11,11 +11,20 @@ $install = (& $vswhere -latest -products '*' -requires 'Microsoft.VisualStudio.C
 if (!$install) { throw 'MSVC tools unavailable.' }
 $vcvars = Join-Path $install 'VC\Auxiliary\Build\vcvars64.bat'
 if (!(Test-Path -LiteralPath $vcvars -PathType Leaf)) { throw 'MSVC environment unavailable.' }
-$command = '"' + $vcvars + '" >nul && cl.exe /nologo /std:c11 /O2 /W4 /WX /utf-8 /Fo:"' +
+$command = '"' + $vcvars + '" >nul && cl.exe /nologo /std:c11 /O2 /MT /W4 /WX /utf-8 /Fo:"' +
   $object + '" /Fe:"' + $output + '" "' + $source +
   '" /link /SUBSYSTEM:CONSOLE kernel32.lib advapi32.lib userenv.lib ws2_32.lib user32.lib'
 & cmd.exe /d /s /c $command
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $output -PathType Leaf)) {
   throw 'AppContainer fixed-payload diagnostic build failed.'
+}
+$payload = Join-Path $root 'native\task-os-sandbox-windows-appcontainer-fixed-p07.exe'
+$payloadObject = Join-Path $root 'native\task-os-sandbox-windows-appcontainer-fixed-p07.obj'
+$payloadCommand = '"' + $vcvars + '" >nul && cl.exe /nologo /std:c11 /O2 /MT /W4 /WX /utf-8 /DNEXOWIRE_FIXED_SANDBOX_CHILD=1 /Fo:"' +
+  $payloadObject + '" /Fe:"' + $payload + '" "' + $source +
+  '" /link /SUBSYSTEM:CONSOLE kernel32.lib advapi32.lib ws2_32.lib user32.lib'
+& cmd.exe /d /s /c $payloadCommand
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $payload -PathType Leaf)) {
+  throw 'Minimal fixed child build failed.'
 }
 Write-Output 'Unsigned disposable AppContainer diagnostic built; no production worker or CORE authority.'

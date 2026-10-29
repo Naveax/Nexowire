@@ -15,6 +15,7 @@ test('#07 Windows diagnostic uses real AppContainer token readback before resumi
     'CreateRestrictedToken','DISABLE_MAX_PRIVILEGE','LUA_TOKEN','SE_GROUP_USE_FOR_DENY_ONLY','CreateProcessAsUserW',
     'TOKEN_ADJUST_DEFAULT','TOKEN_ASSIGN_PRIMARY','restricted_worker_integrity_lower',
     'CreateWindowStationW','CWF_CREATE_ONLY','CreateDesktopW','GetUserObjectInformationW','lpDesktop=desktopPath',
+    'TokenDefaultDacl','set_worker_default_dacl','configuredDefaultUserAccess',
     'PROCESS_DUP_HANDLE','CREATE_BREAKAWAY_FROM_JOB','JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE',
     'JobObjectBasicProcessIdList','WSAEACCES','independent_descendant_readback'])assert.ok(source.includes(api),api);
   assert.ok(source.indexOf('independent_suspended_token_readback')<source.lastIndexOf('ResumeThread(child.hThread)'));
@@ -46,10 +47,14 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
   timeout:45000,
 },t=>{
   const exe=fileURLToPath(new URL('../native/task-os-sandbox-windows-appcontainer-probe-p07.exe',import.meta.url));
+  const payload=fileURLToPath(new URL('../native/task-os-sandbox-windows-appcontainer-fixed-p07.exe',import.meta.url));
   for(const args of [[],['--run','cmd.exe'],['--selftest-only'],['--grandchild-fixed'],['--selftest-only',os.tmpdir()]]){
     const denied=spawnSync(exe,args,{encoding:'utf8',timeout:3000,windowsHide:true});
     assert.ok(denied.status===64||denied.status===24,String(denied.error??denied.stderr));
     assert.equal(denied.stdout,'');
+    const payloadDenied=spawnSync(payload,args,{encoding:'utf8',timeout:3000,windowsHide:true});
+    assert.equal(payloadDenied.status,64,String(payloadDenied.error??payloadDenied.stderr));
+    assert.equal(payloadDenied.stdout,'');
   }
   const root=mkdtempSync(path.join(os.tmpdir(),'nw07-appcontainer-ci-'));
   try{
@@ -69,6 +74,7 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
     }
     assert.equal(report.state,'OBSERVED');assert.equal(report.workerExit,0);
     assert.equal(report.privateDesktopObserved,true);
+    assert.equal(report.configuredDefaultUserAccess,true);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
     assert.equal(report.integrityRid,4096);assert.equal(report.capabilityCount,0);
     assert.equal(report.unexpectedEnabledPrivileges,0);

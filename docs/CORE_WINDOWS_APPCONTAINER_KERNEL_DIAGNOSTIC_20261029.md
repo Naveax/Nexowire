@@ -85,6 +85,23 @@ child and descendant. This addresses the documented desktop access requirement;
 the cause of 0xC0000142 is not presented as proven until the actual rerun of the
 NEW source head completes. WinSta0/Default ACL and input desktop are never
 modified or switched; temporary objects/handles belong only to the diagnostic.
+The private-desktop head `de49782fea95bc42f902671f1b3149bb5d0c6c55`, CI
+`40921623886`, still observed 0xC0000142. Desktop creation therefore was not a
+proven resolution. The following source additionally gives only the NEW worker
+token an explicit owner/AppContainer/SYSTEM default DACL for its own newly
+created objects, rather than depending on an Administrators-only inherited
+default after that group becomes deny-only. Actual default owner ACE presence
+is read before and after; no user SID, credential or token content is printed.
+The parent token and every existing object ACL remain untouched. This is a
+startup boundary correction and diagnostic hypothesis, not a claim that the
+underlying DLL initializer has already been identified or containment passed.
+The fixed child is now compiled separately from the same guarded source with
+static CRT and only its token/file/network/desktop-observation dependencies.
+Profile creation, token construction and userenv imports remain in the parent
+diagnostic only. The parent copies one exact sibling fixture name, never an
+arbitrary caller executable. The child accepts only the two fixed internal
+test modes; it cannot create profiles or act as the parent launcher. Both
+binaries are unsigned disposable CI artifacts, not installed publisher proof.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
@@ -104,3 +121,4 @@ Primary platform references:
 - https://learn.microsoft.com/en-us/windows/win32/secauthz/access-rights-for-access-token-objects
 - https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasuserw
 - https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowstationw
+- https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_default_dacl
