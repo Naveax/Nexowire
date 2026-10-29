@@ -187,8 +187,12 @@ test('real PostgreSQL: lost release ACK cannot replay an already completed callb
     const fence=new BrokerExternalDispatchFence({authority:f.create({pool}),authorityId:f.ids.authorityId,publicKeyPem,
       verifyIdentity:async()=>true,verifyEffectiveBroker:async()=>({...f.broker}),verifyOwnerRevocation:async()=>true});
     const req=f.request();
-    await assert.rejects(fence.execute(req,async()=>++callbacks));
+    // The callback's known return value is distinct from the release ACK.
+    // Existing fence semantics retain that value but fence ALL later work.
+    assert.equal(await fence.execute(req,async()=>++callbacks),1);
     assert.equal(lost,true);assert.equal(callbacks,1);
+    await assert.rejects(fence.execute(req,async()=>++callbacks),denied('DISPATCH_REVOKE_PENDING'));
+    await assert.rejects(fence.execute(f.request(),async()=>++callbacks),denied('DISPATCH_REVOKE_PENDING'));
     await assert.rejects(f.create().beginIfCurrent(req,f.broker,nonce()),denied('DISPATCH_STORE_REQUEST_REPLAY'));
     assert.equal(callbacks,1);
     assert.equal((await f.pool.query('SELECT state FROM core_dispatch.claims WHERE request_id=$1',[req.requestId])).rows[0].state,
