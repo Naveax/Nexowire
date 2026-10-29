@@ -5,6 +5,10 @@ import { spawn } from 'node:child_process';
 import * as z from 'zod';
 
 const WINDOWS_TASK_DEFAULT = 'Nexowire Native Agent';
+// A persistent interactive agent must not silently inherit Windows Scheduler's
+// AC-only defaults: a laptop/UPS transitioning to battery is still enrolled.
+export const WINDOWS_NATIVE_AGENT_TASK_SETTINGS =
+  '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries';
 const AGENT_TASK_SYSTEM32='C:\\Windows\\System32';
 const AGENT_TASK_POWERSHELL=AGENT_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
 const AGENT_TASK_MODULES=AGENT_TASK_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules';
@@ -503,7 +507,7 @@ async function installWindows(
     "$action=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' -Argument $argument",
     '$trigger=New-ScheduledTaskTrigger -AtLogOn -User $user',
     '$principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited',
-    '$settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew',
+    WINDOWS_NATIVE_AGENT_TASK_SETTINGS,
     "Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Nexowire first-party native agent' -Force | Out-Null",
     'Start-ScheduledTask -TaskName $name',
     '[pscustomobject]@{ok=$true} | ConvertTo-Json -Compress',
