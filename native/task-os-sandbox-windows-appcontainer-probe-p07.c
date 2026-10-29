@@ -20,6 +20,7 @@
 #include <rpc.h>
 #include <initguid.h>
 #include <fwpmu.h>
+#include <tlhelp32.h>
 #endif
 
 static const char *tokenFailure="not_observed";
@@ -31,6 +32,22 @@ static DWORD observedUnexpectedEnabledPrivileges=0xffffffffUL;
 #ifndef NEXOWIRE_FIXED_SANDBOX_CHILD
 static BOOL initialDefaultUserAccess=FALSE,configuredDefaultUserAccess=FALSE;
 static BOOL wfpPackagePolicyVerified=FALSE;
+static const char *member_image_category(DWORD pid) {
+  HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0);
+  if(snapshot==INVALID_HANDLE_VALUE)return "snapshot_unavailable";
+  PROCESSENTRY32W entry={0};entry.dwSize=sizeof(entry);const char *kind="unknown";
+  if(Process32FirstW(snapshot,&entry))do{
+    if(entry.th32ProcessID!=pid)continue;
+    if(_wcsicmp(entry.szExeFile,L"conhost.exe")==0)kind="console_host";
+    else if(_wcsicmp(entry.szExeFile,L"WerFault.exe")==0)kind="error_reporter";
+    else if(_wcsicmp(entry.szExeFile,L"ctfmon.exe")==0)kind="text_service";
+    else if(_wcsicmp(entry.szExeFile,L"fontdrvhost.exe")==0)kind="font_host";
+    else if(_wcsicmp(entry.szExeFile,L"TextInputHost.exe")==0)kind="text_input_host";
+    else if(_wcsicmp(entry.szExeFile,L"probe.exe")==0)kind="fixed_payload";
+    break;
+  }while(Process32NextW(snapshot,&entry));
+  CloseHandle(snapshot);return kind;
+}
 static DWORD install_unique_test_network_guard(PSID package,HANDLE *engine) {
   /* Only the just-created unique test AppContainer SID. Dynamic session,
    * private sublayer and two exact package conditions; no machine-wide rule,
@@ -307,6 +324,7 @@ static BOOL on_private_test_desktop(const wchar_t *station,const wchar_t *deskto
 }
 static int fixed_worker(int argc,wchar_t **argv) {
   if(argc!=10||!token_is_contained(GetCurrentProcess(),NULL))return 10;
+  if(GetConsoleWindow()!=NULL)return 28;
   worker_progress(argv[9],"token_verified");
   if(!on_private_test_desktop(argv[7],argv[8]))return 26;
   worker_progress(argv[9],"private_desktop_verified");
@@ -377,8 +395,8 @@ static int fixed_worker(int argc,wchar_t **argv) {
   CloseHandle(child.hThread);CloseHandle(child.hProcess);worker_progress(argv[9],"descendant_ready");return 0;
 }
 #endif
-int wmain(int argc,wchar_t **argv) {
 #ifdef NEXOWIRE_FIXED_SANDBOX_CHILD
+static int fixed_child_entry(int argc,wchar_t **argv) {
   if(argc>=2&&wcscmp(argv[1],L"--inside-fixed")==0){
     if(argc==10)worker_progress(argv[9],"entered_main");
     return fixed_worker(argc,argv);
@@ -386,11 +404,36 @@ int wmain(int argc,wchar_t **argv) {
   if(argc==4&&wcscmp(argv[1],L"--grandchild-fixed")==0){
     BOOL member=FALSE;
     if(!token_is_contained(GetCurrentProcess(),NULL)||!IsProcessInJob(GetCurrentProcess(),NULL,&member)||!member||
-      !on_private_test_desktop(argv[2],argv[3]))return 24;
+      !on_private_test_desktop(argv[2],argv[3])||GetConsoleWindow()!=NULL)return 24;
     Sleep(INFINITE);return 25;
   }
   return 64;
+}
+int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,PWSTR line,int show) {
+  (void)instance;(void)previous;(void)show;
+  // Only the bounded fixed parent protocol, not a shell/general command parser.
+  // Use normal WINDOWS CRT startup; no Shell32/profile import or custom entry.
+  wchar_t buffer[8193]={0};wchar_t *argv[11]={L"fixed_payload"};int argc=1;
+  if(!line||wcsnlen_s(line,8193)>=8193||wcscpy_s(buffer,8193,line))return 64;
+  wchar_t *p=buffer;
+  while(*p){
+    while(*p==L' '||*p==L'\t')p++;
+    if(!*p)break;if(argc>=10)return 64;
+    BOOL quoted=*p==L'"';if(quoted)p++;argv[argc++]=p;
+    if(quoted){
+      while(*p&&*p!=L'"')p++;
+      if(!*p)return 64;*p++=L'\0';
+      if(*p&&*p!=L' '&&*p!=L'\t')return 64;
+    }else{
+      while(*p&&*p!=L' '&&*p!=L'\t'){if(*p==L'"')return 64;p++;}
+      if(*p)*p++=L'\0';
+    }
+    if(!argv[argc-1][0])return 64;
+  }
+  return fixed_child_entry(argc,argv);
+}
 #else
+int wmain(int argc,wchar_t **argv) {
   if(argc!=3||wcscmp(argv[1],L"--selftest-only")||wcslen(argv[2])>1000||!empty_test_root(argv[2]))return 64;
   const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE,workerWait=0xffffffffUL;int result=77;
   DWORD descendantExit=0xffffffffUL,jobMemberCount=0xffffffffUL;BOOL descendantInJob=FALSE;
@@ -400,6 +443,7 @@ int wmain(int argc,wchar_t **argv) {
   DWORD associatedProcessObjects=0xffffffffUL;
   DWORD unexpectedWaitResult=0xffffffffUL,unexpectedWaitError=0;
   BOOL unexpectedPidIsSystem=FALSE,unexpectedPidIsController=FALSE;
+  const char *unexpectedImageCategory="not_observed";
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
@@ -541,6 +585,7 @@ int wmain(int argc,wchar_t **argv) {
       }
       wchar_t image[32768]={0};DWORD imageChars=32768;
       BOOL observed=GetExitCodeProcess(extra,&unexpectedMemberExit)&&IsProcessInJob(extra,job,&unexpectedMemberInJob);
+      unexpectedImageCategory=member_image_category((DWORD)pidValue);
       unexpectedImageMatches=QueryFullProcessImageNameW(extra,0,image,&imageChars)&&_wcsicmp(image,exe)==0;
       if(!observed||!unexpectedMemberInJob){CloseHandle(extra);stage="unexpected_job_member_scope";result=1;goto cleanup;}
       if(unexpectedMemberExit==STILL_ACTIVE){
@@ -622,6 +667,7 @@ cleanup:
     "\"zeroAssociationDrainProven\":false,"
     "\"unexpectedWaitResult\":%lu,\"unexpectedWaitError\":%lu,"
     "\"unexpectedPidIsSystem\":%s,\"unexpectedPidIsController\":%s,"
+    "\"unexpectedImageCategory\":\"%s\","
     "\"unexpectedLiveMembers\":%lu,\"unexpectedMemberExit\":%lu,\"unexpectedMemberInJob\":%s,\"unexpectedImageMatches\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
@@ -636,8 +682,9 @@ cleanup:
     (unsigned long)verifiedLiveJobMembers,(unsigned long)verifiedExitedJobMembers,(unsigned long)associatedProcessObjects,
     (unsigned long)unexpectedWaitResult,(unsigned long)unexpectedWaitError,
     unexpectedPidIsSystem?"true":"false",unexpectedPidIsController?"true":"false",
+    unexpectedImageCategory,
     (unsigned long)unexpectedLiveMembers,(unsigned long)unexpectedMemberExit,unexpectedMemberInJob?"true":"false",
     unexpectedImageMatches?"true":"false");
   return result;
-#endif
 }
+#endif

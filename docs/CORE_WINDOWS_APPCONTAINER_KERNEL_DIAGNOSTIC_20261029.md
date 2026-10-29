@@ -175,6 +175,18 @@ and records the actual wait return/error plus non-identifying system/controller
 categories. Timeout, failed wait and STILL_ACTIVE remain denied. No exit code
 alone, inaccessible image, PID lookup or associated-object count is promoted
 to an execution/cleanup proof.
+At head `eca7146d93f362ef5fa2ed2bbc35a0b801264107`, CI `40930722919`, one
+exited member was verified with a SIGNALED handle, but a different third member
+was genuinely still active (exit259) in the same Job. It was NOT accepted. The
+following source builds the fixed child as a WINDOWS-subsystem binary with
+normal wWinMain CRT startup, a bounded fixed-protocol argument parser and no
+console allocation. The actual PE subsystem is checked and child/descendant
+must have no console window. This avoids an implicit console host as one
+possible cause; it is not presented as an identified cause without observation.
+For any remaining extra member, a read-only snapshot reports only a fixed
+image category (e.g. console/error/text host), never arbitrary names/paths/PIDs.
+The held exact-Job process identity stays pinned during lookup and no category
+authorizes a live extra member. All live/unknown member rejections remain.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
@@ -200,3 +212,5 @@ Primary platform references:
 - https://learn.microsoft.com/en-us/windows/win32/fwp/filter-arbitration
 - https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information
 - https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list
+- https://learn.microsoft.com/en-us/cpp/build/reference/subsystem-specify-subsystem
+- https://learn.microsoft.com/en-us/cpp/build/reference/entry-entry-point-symbol

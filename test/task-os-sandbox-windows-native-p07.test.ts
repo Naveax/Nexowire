@@ -50,6 +50,9 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
 },t=>{
   const exe=fileURLToPath(new URL('../native/task-os-sandbox-windows-appcontainer-probe-p07.exe',import.meta.url));
   const payload=fileURLToPath(new URL('../native/task-os-sandbox-windows-appcontainer-fixed-p07.exe',import.meta.url));
+  const pe=readFileSync(payload),header=pe.readUInt32LE(0x3c);
+  assert.equal(pe.readUInt32LE(header),0x00004550); // actual PE\0\0
+  assert.equal(pe.readUInt16LE(header+24+68),2,'fixed child must use the no-console WINDOWS subsystem');
   for(const args of [[],['--run','cmd.exe'],['--selftest-only'],['--grandchild-fixed'],['--selftest-only',os.tmpdir()]]){
     const denied=spawnSync(exe,args,{encoding:'utf8',timeout:3000,windowsHide:true});
     assert.ok(denied.status===64||denied.status===24,String(denied.error??denied.stderr));

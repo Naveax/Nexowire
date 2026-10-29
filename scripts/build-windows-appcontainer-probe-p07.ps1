@@ -22,7 +22,7 @@ $payload = Join-Path $root 'native\task-os-sandbox-windows-appcontainer-fixed-p0
 $payloadObject = Join-Path $root 'native\task-os-sandbox-windows-appcontainer-fixed-p07.obj'
 $payloadCommand = '"' + $vcvars + '" >nul && cl.exe /nologo /std:c11 /O2 /MT /W4 /WX /utf-8 /DNEXOWIRE_FIXED_SANDBOX_CHILD=1 /Fo:"' +
   $payloadObject + '" /Fe:"' + $payload + '" "' + $source +
-  '" /link /SUBSYSTEM:CONSOLE kernel32.lib advapi32.lib ws2_32.lib user32.lib'
+  '" /link /SUBSYSTEM:WINDOWS kernel32.lib advapi32.lib ws2_32.lib user32.lib'
 & cmd.exe /d /s /c $payloadCommand
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $payload -PathType Leaf)) {
   throw 'Minimal fixed child build failed.'
