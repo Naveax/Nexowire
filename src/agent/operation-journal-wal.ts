@@ -1,4 +1,5 @@
 import {promises as fs} from 'node:fs';
+import {endianness} from 'node:os';
 
 /**
  * Conservative, streaming validation of SQLite WAL frames before connecting
@@ -46,10 +47,47 @@ async function readExactly(handle:fs.FileHandle,buf:Buffer,length:number,at:numb
   }
 }
 
+// SQLite reuses WAL allocation after RESTART without truncating old frames.
+// The volatile WAL-index only corroborates a clean current commit boundary.
+// It is NOT an authenticity/rollback witness or a replacement for external CAS.
+async function readReuseIndex(dbFile:string,walHeader:Buffer,pageSize:number,
+  currentFrames:number,commitPages:number,digest:Checksum):Promise<{
+    bytes:Buffer;dev:number;ino:number;size:number;mtimeMs:number;
+  }>{
+  let prior;
+  try{prior=await fs.lstat(dbFile+'-shm');}catch{fail();}
+  if(!prior.isFile()||prior.isSymbolicLink())fail();
+  const handle=await fs.open(dbFile+'-shm','r');
+  try{
+    const opened=await handle.stat();
+    if(!opened.isFile()||opened.dev!==prior.dev||opened.ino!==prior.ino||
+       opened.size<32768||opened.size%32768!==0)fail();
+    const bytes=Buffer.alloc(136);
+    await readExactly(handle,bytes,bytes.length,0);
+    const nativeBig=endianness()==='BE';
+    const u32=(at:number)=>nativeBig?bytes.readUInt32BE(at):bytes.readUInt32LE(at);
+    const szPage=nativeBig?bytes.readUInt16BE(14):bytes.readUInt16LE(14);
+    const checksum=fold(bytes,40,nativeBig,{s0:0,s1:0});
+    if(!bytes.subarray(0,48).equals(bytes.subarray(48,96))||
+       u32(0)!==3007000||u32(4)!==0||bytes[12]!==1||
+       bytes[13]!==Number(walHeader.readUInt32BE(0)===0x377f0683)||
+       szPage!==(pageSize===65536?1:pageSize)||
+       u32(16)!==currentFrames||u32(20)!==commitPages||
+       u32(24)!==digest.s0||u32(28)!==digest.s1||
+       !bytes.subarray(32,40).equals(walHeader.subarray(16,24))||
+       u32(40)!==checksum.s0||u32(44)!==checksum.s1||
+       u32(96)>currentFrames||u32(128)>currentFrames)fail();
+    const after=await handle.stat();
+    if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs)fail();
+    return {bytes,dev:opened.dev,ino:opened.ino,size:opened.size,mtimeMs:opened.mtimeMs};
+  }finally{await handle.close();}
+}
+
 /**
  * Call while holding the native singleton; the journal must not be opened
  * concurrently from another path. Reads frame-by-frame to avoid loading the
- * entire WAL into memory. An invalid/torn tail also denies mutation startup.
+ * entire WAL into memory. An invalid/torn current tail denies startup. A
+ * prior-generation allocation tail needs a matching stable WAL-index boundary.
  */
 export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
   const walFile=dbFile+'-wal';
@@ -83,18 +121,53 @@ export async function verifyAgentJournalWal(dbFile:string):Promise<void>{
     const frameBytes=24+pageSize;
     if((opened.size-32)%frameBytes!==0)fail();
     const frame=Buffer.allocUnsafe(frameBytes);
+    let currentFrames=0,lastCommitPages=0;
+    let oldSalt:Buffer|undefined;
+    let oldGenerationDistance=0;
+    let reuseIndex:Awaited<ReturnType<typeof readReuseIndex>>|undefined;
     for(let position=32;position<opened.size;position+=frameBytes){
       await readExactly(handle,frame,frameBytes,position);
       if(frame.readUInt32BE(0)===0)fail();
-      if(frame.readUInt32BE(8)!==header.readUInt32BE(16)||
-         frame.readUInt32BE(12)!==header.readUInt32BE(20))fail();
+      const currentSalt=frame.subarray(8,16).equals(header.subarray(16,24));
+      if(!currentSalt){
+        const distance=(header.readUInt32BE(16)-frame.readUInt32BE(8))>>>0;
+        if(distance===0||distance>0x7fffffff)fail();
+        if(!oldSalt){
+          if(currentFrames===0||lastCommitPages===0)fail();
+          oldSalt=Buffer.from(frame.subarray(8,16));
+          oldGenerationDistance=distance;
+          reuseIndex=await readReuseIndex(dbFile,header,pageSize,
+            currentFrames,lastCommitPages,digest);
+        }else{
+          // Repeated short rewrites can retain several older generations.
+          // Moving outward through the allocation cannot become newer again.
+          if(distance<oldGenerationDistance)fail();
+          if(distance===oldGenerationDistance&&!frame.subarray(8,16).equals(oldSalt))fail();
+          if(distance>oldGenerationDistance){
+            oldSalt=Buffer.from(frame.subarray(8,16));oldGenerationDistance=distance;
+          }
+        }
+        continue;
+      }
+      if(oldSalt)fail(); // No new current-generation frames after the old tail.
       digest=fold(frame,8,bigEndian,digest);
       digest=fold(frame.subarray(24),pageSize,bigEndian,digest);
       if(frame.readUInt32BE(16)!==digest.s0||
          frame.readUInt32BE(20)!==digest.s1)fail();
+      currentFrames++;
+      lastCommitPages=frame.readUInt32BE(4);
     }
     const after=await handle.stat();
     if(after.size!==opened.size||after.mtimeMs!==opened.mtimeMs)fail();
+    if(reuseIndex){
+      const checked=await readReuseIndex(dbFile,header,pageSize,
+        currentFrames,lastCommitPages,digest);
+      if(checked.dev!==reuseIndex.dev||checked.ino!==reuseIndex.ino||
+         checked.size!==reuseIndex.size||checked.mtimeMs!==reuseIndex.mtimeMs||
+         !checked.bytes.equals(reuseIndex.bytes))fail();
+      const stable=await handle.stat();
+      if(stable.size!==opened.size||stable.mtimeMs!==opened.mtimeMs)fail();
+    }
   }finally{
     await handle.close();
   }
