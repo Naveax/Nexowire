@@ -167,6 +167,14 @@ production drain. `zeroAssociationDrainProven=false` is unconditional; productio
 execution remains unavailable. Microsoft documents that associated accounting
 may retain terminated objects until references are released. Full physical
 drain remains a separate external acceptance gate; no UNKNOWN is made active.
+The live-accounting head `6677066165db173e4bc3a89e7cfce7c5004d0ecd`, CI
+`40929565929`, still rejected an extra member: an exit code of 0 did not yet
+come with a verified SIGNALED handle. The follow-up waits only the remaining
+original one-second observation budget, re-reads exit status after signaling,
+and records the actual wait return/error plus non-identifying system/controller
+categories. Timeout, failed wait and STILL_ACTIVE remain denied. No exit code
+alone, inaccessible image, PID lookup or associated-object count is promoted
+to an execution/cleanup proof.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and

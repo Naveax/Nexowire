@@ -398,6 +398,8 @@ int wmain(int argc,wchar_t **argv) {
   DWORD unexpectedMemberExit=0xffffffffUL;BOOL unexpectedMemberInJob=FALSE,unexpectedImageMatches=FALSE;
   HANDLE exitedMembers[4]={0};DWORD verifiedLiveJobMembers=0,verifiedExitedJobMembers=0;
   DWORD associatedProcessObjects=0xffffffffUL;
+  DWORD unexpectedWaitResult=0xffffffffUL,unexpectedWaitError=0;
+  BOOL unexpectedPidIsSystem=FALSE,unexpectedPidIsController=FALSE;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
@@ -527,6 +529,7 @@ int wmain(int argc,wchar_t **argv) {
       ULONG_PTR pidValue=pids->ProcessIdList[i];
       if(pidValue==(ULONG_PTR)childPid){verifiedLiveJobMembers++;continue;}
       if(pidValue>MAXDWORD){result=1;goto cleanup;}
+      unexpectedPidIsSystem=pidValue==4;unexpectedPidIsController=pidValue==(ULONG_PTR)GetCurrentProcessId();
       // Read-only attestation only. Never terminate or resume a PID obtained
       // from a list/file. Unknown LIVE/wrong-Job/unresolved members never pass.
       // A held SIGNALED process in this exact Job cannot execute. Its image may
@@ -540,8 +543,15 @@ int wmain(int argc,wchar_t **argv) {
       BOOL observed=GetExitCodeProcess(extra,&unexpectedMemberExit)&&IsProcessInJob(extra,job,&unexpectedMemberInJob);
       unexpectedImageMatches=QueryFullProcessImageNameW(extra,0,image,&imageChars)&&_wcsicmp(image,exe)==0;
       if(!observed||!unexpectedMemberInJob){CloseHandle(extra);stage="unexpected_job_member_scope";result=1;goto cleanup;}
-      if(unexpectedMemberExit==STILL_ACTIVE||WaitForSingleObject(extra,0)!=WAIT_OBJECT_0){
+      if(unexpectedMemberExit==STILL_ACTIVE){
         CloseHandle(extra);unexpectedLiveMembers++;stage="unexpected_live_job_member";result=1;goto cleanup;
+      }
+      ULONGLONG now=GetTickCount64();
+      DWORD remaining=now<membershipDeadline?(DWORD)(membershipDeadline-now):0;
+      unexpectedWaitResult=WaitForSingleObject(extra,remaining);
+      unexpectedWaitError=unexpectedWaitResult==WAIT_FAILED?GetLastError():0;
+      if(unexpectedWaitResult!=WAIT_OBJECT_0||!GetExitCodeProcess(extra,&unexpectedMemberExit)||unexpectedMemberExit==STILL_ACTIVE){
+        CloseHandle(extra);stage="extra_job_member_exit_unconfirmed";result=1;goto cleanup;
       }
       exitedMembers[verifiedExitedJobMembers++]=extra;exitedMemberObservations++;
     }
@@ -610,6 +620,8 @@ cleanup:
     "\"maxJobMemberCount\":%lu,\"exitedMemberObservations\":%lu,\"missingMemberObservations\":%lu,"
     "\"verifiedLiveJobMembers\":%lu,\"verifiedExitedJobMembers\":%lu,\"associatedProcessObjects\":%lu,"
     "\"zeroAssociationDrainProven\":false,"
+    "\"unexpectedWaitResult\":%lu,\"unexpectedWaitError\":%lu,"
+    "\"unexpectedPidIsSystem\":%s,\"unexpectedPidIsController\":%s,"
     "\"unexpectedLiveMembers\":%lu,\"unexpectedMemberExit\":%lu,\"unexpectedMemberInJob\":%s,\"unexpectedImageMatches\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
@@ -622,6 +634,8 @@ cleanup:
     (unsigned long)descendantExit,descendantInJob?"true":"false",(unsigned long)jobMemberCount,
     (unsigned long)maxJobMemberCount,(unsigned long)exitedMemberObservations,(unsigned long)missingMemberObservations,
     (unsigned long)verifiedLiveJobMembers,(unsigned long)verifiedExitedJobMembers,(unsigned long)associatedProcessObjects,
+    (unsigned long)unexpectedWaitResult,(unsigned long)unexpectedWaitError,
+    unexpectedPidIsSystem?"true":"false",unexpectedPidIsController?"true":"false",
     (unsigned long)unexpectedLiveMembers,(unsigned long)unexpectedMemberExit,unexpectedMemberInJob?"true":"false",
     unexpectedImageMatches?"true":"false");
   return result;

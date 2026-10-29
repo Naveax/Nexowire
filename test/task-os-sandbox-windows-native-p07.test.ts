@@ -81,6 +81,7 @@ test('#07 real Windows AppContainer fixed-payload isolation, descendant and clea
     assert.equal(report.descendantInJob,true);assert.equal(report.verifiedLiveJobMembers,1);
     assert.ok(Number(report.jobMemberCount)>=1&&Number(report.jobMemberCount)<=4);
     assert.equal(Number(report.verifiedExitedJobMembers)+1,report.jobMemberCount);
+    if(Number(report.verifiedExitedJobMembers)>0)assert.equal(report.unexpectedWaitResult,0);
     assert.equal(report.unexpectedLiveMembers,0);assert.equal(report.zeroAssociationDrainProven,false);
     assert.equal(report.descendantExit,259);
     assert.equal(report.tokenAppContainer,1);assert.equal(report.tokenElevated,0);
