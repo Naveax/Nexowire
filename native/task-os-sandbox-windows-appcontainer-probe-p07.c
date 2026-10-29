@@ -352,12 +352,15 @@ static int fixed_worker(int argc,wchar_t **argv) {
     worker_progress(argv[9],networkError==WSAETIMEDOUT?"network_timeout":
       networkError==WSAECONNREFUSED?"network_refused":"network_error");return 19;
   }
-  wchar_t exe[32768]={0},command[32768]={0};
+  wchar_t exe[32768]={0},command[32768]={0},breakawayCommand[32768]={0};
   if(!GetModuleFileNameW(NULL,exe,32768)||
     _snwprintf_s(command,32768,_TRUNCATE,L"\"%ls\" --grandchild-fixed %ls %ls",exe,argv[7],argv[8])<=0)return 20;
+  // CreateProcess may mutate its command buffer, including on failure. Keep
+  // the normal child command separate from the adversarial breakaway attempt.
+  if(wcscpy_s(breakawayCommand,32768,command))return 20;
   STARTUPINFOW si={0};si.cb=sizeof(si);PROCESS_INFORMATION child={0};
   worker_progress(argv[9],"breakaway_probe");
-  if(CreateProcessW(exe,command,NULL,NULL,FALSE,CREATE_BREAKAWAY_FROM_JOB|CREATE_SUSPENDED|CREATE_NO_WINDOW,
+  if(CreateProcessW(exe,breakawayCommand,NULL,NULL,FALSE,CREATE_BREAKAWAY_FROM_JOB|CREATE_SUSPENDED|CREATE_NO_WINDOW,
     NULL,NULL,&si,&child)){
     TerminateProcess(child.hProcess,99);WaitForSingleObject(child.hProcess,3000);
     CloseHandle(child.hThread);CloseHandle(child.hProcess);return 21;
@@ -391,6 +394,8 @@ int wmain(int argc,wchar_t **argv) {
   if(argc!=3||wcscmp(argv[1],L"--selftest-only")||wcslen(argv[2])>1000||!empty_test_root(argv[2]))return 64;
   const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE,workerWait=0xffffffffUL;int result=77;
   DWORD descendantExit=0xffffffffUL,jobMemberCount=0xffffffffUL;BOOL descendantInJob=FALSE;
+  DWORD maxJobMemberCount=0,exitedMemberObservations=0,missingMemberObservations=0,unexpectedLiveMembers=0;
+  DWORD unexpectedMemberExit=0xffffffffUL;BOOL unexpectedMemberInJob=FALSE,unexpectedImageMatches=FALSE;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
   wchar_t desktopPath[160]={0};HWINSTA testStation=NULL;HDESK testDesktop=NULL;
@@ -512,11 +517,29 @@ int wmain(int argc,wchar_t **argv) {
     if(!QueryInformationJobObject(job,JobObjectBasicProcessIdList,list.bytes,sizeof(list.bytes),NULL)){result=1;goto cleanup;}
     JOBOBJECT_BASIC_PROCESS_ID_LIST *pids=(JOBOBJECT_BASIC_PROCESS_ID_LIST *)list.bytes;
     jobMemberCount=pids->NumberOfProcessIdsInList;
+    if(jobMemberCount>maxJobMemberCount)maxJobMemberCount=jobMemberCount;
     if(jobMemberCount>4){result=1;goto cleanup;}
-    BOOL knownOnly=TRUE;
-    for(DWORD i=0;i<jobMemberCount;i++)
-      if(pids->ProcessIdList[i]!=(ULONG_PTR)childPid&&pids->ProcessIdList[i]!=(ULONG_PTR)child.dwProcessId)knownOnly=FALSE;
-    if(!knownOnly){result=1;goto cleanup;}
+    for(DWORD i=0;i<jobMemberCount;i++){
+      ULONG_PTR pidValue=pids->ProcessIdList[i];
+      if(pidValue==(ULONG_PTR)childPid||pidValue==(ULONG_PTR)child.dwProcessId)continue;
+      if(pidValue>MAXDWORD){result=1;goto cleanup;}
+      // Read-only attestation only. Never terminate or resume a PID obtained
+      // from a list/file. Unknown LIVE or wrong-scope members fail immediately;
+      // exited own-image objects may only be waited on, never accepted as PASS.
+      HANDLE extra=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,(DWORD)pidValue);
+      if(!extra){
+        if(GetLastError()==ERROR_INVALID_PARAMETER){missingMemberObservations++;continue;}
+        stage="unexpected_job_member_open_denied";result=1;goto cleanup;
+      }
+      wchar_t image[32768]={0};DWORD imageChars=32768;
+      BOOL observed=GetExitCodeProcess(extra,&unexpectedMemberExit)&&
+        IsProcessInJob(extra,job,&unexpectedMemberInJob)&&QueryFullProcessImageNameW(extra,0,image,&imageChars);
+      unexpectedImageMatches=observed&&_wcsicmp(image,exe)==0;
+      CloseHandle(extra);
+      if(!observed||!unexpectedMemberInJob||!unexpectedImageMatches){stage="unexpected_job_member_scope";result=1;goto cleanup;}
+      if(unexpectedMemberExit==STILL_ACTIVE){unexpectedLiveMembers++;stage="unexpected_live_job_member";result=1;goto cleanup;}
+      exitedMemberObservations++;
+    }
     if(jobMemberCount==1&&pids->ProcessIdList[0]==(ULONG_PTR)childPid)break;
     if(GetTickCount64()>=membershipDeadline){result=1;goto cleanup;}
     Sleep(1);
@@ -575,6 +598,8 @@ cleanup:
     "\"workerStep\":\"%s\",\"workerWait\":%lu,"
     "\"wfpPackagePolicyVerified\":%s,"
     "\"descendantExit\":%lu,\"descendantInJob\":%s,\"jobMemberCount\":%lu,"
+    "\"maxJobMemberCount\":%lu,\"exitedMemberObservations\":%lu,\"missingMemberObservations\":%lu,"
+    "\"unexpectedLiveMembers\":%lu,\"unexpectedMemberExit\":%lu,\"unexpectedMemberInJob\":%s,\"unexpectedImageMatches\":%s,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
     result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
     tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
@@ -583,7 +608,10 @@ cleanup:
     (unsigned long)observedAdminMode,result==0?"true":"false",
     initialDefaultUserAccess?"true":"false",configuredDefaultUserAccess?"true":"false",
     workerStep,(unsigned long)workerWait,wfpPackagePolicyVerified?"true":"false",
-    (unsigned long)descendantExit,descendantInJob?"true":"false",(unsigned long)jobMemberCount);
+    (unsigned long)descendantExit,descendantInJob?"true":"false",(unsigned long)jobMemberCount,
+    (unsigned long)maxJobMemberCount,(unsigned long)exitedMemberObservations,(unsigned long)missingMemberObservations,
+    (unsigned long)unexpectedLiveMembers,(unsigned long)unexpectedMemberExit,unexpectedMemberInJob?"true":"false",
+    unexpectedImageMatches?"true":"false");
   return result;
 #endif
 }

@@ -136,6 +136,16 @@ exactly the held live descendant must be the only member before Job close;
 unknown PIDs fail immediately and a still-present exited worker is never
 accepted as success. Descendant must be live immediately before Job closure
 and signaled afterwards. The earlier failure's precise substage is not invented.
+Head `bdd8c1519934305c257631a2d939473019194474`, CI `40926792173`, then
+confirmed a live contained descendant in the correct Job, but raw membership
+count was three. The following source attests extra entries read-only for exact
+Job, own fixture image and actual exit state; unknown live/wrong-scope members
+still fail immediately. Exited/missing objects may only be retried within the
+same one-second deadline, never accepted as a successful final set. No PID/SID
+or path is printed, and no listed PID is terminated or resumed. The original
+single-descendant final requirement stays unchanged. Breakaway and normal
+CreateProcess calls also use separate mutable command buffers so a failed
+negative invocation cannot alter the next fixed child's arguments.
 
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
