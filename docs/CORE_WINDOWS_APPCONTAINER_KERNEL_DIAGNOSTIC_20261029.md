@@ -37,6 +37,29 @@ successful result is only OBSERVED for this fixed diagnostic and always has
 `coreAuthority=false`, `productionWorkerInstalled=false`, and physical
 acceptance NOT_PROVEN. A skipped result is not a production PASS.
 
+The first actual CI run `40909361627` compiled this diagnostic but reported
+UNAVAILABLE at `suspended_appcontainer_create`, Win32 error 203
+(ERROR_ENVVAR_NOT_FOUND). That skip is NOT a containment PASS. The follow-up
+builds an OS environment from the held user token with parent inheritance
+disabled, copies only nine explicit Windows profile/system path keys, and
+forces PATH to the real System32. The complete OS/parent environment block is
+never passed. The real child still has to reject the parent-only secret and
+satisfy every previous kernel invariant; none is weakened or skipped away.
+
+The subsequent actual kernel readback at #967 head
+`3a727b277b6a04cab94aa2df0a520efe74bae914` showed AppContainer=1, LOW=4096,
+zero capabilities and matching package, but elevation=1. The original strict
+check rejected it before resume; LOW/AppContainer alone was not accepted as
+non-elevation. The next source correction creates a genuinely restricted
+version of the caller token, disables maximum privileges, makes Administrators
+deny-only and lowers only that new token. It launches with CreateProcessAsUser
+plus AppContainer attributes and independently checks the resulting suspended
+token again. Any privileges beyond SeChangeNotify (even disabled entries that
+could later be re-enabled) and live Administrators membership are additionally
+rejected. No existing check is weakened, no parent
+token or machine privilege is changed, and no new account/logon/password,
+linked-UAC impersonation, credential or fallback is created.
+
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
 hardlink/reparse race resistance; private desktop/input isolation; complete

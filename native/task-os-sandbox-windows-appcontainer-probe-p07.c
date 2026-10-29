@@ -17,24 +17,82 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char *tokenFailure="not_observed";
+static DWORD observedApp=0xffffffffUL,observedElevation=0xffffffffUL;
+static DWORD observedIntegrity=0xffffffffUL,observedCapabilities=0xffffffffUL;
+static BOOL observedPackageMatches=FALSE;
+static DWORD observedUnexpectedPrivileges=0xffffffffUL,observedAdminMode=0xffffffffUL;
+static DWORD observedUnexpectedEnabledPrivileges=0xffffffffUL;
+static HANDLE restricted_worker_token(HANDLE source) {
+  union {SID alignment;BYTE bytes[SECURITY_MAX_SID_SIZE];} admin={0};DWORD bytes=sizeof(admin.bytes);
+  if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,admin.bytes,&bytes))return NULL;
+  SID_AND_ATTRIBUTES disabled={admin.bytes,SE_GROUP_USE_FOR_DENY_ONLY};HANDLE token=NULL;
+  if(!CreateRestrictedToken(source,DISABLE_MAX_PRIVILEGE,1,&disabled,0,NULL,0,NULL,&token))return NULL;
+  PSID low=NULL;
+  if(!ConvertStringSidToSidW(L"S-1-16-4096",&low)){CloseHandle(token);return NULL;}
+  TOKEN_MANDATORY_LABEL label={0};label.Label.Sid=low;label.Label.Attributes=SE_GROUP_INTEGRITY;
+  BOOL lowered=SetTokenInformation(token,TokenIntegrityLevel,&label,(DWORD)(sizeof(label)+GetLengthSid(low)));
+  DWORD error=GetLastError();LocalFree(low);
+  if(!lowered){CloseHandle(token);SetLastError(error);return NULL;}
+  return token;
+}
 static BOOL token_is_contained(HANDLE process,PSID expected) {
   HANDLE token=NULL;DWORD returned=0,isApp=0;
   TOKEN_ELEVATION elevation={0};BOOL ok=FALSE;
   union {TOKEN_MANDATORY_LABEL alignment;BYTE bytes[sizeof(TOKEN_MANDATORY_LABEL)+SECURITY_MAX_SID_SIZE];} label={0};
   union {TOKEN_APPCONTAINER_INFORMATION alignment;BYTE bytes[sizeof(TOKEN_APPCONTAINER_INFORMATION)+SECURITY_MAX_SID_SIZE];} app={0};
   union {TOKEN_GROUPS alignment;BYTE bytes[4096];} capabilities={0};
+  union {TOKEN_PRIVILEGES alignment;BYTE bytes[4096];} privileges={0};
+  union {TOKEN_GROUPS alignment;BYTE bytes[16384];} groups={0};
+  tokenFailure="token_open";observedApp=observedElevation=observedIntegrity=observedCapabilities=0xffffffffUL;
+  observedPackageMatches=FALSE;observedUnexpectedPrivileges=observedAdminMode=0xffffffffUL;
+  observedUnexpectedEnabledPrivileges=0xffffffffUL;
   if(!OpenProcessToken(process,TOKEN_QUERY,&token))return FALSE;
-  if(!GetTokenInformation(token,TokenIsAppContainer,&isApp,sizeof(isApp),&returned)||isApp!=1||
-    !GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&returned)||elevation.TokenIsElevated||
+  tokenFailure="token_information";
+  if(!GetTokenInformation(token,TokenIsAppContainer,&isApp,sizeof(isApp),&returned)||
+    !GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&returned)||
     !GetTokenInformation(token,TokenIntegrityLevel,label.bytes,sizeof(label.bytes),&returned)||
     !GetTokenInformation(token,TokenAppContainerSid,app.bytes,sizeof(app.bytes),&returned)||
-    !GetTokenInformation(token,TokenCapabilities,capabilities.bytes,sizeof(capabilities.bytes),&returned))goto done;
+    !GetTokenInformation(token,TokenCapabilities,capabilities.bytes,sizeof(capabilities.bytes),&returned)||
+    !GetTokenInformation(token,TokenPrivileges,privileges.bytes,sizeof(privileges.bytes),&returned)||
+    !GetTokenInformation(token,TokenGroups,groups.bytes,sizeof(groups.bytes),&returned))goto done;
   PSID integrity=((TOKEN_MANDATORY_LABEL *)label.bytes)->Label.Sid;
   PSID package=((TOKEN_APPCONTAINER_INFORMATION *)app.bytes)->TokenAppContainer;
-  if(!IsValidSid(integrity)||!*GetSidSubAuthorityCount(integrity)||!IsValidSid(package)||
-    *GetSidSubAuthority(integrity,*GetSidSubAuthorityCount(integrity)-1)>SECURITY_MANDATORY_LOW_RID||
-    ((TOKEN_GROUPS *)capabilities.bytes)->GroupCount!=0||(expected&&!EqualSid(package,expected)))goto done;
-  ok=TRUE;
+  observedApp=isApp;observedElevation=elevation.TokenIsElevated;
+  observedCapabilities=((TOKEN_GROUPS *)capabilities.bytes)->GroupCount;
+  tokenFailure="token_sid_invalid";
+  if(!IsValidSid(integrity)||!*GetSidSubAuthorityCount(integrity)||!IsValidSid(package))goto done;
+  observedIntegrity=*GetSidSubAuthority(integrity,*GetSidSubAuthorityCount(integrity)-1);
+  observedPackageMatches=!expected||EqualSid(package,expected);
+  LUID notify={0};
+  if(!LookupPrivilegeValueW(NULL,L"SeChangeNotifyPrivilege",&notify))goto done;
+  observedUnexpectedPrivileges=observedUnexpectedEnabledPrivileges=0;
+  TOKEN_PRIVILEGES *heldPrivileges=(TOKEN_PRIVILEGES *)privileges.bytes;
+  for(DWORD i=0;i<heldPrivileges->PrivilegeCount;i++){
+    LUID_AND_ATTRIBUTES p=heldPrivileges->Privileges[i];
+    if(p.Luid.HighPart!=notify.HighPart||p.Luid.LowPart!=notify.LowPart){
+      observedUnexpectedPrivileges++;
+      if(p.Attributes&SE_PRIVILEGE_ENABLED)observedUnexpectedEnabledPrivileges++;
+    }
+  }
+  union {SID alignment;BYTE bytes[SECURITY_MAX_SID_SIZE];} admin={0};DWORD adminBytes=sizeof(admin.bytes);
+  if(!CreateWellKnownSid(WinBuiltinAdministratorsSid,NULL,admin.bytes,&adminBytes))goto done;
+  observedAdminMode=0;
+  TOKEN_GROUPS *heldGroups=(TOKEN_GROUPS *)groups.bytes;
+  for(DWORD i=0;i<heldGroups->GroupCount;i++){
+    if(EqualSid(heldGroups->Groups[i].Sid,admin.bytes)){
+      DWORD attributes=heldGroups->Groups[i].Attributes;
+      observedAdminMode=(attributes&SE_GROUP_ENABLED)?2:(attributes&SE_GROUP_USE_FOR_DENY_ONLY)?1:3;
+    }
+  }
+  tokenFailure="not_appcontainer";if(isApp!=1)goto done;
+  tokenFailure="elevated_token_inherited";if(elevation.TokenIsElevated)goto done;
+  tokenFailure="integrity_above_low";if(observedIntegrity>SECURITY_MANDATORY_LOW_RID)goto done;
+  tokenFailure="ambient_capabilities";if(observedCapabilities!=0)goto done;
+  tokenFailure="package_sid_mismatch";if(!observedPackageMatches)goto done;
+  tokenFailure="ambient_privileges";if(observedUnexpectedPrivileges!=0)goto done;
+  tokenFailure="administrator_group_inherited";if(observedAdminMode>=2)goto done;
+  ok=TRUE;tokenFailure="contained";
 done:
   CloseHandle(token);return ok;
 }
@@ -87,11 +145,43 @@ static BOOL empty_test_root(const wchar_t *path) {
   }while(FindNextFileW(search,&found));
   FindClose(search);return empty;
 }
+static BOOL minimal_worker_environment(HANDLE token,wchar_t *out,size_t capacity) {
+  /* AppContainer creation needs normal OS profile paths. Build them from the
+   * token's OS environment, WITHOUT inheriting parent process variables, then
+   * copy only this fixed path whitelist. Never pass the complete block. */
+  LPVOID block=NULL;
+  if(!CreateEnvironmentBlock(&block,token,FALSE))return FALSE;
+  const wchar_t *names[]={L"APPDATA",L"LOCALAPPDATA",L"PATH",L"SystemDrive",L"SystemRoot",
+    L"TEMP",L"TMP",L"USERPROFILE",L"windir"};
+  size_t offset=0;BOOL ok=FALSE;wchar_t windows[1024]={0};
+  if(!GetWindowsDirectoryW(windows,1024))goto done;
+  for(size_t i=0;i<sizeof(names)/sizeof(names[0]);i++){
+    const wchar_t *value=NULL;size_t nameLength=wcslen(names[i]);
+    if(wcscmp(names[i],L"PATH")){
+      for(const wchar_t *entry=(const wchar_t *)block;*entry;entry+=wcslen(entry)+1){
+        if(_wcsnicmp(entry,names[i],nameLength)==0&&entry[nameLength]==L'='){
+          value=entry+nameLength+1;break;
+        }
+      }
+      if(!value||!*value){SetLastError(ERROR_ENVVAR_NOT_FOUND);goto done;}
+    }
+    int written=wcscmp(names[i],L"PATH")
+      ?_snwprintf_s(out+offset,capacity-offset,_TRUNCATE,L"%ls=%ls",names[i],value)
+      :_snwprintf_s(out+offset,capacity-offset,_TRUNCATE,L"PATH=%ls\\System32",windows);
+    if(written<=0||offset+(size_t)written+2>capacity){SetLastError(ERROR_BUFFER_OVERFLOW);goto done;}
+    offset+=(size_t)written+1;
+  }
+  out[offset]=L'\0';ok=TRUE;
+done:
+  {DWORD error=GetLastError();DestroyEnvironmentBlock(block);if(!ok)SetLastError(error);}
+  return ok;
+}
 static int fixed_worker(int argc,wchar_t **argv) {
   if(argc!=7||!token_is_contained(GetCurrentProcess(),NULL))return 10;
   BOOL inJob=FALSE;if(!IsProcessInJob(GetCurrentProcess(),NULL,&inJob)||!inJob)return 11;
   wchar_t leak[8]={0};
-  if(GetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",leak,8)!=0)return 12;
+  SetLastError(ERROR_SUCCESS);
+  if(GetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",leak,8)!=0||GetLastError()!=ERROR_ENVVAR_NOT_FOUND)return 12;
   char contents[64]={0};DWORD read=0;
   if(!read_fixture(argv[2],contents,sizeof(contents),&read)||strcmp(contents,"allowed-fixture"))return 13;
   HANDLE denied=CreateFileW(argv[3],GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
@@ -140,7 +230,7 @@ int wmain(int argc,wchar_t **argv) {
   const char *stage="fixture_setup";DWORD error=0,childExit=STILL_ACTIVE;int result=77;
   wchar_t fixture[1200]={0},code[1200]={0},data[1200]={0},exe[1300]={0};
   wchar_t allowed[1300]={0},denied[1300]={0},pidFile[1300]={0},profile[100]={0};
-  HANDLE token=NULL,job=NULL,descendant=NULL;PSID appSid=NULL;
+  HANDLE token=NULL,workerToken=NULL,job=NULL,descendant=NULL;PSID appSid=NULL;
   LPWSTR ownerSid=NULL,appText=NULL;BOOL profileCreated=FALSE,descendantVerified=FALSE;
   PROCESS_INFORMATION child={0};
   LPPROC_THREAD_ATTRIBUTE_LIST attributes=NULL;BOOL attributesInitialized=FALSE;
@@ -154,7 +244,7 @@ int wmain(int argc,wchar_t **argv) {
     _snwprintf_s(denied,1300,_TRUNCATE,L"%ls\\outside-canary.txt",fixture)<=0||
     _snwprintf_s(pidFile,1300,_TRUNCATE,L"%ls\\child.pid",data)<=0)goto cleanup;
   union {TOKEN_USER alignment;BYTE bytes[sizeof(TOKEN_USER)+SECURITY_MAX_SID_SIZE];} user={0};DWORD returned=0;
-  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token)||
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY|TOKEN_DUPLICATE,&token)||
     !GetTokenInformation(token,TokenUser,user.bytes,sizeof(user.bytes),&returned)||
     !ConvertSidToStringSidW(((TOKEN_USER *)user.bytes)->User.Sid,&ownerSid))goto cleanup;
   _snwprintf_s(profile,100,_TRUNCATE,L"Nexowire.Core.Probe.%lu.%llx",(unsigned long)GetCurrentProcessId(),GetTickCount64());
@@ -193,18 +283,16 @@ int wmain(int argc,wchar_t **argv) {
   if(!UpdateProcThreadAttribute(attributes,0,PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
     &capabilities,sizeof(capabilities),NULL,NULL))goto cleanup;
   STARTUPINFOEXW start={0};start.StartupInfo.cb=sizeof(start);start.lpAttributeList=attributes;
-  wchar_t command[8192]={0},windows[1024]={0},environment[4096]={0};
-  if(!GetWindowsDirectoryW(windows,1024))goto cleanup;
-  int length=_snwprintf_s(environment,4096,_TRUNCATE,L"PATH=%ls\\System32",windows);
-  if(length<=0)goto cleanup;
-  int second=_snwprintf_s(environment+length+1,4096-(size_t)length-1,_TRUNCATE,L"SystemRoot=%ls",windows);
-  if(second<=0)goto cleanup;
-  environment[length+1+second+1]=L'\0';
-  if(!SetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",L"ci-parent-only-not-a-real-secret")||
-    _snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\"",
+  wchar_t command[8192]={0},environment[16384]={0};
+  stage="minimal_os_profile_environment";
+  if(!SetEnvironmentVariableW(L"NEXOWIRE_SANDBOX_PARENT_SECRET",L"ci-parent-only-not-a-real-secret"))goto cleanup;
+  if(!minimal_worker_environment(token,environment,sizeof(environment)/sizeof(environment[0])))goto cleanup;
+  if(_snwprintf_s(command,8192,_TRUNCATE,L"\"%ls\" --inside-fixed \"%ls\" \"%ls\" %lu %u \"%ls\"",
     exe,allowed,denied,(unsigned long)GetCurrentProcessId(),(unsigned)ntohs(address.sin_port),pidFile)<=0)goto cleanup;
   stage="suspended_appcontainer_create";
-  if(!CreateProcessW(exe,command,NULL,NULL,FALSE,EXTENDED_STARTUPINFO_PRESENT|CREATE_SUSPENDED|
+  workerToken=restricted_worker_token(token);
+  if(!workerToken){stage="restricted_worker_token_create";goto cleanup;}
+  if(!CreateProcessAsUserW(workerToken,exe,command,NULL,NULL,FALSE,EXTENDED_STARTUPINFO_PRESENT|CREATE_SUSPENDED|
     CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,environment,data,&start.StartupInfo,&child))goto cleanup;
   stage="nested_job_assignment";
   if(!AssignProcessToJobObject(job,child.hProcess))goto cleanup;
@@ -250,12 +338,20 @@ cleanup:
   if(attributesInitialized)DeleteProcThreadAttributeList(attributes);
   if(attributes)HeapFree(GetProcessHeap(),0,attributes);
   if(listener!=INVALID_SOCKET)closesocket(listener);if(socketsStarted)WSACleanup();
+  if(workerToken)CloseHandle(workerToken);
   if(token)CloseHandle(token);if(ownerSid)LocalFree(ownerSid);if(appText)LocalFree(appText);
   if(appSid)FreeSid(appSid);
   if(profileCreated){HRESULT deleted=DeleteAppContainerProfile(profile);if(FAILED(deleted)){result=1;stage="profile_cleanup_failed";error=(DWORD)deleted;}}
   printf("{\"version\":1,\"kind\":\"windows_appcontainer_fixed_probe_v1\",\"state\":\"%s\","
     "\"stage\":\"%s\",\"win32Error\":%lu,\"workerExit\":%lu,"
+    "\"tokenFailure\":\"%s\",\"tokenAppContainer\":%lu,\"tokenElevated\":%lu,"
+    "\"integrityRid\":%lu,\"capabilityCount\":%lu,\"packageMatches\":%s,"
+    "\"unexpectedPrivileges\":%lu,\"unexpectedEnabledPrivileges\":%lu,\"adminGroupMode\":%lu,"
     "\"coreAuthority\":false,\"productionWorkerInstalled\":false,\"physicalAcceptance\":\"NOT_PROVEN\"}\n",
-    result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit);
+    result==0?"OBSERVED":result==77?"UNAVAILABLE":"FAILED",stage,(unsigned long)error,(unsigned long)childExit,
+    tokenFailure,(unsigned long)observedApp,(unsigned long)observedElevation,
+    (unsigned long)observedIntegrity,(unsigned long)observedCapabilities,observedPackageMatches?"true":"false",
+    (unsigned long)observedUnexpectedPrivileges,(unsigned long)observedUnexpectedEnabledPrivileges,
+    (unsigned long)observedAdminMode);
   return result;
 }
