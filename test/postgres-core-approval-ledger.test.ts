@@ -10,6 +10,7 @@ import {PostgresCoreApprovalLedger,CoreApprovalBindingSchema,CoreApprovalCredent
 import {coreWebAuthnIntentHash as coreHash,type CoreWebAuthnIntent,type CoreWebAuthnAssertion}
   from '../src/security/core-webauthn-approval.js';
 import type {DispatchStorePool} from '../src/agent/postgres-broker-dispatch-authority.js';
+import type {CoreNativeProof} from '../src/protocol/core-native-consent-transport.js';
 
 // Real disposable PostgreSQL storage. Software authenticator keys, provisioning,
 // native readback and independent provenance are EXPLICIT TEST FIXTURES.
@@ -51,7 +52,9 @@ async function fixture(){
       'GRANT INSERT(challenge_id,nonce,authority_id,device_id,credential_id,intent,intent_sha256,issued_ms,expires_ms) '+
       'ON core_approval.challenges TO nexowire_approval_runtime; '+
       'GRANT UPDATE(state,receipt_id,assertion_sha256,assertion,previous_counter,next_counter,consumed_ms) '+
-      'ON core_approval.challenges TO nexowire_approval_runtime;');
+      'ON core_approval.challenges TO nexowire_approval_runtime; '+
+      'GRANT INSERT(receipt_id,authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms) '+
+      'ON core_approval.enrollment_consumptions TO nexowire_approval_runtime;');
   }catch(error){await admin.end();throw error;}
   const authorityId=randomUUID(),binding=scope(),keys=generateKeyPairSync('ec',{namedCurve:'prime256v1'});
   const credentialId=randomBytes(32).toString('base64url'),rpId='core.fixture.invalid';
@@ -273,6 +276,121 @@ test('real PostgreSQL approval: key rewrite, history erase/reopen and counter ro
   }finally{await f.close()}
 });
 
+// Software EC/native witnesses here are explicit fixtures. Real PostgreSQL
+// verifies durable one-use semantics, not a physical Windows approval ceremony.
+async function approved(f:Awaited<ReturnType<typeof fixture>>):Promise<CoreNativeProof>{
+  const {intent}=await f.issue(),r=await f.create().consumeAssertion(assertion(intent,f.keys.privateKey,0),intent);
+  return {...f.binding,challengeId:intent.challengeId,receiptId:r.receiptId,
+    approvedAtMs:r.consumedAtMs,consumed:true};
+}
+
+test('real PostgreSQL enrollment: approval readback cannot replace the separate one-use D1 handoff',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);
+    await assert.rejects(f.create().readEnrollmentProof(p.receiptId,f.binding),/CORE_APPROVAL_ENROLLMENT_NOT_CONSUMED/);
+    assert.deepEqual(await f.create().consumeForEnrollment(p,'a'.repeat(64)),p);
+    assert.deepEqual(await f.create().readEnrollmentProof(p.receiptId,f.binding),p);
+    await assert.rejects(f.create().consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
+    await assert.rejects(f.create().consumeForEnrollment(p,'b'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
+    assert.equal((await f.admin.query('SELECT issuer_spki_sha256 FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].issuer_spki_sha256,'a'.repeat(64));
+    for(const sql of ['UPDATE core_approval.enrollment_consumptions SET consumed_ms=1',
+      'DELETE FROM core_approval.enrollment_consumptions','TRUNCATE core_approval.enrollment_consumptions']){
+      await assert.rejects(f.runtime.query(sql),/permission denied/i);
+    }
+    await assert.rejects(f.admin.query('UPDATE core_approval.enrollment_consumptions SET consumed_ms=consumed_ms+1 '+
+      'WHERE receipt_id=$1',[p.receiptId]),/CORE_APPROVAL_ENROLLMENT_HISTORY_REWRITE_DENIED/);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: independent verifiers racing the same receipt admit exactly one',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);
+    const outcomes=await Promise.allSettled(Array.from({length:12},()=>f.create().consumeForEnrollment(p,'a'.repeat(64))));
+    assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);
+    assert.equal(outcomes.filter(r=>r.status==='rejected').length,11);
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'1');
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: lost handoff COMMIT ACK never becomes a successful retry',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);let lost=false,destroyed=false;
+    const wrapped:DispatchStorePool={async connect(){const c=await f.runtime.connect();return {
+      query:async(sql,values=[])=>{const r=await c.query(sql,values);
+        if(sql==='COMMIT'&&!lost){lost=true;throw Error('TEST_ENROLLMENT_ACK_LOST_AFTER_COMMIT')}
+        return {rows:r.rows as Record<string,unknown>[]}},release:(destroy=false)=>{destroyed||=destroy;c.release(destroy)}}}};
+    await assert.rejects(f.create({pool:wrapped}).consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_TRANSACTION_UNKNOWN/);
+    assert.equal(lost,true);assert.equal(destroyed,true);
+    await assert.rejects(f.create().consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
+    // Read-only reconciliation is possible, but it never authorizes a retry.
+    assert.deepEqual(await f.create().readEnrollmentProof(p.receiptId,f.binding),p);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: forged receipt fields and current native session changes deny handoff',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);
+    for(const change of [{challengeId:randomUUID()},{approvedAtMs:p.approvedAtMs+1},
+      {ownerAccountId:'forged-owner-account'},{windowsLogonSessionEpoch:randomUUID()},
+      {windowsUserSid:'S-1-5-18'},{grantGeneration:3},{revokeEpoch:1}]){
+      await assert.rejects(f.create().consumeForEnrollment({...p,...change},'a'.repeat(64)),
+        /CORE_APPROVAL_(?:ENROLLMENT_PROOF_MISMATCH|NATIVE_BINDING_UNVERIFIED)/);
+    }
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'0');
+    await f.create().consumeForEnrollment(p,'a'.repeat(64));
+    f.setNative({...f.binding,windowsLogonSessionEpoch:randomUUID()});
+    await assert.rejects(f.create().readEnrollmentProof(p.receiptId,f.binding),/CORE_APPROVAL_NATIVE_BINDING_UNVERIFIED/);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: database-clock expiry and final-witness revoke reject without reopening history',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);
+    const advanced:DispatchStorePool={async connect(){const c=await f.runtime.connect();return {
+      query:async(sql,values=[])=>{const r=await c.query(sql,values);
+        if(sql.includes('clock_timestamp()'))return {rows:[{now_ms:p.approvedAtMs+120000}]};
+        return {rows:r.rows as Record<string,unknown>[]}},release:(destroy=false)=>c.release(destroy)}}};
+    await assert.rejects(f.create({pool:advanced}).consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_PROOF_EXPIRED/);
+    let reads=0;
+    await assert.rejects(f.create({readProtectedNativeBinding:async()=>++reads===1?{binding:f.binding,
+      observedAtMs:Date.now(),protectedNativeWitness:true}:null}).consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_NATIVE_BINDING_UNVERIFIED/);
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'0');
+    assert.deepEqual(await f.create().consumeForEnrollment(p,'a'.repeat(64)),p);
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: revoke after handoff COMMIT suppresses readback and preserves the tombstone',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);let revoked=false;
+    const wrapped:DispatchStorePool={async connect(){const c=await f.runtime.connect();return {
+      query:async(sql,values=[])=>{const r=await c.query(sql,values);
+        if(sql==='COMMIT'&&!revoked){revoked=true;
+          await f.admin.query("UPDATE core_approval.bindings SET state='REVOKED' WHERE authority_id=$1",[f.authorityId]);}
+        return {rows:r.rows as Record<string,unknown>[]}},release:(destroy=false)=>c.release(destroy)}}};
+    await assert.rejects(f.create({pool:wrapped}).consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_BINDING_REVOKED_OR_STALE/);
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'1');
+  }finally{await f.close()}
+});
+
+test('real PostgreSQL enrollment: a controlled late ACK denies success without undoing consumption',integration,async()=>{
+  const f=await fixture(),realNow=Date.now;try{
+    const p=await approved(f);
+    const wrapped:DispatchStorePool={async connect(){const c=await f.runtime.connect();return {
+      query:async(sql,values=[])=>{const r=await c.query(sql,values);
+        if(sql==='COMMIT')Date.now=()=>p.approvedAtMs+120001;
+        return {rows:r.rows as Record<string,unknown>[]}},release:(destroy=false)=>c.release(destroy)}}};
+    try{await assert.rejects(f.create({pool:wrapped}).consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_ENROLLMENT_ACK_EXPIRED_OR_UNKNOWN/)}finally{Date.now=realNow}
+    await assert.rejects(f.create().consumeForEnrollment(p,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
+  }finally{Date.now=realNow;await f.close()}
+});
+
 test('real PostgreSQL restart: native approval tombstone and counter survive actual database restart',{
   ...integration,skip:!enabled||!phase?'separate staged real restart; physical NOT_PROVEN':false,
 },async()=>{
@@ -281,15 +399,19 @@ test('real PostgreSQL restart: native approval tombstone and counter survive act
     const f=await fixture();try{
       const {intent}=await f.issue(),raw=assertion(intent,f.keys.privateKey,0);
       const receipt=await f.create().consumeAssertion(raw,intent);
+      const proof:CoreNativeProof={...f.binding,challengeId:intent.challengeId,receiptId:receipt.receiptId,
+        approvedAtMs:receipt.consumedAtMs,consumed:true};
+      await f.create().consumeForEnrollment(proof,'a'.repeat(64));
       const started=(await f.admin.query('SELECT pg_postmaster_start_time() AS started')).rows[0].started as Date;
       await writeFile(filename,JSON.stringify({authorityId:f.authorityId,binding:f.binding,intent,raw,
-        receipt,serverStarted:started.toISOString()}),{mode:0o600});
+        receipt,proof,serverStarted:started.toISOString()}),{mode:0o600});
     }finally{await f.close()}
     return;
   }
   assert.equal(phase,'verify');
   const saved=JSON.parse(await readFile(filename,'utf8')) as {authorityId:string;binding:CoreApprovalBinding;
-    intent:CoreWebAuthnIntent;raw:CoreWebAuthnAssertion;receipt:{receiptId:string};serverStarted:string};
+    intent:CoreWebAuthnIntent;raw:CoreWebAuthnAssertion;receipt:{receiptId:string};
+    proof:CoreNativeProof;serverStarted:string};
   CoreApprovalBindingSchema.parse(saved.binding);
   const runtime=pool('nexowire_approval_runtime');
   try{
@@ -301,5 +423,7 @@ test('real PostgreSQL restart: native approval tombstone and counter survive act
     await assert.rejects(ledger.consumeAssertion(saved.raw,saved.intent),/CORE_APPROVAL_CHALLENGE_REPLAY_OR_SCOPE/);
     const receipt=await ledger.readConsumed(saved.receipt.receiptId,saved.binding);
     assert.equal(receipt.coreAuthority,false);assert.equal(receipt.consumed,true);
+    assert.deepEqual(await ledger.readEnrollmentProof(saved.receipt.receiptId,saved.binding),saved.proof);
+    await assert.rejects(ledger.consumeForEnrollment(saved.proof,'a'.repeat(64)),/CORE_APPROVAL_ENROLLMENT_REPLAY/);
   }finally{await runtime.end();await rm(filename,{force:true})}
 });
