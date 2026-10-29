@@ -76,6 +76,12 @@ function addOnce(findings:string[],finding:string):void{
   if(!findings.includes(finding))findings.push(finding);
 }
 
+function matchingPrContexts(value:unknown,expectedPr:unknown):JsonRecord[]{
+  return Array.isArray(value)?value.filter(
+    (item):item is JsonRecord=>record(item)&&item.number===expectedPr,
+  ):[];
+}
+
 /** Pure parser for API payloads. Caller-supplied payloads are never authenticated. */
 export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
   const findings:string[]=[];
@@ -213,10 +219,11 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
         associations=Array.isArray(dispatchAssociations)?
           dispatchAssociations:[];
       }
-      const association=associations.find(item=>
-        record(item)&&item.number===expectedPr);
+      const matching=matchingPrContexts(associations,expectedPr);
+      if(matching.length>1)addOnce(findings,'RUN_PR_CONTEXT_AMBIGUOUS');
+      const association=matching.length===1?matching[0]:null;
       if(!record(association)){
-        addOnce(findings,'RUN_PR_CONTEXT_MISSING');
+        if(matching.length===0)addOnce(findings,'RUN_PR_CONTEXT_MISSING');
       }else{
         if(!record(pr)||!record(pr.head)||!record(association.head)||
            association.head.sha!==pr.head.sha){
@@ -248,6 +255,23 @@ export function auditGitHubCiPayload(input:unknown):CoreCiGitHubAudit{
       nestedRecord(run,'head_repository')?.full_name!==
         nestedRecord(recheckedRun,'head_repository')?.full_name){
       addOnce(findings,'RUN_CHANGED_DURING_AUDIT');
+    }
+
+    // The top-level run SHA/attempt may stay unchanged while GitHub's
+    // association metadata changes. Recheck the selected PR semantically;
+    // unrelated PR entries and their ordering do not change this context.
+    if(record(run)&&run.event==='pull_request'&&record(recheckedRun)){
+      const initial=matchingPrContexts(run.pull_requests,expectedPr);
+      const final=matchingPrContexts(recheckedRun.pull_requests,expectedPr);
+      const first=initial[0],last=final[0];
+      if(initial.length!==1||final.length!==1||!first||!last||
+         (['head','base'] as const).some(key=>{
+           const before=nestedRecord(first,key),after=nestedRecord(last,key);
+           return !before||!after||before.sha!==after.sha||
+             before.ref!==after.ref;
+         })){
+        addOnce(findings,'RUN_PR_CONTEXT_CHANGED_DURING_AUDIT');
+      }
     }
 
     if(!record(jobsEnvelope)||!Array.isArray(jobsEnvelope.jobs)){

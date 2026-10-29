@@ -9,6 +9,8 @@ import {
   REQUIRED_CORE_CI_JOBS,
 } from '../scripts/qa-core-ci-github-audit.js';
 
+type RunFixture=ReturnType<typeof fixtures>['run'];
+
 const headSha='a'.repeat(40);
 const baseSha='b'.repeat(40);
 const runId=40500012345;
@@ -403,5 +405,61 @@ test('missing PR base ref and a mismatched run head ref block evidence',()=>{
   assert.equal(report.snapshotConsistency,'BLOCKED');
   assert.ok(report.findings.includes('PR_BASE_REF_INVALID'));
   assert.ok(report.findings.includes('RUN_PR_HEAD_REF_MISMATCH'));
+});
+
+const changedRunContexts:Array<[string,(run:RunFixture)=>void]>=[
+  ['head ref',run=>{run.pull_requests[0]!.head.ref='other-head';}],
+  ['base ref at the same SHA',run=>{run.pull_requests[0]!.base.ref='release';}],
+  ['base SHA',run=>{run.pull_requests[0]!.base.sha='d'.repeat(40);}],
+  ['selected PR number',run=>{run.pull_requests[0]!.number=prNumber+1;}],
+  ['selected PR association disappears',run=>{run.pull_requests=[];}],
+];
+for(const [name,change] of changedRunContexts){
+  test('run recheck must reject changed PR association: '+name,async()=>{
+    const fixture=fixtures();
+    const changed=structuredClone(fixture.run);
+    change(changed);
+    const fake=fakeFetch([
+      {login:'synthetic-test-user',id:1},
+      fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,changed,
+    ]);
+    const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+    assert.equal(report.snapshotConsistency,'BLOCKED');
+    assert.ok(report.findings.includes('RUN_PR_CONTEXT_CHANGED_DURING_AUDIT'));
+    assert.equal(report.githubOriginAuthenticated,false);
+    assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+    assert.equal(report.productionCore,'NO_GO');
+  });
+}
+
+test('duplicate matching PR associations cannot produce unambiguous run evidence',()=>{
+  const fixture=fixtures();
+  fixture.run.pull_requests.push(structuredClone(fixture.run.pull_requests[0]!));
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('RUN_PR_CONTEXT_AMBIGUOUS'));
+});
+
+test('unrelated run PR associations and their ordering do not invalidate the selected context',async()=>{
+  const fixture=fixtures();
+  const changed=structuredClone(fixture.run);
+  const unrelated=structuredClone(changed.pull_requests[0]!);
+  unrelated.number=prNumber+1;
+  unrelated.base.ref='unrelated-base';
+  changed.pull_requests.unshift(unrelated);
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,changed,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.deepEqual(report.findings,[]);
+  assert.equal(report.githubOriginAuthenticated,false);
+  assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(report.productionCore,'NO_GO');
 });
 
