@@ -37,6 +37,15 @@ successful result is only OBSERVED for this fixed diagnostic and always has
 `coreAuthority=false`, `productionWorkerInstalled=false`, and physical
 acceptance NOT_PROVEN. A skipped result is not a production PASS.
 
+The first actual CI run `40909361627` compiled this diagnostic but reported
+UNAVAILABLE at `suspended_appcontainer_create`, Win32 error 203
+(ERROR_ENVVAR_NOT_FOUND). That skip is NOT a containment PASS. The follow-up
+builds an OS environment from the held user token with parent inheritance
+disabled, copies only nine explicit Windows profile/system path keys, and
+forces PATH to the real System32. The complete OS/parent environment block is
+never passed. The real child still has to reject the parent-only secret and
+satisfy every previous kernel invariant; none is weakened or skipped away.
+
 Still missing for a production #07 worker: a protected signed launcher and
 caller-authenticated immutable task policy; artifact/root provenance and
 hardlink/reparse race resistance; private desktop/input isolation; complete
