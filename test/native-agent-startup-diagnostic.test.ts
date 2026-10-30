@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp, readFile, rm, writeFile, symlink, stat, mkdir} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {initializeNativeAgentState, nativeAgentStartupDiagnosticPath,
   readNativeAgentStartupDiagnostic} from '../src/agent/native-agent-startup-diagnostic.js';
 import {AgentJournalWalError} from '../src/agent/operation-journal-wal.js';
@@ -105,4 +106,20 @@ test('a symlink diagnostic is ignored rather than followed', {skip: process.plat
   await rm(file);
   await symlink(target, file);
   assert.equal(await readNativeAgentStartupDiagnostic(options), null);
+});
+
+test('startup diagnostics bind the process and a cutover nonce without treating the nonce as authority', async t => {
+  const {homeDir} = await sandbox(t);
+  const nonce = randomUUID();
+  const options = {homeDir, env: {NEXOWIRE_UPDATE_STARTUP_NONCE: nonce}};
+  await initializeNativeAgentState(async () => {}, options);
+  const value = await readNativeAgentStartupDiagnostic(options);
+  assert.equal(value?.processId, process.pid);
+  assert.equal(value?.startupNonce, nonce);
+  assert.equal(value?.coreAuthorityVerified, false);
+  assert.equal(value?.activeConnectionVerified, false);
+  await initializeNativeAgentState(async () => {},
+    {homeDir, env: {NEXOWIRE_UPDATE_STARTUP_NONCE: 'Bearer secret-canary'}});
+  assert.equal((await readNativeAgentStartupDiagnostic({homeDir}))?.startupNonce, undefined);
+  assert.doesNotMatch(await readFile(nativeAgentStartupDiagnosticPath({homeDir}), 'utf8'), /secret-canary|Bearer/);
 });

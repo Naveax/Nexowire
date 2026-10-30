@@ -110,7 +110,10 @@ test('live update status accepts UTF-8 BOM from Windows PowerShell without maski
       error: null,
     };
     await fs.writeFile(file, '\uFEFF' + JSON.stringify(state), 'utf8');
-    assert.deepEqual(await readLiveUpdateState({ localAppData: temp }), state);
+    assert.deepEqual(await readLiveUpdateState({ localAppData: temp }),
+      {...state, agentStartupVerified: false, activeConnectionVerified: false});
+    await fs.writeFile(file, JSON.stringify({...state, activeConnectionVerified: true}));
+    await assert.rejects(readLiveUpdateState({localAppData: temp}));
     await fs.writeFile(file, '\uFEFF' + '{not-json', 'utf8');
     await assert.rejects(() => readLiveUpdateState({ localAppData: temp }), SyntaxError);
   } finally {

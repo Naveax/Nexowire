@@ -100,7 +100,7 @@ jobs:
             $payloadRoot = Join-Path $journalPayload 'Nexowire'
             $env:NEXOWIRE_JOURNAL_TEST_APP_ROOT = Join-Path $payloadRoot 'app'
             $bundledNode = Join-Path $payloadRoot 'runtime/node.exe'
-            & $bundledNode --test dist/test/agent-journal-restart-regression.test.js
+            & $bundledNode --test dist/test/agent-journal-restart-regression.test.js dist/test/live-update-startup-acceptance.test.js
             if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows journal restart regressions failed.' }
           } finally {
             Remove-Item Env:NEXOWIRE_JOURNAL_TEST_APP_ROOT -ErrorAction SilentlyContinue

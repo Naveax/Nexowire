@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
@@ -146,6 +146,8 @@ test('#974: the real Agent CLI reaches a disposable Hub after 3 crash restarts w
     const env = agentEnv(root, file, 'ws://127.0.0.1:' + address.port + '/agent');
     let deviceId: unknown;
     for (let restart = 0; restart < 3; restart++) {
+      const startupNonce = randomUUID();
+      env.NEXOWIRE_UPDATE_STARTUP_NONCE = startupNonce;
       let timer: NodeJS.Timeout | undefined;
       let agent: ReturnType<typeof launch>;
       const hello = new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -177,6 +179,8 @@ test('#974: the real Agent CLI reaches a disposable Hub after 3 crash restarts w
       assert.equal(diagnostic.phase, 'local-state-ready');
       assert.equal(diagnostic.automaticJournalRepair, false);
       assert.equal(diagnostic.activeConnectionVerified, false);
+      assert.equal(diagnostic.processId, agent.process.pid);
+      assert.equal(diagnostic.startupNonce, startupNonce);
       agent.process.kill('SIGKILL');
       await agent.exited;
     }

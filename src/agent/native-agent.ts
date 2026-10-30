@@ -416,20 +416,26 @@ export async function runNativeAgent(
   // launchers using the same Windows user/device identity must never both
   // attach to the Hub or mutate the same state files.
   const singletonLock = await acquireNativeAgentSingleton(identity.id);
-  try {
-    await initializeNativeAgentState(() => Promise.all([
-      processes.initialize(),
-      taskGraphs.initialize(),
-      runbooks.initialize(),
-      operationJournal.initialize(),
-    ]), {env});
-  } catch (error) {
-    await singletonLock?.close();
-    throw error;
-  }
-  // Start local CORE UI/authority polling only after winning the singleton.
-  const coreConsole = await createWindowsCoreConsoleAdmission({deviceId:identity.id,
-    credential:token,broker:privilegedBroker,env});
+  const coreConsole = await initializeNativeAgentState(async () => {
+    try {
+      const initialized = await Promise.allSettled([
+        processes.initialize(),
+        taskGraphs.initialize(),
+        runbooks.initialize(),
+        operationJournal.initialize(),
+      ]);
+      const failed = initialized.find(result => result.status === 'rejected');
+      if (failed?.status === 'rejected') throw failed.reason;
+      // Optional local authority construction is also part of initialization.
+      // A failed constructor must not leave a live singleton and a ready marker.
+      return await createWindowsCoreConsoleAdmission({deviceId:identity.id,
+        credential:token,broker:privilegedBroker,env});
+    } catch (error) {
+      try { operationJournal.close(); } catch { /* Preserve the original failure. */ }
+      await singletonLock?.close();
+      throw error;
+    }
+  }, {env});
   progressSupervisor.recover(processes.list());
   const progressWatchdogTimer = setInterval(() => {
     // Do not consume de-duplicated alerts while the Hub is unreachable.

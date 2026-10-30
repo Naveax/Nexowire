@@ -6,10 +6,25 @@ import path from 'node:path';
 import * as z from 'zod';
 import { NEXOWIRE_VERSION } from '../version.js';
 import type { PrivilegedBrokerClient } from '../agent/privileged-broker-client.js';
+import {renderWindowsAgentStartupGuard} from './windows-agent-startup.js';
 
 const REPOSITORY = 'Naveax/Nexowire';
 const LATEST_RELEASE_URL =
   'https://api.github.com/repos/' + REPOSITORY + '/releases/latest';
+const LIVE_UPDATE_SYSTEM32='C:\\Windows\\System32';
+const LIVE_UPDATE_POWERSHELL=LIVE_UPDATE_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
+
+/** Preserve owner-profile references, never executable/module hooks or secrets. */
+export function isolatedLiveUpdateEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return {
+    SystemRoot: 'C:\\Windows', windir: 'C:\\Windows',
+    ComSpec: LIVE_UPDATE_SYSTEM32+'\\cmd.exe',
+    PATH: LIVE_UPDATE_SYSTEM32+';C:\\Windows',
+    PSModulePath: LIVE_UPDATE_SYSTEM32+'\\WindowsPowerShell\\v1.0\\Modules',
+    ...(env.USERPROFILE ? {USERPROFILE: env.USERPROFILE} : {}),
+    ...(env.LOCALAPPDATA ? {LOCALAPPDATA: env.LOCALAPPDATA} : {}),
+  };
+}
 
 const UpdateStateSchema = z.object({
   schemaVersion: z.literal(1),
@@ -20,6 +35,7 @@ const UpdateStateSchema = z.object({
     'cutover_scheduled',
     'succeeded',
     'rolled_back',
+    'rollback_failed',
     'failed',
   ]),
   currentVersion: z.string(),
@@ -27,6 +43,8 @@ const UpdateStateSchema = z.object({
   buildId: z.string().nullable(),
   targetRoot: z.string().nullable(),
   machineComponentsPending: z.boolean(),
+  agentStartupVerified: z.boolean().default(false),
+  activeConnectionVerified: z.literal(false).default(false),
   updatedAt: z.string(),
   error: z.string().nullable(),
 });
@@ -138,7 +156,7 @@ function isoNow(): string {
 
 async function writeState(
   options: LiveUpdateOptions,
-  state: LiveUpdateState,
+  state: z.input<typeof UpdateStateSchema>,
 ): Promise<void> {
   const file = statePath(options);
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -173,6 +191,8 @@ export async function readLiveUpdateState(
         buildId: null,
         targetRoot: null,
         machineComponentsPending: false,
+        agentStartupVerified: false,
+        activeConnectionVerified: false,
         updatedAt: isoNow(),
         error: null,
       };
@@ -275,7 +295,7 @@ async function runPowerShell(
 ): Promise<{ stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
     const child = spawn(
-      'powershell.exe',
+      LIVE_UPDATE_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -287,6 +307,7 @@ async function runPowerShell(
       ],
       {
         windowsHide: true,
+        env: isolatedLiveUpdateEnvironment(), cwd: LIVE_UPDATE_SYSTEM32, shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -432,14 +453,21 @@ export function renderWindowsCutoverScript(input: {
   buildId: string;
   targetRoot: string;
   localAppData: string;
+  currentVersion?: string;
+  homeDir?: string;
+  agentStartupTimeoutSeconds?: number;
 }): string {
+  const startupTimeout = input.agentStartupTimeoutSeconds ?? 120;
+  if (!Number.isInteger(startupTimeout) || startupTimeout < 1 || startupTimeout > 300) {
+    throw new Error('Invalid Agent startup timeout.');
+  }
   const updateDir = path.join(
     input.localAppData,
     'Nexowire',
     'update',
   );
   const statusFile = path.join(updateDir, 'status.json');
-  const home = process.env.USERPROFILE ?? os.homedir();
+  const home = input.homeDir ?? process.env.USERPROFILE ?? os.homedir();
   const agentLauncher = path.join(
     home,
     '.nexowire',
@@ -455,6 +483,7 @@ export function renderWindowsCutoverScript(input: {
   return [
     "$ErrorActionPreference='Stop'",
     '$TargetVersion=' + psLiteral(input.targetVersion),
+    '$OriginalVersion=' + psLiteral(input.currentVersion ?? NEXOWIRE_VERSION),
     '$BuildId=' + psLiteral(input.buildId),
     '$NewRoot=' + psLiteral(input.targetRoot),
     '$StatusFile=' + psLiteral(statusFile),
@@ -464,8 +493,14 @@ export function renderWindowsCutoverScript(input: {
     '$AgentTask=\'Nexowire Native Agent\'',
     '$HubTask=\'Nexowire Hub\'',
     '$backups=@{}',
+    '$backupHashes=@{}',
+    '$StartupNonce=[guid]::NewGuid().ToString()',
+    '$AgentStartupTimeout=' + String(startupTimeout),
+    '$AgentStartupVerified=$false',
+    '$CutoverStarted=$false',
     'function Write-State([string]$state,[string]$errorMessage=$null,[bool]$machinePending=$false){',
-    '  $obj=[ordered]@{schemaVersion=1;state=$state;currentVersion=$TargetVersion;targetVersion=$TargetVersion;buildId=$BuildId;targetRoot=$NewRoot;machineComponentsPending=$machinePending;updatedAt=(Get-Date).ToUniversalTime().ToString(\'o\');error=$errorMessage}',
+    '  $current=if($state -eq "rollback_failed"){\'unknown\'}elseif($state -eq "succeeded"){$TargetVersion}else{$OriginalVersion}',
+    '  $obj=[ordered]@{schemaVersion=1;state=$state;currentVersion=$current;targetVersion=$TargetVersion;buildId=$BuildId;targetRoot=$NewRoot;machineComponentsPending=$machinePending;agentStartupVerified=$AgentStartupVerified;activeConnectionVerified=$false;updatedAt=(Get-Date).ToUniversalTime().ToString(\'o\');error=$errorMessage}',
     '  $json=$obj|ConvertTo-Json -Depth 5',
     '  $tmp=$StatusFile+\'.tmp\'',
     '  Set-Content -LiteralPath $tmp -Value $json -Encoding UTF8',
@@ -473,47 +508,76 @@ export function renderWindowsCutoverScript(input: {
     '}',
     'function Patch-Launcher([string]$file){',
     '  if(-not (Test-Path -LiteralPath $file)){return}',
+    '  $originalHash=(Get-FileHash -LiteralPath $file -Algorithm SHA256 -ErrorAction Stop).Hash',
     '  $text=Get-Content -LiteralPath $file -Raw',
-    '  if($text.Contains($NewRoot)){return}',
     "  $pattern=[regex]::Escape((Join-Path $env:LOCALAPPDATA 'Nexowire\\versions'))+'\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}'",
-    '  $match=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
-    '  if(-not $match.Success){throw (\'Could not find versioned Nexowire runtime in launcher: \'+$file)}',
-    '  $backup=$file+\'.update-rollback\'',
+    '  $replacement=$text',
+    '  if(-not $text.Contains($NewRoot)){',
+    '    $match=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
+    '    if(-not $match.Success){throw \'UPDATE_LAUNCHER_RUNTIME_NOT_FOUND\'}',
+    '    $replacement=$text.Replace($match.Value,$NewRoot)',
+    '  }',
+    '  if($file -eq $AgentLauncher){',
+    String.raw`    $noncePattern='(?m)^\$env:NEXOWIRE_UPDATE_STARTUP_NONCE=''[a-fA-F0-9-]{36}''\r?\n?'`,
+    String.raw`    $replacement=[regex]::Replace($replacement,$noncePattern,'')`,
+    String.raw`    if($replacement -match '\$env:NEXOWIRE_UPDATE_STARTUP_NONCE\s*='){throw 'UPDATE_AGENT_NONCE_CONFIG_UNSUPPORTED'}`,
+    String.raw`    $replacement='$env:NEXOWIRE_UPDATE_STARTUP_NONCE='''+$StartupNonce+"'"+[Environment]::NewLine+$replacement`,
+    '  }',
+    '  if($replacement -ceq $text){return}',
+    '  $backup=$file+\'.update-rollback.\'+$StartupNonce',
     '  Copy-Item -LiteralPath $file -Destination $backup -Force',
+    '  if((Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash -ne $originalHash -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $originalHash){throw \'UPDATE_LAUNCHER_CHANGED_DURING_BACKUP\'}',
     '  $backups[$file]=$backup',
-    '  Set-Content -LiteralPath $file -Value ($text.Replace($match.Value,$NewRoot)) -Encoding UTF8',
+    '  $backupHashes[$file]=$originalHash',
+    '  Set-Content -LiteralPath $file -Value $replacement -Encoding UTF8',
     '}',
     'function Restore-Launchers {',
-    '  foreach($entry in $backups.GetEnumerator()){Copy-Item -LiteralPath $entry.Value -Destination $entry.Key -Force}',
+    '  foreach($entry in $backups.GetEnumerator()){',
+    '    if((Get-FileHash -LiteralPath $entry.Value -Algorithm SHA256 -ErrorAction Stop).Hash -ne $backupHashes[$entry.Key]){throw \'UPDATE_ROLLBACK_BACKUP_CHANGED\'}',
+    '    Copy-Item -LiteralPath $entry.Value -Destination $entry.Key -Force -ErrorAction Stop',
+    '    if((Get-FileHash -LiteralPath $entry.Key -Algorithm SHA256 -ErrorAction Stop).Hash -ne $backupHashes[$entry.Key]){throw \'UPDATE_LAUNCHER_RESTORE_MISMATCH\'}',
+    '  }',
     '}',
     'function Task-Exists([string]$name){return $null -ne (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue)}',
     'function Task-Enabled([string]$name){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;return ($null -ne $task) -and ([string]$task.State -ne "Disabled")}',
     'function Wait-Port([int]$port,[int]$seconds){$until=(Get-Date).AddSeconds($seconds);while((Get-Date)-lt $until){if(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue){return $true};Start-Sleep -Milliseconds 500};return $false}',
-    'function Wait-Agent([int]$seconds){$until=(Get-Date).AddSeconds($seconds);while((Get-Date)-lt $until){$p=Get-CimInstance Win32_Process -Filter "Name=\'node.exe\'" -ErrorAction SilentlyContinue|Where-Object{$_.CommandLine -match [regex]::Escape($NewRoot) -and $_.CommandLine -match \'cli\\.js agent run\'};if($p){return $true};Start-Sleep -Milliseconds 500};return $false}',
+    ...renderWindowsAgentStartupGuard(),
     'Start-Sleep -Seconds 2',
     "$HubBootTask='Nexowire Hub Boot'",
     '$hubBootInstalled=Task-Exists $HubBootTask',
-    '$hadAgent=Task-Exists $AgentTask',
+    '$hadAgent=Task-Enabled $AgentTask',
     '$hadHub=(Task-Enabled $HubTask) -and -not $hubBootInstalled',
     'try {',
-    '  if($hadAgent){Stop-ScheduledTask -TaskName $AgentTask -ErrorAction SilentlyContinue}',
-    '  if($hadHub){Stop-ScheduledTask -TaskName $HubTask -ErrorAction SilentlyContinue}',
+    '  if(-not $hadAgent -and -not $hadHub){throw \'UPDATE_NO_ENABLED_USER_COMPONENTS\'}',
+    '  if($hadAgent){',
+    '    if(-not (Test-Path -LiteralPath $AgentLauncher -PathType Leaf)){throw \'UPDATE_AGENT_LAUNCHER_MISSING\'}',
+    '    $AgentStartupDiagnostic=Get-AgentStartupDiagnosticPath',
+    '  }',
+    '  if($hadHub -and -not (Test-Path -LiteralPath $HubLauncher -PathType Leaf)){throw \'UPDATE_HUB_LAUNCHER_MISSING\'}',
+    '  $CutoverStarted=$true',
+    '  if($hadAgent){Stop-ScheduledTask -TaskName $AgentTask -ErrorAction Stop}',
+    '  if($hadHub){Stop-ScheduledTask -TaskName $HubTask -ErrorAction Stop}',
     '  Start-Sleep -Seconds 1',
     '  Patch-Launcher $AgentLauncher',
     '  Patch-Launcher $HubLauncher',
     '  Patch-Launcher $AutoLauncher',
     '  if($hadHub){Start-ScheduledTask -TaskName $HubTask; if(-not (Wait-Port 43110 25)){throw \'Updated Hub did not become healthy on 43110\'}}',
-    '  if($hadAgent){Start-ScheduledTask -TaskName $AgentTask; if(-not (Wait-Agent 25)){throw \'Updated Agent did not start from the new runtime\'}}',
+    '  if($hadAgent){Start-ScheduledTask -TaskName $AgentTask; if(-not (Wait-Agent $AgentStartupTimeout)){throw \'Updated Agent did not start from the new runtime: UPDATE_AGENT_STARTUP_UNVERIFIED\'}; $AgentStartupVerified=$true}',
     '  $machinePending=(Task-Exists \'Nexowire Hub Boot\') -or (Task-Exists \'Nexowire Privileged Broker\')',
     '  Write-State \'succeeded\' $null $machinePending',
     '} catch {',
     '  $message=$_.Exception.Message',
-    '  if($hadAgent){Stop-ScheduledTask -TaskName $AgentTask -ErrorAction SilentlyContinue}',
-    '  if($hadHub){Stop-ScheduledTask -TaskName $HubTask -ErrorAction SilentlyContinue}',
-    '  Restore-Launchers',
-    '  if($hadHub){Start-ScheduledTask -TaskName $HubTask -ErrorAction SilentlyContinue}',
-    '  Start-Sleep -Seconds 2',
-    '  if($hadAgent){Start-ScheduledTask -TaskName $AgentTask -ErrorAction SilentlyContinue}',
+    '  $AgentStartupVerified=$false',
+    '  if(-not $CutoverStarted){Write-State \'failed\' $message $false; exit 1}',
+    '  $rollbackErrors=New-Object System.Collections.Generic.List[string]',
+    '  if($hadAgent){try {Stop-ScheduledTask -TaskName $AgentTask -ErrorAction Stop} catch {$rollbackErrors.Add("AGENT_STOP: "+$_.Exception.Message)}}',
+    '  if($hadHub){try {Stop-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_STOP: "+$_.Exception.Message)}}',
+    '  if($rollbackErrors.Count -eq 0){try {Restore-Launchers} catch {$rollbackErrors.Add("LAUNCHER_RESTORE: "+$_.Exception.Message)}}',
+    '  if($rollbackErrors.Count -eq 0){',
+    '    if($hadHub){try {Start-ScheduledTask -TaskName $HubTask -ErrorAction Stop} catch {$rollbackErrors.Add("HUB_RESTART: "+$_.Exception.Message)}}',
+    '    if($hadAgent){try {Start-ScheduledTask -TaskName $AgentTask -ErrorAction Stop} catch {$rollbackErrors.Add("AGENT_RESTART: "+$_.Exception.Message)}}',
+    '  }',
+    '  if($rollbackErrors.Count -gt 0){Write-State \'rollback_failed\' ($message+"; "+($rollbackErrors -join "; ")) $false; exit 2}',
     '  Write-State \'rolled_back\' $message $false',
     '  exit 1',
     '}',
@@ -598,6 +662,8 @@ export async function applyLatestLiveUpdate(
         buildId: staged.buildId,
         targetRoot: staged.targetRoot,
         localAppData: localAppData(options),
+        currentVersion: NEXOWIRE_VERSION,
+        homeDir: options.env?.USERPROFILE ?? process.env.USERPROFILE ?? os.homedir(),
       }),
       'utf8',
     );
@@ -613,7 +679,7 @@ export async function applyLatestLiveUpdate(
       error: null,
     });
     const child = spawn(
-      'powershell.exe',
+      LIVE_UPDATE_POWERSHELL,
       [
         '-NoLogo',
         '-NoProfile',
@@ -625,10 +691,18 @@ export async function applyLatestLiveUpdate(
       ],
       {
         detached: true,
+        env: isolatedLiveUpdateEnvironment({...options.env,
+          USERPROFILE: options.env?.USERPROFILE ?? process.env.USERPROFILE,
+          LOCALAPPDATA: localAppData(options)}),
+        cwd: LIVE_UPDATE_SYSTEM32, shell: false,
         windowsHide: true,
         stdio: 'ignore',
       },
     );
+    await new Promise<void>((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', reject);
+    });
     child.unref();
     return {
       scheduled: true,

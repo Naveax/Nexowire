@@ -13,6 +13,8 @@ const FailureCode = z.enum([
 const Diagnostic = z.object({
   schemaVersion: z.literal(1),
   version: z.string().min(1).max(64),
+  processId: z.number().int().positive().max(0x7fffffff).optional(),
+  startupNonce: z.string().uuid().optional(),
   recordedAt: z.string().datetime(),
   phase: z.enum(['initialization-failed', 'local-state-ready']),
   failureCode: FailureCode.nullable(),
@@ -71,6 +73,10 @@ async function record(phase: NativeAgentStartupDiagnostic['phase'],
     ? Math.min(999, (previous?.consecutiveFailures ?? 0) + 1) : 0;
   const value: NativeAgentStartupDiagnostic = {
     schemaVersion: 1, version: NEXOWIRE_VERSION,
+    processId: process.pid,
+    ...(options.env?.NEXOWIRE_UPDATE_STARTUP_NONCE &&
+      z.string().uuid().safeParse(options.env.NEXOWIRE_UPDATE_STARTUP_NONCE).success
+      ? {startupNonce: options.env.NEXOWIRE_UPDATE_STARTUP_NONCE} : {}),
     recordedAt: new Date().toISOString(), phase,
     failureCode: failed ? code?.success ? code.data : 'NATIVE_AGENT_INITIALIZATION_FAILED' : null,
     consecutiveFailures, restartLoopDetected: consecutiveFailures >= 3,
