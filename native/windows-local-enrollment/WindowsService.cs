@@ -19,7 +19,7 @@ internal static class WindowsService
     private static extern IntPtr RegisterServiceCtrlHandlerExW(string name,Handler handler,IntPtr context);
     [DllImport("advapi32.dll",SetLastError=true)] private static extern bool SetServiceStatus(IntPtr handle,ref Status status);
     private static IntPtr handle;
-    private static readonly ServiceMain MainCallback=Main;
+    private static readonly ServiceMain MainCallback=OnServiceMain;
     private static readonly Handler HandlerCallback=Control;
     internal static void Run()
     {
@@ -37,7 +37,7 @@ internal static class WindowsService
     {
         if(control is 1 or 5){Set(3);Stop.Cancel();}return 0;
     }
-    private static void Main(uint argc,IntPtr argv)
+    private static void OnServiceMain(uint argc,IntPtr argv)
     {
         handle=RegisterServiceCtrlHandlerExW(Name,HandlerCallback,IntPtr.Zero);
         if(handle==IntPtr.Zero)return;

@@ -28,4 +28,8 @@ test('actual Windows CNG non-exportable diagnostic key interoperates with v2 ver
   assert.equal(verifyPersistentEnrollmentSession(input).mayDispatch,false);
   input.expected.revoked=true;
   assert.throws(()=>verifyPersistentEnrollmentSession(input),/V2_REJECTED/);
+  const unsupported=spawnSync(exe,['--enroll','unused','--yes'],{encoding:'utf8',timeout:10000,
+    maxBuffer:1024,windowsHide:true});
+  assert.ifError(unsupported.error);assert.equal(unsupported.status,2);
+  assert.match(unsupported.stderr,/INVALID_COMMAND/);
 });

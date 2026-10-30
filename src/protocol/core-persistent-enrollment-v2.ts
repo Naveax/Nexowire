@@ -16,7 +16,7 @@ export type PersistentEnrollmentV2=z.infer<typeof PersistentEnrollmentV2Schema>;
 export const PersistentSessionV2Schema=z.strictObject({
   version:z.literal(2),enrollmentSha256:hash,nonce:id,
   audience:z.literal('nexowire.local-enrollment.session'),
-  bootId:id,windowsSessionId:z.number().int().nonnegative().safe(),
+  bootId:id,windowsSessionId:z.number().int().positive().safe(),
   ownerSid:sid,logonLuid:z.string().regex(/^[a-f0-9]{16}$/).refine(v=>!/^0+$/.test(v)),
   observedAtMs:epoch,validUntilMs:epoch,
 }).refine(v=>v.validUntilMs>v.observedAtMs&&v.validUntilMs-v.observedAtMs<=30000);

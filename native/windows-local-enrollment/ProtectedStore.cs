@@ -27,7 +27,7 @@ internal static class ProtectedStore
             Protocol.Require(ancestor.Exists && (ancestor.Attributes & FileAttributes.ReparsePoint) == 0);
         var acl=item.GetAccessControl(AccessControlSections.Owner|AccessControlSections.Access);
         Protocol.Require(acl.AreAccessRulesProtected);
-        Protocol.Require(acl.GetOwner(typeof(SecurityIdentifier)).Value is "S-1-5-18" or "S-1-5-32-544");
+        Protocol.Require(acl.GetOwner(typeof(SecurityIdentifier))?.Value is "S-1-5-18" or "S-1-5-32-544");
         var found = new HashSet<string>();
         foreach(FileSystemAccessRule ace in acl.GetAccessRules(true,true,typeof(SecurityIdentifier)))
         {
@@ -59,7 +59,7 @@ internal static class ProtectedStore
         var info=new FileInfo(path);
         Protocol.Require(info.Exists && (info.Attributes & FileAttributes.ReparsePoint)==0 && info.Length<=16384);
         var acl=info.GetAccessControl(AccessControlSections.Owner|AccessControlSections.Access);
-        Protocol.Require(acl.GetOwner(typeof(SecurityIdentifier)).Value is "S-1-5-18" or "S-1-5-32-544");
+        Protocol.Require(acl.GetOwner(typeof(SecurityIdentifier))?.Value is "S-1-5-18" or "S-1-5-32-544");
         var found=new HashSet<string>();
         foreach(FileSystemAccessRule ace in acl.GetAccessRules(true,true,typeof(SecurityIdentifier)))
         {
@@ -126,7 +126,9 @@ internal static class ProtectedStore
     }
     private static void AssertKeyAcl(CngKey key)
     {
-        var sd=new RawSecurityDescriptor(key.GetProperty("Security Descr",(CngPropertyOptions)4).GetValue(),0);
+        var rawSecurity=key.GetProperty("Security Descr",(CngPropertyOptions)4).GetValue()
+            ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
+        var sd=new RawSecurityDescriptor(rawSecurity,0);
         Protocol.Require(sd.DiscretionaryAcl is not null && sd.DiscretionaryAcl.Count==2);
         var found=new HashSet<string>();
         foreach(GenericAce raw in sd.DiscretionaryAcl!)

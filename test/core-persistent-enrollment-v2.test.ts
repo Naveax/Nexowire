@@ -77,3 +77,7 @@ test('authority challenge and device witness have distinct signature domains',()
   f.session=signed(f.session.payload,persistentSessionChallengeBytes(f.session.payload));
   assert.throws(()=>verifyPersistentEnrollmentSession(f),/V2_REJECTED/);
 });
+test('session zero cannot represent physical console enrollment',()=>{
+  const f=fixture();
+  assert.throws(()=>persistentSessionBytes({...f.session.payload,windowsSessionId:0}));
+});
