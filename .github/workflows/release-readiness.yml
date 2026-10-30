@@ -20,9 +20,13 @@ on:
       - "test/release-tag.test.ts"
       - "scripts/check-release-package.ts"
       - "scripts/build-windows-user-bundle.ts"
+      - "scripts/windows-shortcut-interop.ts"
+      - "scripts/generate-windows-stable-setup.ts"
       - "scripts/smoke-windows-user-setup.ts"
+      - "installers/**"
       - "scripts/check-release-tag.ts"
       - "test/windows-user-bundle.test.ts"
+      - "test/windows-stable-setup.test.ts"
       - "scripts/generate-release-metadata.ts"
       - "scripts/verify-release-candidate.ts"
       - "test/release-metadata.test.ts"
@@ -82,8 +86,36 @@ jobs:
           node --import tsx scripts/build-windows-user-bundle.ts --output-dir release-windows --source-sha "${{ github.sha }}"
       - name: Smoke Windows one-click setup
         if: runner.os == 'Windows'
+        timeout-minutes: 5
         shell: pwsh
         run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows
+      - name: Reject corrupted download before extraction or launch
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows --scenario checksum-mismatch
+      - name: Verify published v1.0.7 setup baseline without preinstalled Node or npm
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $stable = Join-Path $env:RUNNER_TEMP 'nexowire-published-v1.0.7'
+          gh release download v1.0.7 --repo Naveax/Nexowire --dir $stable --pattern Nexowire-Setup.cmd --pattern Nexowire-Windows-x64.zip --pattern SHA256SUMS-Windows
+          if ($LASTEXITCODE -ne 0) { throw 'Published v1.0.7 installer download failed.' }
+          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --profile ascii
+          if ($LASTEXITCODE -ne 0) { throw 'Published v1.0.7 ASCII clean-profile setup failed.' }
+      - name: Verify anonymous public GitHub download with repository bootstrap and Unicode profile
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $stable = Join-Path $env:RUNNER_TEMP 'nexowire-published-v1.0.7'
+          Copy-Item -LiteralPath installers/Nexowire-Setup.cmd -Destination $stable -Force
+          Copy-Item -LiteralPath installers/SHA256SUMS-Windows -Destination $stable -Force
+          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --download-source github
+          if ($LASTEXITCODE -ne 0) { throw 'Repository bootstrap Unicode clean-profile setup failed.' }
       - name: Upload Windows user bundle
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
