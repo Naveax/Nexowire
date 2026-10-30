@@ -22,7 +22,14 @@ not the remaining quota of any particular authenticated user.
   external-identity mapping, not an account name, admin flag, client claim or
   supplied GitHub login string. It returns `monthlyCredits: null` only for
   this account. Without that verified mapping, the normal Free cap applies.
-- The owner exception does **not** enable premium-only tools, paid billing,
+- **Additional operator-approved exception (2026-10-30):** GitHub account
+  `solkaun` (immutable numeric GitHub user ID `55827920`) has the same
+  **unmetered hosted MCP tool-credit allowance** when authenticated through
+  the server-verified GitHub OAuth identity mapping. The Worker pins this
+  identity server-side, not via a caller-provided login or request parameter.
+  This source change does not affect the live service until independently
+  reviewed and deployed; the target must have linked the same GitHub ID.
+- The owner and additional exceptions do **not** enable premium-only tools, paid billing,
   additional account/device entitlements or external provider resources. It
   preserves D1 charge records, 5x skill weighting and 409 replay prevention.
   Cloudflare/ChatGPT/provider quotas and compute capacity remain independent.

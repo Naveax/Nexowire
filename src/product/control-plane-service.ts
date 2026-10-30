@@ -58,6 +58,8 @@ export interface ControlPlaneServiceOptions {
   freeOnly?: boolean;
   /** Verified GitHub numeric subject eligible for unmetered Free usage. */
   ownerGithubId?: string;
+  /** Additional operator-pinned immutable GitHub IDs, never caller-supplied. */
+  unmeteredGithubIds?: readonly string[];
 }
 
 function boundedId(name: string, input: string): string {
@@ -143,17 +145,24 @@ export class ControlPlaneService {
   private static readonly ROOT_LEASE_MS = 15 * 60 * 1000;
   private readonly infrastructure: () => InfrastructureSnapshot;
   private readonly freeOnly: boolean;
-  private readonly ownerGithubId: string | null;
+  private readonly unmeteredGithubIds: readonly string[];
 
   constructor(
     private readonly store: ControlPlaneStore,
     options: ControlPlaneServiceOptions = {},
   ) {
     this.freeOnly = options.freeOnly ?? false;
-    const ownerId = options.ownerGithubId?.trim() ?? '';
-    // An absent or malformed configuration never grants an exemption.
-    this.ownerGithubId = /^[1-9][0-9]{0,19}$/.test(ownerId)
-      ? ownerId : null;
+    // Only server-configured immutable GitHub numeric IDs qualify. A username,
+    // account display name, role or MCP request argument cannot add an ID.
+    // Ignore malformed IDs rather than ever treating them as a wildcard.
+    this.unmeteredGithubIds = Object.freeze([
+      ...new Set([
+        options.ownerGithubId,
+        ...(options.unmeteredGithubIds ?? []),
+      ].filter((id): id is string =>
+        typeof id === 'string' && /^[1-9][0-9]{0,19}$/.test(id.trim()),
+      ).map(id => id.trim())),
+    ]);
     this.now = options.now ?? (() => new Date());
     this.infrastructure =
       options.infrastructure ??
@@ -256,18 +265,17 @@ export class ControlPlaneService {
 
   private async effectivePlan(account: ProductAccountRecord): Promise<ProductPlan> {
     if (!this.freeOnly) return resolvePlan(account);
-    if (this.ownerGithubId === null) return PRODUCT_PLANS.free;
-
-    // Only a GitHub OAuth identity verified by the sign-in callback qualifies.
-    // Never infer ownership from a display name, role or account.admin flag.
-    const ownerIdentity = await this.store.getExternalIdentity(
-      'github', this.ownerGithubId,
-    );
-    if (ownerIdentity?.accountId !== account.id) return PRODUCT_PLANS.free;
-
-    // Null is an unlimited *tool credit* ceiling; all normal security,
-    // premium-feature and replay checks remain unchanged.
-    return { ...PRODUCT_PLANS.free, monthlyCredits: null };
+    // Only GitHub OAuth identities verified by the sign-in callback qualify.
+    // Never infer exemptions from a display name, role, or account.admin flag.
+    for (const githubId of this.unmeteredGithubIds) {
+      const linkedIdentity = await this.store.getExternalIdentity('github', githubId);
+      if (linkedIdentity?.accountId === account.id) {
+        // Null means unlimited *hosted tool credits* only. Normal security,
+        // premium features, infrastructure limits and replay checks persist.
+        return { ...PRODUCT_PLANS.free, monthlyCredits: null };
+      }
+    }
+    return PRODUCT_PLANS.free;
   }
 
   async dashboard(
