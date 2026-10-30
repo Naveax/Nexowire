@@ -30,6 +30,7 @@ import { NEXOWIRE_VERSION } from '../version.js';
 import { acquireNativeAgentSingleton } from './native-agent-singleton.js';
 import {createWindowsCoreConsoleAdmission} from './windows-core-console-provider.js';
 import {revokePhysicalConsoleGrant} from './windows-console-grant.js';
+import {initializeNativeAgentState} from './native-agent-startup-diagnostic.js';
 
 export interface AgentIdentity {
   id: string;
@@ -416,12 +417,12 @@ export async function runNativeAgent(
   // attach to the Hub or mutate the same state files.
   const singletonLock = await acquireNativeAgentSingleton(identity.id);
   try {
-    await Promise.all([
+    await initializeNativeAgentState(() => Promise.all([
       processes.initialize(),
       taskGraphs.initialize(),
       runbooks.initialize(),
       operationJournal.initialize(),
-    ]);
+    ]), {env});
   } catch (error) {
     await singletonLock?.close();
     throw error;

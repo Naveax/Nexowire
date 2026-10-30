@@ -89,6 +89,23 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows
+      - name: Verify WAL reuse and restart integrity with the actual Windows payload and bundled Node
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $journalPayload = Join-Path $env:RUNNER_TEMP ('nexowire-wal-payload-' + [guid]::NewGuid())
+          try {
+            Expand-Archive -LiteralPath release-windows/Nexowire-Windows-x64.zip -DestinationPath $journalPayload
+            $payloadRoot = Join-Path $journalPayload 'Nexowire'
+            $env:NEXOWIRE_JOURNAL_TEST_APP_ROOT = Join-Path $payloadRoot 'app'
+            $bundledNode = Join-Path $payloadRoot 'runtime/node.exe'
+            & $bundledNode --test dist/test/agent-journal-restart-regression.test.js
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows journal restart regressions failed.' }
+          } finally {
+            Remove-Item Env:NEXOWIRE_JOURNAL_TEST_APP_ROOT -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $journalPayload -Recurse -Force -ErrorAction SilentlyContinue
+          }
       - name: Reject corrupted download before extraction or launch
         if: runner.os == 'Windows'
         timeout-minutes: 5

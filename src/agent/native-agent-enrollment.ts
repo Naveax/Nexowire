@@ -16,6 +16,8 @@ import { parseAllowedRoots } from './path-policy.js';
 import { discoverTailscale } from './tailscale-discovery.js';
 import { writeProtectedSecretFile } from '../security/protected-secret-files.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+import {readNativeAgentStartupDiagnostic,
+  type NativeAgentStartupDiagnostic} from './native-agent-startup-diagnostic.js';
 
 export type AgentDoctorCheckStatus = 'PASS' | 'BLOCKED' | 'FAIL';
 
@@ -63,6 +65,7 @@ export interface AgentConnectionStatus {
   probe: AgentHubProbe | null;
   tailscale: Awaited<ReturnType<typeof discoverTailscale>>;
   lastError: string | null;
+  startupDiagnostic: NativeAgentStartupDiagnostic | null;
 }
 
 export interface AgentDoctorCheck {
@@ -518,6 +521,7 @@ export async function getAgentConnectionStatus(
     probe,
     tailscale,
     lastError,
+    startupDiagnostic: await readNativeAgentStartupDiagnostic({env: effectiveEnv, homeDir}),
   };
 }
 
@@ -549,6 +553,14 @@ export async function doctorAgentEnrollment(
     probe: true,
   });
   const checks: AgentDoctorCheck[] = [];
+
+  if (status.startupDiagnostic?.phase === 'initialization-failed') {
+    checks.push(check('local-state-startup', 'FAIL',
+      'The last recorded local-state initialization failed: ' + status.startupDiagnostic.failureCode,
+      'Preserve the journal and sidecars. Do not delete, reset, or blindly checkpoint them. ' +
+        'A valid recycled WAL opens automatically in v1.0.8; genuine damage requires reviewed recovery.',
+      {...status.startupDiagnostic}));
+  }
 
   checks.push(
     status.installed
