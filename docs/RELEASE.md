@@ -4,7 +4,7 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 ## Published stable release
 
-The latest published stable version is [v1.0.7](https://github.com/Naveax/Nexowire/releases/tag/v1.0.7), published on 2026-10-26 from exact source `e9489175cf599c47f331a22c463421048d1ba407`. The source version `1.0.8` is an **unreleased candidate**. Its scope and acceptance gates are recorded in [v1.0.8 notes](releases/v1.0.8.md).
+The latest published stable version is [v1.0.7](https://github.com/Naveax/Nexowire/releases/tag/v1.0.7), published on 2026-10-26 from exact source `e9489175cf599c47f331a22c463421048d1ba407`. Version `1.0.8` is **owner-authorized for publication**, pending the exact-main/tag workflow gates. Its scope and acceptance gates are recorded in [v1.0.8 notes](releases/v1.0.8.md).
 
 Issue [#974](https://github.com/Naveax/Nexowire/issues/974) remains open until the successor containing the WAL reuse fix is reviewed, merged, packaged, installed through an authorized update and verified across real Windows restarts. Source tests and an extracted CI payload do not establish that an existing device has been upgraded. Do not perform automatic journal deletion, reset, rollback or blind checkpointing as startup repair.
 
@@ -89,7 +89,7 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The current published-stable v1 release is `1.0.7` at exact commit `e9489175cf599c47f331a22c463421048d1ba407`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
+At authorization time, the published-stable v1 release is `1.0.7` at exact commit `e9489175cf599c47f331a22c463421048d1ba407`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
 
 ## Explicit GitHub Release authorization
 
