@@ -85,7 +85,7 @@ test('invalid chunks never publish and retry fails closed if stage is partially 
   assert.equal(await store.get(scope, input.artifactPath), null);
   assert.equal((await ingestDeviceArtifact(store, source(content), input)).state, 'COMPLETE');
 }));
-test('ingest rejects oversized source without remote hash/read', async () => fixture(async store => {
+test('large ingest requires digest before any remote hash/read', async () => fixture(async store => {
   let reads = 0;
   const ops: ArtifactSourceOps = {
     stat: async () => ({ type: 'file', size: 268_435_457 }),
@@ -93,7 +93,7 @@ test('ingest rejects oversized source without remote hash/read', async () => fix
     read: async () => { reads++; throw Error('not reached'); },
   };
   await assert.rejects(ingestDeviceArtifact(store, ops, input),
-    (e: unknown) => e instanceof ArtifactBridgeError && e.code === 'INGEST_SOURCE_INVALID');
+    (e: unknown) => e instanceof ArtifactBridgeError && e.code === 'LARGE_SOURCE_SHA_REQUIRED');
   assert.equal(reads, 0);
 }));
 test('device source cannot return inconsistent size or offset to influence stage', async () => fixture(async store => {
