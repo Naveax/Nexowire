@@ -6,7 +6,10 @@ const state = params.get('state') ?? '';
 const deviceId = params.get('deviceId') ?? '';
 const deviceName = params.get('deviceName') ?? '';
 const platform = params.get('platform') ?? '';
-const RELEASE = 'https://github.com/Naveax/Nexowire/releases/latest/download/';
+// Pin the already tested Unicode-safe bootstrap; branch cleanup must not break downloads.
+const INSTALLER_REF = '96315d5dd4986fffbd24a96859309271d2a88ffe';
+const INSTALLER_VIEW = 'https://github.com/Naveax/Nexowire/blob/' + INSTALLER_REF + '/installers/';
+const INSTALLER_RAW = 'https://raw.githubusercontent.com/Naveax/Nexowire/' + INSTALLER_REF + '/installers/';
 const RELEASE_PAGE = 'https://github.com/Naveax/Nexowire/releases/latest';
 let chatgptAddress = '';
 
@@ -19,12 +22,12 @@ function detectedOS(ua = navigator.userAgent) {
 const installers = {
   windows: {
     heading: 'Windows kurulumu',
-    description: 'Windows 10/11 x64 için indir ve çift tıkla. Node.js, npm, Git veya PowerShell 7 kurman gerekmez. Açılan tarayıcıda giriş yapıp BAĞLA’ya bas.',
-    command: "Invoke-WebRequest -Uri '" + RELEASE + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
-    url: RELEASE + 'Nexowire-Setup.cmd',
-    label: 'Windows kurulumunu indir ↗',
-    checksum: RELEASE + 'SHA256SUMS-Windows',
-    note: 'Ana yol indirme düğmesidir; yönetici olarak çalıştırman gerekmez. İstersen komutla da yalnızca indirebilirsin. Resmî kurucu kendi paketini SHA-256 ile doğrular.',
+    description: 'Windows 10/11 x64: açılan GitHub sayfasında Download raw ile indir ve dosyaya çift tıkla. Node.js, npm, Git veya PowerShell 7 gerekmez. Tarayıcıda giriş yapıp BAĞLA’ya bas.',
+    command: "Invoke-WebRequest -Uri '" + INSTALLER_RAW + "Nexowire-Setup.cmd' -OutFile \"$env:USERPROFILE\\Downloads\\Nexowire-Setup.cmd\"",
+    url: INSTALLER_VIEW + 'Nexowire-Setup.cmd',
+    label: 'Windows kurucusunu aç ↗',
+    checksum: INSTALLER_VIEW + 'SHA256SUMS-Windows',
+    note: 'Depodaki düzeltilmiş kurucu, yayımlanmış v1.0.7 paketini doğrulayarak kullanır. Yönetici olarak çalıştırman gerekmez. İstersen kopyalama düğmesiyle yalnızca indirme komutunu alabilirsin.',
   },
   macos: {
     heading: 'macOS kurulumu',

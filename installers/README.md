@@ -34,8 +34,12 @@ API’sine aktarılır. Ayrı bir sunucudan yardımcı binary indirilmez.
 İzole Windows CI; aday paketi Türkçe karakterli boş profilde, önceki yayımlanmış
 kurucuyu ASCII boş profilde ve bu kurucuyu **aynı yayımlanmış ZIP ile** Türkçe
 karakterli boş profilde ayrı sınar. PATH üzerinde Node/npm/Git/PowerShell 7 yoktur.
-Düzeltilmiş kurucu ayrıca gerçek GitHub HTTPS adresinden, indirme URL’si değiştirilmeden
-ve çocuk sürece GitHub token’ı aktarılmadan sınanır. Bozuk ZIP yanıtında hash hatası,
+Bağlantı sayfası, eski yayın kurucusu yerine test edilmiş bu kurucunun sabit kaynak
+revizyonunu açar; GitHub ekranında **Download raw** ile dosya indirilir.
+
+İlk CMD dosyası da sayfadaki sabit GitHub HTTPS adresinden PowerShell ile indirilip
+repo hash’iyle karşılaştırılır. Ardından bu dosyanın gerçek uygulama ZIP’ini GitHub’dan
+indirmesi, URL değiştirilmeden ve çocuk sürece GitHub token’ı aktarılmadan sınanır. Bozuk ZIP yanıtında hash hatası,
 kurulum klasörünün oluşmaması ve başlatma/görev adımlarına geçilmemesi ayrı negatif
 kontroldür. Bu ret sonucu başarılı kurulum sayılmaz.
 

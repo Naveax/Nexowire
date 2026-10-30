@@ -226,6 +226,25 @@ async function main(): Promise<void> {
   });
 
   try {
+    let verifiedSetupText = setupText;
+    if (downloadSource === 'github') {
+      // Download the exact initial CMD offered by the UI, not just its ZIP.
+      // The child has only built-in Windows tools and no inherited GH_TOKEN.
+      const downloadedSetup = path.join(tempRoot, 'Nexowire-Setup-from-GitHub.cmd');
+      const bootstrap = await waitForChild(
+        path.join(system32, 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+          "$ErrorActionPreference='Stop'; $web=New-Object System.Net.WebClient; try { $web.DownloadFile($env:NEXOWIRE_SMOKE_SETUP_URL, $env:NEXOWIRE_SMOKE_SETUP_FILE) } finally { $web.Dispose() }"],
+        { cwd: tempRoot, env: { ...cleanEnv,
+          NEXOWIRE_SMOKE_SETUP_URL: 'https://raw.githubusercontent.com/Naveax/Nexowire/96315d5dd4986fffbd24a96859309271d2a88ffe/installers/Nexowire-Setup.cmd',
+          NEXOWIRE_SMOKE_SETUP_FILE: downloadedSetup,
+        } },
+      );
+      assert.equal(bootstrap.exitCode, 0, bootstrap.stderr);
+      assert.equal(await sha256File(downloadedSetup), checksums.get('Nexowire-Setup.cmd'),
+        'Public bootstrap differs from the repository-pinned installer.');
+      verifiedSetupText = await fs.readFile(downloadedSetup, 'utf8');
+    }
     const address = server.address();
     if (!address || typeof address === 'string') {
       fail('Windows setup smoke HTTP server has no TCP address.');
@@ -236,8 +255,8 @@ async function main(): Promise<void> {
       '/Nexowire-Windows-x64.zip';
 
     let smokeSetup = downloadSource === 'fixture'
-      ? setupText.replace(urlMatch[1]!, localUrl)
-      : setupText;
+      ? verifiedSetupText.replace(urlMatch[1]!, localUrl)
+      : verifiedSetupText;
     smokeSetup = smokeSetup.replace(
       "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nexowire.lnk';",
       "$shortcutPath = Join-Path $env:NX_INSTALL 'Nexowire.lnk';",
@@ -405,6 +424,7 @@ async function main(): Promise<void> {
           profileKind,
           downloadSource,
           payloadDownloadedOverPublicHttps: downloadSource === 'github',
+          bootstrapDownloadedOverPublicHttps: downloadSource === 'github',
           taskRegistrationAndBrowserSimulated: true,
           oauthOrDevicePairingVerified: false,
           hiddenLauncherFixtureVerified: true,
