@@ -45,7 +45,8 @@ if((Get-Item -LiteralPath $manifestFile).Length -gt 1048576){throw 'MANIFEST_TOO
 if((Get-FileHash -LiteralPath $manifestFile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedManifestSha256){throw 'MANIFEST_HASH_MISMATCH'}
 $manifest=Get-Content -LiteralPath $manifestFile -Raw -Encoding UTF8|ConvertFrom-Json
 if($manifest.version -ne 1 -or $manifest.kind -cne 'nexowire-local-enrollment-opt-in' -or
-    $manifest.source -cnotmatch '^[a-f0-9]{40}$' -or @($manifest.files).Count -lt 1 -or @($manifest.files).Count -gt 2000){throw 'INVALID_MANIFEST'}
+    $manifest.source -cnotmatch '^[a-f0-9]{40}$' -or $manifest.sourceTree -cnotmatch '^[a-f0-9]{40}$' -or
+    @($manifest.files).Count -lt 1 -or @($manifest.files).Count -gt 2000){throw 'INVALID_MANIFEST'}
 if((Get-Item -LiteralPath $EnrollmentRequestFile).Length -gt 16384 -or
     (Get-Item -LiteralPath $AgentIdentityFile).Length -gt 16384){throw 'IDENTITY_INPUT_TOO_LARGE'}
 $requestText=[IO.File]::ReadAllText((Resolve-Path -LiteralPath $EnrollmentRequestFile).Path)
