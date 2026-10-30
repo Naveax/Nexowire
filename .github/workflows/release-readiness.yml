@@ -86,8 +86,14 @@ jobs:
           node --import tsx scripts/build-windows-user-bundle.ts --output-dir release-windows --source-sha "${{ github.sha }}"
       - name: Smoke Windows one-click setup
         if: runner.os == 'Windows'
+        timeout-minutes: 5
         shell: pwsh
         run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows
+      - name: Reject corrupted download before extraction or launch
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir release-windows --scenario checksum-mismatch
       - name: Verify published v1.0.7 setup baseline without preinstalled Node or npm
         if: runner.os == 'Windows'
         timeout-minutes: 5
@@ -100,7 +106,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Published v1.0.7 installer download failed.' }
           node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --profile ascii
           if ($LASTEXITCODE -ne 0) { throw 'Published v1.0.7 ASCII clean-profile setup failed.' }
-      - name: Verify repository bootstrap with unchanged published v1.0.7 payload and Unicode profile
+      - name: Verify anonymous public GitHub download with repository bootstrap and Unicode profile
         if: runner.os == 'Windows'
         timeout-minutes: 5
         shell: pwsh
@@ -108,7 +114,7 @@ jobs:
           $stable = Join-Path $env:RUNNER_TEMP 'nexowire-published-v1.0.7'
           Copy-Item -LiteralPath installers/Nexowire-Setup.cmd -Destination $stable -Force
           Copy-Item -LiteralPath installers/SHA256SUMS-Windows -Destination $stable -Force
-          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable
+          node --import tsx scripts/smoke-windows-user-setup.ts --bundle-dir $stable --download-source github
           if ($LASTEXITCODE -ne 0) { throw 'Repository bootstrap Unicode clean-profile setup failed.' }
       - name: Upload Windows user bundle
         if: runner.os == 'Windows'

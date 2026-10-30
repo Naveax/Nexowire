@@ -121,6 +121,7 @@ doğrulandığı anlamına gelmez. Bu durumlar bağlantı kontrolünden ayrı g�
 | Dosya `.cmd.txt` olmuş. | Dosya Gezgini’nde dosya uzantılarını göster; resmî `.cmd` dosyasını yeniden indir. |
 | Tarayıcı veya SmartScreen dosyayı engelliyor. | Resmî GitHub yayınını ve dosyayı kontrol et. Güvenlik yazılımını veya kurumsal politikayı kapatma; engelin tam metnini kaydet. |
 | Kurucu hata veriyor. | Açık kalan hata penceresindeki metni kaydet. GitHub indirmesi, ağ/proxy, disk alanı veya güvenlik engeli olabilir; hata görülmeden “kuruldu” denmez. |
+| `Nexowire payload checksum mismatch` görünüyor. | İndirilen paket beklenen dosyayla eşleşmiyor; kurulum burada durur. Ağ/proxy indirmeyi değiştirmiş veya eksik bırakmış olabilir. Bağlantıyı kontrol edip aynı kurucuyu yeniden aç; hash denetimini kaldırma. |
 | Eski kurucu `Unable to save shortcut` hatası veriyor. | Bu sayfanın başındaki düzeltilmiş kurucuyu kullan. Var olan cihaz kayıtlarını veya `.nexowire` klasörünü silme. |
 | Kurucu bitti, tarayıcı açılmadı. | Başlat → Nexowire ile bir kez daha aç. Yine açılmıyorsa Windows Script Host/politika veya uygulama başlatma hatasını incele; yönetici Broker yardımcı ZIP’ine geçme. |
 | Eşleme süresi doldu. | Başlat → Nexowire ile yeni bağlantı isteği aç; yeni tarayıcı sayfasında BAĞLA’yı kullan. Eski sayfayı tekrar tekrar onaylama. |

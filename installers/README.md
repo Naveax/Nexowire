@@ -34,6 +34,11 @@ API’sine aktarılır. Ayrı bir sunucudan yardımcı binary indirilmez.
 İzole Windows CI; aday paketi Türkçe karakterli boş profilde, önceki yayımlanmış
 kurucuyu ASCII boş profilde ve bu kurucuyu **aynı yayımlanmış ZIP ile** Türkçe
 karakterli boş profilde ayrı sınar. PATH üzerinde Node/npm/Git/PowerShell 7 yoktur.
+Düzeltilmiş kurucu ayrıca gerçek GitHub HTTPS adresinden, indirme URL’si değiştirilmeden
+ve çocuk sürece GitHub token’ı aktarılmadan sınanır. Bozuk ZIP yanıtında hash hatası,
+kurulum klasörünün oluşmaması ve başlatma/görev adımlarına geçilmemesi ayrı negatif
+kontroldür. Bu ret sonucu başarılı kurulum sayılmaz.
+
 Görev kaydı ve tarayıcı/hesap girişi simüle edilir. Gizli başlatıcı ayrıca geçici
 bir test CLI’siyle sınanır. Bunlar gerçek kullanıcı girişi, cihaz eşleme veya
 ChatGPT OAuth başarısı olarak sayılmaz; kesin sonuç PR’ın exact-SHA CI kaydındadır.
