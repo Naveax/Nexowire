@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
+import {createHash,X509Certificate,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {createServer,request as httpsRequest} from 'node:https';
 import {createServer as createHttpServer} from 'node:http';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
@@ -15,6 +15,8 @@ import {CoreApprovalLedgerError} from '../src/security/postgres-core-approval-le
 import {RemoteTrustedNativeCoreEnrollmentVerifier} from '../src/product/core-native-consent-verifier.js';
 import {parseTrustedCoreNativeResponse,type CoreNativeProof,type CoreNativeWireRequest}
   from '../src/protocol/core-native-consent-transport.js';
+import {createCoreNativeMtlsFetch} from '../src/security/core-native-mtls-fetch.js';
+import {createCoreNativeVerifierServer} from '../src/security/core-native-verifier-server.js';
 
 function proof():CoreNativeProof{return {version:1,challengeId:randomUUID(),receiptId:randomUUID(),
   ownerAccountId:'owner-fixture-0001',deviceId:'device-fixture-0001',installationId:randomUUID(),
@@ -110,6 +112,81 @@ test('independent native enrollment verifier enforces real TLS transport and sco
     server.closeAllConnections();plain.closeAllConnections();
     await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>plain.close(()=>r()))]);
     await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});
+  });
+
+  await t.test('existing verifier uses the bounded production-shaped mTLS adapter without an HTTP mock',async()=>{
+    reset();
+    const serverCert=await readFile(path.join(root,'server.crt'),'utf8');
+    const strict=createCoreNativeVerifierServer({keyPem:await readFile(path.join(root,'server.key'),'utf8'),
+      certificatePem:serverCert,clientCaPem:ca.toString('utf8'),handler});
+    await new Promise<void>(r=>strict.listen(0,'127.0.0.1',r));
+    const address=strict.address();assert.ok(address&&typeof address!=='string');
+    const endpointOrigin='https://127.0.0.1:'+address.port;
+    const tlsConfig={origin:endpointOrigin,keyPem:clientKey.toString('utf8'),
+      certificatePem:clientCert.toString('utf8'),serverCaPem:ca.toString('utf8'),
+      serverSpkiSha256:createHash('sha256').update(new X509Certificate(serverCert).publicKey
+        .export({type:'spki',format:'der'})).digest('hex')};
+    const transport=createCoreNativeMtlsFetch(tlsConfig);
+    const verifier=new RemoteTrustedNativeCoreEnrollmentVerifier({origin:endpointOrigin,
+      credential,pinnedSpkiBase64:pin,fetchImpl:transport});
+    try{
+      assert.equal(await verifier.verifyAndConsume(p,expected(p)),true);
+      assert.equal(await verifier.verifyAndConsume(p,expected(p)),false,'no consume replay');
+      assert.equal(await verifier.currentReadback(readback(p)),true);
+      const before=consumes;
+      const wrongPin=new RemoteTrustedNativeCoreEnrollmentVerifier({origin:endpointOrigin,credential,
+        pinnedSpkiBase64:pin,fetchImpl:createCoreNativeMtlsFetch({...tlsConfig,serverSpkiSha256:'0'.repeat(64)})});
+      assert.equal(await wrongPin.verifyAndConsume(p,expected(p)),false);
+      assert.equal(consumes,before,'wrong TLS key never reaches ledger');
+      await assert.rejects(transport('https://127.0.0.1:1/v1/core-native-consent',{
+        method:'POST',redirect:'error',body:'{}'}),/REQUEST_INVALID/);
+      await assert.rejects(transport(endpointOrigin+'/v1/core-native-consent',{
+        method:'POST',redirect:'follow',body:'{}'}),/REQUEST_INVALID/);
+      tlsConfig.origin='https://foreign.invalid';tlsConfig.serverSpkiSha256='0'.repeat(64);
+      assert.equal(await verifier.currentReadback(readback(p)),true,'constructor alias cannot replace pinned origin/key');
+      const abort=new AbortController();abort.abort();
+      await assert.rejects(transport(endpointOrigin+'/v1/core-native-consent',{
+        method:'POST',redirect:'error',headers:{authorization:'Bearer '+credential,
+          'content-type':'application/json'},body:'{}',signal:abort.signal}),/REQUEST_UNKNOWN/);
+    }finally{strict.closeAllConnections();await new Promise<void>(r=>strict.close(()=>r()));reset()}
+  });
+
+  await t.test('mTLS adapter bounds response bytes and absolute time, refuses redirects and never retries',async()=>{
+    let kind:'ok'|'redirect'|'large'|'slow'='ok',requests=0;
+    const serverCert=await readFile(path.join(root,'server.crt'),'utf8');
+    const strict=createCoreNativeVerifierServer({keyPem:await readFile(path.join(root,'server.key'),'utf8'),
+      certificatePem:serverCert,clientCaPem:ca.toString('utf8'),handler:(_req,res)=>{
+        requests++;
+        if(kind==='redirect'){res.writeHead(307,{location:'https://foreign.invalid/'});res.end();return}
+        if(kind==='large'){res.end('x'.repeat(32769));return}
+        if(kind==='slow'){
+          res.writeHead(200);const timer=setInterval(()=>res.write(' '),10);
+          res.once('close',()=>clearInterval(timer));return;
+        }
+        res.end('{}');
+      }});
+    await new Promise<void>(r=>strict.listen(0,'127.0.0.1',r));
+    const address=strict.address();assert.ok(address&&typeof address!=='string');
+    const origin='https://127.0.0.1:'+address.port;
+    const transport=createCoreNativeMtlsFetch({origin,keyPem:clientKey.toString('utf8'),
+      certificatePem:clientCert.toString('utf8'),serverCaPem:ca.toString('utf8'),timeoutMs:100,
+      serverSpkiSha256:createHash('sha256').update(new X509Certificate(serverCert).publicKey
+        .export({type:'spki',format:'der'})).digest('hex')});
+    const options={method:'POST',redirect:'error' as const,headers:{authorization:'Bearer '+credential,
+      'content-type':'application/json'},body:'{}'};
+    try{
+      assert.equal(await (await transport(origin+'/v1/core-native-consent',options)).text(),'{}');
+      for(const mode of ['redirect','large','slow'] as const){
+        kind=mode;const before=requests;
+        await assert.rejects(transport(origin+'/v1/core-native-consent',options),/REQUEST_UNKNOWN/);
+        assert.equal(requests,before+1,'one HTTP request, never an automatic retry');
+      }
+      const before=requests;
+      await assert.rejects(transport(origin+'/v1/core-native-consent',{...options,body:'x'.repeat(16385)}),/REQUEST_INVALID/);
+      await assert.rejects(transport(origin+'/v1/core-native-consent',{
+        ...options,headers:{...options.headers,host:'foreign.invalid'}}),/REQUEST_INVALID/);
+      assert.equal(requests,before,'invalid request never leaves the host');
+    }finally{strict.closeAllConnections();await new Promise<void>(r=>strict.close(()=>r()))}
   });
 
   await t.test('plaintext, missing client certificate, wrong credentials and role fail before ledger access',async()=>{
