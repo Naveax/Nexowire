@@ -6,6 +6,7 @@ import {mkdtemp, mkdir, readFile, writeFile, rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {setTimeout as delay} from 'node:timers/promises';
 
 const payloadRoot = process.env.NEXOWIRE_JOURNAL_TEST_APP_ROOT;
 const moduleUrl = (file: string) => payloadRoot
@@ -45,21 +46,37 @@ test('Windows PowerShell 5.1 runs generated launchers through Unicode and quoted
     t.after(() => rm(root, {recursive: true, force: true}));
     const home = path.join(root, "Çığ Ölçek O'Brien");
     await mkdir(home, {recursive: true});
-    const cli = path.join(home, 'capture.mjs');
-    const observed = path.join(home, 'observed.json');
-    await writeFile(cli, "import {writeFileSync} from 'node:fs';\n" +
-      "writeFileSync(new URL('./observed.json', import.meta.url), JSON.stringify({args:process.argv.slice(2)," +
-      'NEXOWIRE_DEVICE_NAME:process.env.NEXOWIRE_DEVICE_NAME,NEXOWIRE_STATE_DIR:process.env.NEXOWIRE_STATE_DIR}));\n');
-    for (const item of launchers(cli, path.join(home, 'durum'))) {
-      await t.test(item.name, async () => {
-        const file = path.join(home, item.name + '.ps1');
+    for (const name of ['agent', 'hub', 'auto-update']) {
+      await t.test(name, async () => {
+        // A shell exiting does not establish that its child has emitted its
+        // receipt. Never let another case's late receipt satisfy this case.
+        const directory = path.join(home, name);
+        await mkdir(directory);
+        const cli = path.join(directory, 'capture.mjs');
+        const observed = path.join(directory, 'observed.json');
+        await writeFile(cli, "import {writeFileSync,renameSync} from 'node:fs';\n" +
+          "const temporary=new URL('./observed.tmp',import.meta.url);\n" +
+          'writeFileSync(temporary, JSON.stringify({args:process.argv.slice(2),' +
+          'NEXOWIRE_DEVICE_NAME:process.env.NEXOWIRE_DEVICE_NAME,NEXOWIRE_STATE_DIR:process.env.NEXOWIRE_STATE_DIR}));\n' +
+          "renameSync(temporary,new URL('./observed.json',import.meta.url));\n");
+        const item = launchers(cli, path.join(directory, 'durum')).find(value => value.name === name)!;
+        const file = path.join(directory, 'launch.ps1');
         await writeFile(file, item.script, 'utf8');
         await run('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
           ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file],
           {env: isolatedLiveUpdateEnvironment({USERPROFILE: home,
             LOCALAPPDATA: path.join(home, 'AppData', 'Local')}),
           cwd: 'C:\\Windows\\System32', timeout: 15_000, maxBuffer: 32_768, windowsHide: true});
-        const result = JSON.parse(await readFile(observed, 'utf8'));
+        const started = performance.now();
+        let content: string | undefined;
+        while (performance.now() - started < 10_000) {
+          t.signal.throwIfAborted();
+          try { content = await readFile(observed, 'utf8'); break; }
+          catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+          await delay(25, undefined, {signal: t.signal});
+        }
+        assert.notEqual(content, undefined, name + ' did not emit its own capture within 10 seconds');
+        const result = JSON.parse(content!);
         assert.deepEqual(result.args, item.args);
         if (item.key) assert.equal(result[item.key], item.value);
         await rm(observed);
