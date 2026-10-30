@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {mkdtemp, mkdir, readFile, writeFile, rm, copyFile} from 'node:fs/promises';
 import {createHash, randomUUID} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
@@ -42,9 +42,14 @@ test('user updater bounds the readiness wait instead of accepting an unbounded t
 });
 
 test('Windows cutover script rejects false readiness and preserves journal, identity and credential bytes',
-  {skip: !win, timeout: 180_000}, async t => {
+  {skip: !win, timeout: 240_000}, async t => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'nw-update-startup-fixture-'));
-    t.after(() => rm(root, {recursive: true, force: true, maxRetries: 10, retryDelay: 100}));
+    let running: Promise<void> | undefined;
+    t.after(async () => {
+      // Cancellation must terminate and reap the fixture process before deleting its files.
+      await running?.catch(() => {});
+      await rm(root, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
+    });
     const seed = path.join(root, 'seed.sqlite');
     const schema = new AgentOperationJournal(seed);
     await schema.initialize();
@@ -88,7 +93,9 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
       {name: 'rollback-start-fails', result: 'rollback_failed', code: 2},
       {name: 'disabled-agent', result: 'failed', code: 1},
     ];
-    for (const scenario of scenarios) await t.test(scenario.name, async () => {
+    const cases = [];
+    for (const scenario of scenarios) {
+      t.signal.throwIfAborted();
       const homeDir = path.join(root, scenario.name);
       const appData = path.join(homeDir, 'AppData', 'Local');
       const profile = path.join(homeDir, '.nexowire');
@@ -127,19 +134,21 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
         '$scenario=' + ps(scenario.name),
         '$fixtureActions=' + ps(path.join(homeDir, 'fixture-actions.txt')),
         '$script:cimReads=0',
+        '[Console]::WriteLine("[fixture] script entered: "+$scenario)',
         // Every task/process command is shadowed. Never query or edit host tasks.
-        'function Get-ScheduledTask {param([string]$TaskName)',
+        'function Get-ScheduledTask {[CmdletBinding()]param([string]$TaskName)',
         "  if($TaskName -eq 'Nexowire Native Agent'){return [pscustomobject]@{State=$(if($scenario -eq 'disabled-agent'){'Disabled'}else{'Ready'})}}",
         "  if($TaskName -in @('Nexowire Hub','Nexowire Hub Boot','Nexowire Privileged Broker')){return $null}",
         "  throw 'HOST_TASK_LOOKUP_DENIED'",
         '}',
-        'function Stop-ScheduledTask {param([string]$TaskName)',
+        'function Stop-ScheduledTask {[CmdletBinding()]param([string]$TaskName)',
         "  if($TaskName -ne 'Nexowire Native Agent'){throw 'HOST_TASK_STOP_DENIED'}",
         "  Add-Content -LiteralPath $fixtureActions -Value 'stop'",
         "  if($scenario -eq 'stop-denied'){throw 'SYNTHETIC_STOP_DENIED'}",
         '}',
-        'function Start-ScheduledTask {param([string]$TaskName)',
+        'function Start-ScheduledTask {[CmdletBinding()]param([string]$TaskName)',
         "  if($TaskName -ne 'Nexowire Native Agent'){throw 'HOST_TASK_START_DENIED'}",
+        '  [Console]::WriteLine("[fixture] start stub: "+$scenario)',
         "  Add-Content -LiteralPath $fixtureActions -Value 'start'",
         '  $text=Get-Content -LiteralPath $AgentLauncher -Raw',
         '  $parseTokens=$null; $parseErrors=$null',
@@ -160,7 +169,7 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
         "  if($scenario -eq 'oversized-marker'){[IO.File]::AppendAllText($AgentStartupDiagnostic,('x'*4097))}",
         "  if($scenario -eq 'malformed-marker'){[IO.File]::WriteAllText($AgentStartupDiagnostic,'not-json')}",
         '}',
-        'function Get-CimInstance {param([string]$ClassName,[string]$Filter)',
+        'function Get-CimInstance {[CmdletBinding()]param([string]$ClassName,[string]$Filter,[uint32]$OperationTimeoutSec)',
         "  if($ClassName -ne 'Win32_Process'){throw 'HOST_CIM_DENIED'}",
         '  $script:cimReads++',
         "  if($scenario -eq 'process-disappears' -and $script:cimReads -gt 1){return $null}",
@@ -175,50 +184,100 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
         '  Microsoft.PowerShell.Management\\Copy-Item @PSBoundParameters',
         "  if($scenario -eq 'restore-corrupted' -and $LiteralPath.Contains('.update-rollback.')){[IO.File]::WriteAllText($Destination,'SYNTHETIC_RESTORE_CORRUPTION')}",
         '}',
-        'function Start-Sleep {param([int]$Seconds,[int]$Milliseconds)}',
+        'function Start-Sleep {[CmdletBinding()]param([int]$Seconds,[int]$Milliseconds)}',
         renderWindowsCutoverScript({targetVersion: '1.0.8', currentVersion: '1.0.7',
           buildId: '1.0.8-bbbbbbbbbbbb', targetRoot: newRoot, localAppData: appData,
           homeDir, agentStartupTimeoutSeconds: 1}),
+        'exit 0',
       ].join('\r\n');
       await writeFile(wrapper, program);
-      const result = spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-        ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', wrapper],
-        {env: isolatedLiveUpdateEnvironment({USERPROFILE: homeDir, LOCALAPPDATA: appData}),
-          cwd: 'C:\\Windows\\System32', encoding: 'utf8', timeout: 20_000,
-          maxBuffer: 100 * 1024, windowsHide: true});
-      assert.equal(result.status, scenario.code, result.stderr + result.stdout);
-      const state = await readLiveUpdateState({localAppData: appData});
-      assert.equal(state.state, scenario.result, JSON.stringify(state));
-      assert.equal(state.agentStartupVerified, scenario.result === 'succeeded');
-      assert.equal(state.activeConnectionVerified, false);
-      assert.equal(state.currentVersion, scenario.result === 'rollback_failed' ? 'unknown'
-        : scenario.result === 'succeeded' ? '1.0.8' : '1.0.7');
-      assert.deepEqual(await Promise.all(protectedFiles.map(async file => hash(await readFile(file)))), before);
-      if (scenario.result === 'rolled_back' || scenario.result === 'failed') {
-        assert.deepEqual(await readFile(launcher), await readFile(launcherBackup));
-      }
-      if (scenario.result === 'succeeded') {
-        const text = await readFile(launcher, 'utf8');
-        assert.match(text, /^\uFEFF?\$env:NEXOWIRE_UPDATE_STARTUP_NONCE='[a-f0-9-]{36}'\r?\n/);
-        assert.ok(text.includes(newRoot));
-        assert.ok(text.includes(ps(credential)));
-        assert.equal(text.match(/\$env:NEXOWIRE_UPDATE_STARTUP_NONCE=/g)?.length, 1);
-        const expectedDiagnostic = scenario.name === 'custom-journal'
-          ? path.join(path.dirname(journal), 'native-agent', 'startup-diagnostic.json')
-          : path.join(native, 'startup-diagnostic.json');
-        const startup = JSON.parse(await readFile(expectedDiagnostic, 'utf8'));
-        assert.equal(startup.processId, 4242);
-        assert.equal(startup.startupNonce, /NEXOWIRE_UPDATE_STARTUP_NONCE='([^']+)'/.exec(text)?.[1]);
-      }
-      if (scenario.name === 'disabled-agent') {
-        await assert.rejects(readFile(path.join(homeDir, 'fixture-actions.txt')), {code: 'ENOENT'});
-      }
-      const journalReadback = new AgentOperationJournal(journal);
-      try {
-        assert.equal((await journalReadback.inspect(unknownId))?.status, 'unknown');
-        assert.equal((await journalReadback.begin(unknownId, fingerprint, 'shell.exec')).created, false);
-      } finally { journalReadback.close(); }
+      cases.push({scenario, homeDir, appData, journal, protectedFiles, before, newRoot,
+        launcher, launcherBackup, credential, native, wrapper});
+    }
+    const batch = path.join(root, 'fixture-batch.ps1');
+    const results = path.join(root, 'fixture-results.json');
+    // A script's exit returns to its caller with LASTEXITCODE. Keep the actual cutover
+    // script intact, including its exit 1/2 paths, without nineteen cold shell starts.
+    await writeFile(batch, [
+      "$ErrorActionPreference='Stop'",
+      '$results=@()',
+      ...cases.flatMap(({scenario, homeDir, appData, wrapper}) => [
+        '$env:USERPROFILE=' + ps(homeDir), '$env:LOCALAPPDATA=' + ps(appData),
+        '[Console]::WriteLine(' + ps('[fixture] begin: ' + scenario.name) + ')',
+        '$global:LASTEXITCODE=0',
+        '& ' + ps(wrapper),
+        '$code=$LASTEXITCODE',
+        '[Console]::WriteLine(' + ps('[fixture] end: ' + scenario.name + ' code=') + '+$code)',
+        '$results+= [pscustomobject]@{name=' + ps(scenario.name) + ';code=$code}',
+        '[IO.File]::WriteAllText(' + ps(results) + ',(ConvertTo-Json -InputObject @($results) -Compress))',
+      ]),
+      'exit 0',
+    ].join('\r\n'));
+    running = new Promise<void>((resolve, reject) => {
+      const child = spawn('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', batch],
+        {env: isolatedLiveUpdateEnvironment({USERPROFILE: root, LOCALAPPDATA: path.join(root, 'AppData', 'Local')}),
+          cwd: 'C:\\Windows\\System32', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']});
+      let output = '', failure: Error | undefined;
+      const stop = (error: Error) => { failure ??= error; child.kill(); };
+      const abort = () => stop(new Error('PowerShell fixture cancelled'));
+      const timer = setTimeout(() => stop(new Error('PowerShell fixture exceeded 180 seconds')), 180_000);
+      t.signal.addEventListener('abort', abort, {once: true});
+      if (t.signal.aborted) abort();
+      for (const stream of [child.stdout, child.stderr]) stream.on('data', (data: Buffer) => {
+        output = (output + data.toString('utf8')).slice(-128 * 1024);
+        process.stdout.write(data);
+      });
+      child.once('error', error => { failure ??= error; });
+      child.once('close', code => {
+        clearTimeout(timer);
+        t.signal.removeEventListener('abort', abort);
+        if (failure || code !== 0) reject(new Error((failure?.message ?? `PowerShell exit ${code}`) + '\n' + output));
+        else resolve();
+      });
     });
+    await running;
+    const outcomes: {name: string; code: number}[] = JSON.parse(await readFile(results, 'utf8'));
+    assert.deepEqual(outcomes.map(value => value.name), scenarios.map(value => value.name));
+    for (const fixture of cases) {
+      t.signal.throwIfAborted();
+      const {scenario, homeDir, appData, journal, protectedFiles, before, newRoot,
+        launcher, launcherBackup, credential, native} = fixture;
+      await t.test(scenario.name, async () => {
+        assert.equal(outcomes.find(value => value.name === scenario.name)?.code, scenario.code);
+        const state = await readLiveUpdateState({localAppData: appData});
+        assert.equal(state.state, scenario.result, JSON.stringify(state));
+        assert.equal(state.agentStartupVerified, scenario.result === 'succeeded');
+        assert.equal(state.activeConnectionVerified, false);
+        assert.equal(state.currentVersion, scenario.result === 'rollback_failed' ? 'unknown'
+          : scenario.result === 'succeeded' ? '1.0.8' : '1.0.7');
+        assert.deepEqual(await Promise.all(protectedFiles.map(async file => hash(await readFile(file)))), before);
+        if (scenario.result === 'rolled_back' || scenario.result === 'failed') {
+          assert.deepEqual(await readFile(launcher), await readFile(launcherBackup));
+        }
+        if (scenario.result === 'succeeded') {
+          const text = await readFile(launcher, 'utf8');
+          assert.match(text, /^\uFEFF?\$env:NEXOWIRE_UPDATE_STARTUP_NONCE='[a-f0-9-]{36}'\r?\n/);
+          assert.ok(text.includes(newRoot));
+          assert.ok(text.includes(ps(credential)));
+          assert.equal(text.match(/\$env:NEXOWIRE_UPDATE_STARTUP_NONCE=/g)?.length, 1);
+          const expectedDiagnostic = scenario.name === 'custom-journal'
+            ? path.join(path.dirname(journal), 'native-agent', 'startup-diagnostic.json')
+            : path.join(native, 'startup-diagnostic.json');
+          const startup = JSON.parse(await readFile(expectedDiagnostic, 'utf8'));
+          assert.equal(startup.processId, 4242);
+          assert.equal(startup.startupNonce, /NEXOWIRE_UPDATE_STARTUP_NONCE='([^']+)'/.exec(text)?.[1]);
+        }
+        if (scenario.name === 'disabled-agent') {
+          await assert.rejects(readFile(path.join(homeDir, 'fixture-actions.txt')), {code: 'ENOENT'});
+        }
+        const journalReadback = new AgentOperationJournal(journal);
+        try {
+          assert.equal((await journalReadback.inspect(unknownId))?.status, 'unknown');
+          assert.equal((await journalReadback.begin(unknownId, fingerprint, 'shell.exec')).created, false);
+        } finally { journalReadback.close(); }
+      });
+    }
     t.diagnostic('Real SQLite files and PowerShell script, generated data and task/process stubs. ' +
       'No live task, Agent, Broker, account, enrollment or physical update acceptance.');
   });
