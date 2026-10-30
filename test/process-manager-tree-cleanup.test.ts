@@ -50,7 +50,7 @@ test('Windows process.stop exposes bounded tree termination evidence and checks 
       'tree cleanup outcome must never be silently omitted',
     );
     assert.equal(treeCleanup,'requested',
-      'live shell root should be terminated via confirmed taskkill exit 0');
+      'Job guardian stop is requested, not an independent per-descendant proof');
     let lingering:RunningChild[]=[];
     for(let i=0;i<10;i++){
       lingering=findExactFixture(marker);
@@ -95,6 +95,10 @@ test('Windows Job owner reaps descendants after the root PID is deliberately los
     // Verify the shell PID's Win32 creation time before touching this
     // specifically owned test root. PID alone is reusable.
     assert.equal(started.treeOwnership,'windows_job');
+    assert.equal(started.jobMembershipVerified,'root_at_launch');
+    assert.equal(started.descendantCoverage,'job_members_only');
+    assert.equal(started.outOfJobDescendants,'unknown',
+      'out-of-Job children must not be claimed as verified cleaned');
     const rootProof=execFileSync('powershell.exe',[
       '-NoProfile','-NonInteractive','-Command',
       "$p=Get-CimInstance Win32_Process -Filter 'ProcessId="+String(started.pid)+"'; if($p){$p.CreationDate.ToUniversalTime().ToFileTimeUtc()}"

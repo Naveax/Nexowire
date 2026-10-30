@@ -108,3 +108,30 @@ test('new unknown CI jobs require deliberate matrix review, not silent PASS',()=
   assert.ok(r.findings.includes('UNEXPECTED_JOB'));
   assert.ok(r.findings.includes('REQUIRED_JOB_MISSING'));
 });
+
+test('offline green metadata and forged flags cannot prove checkout tree or Windows cases',()=>{
+  const s=synthetic();
+  s.checkoutRevisionEvidence='VERIFIED';
+  s.checkoutTreeMatchesHead='MATCHED';
+  s.windowsBrokerFixtureCases='PASSED';
+  const result=auditCoreCiSnapshot(s);
+  assert.equal(result.snapshotConsistency,'CONSISTENT');
+  assert.equal(result.checkoutRevisionEvidence,'NOT_COLLECTED');
+  assert.equal(result.checkoutTreeMatchesHead,'NOT_PROVEN');
+  assert.equal(result.windowsBrokerFixtureCases,'NOT_PROVEN');
+  assert.equal(result.githubOriginAuthenticated,false);
+  assert.equal(result.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(result.productionCore,'NO_GO');
+});
+
+test('a cancelled workflow and its cancelled job cannot produce a successful snapshot',()=>{
+  const s=synthetic();
+  data(s,'run').conclusion='cancelled';
+  jobs(s)[0]!.conclusion='cancelled';
+  const result=auditCoreCiSnapshot(s);
+  assert.equal(result.snapshotConsistency,'BLOCKED');
+  assert.ok(result.findings.includes('RUN_NOT_SUCCESSFUL'));
+  assert.ok(result.findings.includes('JOB_NOT_SUCCESSFUL'));
+  assert.equal(result.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(result.productionCore,'NO_GO');
+});

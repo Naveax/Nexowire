@@ -1,0 +1,464 @@
+/** #11 system QA: live-source audit tests remain synthetic and grant nothing. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  auditCurrentGitHubCi,
+  auditGitHubCiPayload,
+  CORE_CI_REPOSITORY,
+  CORE_CI_WORKFLOW_ID,
+  REQUIRED_CORE_CI_JOBS,
+} from '../scripts/qa-core-ci-github-audit.js';
+
+type RunFixture=ReturnType<typeof fixtures>['run'];
+
+const headSha='a'.repeat(40);
+const baseSha='b'.repeat(40);
+const runId=40500012345;
+const prNumber=912;
+const repo=CORE_CI_REPOSITORY;
+const token='ghp_test_token_never_logged_or_transmitted';
+
+function fixtures(){
+  const pullRequest={
+    number:prNumber,state:'open',draft:true,
+    head:{
+      ref:'qa/11-test-branch',sha:headSha,
+      repo:{full_name:repo},
+    },
+    base:{
+      ref:'main',sha:baseSha,
+      repo:{full_name:repo},
+    },
+  };
+  const run={
+    id:runId,head_branch:'qa/11-test-branch',head_sha:headSha,
+    head_repository:{full_name:repo},
+    workflow_id:CORE_CI_WORKFLOW_ID,status:'completed',conclusion:'success',
+    run_attempt:1,event:'pull_request',
+    pull_requests:[{
+      number:prNumber,
+      head:{sha:headSha,ref:'qa/11-test-branch'},
+      base:{sha:baseSha,ref:'main'},
+    }],
+  };
+  const jobs={
+    total_count:REQUIRED_CORE_CI_JOBS.length,
+    jobs:REQUIRED_CORE_CI_JOBS.map(name=>({
+      name,run_id:runId,run_attempt:1,status:'completed',conclusion:'success',
+    })),
+  };
+  return {pullRequest,run,jobs};
+}
+
+function fakeFetch(responses:unknown[]){
+  let cursor=0;
+  const urls:string[]=[];
+  const authHeaders:string[]=[];
+  const fetcher:typeof fetch=async(input,init)=>{
+    const url=typeof input==='string'?input:
+      input instanceof URL?input.href:input.url;
+    urls.push(url);
+    authHeaders.push(new Headers(init?.headers).get('authorization')??'');
+    const body=responses[cursor++];
+    if(body===undefined)throw new Error('Unexpected request');
+    return new Response(JSON.stringify(body),{
+      status:200,headers:{'content-type':'application/json'},
+    });
+  };
+  return {fetcher,urls,authHeaders};
+}
+
+function auditInput(){
+  return {
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,token,
+  };
+}
+
+test('live audit binds authenticated source, exact PR, run attempt and complete jobs',async()=>{
+  const fixture=fixtures();
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.equal(report.headSha,headSha);
+  assert.equal(report.baseSha,baseSha);
+  assert.equal(report.runAttempt,1);
+  assert.equal(report.githubOriginAuthenticated,false);
+  assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(report.productionCore,'NO_GO');
+  assert.equal(fake.urls.length,6);
+  assert.equal(fake.urls[5],fake.urls[2]);
+  assert.ok(fake.urls[3]!.includes('/attempts/1/jobs?'));
+  assert.equal(fake.urls[0],'https://api.github.com/user');
+  assert.ok(fake.urls.every(url=>url.startsWith('https://api.github.com/')));
+  assert.ok(fake.authHeaders.every(value=>value==='Bearer '+token));
+  assert.equal(JSON.stringify(report).includes(token),false);
+});
+
+test('saved or mismatched SHA cannot inherit a current PASS',async()=>{
+  const fixture=fixtures();
+  fixture.run.head_sha='c'.repeat(40);
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('EXACT_SHA_MISMATCH'));
+  assert.equal(report.productionCore,'NO_GO');
+});
+
+test('the workflow must be the pinned CI workflow',async()=>{
+  const fixture=fixtures();
+  fixture.run.workflow_id=17;
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.ok(report.findings.includes('WORKFLOW_ID_MISMATCH'));
+});
+
+test('base movement after the run blocks exact PR context',async()=>{
+  const fixture=fixtures();
+  fixture.pullRequest.base.sha='d'.repeat(40);
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.ok(report.findings.includes('RUN_PR_BASE_MISMATCH'));
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+});
+
+test('PR head or base changing during the audit invalidates the snapshot',async()=>{
+  const fixture=fixtures();
+  const changed={...fixture.pullRequest,head:{
+    ...fixture.pullRequest.head,sha:'e'.repeat(40),
+  }};
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,changed,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+});
+
+test('workflow_dispatch must resolve its exact commit to the current PR',async()=>{
+  const fixture=fixtures();
+  fixture.run.event='workflow_dispatch';
+  fixture.run.pull_requests=[];
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,[fixture.pullRequest],
+    fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.equal(report.event,'workflow_dispatch');
+  assert.ok(fake.urls.some(url=>url.includes('/commits/'+headSha+'/pulls?')));
+  assert.equal(report.githubOriginAuthenticated,false);
+});
+
+test('foreign PR context cannot be reused for another pull request',async()=>{
+  const fixture=fixtures();
+  fixture.run.pull_requests[0]!.number=913;
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.ok(report.findings.includes('RUN_PR_CONTEXT_MISSING'));
+});
+
+test('duplicate, missing, skipped, failed and foreign-run jobs block evidence',()=>{
+  const fixture=fixtures();
+  const jobs=fixture.jobs.jobs as Array<{
+    name:string;run_id:number;run_attempt:number;status:string;conclusion:string;
+  }>;
+  jobs[0]!.name=jobs[1]!.name;
+  jobs[2]!.conclusion='skipped';
+  jobs[3]!.run_id=9;
+  jobs[4]!.name='unexpected';
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,
+    recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.ok(report.findings.includes('DUPLICATE_JOB_NAME'));
+  assert.ok(report.findings.includes('JOB_NOT_SUCCESSFUL'));
+  assert.ok(report.findings.includes('JOB_RUN_ID_MISMATCH'));
+  assert.ok(report.findings.includes('UNEXPECTED_JOB'));
+  assert.equal(report.productionCore,'NO_GO');
+});
+
+test('job pagination truncation and attempt mismatch block evidence',()=>{
+  const fixture=fixtures();
+  (fixture.jobs as {total_count:number}).total_count=8;
+  fixture.jobs.jobs[0]!.run_attempt=2;
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,
+    recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.ok(report.findings.includes('JOB_PAGE_INCOMPLETE'));
+  assert.ok(report.findings.includes('JOB_ATTEMPT_MISMATCH'));
+});
+
+test('invalid token and foreign repository are rejected before any request',async()=>{
+  const fake=fakeFetch([]);
+  await assert.rejects(()=>auditCurrentGitHubCi({
+    ...auditInput(),token:'bad',
+  },fake.fetcher),/GITHUB_TOKEN_REQUIRED_OR_INVALID/);
+  await assert.rejects(()=>auditCurrentGitHubCi({
+    ...auditInput(),repositoryFullName:'attacker/Nexowire',
+  },fake.fetcher),/GITHUB_CI_INPUT_INVALID/);
+  assert.equal(fake.urls.length,0);
+});
+
+test('attempt-scoped job endpoint remains usable when job records omit run_attempt',async()=>{
+  const fixture=fixtures();
+  for(const job of fixture.jobs.jobs){
+    delete (job as {run_attempt?:number}).run_attempt;
+  }
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.ok(fake.urls.some(url=>url.includes('/attempts/1/jobs?')));
+});
+
+test('a token response without authenticated user identity is rejected',async()=>{
+  const fixture=fixtures();
+  const fake=fakeFetch([
+    {message:'not authenticated'},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,fixture.run,
+  ]);
+  await assert.rejects(
+    ()=>auditCurrentGitHubCi(auditInput(),fake.fetcher),
+    /GITHUB_TOKEN_AUTHENTICATION_FAILED/,
+  );
+});
+
+test('malformed caller-supplied records never become authenticated or accepted',()=>{
+  const report=auditGitHubCiPayload(null);
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.equal(report.githubOriginAuthenticated,false);
+  assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(report.productionCore,'NO_GO');
+});
+
+test('successful run metadata and forged flags cannot prove checked-out tree or Windows cases',()=>{
+  const fixture=fixtures();
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+    checkoutRevisionEvidence:'VERIFIED',
+    checkoutTreeMatchesHead:'MATCHED',
+    windowsBrokerFixtureCases:'PASSED',
+  });
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.equal(report.checkoutRevisionEvidence,'NOT_COLLECTED');
+  assert.equal(report.checkoutTreeMatchesHead,'NOT_PROVEN');
+  assert.equal(report.windowsBrokerFixtureCases,'NOT_PROVEN');
+  assert.equal(report.githubOriginAuthenticated,false);
+  assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(report.productionCore,'NO_GO');
+});
+
+test('a new run attempt or changed outcome after job retrieval blocks the snapshot',async()=>{
+  for(const changed of [
+    {run_attempt:2,status:'in_progress',conclusion:null},
+    {status:'completed',conclusion:'cancelled'},
+    {head_sha:'c'.repeat(40)},
+    {workflow_id:17},
+  ]){
+    const fixture=fixtures();
+    const fake=fakeFetch([
+      {login:'synthetic-test-user',id:1},
+      fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,
+      {...fixture.run,...changed},
+    ]);
+    const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+    assert.equal(report.snapshotConsistency,'BLOCKED');
+    assert.ok(report.findings.includes('RUN_CHANGED_DURING_AUDIT'));
+    assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+    assert.equal(report.productionCore,'NO_GO');
+    assert.equal(fake.urls[5],fake.urls[2]);
+  }
+});
+
+test('missing run recheck never yields a consistent live metadata snapshot',()=>{
+  const fixture=fixtures();
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('RUN_RECHECK_MISSING'));
+});
+
+test('PR base movement during job retrieval blocks the live snapshot',async()=>{
+  const fixture=fixtures();
+  let releaseJobs!:()=>void;
+  let signalJobStart!:()=>void;
+  const jobsHeld=new Promise<void>(resolve=>{releaseJobs=resolve;});
+  const jobsStarted=new Promise<void>(resolve=>{signalJobStart=resolve;});
+  let prReads=0;
+  let currentPr=fixture.pullRequest;
+  const response=(payload:unknown)=>new Response(JSON.stringify(payload),{
+    status:200,headers:{'content-type':'application/json'},
+  });
+  const fetcher:typeof fetch=async(input)=>{
+    const url=typeof input==='string'?input:
+      input instanceof URL?input.href:input.url;
+    if(url.endsWith('/user'))return response({login:'synthetic-test-user',id:1});
+    if(url.includes('/attempts/1/jobs?')){
+      signalJobStart();
+      await jobsHeld;
+      return response(fixture.jobs);
+    }
+    if(url.endsWith('/pulls/'+prNumber)){
+      prReads++;
+      return response(currentPr);
+    }
+    if(url.endsWith('/actions/runs/'+runId))return response(fixture.run);
+    throw new Error('Unexpected request');
+  };
+  const pending=auditCurrentGitHubCi(auditInput(),fetcher);
+  await jobsStarted;
+  const readsBeforeJobsCompleted=prReads;
+  currentPr={...fixture.pullRequest,base:{
+    ...fixture.pullRequest.base,sha:'d'.repeat(40),
+  }};
+  releaseJobs();
+  const report=await pending;
+  assert.equal(readsBeforeJobsCompleted,1);
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+});
+
+
+test('PR base branch changes at the same commit invalidate rechecked context',()=>{
+  const fixture=fixtures();
+  const changed={...fixture.pullRequest,base:{
+    ...fixture.pullRequest.base,ref:'release-branch',
+  }};
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:changed,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+});
+
+test('run association branch names must match PR refs even when SHAs match',()=>{
+  const fixture=fixtures();
+  const changed={...fixture.pullRequest,base:{
+    ...fixture.pullRequest.base,ref:'release-branch',
+  }};
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:changed,recheckedPullRequest:changed,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('RUN_PR_BASE_REF_MISMATCH'));
+});
+
+
+test('PR head and repository changes at the same SHA invalidate rechecked context',()=>{
+  const fixture=fixtures();
+  for(const changed of [
+    {...fixture.pullRequest,head:{...fixture.pullRequest.head,ref:'renamed-head'}},
+    {...fixture.pullRequest,head:{...fixture.pullRequest.head,repo:{full_name:'other/repo'}}},
+    {...fixture.pullRequest,base:{...fixture.pullRequest.base,repo:{full_name:'other/repo'}}},
+  ]){
+    const report=auditGitHubCiPayload({
+      repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+      pullRequest:fixture.pullRequest,recheckedPullRequest:changed,
+      run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+    });
+    assert.equal(report.snapshotConsistency,'BLOCKED');
+    assert.ok(report.findings.includes('PR_CHANGED_DURING_AUDIT'));
+  }
+});
+
+test('missing PR base ref and a mismatched run head ref block evidence',()=>{
+  const fixture=fixtures();
+  fixture.pullRequest.base.ref='';
+  fixture.run.pull_requests[0]!.head.ref='other-head';
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('PR_BASE_REF_INVALID'));
+  assert.ok(report.findings.includes('RUN_PR_HEAD_REF_MISMATCH'));
+});
+
+const changedRunContexts:Array<[string,(run:RunFixture)=>void]>=[
+  ['head ref',run=>{run.pull_requests[0]!.head.ref='other-head';}],
+  ['base ref at the same SHA',run=>{run.pull_requests[0]!.base.ref='release';}],
+  ['base SHA',run=>{run.pull_requests[0]!.base.sha='d'.repeat(40);}],
+  ['selected PR number',run=>{run.pull_requests[0]!.number=prNumber+1;}],
+  ['selected PR association disappears',run=>{run.pull_requests=[];}],
+];
+for(const [name,change] of changedRunContexts){
+  test('run recheck must reject changed PR association: '+name,async()=>{
+    const fixture=fixtures();
+    const changed=structuredClone(fixture.run);
+    change(changed);
+    const fake=fakeFetch([
+      {login:'synthetic-test-user',id:1},
+      fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,changed,
+    ]);
+    const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+    assert.equal(report.snapshotConsistency,'BLOCKED');
+    assert.ok(report.findings.includes('RUN_PR_CONTEXT_CHANGED_DURING_AUDIT'));
+    assert.equal(report.githubOriginAuthenticated,false);
+    assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+    assert.equal(report.productionCore,'NO_GO');
+  });
+}
+
+test('duplicate matching PR associations cannot produce unambiguous run evidence',()=>{
+  const fixture=fixtures();
+  fixture.run.pull_requests.push(structuredClone(fixture.run.pull_requests[0]!));
+  const report=auditGitHubCiPayload({
+    repositoryFullName:repo,pullRequestNumber:prNumber,runId,
+    pullRequest:fixture.pullRequest,recheckedPullRequest:fixture.pullRequest,
+    run:fixture.run,recheckedRun:fixture.run,jobs:fixture.jobs,
+  });
+  assert.equal(report.snapshotConsistency,'BLOCKED');
+  assert.ok(report.findings.includes('RUN_PR_CONTEXT_AMBIGUOUS'));
+});
+
+test('unrelated run PR associations and their ordering do not invalidate the selected context',async()=>{
+  const fixture=fixtures();
+  const changed=structuredClone(fixture.run);
+  const unrelated=structuredClone(changed.pull_requests[0]!);
+  unrelated.number=prNumber+1;
+  unrelated.base.ref='unrelated-base';
+  changed.pull_requests.unshift(unrelated);
+  const fake=fakeFetch([
+    {login:'synthetic-test-user',id:1},
+    fixture.pullRequest,fixture.run,fixture.jobs,fixture.pullRequest,changed,
+  ]);
+  const report=await auditCurrentGitHubCi(auditInput(),fake.fetcher);
+  assert.equal(report.snapshotConsistency,'CONSISTENT');
+  assert.deepEqual(report.findings,[]);
+  assert.equal(report.githubOriginAuthenticated,false);
+  assert.equal(report.physicalAcceptance,'NOT_PROVEN');
+  assert.equal(report.productionCore,'NO_GO');
+});
