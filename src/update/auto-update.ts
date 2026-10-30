@@ -170,7 +170,7 @@ export function renderAutoUpdateLauncher(
   executable: string,
   cli: string,
 ): string {
-  return [
+  return '\uFEFF' + [
     "$ErrorActionPreference='Stop'",
     '& ' + psLiteral(executable) + ' ' +
       psLiteral(cli) + " 'update' 'auto' 'run'",

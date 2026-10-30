@@ -304,7 +304,9 @@ export function buildNativeAgentLauncher(
       'exit $LASTEXITCODE',
       '',
     );
-    return lines.join('\r\n');
+    // This file is executed by Windows PowerShell 5.1, whose BOM-less
+    // script decoder otherwise uses the machine's ANSI code page.
+    return '\uFEFF' + lines.join('\r\n');
   }
 
   const lines = ['#!/bin/sh', 'set -eu'];

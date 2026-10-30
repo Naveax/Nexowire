@@ -235,7 +235,7 @@ export function buildHubLauncher(
     'exit $LASTEXITCODE',
     '',
   );
-  return lines.join('\r\n');
+  return '\uFEFF' + lines.join('\r\n');
 }
 
 async function runPowerShellJson<T>(

@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const payloadRoot = process.env.NEXOWIRE_JOURNAL_TEST_APP_ROOT;
-const {renderWindowsCutoverScript, readLiveUpdateState, isolatedLiveUpdateEnvironment} = await import(
+const {renderWindowsCutoverScript, writeWindowsCutoverScript, readLiveUpdateState, isolatedLiveUpdateEnvironment} = await import(
   payloadRoot ? pathToFileURL(path.join(payloadRoot, 'dist/src/update/live-update.js')).href
     : new URL('../src/update/live-update.js', import.meta.url).href);
 const {AgentOperationJournal} = await import(payloadRoot
@@ -39,6 +39,24 @@ test('user updater bounds the readiness wait instead of accepting an unbounded t
       buildId: '1.0.8-bbbbbbbbbbbb', targetRoot: 'C:\\fixture',
       localAppData: 'C:\\fixture', agentStartupTimeoutSeconds}), /Invalid Agent startup timeout/);
   }
+});
+
+test('persisted cutover helper is Unicode-readable by Windows PowerShell 5.1', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'nw-update-encoding-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const homeDir = path.join(root, "Çığ Ölçek O'Brien");
+  const localAppData = path.join(homeDir, 'AppData', 'Local');
+  const input = {targetVersion: '1.0.8', currentVersion: '1.0.7',
+    buildId: '1.0.8-bbbbbbbbbbbb', localAppData, homeDir,
+    targetRoot: path.join(localAppData, 'Nexowire', 'versions', '1.0.8-bbbbbbbbbbbb')};
+  const file = path.join(root, 'apply.ps1');
+  await writeWindowsCutoverScript(file, input);
+  const bytes = await readFile(file);
+  // Without this signature, the pinned 5.1 interpreter decodes non-ASCII
+  // script literals using the machine's ANSI code page, not UTF-8.
+  assert.equal(bytes.subarray(0, 3).toString('hex'), 'efbbbf');
+  assert.equal(bytes.subarray(3).toString('utf8'), renderWindowsCutoverScript(input));
+  assert.ok(bytes.toString('utf8').includes("Çığ Ölçek O''Brien"));
 });
 
 test('Windows cutover script rejects false readiness and preserves journal, identity and credential bytes',
@@ -75,6 +93,8 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
     const scenarios = [
       {name: 'fresh', result: 'succeeded', code: 0},
       {name: 'custom-journal', result: 'succeeded', code: 0},
+      {name: 'unicode-profile', result: 'succeeded', code: 0},
+      {name: 'unicode-custom-journal', result: 'succeeded', code: 0},
       {name: 'missing-marker', result: 'rolled_back', code: 1},
       {name: 'old-nonce', result: 'rolled_back', code: 1},
       {name: 'wrong-pid', result: 'rolled_back', code: 1},
@@ -96,15 +116,17 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
     const cases = [];
     for (const scenario of scenarios) {
       t.signal.throwIfAborted();
-      const homeDir = path.join(root, scenario.name);
+      const unicode = scenario.name.startsWith('unicode-');
+      const customJournal = scenario.name.endsWith('custom-journal');
+      const homeDir = path.join(root, scenario.name, ...(unicode ? ["Çığ Ölçek O'Brien"] : []));
       const appData = path.join(homeDir, 'AppData', 'Local');
       const profile = path.join(homeDir, '.nexowire');
       const native = path.join(profile, 'native-agent');
       const update = path.join(appData, 'Nexowire', 'update');
       await mkdir(native, {recursive: true});
       await mkdir(update, {recursive: true});
-      const journal = scenario.name === 'custom-journal'
-        ? path.join(homeDir, "O'Brien", 'operations.sqlite') : path.join(profile, 'agent-operations.sqlite');
+      const journal = customJournal
+        ? path.join(homeDir, "O'Brien Çığ", 'operations.sqlite') : path.join(profile, 'agent-operations.sqlite');
       await mkdir(path.dirname(journal), {recursive: true});
       const protectedFiles = ['', '-wal', '-shm'].map(suffix => journal + suffix);
       for (let i = 0; i < 3; i++) await writeFile(protectedFiles[i]!, journalBytes[i]!);
@@ -119,8 +141,8 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
       const newRoot = path.join(appData, 'Nexowire', 'versions', '1.0.8-bbbbbbbbbbbb');
       const launcher = path.join(native, 'launch.ps1');
       const original = ["$ErrorActionPreference='Stop'",
-        ...(scenario.name === 'custom-journal' ? ["$env:NEXOWIRE_UPDATE_STARTUP_NONCE='11111111-1111-4111-8111-111111111111'"] : []),
-        ...(scenario.name === 'custom-journal' ? ['$env:NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE=' + ps(journal)] : []),
+        ...(customJournal ? ["$env:NEXOWIRE_UPDATE_STARTUP_NONCE='11111111-1111-4111-8111-111111111111'"] : []),
+        ...(customJournal ? ['$env:NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE=' + ps(journal)] : []),
         '$env:NEXOWIRE_AGENT_TOKEN_DPAPI_FILE=' + ps(credential),
         '& ' + ps(path.join(oldRoot, 'runtime', 'node.exe')) + ' ' +
           ps(path.join(oldRoot, 'app', 'dist', 'src', 'cli.js')) + " 'agent' 'run'",
@@ -129,6 +151,12 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
       const launcherBackup = path.join(homeDir, 'original-launcher.ps1');
       await copyFile(launcher, launcherBackup);
       const wrapper = path.join(homeDir, 'isolated-cutover.ps1');
+      const helper = path.join(update, 'apply.ps1');
+      // Exercise the production writer and a separate -File-equivalent script
+      // invocation. Never hide a missing BOM by embedding the helper inline.
+      await writeWindowsCutoverScript(helper, {targetVersion: '1.0.8', currentVersion: '1.0.7',
+        buildId: '1.0.8-bbbbbbbbbbbb', targetRoot: newRoot, localAppData: appData,
+        homeDir, agentStartupTimeoutSeconds: 1});
       const program = [
         "$ErrorActionPreference='Stop'",
         '$scenario=' + ps(scenario.name),
@@ -154,7 +182,7 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
         '  $parseTokens=$null; $parseErrors=$null',
         '  [void][System.Management.Automation.Language.Parser]::ParseInput($text,[ref]$parseTokens,[ref]$parseErrors)',
         "  if($parseErrors.Count -ne 0){throw 'PATCHED_LAUNCHER_SYNTAX_INVALID'}",
-        "  if(-not $text.Contains($NewRoot)){if($scenario -eq 'rollback-start-fails'){throw 'SYNTHETIC_OLD_AGENT_START_FAILED'}; return}",
+        "  if(-not $text.Contains($NewRoot.Replace(\"'\",\"''\"))){if($scenario -eq 'rollback-start-fails'){throw 'SYNTHETIC_OLD_AGENT_START_FAILED'}; return}",
         "  if($scenario -eq 'backup-changed'){Get-ChildItem -LiteralPath (Split-Path -Parent $AgentLauncher) -Filter 'launch.ps1.update-rollback.*' | ForEach-Object {[IO.File]::WriteAllText($_.FullName,'SYNTHETIC_BACKUP_CORRUPTION')}; return}",
         "  if($scenario -in @('missing-marker','restore-corrupted','rollback-start-fails')){return}",
         '  $value=[ordered]@{schemaVersion=1;version=$TargetVersion;recordedAt=[DateTime]::UtcNow.ToString("o");processId=4242;startupNonce=$StartupNonce;phase="local-state-ready";failureCode=$null;consecutiveFailures=0;restartLoopDetected=$false;automaticJournalRepair=$false;activeConnectionVerified=$false;coreAuthorityVerified=$false}',
@@ -185,20 +213,18 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
         "  if($scenario -eq 'restore-corrupted' -and $LiteralPath.Contains('.update-rollback.')){[IO.File]::WriteAllText($Destination,'SYNTHETIC_RESTORE_CORRUPTION')}",
         '}',
         'function Start-Sleep {[CmdletBinding()]param([int]$Seconds,[int]$Milliseconds)}',
-        renderWindowsCutoverScript({targetVersion: '1.0.8', currentVersion: '1.0.7',
-          buildId: '1.0.8-bbbbbbbbbbbb', targetRoot: newRoot, localAppData: appData,
-          homeDir, agentStartupTimeoutSeconds: 1}),
-        'exit 0',
+        '& ' + ps(helper),
+        'exit $LASTEXITCODE',
       ].join('\r\n');
-      await writeFile(wrapper, program);
+      await writeFile(wrapper, '\uFEFF' + program);
       cases.push({scenario, homeDir, appData, journal, protectedFiles, before, newRoot,
         launcher, launcherBackup, credential, native, wrapper});
     }
     const batch = path.join(root, 'fixture-batch.ps1');
     const results = path.join(root, 'fixture-results.json');
     // A script's exit returns to its caller with LASTEXITCODE. Keep the actual cutover
-    // script intact, including its exit 1/2 paths, without nineteen cold shell starts.
-    await writeFile(batch, [
+    // script intact, including its exit 1/2 paths, without per-case cold shell starts.
+    await writeFile(batch, '\uFEFF' + [
       "$ErrorActionPreference='Stop'",
       '$results=@()',
       ...cases.flatMap(({scenario, homeDir, appData, wrapper}) => [
@@ -258,10 +284,10 @@ test('Windows cutover script rejects false readiness and preserves journal, iden
         if (scenario.result === 'succeeded') {
           const text = await readFile(launcher, 'utf8');
           assert.match(text, /^\uFEFF?\$env:NEXOWIRE_UPDATE_STARTUP_NONCE='[a-f0-9-]{36}'\r?\n/);
-          assert.ok(text.includes(newRoot));
+          assert.ok(text.includes(newRoot.replaceAll("'", "''")));
           assert.ok(text.includes(ps(credential)));
           assert.equal(text.match(/\$env:NEXOWIRE_UPDATE_STARTUP_NONCE=/g)?.length, 1);
-          const expectedDiagnostic = scenario.name === 'custom-journal'
+          const expectedDiagnostic = scenario.name.endsWith('custom-journal')
             ? path.join(path.dirname(journal), 'native-agent', 'startup-diagnostic.json')
             : path.join(native, 'startup-diagnostic.json');
           const startup = JSON.parse(await readFile(expectedDiagnostic, 'utf8'));

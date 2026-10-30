@@ -509,13 +509,15 @@ export function renderWindowsCutoverScript(input: {
     'function Patch-Launcher([string]$file){',
     '  if(-not (Test-Path -LiteralPath $file)){return}',
     '  $originalHash=(Get-FileHash -LiteralPath $file -Algorithm SHA256 -ErrorAction Stop).Hash',
-    '  $text=Get-Content -LiteralPath $file -Raw',
-    "  $pattern=[regex]::Escape((Join-Path $env:LOCALAPPDATA 'Nexowire\\versions'))+'\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}'",
+    '  $text=Get-Content -LiteralPath $file -Raw -Encoding UTF8',
+    String.raw`  $literalNewRoot=$NewRoot.Replace("'","''")`,
+    String.raw`  $versionsLiteral=(Join-Path $env:LOCALAPPDATA 'Nexowire\versions').Replace("'","''")`,
+    "  $pattern=[regex]::Escape($versionsLiteral)+'\\\\[0-9]+\\.[0-9]+\\.[0-9]+-[a-f0-9]{12}'",
     '  $replacement=$text',
-    '  if(-not $text.Contains($NewRoot)){',
+    '  if(-not $text.Contains($literalNewRoot)){',
     '    $match=[regex]::Match($text,$pattern,[Text.RegularExpressions.RegexOptions]::IgnoreCase)',
     '    if(-not $match.Success){throw \'UPDATE_LAUNCHER_RUNTIME_NOT_FOUND\'}',
-    '    $replacement=$text.Replace($match.Value,$NewRoot)',
+    '    $replacement=$text.Replace($match.Value,$literalNewRoot)',
     '  }',
     '  if($file -eq $AgentLauncher){',
     String.raw`    $noncePattern='(?m)^\$env:NEXOWIRE_UPDATE_STARTUP_NONCE=''[a-fA-F0-9-]{36}''\r?\n?'`,
@@ -583,6 +585,16 @@ export function renderWindowsCutoverScript(input: {
     '}',
     '',
   ].join('\r\n');
+}
+
+/** Write the helper exactly as the pinned Windows PowerShell 5.1 reads it. */
+export async function writeWindowsCutoverScript(
+  file: string,
+  input: Parameters<typeof renderWindowsCutoverScript>[0],
+): Promise<void> {
+  // Windows PowerShell 5.1 treats BOM-less scripts as the current ANSI code
+  // page. Paths in script literals must survive regardless of system locale.
+  await fs.writeFile(file, '\uFEFF' + renderWindowsCutoverScript(input), 'utf8');
 }
 
 export async function applyLatestLiveUpdate(
@@ -655,17 +667,16 @@ export async function applyLatestLiveUpdate(
       root,
       'apply-' + staged.buildId + '.ps1',
     );
-    await fs.writeFile(
+    await writeWindowsCutoverScript(
       helper,
-      renderWindowsCutoverScript({
+      {
         targetVersion: check.latestVersion,
         buildId: staged.buildId,
         targetRoot: staged.targetRoot,
         localAppData: localAppData(options),
         currentVersion: NEXOWIRE_VERSION,
         homeDir: options.env?.USERPROFILE ?? process.env.USERPROFILE ?? os.homedir(),
-      }),
-      'utf8',
+      },
     );
     await writeState(options, {
       schemaVersion: 1,

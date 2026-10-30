@@ -4,7 +4,7 @@
 export function renderWindowsAgentStartupGuard(): string[] {
   return String.raw`
 function Get-AgentStartupDiagnosticPath {
-  $text=Get-Content -LiteralPath $AgentLauncher -Raw -ErrorAction Stop
+  $text=Get-Content -LiteralPath $AgentLauncher -Raw -Encoding UTF8 -ErrorAction Stop
   $pattern='(?m)^\$env:NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE=''((?:[^'']|'''')*)''\r?$'
   $assignments=[regex]::Matches($text,$pattern)
   if($assignments.Count -gt 1){throw 'UPDATE_AGENT_JOURNAL_CONFIG_AMBIGUOUS'}
