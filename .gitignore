@@ -11,3 +11,5 @@ Thumbs.db
 
 .wrangler/
 wrangler.runtime.json
+native/windows-local-enrollment/bin/
+native/windows-local-enrollment/obj/
