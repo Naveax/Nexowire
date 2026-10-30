@@ -22,6 +22,8 @@ import {
   fingerprintAgentRequest,
 } from './request-cache.js';
 import { AgentOperationJournal } from './operation-journal.js';
+import {verifyAgentJournalWal} from './operation-journal-wal.js';
+import {RemoteMutationCasClient,MutationCasError} from './remote-mutation-cas.js';
 import { PrivilegedBrokerClient } from './privileged-broker-client.js';
 import { loadOrCreatePrivilegedBrokerToken } from '../security/privileged-broker-secret.js';
 import { resolveProtectedSingleSecret } from '../security/protected-secret-files.js';
@@ -374,10 +376,33 @@ export async function runNativeAgent(
     activePrivilegeMode,
   );
   const requestCache = new AgentRequestCache<AgentResponse>();
+  // Fail closed: an independently provisioned, rollback-independent authority
+  // is mandatory for native mutating agents. Never auto-create one from a
+  // potentially rolled-back journal. Operator must attest legacy migration.
+  const authorityFile=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_FILE?.trim();
+  const authorityId=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_ID?.trim();
+  const authorityGeneration=env.NEXOWIRE_AGENT_JOURNAL_AUTHORITY_GENERATION?.trim();
+  // A local SQLite authority may remain for migration/test compatibility,
+  // but it is NOT an anti-rollback trust root: both local DBs can roll back.
+  const localAuthority=authorityFile&&authorityId&&authorityGeneration
+    ? {file:authorityFile,authorityId,generation:authorityGeneration}
+    : undefined;
+  const operationJournalFile = env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
+    path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite');
   const operationJournal = new AgentOperationJournal(
-    env.NEXOWIRE_AGENT_OPERATION_JOURNAL_FILE?.trim() ||
-      path.join(os.homedir(), '.nexowire', 'agent-operations.sqlite'),
+    operationJournalFile,
+    localAuthority?{authority:localAuthority}:{},
   );
+  // Do not throw on missing CAS while bootstrapping: read-only diagnosis
+  // remains available. Every mutating request MUST first reserve via CAS.
+  const casEndpoint=env.NEXOWIRE_AGENT_RESERVATION_CAS_URL?.trim();
+  const casToken=env.NEXOWIRE_AGENT_RESERVATION_CAS_TOKEN?.trim();
+  const casAuthorityId=env.NEXOWIRE_AGENT_RESERVATION_CAS_AUTHORITY_ID?.trim();
+  const casEpoch=env.NEXOWIRE_AGENT_RESERVATION_CAS_EPOCH?.trim();
+  const remoteCas=casEndpoint&&casToken&&casAuthorityId&&casEpoch
+    ? new RemoteMutationCasClient({endpoint:casEndpoint,token:casToken,
+        authorityId:casAuthorityId,epoch:casEpoch,deviceId:identity.id})
+    : undefined;
   const advertisedCapabilities = await capabilitiesForAgent(
     process.platform,
     env,
@@ -422,7 +447,9 @@ export async function runNativeAgent(
         processes.initialize(),
         taskGraphs.initialize(),
         runbooks.initialize(),
-        operationJournal.initialize(),
+        // Startup validates existing WAL without mutating recovery history.
+        // Journal initialization remains behind the trusted remote CAS reserve.
+        verifyAgentJournalWal(operationJournalFile),
       ]);
       const failed = initialized.find(result => result.status === 'rejected');
       if (failed?.status === 'rejected') throw failed.reason;
@@ -553,6 +580,25 @@ export async function runNativeAgent(
                 // reconnect/restart cannot silently repeat a shell or write.
                 const mutation = !isReadOnlyCapability(request.data.capability);
                 if (mutation) {
+                  if(!remoteCas){
+                    throw new MutationCasError('CAS_CONFIGURATION_REQUIRED',
+                      'Remote mutation reservation unavailable; read-only access remains enabled.');
+                  }
+                  // This server stores authoritative IDs OUTSIDE the Agent's
+                  // journal+SQLite rollback domain. Network ambiguity or
+                  // service failure means NO dispatch, never blind replay.
+                  const reserved=await remoteCas.reserve(
+                    request.data.requestId,fingerprint,request.data.capability);
+                  if(!reserved.created){
+                    return {
+                      type:'response' as const,requestId:request.data.requestId,
+                      ok:false,error:{
+                        code:'AGENT_OPERATION_ALREADY_RECORDED',
+                        message:'Trusted CAS already recorded this request ID; no replay.',
+                        details:{requestId:request.data.requestId},
+                      },
+                    };
+                  }
                   const begun = await operationJournal.begin(
                     request.data.requestId,
                     fingerprint,

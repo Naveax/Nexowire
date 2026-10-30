@@ -16,6 +16,10 @@ import {
   preflightVerifiedInstaller,
 } from './windows-installer-job.js';
 import { NEXOWIRE_VERSION } from '../version.js';
+import {
+  invokeBrokerEffectOnce,
+  type BrokerExternalEffectAdmission,
+} from './privileged-broker-effect-admission.js';
 
 const BROKER_ELEVATION_SYSTEM32='C:\\Windows\\System32';
 const BROKER_ELEVATION_POWERSHELL=BROKER_ELEVATION_SYSTEM32+'\\WindowsPowerShell\\v1.0\\powershell.exe';
@@ -37,6 +41,12 @@ export interface PrivilegedBrokerServerOptions {
   tokens: readonly string[];
   maxBodyBytes?: number;
   requireElevation?: boolean;
+  /**
+   * Production MUST use a physically accepted independent CAS authority.
+   * No authority is installed by default; every /execute effect denies.
+   * Neither the HTTP body nor the bearer token may supply this object.
+   */
+  effectAdmission?: BrokerExternalEffectAdmission;
   execute?: (
     capability: string,
     input: unknown,
@@ -74,6 +84,13 @@ export function isWindowsProcessElevated(): boolean {
     result.status === 0 &&
     result.stdout.trim().toLowerCase() === 'true'
   );
+}
+
+/** Health must reflect a fresh token probe, never test-only startup options. */
+export function brokerHealthElevationClaim(
+  readCurrentToken:()=>boolean=isWindowsProcessElevated,
+):boolean {
+  try{return readCurrentToken()===true}catch{return false}
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -195,10 +212,8 @@ export async function startPrivilegedBroker(
       response.end(JSON.stringify({
         ok: true,
         version: NEXOWIRE_VERSION,
-        elevated:
-          options.requireElevation === false
-            ? true
-            : isWindowsProcessElevated(),
+        // Test fixtures may skip startup elevation; health never invents HIGH.
+        elevated: brokerHealthElevationClaim(),
       }));
       return;
     }
@@ -221,6 +236,7 @@ export async function startPrivilegedBroker(
       )) as {
         capability?: unknown;
         input?: unknown;
+        operation_id?: unknown;
       };
       const capability =
         typeof decoded.capability === 'string'
@@ -291,9 +307,17 @@ export async function startPrivilegedBroker(
                   requestedInput,
                 ));
 
-      const data = await execute(
+      // The Broker owns this gate. It is applied equally to native Windows
+      // effects and injected execute / installer / updater callbacks. A
+      // successful bearer check or a trusted-looking HTTP field cannot skip it.
+      // An unprovisioned external monotonic CAS denies by default.
+      const data = await invokeBrokerEffectOnce(
+        options.effectAdmission,
+        decoded.operation_id,
         capability,
         decoded.input,
+        (boundInput) => execute(capability, boundInput),
+        () => options.requireElevation === false || isWindowsProcessElevated(),
       );
 
       response.writeHead(200, {

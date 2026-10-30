@@ -45,6 +45,11 @@ export interface CoreCiAudit {
   readonly findings: readonly string[];
   /** A saved JSON snapshot is caller-supplied, not authenticated GitHub data. */
   readonly githubOriginAuthenticated: false;
+  /** Saved run metadata does not establish what the runner checked out. */
+  readonly checkoutRevisionEvidence: 'NOT_COLLECTED';
+  readonly checkoutTreeMatchesHead: 'NOT_PROVEN';
+  /** A successful Windows job can skip a specific required test case. */
+  readonly windowsBrokerFixtureCases: 'NOT_PROVEN';
   readonly physicalAcceptance: 'NOT_PROVEN';
   readonly productionCore: 'NO_GO';
   readonly requiredJobs: readonly string[];
@@ -122,6 +127,9 @@ export function auditCoreCiSnapshot(input: unknown): CoreCiAudit {
     snapshotConsistency: findings.length === 0 ? 'CONSISTENT' : 'BLOCKED',
     findings,
     githubOriginAuthenticated: false,
+    checkoutRevisionEvidence: 'NOT_COLLECTED',
+    checkoutTreeMatchesHead: 'NOT_PROVEN',
+    windowsBrokerFixtureCases: 'NOT_PROVEN',
     physicalAcceptance: 'NOT_PROVEN',
     productionCore: 'NO_GO',
     requiredJobs: REQUIRED_JOBS,
