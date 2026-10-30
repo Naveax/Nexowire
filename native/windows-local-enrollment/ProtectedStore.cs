@@ -119,16 +119,17 @@ internal static class ProtectedStore
             Provider=new CngProvider(provider),ExportPolicy=CngExportPolicies.None,
             KeyCreationOptions=CngKeyCreationOptions.MachineKey,KeyUsage=CngKeyUsages.Signing
         };
-        creation.Parameters.Add(new CngProperty("Security Descr",bytes,(CngPropertyOptions)4));
+        creation.Parameters.Add(new CngProperty("Security Descr",bytes,(CngPropertyOptions)5));
         var key=CngKey.Create(CngAlgorithm.ECDsaP256,name,creation);
         try{AssertKeyAcl(key);return key;}
-        catch{key.Dispose();throw;}
+        catch{try{key.Delete();}finally{key.Dispose();}throw;}
     }
     private static void AssertKeyAcl(CngKey key)
     {
-        var rawSecurity=key.GetProperty("Security Descr",(CngPropertyOptions)4).GetValue()
+        var rawSecurity=key.GetProperty("Security Descr",(CngPropertyOptions)5).GetValue()
             ?? throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");
         var sd=new RawSecurityDescriptor(rawSecurity,0);
+        Protocol.Require(sd.Owner?.Value is "S-1-5-18" or "S-1-5-32-544");
         Protocol.Require(sd.DiscretionaryAcl is not null && sd.DiscretionaryAcl.Count==2);
         var found=new HashSet<string>();
         foreach(GenericAce raw in sd.DiscretionaryAcl!)

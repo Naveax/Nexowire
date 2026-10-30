@@ -232,6 +232,15 @@ jobs:
           dotnet build native/windows-local-enrollment/Nexowire.LocalEnrollment.csproj -c Release -o native/windows-local-enrollment/bin/qa --nologo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test --import tsx test/windows-local-enrollment-native.test.ts
+      - name: Parse opt-in enrollment packaging scripts without installing
+        shell: pwsh
+        run: |
+          foreach ($file in Get-ChildItem scripts/local-enrollment -Filter *.ps1) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { $parseErrors | Format-List; exit 1 }
+          }
 
   macos-agent-lifecycle-live:
     runs-on: macos-latest

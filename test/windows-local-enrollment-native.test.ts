@@ -33,3 +33,12 @@ test('actual Windows CNG non-exportable diagnostic key interoperates with v2 ver
   assert.ifError(unsupported.error);assert.equal(unsupported.status,2);
   assert.match(unsupported.stderr,/INVALID_COMMAND/);
 });
+test('actual Windows machine CNG key owner/DACL survive reopen without enrollment',{
+  skip:process.platform!=='win32',timeout:60000,
+},()=>{
+  const exe=fileURLToPath(new URL('../native/windows-local-enrollment/bin/qa/Nexowire.LocalEnrollment.exe',import.meta.url));
+  const result=spawnSync(exe,['--machine-key-self-test'],{encoding:'utf8',timeout:45000,maxBuffer:4096,windowsHide:true});
+  assert.ifError(result.error);assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout),{diagnosticOnly:true,machineKeyAclVerified:true,
+    privateExportDenied:true,provider:'software',humanEnrollment:false});
+});

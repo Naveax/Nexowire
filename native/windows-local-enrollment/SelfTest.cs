@@ -5,6 +5,27 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class SelfTest
 {
+    internal static void MachineKey()
+    {
+        ProtectedStore.RequireAdministrator();
+        var name="Nexowire.LocalEnrollment."+Guid.NewGuid().ToString("D");
+        using var key=ProtectedStore.CreateKey(name,"Microsoft Software Key Storage Provider");
+        try
+        {
+            // No config, consent, grant, service or ProtectedStore.Root writes.
+            // This only tests actual machine key custody and reopen semantics.
+            var c=new StoreConfig(1,"","","","",name,"Microsoft Software Key Storage Provider","");
+            using var reopened=ProtectedStore.OpenKey(c);using var signer=new ECDsaCng(reopened);
+            var bytes=System.Text.Encoding.UTF8.GetBytes("nexowire.disposable.machine.key.diagnostic");
+            var sig=signer.SignData(bytes,HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+            Protocol.Require(signer.VerifyData(bytes,sig,HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+            var denied=false;try{reopened.Export(CngKeyBlobFormat.Pkcs8PrivateBlob);}catch(CryptographicException){denied=true;}
+            Protocol.Require(denied);
+            Console.WriteLine(JsonSerializer.Serialize(new {diagnosticOnly=true,machineKeyAclVerified=true,
+                privateExportDenied=true,provider="software",humanEnrollment=false},Protocol.Json));
+        }
+        finally{key.Delete();}
+    }
     internal static void Run()
     {
         // Disposable CURRENT USER diagnostic key only. Never invokes consent,

@@ -46,10 +46,25 @@ node --test --import tsx test/windows-local-enrollment-native.test.ts
 `--self-test` creates and deletes a disposable CURRENT USER software CNG key,
 verifies that private export is rejected, and prints public signed test vectors.
 It does not touch the protected enrollment store, SCM, Agent or human approval.
+`--machine-key-self-test` additionally requires an elevated diagnostic process;
+it creates/reopens/deletes a disposable machine software CNG key and checks its
+SYSTEM/Administrators owner/DACL plus private-export denial. It creates no grant
+or service and is not counted as human or hardware enrollment evidence.
 
 ## Remaining before installation
 
-Reviewed opt-in self-contained runtime/installer and rollback; independent
+The opt-in build/install scripts under `scripts/local-enrollment` are pending
+Windows acceptance. The build emits a self-contained runtime and SHA256 manifest;
+the installer requires an independently supplied manifest hash, explicit exactly
+two-device allowlist, current Agent identity and same-owner request. Preflight is
+read-only. Actual install uses Windows PowerShell 5.1 under normal local UAC,
+copies/hash-checks protected runtime bytes, invokes the visible ceremony, then
+creates an Automatic LocalSystem SCM service. It does not change the old Agent or
+Broker and reports coreActivated=false. Partial failure preserves grant/key and
+diagnostic evidence, removing only the exact new service it created. No such
+installer has been run on the user's devices.
+
+Independent
 authority v2 challenge issuance and current revocation/restore custody; Agent
 adapter and #982 mTLS/verifier composition; real machine-key ACL/TPM/SCM/pipe
 acceptance (including hostile owner clients); two-device visible enrollment,
