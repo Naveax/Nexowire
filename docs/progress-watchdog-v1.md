@@ -42,3 +42,912 @@ Unknown or side-effecting operations are never automatically replayed. Process-t
 - Test cases cover missing/invalid telemetry, split chunks, multi-megabyte stdout, monotonically increasing counters, stalled and growing queues, blocker reports, crashed workers, unknown-exit outcomes, Process Manager reconciliation, incomplete zero-exit tasks, graph/runbook proof levels and retry-budget decisions.
 - A controlled local `process.start/read` fixture tests live stdout ingestion without starting trading bots, models or external user scripts.
 - Not yet covered: verified on-disk application result manifests bound to a specific account/device/project, long-duration independent live worker acceptance, standalone restart-safe telemetry persistence, and host resource-sampler correlation. These require separate acceptance work; no production acceptance is claimed.
+
+
+## v2: independent result-file verification (PR #550 continuation)
+
+A live PID, exit code 0, heartbeat, self-reported completed/pending/failure
+counters, or a worker-supplied SHA-256 digest are NOT verification. This
+continuation adds a separate bounded verifier in
+`src/agent/progress-proof-verifier.ts`, a supervisor-only
+`verifySessionFromDisk(sessionId, trustedRequest)` entry point, and an
+operator-only offline command. **No Process Manager changes.**
+
+### Trusted scope and on-disk format
+
+The trusted caller, NOT the worker's stdout, must independently establish
+account, device, project, run, session, immutable task total and the results
+root:
+
+```json
+{
+  "runRoot": "ABSOLUTE_OPERATOR_TRUSTED_TEST_DIRECTORY",
+  "scope": {
+    "ownerAccountId": "owner-fixture",
+    "deviceId": "device-fixture",
+    "projectId": "project-fixture",
+    "runId": "run-fixture",
+    "sessionId": "session-fixture"
+  },
+  "expectedCount": 2
+}
+```
+
+Within the root, a `manifest.json` must contain:
+
+```json
+{
+  "schemaVersion": 1,
+  "scope": {
+    "ownerAccountId": "owner-fixture",
+    "deviceId": "device-fixture",
+    "projectId": "project-fixture",
+    "runId": "run-fixture",
+    "sessionId": "session-fixture"
+  },
+  "expectedCount": 2,
+  "sealed": true,
+  "artifacts": [
+    {
+      "itemId": "unit-0",
+      "filename": "unit-0.json",
+      "sha256": "SHA256_OF_THE_EXACT_BYTES"
+    }
+  ]
+}
+```
+
+Each `results/<filename>` must be a bounded JSON object with
+`schemaVersion:1`, `runId`, `itemId`, `outcome: completed|failed`
+and optionally `payload`. The verifier reads each physical file, hashes the
+actual bytes, rejects mismatched hashes, file/manifest identity drift,
+duplicate items/filenames, symlinks, junction-like nonordinary directories,
+hardlinks, missing paths and concurrent metadata changes. Limits: 1000
+items, 128 KiB per result, 256 KiB manifest, 16 MiB combined. It re-reads
+the manifest to detect mutation during inspection.
+
+The verifier computes completed and failure counts from actual result JSON
+outcomes, pending from the **independently pinned** expected total, and an
+aggregate digest:
+
+```text
+SHA256("NEXOWIRE_RESULT_SET_V1\n" +
+       each item sorted by id: JSON.stringify([itemId,outcome,fileSha256]) + "\n")
+```
+
+The worker's reported aggregate SHA-256, completed/pending/failed counters
+and Agent-observed progress time must agree with the scanned evidence.
+The last progress timestamp is the Agent clock when the claimed count first
+advanced, NOT a worker timestamp. If a result file's observed mtime is
+significantly later than that claim, verification fails. Filesystem mtime is
+only an untrusted consistency hint, not a trustworthy completion clock.
+`lastVerifiedProgressAt` records the Agent's independent rehash time.
+
+### State / safety contract
+
+- `progress_unknown`: no trusted sample or proof, or proof unavailable.
+- `active`: running worker with reported counters, possibly separately
+  verified files; **never** implies task success.
+- `stalled`: no reported completed-count advancement with pending work for
+  the configured threshold. Queue growth has its own warning.
+- `progress_mismatch`: an explicitly attempted independent verification
+  failed (for example false counters, changed file hash, identity drift).
+- `reported_complete`: exited 0 and worker reports zero pending, but lacks
+  fresh independent proof.
+- `completed_verified`: **only** exited 0 with matching trusted scope,
+  independently rehashed exact result files, sealed expected count,
+  zero pending, zero failures, matching worker digest/counters, and a fresh
+  verification performed within the last 30 seconds.
+- A cached proof expires after 30 seconds; do not keep a green verified
+  status forever when files may be mutable. A changed sample, process
+  transition, Agent reconnect or verification race invalidates proof.
+- `failed`, `lost` and ambiguous restarts stay distinct. The watchdog
+  never triggers a process retry; retry policy continues to require
+  explicit authorization, reconciliation and bounded idempotent budget.
+
+A worker saying GPU saturation is **worker-reported**; no independent GPU
+occupancy sensor was added. High claimed GPU usage plus no completed files
+remains stalled/suspected, never falsely `completed_verified`. A reconnect
+does not imply a task was executed twice, and it does not justify replay.
+
+Operator-only optional offline check:
+
+```text
+npm run progress:verify -- --trusted-request ABSOLUTE_PATH_TO_OWNER_PROVISIONED_DESCRIPTOR.json
+```
+
+It verifies only result files; its JSON explicitly says
+`completedVerified:false` and
+`processExitIndependentlyAttested:false`, because a standalone file scan
+cannot attest to Agent process exit. A request descriptor written by the
+worker itself is NOT an independent trust anchor.
+
+### Acceptance evidence and remaining blockers
+
+Test fixture `test/fixtures/progress-result-worker-fixture.cjs` uses only
+temporary directories and controlled Node processes. Negative cases:
+fabricated completed/pending, tampered result bytes, wrong account/device/
+project/run/session, missing/duplicate results, result identity drift,
+hardlink aliasing, timestamp inconsistency, verifier/sample race, GPU report
+without output, queue growth, crash or ambiguous exit and reconnect.
+A Windows symlink fixture is attempted but may be skipped when the OS denies
+creating a symlink; hardlink rejection remains tested.
+
+**NOT PRODUCTION ACCEPTANCE:** Neither worker-created JSON nor worker-owned
+manifest is a cryptographically attested independent record of semantic
+correctness. Production still needs Agent-owned immutable write-once results
+or a protected artifact handoff/manifest signer, trusted scheduling of total
+work, filesystem ACL boundary and handle-safe TOCTOU protection, persistent
+proof journal after Agent restart, external process exit ownership check,
+physical 2-device acceptance and long-running real workloads. This module
+is not automatically invoked for arbitrary process.read responses because
+no trusted per-session project/total/root binding has been provisioned.
+Unconfigured processes remain self-reported/unverified; no fabricated green
+status. The actual crypto model/trading bot was not started.
+
+
+### Post-merge #559 / #550 Windows acceptance note (2026-10-18)
+
+PR #550 merged into main as ca7fc2c while the verifier follow-up was in
+progress. This implementation therefore targets a separate DRAFT follow-up
+PR against main instead of rewriting a merged PR.
+
+The unrelated Win32 Job Object change from PR #559 makes Native Process
+Manager refuse process.start without its pinned native Job owner EXE.
+The isolated Work PC source worktree lacks native/windows-job-owner.exe.
+The controlled process.start/read integration tests are conditionally
+SKIPPED **only** when that helper is absent, with explicit evidence.
+When provisioned, the new bounded temporary fixture uses the real native
+Process Manager/Job guardian, receives the Agent-assigned session ID over
+stdin, emits result hashes/counters on stdout, and checks observed process
+exit plus on-disk proof. A genuine completed task reaches
+`completed_verified`; an inflated counter with a sealed but incomplete
+manifest reaches `progress_mismatch`.
+No native Process Manager code or runtime trust checks were weakened.
+The new independent result-file verifier tests execute controlled temporary
+Node worker subprocesses without invoking Native Process Manager; they do
+not substitute for a true Windows Job Object acceptance test.
+Linux CI can still run the original process.start/read integration test.
+
+Reviewers must distinguish targeted PASS, physical Win32 process-start
+SKIP, GitHub exact-head CI and production release gates.
+
+### Follow-up #575: Windows Job pipe drain and bounded file reads (2026-10-19)
+
+- Initial GitHub CI run `39155483038` failed solely in Windows
+  `browser-live` > `Physical Windows Job Object regressions`:
+  `Windows Job preserves separate stdin/stdout/stderr pipes` observed
+  `status=exited` before `WINJOB_STDOUT` was read. The source-built
+  local native helper reproduced correct output 24/24 times; the
+  intermittent ordering hypothesis is **not** claimed proven solely
+  by the earlier CI failure.
+- The existing physical Windows Job test retains strict, separate
+  stdout/stderr content assertions and the Job-owned exit requirement,
+  but polls with a bounded 50 ms delay after early terminal observations
+  instead of spinning through the entire read budget before asynchronous
+  pipe callbacks can deliver their last events. Missing output still fails.
+- The result verifier reads at most each file's previously attested size
+  (128 KiB per result, 256 KiB for manifest) from the open handle.
+  A worker appending while scanned can no longer trigger an unbounded
+  `FileHandle.readFile()` allocation; stat/identity/mtime changes fail closed.
+- New negative tests cover matching file hashes with nonzero or
+  **unknown** OS exit, and a too-large file with a forged matching
+  manifest SHA-256. Neither can reach `completed_verified`.
+- A separately controlled Windows native Process Manager fixture now
+  tests complete versus forged-progress output end to end. Its command
+  parameters use guarded metacharacter-free test paths on Windows to
+  avoid pre-existing cmd.exe quoting ambiguity through the native helper.
+  Paths requiring different native quoting are **BLOCKED**, not silently
+  allowed. The production helper executable trust chain remains a separate
+  requirement.
+
+
+### #575 strict completion correlation and #588 observer adapter (2026-10-20)
+
+- `completed_verified` now requires all previously independent JSON file
+  SHA-256/count/scope checks **plus** an externally bound UUID `requestId`,
+  exact captured stdout progress-line SHA-256, observed OS exit 0,
+  Agent-observed exit timestamp, bounded timestamp ordering, and an
+  out-of-band trusted storage attestation of the result set SHA-256.
+  File-consistency `progressVerified:true` **alone** no longer means
+  `completed_verified`: without trusted attestation a clean exit remains
+  `reported_complete` and `verificationReasonForCompletion` is
+  `IMMUTABLE_ATTESTATION_REQUIRED`.
+- `TrustedCompletionAttestation` is a **boundary contract**, not a
+  cryptographic token or implementation of immutable storage. A normal
+  worker cannot supply it from stdout or from its own manifest. Until an
+  independently authenticated Agent-owned immutable storage provider is
+  connected, real production work must not receive this attestation.
+  The isolated unit tests explicitly simulate the provider for acceptance
+  policy testing; their success does NOT establish storage immutability.
+- Additional negative acceptance: forged requestId, immutable digest,
+  stdout hash, commit/exit timestamps, unknown/nonzero exit, lost child,
+  malformed telemetry after proof, 0 new results, pending-zero process
+  stalled without actual exit, and stale stdout replay from an older
+  Hub reconnect epoch. Invalid telemetry now invalidates cached proof.
+  `mutation_unknown` remains non-retryable without outside reconciliation.
+- New stand-alone `artifact-transfer-progress-adapter.ts` for issue #588
+  consumes **actual** ArtifactBridge `begin`, `putChunk`, and `commit`
+  receipts. Reports 65,536-byte chunk counters, last acknowledged chunk
+  SHA-256, confirmed offsets, previously persisted resume offset,
+  remaining bytes, full-file SHA-256, and only confirmed-complete storage
+  results. Duplicate acknowledged chunks do not increase counts.
+  `mutation_unknown` strictly blocks automatic replay; an operator must
+  reconcile through the owning Artifact Bridge API. The adapter does
+  not touch `src/workspace/artifact-bridge.ts`, the ingest/store
+  implementation, native Process Manager, or live Agent.
+- Adapter test invokes a real isolated `ArtifactBridgeStore` with
+  2x64KiB+123-byte payload, reconstructs the adapter from its durable
+  resume offset, re-reads the committed manifest, and verifies negative
+  lost-response/offset/sha/oversized-chunk scenarios.
+- **Not production accepted**: missing actual immutable storage attestation,
+  signed/ACL-controlled authoritativeness for requestId/exitedAt,
+  output-proof durable WAL after Agent crash, protected cross-owner handles,
+  physical 2-device acceptance and representative long-running workloads.
+  No live crypto bot or GPU benchmark launched.
+
+
+### Historical #575 transfer receipt prototype (2026-10-20; superseded 2026-10-21)
+
+`src/agent/one-call-transfer-watchdog.ts` is a standalone, read-only
+observer of the current **#596** `artifact_bridge_ingest_device_file`
+response and the proposed **#597** single-call `transfer_status` /
+`transfer_cancel` status/cancel responses. It never changes
+`src/workspace/artifact-bridge.ts`, `src/mcp/artifact-bridge-*`
+(#08 owned), or ProcessManager (#03 owned), and does not initiate transfers.
+
+**Provenance levels are distinct:**
+
+1. `PARTIAL`, `COMPLETE`, `ALREADY_PRESENT` responses contain
+   `state`, `sha256`, `size`, `offset`, `transferredBytes`, and
+   `artifactPath`. Their byte offsets and derived 65,536-byte chunk
+   counts are **receipt claims**, not independently attested immutable
+   content. These receipts provide NO per-chunk hash list or
+   requestId binding on their own; the authenticated invoker must
+   pin scope/UUID and validate source authenticity. The observer refuses
+   regressions, overflows, invalid hashes and offsets, and inconsistent
+   reported transfer bytes.
+2. Only after an externally authenticated `ArtifactBridgeStore.get`
+   and independently content-hashed `readChunk` response match the
+   pinned account/project/device/artifact/SHA-256/size does the adapter
+   expose `storageVerified=true` and a
+   `lastVerifiedChunkSha256`. It expires after **30 seconds**.
+   It uses bounded 64 KiB reads, not one giant MCP payload. The
+   filesystem/storage verification does NOT prove a worker completed a
+   valid task.
+3. `workerCompletedVerified=false` is deliberately invariant.
+   Worker-reported completed counters, PID liveness, or even a valid
+   stored artifact must NEVER be promoted into
+   `ProgressSupervisor.completed_verified` without its separate
+   trusted request/output/exit/immutable-attestation contract.
+4. A lost mutation response sets `mutation_unknown`; no automatic
+   replay, cancel or retry is performed. The proposed status receipt
+   can explicitly reconcile a reported offset/cancel state but does
+   NOT prove on-disk content. Cancel is a terminal noncompletion.
+   Zero persisted-byte growth under a running/lying worker generates
+   `NO_STORAGE_PROGRESS`; lost child PID generates
+   `WORKER_PID_LOST`. A 1 GiB+ transfer can be represented by
+   bounded integer metrics without allocating its contents in RAM.
+
+**Integration blocker:** At inspection, PR #596 (HEAD
+`22675eeb46b7360622a0800ac5d293fee63b2e68`) remains DRAFT.
+It still provides at most 32 chunks per MCP ingest call and may return
+`PARTIAL`. The #597 child QA demanding one-call background transfer
+plus authenticated `status/cancel` is also OPEN/DRAFT and intentionally
+red against that contract. The proposed status/cancel receipt observer
+is therefore a *contract adapter*, not a claim that those endpoints
+exist or that background copy execution has been accepted.
+The existing store-backed tests exercise the actual begin/putChunk/
+commit/get/readChunk APIs and use synthetic receipt DTOs only for
+interfaces that #596/#597 have not implemented.
+
+Production remains **NO-GO** pending authenticated single-call transfer
+execution, durable owner-bound status/cancel receipts, trusted immutable
+artifact handoff, full provenance and end-to-end two-device acceptance.
+No live crypto/GPU workload, production deploy, automatic replay, or
+unsigned Job helper installation was attempted.
+
+
+### 2026-10-21: exact #596 head 33504656 after #597 QA merge
+
+**Current one-call ABI (source-only, #596 remains DRAFT):**
+`artifact_bridge_transfer_start` accepts source/target device/path, optional
+project/expected hash and explicit `resume_transfer_id`; it returns a
+`CrossDeviceTransferJobs.public()` receipt immediately. Authenticated
+`artifact_bridge_transfer_status` and `artifact_bridge_transfer_cancel`
+now exist. Their output fields are: `id` (UUID), `state` (`QUEUED`,
+`RUNNING`, `RECOVERY_REQUIRED`, `FAILED`, `MUTATION_UNKNOWN`,
+`CANCEL_REQUESTED`, `CANCELLED`, `PUBLISHING`, `COMPLETED`),
+`bytesTotal`, `bytesConfirmed`, `sha256`, source/target device/path,
+`updatedAt`, optional `errorCode`. The earlier PARTIAL/COMPLETE DTO
+belongs to the older bounded-ingest API; the previous section documents
+that historical prototype, NOT the current one-call adapter.
+
+**Reworked independent `src/agent/one-call-transfer-watchdog.ts`:**
+- Pins externally authenticated caller `requestId`, source/target device,
+  path and optionally source SHA-256, then binds the returned transfer UUID.
+  Validates monotonic time/offset, safe integer size, chunk boundaries and
+  identical transfer identity/hash on every start/status/cancel receipt.
+  No full binary body is included in RPC responses.
+- `COMPLETED` with all bytes acknowledged is only
+  `publicationReported=true`. Even `PUBLISHING` with all bytes cannot
+  become storage proof. To obtain `readbackVerified=true`, the caller
+  supplies a separate **authenticated target-side** `stat`, complete
+  `hash`, last <=64KiB `read` and a second complete `hash/stat` through
+  Native read-only APIs. All hashes and byte counts must agree. Proof
+  expires after 30 seconds. Native v1.0.5 >256MiB hash/offset acceptance
+  remains BLOCKED.
+- `atomicNoOverwriteVerified=false` stays explicit. Final readback
+  can establish *observed destination content consistency*, not historic
+  no-overwrite/atomic-move provenance or immutable custody.
+  `workerCompletedVerified=false` is invariant; transfer status is
+  **never** an immutable worker result or `completed_verified`.
+- `MUTATION_UNKNOWN` and `RECOVERY_REQUIRED` prevent implicit replay;
+  a renewed receipt is accepted only by an explicitly owner-approved
+  resume call after the #596 job manager reconciles source and staging.
+  `CANCEL_REQUESTED`/`CANCELLED` are not completion. Persisted zero
+  byte growth or lost child status raises warnings, even if worker
+  counters claim 100%. `FAILED`, `PUBLISHING` rollback, canceled
+  publication and changed owner/target/hash are rejected.
+- **Permanent #575 suite:** 11 exact-DTO adapter tests including fake
+  completion, independent correct/mismatching target, mutation between
+  first and final hash, stale proof, stalled fake progress, lost PID,
+  UNKNOWN/resume, cancel, rollback/forgery and 1GiB+ accounting without
+  allocating the payload. The existing Progress/Proof fixtures remain.
+- **Independent cross-branch local acceptance:** using an **ephemeral
+  uncommitted source copy** from real #596 HEAD
+  `335046569a38f3a1a3fc82bf851f9b7df7640fdb`,
+  4/4 tests exercised actual `CrossDeviceTransferJobs`: 221KiB+
+  single logical start, observed `COMPLETED` followed by target-side
+  SHA/readback; lost-write-ACK `MUTATION_UNKNOWN` followed by explicit
+  reconciled resume without duplicate write; cancel prevented
+  publication; pre-existing destination was never overwritten. All
+  isolated fixture copies were removed before PR commit. The source
+  owned by #08 and all live Agents remained unchanged.
+
+**Acceptance limitation:** This DRAFT #575 verifies observed transfer
+integrity only. A privileged, authenticated, immutable Agent-owned
+artifact/result handoff with durable `requestId`, output SHA-256,
+exitCode/timestamps and signed/independent acceptance remains absent.
+No status RPC, readback alone, or synthetic fixture may assert
+production `completed_verified`. The #596 source still awaits its own
+integration, signed release and two-device real acceptance; no live
+crypto bot/GPU workloads were launched.
+
+
+### 2026-10-21 / #11 P0: independently sealed CORE result completion (staged only)
+
+- PR #575 source-only strict verifier `src/agent/trusted-worker-completion.ts`
+  now requires an **Ed25519 signed, canonical, domain-separated result
+  statement**, independently pinned **second** Ed25519 key for the
+  off-host immutable-storage seal (same key is explicitly rejected),
+  and content-addressed complete off-host SHA-256 readback via <=64KiB
+  chunks. The object bytes describe the bound statement *excluding its
+  own digest*, avoiding circular hashing. Readback is limited to 128KiB
+  proof metadata; worker bulk results still use separate Artifact Bridge.
+- The signed statement binds owner account, project, device, run/session,
+  trusted invocation request UUID, CORE grant ID and positive **owner
+  grant epoch**, source/target devices and path (distinct physical/logical
+  identities), transfer UUID, result-set digest, remote object digest,
+  exact worker output SHA-256, completed/pending/failed (pending=0,
+  failed=0), OS exit code 0, commit timestamp and OS-observed exit
+  timestamp. Current authority is reread **before and after** off-host
+  inspection. Grant must be `CORE/ACTIVE`, epoch exact, not revoked or
+  cancel requested. Transfer must remain `COMPLETED` with exact target
+  SHA, bytes and identity at both reads.
+- Separately signed **immutable storage seal** binds owner, project,
+  off-host destination, transfer UUID, owner grant epoch, object SHA-256
+  and seal timestamp. Plain JSON `trusted_storage_adapter` objects
+  and bare #596/#616 RPC receipts are **always untrusted**. Only
+  `verifyOffhostCompletion` can mint a module-private, unforgeable
+  `VerifiedCompletionPermit`, which `ProgressSupervisor` requires
+  for the `completed_verified` state.
+- `invalidateOwnerGrant(sessionId)` invalidates evidence and permanently
+  blocks permit reuse for the same session upon CORE cancel/revoke/
+  re-pair. UNKNOWN mutation effects never trigger automatic retry;
+  signed transfer-state `MUTATION_UNKNOWN`, `CANCEL_REQUESTED`,
+  `CANCELLED` and `RECOVERY_REQUIRED` cannot produce a permit.
+  Verify-generation races, lost PID, reconnect and stalled worker
+  remain covered by existing supervisor/transfer regression tests.
+- **#616 current head** `94b92e01219aca3cd4ca86775fe4b61a72ac53c4`
+  is CI-green staging for a *different* transfer-writer monotonic
+  lease (epoch/token via `TrustedTransferAuthority`). This is NOT
+  interchangeable with owner CORE grant epoch. Both will require
+  separate genuine external authority and revocation/fence wiring
+  before production. The #616 author explicitly reports external
+  monotonic trust emulation as TEST-ONLY and physical NO-GO.
+- **Staging limitations:** This verifier has no production-pinned
+  authentic issuer public keys, owner CORE-grant authority, actual
+  signed immutable off-host storage service, durable revoke event
+  subscription, independently authenticated remote Agent readback,
+  or tested crash-consistent two-device evidence. In particular, a
+  signature from a mock off-host store is not proof that a real storage
+  object is immutable. The caller MUST supply trusted ports; none are
+  wired to the production Hub by this change. The in-memory revoked
+  flag is not a crash-durable authority; after restart a current
+  external grant lookup is still mandatory.
+- **Tests:** Ed25519-positive permit and fail-closed negative cases
+  for forged/missing signatures, reused same signer, forged off-host
+  seal, partial/mismatched payload, wrong owner epoch, revoke/cancel
+  before and during readback, stale signed receipt, UNKNOWN transfer
+  state, transfer changing after readback, raw plain attestation,
+  cached-permit replay after CORE cancellation, and proof corruption.
+  No live crypto trading, GPU benchmark, 1GiB artifact file,
+  production Agent/Hub restart or service mutation is involved.
+- Only #575 progress verifier/adapters/tests/documentation changed.
+  #08 Artifact Store, #03 ProcessManager, physical Agent and broker
+  remain untouched. **Production completion acceptance is NO-GO**
+  pending genuine second-party sealed custody and independent QA.
+
+
+### 2026-10-21 #11 follow-up: independent runtime SHA-256 postcondition (staging only)
+
+PR #575 introduces `src/agent/progress-runtime-postcondition.ts` as a
+**read-only, source-only** handoff adapter. The runtime never starts a
+transfer, writes Artifact Bridge files, controls a Job owner, or replays a
+remote mutation. It requires **three distinct pre-pinned Ed25519
+authorities**: the worker-result issuer, an immutable off-host storage
+seal issuer, and a separate independent postcondition witness. None of
+these keys may be worker stdout, user JSON, or the unauthenticated RPC
+receipt. No production keys or provider are wired by this PR.
+
+1. Bind owner/device/project/run/session, request UUID, CORE grant ID and
+   exact owner grant epoch, job ID, source/target and expected result-set
+   SHA-256. Read `readGrant` and `readTransfer` from **independently
+   authenticated read-only transports**. CORE must be `ACTIVE` with
+   exactly the current epoch. Transfer must be `COMPLETED`, full offset
+   recorded, and target full SHA/length bound to signed proof.
+2. `readPostcondition()` returns a separately signed Ed25519 result:
+   requester UUID, job UUID, owner, project, target device/path, owner
+   grant epoch, full-object SHA-256, confirmed bytes and timestamp.
+   Signature and freshness (30s), digest, byte length and provenance
+   are validated before trusting the response. A forged
+   `COMPLETED` RPC is **never** sufficient.
+3. Existing `verifyOffhostCompletion` independently re-hashes every
+   64KiB chunk of the bounded 128KiB signed metadata object via remote
+   `readOffhost`, checks a second differently signed immutable storage
+   seal, and rereads CORE grant and transfer state after readback.
+4. Before presenting the opaque permit to `ProgressSupervisor`,
+   runtime rereads owner and transfer. After the supervisor rereads
+   local result JSON, checks completed/pending/failed counts, exitCode=0,
+   timestamps, output SHA and result-set digest, runtime repeats owner
+   and transfer rechecks. CORE revoke/cancel/re-pair invalidates session
+   proof; `CANCEL_REQUESTED` is not completion.
+5. Lost ACK, missing/partial offhost bytes, forged digest/signature,
+   transfer `MUTATION_UNKNOWN` / `RECOVERY_REQUIRED`, transport loss,
+   stale grant epoch, failed release/cancel and corrupt result hashes
+   fail closed. Ambiguous outcome becomes **sticky UNKNOWN** in this
+   runtime adapter. `automaticReplayAllowed=false` always. Resuming
+   requires a fresh, separately approved/reconciled session or operator
+   workflow, never a silent worker retry.
+6. Worker PID alive, fake 100%, stalled work and reported progress alone
+   remain insufficient. The adapter cannot transform #616's test-only
+   monotonic CAS or an unverified remote receipt into a real immutable
+   custody service.
+
+**Test evidence:** temporary result-worker fixture, in-memory synthetic
+off-host provider, locally generated *test-only* Ed25519 keys; positive
+runtime proof and adversarial old owner epoch, pending CORE cancellation
+(including races across readback), forged postcondition or COMPLETED
+receipt, lost ACK, tampered/truncated disk content, UNKNOWN job and lost
+worker PID scenarios. These prove source contract behavior, **not**
+production cryptographic key custody, durable revocation, independent
+witness deployment or a physical off-host acceptance run.
+
+**Production acceptance remains NO-GO.** Requires real authenticated
+transport ports with independent key management, nonforgeable monotonic
+CORE grant persistence / revoke delivery, real off-host immutable
+artifact seal and separate postcondition witness, #616 genuine CAS/
+writer fence and crash recovery, and two-device physical acceptance.
+No #08 store source, #03 Job owner source, live Agent/UAC/VM, crypto
+bot, or GPU workload was modified or started.
+
+
+### 2026-10-21 #11 narrow native-write cancellation / lost-ACK fail-closed QA
+
+The `ProgressRuntimePostconditionAdapter` now treats an inconsistent
+terminal `COMPLETED` (wrong SHA256, incomplete byte count, changed
+owner-bound operation), `FAILED`, `RECOVERY_REQUIRED` and
+`MUTATION_UNKNOWN` as **sticky MUTATION_UNKNOWN**, not a benign
+`REPORTED_ONLY` poll. No automatic transfer replay or retry follows.
+A `QUEUED` / `RUNNING` / `PUBLISHING` status still cannot satisfy
+the independently signed postcondition, live CORE grant epoch, immutable
+off-host result seal and real disk/output proof.
+
+The adapter also checks its sticky unknown/cancel state after
+asynchronous off-host verification, before and after local result
+validation, and immediately before returning
+`COMPLETED_VERIFIED`. A lost ACK arriving *during* off-host readback
+therefore cannot be hidden by a concurrently finishing proof. If the
+lower-level verifier rejects a proof, the adapter re-reads both the
+trusted owner grant and transfer status to distinguish genuine
+`CANCEL_REQUESTED` from an ambiguous native-write outcome.
+Unknown still blocks any retry even if a later fabricated
+`COMPLETED` appears.
+
+New adversarial fixture coverage includes: canceled native write
+observed during independent readback; CORE cancel arriving after
+the local result file check; forged `COMPLETED` with incorrect
+digest or short `bytesConfirmed`; remote writer `FAILED` and
+`RECOVERY_REQUIRED`; PID loss *during* readback; a stalled synthetic
+worker reporting 100% without an observed OS exit; and a lost
+ACK injected mid-flight. All remain incomplete or permanently UNKNOWN
+until a genuinely separate authorized reconciliation.
+
+This is **source-only safety hardening**, not live native-write
+attestation. The fixture's Ed25519 keys, remote transport, and
+immutable custody are synthetic. Until real separately authenticated
+result/postcondition witness and off-host storage, physical SHA256
+readback, durable CORE revoke/epoch authority and #616 real external
+writer fencing are deployed and tested, production worker
+`COMPLETED_VERIFIED` remains **NO-GO**. No changes to #08 Artifact
+Store implementation, #03 Job/ProcessManager, live Agent/UAC/VM, or
+GPU/crypto workloads.
+
+
+### 2026-10-21 #11 follow-up: fake COMPLETED after lost ACK/PID, stale CORE and native-write cancellation
+
+The source-only `ProgressRuntimePostconditionAdapter` has additional
+fail-closed event boundaries. A `observeLostPid()` or
+`observeNativeWriteCancelPending()` callback now marks the current
+session permanently `MUTATION_UNKNOWN` (with no auto replay). The
+adapter also *independently observes* the ProgressSupervisor's
+`lost`, `orphaned` or genuinely `stalled` process state before
+verification and at each asynchronous proof boundary. A later
+counterfeit `COMPLETED` RPC, even with syntactically plausible fields,
+cannot restore completion after process identity or native write outcome
+has become unknown.
+
+A malformed postcondition signature/digest is also sticky UNKNOWN, not
+a retryable `POSTCONDITION_MISMATCH`. A transfer in
+`CANCEL_REQUESTED` is ambiguous because a write may already have
+dispatched, so it remains UNKNOWN pending explicit independent
+reconciliation. `CANCELLED` and externally revoked/stale CORE grants
+are fail-closed cancellations, never verified completion. No retry or
+replay is attempted by the adapter; an explicit new authorized
+invocation with a verified independent grant and immutable-result proof
+is required.
+
+Additional deterministic QA covers: counterfeit `COMPLETED` after
+a lost ACK and after loss of the owner PID; stalled worker incorrectly
+reporting completion; asynchronous native-write cancellation after
+dispatch/readback; forged status after that cancellation; CORE grant
+epoch changes and revoke occurring after signed witness retrieval;
+and reattempt prevention even after later superficially successful
+RPCs. Assertions verify `automaticReplayAllowed=false` and no
+`completed_verified` state or independent signed digest promotion.
+
+**Strict scope:** Progress code/tests/documentation only. No edits to
+Artifact Bridge (#08) implementation, native Job/ProcessManager (#03),
+or live Agent/Hub/UAC/VM. Source tests use temporary synthetic
+worker/result fixtures and test-only Ed25519 keys. Independent
+physical owner-epoch authority and real immutable off-host SHA-256
+readback are **NOT installed or verified**; production acceptance
+remains NO-GO.
+
+
+### 2026-10-22 #11 cross-review of #725 Native forensics and #712 CORE revoke
+
+Exact reviewed heads: Artifact #725 `09c3dcaf23103b429780c2862c846956058bdcb8`
+(hosted CI `39659633982` SUCCESS) and Broker dispatch #712
+`62800af17d2a9ce18670dba6a8ac861a5d7f4ba5`
+(hosted CI `39659225895` SUCCESS). Both are source-level,
+not physical installed Agent/immutable witness acceptance.
+
+**New Progress-owner fail-closed binding:** #725's authenticated
+transfer status exposes an optional typed `errorCode` separate from
+the state, even when concurrent cancellation changes a superficial
+`COMPLETED` or `CANCELLED` report. The independent
+`ProgressRuntimePostconditionAdapter` AND its underlying
+`verifyOffhostCompletion` now reject *any* `COMPLETED` with an
+errorCode before promoting an immutable result; a forensic errorCode
+on an otherwise `CANCELLED` receipt is sticky `MUTATION_UNKNOWN`,
+not a silent clean cancel or a retry permit. Test examples are
+`FORGED_WRITE_RECEIPT`, `CORE_OWNER_REVOKED`,
+`CORE_GRANT_EPOCH_STALE`, `NATIVE_LEASE_EXPIRED` and
+`TRANSFER_WRITE_OUTCOME_UNKNOWN`. No extra remote readback or
+automatic replay follows such a receipt.
+
+**New negative tests:** error-bearing counterfeit terminal receipts
+(6 adversarial combinations); previously accepted owner CORE grant
+revocation and epoch rotation followed by a stale `ACTIVE` response;
+and stale output after Agent reconnect against a formerly accepted
+proof. A lost ACK, lost PID, stalled worker or pending native-write
+cancel already has source tests with sticky UNKNOWN and no replay.
+
+#712 distinguishes external Broker `ownerEpoch` and
+`grantGeneration` from the Progress completion
+`ownerGrantEpoch`. These are separate authorities and are **not**
+asserted equivalent. Source-only Progress validation requires the
+trusted CORE grant readback to remain ACTIVE at the pinned epoch;
+#712's actual external nonce-bound CAS, physical Broker protected
+high-integrity state and durable revokeAndDrain are still separate
+production release gates. Without authenticated live owner grant and
+independently signed immutable off-host SHA-256 custody, production
+`COMPLETED_VERIFIED` is **NO-GO** regardless of these tests.
+
+No #725 Artifact Store/native writer files, #712 Broker dispatch
+files, #03 ProcessManager/Job owner files or live Agent/VM/UAC were
+modified. This patch is restricted to #575's Progress-owned
+source/QA/documentation on its existing DRAFT PR.
+
+
+### 2026-10-22 #11 exact hosted CI and cached-acceptance revoke regression
+
+Reviewed exact hosted #575 HEAD `b8854de9d32474c62104d2b0f4c1515f1f6eb383`:
+CI `39677612780` **7/7 SUCCESS** and Release Readiness
+`39677612756` **3/3 package SUCCESS** (publishing and tagged
+attestation were SKIPPED). Reviewed #725 HEAD
+`09c3dcaf23103b429780c2862c846956058bdcb8`; #712
+**current** HEAD `1d78a7a9174e91e3b6baaa1319a063917391a64f`
+(hosted CI `39676838080` SUCCESS). Neither source PR proves a
+deployed rollback-independent owner/custody authority.
+
+**Reproduced genuine Progress-owner gap:** after a prior
+`COMPLETED_VERIFIED`, an independently invalidated
+`ProgressSupervisor` grant/proof left
+`ProgressRuntimePostconditionAdapter.snapshot()` reporting the
+cached `COMPLETED_VERIFIED` result and cached postcondition SHA
+until another asynchronous reconcile was requested. The regression
+test failed (25 PASS / 1 FAIL) *before* the fix. The adapter now
+cross-checks its cached completion against the supervisor's
+current independently scoped `completed_verified` state at each
+synchronous snapshot. If revoked, reconnected, expired or otherwise
+invalidated, the snapshot reports `MUTATION_UNKNOWN` and no digest
+without making a new network call or mutating other owners' state.
+The next `reconcile()` becomes sticky UNKNOWN and refuses to re-poll
+a possibly replayed transfer. This is only a local cache fence:
+physical off-host revoke/epoch readback remains an external
+unfulfilled production contract.
+
+**Forensic #725 comparison:** a `COMPLETED` with late
+`FORGED_WRITE_RECEIPT` when the lower-level off-host verifier
+rereads status was independently re-tested. It remains sticky
+UNKNOWN, with no accepted output SHA and no replay. No additional
+#725 artifact-store/native writer implementation change is warranted.
+#712 distinguishes its Broker CAS ownerEpoch and grantGeneration
+from Progress's separately authenticated ownerGrantEpoch: they must
+not be silently conflated.
+
+New deterministic fixture QA covers a revoked previously accepted
+grant (red before fix), expiring cached proof, stale reconnect,
+and a forensic `errorCode` arriving only after the first signed
+postcondition. All tests are generated TEMP/read-only providers,
+not physical independent authority evidence. No #08 store, #03
+Job owner, live Agent/VM/UAC, user files or production workloads
+were modified. **Production remains NO-GO** pending genuine signed
+immutable off-host output SHA readback, physical owner-epoch
+attestation and independent durable monotonic grant/cancel CAS.
+
+
+### 2026-10-22 #11 reconciliation: #754 final Native publication vs #752 Connection and #757 CORE
+
+Exact reviewed PR heads: #754 `3a5bf392109d17dbf2650a18398917d5501fd488`
+GitHub CI `39736052869` **FAILURE** (Windows `browser-live`
+physical Job fast-exit stdout/stderr drain before exited; iteration 6).
+Its Node22/24, Linux, WSL2, macOS and security jobs succeeded.
+The native publication source contract independently verifies exact
+job/owner/project/device/path, published bytes SHA-256 and length,
+**durable publication requestId**, writer epoch, and protected final
+receipt before marking COMPLETED; the real Agent v1.0.5 does NOT
+provide this signer. #752 `95bea58abf5be7e0fb4a3c8d7798285423e97573`
+CI `39735641942` 7/7 SUCCESS preserves orphaned UNKNOWN and no-replay
+through reconnect. #757 `93acbb7a4e830485ce94015b3c76837a3fcdad34`
+CI `39736445337` 7/7 SUCCESS provides source-level late CORE
+revokeAndDrain acceptance, NOT a deployed physical CAS.
+
+**Real independent Progress proof gap fixed (source-only):** a
+`readTransfer().state === COMPLETED` and even a previously signed
+metadata object + independent metadata SHA readback did not establish
+#754's separately authenticated *final Native publication*. The
+`verifyOffhostCompletion` cryptographic permit gate now REQUIRES a
+fourth, DISTINCT pinned Ed25519 key for a
+`SignedFinalPublicationWitness`, injected only via trusted
+`readFinalPublicationWitness()`. No local bool, worker stdout or
+Hub ACK is equivalent. The signed witness binds the independently
+pinned **durable Native publication requestId**, transfer job ID,
+owner account/project, target device/path, exact full object SHA,
+confirmed length, separate monotonic **writerEpoch**, and publication
+timestamp. The worker-result, immutable storage, publication and
+postcondition verifier keys must all be distinct. Missing, stale,
+wrong-epoch/requestId, forged or foreign native publication witness
+FAILS CLOSED. The lower-level permit issuer also enforces this new
+requirement, preventing bypass by calling `verifyOffhostCompletion`
+directly rather than through the runtime adapter.
+
+The ProgressSupervisor now exposes **read-only proofGenerationOf()**.
+The runtime pins the generation at reconciliation start and rechecks
+it across authenticated grant/transfer/status, independent off-host
+readback and local disk verification, so a #752 reconnect or changed
+worker evidence mid-readback cannot become a retryable
+`PROOF_UNVERIFIED` or a fabricated `COMPLETED_VERIFIED`. It instead
+stays sticky `MUTATION_UNKNOWN` with `automaticReplayAllowed=false`.
+#757 owner CORE revoke still fails closed independently, never
+confusing grant epoch with Artifact writer lease epoch.
+
+The positive tests use **ephemeral independent Ed25519 keys and
+synthetic source-only off-host/Native verifier fixtures**; no real
+#754 signer, external CAS, physical device readback, Agent/Hub, UAC,
+VM or user files were accessed. This is a new source-level *acceptance
+contract*, **not a deployed native publication/verifier**. The
+hosted Native path must keep the receipt provider unset (and therefore
+deny completion) until #05 native signing, #587 rollback-independent
+CAS, #613/#752 authenticated connection epoch, #757 physical CORE,
+true off-host immutable digest custody and two-device QA are proven.
+
+Scope restricted to existing #575 Progress code/tests/docs.
+No #08 Artifact Store, #03 Job owner, #754, #752 or #757
+owner implementation was modified. **Production NO-GO.**
+
+
+### 2026-10-22 #11: #768 external monotonic publication commit, #770 orphan, #767 revoke (source only)
+
+Cross-verified exact source heads: #768
+`00ad9a4f061a4da2a0215e470b302f1e25950e4e` (external
+`TrustedTransferAuthority.commitPublished`; initial hosted CI
+`39803672615` not yet overall green), #770
+`131d96cdab40a68f0b12c6991d330e9d62573bf0` (read-only
+`publication_verified_not_committed`; initial CI
+`39804271245` not yet overall green), and #767
+`6967cc92ae85e5d1034591940d273615c4056e00`
+(hosted CI `39803417079` 7/7 SUCCESS, source-only CORE/ROOT
+final-grant denial, never physical dispatch). On #575 prior exact HEAD
+`4fc801f22c6b8d80b86ca29b207607b9424b9cda` hosted
+CI `39804254748` and Release `39804254745` were
+not overall completed on initial review; do not reuse older green.
+
+**Actual RED source vulnerability:** even with all independent worker,
+storage, postcondition and final Native receipt signatures, a
+cryptographically authentic final publisher ACK with no
+#768 rollback-independent `commitPublished` was incorrectly
+classified `COMPLETED_VERIFIED` by Progress. The two added
+adversarial cases were 31 PASS / 2 FAIL pre-fix:
+signed Native final receipt **without external commit**, and a
+synthetic **validly signed prior owner-grant epoch** commit despite
+matching transfer SHA. No source owner elsewhere was changed.
+
+**Fixed Progress-only contract:** the lower-level
+`verifyOffhostCompletion` permit minting now REQUIRES a fifth
+distinct externally pinned Ed25519 verification key and trusted
+`readMonotonicPublicationCommit()` read-only provider, not an
+MCP argument, unsigned ACK, WAL boolean or ordinary progress
+receipt. The signed, independently read back #768 commit binds
+`durableCommitId` (opaque UUID), exact durable publication
+`requestId`, job/owner/project/target, immutable SHA-256/byte
+length, *separate* writer epoch, owner CORE grant epoch and fresh
+commit time. Result issuer, immutable store, final publisher,
+external commit witness and postcondition all have separate
+pinned keys. A missing, forged, wrong-owner, wrong-request,
+stale-epoch, stale-timestamp or conflicting commit **denies
+COMPLETED_VERIFIED**; runtime makes the uncertain potentially
+dispatched side effect sticky `MUTATION_UNKNOWN` and
+`automaticReplayAllowed=false`. The trusted CORE grant and
+transfer remain checked again after commit readback and after local
+disk verification, and Progress proofGeneration fences reconnect.
+
+**New source-only negatives:** missing independently signed
+monotonic commit after seemingly valid final signed publication,
+validly signed old owner epoch commit, missing/forged/foreign
+commit attestations and wrong publication request ID,
+#770 orphaned Connection after signed final publish but with lost
+external commit ACK (UNKNOWN no replay), #767 owner CORE revoke
+after commit but before final trusted readback (denied), plus
+existing forged Native ACK, lost PID/stall/ACK, returned forensic
+errorCode, stale reconnect and partial file checks.
+
+**Important production gate:** this is a *required contract*, NOT an
+implementation or installation of #587 external monotonic CAS,
+protected #05 Native signer, #768 physical `commitPublished`,
+real immutable off-host artifact witness or physically attested
+#767 CORE/Broker grant. The test signers and commit authority are
+synthetic in-process fixtures. Source CI cannot make production GO.
+Only Progress-owned code/tests/docs changed; no #08/#03/#06/#04
+owners, live Agent/VM/UAC, native device transfers or user files
+modified. Remain DRAFT and **production NO-GO**.
+
+
+### 2026-10-22 #11 source-only bounded task-step evidence for #780
+
+Cross-reviewed GitHub [#780](https://github.com/Naveax/Nexowire/issues/780):
+the durable coding loop, checkpoint replay, cancel/UNKNOWN and exact
+owner epoch remain separate product work. #11 Progress is NOT the
+task-loop journal owner and must never treat process PID, 100%-reported
+counters, stdout or untrusted tool `COMPLETED` as step success.
+
+`ProgressRuntimePostconditionAdapter.taskStepCheckpointView()` now
+exposes a **read-only, nonpersistent, at-most-one-run-step** summary
+of the existing five-key authenticated final proof. It presents
+`taskStepRunId` (the existing cryptographically signed run ID,
+NOT an invented arbitrary tool step), session/request identity,
+immutable object SHA-256, result-set SHA-256, the protected signed
+ownerGrantEpoch and the independently verified #768
+`durableCommitId`, with a maximum serialized size of **4096 bytes**.
+The underlying `VerifiedCompletionPermit` carries that authenticated
+commit ID only after full independent publisher, storage, postcondition,
+and rollback-external monotonic readbacks succeed. This view does NOT
+persist a durable checkpoint, create a task graph, enable resume or
+provide physically deployed step-attestation keys; the new visible
+`SOURCE_VERIFIED_STEP` indicates **source-contract evidence only**.
+
+Without an accepted, current ProgressSupervisor
+`completed_verified` state, including on lost ACK, lost PID,
+progress stalls, missing external commit, reconnect, revoke or
+expired proof, this read-only view exposes **zero attested steps,
+no immutable SHA, `UNKNOWN_NO_REPLAY` and
+`automaticReplayAllowed:false`**. There is no automatic RPC retry.
+The view also states `checkpointPersisted:false` and
+`productionAuthorityConnected:false` unconditionally.
+
+**Independent negative QA:** claimed `COMPLETED` with running
+worker/fake progress and no monotonic commit => UNKNOWN/zero
+attestations; full synthetic signed off-host proof => one bounded
+run-scoped summary and verified SHA; after a previously accepted
+result, authoritative CORE revoke followed by old owner epoch,
+forged signature/COMPLETED and attempted replay => UNKNOWN, no
+cached SHA or step attestation and **zero extra transfer polls**.
+The suite tests the 4096-byte bound and immutable presentation.
+
+**Release remains NO-GO:** no authenticated native #05 signer,
+rollback-independent #587/#768 CAS service, independently protected
+physical owner grant/revoke witness, installed task worker or
+durable checkpoint. Source-only synthetic Ed25519 and single-run
+fixtures are not physical task-step attestations. #08 Artifact Store,
+#03 Job owner, #780 actual task agent/checkpoint code, live Agent/VM/
+UAC and user files are untouched. The only modifications belong
+to #575 Progress source/tests/docs on its existing DRAFT PR.
+
+
+### 2026-10-22 #11 replay/cloned-runbook Progress-only QA (#781 / #785)
+
+Exact previous #575 HEAD `0e694e0e8484071ed6815f9e0e25cb7aee5220d4`:
+GitHub CI `39816972153` **SUCCESS**, Release Readiness
+`39816972160` **SUCCESS**. This is source CI, not physical
+completion authority.
+
+Cross-reviewed #781
+`89a865363829c8c30a74de1516e53a697549c05b`:
+its *deliberately unsafe* read-only QA proves
+`executeDurableRunbook` maps lost native `MUTATION_STATE_UNKNOWN`
+to FAILED and re-executes an unchanged logical operation under
+a new `runbook_id` without a trusted owner-epoch/semantic-effect
+readback. A PASS for that negative is proof of risk, **not**
+production readiness. Cross-reviewed #785
+`e7e46b970dd9123ea3d827f4f6bb4f60cb91b209`:
+the Artifact Bridge checkpoint owner requires an independent
+#768 publication CAS readback before checkpoint persistence.
+Neither owner implementation was changed.
+
+**Narrow Progress-only source gap reproduced RED first:**
+after a signed and externally committed Native receipt already
+existed, a newly reconstructed Progress supervisor with recovered
+`exited` PID state but **no authenticated live worker sample**,
+or a previously completed session whose CORE grant had been revoked
+with stale `ACTIVE` readback on a cloned adapter, produced
+retryable `PROOF_UNVERIFIED` rather than sticky
+`MUTATION_UNKNOWN`. Three new source negatives had
+**39 PASS / 2 FAIL** on the original exact head.
+
+**Fix:** when an independently committed external mutation reaches
+local disk-proof verification and `ProgressSupervisor` reports
+`NO_TRUSTED_LIVE_SAMPLE`, `OWNER_GRANT_REVOKED`, or
+`PROOF_RACE_REVERIFY`, the runtime makes the result **sticky
+MUTATION_UNKNOWN**, clears cached digest and grant proof, and
+refuses subsequent status polling/replay. It cannot classify
+an old signed `COMPLETED` as a verified new run by substituting
+a cloned run ID; the worker result's original signed run/request/
+session, immutable SHA, current owner grant and external commit
+must all match. Rebooted fake stdout/PID alone cannot promote
+the checkpoint. Existing valid source proof remains accepted
+only when all five independent synthetic authorities and local
+disk/progress evidence actually match.
+
+**Owner boundary:** Progress does NOT provide a durable semantic
+logical-effect identity across runbook_id clones, repair
+`executeDurableRunbook` state transitions, or enforce
+runbook pre-dispatch authority. **#781 unsafe re-dispatch remains
+a separate P0 work item for the runbook/journal owner**.
+No #08 Artifact Store or #03 Job owner files were touched;
+no live Agent/VM, Broker, UAC or user file mutation occurred.
+Missing protected Native issuer, real independently immutable
+off-host output SHA-256 readback, external #587 CAS and physical
+owner-epoch readback still make **production NO-GO**.

@@ -453,6 +453,7 @@ export async function runNativeAgent(
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
 
+  let hubConnectionEstablishedBefore = false;
   while (!stopped) {
     const hubUrl = hubEndpoints[endpointIndex]!;
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -475,6 +476,9 @@ export async function runNativeAgent(
       };
 
       socket.once('open', async () => {
+        // A fresh Hub epoch cannot inherit stale worker-reported proof.
+        if (hubConnectionEstablishedBefore) progressSupervisor.invalidateOnReconnect();
+        hubConnectionEstablishedBefore = true;
         openedAt = Date.now();
         lastPongAt = Date.now();
         socket.on('pong', () => {
