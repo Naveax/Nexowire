@@ -4,7 +4,13 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 ## Published stable release
 
-Nexowire v1.0.4 was published on 2026-10-07 from tag `v1.0.4` at exact commit `e5f865f4d252406a129a2a5d58a499f68fd09ae5`. Exact-main CI `37685751072`, authorized publisher `37685751071`, and tag-scoped Release Readiness `37685873099` all completed successfully. The annotated tag dereferences to that exact commit; the GitHub Release was published at `2026-10-07T21:01:56Z` with the canonical tarball, CycloneDX SBOM, release manifest, SHA256SUMS, Windows checksum file, Windows ZIP, and setup CMD. npm publication remains disabled.
+The latest published stable version is [v1.0.7](https://github.com/Naveax/Nexowire/releases/tag/v1.0.7), published on 2026-10-26 from exact source `e9489175cf599c47f331a22c463421048d1ba407`. The source version `1.0.8` is an **unreleased candidate**. Its scope and acceptance gates are recorded in [v1.0.8 notes](releases/v1.0.8.md).
+
+Issue [#974](https://github.com/Naveax/Nexowire/issues/974) remains open until the successor containing the WAL reuse fix is reviewed, merged, packaged, installed through an authorized update and verified across real Windows restarts. Source tests and an extracted CI payload do not establish that an existing device has been upgraded. Do not perform automatic journal deletion, reset, rollback or blind checkpointing as startup repair.
+
+## Historical v1.0.4 rollout record
+
+The following observations are historical, not current device status. Nexowire v1.0.4 was published on 2026-10-07 from tag `v1.0.4` at exact commit `e5f865f4d252406a129a2a5d58a499f68fd09ae5`. Exact-main CI `37685751072`, authorized publisher `37685751071`, and tag-scoped Release Readiness `37685873099` all completed successfully. npm publication remains disabled.
 
 Live Windows rollout state verified 2026-10-08:
 
@@ -83,7 +89,7 @@ The CLI version and `package.json` version must match. A version bump that updat
 
 On GitHub tag-triggered release-readiness runs, `release:tag:check` also requires the exact tag `v<package-version>`. For example, package version `0.1.0-dev.1` accepts only `v0.1.0-dev.1`; a stale or hand-typed mismatched tag fails before the canonical tarball is built. Pull-request and branch runs are intentionally non-tag no-ops for this check.
 
-The current published-stable v1 release is `1.0.4` at exact commit `e5f865f4d252406a129a2a5d58a499f68fd09ae5`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
+The current published-stable v1 release is `1.0.7` at exact commit `e9489175cf599c47f331a22c463421048d1ba407`. GitHub Release is the distribution path; npm publication remains intentionally disabled by `"private": true`.
 
 ## Explicit GitHub Release authorization
 

@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { windowsShortcutInterop } from './windows-shortcut-interop.js';
 
 interface BundleOptions {
   outputDir: string;
@@ -224,14 +225,13 @@ export function renderSetupScript(input: {
     "};",
     "$launcher = Join-Path $env:NX_INSTALL 'Nexowire.vbs';",
     "if (-not (Test-Path -LiteralPath $launcher)) { throw 'Nexowire launcher is missing.' };",
-    "$ws = New-Object -ComObject WScript.Shell;",
+    // Base64 is only ASCII-safe transport for C# through cmd.exe quoting. The
+    // decoded source uses Windows' own Shell Link API; no downloaded helper.
+    "Add-Type -TypeDefinition ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" +
+      Buffer.from(windowsShortcutInterop, 'utf8').toString('base64') + "')));",
     "$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Nexowire.lnk';",
-    "$shortcut = $ws.CreateShortcut($shortcutPath);",
-    "$shortcut.TargetPath = Join-Path $env:WINDIR 'System32\\wscript.exe';",
-    "$shortcut.Arguments = [char]34 + $launcher + [char]34;",
-    "$shortcut.WorkingDirectory = $env:NX_INSTALL;",
-    "$shortcut.Description = 'Connect this PC to Nexowire';",
-    "$shortcut.Save();",
+    "$shortcut = @{ TargetPath = (Join-Path $env:WINDIR 'System32\\wscript.exe'); Arguments = ([char]34 + $launcher + [char]34) };",
+    "[NexowireShortcut]::Save($shortcutPath, $shortcut.TargetPath, $shortcut.Arguments, $env:NX_INSTALL);",
     "$autoNode = Join-Path $env:NX_INSTALL 'runtime\\node.exe';",
     "$autoCli = Join-Path $env:NX_INSTALL 'app\\dist\\src\\cli.js';",
     "& $autoNode $autoCli update auto install | Out-Null;",

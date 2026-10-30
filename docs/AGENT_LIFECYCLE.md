@@ -39,6 +39,8 @@ The lifecycle launcher may persist the reference/path and non-secret connection 
 
 Windows uses a current-user Scheduled Task triggered at logon with automatic restart settings. This is intentional: GUI, UI Automation, screenshots, keyboard, and pointer control need the interactive user session rather than Session 0.
 
+The task must be allowed to start **and stay running on battery/UPS power** (`AllowStartIfOnBatteries`, `DontStopIfGoingOnBatteries`). Windows Task Scheduler defaults to disallowing battery starts when this setting is unspecified; consequently a task may remain `Queued` even if its launcher, owner SID and last exit code look correct. Existing v1.0.7 installations keep their previously registered task settings until a separately authorized task update or a future installer explicitly migrates them. A task `Queued` on AC power requires separate scheduler/launcher investigation; battery restrictions alone are not proof of the cause.
+
 A logout ends that interactive session. The agent starts again at the next logon; it is not disguised as a LocalSystem service.
 
 The Windows native agent also acquires a kernel-owned, device/user-scoped named-pipe singleton lease before opening persistent worker/task state or Hub connections. If two historical launchers try to start the same device identity, the second exits with `AGENT_ALREADY_RUNNING`; it must not connect as a duplicate. The kernel releases the lease after normal exit or forced termination, so no stale PID/lockfile reset or credential is needed. Keep launcher ownership unambiguous instead of treating the singleton as a substitute for correct Scheduled Task registration.

@@ -343,6 +343,9 @@ export default {
       // GitHub's immutable numeric user ID for the Nexowire repository owner.
       // This is an application quota exemption, not paid infrastructure access.
       ownerGithubId: '79841922',
+      // solkaun: verified GitHub immutable user ID (not a mutable login).
+      // Only monthly hosted MCP tool credits are unmetered; no admin role.
+      unmeteredGithubIds: ['55827920'],
       infrastructure: () => ({
         freeCapacityPercent: boundedCapacity(env),
         prepaidCapacityCredits: 0,
