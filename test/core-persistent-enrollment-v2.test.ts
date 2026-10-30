@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
-import {persistentEnrollmentBytes,persistentEnrollmentHash,persistentSessionBytes,
+import {persistentEnrollmentBytes,persistentEnrollmentHash,persistentSessionBytes,persistentSessionChallengeBytes,
   verifyPersistentEnrollmentSession,type PersistentEnrollmentV2,type PersistentSessionV2,
 } from '../src/protocol/core-persistent-enrollment-v2.js';
 
@@ -69,5 +69,11 @@ test('tampered signatures, wrong key, unknown fields and v1 downgrade rejected',
 test('overlong witness validity and cross-grant session cannot be signed as valid input',()=>{
   const f=fixture();assert.throws(()=>persistentSessionBytes({...f.session.payload,validUntilMs:f.nowMs+30001}));
   const other=fixture();f.session=other.session;
+  assert.throws(()=>verifyPersistentEnrollmentSession(f),/V2_REJECTED/);
+});
+test('authority challenge and device witness have distinct signature domains',()=>{
+  const f=fixture();
+  assert.notDeepEqual(persistentSessionChallengeBytes(f.session.payload),persistentSessionBytes(f.session.payload));
+  f.session=signed(f.session.payload,persistentSessionChallengeBytes(f.session.payload));
   assert.throws(()=>verifyPersistentEnrollmentSession(f),/V2_REJECTED/);
 });

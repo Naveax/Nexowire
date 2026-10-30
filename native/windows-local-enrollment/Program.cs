@@ -19,6 +19,8 @@ internal static class Program
             Protocol.Require(OperatingSystem.IsWindows());
             if(args.Length==1 && args[0]=="--self-test") { SelfTest.Run();return 0; }
             if(args.Length==1 && args[0]=="--service") { WindowsService.Run();return 0; }
+            if(args.Length==1 && args[0] is "--status" or "--attest")
+            {EnrollmentClient.Run(args[0]=="--status"?"status":"attest").GetAwaiter().GetResult();return 0;}
             if(args.Length==1 && args[0]=="--inspect")
             {
                 ProtectedStore.RequireAdministrator();var (_,g)=ProtectedStore.Load();

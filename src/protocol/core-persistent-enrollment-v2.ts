@@ -44,6 +44,10 @@ export function persistentSessionBytes(raw:unknown):Buffer{
     p.windowsSessionId,p.ownerSid,p.logonLuid,p.observedAtMs,p.validUntilMs,
   ]),'utf8');
 }
+/** Independent authority challenge, not a locally selected signing request. */
+export function persistentSessionChallengeBytes(raw:unknown):Buffer{
+  return Buffer.concat([Buffer.from('nexowire.local.session.challenge.v2\0','utf8'),persistentSessionBytes(raw)]);
+}
 
 /** All expected state must come from protected local/independent authority.
  * Successful verification is NOT dispatch authorization or proof of UAC consent.

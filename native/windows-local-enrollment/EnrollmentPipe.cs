@@ -9,7 +9,7 @@ namespace Nexowire.LocalEnrollment;
 
 internal static class EnrollmentPipe
 {
-    private sealed record Request(int Version,string Operation);
+    private sealed record Request(int Version,string Operation,SignedSession? Challenge=null);
     [StructLayout(LayoutKind.Sequential)] private struct SecurityAttributes
     { public int Length;public IntPtr Descriptor;[MarshalAs(UnmanagedType.Bool)] public bool Inherit; }
     [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
@@ -51,27 +51,50 @@ internal static class EnrollmentPipe
                 var length=System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
                 Protocol.Require(length is >0 and <=16384);
                 var bytes=new byte[length];await pipe.ReadExactlyAsync(bytes,deadline.Token);
-                string? sid=null;
+                string? sid=null;SessionEvidence? evidence=null;
                 pipe.RunAsClient(()=> {using var identity=WindowsIdentity.GetCurrent(true);
-                    sid=identity?.User?.Value;});
-                Protocol.Require(sid==config.OwnerSid);
+                    sid=identity?.User?.Value;
+                    if(sid==config.OwnerSid)evidence=WindowsSessionEvidence.CaptureImpersonated(config.OwnerSid);});
+                Protocol.Require(sid==config.OwnerSid && evidence is not null);
                 var r=Protocol.Read<Request>(bytes);
-                // No unauthenticated signing, enrollment or dispatch opcode.
-                // A separately provisioned independent challenge verifier must
-                // be integrated before any witness-signing operation is added.
-                Protocol.Require(r.Version==2 && r.Operation=="status");
+                Protocol.Require(r.Version==2 && r.Operation is "status" or "attest");
                 var (fresh,g)=ProtectedStore.Load();
                 Protocol.Require(fresh==config);
                 using var key=ProtectedStore.OpenKey(config);using var signer=new ECDsaCng(key);
+                SignedSession? witness=null;
+                if(r.Operation=="attest")
+                {
+                    Protocol.Require(r.Challenge is not null);
+                    var challenge=r.Challenge!;var p=challenge.Payload;
+                    using var authority=ECDsa.Create();
+                    var der=Convert.FromBase64String(config.AuthoritySpkiBase64);
+                    authority.ImportSubjectPublicKeyInfo(der,out var used);
+                    var now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    Protocol.Require(used==der.Length && Protocol.Verify(authority,Protocol.ChallengeBytes(p),challenge.SignatureBase64));
+                    Protocol.Require(p.EnrollmentSha256==Protocol.Hash(Protocol.GrantBytes(g.Payload)) &&
+                        p.BootId==evidence!.BootId && p.OwnerSid==evidence.OwnerSid &&
+                        p.WindowsSessionId==evidence.WindowsSessionId && p.LogonLuid==evidence.LogonLuid &&
+                        p.ObservedAtMs<=now && p.ValidUntilMs>now && p.ObservedAtMs>=g.Payload.ConsentedAtMs);
+                    ProtectedStore.ConsumeNonce(p.Nonce);
+                    // Recheck both protected enrollment/revocation and live
+                    // kernel token/session immediately before producing proof.
+                    Protocol.Require(ProtectedStore.Load()==(config,g));
+                    SessionEvidence? latest=null;
+                    pipe.RunAsClient(()=>latest=WindowsSessionEvidence.CaptureImpersonated(config.OwnerSid));
+                    Protocol.Require(latest==evidence && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()<p.ValidUntilMs);
+                    witness=new SignedSession(p,Convert.ToBase64String(signer.SignData(Protocol.SessionBytes(p),
+                        HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation)));
+                    Protocol.Require(ProtectedStore.Load()==(config,g));
+                }
+                else Protocol.Require(r.Challenge is null);
                 var response=JsonSerializer.SerializeToUtf8Bytes(new {version=2,verified=true,
                     grant=g,spkiBase64=Convert.ToBase64String(signer.ExportSubjectPublicKeyInfo()),
-                    keyProvider=config.KeyProvider,mayDispatch=false},Protocol.Json);
+                    keyProvider=config.KeyProvider,evidence,witness,mayDispatch=false},Protocol.Json);
                 System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(lengthBytes,response.Length);
                 await pipe.WriteAsync(lengthBytes,deadline.Token);await pipe.WriteAsync(response,deadline.Token);
                 await pipe.FlushAsync(deadline.Token);
             }
-            catch(Exception e) when(e is IOException or InvalidDataException or JsonException or
-                CryptographicException or UnauthorizedAccessException or OperationCanceledException)
+            catch(Exception e) when(e is not OutOfMemoryException and not StackOverflowException)
             { if(stop.IsCancellationRequested)break; }
             finally{if(pipe.IsConnected)pipe.Disconnect();}
         }

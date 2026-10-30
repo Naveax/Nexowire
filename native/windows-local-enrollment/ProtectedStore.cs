@@ -152,4 +152,13 @@ internal static class ProtectedStore
             Protocol.Verify(signer,Protocol.GrantBytes(g.Payload),g.SignatureBase64));
         return(c,g);
     }
+    internal static void ConsumeNonce(string nonce)
+    {
+        Protocol.Require(Protocol.Uuid(nonce));
+        AssertPath(Root);
+        // A crash or lost reply after this durable claim remains consumed.
+        // Bound storage rather than discard replay protection on overload.
+        Protocol.Require(Directory.EnumerateFiles(Root,"nonce-*.json").Take(100000).Count()<100000);
+        WriteNew("nonce-"+nonce+".json",new {version=2,consumed=true});
+    }
 }

@@ -66,6 +66,8 @@ internal static partial class Protocol
             s.OwnerSid,s.LogonLuid,s.ObservedAtMs,s.ValidUntilMs
         },Json));
     }
+    internal static byte[] ChallengeBytes(Session s) =>
+        Encoding.UTF8.GetBytes("nexowire.local.session.challenge.v2\0").Concat(SessionBytes(s)).ToArray();
     internal static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
     internal static bool Verify(ECDsa key, byte[] bytes, string signature)
     {

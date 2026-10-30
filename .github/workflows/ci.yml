@@ -64,16 +64,6 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: ./scripts/build-windows-core-session-readback.ps1
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - name: Build opt-in local enrollment service and verify CNG interoperability
-        timeout-minutes: 5
-        shell: pwsh
-        run: |
-          dotnet build native/windows-local-enrollment/Nexowire.LocalEnrollment.csproj -c Release -o native/windows-local-enrollment/bin/qa --nologo
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node --test --import tsx test/windows-local-enrollment-native.test.ts
       - name: Verify CORE kernel session readback without granting authority
         timeout-minutes: 2
         run: node --test --import tsx test/core-native-session-readback.test.ts
@@ -222,6 +212,26 @@ jobs:
         run: node --test --import tsx test/security-operational-live.test.ts
         env:
           NEXOWIRE_LIVE_SECURITY_TEST: "1"
+
+  local-enrollment-native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: npm ci
+      - name: Build opt-in local enrollment service and verify CNG interoperability
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          dotnet build native/windows-local-enrollment/Nexowire.LocalEnrollment.csproj -c Release -o native/windows-local-enrollment/bin/qa --nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test --import tsx test/windows-local-enrollment-native.test.ts
 
   macos-agent-lifecycle-live:
     runs-on: macos-latest
