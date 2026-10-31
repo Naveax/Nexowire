@@ -52,11 +52,14 @@ test('actual Windows machine CNG key owner/DACL survive reopen without enrollmen
 });
 
 test('Windows installer read-only preflight rejects owner and installation identity mismatches',{
-  skip:process.platform!=='win32',timeout:60000,
+  skip:process.platform!=='win32',timeout:90000,
 },()=>{
-  const sidResult=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+  // The CI runner provisions pwsh 7; cold Windows PowerShell 5.1 startup can
+  // exceed 10s under concurrent jobs. This remains a bounded, read-only SID
+  // query with unchanged owner/device/installation assertions below.
+  const sidResult=spawnSync('pwsh.exe',['-NoProfile','-NonInteractive','-Command',
     '[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],
-    {encoding:'utf8',timeout:10000,maxBuffer:1024,windowsHide:true});
+    {encoding:'utf8',timeout:30000,maxBuffer:1024,windowsHide:true});
   assert.ifError(sidResult.error);
   assert.equal(sidResult.status,0,sidResult.stderr);
   const ownerSid=sidResult.stdout.trim();
