@@ -4,9 +4,9 @@ Nexowire is packaged as a self-hosted first-party runtime. GitHub release artifa
 
 ## Published stable release
 
-The latest published stable version is [v1.0.7](https://github.com/Naveax/Nexowire/releases/tag/v1.0.7), published on 2026-10-26 from exact source `e9489175cf599c47f331a22c463421048d1ba407`. Version `1.0.8` is **owner-authorized for publication**, pending the exact-main/tag workflow gates. Its scope and acceptance gates are recorded in [v1.0.8 notes](releases/v1.0.8.md).
+The latest published stable version is [v1.0.8](https://github.com/Naveax/Nexowire/releases/tag/v1.0.8), published on **2026-10-30** from the exact annotated tag/source commit `a19a228dc6f19fd484cf935e941a00ea625233f8`. All seven GitHub Release assets and tag-scoped Release Readiness were independently verified as recorded in [v1.0.8 notes](releases/v1.0.8.md) and [#974](https://github.com/Naveax/Nexowire/issues/974).
 
-Issue [#974](https://github.com/Naveax/Nexowire/issues/974) remains open until the successor containing the WAL reuse fix is reviewed, merged, packaged, installed through an authorized update and verified across real Windows restarts. Source tests and an extracted CI payload do not establish that an existing device has been upgraded. Do not perform automatic journal deletion, reset, rollback or blind checkpointing as startup repair.
+Issue [#974](https://github.com/Naveax/Nexowire/issues/974) remains open for follow-up despite the published fix: documented owner-approved NAVEAX Agent/Broker v1.0.8 canary passed two real Windows reboots and preserved 1,703 original journal records/one UNKNOWN; **second-device, clean Windows 10/11, interruption/sleep and 24-hour acceptance remain unverified**. This is documented historical device evidence, not a new current device readback. Do not perform automatic journal deletion, reset, rollback or blind checkpointing as startup repair.
 
 ## Historical v1.0.4 rollout record
 
