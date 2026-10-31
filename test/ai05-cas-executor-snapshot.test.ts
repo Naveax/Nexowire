@@ -100,7 +100,8 @@ test('AI-05 original immutable approved evidence continues to bind Broker wire b
 
 test('AI-05 original owner/session/UUID scope detached before any await',()=>{
   const {expected}=evidence();
-  const mutable={...expected,scope:{...expected.scope}};
+  const mutable:{requestId:string;scope:{ownerId:string;sessionEpoch:string}}=
+    {...expected,scope:{...expected.scope}};
   const frozen=snapshotCoreWindowsDispatchRequest(mutable);
   assert.deepEqual(frozen,expected);
   assert.ok(Object.isFrozen(frozen));
