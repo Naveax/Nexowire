@@ -37,3 +37,6 @@ AI-04/05 must not treat `openat2` RESOLVE_* alone, `st_nlink`, a canonical path 
 
 ### Non-authoritative JS envelope hardening for AI-04/05
 AI-07 now validates the complete own-key schema of source intent, including root/network/budgets and endpoint array hidden metadata. Do not use JS reflection as a native security proof: proxies, async mutation and serializer differences still require a frozen canonical native request byte buffer, signed capability/fingerprint identity and independent CAS/Broker gate before **any** side effect. There is no runtime permit in this PR.
+
+### P0: group kill cannot stand in for kernel-enforced descendant drain
+AI-04/AI-05/AI-08 must preserve the negative `test/ai07-sandbox-linux-setsid-breakaway.test.ts`: POSIX `setsid` can escape a process group and survive `kill(-pgid,SIGKILL)`, even when the direct parent is reaped. Do NOT release grant/quota or claim worker cleanup from a Job flag, group kill, single waitpid or synthetic receipt. Require independently verified cgroup v2 process membership/killed population, exact worker identity and revoke readback (or protected Windows whole-Job containment), with UNKNOWN remaining terminal until durable reconciliation. Source-only AI-07 does not modify executor/Broker.

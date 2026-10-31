@@ -70,3 +70,6 @@ Strict extra-key rejection and hostile argv negative regression added; preserves
 
 ### Nested source-intent key inspection
 Added allowlisted exact own-data-key checks for top-level task, root, network, budgets and empty endpoints plus seven targeted negatives. Retains deny-only execution, no replay, and all native production blockers; PR still Draft / NO-GO.
+
+### Verified escape counterexample (2026-11-01)
+Added test-only Linux `setsid` descendant escape from process group; real kernel PIDFD witness confirms escaped child survives original group kill, then test-owned PIDFD cleanup reaps it. Deliberate no-escape control exits 55. This strengthens negative QA but does not implement cgroup/Job descendant confinement. Draft NO_GO remains; exact HEAD CI required.

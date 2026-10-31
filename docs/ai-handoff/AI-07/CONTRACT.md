@@ -84,3 +84,6 @@ In `boundedArgs`, `Reflect.ownKeys(args).length` must exactly match `args.length
 
 ### Strict nested source-only own-data schema
 `exactOwnDataKeys` rejects unexpected, symbol, hidden and accessor own keys for the declared top-level task, taskRoot, network and budgets objects; the zero-endpoint list must have only its native array length property. Unexpected top/root keys add INVALID_TASK_INTENT; unexpected network/endpoint keys add NETWORK_MUST_BE_DEFAULT_DENY; unexpected budget keys add INVALID_RESOURCE_BUDGET. This is **not** a deep immutable snapshot or safe Proxy execution boundary; AI-05/AI-04 must bind signed exact native serialization across asynchronous admission.
+
+### Why process-group cleanup cannot satisfy descendant revoke
+`test/ai07-sandbox-linux-setsid-breakaway.test.ts` proves the adversarial case: a child-grandchild can call `setsid()` and leave the original process group. After a verified `kill(-group,SIGKILL)` and parent `waitpid`, the **grandchild remains alive**, independently observed through its PIDFD; the fixture explicitly reaps it through subreaper custody. It cannot be counted as a cgroup/Job whole-tree cleanup receipt. Production requires a separately enforced cgroup v2/Job boundary and independent zero-descendant readback before quota/grant release.

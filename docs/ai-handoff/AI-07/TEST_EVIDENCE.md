@@ -85,3 +85,7 @@ New `test/ai07-sandbox-hostile-input.test.ts` negative cases assert `INVALID_TAS
 
 ### Strict nested own-keys regression (2026-11-01)
 New `test/ai07-sandbox-structured-ownkeys.test.ts`: baseline source-only task shape is well formed yet execution denied. Seven negatives reject non-enumerable top/root/network/budget fields, symbolic root/endpoints, an unknown top-level permit and a throwing network Proxy ownKeys without invoking hidden getters. Native worker remains unavailable; exact HEAD CI and tests must be verified separately, not inferred from prior SHA.
+
+### Disposable Linux escaped-grandchild regression (2026-11-01)
+- Host: isolated Linux 6.18.57 x86_64, Debian GCC 14.2.0 / Node 22.16.0. `cc -std=c11 -O2 -Wall -Wextra -Werror`: `setsid()` breakaway child remains live after original group SIGKILL, fixture returns exit **0** with `NOT_CGROUP_OR_WORKER_ACCEPTANCE`. Deliberately disabled breakaway variant returns expected **55**; five repeats each (5/5 + 5/5). `node --experimental-strip-types --test` of the standalone fixture: **1/1 PASS**, exit 0. Original group leader and escaped child are both reaped within bounded waits; no live task, service or external process touched.
+- Repository command: `node --test --import tsx test/ai07-sandbox-linux-setsid-breakaway.test.ts`. Missing PIDFD or subreaper ability is BLOCKED, not a fake pass. This test is **negative evidence of insufficient process-group containment**, not proof cgroup v2 worker/revoke and not physical Windows acceptance. New exact-head CI required.
