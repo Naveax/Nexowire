@@ -11,7 +11,7 @@ import {
 const CAP='windows.firewall.control';
 const ALTERNATE='windows.task.control';
 const TICKET='ai08_synthetic_ticket_0123456789abcdef';
-type Attack='none'|'reserve-scope'|'reserve-signature'|'commit-capability'|'lost-commit-ack';
+type Attack='none'|'reserve-scope'|'reserve-signature'|'commit-capability'|'lost-commit-ack'|'transport-post-snapshot-tamper';
 function fixture(attack:Attack){
   const key=generateKeyPairSync('ed25519');
   const binding:BrokerVerifiedEffectBinding={
@@ -21,7 +21,8 @@ function fixture(attack:Attack){
     protectedBrokerProofId:'ai08-protected-synthetic',
     expiresAtMs:Date.now()+20_000,
   };
-  let callbacks=0,remoteConsumes=0,verifiedPayloads=0;
+  let callbacks=0,remoteConsumes=0,verifiedPayloads=0,transportTampered=false;
+  let transportReservation:BrokerEffectReceipt|undefined;
   const issued=(state:'RESERVED'|'COMMITTED',request:BrokerEffectRequest,
     challengeNonce:string):BrokerEffectReceipt=>{
     const payload={state,operationId:request.operationId,capability:request.capability,
@@ -41,7 +42,9 @@ function fixture(attack:Attack){
     begin:async (req,nonce)=>{
       if(admitted.has(req.operationId))return null;
       admitted.add(req.operationId);
-      return issued('RESERVED',req,nonce);
+      const receipt=issued('RESERVED',req,nonce);
+      if(attack==='transport-post-snapshot-tamper')transportReservation=receipt;
+      return receipt;
     },
     commit:async(req,ticket,nonce)=>{
       if(ticket!==TICKET)return null;
@@ -51,6 +54,16 @@ function fixture(attack:Attack){
     },
     verifyReceipt:async(receipt,signedPayloadUtf8)=>{
       verifiedPayloads++;
+      if(attack==='transport-post-snapshot-tamper'&&verifiedPayloads===1){
+        assert.ok(transportReservation);
+        // The transport may mutate after returning its signed-looking object.
+        // Verification MUST use a detached frozen snapshot, not the raw object.
+        Object.assign(transportReservation.binding,{ownerId:'foreign-owner'});
+        Object.assign(transportReservation,{capability:ALTERNATE});
+        transportTampered=true;
+        assert.equal(receipt.binding.ownerId,binding.ownerId);
+        assert.equal(receipt.capability,CAP);
+      }
       assert.ok(Object.isFrozen(receipt));
       assert.ok(Object.isFrozen(receipt.binding));
       const {proof:ignored,...signed}=receipt;
@@ -69,7 +82,8 @@ function fixture(attack:Attack){
   },()=>true);
   return {run,input,get callbacks(){return callbacks},
     get remoteConsumes(){return remoteConsumes},
-    get verifiedPayloads(){return verifiedPayloads}};
+    get verifiedPayloads(){return verifiedPayloads},
+    get transportTampered(){return transportTampered}};
 }
 
 test('AI-08: receipt verifier receives an immutable, exact signed snapshot',async()=>{
@@ -101,4 +115,13 @@ test('AI-08: detached input cannot be mutated across admission awaits',async()=>
   f.input.seq=999;
   assert.equal(await begun,'synthetic-executed');
   assert.equal(f.callbacks,1);
+});
+
+test('AI-08: post-snapshot transport mutation cannot substitute signed Broker authority',async()=>{
+  const f=fixture('transport-post-snapshot-tamper');
+  assert.equal(await f.run(),'synthetic-executed');
+  assert.equal(f.transportTampered,true,'the malicious transport really changed its raw fields');
+  assert.equal(f.callbacks,1,'only the originally verified scope may execute');
+  assert.equal(f.remoteConsumes,1);
+  assert.equal(f.verifiedPayloads,2);
 });

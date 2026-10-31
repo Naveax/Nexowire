@@ -66,6 +66,12 @@ test('AI-08: server SPKI pin mismatch denies before the HTTP handler',async t=>{
   assert.equal(response.status,200);
   assert.deepEqual(await response.json(),{fixture:true});
   assert.equal(httpRequests,1);
+  // An already-aborted request must fail before sending any protected payload.
+  const aborted=new AbortController();
+  aborted.abort();
+  await assert.rejects(valid(url,{...init,signal:aborted.signal}),
+    /CORE_MTLS_REQUEST_UNKNOWN/);
+  assert.equal(httpRequests,1,'a pre-aborted request must not reach localhost');
   // Neither origin mutation nor redirect options may change the pinned endpoint.
   config.origin='https://attacker.invalid';
   await assert.rejects(valid('https://attacker.invalid/v1/core-native-consent',init),

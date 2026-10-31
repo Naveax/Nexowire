@@ -14,3 +14,7 @@
 - **Eksik:** Gerçek native sandbox, Windows kernel token/handles/descendants/WFP, physical UAC/DPAPI/owner consent, rollback-independent offhost CAS, 2-PC sleep/reboot/24h, bütün yeni owner-PR'ların tek entegrasyon HEAD'i.
 
 **Merge/deploy/live device:** yapılmadı. **Production NO_GO.**
+
+
+## 31.10.2026 QA devam eki
+Mevcut 32 ölçülmüş testi silmeden, AI-08 üç regresyon daha ekledi: immutable Broker signed receipt üzerine raw transport substitution, CAS aynı UUID eşzamanlı admission/replay ve pre-aborted mTLS. Bu testler için **yeni HEAD CI bekleniyor**; yeni SHA/runs sonucu GitHub'dan alınmadan 35/35 PASS yazılmaz. Başka ajan kaynağı değiştirilmedi; Draft / CORE production NO_GO.

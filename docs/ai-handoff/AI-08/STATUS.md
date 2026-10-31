@@ -19,3 +19,7 @@
 Altı AI-08 test dosyasında WAL restart/recycle, bozuk WAL/SHM, credential/owner/session, mTLS SPKI pin, signed receipt/ACK loss, CAS immutable scope, D1 claim race (15 durum), sandbox fake-proofs/UNKNOWN ele alınır. Bu kaynak testleri gerçek cihaz yetki kanıtı değildir.
 
 Koordinatör, onaylı AI-01...AI-07 deltasını ayrı birleşik HEAD'de test etmelidir; #989 bunları otomatik içermez. Gerçek Windows low-privilege worker, handle/env/child/network/IPC containment, native UAC/SID/DPAPI readback, external CAS durability, iki-PC restart/sleep/24h acceptance: **BLOCKED**. Merge/deploy/live Agent yapılmadı.
+
+
+## 31 Ekim 2026 | QA genişletme
+Üç yeni bağımsız regresyon eklendi (Broker signed-receipt transport mutation, CAS same-UUID concurrency/replay, pre-aborted TLS). Bu yeni testler için **yeni exact HEAD CI: NOT_TESTED / pending**. Önceki `e30b3fe39cd74dc279b32a7e5ed1691d4cd7d591` üzerinde **32/32 PASS**, Node22/24 build/typecheck SUCCESS; bu sayı gelecekteki testlere devredilmez. AI-01..07'nin güncel SHA/CI/sınır kanıtı için `TEST_EVIDENCE.md` tablosuna bak. CORE production NO_GO; gerçek kernel/physical kanıt BLOCKED.

@@ -9,7 +9,7 @@ import {
   type DispatchClaim,
 } from '../src/agent/broker-external-dispatch-fence.js';
 
-type Attack='original-mutation'|'signed-owner-substitution'|'broker-disappears';
+type Attack='original-mutation'|'signed-owner-substitution'|'broker-disappears'|'parallel-claim';
 function make(attack:Attack){
   const keys=generateKeyPairSync('ed25519');
   const authorityId=randomUUID(),brokerId=randomUUID(),dispatchId=randomUUID();
@@ -24,6 +24,9 @@ function make(attack:Attack){
     highIntegrityToken:true,signedProtectedImage:true,protectedParentAndImports:true,
   };
   let effects=0,brokerReads=0,beginReads=0;
+  let enterBegin!:()=>void,releaseBegin!:()=>void;
+  const beginEntered=new Promise<void>(resolve=>{enterBegin=resolve});
+  const beginHeld=new Promise<void>(resolve=>{releaseBegin=resolve});
   let seen:BrokerDispatchRequest|undefined;
   const replayTombstones=new Set<string>();
   const proof=(kind:'broker_dispatch_permit_v1'|'broker_dispatch_commit_v1',
@@ -48,6 +51,7 @@ function make(attack:Attack){
       if(replayTombstones.has(req.requestId))throw Error('durable replay tombstone');
       replayTombstones.add(req.requestId);
       seen=structuredClone(req);
+      if(attack==='parallel-claim'){enterBegin();await beginHeld;}
       return proof('broker_dispatch_permit_v1',req,nonce);
     },
     commitIfCurrent:async(req,_b,id,nonce)=>{
@@ -83,6 +87,7 @@ function make(attack:Attack){
   });
   return {original,expected,get effects(){return effects},
     get seen(){return seen},get beginReads(){return beginReads},
+    beginEntered,releaseBegin:()=>releaseBegin(),
     run:()=>fence.execute(original,async approved=>{
       effects++;
       assert.deepEqual(approved,expected,'callback must receive immutable validated scope');
@@ -109,4 +114,19 @@ test('AI-08: loss of trusted broker readback between CAS phases denies execution
   const f=make('broker-disappears');
   await assert.rejects(f.run());
   assert.equal(f.effects,0);
+});
+
+test('AI-08: concurrent same-UUID external CAS dispatch cannot double-admit',async()=>{
+  const f=make('parallel-claim');
+  const first=f.run();
+  try{
+    await f.beginEntered;
+    await assert.rejects(f.run(),{code:'DISPATCH_EXTERNAL_CAS_UNKNOWN'});
+    assert.equal(f.beginReads,1,'second in-flight UUID never reaches remote reserve');
+  }finally{f.releaseBegin();}
+  assert.equal(await first,'synthetic-effect');
+  assert.equal(f.effects,1);
+  await assert.rejects(f.run(),{code:'DISPATCH_EXTERNAL_CAS_UNKNOWN'},
+    'the consumed UUID cannot be replayed after completion');
+  assert.equal(f.effects,1);
 });

@@ -67,3 +67,30 @@ npm run build
 - **Windows browser-live:** son tam sorguda workflow hâlâ `in_progress` idi; bağımsız Windows işinin final sonucu doğrulanana kadar workflow geneli SUCCESS sayılmaz. Bu dokümanları güncelleyen yeni commit için CI ayrıca **yeni exact HEAD** üzerinde ölçülmelidir.
 - **Kanıt sınıfı:** D1 testleri SYNTHETIC_SQLITE (gerçek ürünün source-level D1 API'si, sentetik native readback), WAL DISPOSABLE_SQLITE, mTLS LOCAL_TLS_LOOPBACK, diğerleri SYNTHETIC_UNIT. **Gerçek OS sandbox isolation / native owner UAC / kalıcı fiziksel enrollment / iki-PC 24h kabulü BLOCKED; CORE production NO_GO.**
 - **CI tekrar politikası:** mevcut active `(workflow, SHA, inputs)` run'ını yeniden dispatch etme; her rapor aynı exact SHA/run'a bağlanır. Eski iptal edilmiş run'lar FAILURE diye yeniden sınıflandırılmaz.
+
+
+## 31.10.2026 | Yeni bağımsız QA testleri (CI sonucu henüz ölçülmedi)
+
+Aşağıdaki üç ek test yalnızca AI-08 dosyalarına hazırlanmıştır; **bu kodun yeni exact SHA için CI sonucu henüz mevcut değildir**. Önceki `e30b3fe39cd74dc279b32a7e5ed1691d4cd7d591` HEAD'inin 32/32 PASS kanıtı yeni testleri kapsamaz.
+
+| Yeni test | Kaynak dosya | Kanıt sınıfı | Durum |
+|---|---|---|---|
+| Transport-owned Broker receipt imzalı snapshot sonrasında owner/capability değiştirir; doğrulayıcı değişmez kopyayı kullanmalı | `test/ai08-broker-receipt.test.ts` | SYNTHETIC_UNIT | NOT_TESTED (yeni HEAD) |
+| Aynı UUID ile ilk CAS reserve beklerken ikinci bağımsız admission başlatılamaz; tamamlandıktan sonra replay reddedilir | `test/ai08-cas-scope.test.ts` | SYNTHETIC_UNIT | NOT_TESTED (yeni HEAD) |
+| Önceden iptal edilmiş mTLS isteği protected payload'ı yerel HTTPS endpoint'ine göndermemeli | `test/ai08-mtls-pin.test.ts` | LOCAL_TLS_LOOPBACK | NOT_TESTED (yeni HEAD) |
+
+**Gerçek OS izolasyonu / Windows native consent / offhost CAS / physical two-PC kabul** için yeni testler dahil hiçbir sentetik PASS kullanılmaz. Üretim CORE NO_GO'dur.
+
+### Bağımsız owner-PR exact HEAD / CI gözlem matrisi (31.10.2026 anlık görünüm)
+
+| Modül | Draft PR | Gözlenen exact HEAD | CI run / son gözlem | AI-08 mock kaynak negatifleri | OS/physical |
+|---|---|---|---|---|---|
+| AI-01 WAL | #986 | `f33bc494fe4efe2a75d5a4a91917661afba8fa4b` | `41197139627`: 6 completed SUCCESS, browser-live aktif | WAL current/old suffix + current corruption PASS eski AI-08 SHA | BLOCKED |
+| AI-02 enrollment | #984 | `9d0f35607d4cde87bd031e2da77855cfaf570c31` | `41145160595` SUCCESS | revoked owner/SID/machine/session synthetic PASS | BLOCKED |
+| AI-03 mTLS | #988 | `a1cea7e58a853d9e598477e0f2efd64a65c361f5` | `41197111450`: 6 SUCCESS, browser-live aktif | Local wrong SPKI pin PASS; pre-abort yeni test NOT_TESTED | BLOCKED |
+| AI-04 Broker | #987 | `62f73e1ddfa4c7fc8ebadcd7b7499393a66cc380` | `41196171288`: 7 jobs SUCCESS | signed receipt mismatch, lost-ACK PASS; transport tamper yeni test NOT_TESTED | BLOCKED |
+| AI-05 CAS | #992 | `bc29cdc3a777e5c689b38c984626b4cf2becf2cd` | `41197355153`: 6 SUCCESS, browser-live aktif | signed scope, nested mutation PASS; parallel UUID yeni test NOT_TESTED | BLOCKED |
+| AI-06 Console | #985 | `33fdc91ffbb41ad69183ab0a93b2a3cdf146a15e` | `41197159107`: 6 SUCCESS, browser-live aktif | 15 D1 readback readiness/scope negatives PASS (önceki HEAD) | BLOCKED |
+| AI-07 sandbox | #990 | `237ad6d11317f93d032d3040d99b0936b9a16ea5` | `41197172377`: 6 SUCCESS, browser-live aktif | fake native permit, UNKNOWN deny PASS | BLOCKED |
+
+Bu PR'ların yeni üretim deltalari AI-08'in #984 üzerine oturan test HEAD'inde **birleşik olarak yoktur**. Owner PR CI'sı başarı gösterse bile birleşik HEAD ve native kernel kabulü yerine kullanılamaz. Gözlem anındaki aktif işler için yeni final sonucu ayrıca aranır; bu tablo sonradan otomatik SUCCESS'e dönmez.
