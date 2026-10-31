@@ -6,6 +6,7 @@
  */
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {createHash} from 'node:crypto';
+import {types as nodeTypes} from 'node:util';
 import {BrokerExternalDispatchFence,type BrokerDispatchRequest}
   from './broker-external-dispatch-fence.js';
 import {privilegeRequirement} from '../security/privilege.js';
@@ -42,6 +43,7 @@ function canonical(value:unknown,ancestors=new Set<object>()):string {
   if(typeof value==='number'&&Number.isFinite(value))
     return JSON.stringify(value);
   if(typeof value!=='object')deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
+  if(nodeTypes.isProxy(value))deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
   if(ancestors.has(value))deny('CORE_DISPATCH_INPUT_NOT_CANONICAL');
   const proto=Object.getPrototypeOf(value);
   if(!Array.isArray(value)&&proto!==Object.prototype&&proto!==null)
@@ -132,6 +134,34 @@ export function coreWindowsEffectFingerprint(
 }
 
 /**
+ * A frozen object may still contain an accessor property. Treat only exact
+ * own enumerable data descriptors as an authenticated callback payload.
+ * Reject Proxy wrappers before any reflective operation executes traps.
+ */
+function assertFrozenPlainDispatchRecord(
+  value:unknown,fields:readonly string[],
+):void{
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+     nodeTypes.isProxy(value))
+    deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(value);
+    keys=Reflect.ownKeys(value);
+    prototype=Object.getPrototypeOf(value);
+  }catch{return deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH')}
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==fields.length||
+     fields.some(key=>!Object.prototype.hasOwnProperty.call(descriptors,key)||
+       !('value' in descriptors[key]!)||
+       descriptors[key]!.enumerable!==true)||
+     !Object.isFrozen(value))
+    deny('CORE_DISPATCH_APPROVED_REQUEST_MISMATCH');
+}
+
+/**
  * #947's detached and frozen approved request is the only post-CAS source of
  * identity. #916's older #910 fence has no approved callback argument: if
  * called with that older implementation, deny rather than use a mutable
@@ -142,9 +172,12 @@ export function assertCoreApprovedDispatchRequest(
   expected:Readonly<BrokerDispatchRequest>,
   prepared:PreparedCoreWindowsMutation,
 ):void{
-  if(!approved||!Object.isFrozen(approved)||
-     !approved.scope||!Object.isFrozen(approved.scope)||
-     approved.requestId!==expected.requestId||
+  assertFrozenPlainDispatchRecord(approved,
+    ['requestId','capability','fingerprint','scope']);
+  assertFrozenPlainDispatchRecord(approved!.scope,
+    ['ownerId','deviceId','deviceEpoch','sessionEpoch','ownerEpoch',
+      'expectedGeneration','requiredPrivilege']);
+  if(approved!.requestId!==expected.requestId||
      approved.capability!==prepared.capability||
      approved.fingerprint!==prepared.fingerprint||
      expected.capability!==prepared.capability||
