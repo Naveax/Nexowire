@@ -149,6 +149,44 @@ function snapshotProtectedBrokerEvidence(raw:unknown):ProtectedBrokerEvidence {
   }
 }
 
+/** Capture constructor dependencies before any asynchronous admission.
+ * A readonly *reference* to the caller's config object is not immutable:
+ * a late callback/provider swap could turn a rejected owner into permission.
+ * Keep the trusted authority object itself opaque; its durability remains
+ * independently attested outside this JavaScript source boundary. */
+function snapshotFenceConfig<T extends object>(raw:T):T {
+  try {
+    if(!raw || typeof raw!=='object' || Array.isArray(raw))
+      deny('DISPATCH_CONFIG_INVALID');
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype && prototype!==null)
+      deny('DISPATCH_CONFIG_INVALID');
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const required=['authority','authorityId','publicKeyPem',
+      'verifyIdentity','verifyEffectiveBroker','verifyOwnerRevocation'];
+    const accepted=new Set([...required,'maxPermitMs','now','monotonicNowNs']);
+    const ownKeys=Reflect.ownKeys(descriptors);
+    if(ownKeys.some(key=>typeof key!=='string'||!accepted.has(key)))
+      deny('DISPATCH_CONFIG_INVALID');
+    const snapshot:Record<string,unknown>=Object.create(null);
+    for(const key of required){
+      const d=descriptors[key];
+      if(!d||!Object.hasOwn(d,'value')||d.enumerable!==true)
+        deny('DISPATCH_CONFIG_INVALID');
+      snapshot[key]=d.value;
+    }
+    for(const key of ['maxPermitMs','now','monotonicNowNs']){
+      const d=descriptors[key];
+      if(d){
+        if(!Object.hasOwn(d,'value')||d.enumerable!==true)
+          deny('DISPATCH_CONFIG_INVALID');
+        snapshot[key]=d.value;
+      }
+    }
+    return Object.freeze(snapshot) as unknown as T;
+  }catch{return deny('DISPATCH_CONFIG_INVALID')}
+}
+
 /** Source gate: does not modify #03/#04 Broker/Access owner implementation. */
 export class BrokerExternalDispatchFence {
   private readonly publicKey:KeyObject;
@@ -179,14 +217,18 @@ export class BrokerExternalDispatchFence {
     /** Verify an exact short-lived owner-signed revoke approval. */
     verifyOwnerRevocation:(request:DispatchRevokeRequest)=>Promise<boolean>;
   }){
-    if(!uuid.safeParse(config.authorityId).success)deny('DISPATCH_AUTHORITY_INVALID');
-    const max=config.maxPermitMs===undefined?MAX_PERMIT_MS:config.maxPermitMs;
+    // Pin top-level authority/callback references once; do not permit
+    // caller-owned config mutation across identity or remote CAS awaits.
+    const pinned=snapshotFenceConfig(config);
+    this.config=pinned;
+    if(!uuid.safeParse(pinned.authorityId).success)deny('DISPATCH_AUTHORITY_INVALID');
+    const max=pinned.maxPermitMs===undefined?MAX_PERMIT_MS:pinned.maxPermitMs;
     if(!Number.isSafeInteger(max)||max<1||max>MAX_PERMIT_MS)
       deny('DISPATCH_PERMIT_TTL_INVALID');
     this.maxPermitMs=max;
-    this.readClock=config.now??Date.now;
-    this.readMonotonic=config.monotonicNowNs??process.hrtime.bigint;
-    this.publicKey=createPublicKey(config.publicKeyPem);
+    this.readClock=pinned.now??Date.now;
+    this.readMonotonic=pinned.monotonicNowNs??process.hrtime.bigint;
+    this.publicKey=createPublicKey(pinned.publicKeyPem);
     if(this.publicKey.asymmetricKeyType!=='ed25519')
       deny('DISPATCH_SIGNING_KEY_INVALID');
   }

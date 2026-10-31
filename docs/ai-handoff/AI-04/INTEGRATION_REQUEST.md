@@ -38,3 +38,10 @@
 - `test/ai04-broker-claim-snapshot.test.ts` adds a canonical signed positive and ten signed-envelope negatives covering reserve/commit for accessor, inherited, Proxy, extra-own-key and symbol-key; no provider getter or mutation callback may run. No regression tests removed or skipped.
 - This is a JS read-boundary guard, not proof of real independent CAS, OS protected Broker, High token, Job isolation, or owner-approved devices. A malicious Proxy can synthesize correct immutable descriptor values; source-only checks cannot certify the operating-system trust boundary.
 - Prior exact HEAD `46909dd677188396646681605959792ae81091e3` run `41243950808` SUCCESS 7/7; the follow-up commit needs a **separate exact-HEAD CI**. The expected trust publisher/ABI/fail-closed integration remains coordinator-owned and production CORE NO-GO.
+
+## Pinned Broker fence dependency snapshot (source-only, after d971f023)
+
+- `BrokerExternalDispatchFence` once retained its caller-owned mutable `config` by reference. Replacing `verifyIdentity`, `verifyEffectiveBroker`, `verifyOwnerRevocation` or `authority` after construction could retarget a later async admission. Constructor now copies only permitted own enumerable data descriptors and freezes the top-level dependency mapping without executing getters; accessor/Proxy/extra/symbol keys are rejected.
+- `test/ai04-broker-config-snapshot.test.ts` adds four negative tests: replacement CAS authority, false-to-true identity callback substitution, config getter, and trapping config Proxy. No production OS/effect permission or fixture bypass is added.
+- The pinned `authority` object remains an externally supplied service interface, **not an immutable OS trust anchor**. Its native process/service SID, TLS peer and anti-rollback durable grant state still require coordinator and independent physical verification. Protected kernel acceptance is BLOCKED, production CORE NO-GO.
+- Predecessor signed-envelope source SHA `d971f0239d3d2b76b406697aac0183cbdea60097` uses CI run `41246475485`; this new source candidate needs a distinct exact-head CI before PASS may be claimed.
