@@ -1,28 +1,27 @@
 # AI-03 | TEST_EVIDENCE
 
-## Identity and dependency chain
-- Main observed 2026-10-31: `a19a228dc6f19fd484cf935e941a00ea625233f8`.
-- #970 handler HEAD `5e09c01a1f43b25eaa6b2833dfa191bfdea56b4c`, ancestor of #981 base `7e4093c30c1ead3cd22888184450c34aef4737da` (31 ahead, 0 behind). #981 head `b4d6e57053cce6738087e8cecf932fab3492f3c3` equals #982 base. #982 head `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` is AI-03 PR base.
-- Draft PR: https://github.com/Naveax/Nexowire/pull/988, branch `ai/03-native-verifier-20261031`.
-- **Last completely verified source SHA:** `85df4259de234ddcebd8e73277df979d878db921`. GitHub Actions workflow CI 369213208 run [41198185416](https://github.com/Naveax/Nexowire/actions/runs/41198185416) **completed SUCCESS, seven of seven jobs** (Node 22 job `124528660410`, Node 24 `124528660349`, security `124528660429`, WSL2 `124528660468`, macOS `124528660536`, Linux native `124528660586`, Windows browser-live `124528660600`).
-- Node 22 and Node 24 each **2,755 total; 2,401 PASS, 0 FAIL, 352 SKIP, 2 TODO**, Node sources typecheck and build PASS. This includes `omitted protected transport refuses global fetch fallback before exposing bearer` and `shared authority transport rejects ambiguous HTTP media metadata even with a valid signature` passing both Node versions.
-- Linux-native disposable PostgreSQL ran seven real DB enrollment rejection/readback cases successfully: one-use D1 handoff, concurrent consume, lost COMMIT ACK, forged receipt/native change, expiry/revoke, post-COMMIT revoke, late ACK. The database and witness are test fixtures; source success is not physical approval.
+## Exact source, PR and CI identity
+- Branch `ai/03-native-verifier-20261031`, [Draft PR #988](https://github.com/Naveax/Nexowire/pull/988), exact base `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` (#982). #982 base is #981 head `b4d6e57053cce6738087e8cecf932fab3492f3c3`; #970 is upstream of #981.
+- **Last tested source SHA:** `5959e6cbb7b44f30d489b492c50201a765a0a0cb`. Exact GitHub `CI` workflow **369213208**, run [#41200342022](https://github.com/Naveax/Nexowire/actions/runs/41200342022), **completed SUCCESS 7/7**.
+- Job IDs and outcomes:
+  - Node 22: `124534810760`, SUCCESS; typecheck, tests, build. **2,757 tests; 2,403 PASS; 0 FAIL; 352 SKIP; 2 TODO**.
+  - Node 24: `124534810700`, SUCCESS; typecheck, tests, build. **2,757 tests; 2,403 PASS; 0 FAIL; 352 SKIP; 2 TODO**.
+  - Linux native: `124534810641`, SUCCESS; seven real disposable PostgreSQL enrollment tests passed.
+  - Windows browser-live `124534810514`, WSL2 `124534810681`, security-operational `124534810763`, macOS lifecycle `124534810663`: all SUCCESS.
+- Previous source sha `85df4259de234ddcebd8e73277df979d878db921` CI #41198185416: SUCCESS 7/7 with 2,401 PASS on each Node version. **Do not substitute prior SHA evidence for current SHA.**
+- This handoff evidence update itself is docs-only and has a *new* exact HEAD on publication; check its own workflow. Do not claim CI from the preceding source HEAD covers a different git commit.
 
-## Socket / negative-case coverage
-- Actual disposable loopback TLS1.3/mTLS tests verify CA/client cert absence, expired client, a **different same-CA valid client** denied by protected bearer-to-certificate fixture resolver, expired server cert despite a correctly pinned server SPKI, server key-rotation stale pin denial, role/owner/session scope, nonce/hash/signature, replay and revoke, redirect/no retry, bounded/trickled response and content metadata rejection.
-- Valid JSON/UTF-8 and identity encoding positive tests pass; gzip/ambiguous/duplicate headers reject.
-- New source follow-up adds **strict HTTP 200** to common authority calls; test expects 201/202/206 signed JSON to fail without retry and true 200 to pass. This **follow-up is not covered** by the preceding successful `85df4259de234ddcebd8e73277df979d878db921` run. Exact new SHA/run must be verified after publication.
+## Focused negative/positive proof
+- `signed non-200 success responses are terminal and never accepted as verifier ACK`: Node 22/24 PASS; HTTP 201/202/206 signed responses rejected, signed HTTP 200 accepted.
+- `native authority deadline is absolute when injected transport, body or cancel ignores abort`: Node 22/24 PASS; noncooperative fetch/body timeout and stalled cancellation fail closed without retry.
+- `omitted protected transport refuses global fetch fallback before exposing bearer`: Node 22/24 PASS; missing mTLS-capable injection cannot silently fall back to global fetch.
+- Real disposable TLS1.3 loopback tests: expired client/server cert, missing client cert, same-CA alternate client with reused bearer, explicit server SPKI rotation/pin mismatch, timeout, redirect, response size/metadata, owner/session/nonce/replay and revoke. These are **real socket tests using disposable certs**, not production PKI or owner approval.
+- Seven disposable PostgreSQL tests cover independent one-use handoff, two-verifier race, lost COMMIT ACK, forgery/session changes, expiry/revoke, post-commit revoke and late-ACK suppression. Their native witness/signatures are still isolated fixtures; database tests do not imply physical enrollment.
 
-## Local testing / evidence boundary
-- `node --test --import tsx test/core-native-verifier-server.test.ts`: NOT RUN locally, exit code N/A.
-- `node --test --import tsx test/core-native-enrollment-verifier-handler.test.ts`: NOT RUN locally, exit code N/A.
-- `node --test --import tsx test/postgres-core-approval-ledger.test.ts`: NOT RUN locally, exit code N/A (disposable PostgreSQL integrated in GitHub Linux CI).
-- `node --test --import tsx test/core-native-consent-transport.test.ts`: NOT RUN locally, exit code N/A.
-- `npm run typecheck`: NOT RUN locally, exit code N/A.
-- Sandbox has no checked-out dependency tree or working GitHub DNS; do not promote GitHub CI into a local execution claim.
-- Test certificates, local software signer, mock native witness and disposable DB are **not** real Windows UAC, protected CNG/TPM, owner SID/session/LUID kernel readback, rollback-resistant external witness or physical two-PC consent. CORE remains `NO_GO`.
-
-## New adversarial liveness regression (follow-up HEAD not yet CI-verified)
-- Source: `src/protocol/core-native-consent-transport.ts`; test: `test/core-native-consent-transport.test.ts`.
-- Tests an injected fetch that ignores abort and never resolves; an HTTP 200 JSON response with a body that never yields; and an oversized stream whose `cancel()` never resolves. All must fail closed within the configured absolute deadline or byte bound without retries. A separate 900ms test watchdog prevents hanging CI if the safeguard regresses.
-- Prior source SHA `559d0b36330cfc33e9334333960927aef3bbd6de` had CI run [41200058343](https://github.com/Naveax/Nexowire/actions/runs/41200058343) in progress at source inspection; it does **not** prove the new follow-up. The last fully completed CI was `85df4259de234ddcebd8e73277df979d878db921` / run 41198185416 SUCCESS 7/7. Exact new HEAD CI must be checked independently.
+## Commands and evidence boundaries
+- `node --test --import tsx test/core-native-verifier-server.test.ts`: NOT RUN locally; exit N/A.
+- `node --test --import tsx test/core-native-enrollment-verifier-handler.test.ts`: NOT RUN locally; exit N/A.
+- `node --test --import tsx test/postgres-core-approval-ledger.test.ts`: NOT RUN locally; exit N/A. Real disposable PG cases were run in the Linux native CI job above.
+- `node --test --import tsx test/core-native-consent-transport.test.ts`: NOT RUN locally; exit N/A.
+- `npm run typecheck`: NOT RUN locally; exit N/A. CI Node22/24 typecheck/build steps returned SUCCESS.
+- Isolated disposable keys/CA/DB are not Windows CNG/TPM/DPAPI custody, live SID/session/LUID kernel readback, independent restore witness, two-device physical acceptance or production signing keys. **CORE production NO_GO.**
