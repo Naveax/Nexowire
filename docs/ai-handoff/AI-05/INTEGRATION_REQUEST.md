@@ -1,14 +1,19 @@
-# AI-05 Cross-owner integration requests
+# AI-05 cross-owner integration requests
 
-These are requests only, not permission to modify another agent's files.
+**Requests only. Do not change another AI's files from this branch.**
 
-## AI-04 Broker admission / #947 immutable callback contract
-The protected Broker fence must provide a detached and deeply immutable approved request matching the same original UUID, capability, fingerprint and owner/device/session/generation scope used during independent CAS. The Broker must independently verify actual payload bytes and current owner/revoke/privilege/receipt before each effect; a transport success, duplicate UUID or signed JSON alone must not be an execution permit. Keep signed receipt canonicalization in AI-04-owned modules.
+## AI-04: Broker admission + signed effect receipt
 
-## Coordinator `src/agent/native-agent.ts` and journal
-Only the coordinator may wire real approved dispatch/grant scope to the executor. Preserve the release's WAL/restart safeguards, immutable logical mutation ID, terminal UNKNOWN and no blind retry. If `created:false`, callback dispatch is prohibited until independent reconciliation. Do not enable CORE by configuration in this source PR.
+A protected per-effect Broker must re-check the original immutable request UUID, capability, fingerprint, owner/device/session generation, readback and exact wire payload at actual dispatch time. A grant or external CAS reservation is not itself a native permit. Preserve global tombstones/UNKNOWN after lost ACK, restart and revoke; `created:false` must never execute a callback. Provider authenticity must be established independent of Agent process state and synthetic receipts.
 
-## AI-07 OS sandbox
-Shell/task graph/process effects need a separate real low-privilege provider and OS readback; a CAS reservation must never be interpreted as a shell launcher grant. The AI-07 handoff from #990 is tracked but not implemented here.
+## Coordinator: native-agent, operation journal and CI
 
-All physical integration requires separately authenticated and authorized owner/device Windows readback. This PR is not release approval.
+Coordinator owns `src/agent/native-agent.ts`, `src/agent/operation-journal.ts` and `.github/workflows/**`. Wire the original approved deep-frozen request into the protected Broker callback without reconstructing it from a mutable input. Keep WAL restart/recycled-frame safeguards, and do not retry mutations after ambiguous CAS/HTTP outcomes. Integration must preserve released v1.0.8 startup behavior. The Windows `browser-live` job has previously run long within its console/DPAPI stages; investigate independently if full CI cannot finish. AI-05 does not edit the workflow.
+
+## AI-07: real OS sandbox
+
+Each `shell.exec`, subprocess, graph or nested effect needs a verified independently isolated low-privilege worker, descendant/handle/network/environment containment and revoke/drain witness. A signed Core grant or Job Object alone is not kernel isolation proof. Provider absence/UNKNOWN must deny execution.
+
+## Physical operator acceptance
+
+Only independently authorized owner-side Windows tests can verify real enrollment, UAC/ACL, signed Broker image, two-PC restart/revocation, protected local record, protected CAS custody and restore resistance. Source CI passing does not replace these gates.

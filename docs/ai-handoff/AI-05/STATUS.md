@@ -1,21 +1,24 @@
 # AI-05 STATUS
-Status: IN_PROGRESS (source candidate, pending independent CI)
-Date: 2026-10-31
-Branch: `ai/05-cas-executor`
-Draft PR: https://github.com/Naveax/Nexowire/pull/992
-Stacked base: `integration/core-after-v108-20261030`
-Base SHA: `7e4093c30c1ead3cd22888184450c34aef4737da`
-Initial source+test candidate SHA: `c6957704e02e5150414e66f727625cf31f8d99c1`
-Initial candidate CI: 41196039175 completed FAILURE: TS2345 at source line 134; corrected in 925c18fd1bbb116da26e783d85e3e42710cb1dc2. New receipt snapshot and two more negative tests are at 43ca9f50fe76b4595e046b0dd49d339c82505696. Exact final-head CI must be checked separately.
-Current exact PR HEAD and CI must be taken from GitHub after this file is committed.
 
-Completed: isolated #05 immutable request+scope+external receipt source changes and six synthetic adversarial test cases.
-In progress: exact final SHA typecheck, Node 22/24 and platform CI, cross-owner QA.
-Next: inspect actual CI logs; fix only AI-05 paths; never relaunch an existing same-SHA CI.
-Never turn on CORE_EXECUTOR_DISPATCH_ENABLED or deploy this branch.
+- Date: 2026-10-31
+- Status: **IN_PROGRESS / source review**, **production CORE NO_GO**
+- Repository: Naveax/Nexowire
+- Branch: `ai/05-cas-executor`
+- Draft PR: https://github.com/Naveax/Nexowire/pull/992
+- Stacked base: `integration/core-after-v108-20261030`, exact SHA `7e4093c30c1ead3cd22888184450c34aef4737da`
+- Latest source and test tip before this documentation commit: `2f53b5a923a413a10bb2f054dbfa93469869c9c4`
+- Final exact PR HEAD: read from the live PR; the documentation cannot contain its own Git commit SHA
+- This source tip's GitHub CI run: `41200171318` was queued at last inspection. Its verdict is **not** transferred to a later documentation HEAD.
 
-2026-10-31 additional hardening: caller-owned CAS request is snapshotted without accessors; hidden/non-enumerable keys on request, scope or receipt are denied. Source/test candidate SHA before this handoff commit: `caadd1db53fb4993402a0abd06f3b8f2abb7c883`. CI run 41197201487 observed in_progress. This document's future HEAD needs fresh exact-SHA CI.
+## Implemented in AI-05 paths
 
-2026-10-31 follow-up: additional AI-05 HTTPS CAS transport uncertainty guard and 2 synthetic HTTP response tests were added. Existing PR #992 stays Draft; exact post-update SHA/CI is live GitHub state. No same-SHA workflow rerun and no real network/OS/CAS mutation.
+1. Deeply detached original CAS UUID/fingerprint and authenticated scope snapshots before async identity, SQL or remote witness checks.
+2. Detached external `created:false`/sequence receipt before awaited DB operations. Unknown ACK and already-tombstoned UUID never silently grant a mutation replay.
+3. HTTPS grant CAS reserve/revoke/re-pair classifies 408/425/429/5xx as UNKNOWN, not a reliable terminal refusal; no hidden transport retries.
+4. HTTPS request/scope/revoke/re-pair and remote monotonic witness requests reject getter/Proxy/symbol/hidden/extra fields without calling hostile accessors.
+5. Original authority/credential/provider configuration pinned at constructor; no retargeting from a mutable shared settings object.
+6. New synthetic tests: 9 PostgreSQL scope, 6 HTTPS outcome, 3 standalone remote witness, **18 total**.
 
-2026-10-31: additional immutable constructor configuration binding implemented for HTTPS/PG CAS and three adversarial provider/authority swap tests. Current source candidate SHA must be taken from GitHub; no physical proof.
+## Next gate
+
+Wait for exact HEAD typecheck, Node 22/24 tests, build and the full 7-job CI matrix. Do not re-dispatch same SHA/workflow/input. If CI fails, fix only AI-05-owned files and preserve negative assertions. AI-08 may independently review without changing this source. Coordinator owns shared CI, integration and release. No live Agent, Broker, UAC/ACL or two-PC operation authorized.

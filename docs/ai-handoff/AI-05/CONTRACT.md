@@ -1,30 +1,19 @@
-# AI-05 Immutable CAS admission contract
+# AI-05 Immutable external CAS and executor contract
 
-## Authority and trust boundary
-The caller-provided `CasRequest` (UUID, fingerprint, capability and device epoch) is validated, **cloned and frozen synchronously** when `PostgresBoundGrantCas.reserve` starts. The resolver's returned `AuthenticatedGrantScope` (ownerId, deviceId, deviceEpoch, sessionEpoch, expectedGeneration, requiredPrivilege) is not retained as a borrowed reference. It is examined by property descriptors without invoking getters, structurally validated, copied and frozen **before** any SQL BEGIN/FOR UPDATE or external CAS call.
+## Admission identity
 
-An `ExternalGrantCasReceipt` is separately checked for plain own data descriptors, fully schema-validated, detached and frozen before the next SQL await. In particular `created:false` and sequence cannot be rotated by a retained provider object after validation.
+The original request identity is the exact validated `deviceId`, `epoch`, `requestId`, `fingerprint` and `capability`. In the PostgreSQL-bound CAS, authenticated owner/device/session/epoch/generation/requiredPrivilege is copied from plain own enumerable data descriptors and frozen before async SQL. The external reservation receipt, including `created` and `sequence`, is separately validated, detached and frozen before another SQL await. A remote returned object may not retroactively turn a historical `created:false` into `created:true`.
 
-The local PostgreSQL device/delegation row locks do not replace the independently operated, rollback-resistant external reserve/commit gate. The external `reserveIfCurrent` provider must bind the identical immutable request and scope to an atomic current grant/revoke generation and global UUID tombstone. `created:false` is a replay-denial/readback result, **never** a new execution permit. If external reservation may have committed but its acknowledgement was lost, the result is UNKNOWN, no silent retry or local fallback.
+No reflected/accessor, Proxy, symbol, hidden, inherited or unexpected identity key is admission. Only primitive typed fields from a strict schema are accepted. `Object.freeze` and local SQL locks are not cryptographic identity, OS privilege or externally operated anti-rollback proof.
 
-## Invariants tested
-- Owner/session/generation can mutate in the original resolver object after row checks without changing external CAS request, authorized scope or stored tombstone owner.
-- Original caller request UUID/fingerprint can mutate during SQL awaits without rotating the reserved identity.
-- Accessor-backed scope inputs fail closed without invoking a user getter.
-- Lost external acknowledgement triggers one external attempt and database rollback, not a second mutation.
-- Previously tombstoned global UUID remains `created:false`, with no fresh insert, even if the borrowed external receipt is changed after its initial proof check.
-- Accessor-backed external proof is rejected without running a getter.
+## HTTPS transport and configuration
 
-## Integration boundaries
-AI-04 owns Broker admission, signed effect receipts, Job/kernel readback, and the existing `broker-external-dispatch-fence.ts`. AI-05 owns the CAS and executor modules only. The coordinator owns `native-agent.ts`, `operation-journal.ts`, shared CI and production integration. AI-07 owns OS sandbox provider; no worker is authorized by this source-only change.
+External reserve/revoke/re-pair requests are snapshotted from own enumerable data descriptors, strictly parsed and frozen **before** credential resolution or network awaits. Their original wire bytes retain the approved immutable request identity even when caller references mutate. Each client and witness adapter pins a detached configuration object in its constructor: authority ID, device/epoch, token or credential-provider reference, trusted CAS provider and pool are not retargeted by the caller later.
 
-`CORE_EXECUTOR_DISPATCH_ENABLED=false` remains mandatory. No test fixture, signed request, JSON receipt or mocked HIGH/ACL status is a physical grant or host isolation proof.
+Network uncertainty (timeout, lost ACK, HTTP 408/425/429/5xx, invalid or absent trustworthy admission) never authorizes a retry of a mutation. The transport has no internal mutation retry. Explicit HTTP 403/409 can count as refusal only where an independently operated server guarantees those outcomes were issued **before** any side-effect. Reconciliation of UNKNOWN must use an external durable request tombstone/OS observation, not a new invocation.
 
-## Original request data provenance
-`CasRequest` is copied from exactly five own enumerable data descriptors (deviceId, epoch, requestId, fingerprint, capability) before provenance, identity or SQL awaits. Inherited fields, symbol keys, unknown extra keys, accessor descriptors and hidden non-enumerable fields fail closed. Authenticated scope and external receipt apply the same own-enumerable-data rule before their first downstream await. This is structural binding only, not signed identity proof.
+## Executor and Broker boundary
 
-## HTTPS ambiguous HTTP outcome boundary
-The external CAS HTTP adapter must preserve uncertainty after dispatch. HTTP 408, 425, 429 and any 5xx may mean that a one-use reserve, revoke or re-pair committed before the response was generated. These outcomes map to the operation-specific UNKNOWN/transport-unknown denial code, never to a definitive refusal. The client does not retry internally. Explicit authority 403/409 responses remain refusals only under the independent authority's no-side-effect rejection contract. Neither code is a permit. Transport UNKNOWN requires independent reconciliation before any new mutation.
+AI-05's approved executor callback must use the exact immutable payload bytes and fingerprint admitted by an independently protected Broker CAS fence. `CORE_EXECUTOR_DISPATCH_ENABLED=false` remains in source; no test fixture or signed JSON receipt enables it. AI-04 owns the separate Broker-side per-effect authorization and signed receipts. AI-07 owns OS worker launch/containment. The coordinator owns `src/agent/native-agent.ts`, `operation-journal.ts`, CI workflow and integration.
 
-## Constructor authority invariance
-The HTTPS grant transport and PostgreSQL-bound CAS each shallow-copy and freeze their trusted dependency configuration on construction. The root authority ID, credential resolver, external CAS provider and pool cannot be switched by later mutation of the caller's original settings object across async identity/SQL/HTTP awaits. The nested provider implementation and actual durable external grant custody still require separate independent verification.
+A valid `created:false` is **not** new execution permission. After lost ACK / restart / UNKNOWN no second mutation is allowed for the original UUID. No physical Windows/device/kernel authorization is claimed by this source-only PR.

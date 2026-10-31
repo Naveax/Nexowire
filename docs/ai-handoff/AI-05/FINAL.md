@@ -1,25 +1,17 @@
-# AI-05 source candidate handoff (provisional)
+# AI-05 handoff | provisional
 
-- Status: NO_GO for production; IN_PROGRESS for source review/CI
+- **Decision:** source candidate IN_PROGRESS / awaiting exact-head CI; **production NO_GO**
 - Branch: `ai/05-cas-executor`
 - Draft PR: https://github.com/Naveax/Nexowire/pull/992
 - Base: `integration/core-after-v108-20261030`
 - Base SHA: `7e4093c30c1ead3cd22888184450c34aef4737da`
-- Latest source+test SHA (before final docs): `43ca9f50fe76b4595e046b0dd49d339c82505696`
-- Exact final HEAD: see live PR metadata; this report cannot self-embed the SHA of the commit that contains itself.
-- Modified owner files: `src/agent/postgres-bound-grant-cas.ts`, `test/ai05-cas-scope-snapshot.test.ts`, this `docs/ai-handoff/AI-05/**` directory.
-- Test execution: 6 adversarial source cases added; current-head CI/exit codes must be recorded from the actual run. Local execution not possible in isolated runtime (DNS).
-- Mock/real OS: only source-level synthetic fixtures; no live independent PostgreSQL or Windows physical acceptance.
-- Initial CI TS2345 was reproduced in hosted CI and fixed in a later source commit. Final-head CI result is pending.
-- Remaining P0 gates: protected Broker admission and receipts, external CAS hosting/restore custody, native Windows identity/ACL trust, sandbox worker, real two-device enrollment/revoke/restart.
-- Guardrail: `CORE_EXECUTOR_DISPATCH_ENABLED=false`; no merge, deploy, UAC, ACL, local enrollment or production mutation.
-- Coordinator handoff: review PR #992 and integration requests; merge/release decision stays with coordinator.
-
-## Follow-up delta
-The prior six-test handoff was extended to nine targeted AI-05 synthetic negatives, including original request getter, polluted keys/prototypes and non-enumerable identity/proof fields. Consult current PR HEAD and CI for final verification; local machine/physical acceptance remains unperformed and production stays NO_GO.
-
-## Additional AI-05 HTTP transport hardening
-Three one-use external grant actions (reserve/revoke/re-pair) now keep HTTP 408/425/429/5xx in UNKNOWN state to prevent treating an already-committed mutation as safe to retry. Two negative test cases cover uncertainty vs explicit 403/409 refusal. These are source-only and require exact-HEAD CI and external authority contract verification. Physical/production NO_GO unchanged.
-
-## Constructor binding delta
-Replaced borrowed CAS transport and PostgreSQL authority settings with detached frozen copies at initialization. Added adversarial forged-authority and provider-swap tests. Release stays NO_GO: a frozen JavaScript object is not external physical trust provenance.
+- Latest code SHA immediately prior to handoff update: `2f53b5a923a413a10bb2f054dbfa93469869c9c4`
+- **Final exact PR HEAD:** obtain from PR after documentation commit. It cannot be self-referenced from a document within that commit.
+- Changed files: `src/agent/postgres-bound-grant-cas.ts`, `src/agent/https-external-grant-cas.ts`, `src/agent/remote-mutation-cas.ts`, 3 new `test/ai05-cas-*.test.ts` and 5 `docs/ai-handoff/AI-05/*.md`. No shared or other-agent source.
+- New negative regressions: **18 synthetic cases** (9 PostgreSQL, 6 HTTPS, 3 remote witness). Exact final-head CI verdict, original tests, TS/build and platform run statuses must be independently confirmed before READY_FOR_REVIEW.
+- CI run seen for code tip: `41200171318`, queued before this documentation-only commit.
+- No local exit codes: tests were not run from a full local clone. See `TEST_EVIDENCE.md`.
+- Native/physical evidence: **NOT RUN / NOT PROVEN**. Only source and mocked HTTP/SQL assertions. No installed service, real device enrollment, UAC/ACL, credential or broker changes.
+- Flag: `CORE_EXECUTOR_DISPATCH_ENABLED=false`. No merge, deploy or main push.
+- Outstanding blocker: independent trusted CAS custody and release/revoke monotonicity, protected Broker receipt/native source, real OS sandbox, coordinator integration, two-PC physical restart and revoke/readback.
+- Next: track exact-head CI, make owner-only CI fixes if necessary, and send evidence/required API handoff to coordinator. Treat CI SKIP/TODO as not physically validated.
