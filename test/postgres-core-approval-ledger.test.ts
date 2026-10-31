@@ -353,6 +353,34 @@ test('real PostgreSQL enrollment: issuer changes during native witness await den
   }finally{await f.close()}
 });
 
+test('real PostgreSQL enrollment: issuer rotation after DB clock read denies handoff before INSERT',integration,async()=>{
+  const f=await fixture();try{
+    const p=await approved(f);let flipped=false;
+    // The independent native witness is initially issuer A. A real SQL clock
+    // read finishes, then a concurrent protected issuer rotation becomes
+    // observable BEFORE the permanent handoff INSERT. A witness checked
+    // before the awaited SQL read would miss this race and consume the receipt.
+    const guarded:DispatchStorePool={async connect(){const c=await f.runtime.connect();return {
+      query:async(sql,values=[])=>{
+        const result=await c.query(sql,values);
+        if(sql.includes('clock_timestamp()')&&!flipped){
+          flipped=true;f.setIssuer('b'.repeat(64));
+        }
+        return {rows:result.rows as Record<string,unknown>[]};
+      },release:(destroy=false)=>c.release(destroy),
+    }}};
+    await assert.rejects(f.create({pool:guarded}).consumeForEnrollment(p,'a'.repeat(64)),
+      /CORE_APPROVAL_ISSUER_UNVERIFIED/);
+    assert.equal(flipped,true,'the protected issuer was rotated after a genuine SQL clock read');
+    assert.equal((await f.admin.query('SELECT COUNT(*) AS n FROM core_approval.enrollment_consumptions '+
+      'WHERE receipt_id=$1',[p.receiptId])).rows[0].n,'0',
+      'no one-use enrollment tombstone may be inserted after issuer rotation');
+    f.setIssuer('a'.repeat(64));
+    assert.deepEqual(await f.create().consumeForEnrollment(p,'a'.repeat(64)),p,
+      'a failed pre-INSERT check did not consume the one-use handoff');
+  }finally{await f.close()}
+});
+
 test('real PostgreSQL enrollment: issuer changes after COMMIT deny ACK but preserve tombstone',integration,async()=>{
   const f=await fixture();try{
     const p=await approved(f);let switched=false;

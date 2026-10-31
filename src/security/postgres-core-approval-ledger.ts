@@ -279,9 +279,13 @@ export class PostgresCoreApprovalLedger {
       const stored=await this.stored(tx,proof.receiptId,expected);
       if(!Object.keys(proof).every(k=>proof[k as keyof CoreNativeProof]===stored.proof[k as keyof CoreNativeProof]))
         fail('ENROLLMENT_PROOF_MISMATCH');
-      await this.trusted(expected,issuer);await this.current(tx,expected);
+      await this.current(tx,expected);
       const time=await tx.now();
       if(time<proof.approvedAtMs||time-proof.approvedAtMs>=120000)fail('ENROLLMENT_PROOF_EXPIRED');
+      // The DB lock and clock query both await I/O. Revalidate the protected
+      // native issuer/scope AFTER those awaits, just before the irrevocable
+      // one-use INSERT, not before an intervening mutable readback.
+      await this.trusted(expected,issuer);
       const inserted=await tx.db.query('INSERT INTO core_approval.enrollment_consumptions '+
         '(receipt_id,authority_id,device_id,proof_sha256,issuer_spki_sha256,consumed_ms) '+
         'VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(receipt_id) DO NOTHING RETURNING receipt_id',
