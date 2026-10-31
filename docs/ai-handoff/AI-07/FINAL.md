@@ -64,3 +64,6 @@ Added `test/ai07-sandbox-linux-pidfd-orphan.test.ts` with an intentionally broke
 
 ### Linux path root negative (2026-11-01)
 Added isolated `test/ai07-sandbox-linux-openat2-root.test.ts` with real Linux `openat2` traversal/symlink kernel denials and a deliberate hardlink bypass illustration; all four variants matched locally across 40 runs. This expands AI-07 negative OS evidence but DOES NOT establish a production filesystem sandbox or release CORE/UNKNOWN gates. NO_GO persists.
+
+### argv additional-own-key hardening
+Strict extra-key rejection and hostile argv negative regression added; preserves no execution permit, no fallbacks, UNKNOWN reconciliation and native OS production NO-GO.

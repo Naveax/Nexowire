@@ -78,3 +78,6 @@ The parent opens its own `pidfd_open` *before* the namespace PID1 fork. PID1 ins
 
 ### Linux openat2 filesystem evidence is bounded, hardlink escape remains open
 The disposable `test/ai07-sandbox-linux-openat2-root.test.ts` tests `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV` against fixture-owned `../outside`, in-root symlink and an out-of-root hardlinked inode. The first two can be kernel denied; `openat2` **does not constrain a hardlink to a distinct inode origin**. The test-only `st_nlink>1` probe documents this gap but is not independently protected inode admission, path immutability, mount confinement or a production OS permit. AI-04/05 must not infer task-root confinement from string paths or the fixture.
+
+### Strict source-only argv shape
+In `boundedArgs`, `Reflect.ownKeys(args).length` must exactly match `args.length+1` alongside each own indexed data descriptor check. This rejects hidden or symbolic fields and throwing Proxy ownKeys traps so additional JS metadata cannot be silently ignored in source validation. It is no proof of actual native argv serialization; immutable signed input/OS grant remains AI-05/04-owned.

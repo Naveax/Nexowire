@@ -83,3 +83,6 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## 2026-11-01 genuine Linux path-boundary negative (AI-07)
 - Added `test/ai07-sandbox-linux-openat2-root.test.ts` as an isolated, **test-only** `openat2` Linux fixture. `RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS|RESOLVE_NO_XDEV` admits a fixture-owned ordinary file, rejects a temporary-root `../outside` traversal with `EXDEV`, and denies a symlink with `ELOOP`. Three deliberate weakened controls return 55/56/57, never PASS.
 - **Critical limitation:** a hardlink from outside the fixture-owned root STILL opens successfully under these `openat2` flags. The fixture detects matching inode/device and `st_nlink>1`, and flags a deliberately missing hardlink check as exit 57. This simple check is not a complete hardlink/inode-integrity or race defense. Real OS filesystem boundary and protected task root remain unproven; production NO-GO.
+
+## 2026-11-01 argv own-key fail-closed validation
+- Source-only bounded argv now demands precisely `length` plus its indexed own data descriptors. Extra non-enumerable own properties, symbols or throwing ownKeys traps classify `INVALID_TASK_INTENT`; no getter is evaluated. A future immutable serialized-byte admission is still required; JavaScript reflection alone is not a trusted attester. CORE/task execution remains denied.

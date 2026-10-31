@@ -82,6 +82,11 @@ function boundedArgs(value: unknown): boolean {
         Object.getPrototypeOf(value) !== Array.prototype) return false;
     const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
     if (!Number.isSafeInteger(length) || (length as number) > 256) return false;
+    // Only the exact indexed argv slots and intrinsic length are admitted.
+    // Hidden own properties, symbols and accessor-backed metadata could make
+    // a later serializer sign bytes other than the fields we inspected.
+    // Malicious Proxy ownKeys traps are caught and remain deny-only.
+    if (Reflect.ownKeys(value).length !== (length as number) + 1) return false;
     // Individual limits are insufficient: 256 x 32K strings would let
     // untrusted callers force a huge serialized payload before OS admission.
     // Keep the combined argument envelope conservatively under the Windows
