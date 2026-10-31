@@ -6,6 +6,7 @@
     "src/agent/browser-manager.ts#spawn": 3,
     "src/agent/executors.ts#spawn": 2,
     "src/agent/executors.ts#spawnSync": 1,
+    "src/agent/journal-owner-process.ts#spawn": 1,
     "src/agent/native-agent-lifecycle.ts#spawn": 1,
     "src/agent/privileged-broker-lifecycle.ts#spawn": 1,
     "src/agent/privileged-broker.ts#spawnSync": 1,
