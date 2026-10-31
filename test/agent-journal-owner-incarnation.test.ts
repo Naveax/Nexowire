@@ -53,6 +53,35 @@ test('live owner and legacy live PID without birth evidence are never reclaimed'
   await assert.rejects(second.initialize(),{code:'AGENT_JOURNAL_IN_USE'});
   assert.equal((await first.inspect(id))?.status,'succeeded');
 });
+test('concurrent startup has exactly one owner and rejected contenders can retry after clean shutdown',
+  {timeout:120000},async t=>{
+  const {file,id,cleanup}=await fixture(t);
+  const contenders=Array.from({length:12},()=>new AgentOperationJournal(file));
+  for(const journal of contenders)cleanup(()=>journal.close());
+  const outcomes=await Promise.allSettled(contenders.map(journal=>journal.initialize()));
+  const winners=outcomes.flatMap((result,index)=>result.status==='fulfilled'?[index]:[]);
+  assert.equal(winners.length,1,'parallel startup must never grant two mutation leases');
+  for(const result of outcomes)if(result.status==='rejected')
+    assert.equal(result.reason.code,'AGENT_JOURNAL_IN_USE');
+  const winner=contenders[winners[0]!]!;
+  assert.equal((await winner.begin(id,'a'.repeat(64),'files.write')).created,false);
+  winner.close();
+  // Reuse an instance whose first initialization failed: no poisoned loading state.
+  const retry=contenders.find((_,index)=>index!==winners[0])!;
+  await retry.initialize();
+  assert.equal((await retry.inspect(id))?.status,'succeeded');
+  assert.equal((await retry.begin(id,'a'.repeat(64),'files.write')).created,false);
+  retry.close();
+  // Repeated handoffs preserve both terminal tombstones and exclusive ownership.
+  for(let cycle=0;cycle<5;cycle++){
+    const next=new AgentOperationJournal(file);cleanup(()=>next.close());
+    await next.initialize();
+    assert.equal((await next.inspect(id))?.status,'succeeded');
+    const blocked=new AgentOperationJournal(file);cleanup(()=>blocked.close());
+    await assert.rejects(blocked.initialize(),{code:'AGENT_JOURNAL_IN_USE'});
+    next.close();
+  }
+});
 test('Agent connects for diagnosis under live journal contention and blocks writes before execution',
   {timeout:120000},async t=>{
   const {dir,file,cleanup}=await fixture(t);const owner=new AgentOperationJournal(file);await owner.initialize();cleanup(()=>owner.close());
