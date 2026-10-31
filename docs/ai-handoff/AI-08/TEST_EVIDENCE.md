@@ -1,45 +1,58 @@
-# AI-08 | Exact-SHA test kanıtı ve negatif matris
+# AI-08 | Negatif test kanıtı (exact SHA/CI ayrımı)
 
-**Gözlem:** 2026-10-31. **Bu dosyaya yazılırken AI-08 yeni testleri henüz GitHub CI'da çalıştırılmadı.** PASS iddiası yerine `NOT_TESTED` kullanılır. İlgili PR run'ları bağımsız AI-08 test sonucu değildir. Yerel çalışma ortamında GitHub DNS ve npm checkout erişimi yoktur; CI sonrası gerçek exit code ve job sayıları haricen doğrulanmalıdır.
+## CI kanıt seviyeleri
 
-## Referans kaynak/CI kanıtı
+### Doğrudan ölçülmüş AI-08 kaynak testleri
+- **Kaynak HEAD:** `44f18a925974c9eb9743d366ded1d81ca851b95a`
+- **Workflow:** CI, run ID `41194807179`, GitHub Actions `pull_request` (Draft #989).
+- **Node 22:** `npm run typecheck`, `npm test`, `npm run build` **SUCCESS (exit 0)**; test suite `2787 total / 2431 PASS / 0 FAIL / 354 skipped / 2 TODO`; ilk **17 AI-08 testi PASS**.
+- **Node 24:** `npm run typecheck`, `npm test`, `npm run build` **SUCCESS (exit 0)**; aynı 2787/2431/0/354/2, **17 AI-08 PASS**.
+- **CI Node job IDs:** Node22 `124518726574`; Node24 `124518726530`.
+- **WAL gerçek fixture geometrisi:** SQLite tarafından üretilen `2 current-generation / 161 prior allocation frames`. Önceki gerçek kullanıcı vakasının 709/295 sayısını fiziksel olarak tekrar ettiğimiz iddia edilmez.
+- **Diğer CI job'lar:** Linux native, local enrollment native, WSL2, macOS, security-operational işleri önceki HEAD için SUCCESS görüldü. `browser-live` tam işin final sonucunu doğrulamadan tüm-run SUCCESS denmez.
 
-| Alan | PR | exact HEAD | CI run | Gözlenen sonuç |
+### Daha sonra eklenen D1 claim/admission negatifleri
+- **Kod commit:** `913230d378d9331eab01d7bb36094123d4fbe107`.
+- **Test dosyası:** `test/ai08-console-claim.test.ts`. Offline, admin-bridge not-ready, privilege downgrade, platform switch, CORE disabled senaryoları. Her birinde async native readback sırasında D1 güncellenir; claim yanlışlıkla sürdürülmemeli; tüketilmiş request ID unknown/terminal kalmalı.
+- **Bu ek testlerin ölçüm durumu:** `NOT_TESTED` bu doküman yazılırken. Commit `913230d...` için yeni run ID `41195396312` pending gözlendi. Nihai docs HEAD'in gerçek run'ı ayrıca doğrulanacaktır.
+
+## Referans PR exact-SHA kanıtları (AI-08 testleri yerine kullanılamaz)
+
+| Alan | PR / durum | exact HEAD | CI run | Sonuç |
 |---|---|---|---|---|
-| main 1.0.8 / WAL birleşik | #957 (closed), main | `a19a228dc6f19fd484cf935e941a00ea625233f8` | `41078541065` | SUCCESS; yayın ve canary ayrı issue #974 |
-| #01 CAS immutable request | #947 Draft | `49109b082f811174894bf268ae1e57dbb2bea50d` | `40698276841` | SUCCESS |
-| #02 Broker signed receipt | #950 Draft | `4c92f676c5d0ce0dd6c85a6288912ab21bf4a80c` | `40752196776` | SUCCESS |
-| #03 guarded Windows mutation | #916 Draft | `0b505e053cb99704015700faf47c9c437862abef` | `40705681126` | SUCCESS |
-| #04 claim readiness adversarial | #949 Draft | `2829db965bee48312e4614cd234caf34e7de24d4` | `40705928887` | FAILURE |
-| #04 claim readiness source fix | #951 Draft | `169186b90a51619d79ff29a93a1770f4a9d4bdf2` | `40712106650` | SUCCESS; fiziksel PASS değil |
-| #07 sandbox provider | #859 Draft | `68ee74ce7e1e5a36c8ae2f9b065f49a5cb13cee9` | `40547392793` | SUCCESS; source only |
-| mTLS client | #982 Draft | `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` | `41139860087` | SUCCESS; loopback/source only |
-| integrated candidate | #980 Draft | `7e4093c30c1ead3cd22888184450c34aef4737da` | CI `41113730982`, Release Readiness `41113730994` | SUCCESS; CORE NO_GO |
-| independent QA target base | #984 Draft | `9d0f35607d4cde87bd031e2da77855cfaf570c31` | `41145160595` | SUCCESS; AI-08 testleri henüz bu HEAD'de yok |
+| v1.0.8 main WAL candidate | main | `a19a228dc6f19fd484cf935e941a00ea625233f8` | `41078541065` | SUCCESS; physical CORE değil |
+| External CAS nested request | #946 Draft | `00330e83e6fd4cf59d86bbbda3fb7c213f258ee4` | `40674859833` | **FAILURE: 3 adversarial** |
+| Immutable CAS source fix | #947 Draft | `49109b082f811174894bf268ae1e57dbb2bea50d` | `40698276841` | SUCCESS |
+| Broker signed receipts | #950 Draft | `4c92f676c5d0ce0dd6c85a6288912ab21bf4a80c` | `40752196776` | SUCCESS |
+| Windows mutation dispatcher | #916 Draft | `0b505e053cb99704015700faf47c9c437862abef` | `40705681126` | SUCCESS |
+| Console D1 race adversarial | #949 Draft | `2829db965bee48312e4614cd234caf34e7de24d4` | `40705928887` | **FAILURE: 6 adversarial** |
+| Console D1 race source fix | #951 Draft | `169186b90a51619d79ff29a93a1770f4a9d4bdf2` | `40712106650` | SUCCESS |
+| #07 OS sandbox provider | #859 Draft | `68ee74ce7e1e5a36c8ae2f9b065f49a5cb13cee9` | `40547392793` | SUCCESS; deny-only stub |
+| mTLS source client | #982 Draft | `5e52b756cc6959ffacb7bcd25f2fc1ad2beccc39` | `41139860087` | SUCCESS; source/loopback |
+| Integration candidate | #980 Draft | `7e4093c30c1ead3cd22888184450c34aef4737da` | `41113730982`, `41113730994` | SUCCESS; NO_GO |
+| QA source base | #984 Draft | `9d0f35607d4cde87bd031e2da77855cfaf570c31` | `41145160595` | SUCCESS; AI-08 testlerini içermez |
 
-#946 adversarial nested scope, exact HEAD `00330e83e6fd4cf59d86bbbda3fb7c213f258ee4`, CI `40674859833` **FAILURE**. #974 açık P0'dır; 1.0.8 canary / yayın kanıtı tüm cihaz kabulü değildir.
+## AI-08 negatif matris
 
-## Negatif kanıt matrisi
-
-| Modül ve negatif senaryo | Yeni AI-08 test | Sınıf | Durum |
+| Negatif senaryo | QA dosyası | Ölçüm sınıfı | Kanıt (44f18...) |
 |---|---|---|---|
-| WAL valid RESTART/recycle retained old tail + UNKNOWN | `ai08-wal-recycle` | DISPOSABLE_SQLITE | NOT_TESTED |
-| WAL bad current frame / tampered SHM second header | `ai08-wal-recycle` | DISPOSABLE_SQLITE | NOT_TESTED |
-| Enrollment revoked owner, SID, machine and session mismatch | `ai08-enrollment-sandbox` | SYNTHETIC_UNIT | NOT_TESTED |
-| mTLS wrong SPKI pin never reaches handler; immutable origin | `ai08-mtls-pin` | LOCAL_TLS_LOOPBACK | NOT_TESTED |
-| Broker receipt mismatched scope/signature/capability and lost COMMIT ACK | `ai08-broker-receipt` | SYNTHETIC_UNIT | NOT_TESTED |
-| CAS request nested-scope mutation and broker readiness race | `ai08-cas-scope` | SYNTHETIC_UNIT | NOT_TESTED |
-| Console D1 claim post-native-readback device/offline/platform/owner switch | external #949/#951 | SYNTHETIC_UNIT | NOT_TESTED (AI-08) |
-| Sandbox injected fake kernel evidence and UNKNOWN replay hints | `ai08-enrollment-sandbox` | SYNTHETIC_UNIT | NOT_TESTED |
-| Sandbox kernel handles/env/children/network/revoke drain | required #07 physical | ISOLATED_NATIVE_OS | BLOCKED |
-| Two-device UAC/CORE verified acceptance / 24h or sleep | owner-auth physical | PHYSICAL_TWO_PC | BLOCKED |
+| WAL RESTART/recycle, UNKNOWN korunur | ai08-wal-recycle | DISPOSABLE_SQLITE | PASS |
+| Current WAL checksum damage, index header mismatch | ai08-wal-recycle | DISPOSABLE_SQLITE | PASS |
+| Revoked owner, SID, machine, boot/session freshness | ai08-enrollment-sandbox | SYNTHETIC_UNIT | PASS |
+| Server SPKI mismatch, immutable origin/redirect refusal | ai08-mtls-pin | LOCAL_TLS_LOOPBACK | PASS |
+| Signed receipt scope/capability mismatch, COMMIT ACK loss | ai08-broker-receipt | SYNTHETIC_UNIT | PASS |
+| CAS deep request identity mutation, signed scope substitution | ai08-cas-scope | SYNTHETIC_UNIT | PASS |
+| D1 claim readiness loss during async native readback | ai08-console-claim | SYNTHETIC_SQLITE | NOT_TESTED on 44f18...; test later committed |
+| Fake native sandbox attestation, hostile getters, UNKNOWN replay | ai08-enrollment-sandbox | SYNTHETIC_UNIT | PASS |
+| Actual handle/env inheritance, descendant breakout, network/IPC, revoke drain | #07 native OS handoff | ISOLATED_NATIVE_OS | BLOCKED |
+| Two physical PCs: true owner UAC/DPAPI/CORE 24h, reboot/sleep | owner-controlled staging | PHYSICAL_TWO_PC | BLOCKED |
 
-## Komutlar
+## Yeniden çalıştırma
 ```bash
 node --test --import tsx test/ai08-*.test.ts
 npm run typecheck
 npm run build
 ```
-**Local exit code / sayı:** NOT_TESTED (tam checkout ve npm dependency yok).  
-**GitHub AI-08 exact HEAD / workflow / run ID:** henüz YOK.  
-**Yanlış yorumlama yasağı:** önceki PR CI sonuçları AI-08 PASS, OS privilege readback veya fiziksel CORE onayı değildir.
+**Doğrudan elde edilmiş Node test exit code:** 0 (17 testli `44f18...` HEAD). Yeni D1 test ve nihai PR HEAD sonuçlarını ayrı exact SHA/run ile doğrula. Shell wildcard expansion platformu farklıysa `npm test` CI doğrulanmış alternatifidir.
+
+**NO_GO:** `SYNTHETIC_UNIT`, disposable SQLite, localhost TLS, hosted Windows runner sonucu gerçek Windows owner-consent/TPM/mTLS production, native sandbox kernel isolation veya 2-PC physical acceptance değildir. #974 WAL P0, #539 reliability açık kalır.

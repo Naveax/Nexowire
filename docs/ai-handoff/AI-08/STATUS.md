@@ -1,21 +1,26 @@
 # AI-08 | STATUS
 
-**Durum:** IN_PROGRESS · independent QA branch only · CORE production **NO_GO**  
+**Durum:** `IN_PROGRESS` kaynak QA; **CORE production: NO_GO**.  
 **Branch:** `ai/08-independent-qa-20261031`  
-**Temel:** #984 `local/persistent-enrollment-v2-20261031`, exact SHA `9d0f35607d4cde87bd031e2da77855cfaf570c31`  
-**Ana dal kontrolü:** `main` `a19a228dc6f19fd484cf935e941a00ea625233f8` (31 Ekim 2026)  
-**Final HEAD/CI:** PR açıldıktan sonra GitHub'dan exact HEAD ve workflow run ID ile doğrulanacak. Bu belge tek başına final SHA kanıtı değildir.
+**Draft PR:** [#989](https://github.com/Naveax/Nexowire/pull/989)  
+**Base branch:** `local/persistent-enrollment-v2-20261031`  
+**Base SHA:** `9d0f35607d4cde87bd031e2da77855cfaf570c31` (#984; stack #983/#982/#981/#980/main).  
+**Önceki ölçülmüş kod HEAD:** `44f18a925974c9eb9743d366ded1d81ca851b95a`; CI `41194807179`.  
+**Son kaynak commit:** `913230d378d9331eab01d7bb36094123d4fbe107` (D1 claim-ready testleri eklenmiş; exact yeni CI `41195396312` pending gözlendi).  
+**Bu dokümantasyon commit'inin nihai SHA'sı:** commit yaratılmadan öngörülemez; PR HEAD/CI üzerinden ayrıca doğrulanacak.
 
-## Ayrılmış değişiklikler
-- `test/ai08-enrollment-sandbox.test.ts`: revoke/machine/SID/session ve native sandbox deny-only
-- `test/ai08-broker-receipt.test.ts`: imza kapsamı, ACK loss, input snapshot
-- `test/ai08-wal-recycle.test.ts`: gerçek SQLite tarafından üretilen disposable reused WAL ve bozuk suffix/index
-- `test/ai08-cas-scope.test.ts`: nested-scope snapshot, signed owner substitution, Broker readback race
-- `test/ai08-mtls-pin.test.ts`: izole loopback TLS SPKI pin mismatch
-- `docs/ai-handoff/AI-08/**`: kapsam, kanıt ve harici ihtiyaçlar
+## Kapsam
+Yeni `test/ai08-*.test.ts` dosyaları:
+- `ai08-enrollment-sandbox` (kalıcı owner, revoke, SID/machine/epoch, fake sandbox)
+- `ai08-broker-receipt` (signed bytes, ABA, capability/scope, ACK loss)
+- `ai08-wal-recycle` (disposable SQLite WAL eski allocation vs güncel tam frame)
+- `ai08-cas-scope` (deep nested scope, signed owner substitution, Broker readback race)
+- `ai08-mtls-pin` (localhost TLS SPKI pin ve sabit origin)
+- `ai08-console-claim` (D1 claim beklerken offline/privilege/platform/CORE readiness değişimi)
+Ayrı 5 teslim dokümanı yalnız `docs/ai-handoff/AI-08/**` içinde.
 
-## Sıradaki işlem
-1. Draft PR'ı sadece bu branch üzerinde oluştur; başka PR'a push/rebase/merge yapma.
-2. Exact HEAD için tek CI run'ını izle, duplicate tetikleme.
-3. Typecheck ve yeni QA testleri için ölçülmüş sonucu `TEST_EVIDENCE.md`/PR raporuyla eşleştir.
-4. Fiziksel 2-PC kanıtı olmadıkça NO_GO; kaynak adaylarını production PASS olarak işaretleme.
+## Ölçülen eski QA HEAD
+Node 22 ve Node 24 `41194807179`: **17/17 AI-08 test PASS**; her biri toplam 2787 test, 2431 PASS, 0 FAIL, 354 SKIP, 2 TODO. Typecheck/build SUCCESS. Bu başarı **eklenen son D1 test dosyası için kanıt değildir**; o, yeni HEAD CI'da ölçülmelidir. Söz konusu run'ın tüm OS işlerinin nihai durumu ayrıca izlenir.
+
+## Sonraki kapı
+PR #989 nihai HEAD için `npm run typecheck`, `npm test`, `npm run build`, Windows/OS workflow job sonuçları ve gerçek exit-code koşullarını kontrol et; aynı exact SHA için duplicate CI tetikleme. Source PASS olsa bile fiziksel 2-PC CORE ve native sandbox kabulü BLOCKED/NO_GO'dur.

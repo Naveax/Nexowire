@@ -1,17 +1,21 @@
-# AI-08 | Final handoff (pre-CI snapshot)
+# AI-08 teslim özeti (kaynak + ölçülmüş kanıt sınırı)
 
-- **Durum:** `NO_GO` for production / `IN_PROGRESS` for independent QA. Do not promote to READY_FOR_REVIEW until exact AI-08 HEAD CI is inspected.
-- **Branch:** `ai/08-independent-qa-20261031`
-- **Base:** #984 `local/persistent-enrollment-v2-20261031` at `9d0f35607d4cde87bd031e2da77855cfaf570c31` (stacked via #983, #982, #981, #980 → main).
-- **Final Head SHA:** will be obtained after all files are committed. No commit can truthfully predeclare its own SHA.
-- **Draft PR URL:** pending; reported separately after creation.
-- **Changed files:** only five new `test/ai08-*.test.ts` and five `docs/ai-handoff/AI-08/*.md`. No production code changed.
-- **Test command / exit code:** `node --test --import tsx test/ai08-*.test.ts`, `npm run typecheck`, `npm run build`: **NOT_TESTED** at writing. No local checkout/npm deps due GitHub DNS restriction.
-- **Source reference CI:** base #984 run 41145160595, exact `9d0f35607d4cde87bd031e2da77855cfaf570c31`, SUCCESS. This is NOT an AI-08 HEAD run.
-- **AI-08 exact CI ID:** pending new PR workflow; do not trigger a duplicate for the same SHA/workflow/inputs.
-- **Negatives:** synthetic WAL/crypto/CAS/enrollment/sandbox and disposable local TLS cases defined in `TEST_EVIDENCE.md`. Actual PASS/FAIL requires measured CI.
-- **Mock / actual OS / physical:** tests use SYNTHETIC_UNIT, DISPOSABLE_SQLITE and LOCAL_TLS_LOOPBACK, no trusted native Windows proof, NO physical two-PC acceptance.
-- **Integration:** see `INTEGRATION_REQUEST.md` for #03/#07 native isolation, D1 claim/CORE readback, durable CAS and two-device checks. No direct external module edits.
-- **Open P0 / residual:** #539 reliability open; #974 WAL open for broader acceptance, sandbox native handoff not integrated; #949/#946 adversarial PRs RED at their own HEAD; CORE production remains fail-closed NO_GO.
+**Durum:** `IN_PROGRESS` kaynak QA; production `NO_GO`, Draft PR açık.  
+**Branch:** `ai/08-independent-qa-20261031`  
+**Draft PR:** [#989](https://github.com/Naveax/Nexowire/pull/989)  
+**Base SHA:** `9d0f35607d4cde87bd031e2da77855cfaf570c31` (#984)  
+**Önceki koşmuş HEAD:** `44f18a925974c9eb9743d366ded1d81ca851b95a`  
+**Ölçülmüş CI:** `41194807179`: Node 22/24 her ikisi 17/17 AI-08 PASS, tüm suite 2787/2431/0 fail/354 skipped/2 TODO, typecheck ve build exit 0. 7/8 CI jobs SUCCESS gözlendi; Windows browser-live sonuçlanmadan tüm-workflow SUCCESS iddiası yok.
+**Son eklenen kod:** `913230d378d9331eab01d7bb36094123d4fbe107` üzerindeki 5 yeni D1 claim TOCTOU negatif testi. Bu son testler henüz bir CI başarısı olarak işaretlenmedi.
+**Nihai HEAD:** GitHub PR #989 güncel HEAD üzerinden doğrulanır; bu doküman commit SHA'sını önceden bildiğini iddia etmez.
 
-This snapshot is intentionally conservative. Post-CI exact run details belong in a dated PR comment/handoff revision with **its own** exact HEAD SHA; prior SHA evidence must not be silently reused.
+## Değişiklikler
+Sadece **6 yeni** `test/ai08-*.test.ts` ve **5 AI-08 handoff belgesi**. Üretim `src/`, `native/`, CI, Agent/Broker, installer, canlı cihaz, veritabanı ve gerçek izin durumları değiştirilmedi.
+
+## Test/repro
+`node --test --import tsx test/ai08-*.test.ts`, `npm run typecheck`, `npm run build`. İlk 17 testin bağımsız ispatı `TEST_EVIDENCE.md` ve GitHub run `41194807179` Node job loglarıdır. Yeni D1 testlerini içeren exact HEAD CI başarıya ulaştığında ayrı PR yorumu yazılır.
+
+## Entegrasyon ve açık risk
+Gerçek #07 düşük yetkili OS worker, handle/env/network/child isolation; #03 mutasyon dispatcher native gate, kalıcı external CAS/revoke, gerçek Windows session readback, iki fiziksel cihazla owner-approved acceptance; doğrulanmamış durumlar **BLOCKED**. `INTEGRATION_REQUEST.md` ayrıntıları içerir. #539 ve #974 açık. #946/#949 tarihi RED kayıtları daha sonraki source fix CI PASS ile silinmez. CORE production `NO_GO` kalır.
+
+**Fiziksel cihaz / gerçek UAC/ACL/DPAPI / prod D1 / Hub bağlantısı:** QA kapsamında hiç değiştirilmedi veya kabul testinden geçirilmedi.
