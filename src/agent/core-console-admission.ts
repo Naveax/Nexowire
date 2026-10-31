@@ -103,6 +103,10 @@ export class CoreConsoleAdmission {
   // A late affirmative native approval must never reopen a STOP issued
   // while the enrollment prompt or protected service readback was pending.
   private revokeSequence = 0;
+  // Closing an Agent controller is terminal for that instance. A delayed
+  // native consent callback must never resurrect a closed controller.
+  private closed = false;
+  private enrollmentPending = false;
   private readonly requests = new Set<string>();
   private readonly inFlight = new Set<string>();
 
@@ -191,23 +195,40 @@ export class CoreConsoleAdmission {
 
   /** Only the provider's real local decision UI can reopen a stopped profile. */
   async enroll(signal:AbortSignal):Promise<boolean>{
+    if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
     if(!this.provider?.enroll)throw failure('CORE_CONSOLE_PROVIDER_UNAVAILABLE');
     if(signal.aborted)return false;
+    // The protected provider also serializes approval, but the controller
+    // must not allow another implementation to prompt/register in parallel.
+    if(this.enrollmentPending)throw failure('CORE_ENROLLMENT_PROMPT_ACTIVE');
+    this.enrollmentPending=true;
     const observedRevokeSequence=this.revokeSequence;
-    const approved=await this.provider.enroll(signal);
-    // A provider can finish an old native approval after controller.revoke()
-    // has already latched STOP. Only a NEW explicit local enrollment begun
-    // after that revoke may restore controller state.
-    if(this.revokeSequence!==observedRevokeSequence)
-      throw failure('CORE_ENROLLMENT_REVOKED_DURING_APPROVAL');
-    if(approved===true&&!signal.aborted){
-      if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
-      this.binding=Object.freeze({...this.provider.binding});this.abort=new AbortController();this.stopped=false;
-      return true;
-    }
-    return false;
+    try{
+      const approved=await this.provider.enroll(signal);
+      // close() and revoke() both fence delayed native approval, even if the
+      // downstream provider returns true or a remote revoke ACK is lost.
+      if(this.closed)throw failure('CORE_CONSOLE_CONTROLLER_CLOSED');
+      if(this.revokeSequence!==observedRevokeSequence)
+        throw failure('CORE_ENROLLMENT_REVOKED_DURING_APPROVAL');
+      if(approved===true&&!signal.aborted){
+        if(!this.provider.binding)throw failure('CORE_ENROLLMENT_BINDING_REQUIRED');
+        this.binding=Object.freeze({...this.provider.binding});
+        this.abort=new AbortController();this.stopped=false;
+        return true;
+      }
+      return false;
+    }finally{this.enrollmentPending=false;}
   }
-  close():void {this.provider?.close?.();}
+  close():void {
+    if(this.closed)return;
+    // Fence synchronously before any provider cleanup. close() is not a
+    // substitute for durable remote revoke, but cannot grant local authority.
+    this.closed=true;
+    this.revokeSequence++;
+    this.stopped=true;
+    this.abort.abort();
+    this.provider?.close?.();
+  }
   get installed():boolean {return this.provider!==undefined;}
 
   async execute(

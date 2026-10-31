@@ -77,3 +77,18 @@ asenkron `enroll` sırasında gelen `revoke` için nesil kontrolü
 ve `test/ai06-consent-controller-races.test.ts` testleri eklendi.
 Yeni HEAD CI tamamlanmadan yeni testler PASS sayılmaz. Bu, native
 signer/OS approval veya koordinatör migration P0 sorununu çözmez.
+
+## Controller close/enroll kaynak düzeltmesi
+
+`CoreConsoleAdmission.close()` artık controller state'ini yerelde
+terminal durdurur; gecikmiş native approval controller'ı tekrar
+açamaz. Tek controller altında eşzamanlı enrollment, tek pending
+approval ile sınırlandırıldı. 2 ek sentetik negatif test eklendi;
+mevcut STOP/revoke testleri korunur. Native OS onayı, gerçek owner
+session ve effect-boundary CAS kanıtı değildir.
+
+**WAL CI engeli:** `fc30dbd1448de5e502fafab59cd68ace16cd722f`
+için Windows browser-live job `124545731212` AI-01/#974 journal
+restart testlerinde 30s timeout verdi. AI-06 bu dosyalara dokunmadı.
+Yeni kaynak HEAD exact CI'ı ayrı değerlendirilecek. Migration için
+koordinatör Draft #996 gerekir; production CORE NO-GO kalır.

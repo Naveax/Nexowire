@@ -113,3 +113,19 @@ karşılaştırır. Araya revoke girdiyse yerel `stopped=false` yapılmaz,
 Bir sonraki **yeni** yerel enrollment mevcut revoke neslini yakalayıp
 proven/native approval olmadan yetki üretmeden yürüyebilir. Yalnız sentetik
 mock testinden physical consent kabulü çıkmaz.
+
+## Controller kapatma ve eşzamanlı enrollment sözleşmesi
+
+`CoreConsoleAdmission.close()` aynı instance için **terminal** kalır.
+Senkron şekilde `closed`, monoton `revokeSequence`, `stopped` ve
+mevcut `AbortController` değişir; böylece devam eden `enroll` onayı
+provider daha sonra `true` döndürse bile yerel CORE'u yeniden açamaz.
+Aynı instance üstünden yeni enrollment reddedilir. Kapanma, uzak
+`revoke` ACK'sinin yerine geçmez; protected servis ve OS efekti için
+ayrı durdurma/cleanup ve kalıcı revocation zorunludur.
+
+Üst düzey controller'da `enrollmentPending` kilidi, başka provider
+implementasyonları aynı anda iki native onay akışı başlatmasın diye
+tek enrollment isteğine izin verir. Yeni isteğin tekrar denenebilmesi
+için ilk denemenin bitmesi gerekir. Bu kontrol sahibi olmayan tarafın
+UAC onayı oluşturmaz, sentetik kanıtı fiziksel kanıt olarak kabul etmez.

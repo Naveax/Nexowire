@@ -1,22 +1,13 @@
 # AI-06 | Durum
 
-**Durum:** IN_PROGRESS (source-only), **Production CORE: NO-GO**.
+**Durum:** IN_PROGRESS (source-only) / Production CORE: **NO-GO**.
 
 - Repo: `Naveax/Nexowire`; branch `ai/06-console-claim`; Draft PR #985.
-- Base exact SHA: `7e4093c30c1ead3cd22888184450c34aef4737da` (#980).
-- Son tüm job'ları PASS olan exact HEAD: `790e83ba757ecc928b7af1d8fe4ac0cc389587ea`, CI `41201296965` (7/7), Node22/24 2770 test / 2416 PASS / 0 FAIL / 352 SKIP / 2 TODO; 31/31 AI-06.
-- Bu kaynak değişikliği: geç STOP/abort + native callback öncesi iptal yeniden kontrolü, owner/credential claim re-pair negatifleri ve owner-status platform/readiness/revoke yarışları.
-- Güncellenen kaynak/test commit'inin exact HEAD ve CI sonuçları PR üzerinden ayrıca doğrulanacak; eski HEAD PASS sonucu yeni HEAD'e aktarılmayacak.
-- CI queued/in_progress ise yeniden dispatch yok, aynı run ID takip edilir.
-- Ortak dosyalar, `main`, başka ajan branch'i, migration ve canlı cihaz değişmedi. 
-- **Açık P0:** `claim` henüz native readback onayı yokken `dispatched` durumuna geçiyor; `complete(succeeded)` bununla yarışabiliyor. Migration / approval-marker koordinatörde, `INTEGRATION_REQUEST.md` üzerinden talep edildi.
-- Sıradaki kapılar: yeni SHA'nın CI/Windows sonuçları, AI-08 bağımsız QA, gerçek protected native effect boundary ve iki Windows PC fiziksel kabulü.
-
-## Controller-level revoke / enroll nesil-fence
-
-`CoreConsoleAdmission.enroll` native provider yanıtı beklerken `revoke` gelirse,
-`revokeSequence` uyuşmazlığı ile STOP'un geri açılması reddedilir. Sadece
-STOP sonrasında **yeniden başlatılan** açık yerel enrollment iş akışı
-controller durumunu sıfırlayabilir. İki revoked-race (revoke ACK başarı/kayıp)
-ve bir explicit-enroll kontrolü yeni `test/ai06-consent-controller-races.test.ts`
-ile test edilecek; yeni exact HEAD CI sonucuna kadar PASS sayılmaz.
+- Base exact SHA: `7e4093c30c1ead3cd22888184450c34aef4737da`.
+- Son doğrulanan prior HEAD: `790e83ba757ecc928b7af1d8fe4ac0cc389587ea`; CI `41201296965` **7/7 SUCCESS**, Node22/24 31/31 AI-06 PASS.
+- Mevcut önceki HEAD: `fc30dbd1448de5e502fafab59cd68ace16cd722f`; CI `41204160052` **6/7 SUCCESS**, Node22/24 34/34 AI-06 PASS, Windows `browser-live` RED (AI-01/#974 WAL worker 30 saniye timeout); CI gerçek FAIL olarak korunur. Doğrulama için Windows job `124545731212`.
+- Bu geliştirme: `src/agent/core-console-admission.ts` üst düzey controller close/enroll yarışlarına terminal fencing ve single-flight enrollment; `test/ai06-consent-controller-races.test.ts` içine iki sentetik negatif vaka.
+- Yeni commitin exact HEAD/CI run ID'si PR/Actions üzerinde doğrulanacak. Önceki CI sonuçları yeni HEAD için PASS değildir. Aynı workflow/SHA için aktif run tekrarlanmayacak.
+- Ortak WAL/Windows test kaynakları, `main`, migration, installer, prod D1 ve canlı cihazlar değiştirilmedi.
+- **Kalan P0:** bağımsız AI-08 #989 erken `complete(succeeded)` hatası; koordinatör Draft #996 native-verified marker migration hazırladı. AI-06 D1 kaynak entegrasyonu migration'ın doğru dalda uygulanmış kanıtına bağlı. Native OS effect-boundary ve iki-PC fiziksel kabul henüz yok.
+- Kapanış: Draft + CORE NO-GO; merge/deploy yok.

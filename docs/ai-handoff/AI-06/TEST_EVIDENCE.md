@@ -109,3 +109,22 @@ true dönse de controller'ı açamama; gerçek bir STOP'tan sonra yapılan
 Üçü de fiziksel Windows/native kayıt değil; yeni exact SHA için CI
 sonucu yokken PASS iddia edilemez. Önceki 31/31 PASS yalnız
 `790e83ba757ecc928b7af1d8fe4ac0cc389587ea` içindir.
+
+## Controller terminal close ve single-flight enrollment regresyonları
+
+`test/ai06-consent-controller-races.test.ts` iki ek sentetik negatif
+vaka içerir:
+- `close()` bekleyen onay sırasında çağrılır; eski provider true dönse
+  bile controller kapalı kalmalı, yeni enroll reddedilmeli, ikinci close
+  idempotent olmalı ve native callback hiç gerçekleşmemeli.
+- Aynı controller üzerinde paralel iki onay isteğinden yalnız birisi
+  provider'a ulaşmalı (`CORE_ENROLLMENT_PROMPT_ACTIVE`), asenkron
+  işlem sonrasında kilit tekrar açılmalı.
+
+Bunlar protected native consent, fiziksel Windows onayı veya OS effect
+kanıtı değildir. Yeni HEAD'in CI sonucu gelmeden PASS kabul edilmez.
+
+**Bilinen önceki HEAD `fc30dbd1448de5e502fafab59cd68ace16cd722f`:**
+Node22/24 34/34 AI-06 PASS, total 2.773 / 2.419 pass / 0 fail;
+Windows browser-live RED `124545731212`, iki AI-01/#974 WAL worker
+30s timeout. Kapsam dışı testleri gevşetme veya yeni timeout oluşturma yok.

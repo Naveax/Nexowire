@@ -59,3 +59,53 @@ test('AI-06: a new explicit enrollment after completed STOP may reopen the contr
   assert.equal(status.active,false,'synthetic provider is not real OS approval');
   assert.equal(status.state,'CURRENT_AUTHORITY_UNAVAILABLE');
 });
+
+test('AI-06: close during delayed enrollment permanently fences controller approval',async()=>{
+  const approval=deferred<boolean>();let closes=0,starts=0,effects=0;
+  const provider:CoreConsoleNativeProvider={
+    binding,
+    enroll:async()=>{starts++;return approval.wait();},
+    revoke:async()=>{},
+    close:()=>{closes++;},
+    inspect:async()=>{throw new Error('NO_NATIVE_OS_READBACK');},
+    execute:async()=>{effects++;throw new Error('UNEXPECTED_NATIVE_DISPATCH');},
+  };
+  const controller=new CoreConsoleAdmission(undefined,provider);
+  const pending=controller.enroll(new AbortController().signal);
+  await approval.started;
+  controller.close();
+  approval.finish(true);
+  await assert.rejects(pending,(error:unknown)=>
+    !!error&&typeof error==='object'&&'code' in error&&
+    error.code==='CORE_CONSOLE_CONTROLLER_CLOSED');
+  assert.equal((await controller.status('full')).state,'REVOKED_LOCALLY');
+  await assert.rejects(controller.enroll(new AbortController().signal),/CORE_CONSOLE_CONTROLLER_CLOSED/);
+  await assert.rejects(controller.execute('windows.pointer.click',{},
+    '00000000-0000-4000-8000-000000000077','full'));
+  controller.close();
+  assert.equal(closes,1,'repeated close is idempotent');
+  assert.equal(starts,1,'close cannot start another approval');
+  assert.equal(effects,0);
+});
+
+test('AI-06: parallel controller enrollment requests cannot start two approval prompts',async()=>{
+  const approval=deferred<boolean>();let starts=0;
+  const provider:CoreConsoleNativeProvider={
+    binding,
+    enroll:async()=>{starts++;return approval.wait();},
+    revoke:async()=>{},
+    inspect:async()=>{throw new Error('SYNTHETIC_READBACK_NOT_NATIVE');},
+    execute:async()=>{throw new Error('UNEXPECTED_NATIVE_DISPATCH');},
+  };
+  const controller=new CoreConsoleAdmission(undefined,provider);
+  const first=controller.enroll(new AbortController().signal);
+  await approval.started;
+  await assert.rejects(controller.enroll(new AbortController().signal),
+    /CORE_ENROLLMENT_PROMPT_ACTIVE/);
+  assert.equal(starts,1,'only one native approval workflow can be active');
+  approval.finish(true);
+  assert.equal(await first,true);
+  const status=await controller.status('full');
+  assert.equal(status.active,false,'synthetic provider is not real protected OS readback');
+  assert.equal(status.state,'CURRENT_AUTHORITY_UNAVAILABLE');
+});
