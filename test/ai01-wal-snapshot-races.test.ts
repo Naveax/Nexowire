@@ -51,7 +51,7 @@ async function mutateByte(file:string,offset:number){
   try{
     const byte=Buffer.alloc(1);
     assert.equal((await handle.read(byte,0,1,offset)).bytesRead,1);
-    byte[0]^=0x40;
+    byte[0]=(byte[0]??0)^0x40;
     assert.equal((await handle.write(byte,0,1,offset)).bytesWritten,1);
   }finally{await handle.close();}
 }
@@ -121,7 +121,7 @@ test('replaced WAL pathname cannot borrow verification of the previous inode',as
   const walPath=f.file+'-wal';
   const staged=walPath+'.replacement';
   const replacement=Buffer.from(f.wal);
-  replacement[24]^=0x40;
+  replacement[24]=(replacement[24]??0)^0x40;
   await fs.writeFile(staged,replacement);
   await atWalStat(walPath,2,async()=>{
     await fs.rename(walPath,walPath+'.original');
