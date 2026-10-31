@@ -365,9 +365,14 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
       state.windowsSessionId===latest.windowsSessionId&&
       state.windowsLogonLuid===latest.windowsLogonLuid&&
       state.windowsLogonSessionEpoch===latest.windowsLogonSessionEpoch;
-    const certificate=this.revoked||signal.aborted||!localValid||!nativeValid||
-      !unchanged||!bridge||!latestBridge||!this.matches(latest)||
-      await this.options.store.stopped()||await this.options.store.blocked?.()?null:this.profile.certificate;
+    // These are async filesystem reads. STOP, revoke or cancellation can occur
+    // while either read is outstanding; evaluate them *before* the final
+    // volatile checks, rather than checking signal.aborted only at the start.
+    const stopped=await this.options.store.stopped();
+    const blocked=await this.options.store.blocked?.();
+    const certificate=this.closed||this.revoked||signal.aborted||stopped||blocked||
+      !localValid||!nativeValid||!unchanged||!bridge||!latestBridge||
+      !this.matches(latest)?null:this.profile.certificate;
     return {certificate,pinnedLocalSpkiDer:pinned,
       current:{...this.current(latest),bridgeVerified:latest.bridgeVerified&&latestBridge},
       devicePlatform:latest.devicePlatform,deviceReady:latest.deviceReady,
@@ -559,6 +564,12 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
           finalEnrollment.grantGeneration!==request.grantGeneration||
           finalEnrollment.revokeEpoch!==request.revokeEpoch)
           throw new Error('CORE_CONSOLE_FINAL_SESSION_READBACK_REQUIRED');
+        // A cancellation may arrive after the final async native consent
+        // readback but before the callback. Recheck STOP immediately before
+        // crossing into native work; native OS must still fence each real effect.
+        const stoppedBeforeNative=await this.options.store.stopped();
+        if(stoppedBeforeNative||this.closed||this.revoked||signal.aborted)
+          throw new Error('CORE_CONSOLE_FINAL_STOP_OR_CANCELLED');
         const native=this.options.native??executeCoreConsoleNative;
         // The marker lets native cleanup release pressed keys before exiting.
         // Cancellation does not grant a new request or permit a blind replay.

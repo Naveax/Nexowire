@@ -53,3 +53,14 @@ son native effect **bu aynı snapshot** üzerinden çalışır. Deserialization
 başarısızsa `CORE_DISPATCH_SNAPSHOT_INVALID` döner. Bu koruma JS süreç içi
 mutation TOCTOU içindir; gerçek native etki öncesi bağımsız CAS/OS readback
 gerekliliğini kaldırmaz.
+
+## Geç iptal, STOP ve callback öncesi son kontrol
+
+`WindowsCoreConsoleProvider.inspect()`, asenkron
+`store.stopped()/store.blocked()` tamamlandıktan **sonra**
+`closed/revoked/signal.aborted` değerlerini yeniden kontrol eder.
+`execute()`, son readback ve native callback arasında `store.stopped()`
+ile birlikte yeniden `closed/revoked/signal.aborted` kontrol eder.
+Geç abort sonucu `unknown` + STOP; native effect callback çağrılmaz.
+Bu JS sınırı gerçek OS effect ile atomik değildir: native protokolde
+owner/session/revoke/CAS ve effect-boundary doğrulaması yine zorunludur.

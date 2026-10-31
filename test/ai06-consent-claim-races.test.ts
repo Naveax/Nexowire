@@ -96,6 +96,10 @@ const races=[
     restore:'UPDATE device_maintenance_preferences SET enabled=1'},
   {name:'bridge disabled',sql:"UPDATE device_bridge_preferences SET desired_mode='off'",
     restore:"UPDATE device_bridge_preferences SET desired_mode='auto'"},
+  {name:'owner account re-paired',sql:"UPDATE devices SET owner_account_id='ai06-owner-replaced'",
+    restore:null},
+  {name:'paired device credential rotated',sql:"UPDATE devices SET credential_hash='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'",
+    restore:null},
   {name:'signing key rotated under the same enrollment',
     sql:`UPDATE device_core_console_authority SET public_key_spki='${rotatedPublicKeySpki}'`,
     restore:null},
@@ -199,4 +203,30 @@ test('AI-06: missing local signing key cannot be classified as enrolled',async()
     assert.equal(status.localEnrolled,false);
     assert.equal(status.active,false);
   }finally{f.db.close();}
+});
+
+const statusRaces=[
+  {name:'device offline',sql:'UPDATE devices SET online=0'},
+  {name:'platform no longer Windows',sql:"UPDATE devices SET platform='linux'"},
+  {name:'Broker privilege lost',sql:"UPDATE devices SET privilege_mode='direct'"},
+  {name:'Broker readiness lost',sql:'UPDATE devices SET admin_bridge_ready=0'},
+  {name:'CORE preference off',sql:'UPDATE device_maintenance_preferences SET enabled=0'},
+  {name:'owner logon epoch rotated',sql:"UPDATE device_core_console_authority SET windows_logon_session_epoch='rotated-during-readback'"},
+  {name:'revoke epoch changed',sql:'UPDATE device_core_console_authority SET revoke_epoch=revoke_epoch+1'},
+] as const;
+
+for(const scenario of statusRaces)test('AI-06: deviceStatus cannot publish stale enrollment after '+scenario.name,async()=>{
+  const f=fixture(),g=deferred();
+  try{
+    const before=await f.deviceStatus();
+    assert.equal(before.localEnrolled,true,'test precondition: synthetic enrollment current');
+    f.pause(g.wait);
+    const pending=f.deviceStatus();
+    await g.started;
+    f.db.exec(scenario.sql);
+    g.release();
+    const after=await pending;
+    assert.equal(after.localEnrolled,false,'post-await owner/readiness change must deny enrollment');
+    assert.equal(after.active,false,'stale native session cannot report active CORE');
+  }finally{g.release();f.db.close();}
 });

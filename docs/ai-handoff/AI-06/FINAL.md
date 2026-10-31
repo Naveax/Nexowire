@@ -25,3 +25,17 @@
   SQL CHECK/operation migration sınırı dışında. Koordinatör ve AI-03'e
   `INTEGRATION_REQUEST.md` üzerinden native-verified claim marker
   talep edildi. Bu risk production NO-GO nedenidir.
+
+## Son çalışma: geç STOP ve oturum/readiness yarışları
+
+- Kaynak: `src/agent/windows-core-console-provider.ts`, son asenkron
+  STOP/blocked okumalarından sonra iptal tekrar değerlendirilir; native
+  callback öncesinde STOP ve volatile iptal yeniden kontrol edilir.
+- Test: `test/core-console-provider.integration.test.ts` geç iptalin
+  native callback'e ulaşmadığı fixture; `test/ai06-consent-claim-races.test.ts`
+  owner credential/re-pair ve `deviceStatus` readiness/session/revoke yarışları.
+- **Yeni exact HEAD CI henüz doğrulanmadı.** Bilinen önceki HEAD
+  `33fdc91ffbb41ad69183ab0a93b2a3cdf146a15e` için Node22/24
+  17/17 AI-06 testi PASS idi. Bu bilgi yeni kaynak için PASS değildir.
+- Açık P0, schema-native claim/complete onay işaretleyicisi ve protected
+  OS effect boundary; `INTEGRATION_REQUEST.md` içinde ayrı, production NO-GO.

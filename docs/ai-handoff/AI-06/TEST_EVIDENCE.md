@@ -48,3 +48,18 @@ nesnesini değiştirmesini ve native callback'in yalnız kabul edilen
 orijinal snapshot'ı aldığını doğrular. Production callback değil sentetik
 fixture; yeni exact HEAD'in CI sonucu bu dosyadaki eski PASS sayıları
 yerine geçmedikçe yeni test PASS sayılmaz.
+
+## İlave geç iptal ve kapsam yarışları
+
+- Geç iptal regresyonu: `test/core-console-provider.integration.test.ts`
+  `AI-06: late STOP-readback cancellation...` sentetik fixture ile son
+  `store.blocked()` gözleminde AbortController iptali enjekte eder.
+  Native callback **0** ve terminal `unknown` + STOP beklenir.
+- `test/ai06-consent-claim-races.test.ts` içine claim sırasında owner
+  re-pair + credential rotation ve `deviceStatus()` için yedi farklı
+  asenkron online/platform/Broker/CORE/session/revoke yarışı eklendi.
+- Güncel kaynakta **25 D1 fixture testi + 2 provider entegrasyon testi =
+  27 AI-06 testi** beklenir. Yeni exact SHA'nın CI sonucu gelmeden PASS
+  iddia edilmez. Önceki 17/17 PASS kanıtı yalnız
+  `33fdc91ffbb41ad69183ab0a93b2a3cdf146a15e`, run `41197159107`
+  için geçerlidir.

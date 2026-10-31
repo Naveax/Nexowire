@@ -91,9 +91,11 @@ function fixture(){
   const nativeInputs:unknown[]=[];
   let forgedNativeReceipt:((value:NativeCoreConsentProof)=>NativeCoreConsentProof)|undefined;
   let onNative:(()=>Promise<void>)|undefined;
+  let beforeBlockedRead:(()=>void)|undefined;
   const store:CoreProfileStore={stopFile:'fixture-only-STOP',load:async()=>structuredClone(record),
     save:async p=>{record=structuredClone(p);},stop:async()=>{stopped=true;},clearStop:async()=>{stopped=false;},stopped:async()=>stopped,
-    block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},blocked:async()=>blocked};
+    block:async()=>{blocked=true;},clearBlock:async()=>{blocked=false;},
+    blocked:async()=>{const hook=beforeBlockedRead;beforeBlockedRead=undefined;hook?.();return blocked;}};
   const options={deviceId,authority:client,store,
     broker:{probe:async()=>({reachable:bridge,elevated:bridge,version:NEXOWIRE_VERSION})},
     // SYNTHETIC native receipt/readback fixture. It has no protected Windows
@@ -134,6 +136,7 @@ function fixture(){
     setCurrentLogon:(v:typeof currentLogon)=>{currentLogon={...v};},
     duringNativeReadback:(cb:()=>void)=>{beforeNativeReadback=cb;},
     afterLocalReadback:(cb:()=>void)=>{afterLocalNativeReadback=cb;},
+    beforeBlockedRead:(cb:()=>void)=>{beforeBlockedRead=cb;},
     pauseNextAuthorityReadback:()=>{
       let entered!:()=>void,release!:()=>void;
       const enteredPromise=new Promise<void>(resolve=>{entered=resolve;});
@@ -462,6 +465,38 @@ test('AI-06: caller mutation during async claim cannot change the native effect 
     assert.deepEqual(f.nativeInputs(),[{hwnd:'0x123',x:0,y:0}],
       'native must see only the immutable authorized snapshot');
     assert.equal(f.effects(),1);
+  }finally{f.db.close();}
+});
+
+test('AI-06: late STOP-readback cancellation blocks native callback after claim',async()=>{
+  const f=fixture();
+  try{
+    const {provider}=await enable(f);
+    const profile=f.profile();
+    const e=profile.certificate!.enrollment;
+    const requestId=randomUUID(),capability='windows.pointer.move';
+    const input={hwnd:'0x123',x:0,y:0};
+    const binding={ownerAccountId:owner,deviceId,installationId:profile.installationId};
+    const fingerprint=createHash('sha256')
+      .update(JSON.stringify([requestId,capability,input,binding])).digest('hex');
+    const controller=new AbortController();
+    let interleaved=false;
+    f.before(body=>{
+      if(body.action==='claim')f.beforeBlockedRead(()=>{
+        // The readback is already verified. Cancel *within* the last async
+        // local block/STOP query, after earlier signal checks have run.
+        interleaved=true;controller.abort();
+      });
+    });
+    const receipt=await provider.execute({requestId,capability,input,fingerprint,binding,
+      enrollmentId:e.enrollmentId,ownerEpoch:e.ownerEpoch,grantGeneration:e.grantGeneration,
+      revokeEpoch:e.revokeEpoch},controller.signal);
+    assert.equal(interleaved,true,'the cancellation hook must actually fire');
+    assert.equal(receipt.outcome,'unknown','cancelled claim must never report success');
+    assert.equal(f.effects(),0,'no synthetic native effect after late cancellation');
+    assert.equal(await f.store.stopped(),true,'STOP remains latched');
+    assert.equal(f.db.prepare('SELECT state FROM device_core_console_operations WHERE request_id=?')
+      .get(requestId)?.state,'unknown','uncertain request remains terminal');
   }finally{f.db.close();}
 });
 
