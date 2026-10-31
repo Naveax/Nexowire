@@ -39,3 +39,9 @@
 
 - Existing baseline `622c82c49d4f22817f49051c9310306c01532911`: exact workflow CI #41205430526 completed **SUCCESS 8/8**, its Windows native job 5/5 PASS.
 - New native disposable `--self-test` verifies canonical P-256 SPKI and displayed SHA-256 plus visible owner/device/installation scope; negatives cover padding/whitespace, malformed or truncated DER and P-384 curve. No MessageBox or real local consent is performed. A new exact HEAD CI must confirm native C# build and tests; no prior green-run inheritance.
+
+## AI-02 final active-local-console gate / scoped revoke UI
+
+- Last confirmed green exact HEAD `6a3c6f9f9f3a7421dd4de3b8846e819fdb45b66a`, workflow #41211679265 **SUCCESS 8/8**, Windows native 5/5 PASS (historical evidence, not transferable).
+- New source candidate: repeat administrator, exact owner SID, and active console OS checks **after** contested revoke fence, and **after** TPM/software key creation before protected enrollment writes. Revoke dialog now displays exact owner/device/installation/enrollment/generation; its pure negative test rejects malformed grant, checks visible scope and real newline formatting.
+- Physical SCM, local owner UAC/console, OS session switch, hardware TPM and crash/recovery are **NOT TESTED**. A real Windows test fixture and AI-08 independent source review remain required. Keep `mayDispatch=false`, CORE off, Draft and production NO-GO.

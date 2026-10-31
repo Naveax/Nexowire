@@ -34,12 +34,18 @@ internal static class Program
                 var (c,g)=ProtectedStore.Load();RequireOwner(c.OwnerSid);
                 Protocol.Require(Environment.UserInteractive && Process.GetCurrentProcess().SessionId>0);
                 WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
-                Protocol.Require(MessageBoxW(IntPtr.Zero,"Bu bilgisayardaki kalıcı Nexowire kaydı iptal edilsin mi?\n"+
-                    "Yeniden etkinleştirme yeni yerel onay gerektirir.","Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)==6);
+                Protocol.Require(MessageBoxW(IntPtr.Zero,
+                    RevocationConsentSummary(g.Payload),
+                    "Nexowire — Kaydı iptal et",0x00010000|0x00000100|0x00000004|0x00000030)==6);
+                RequireOwner(c.OwnerSid);
                 WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
-                // Serialize a visible local revoke against any in-flight
-                // attestation sign/reply, then revalidate protected state.
+                // A lock can be contested for seconds after the visible UI.
+                // Repeat real owner/console and protected grant readback after
+                // acquiring it, immediately before the irreversible marker.
                 using var fence=ProtectedStore.AcquireRevocationFence(CancellationToken.None);
+                ProtectedStore.RequireAdministrator();
+                RequireOwner(c.OwnerSid);
+                WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
                 Protocol.Require(ProtectedStore.Load()==(c,g));
                 ProtectedStore.WriteNew("revoked.json",new {version=1,enrollmentId=g.Payload.EnrollmentId,
                     generation=g.Payload.Generation,revokedAtMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
@@ -77,6 +83,21 @@ internal static class Program
                 authority.ExportSubjectPublicKeyInfo().AsSpan().SequenceEqual(der)); }
         catch(CryptographicException) {throw new InvalidDataException("LOCAL_ENROLLMENT_REJECTED");}
         return Protocol.Hash(der);
+    }
+    internal static string RevocationConsentSummary(Grant g)
+    {
+        Protocol.Validate(g);
+        // Confirm exactly which owner, installation, enrollment and generation
+        // will be revoked, without displaying any key material or signing data.
+        return "Bu kalıcı Nexowire kaydı iptal edilsin mi?\n\n"+
+            "Cihaz: "+g.DeviceId+
+            "\nKurulum: "+g.InstallationId+
+            "\nSahip hesabı: "+g.OwnerAccountId+
+            "\nWindows sahibi: "+g.OwnerSid+
+            "\nKayıt: "+g.EnrollmentId+
+            "\nNesil: "+g.Generation+
+            "\n\nYeni kayıt için yeniden yerel onay gerekir."+
+            "\nBu işlem tek başına CORE izni veya UAC otomasyonu vermez.";
     }
     internal static string EnrollmentConsentSummary(Grant g,string mode,string authoritySha256)
     {
@@ -121,8 +142,10 @@ internal static class Program
             EnrollmentConsentSummary(g,mode,authoritySha256),
             "Nexowire — Kalıcı yerel kayıt",0x00010000|0x00000100|0x00000004|0x00000030);
         Protocol.Require(approved==6);
-        // An RDP switch or detached/locked console during the visible UI
-        // invalidates this ceremony; no protected grant is created.
+        // The same elevated owner must still control the active local
+        // console after consent; an RDP switch or logoff denies.
+        ProtectedStore.RequireAdministrator();
+        RequireOwner(request.OwnerSid);
         WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         ProtectedStore.CreateRoot();
         using var key=ProtectedStore.CreateKey(keyName,provider);
@@ -133,6 +156,12 @@ internal static class Program
             ConsentedAtMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()};
         var config=new StoreConfig(1,request.OwnerSid,request.DeviceId,request.InstallationId,
             request.OwnerAccountId,keyName,provider,request.AuthoritySpkiBase64);
+        // Key creation can take time (especially TPM). The original visible
+        // consent is not sufficient if the local console or owner changed
+        // before the first persistent write. Partial key/root remains deny-only.
+        ProtectedStore.RequireAdministrator();
+        RequireOwner(request.OwnerSid);
+        WindowsSessionEvidence.RequireActiveLocalConsole(Process.GetCurrentProcess().SessionId);
         ProtectedStore.WriteNew("config.json",config);
         ProtectedStore.WriteNew("grant.json",new SignedGrant(g,Convert.ToBase64String(signer.SignData(
             Protocol.GrantBytes(g),HashAlgorithmName.SHA256,DSASignatureFormat.IeeeP1363FixedFieldConcatenation))));

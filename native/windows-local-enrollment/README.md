@@ -195,3 +195,18 @@ native tests reject noncanonical base64, malformed/truncated DER and wrong
 curve; no consent UI is actually opened by the test. Showing a fingerprint
 does **not** establish a trusted externally pinned issuer, grant generation,
 current remote revoke, or Agent binary provenance. Those remain NO-GO gates.
+
+## AI-02 final owner/console checks before persistent writes
+
+Visible local revocation identifies the **device, installation, owner SID and
+account, enrollment ID, and generation** being revoked. The code rechecks the
+elevated owner and active console **after** any wait for the exclusive
+revoke/attestation fence and immediately before validating unchanged protected
+state and writing the irrevocable marker. Initial enrollment similarly rechecks
+owner, admin rights and active local console after visible consent and **again
+after TPM/software CNG key creation, immediately before protected config/grant
+writes**. If the console changes during the key-creation window, partial
+protected state is intentionally left fail-closed for reviewed recovery rather
+than silently reusing consent. Native self-test validates the displayed scope
+and invalid-grant denial without displaying any UI. This does not prove a live
+SCM service or physical owner acceptance on production devices.

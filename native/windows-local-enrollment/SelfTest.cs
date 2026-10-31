@@ -27,6 +27,18 @@ internal static class SelfTest
             Protocol.Require(visible.Contains(value,StringComparison.Ordinal));
         // The real MessageBox must have readable line breaks, not \\n glyphs.
         Protocol.Require(visible.Contains("\n",StringComparison.Ordinal));
+        var revoke=Program.RevocationConsentSummary(grant);
+        foreach(var value in new[]{grant.DeviceId,grant.InstallationId,
+            grant.OwnerAccountId,grant.OwnerSid,grant.EnrollmentId,
+            grant.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "yeniden yerel onay", "CORE izni veya UAC otomasyonu vermez"})
+            Protocol.Require(revoke.Contains(value,StringComparison.Ordinal));
+        Protocol.Require(revoke.Contains("\n",StringComparison.Ordinal));
+        var malformed=grant with {OwnerAccountId="invalid owner"};
+        var rejected=false;
+        try{Program.RevocationConsentSummary(malformed);}
+        catch(InvalidDataException){rejected=true;}
+        Protocol.Require(rejected);
         var tpm=Program.EnrollmentConsentSummary(grant,"tpm",pin);
         Protocol.Require(tpm.Contains("TPM (dışa aktarılamaz)",StringComparison.Ordinal));
         using var differentCurve=ECDsa.Create(ECCurve.NamedCurves.nistP384);
