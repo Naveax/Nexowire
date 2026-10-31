@@ -81,7 +81,36 @@ const TICKET=/^[a-zA-Z0-9_-]{24,256}$/;
 const MAX_FUTURE_MS=30_000;
 function deny(): never {throw new BrokerEffectAdmissionDenied();}
 
-function bindingValid(b:BrokerVerifiedEffectBinding|null|undefined):
+/**
+ * A provider-owned OS/owner witness is not trustworthy as a live JS object.
+ * Reject inherited/accessor properties, then consume one fixed set of own
+ * data values. In particular, never validate a getter's first value and
+ * compare a later value from the same object (synchronous TOCTOU / ABA).
+ * This snapshot is only a source-side guard; it is NOT kernel evidence.
+ */
+function snapshotBinding(raw:BrokerVerifiedEffectBinding|null|undefined):
+  BrokerVerifiedEffectBinding|null {
+  if(!raw || typeof raw!=='object' || Array.isArray(raw))return null;
+  try {
+    const prototype=Object.getPrototypeOf(raw);
+    if(prototype!==Object.prototype && prototype!==null)return null;
+    const descriptors=Object.getOwnPropertyDescriptors(raw);
+    const fields=[
+      'authorityId','ownerId','deviceId','sessionId',
+      'ownerEpoch','deviceEpoch','sessionEpoch','generation',
+      'highTokenProofId','protectedBrokerProofId','expiresAtMs',
+    ] as const;
+    const snapshot:Record<string,unknown>=Object.create(null);
+    for(const key of fields){
+      const descriptor=descriptors[key];
+      if(!descriptor || !Object.hasOwn(descriptor,'value') ||
+        descriptor.enumerable!==true)return null;
+      snapshot[key]=descriptor.value;
+    }
+    return Object.freeze(snapshot) as unknown as BrokerVerifiedEffectBinding;
+  }catch{return null}
+}
+\nfunction bindingValid(b:BrokerVerifiedEffectBinding|null|undefined):
   b is BrokerVerifiedEffectBinding {
   if(!b || typeof b!=='object')return false;
   for(const key of ['authorityId','ownerId','deviceId','sessionId',
@@ -208,7 +237,7 @@ export async function invokeBrokerEffectOnce<T>(
   const captured=frozenEffectInput(capability,input);
   if(!SHA.test(captured.inputSha256))deny();
   let first:BrokerVerifiedEffectBinding|null;
-  try{first=await authority.readVerifiedBinding()}catch{deny()}
+  try{first=snapshotBinding(await authority.readVerifiedBinding())}catch{deny()}
   if(!bindingValid(first))deny();
   // Use the ORIGINAL wall-time budget, capped at the 30 s binding limit.
   // Do not refresh the budget after begin/commit/readback awaits.
@@ -224,7 +253,7 @@ export async function invokeBrokerEffectOnce<T>(
     lastNs=nowNs;
   };
   assertMonotonicFresh();
-  const binding=Object.freeze({...first});
+  const binding=first; // already a detached frozen witness snapshot
   const request:BrokerEffectRequest=Object.freeze({
     operationId,capability,inputSha256:captured.inputSha256,binding,
   });
@@ -260,7 +289,7 @@ export async function invokeBrokerEffectOnce<T>(
   if(!sameSignedPayload(committed)||
      !receiptMatches(committed.receipt,'COMMITTED',request,commitNonce,ticket))deny();
   let recent:BrokerVerifiedEffectBinding|null;
-  try{recent=await authority.readVerifiedBinding()}catch{deny()}
+  try{recent=snapshotBinding(await authority.readVerifiedBinding())}catch{deny()}
   assertMonotonicFresh();
   if(!bindingValid(recent)||!sameBinding(binding,recent))deny();
   // Elevation probe may synchronously spawn Windows tooling and take seconds.
@@ -269,7 +298,7 @@ export async function invokeBrokerEffectOnce<T>(
   try{if(verifyWindowsElevationNow()!==true)deny()}catch{deny()}
   assertMonotonicFresh();
   let immediate:BrokerVerifiedEffectBinding|null;
-  try{immediate=authority.readVerifiedBindingNow()}catch{deny()}
+  try{immediate=snapshotBinding(authority.readVerifiedBindingNow())}catch{deny()}
   if(!bindingValid(immediate)||!sameBinding(binding,immediate))deny();
   assertMonotonicFresh();
   return execute(captured.input);
