@@ -29,6 +29,12 @@ not the remaining quota of any particular authenticated user.
   identity server-side, not via a caller-provided login or request parameter.
   This source change does not affect the live service until independently
   reviewed and deployed; the target must have linked the same GitHub ID.
+- **Additional operator-approved exception (2026-10-31):** GitHub account
+  `SinsiVinci` (immutable numeric GitHub user ID `331287442`) receives the
+  same unmetered hosted MCP tool-credit allowance after server-verified GitHub
+  OAuth identity linking. This exemption does not grant admin/CORE authority,
+  premium tools, device entitlements or unlimited cloud/provider capacity.
+  A code change or draft PR alone does not make this active in production.
 - The owner and additional exceptions do **not** enable premium-only tools, paid billing,
   additional account/device entitlements or external provider resources. It
   preserves D1 charge records, 5x skill weighting and 409 replay prevention.
