@@ -1,11 +1,23 @@
-# AI-02 | interim source delivery
+# AI-02 | source delivery / production acceptance verdict
 
-- **Verdict:** SOURCE CANDIDATE / REVIEW AFTER EXACT-HEAD CI; **PRODUCTION NO-GO**.
-- **Draft PR:** https://github.com/Naveax/Nexowire/pull/993 ; branch `ai/02-enrollment-hardening-20261031`, open, unmerged.
-- **Stack base:** #984 `9d0f35607d4cde87bd031e2da77855cfaf570c31` (parent #983). New source HEAD is the PR's current live SHA; do not infer from parent.
-- **Known previous source HEAD:** `97cb3668fe7f37e95c9730912d6637fd0a963c56`, [run 41204589273](https://github.com/Naveax/Nexowire/actions/runs/41204589273) observed 7/8 SUCCESS with Windows native 4/4 PASS and browser-live pending. This is historical, not green proof for future commits.
-- **Implemented in AI-02-only paths:** C#↔TypeScript canonical v2 signed wire, protected CNG and local-store validation, native active-console and SID/session/LUID readback, bounded IPC denial and fixed `mayDispatch=false`, one-use challenge nonce, revoke/attest exclusive fence, explicit read-only installer identity preflight and revoke-first service-only uninstall, corrupted revoke marker handling, disposable clock/malformed message/ACL/parser tests.
-- **Current staged negatives requiring new exact SHA CI:** malformed protected-record JSON/UTF-8/missing-required/unknown/duplicate/oversized cases; uninstalled Windows `--service` entry must reject non-LocalSystem runner before any SCM operation. All tests remain enforced, not skipped or replaced by synthetic PASS.
-- **Not tested:** actual installed SCM service with start/stop/restart, physical owner UAC approval, host corrupt protected ProgramData, malicious same-user pipe client process trust, real TPM hardware/DPAPI state, offline external CAS revoke/rollback, two production PCs. Disposable CNG/self-test/packaging evidence is not physical acceptance.
-- **External blockers:** coordinator-protected authenticated Agent identity and same-user client executable provenance; AI-03 independent mTLS/issuer pin/revoke ledger/generation/CAS; AI-08 independent adversarial review; disposable Windows service lifecycle and recovery acceptance. See `INTEGRATION_REQUEST.md`.
-- **No merge, deploy, main/workflow/shared file changes, CORE activation, localEnrolled/active forging, live device/Agent/Hub/Broker/UAC/ACL modification.**
+**Verdict:** SOURCE REVIEW CANDIDATE; **PRODUCTION NO-GO** until independent external trust and physical acceptance. Draft PR [#993](https://github.com/Naveax/Nexowire/pull/993) on `ai/02-enrollment-hardening-20261031`; stacked base #984 `9d0f35607d4cde87bd031e2da77855cfaf570c31`, unmerged.
+
+## Delivered in AI-02-only paths
+
+- Native Windows opt-in enrollment with signed persistent ES256-P1363 CNG machine-key grant; exact device, installation, owner account/SID, grant generation, service incarnation and Windows active physical console checks.
+- Protected store owner/DACL validation, canonical external issuer SPKI readback, corrupted/revoked marker fail-closed, immutable consent and revoke evidence, bounded persisted one-use nonce ledger and process-crash-safe revoke-vs-attestation file-sharing fence.
+- Local named pipe with remote clients refused, owner impersonation and active session readback, bounded v2 frames and generic denials. Native client additionally rejects unsigned/self-inconsistent `verified:true` envelopes and signed replies that do not match the **exact submitted authority challenge**. This proves internal cryptographic consistency only, **not independent pinned trust or execution authority**.
+- Install/uninstall scripts: exact 2-device allowlist, manifest digest and runtime hash verification, owner/Agent identity comparisons (not independent authenticity), service identity and protected state checks. Installer requires **explicit `-Execute`**; `-PreflightOnly` is read-only; neither/both modes deny; uninstall likewise requires a separately reviewed and revoked `-Execute` path. No production installation performed.
+
+## Exact-head evidence rule
+
+Last source HEAD before this candidate: `4c2b379dd12c4b704d19e5804d83afae44dc10a7`, [CI #41246829570](https://github.com/Naveax/Nexowire/actions/runs/41246829570). At last observation, 7/8 jobs PASS and browser-live still in_progress; Windows native #124671948122 PASS with 0 .NET errors/warnings and 5/5 tests PASS, 192-file artifact `installed=false`. **This is historical:** the PR's new exact HEAD must be fetched live and its automatic workflow independently verified before considering a merge. Previously fully green `2fef25808393eb84232872507e2d316e9a23b327` / #41243991732 8/8 applies only to that earlier commit.
+
+## Unresolved acceptance, not simulated
+
+1. Coordinator P0: signed/protected Agent installation identity and race-safe same-owner native pipe peer executable provenance. Caller-selected `AgentIdentityFile` is not trusted authority.
+2. AI-03 P0: independently pinned issuer/mTLS, monotonic off-device revoke and grant generation, durable one-use CAS plus final protected native readback at actual effect boundary.
+3. AI-08 P0: adversarial tests and independent source review on **exact combined SHA**, including earlier D1 `complete(succeeded)` before native readback race. AI-02 cannot modify AI-06/Coordinator/QA files.
+4. Approved disposable Windows acceptance P1: actual installed SCM lifecycle, crash/reboot, hostile pipe client, session changes, TPM hardware, owner physical consent, offline revoke and eventual two-PC staged checks. Source-only CNG tests are not real owner/SCM acceptance.
+
+**CORE remains disabled; `mayDispatch=false`. No merge, deploy, live device, UAC/ACL or actual SCM modifications.**

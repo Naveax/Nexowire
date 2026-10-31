@@ -77,3 +77,18 @@
   local parser property, not a real external verifier or production consent.
 - Await new exact HEAD CI. The preceding CI run #41246540822, whatever its
   eventual result, is historical evidence for preceding SHA `7f017aa2f97911e0b618866ec4b8f98cf9792237`.
+
+## Installer explicit-opt-in regression candidate (new exact SHA CI required)
+
+- Protect `install.ps1` from accidental mutable invocation: exactly one of
+  `-PreflightOnly` and `-Execute`. Any invocation with complete matching
+  fixture inputs but **without `-Execute`** must reject with
+  `INSTALL_EXECUTE_OPT_IN_REQUIRED`, before Windows PowerShell 5.1/ACL/SCM
+  mutation. Both switches reject `CONFLICTING_INSTALL_MODES`.
+- Keep original `-PreflightOnly` positive + wrong owner/device/installation
+  negatives unchanged; add these two fail-closed cases to the same disposable
+  non-executable fixture. Tests never pass `-Execute`, so there is no service,
+  CNG key, UAC, real owner approval or installed artifact.
+- Pre-candidate source `4c2b379dd12c4b704d19e5804d83afae44dc10a7` has native 5/5 PASS and 7/8 overall jobs
+  success in CI #41246829570 at last verified read; new HEAD requires new
+  exact workflow result. No synthetic result or parent SHA transferred.

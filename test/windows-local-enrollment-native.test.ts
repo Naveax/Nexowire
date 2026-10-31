@@ -85,8 +85,10 @@ test('Windows installer read-only preflight rejects owner and installation ident
     const script=fileURLToPath(new URL('../scripts/local-enrollment/install.ps1',import.meta.url));
     const identity={id:deviceId,installationId,ownerAccountId};
     const request={deviceId,installationId,ownerAccountId,ownerSid,authoritySpkiBase64:'fixture-only'};
-    const command="$ErrorActionPreference='Stop'; $ids=[Guid[]]@([Guid]::Parse($env:AI02_DEVICE),[Guid]::Parse($env:AI02_OTHER)); & $env:AI02_SCRIPT -BundleDirectory $env:AI02_BUNDLE -ExpectedManifestSha256 $env:AI02_HASH -EnrollmentRequestFile $env:AI02_REQUEST -AgentIdentityFile $env:AI02_IDENTITY -ExpectedDeviceId ([Guid]::Parse($env:AI02_DEVICE)) -AllowedDeviceIds $ids -PreflightOnly";
-    const execute=(id:unknown,req:unknown)=>{
+    const commandBase="$ErrorActionPreference='Stop'; $ids=[Guid[]]@([Guid]::Parse($env:AI02_DEVICE),[Guid]::Parse($env:AI02_OTHER)); & $env:AI02_SCRIPT -BundleDirectory $env:AI02_BUNDLE -ExpectedManifestSha256 $env:AI02_HASH -EnrollmentRequestFile $env:AI02_REQUEST -AgentIdentityFile $env:AI02_IDENTITY -ExpectedDeviceId ([Guid]::Parse($env:AI02_DEVICE)) -AllowedDeviceIds $ids";
+    const execute=(id:unknown,req:unknown,mode:'preflight'|'without-opt-in'|'conflict'='preflight')=>{
+      const command=commandBase+(mode==='preflight'?' -PreflightOnly':
+        mode==='conflict'?' -PreflightOnly -Execute':'');
       writeFileSync(identityPath,JSON.stringify(id));
       writeFileSync(requestPath,JSON.stringify(req));
       // Read-only preflight supports PowerShell 7; CI's pwsh environment
@@ -102,6 +104,16 @@ test('Windows installer read-only preflight rejects owner and installation ident
     assert.ifError(ok.error);
     assert.equal(ok.status,0,ok.stderr);
     assert.match(ok.stdout,/"installed"\s*:\s*false/);
+    // Never run the actual service/install route on CI. With complete fake
+    // inputs but without -Execute, installer MUST reject before any writes.
+    const missingOptIn=execute(identity,request,'without-opt-in');
+    assert.ifError(missingOptIn.error);
+    assert.notEqual(missingOptIn.status,0,missingOptIn.stdout);
+    assert.match(missingOptIn.stderr,/INSTALL_EXECUTE_OPT_IN_REQUIRED/);
+    const conflicting=execute(identity,request,'conflict');
+    assert.ifError(conflicting.error);
+    assert.notEqual(conflicting.status,0,conflicting.stdout);
+    assert.match(conflicting.stderr,/CONFLICTING_INSTALL_MODES/);
     for(const [id,req,error] of [
       [identity,{...request,installationId:randomUUID()},'LOCAL_OWNER_DEVICE_MISMATCH'],
       [identity,{...request,ownerAccountId:'other-account-01'},'LOCAL_OWNER_DEVICE_MISMATCH'],

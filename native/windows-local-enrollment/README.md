@@ -56,8 +56,11 @@ or service and is not counted as human or hardware enrollment evidence.
 The opt-in build/install scripts under `scripts/local-enrollment` are pending
 Windows acceptance. The build emits a self-contained runtime and SHA256 manifest;
 the installer requires an independently supplied manifest hash, explicit exactly
-two-device allowlist, current Agent identity and same-owner request. Preflight is
-read-only. Actual install uses Windows PowerShell 5.1 under normal local UAC,
+two-device allowlist, current Agent identity and same-owner request. The
+**read-only** `-PreflightOnly` mode has no installation side effects; omitting
+both `-PreflightOnly` and `-Execute` is **denied**, not treated as consent.
+The two switches are mutually exclusive. Only an explicit `-Execute` reaches
+the actual Windows PowerShell 5.1 installation path under normal local UAC,
 copies/hash-checks protected runtime bytes, invokes the visible ceremony, then
 creates an Automatic LocalSystem SCM service. It does not change the old Agent or
 Broker and reports coreActivated=false. Partial failure preserves grant/key and
@@ -76,9 +79,10 @@ compilation/CNG diagnostics must pass before presenting any installation UAC.
 The native pipe now sends a bounded, non-sensitive v2 denial frame for rejected
 operations when the client remains connected. The diagnostic client refuses
 denials, wrong protocol versions and frames that claim dispatch permission.
-It still does **not** cryptographically validate raw pipe output: only an
-independently pinned Agent verifier may use signed proof, and no proof activates
-CORE by itself. A consumed challenge nonce cannot be replayed after a lost ACK.
+The client checks canonical P-256 signed grant/witness self-consistency,
+including an exact reply-to-challenge match. **It is not an independently
+pinned verifier**: only the protected Agent verifier may use signed proof,
+and no proof activates CORE by itself. A consumed challenge nonce cannot be replayed after a lost ACK.
 
 The opt-in installer preflight additionally requires that the **device UUID,
 installation UUID and owner account ID** match the independently supplied Agent
@@ -259,3 +263,15 @@ Windows session, logon LUID and absent challenge context. This remains
 necessary defense in depth, **not** authority: neither the local client nor
 its tests establish the externally pinned issuer, signed installed Agent
 identity, current generation/revoke or durable remote one-use CAS.
+
+## AI-02 explicit native installation intent
+
+The source installer requires either `-PreflightOnly` (bounded, read-only
+validation) or `-Execute` (explicitly opted-in mutating installation, which
+still requires approved Windows PowerShell 5.1, local elevation and a visible
+physical-console owner consent ceremony). An invocation with neither switch
+fails as `INSTALL_EXECUTE_OPT_IN_REQUIRED`; both switches fail as
+`CONFLICTING_INSTALL_MODES`. Disposable Windows CI never passes `-Execute`
+and verifies both denial paths using a fake, non-executable bundle. External
+Agent installation identity provenance, signed package publisher and real
+Windows SCM/TPM acceptance remain production P0 / NO-GO.
