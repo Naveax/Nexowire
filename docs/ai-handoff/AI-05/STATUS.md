@@ -32,3 +32,10 @@ Wait for exact HEAD typecheck, Node 22/24 tests, build and the full 7-job CI mat
 - 4 new executor adversarial cases. **Current total: 23 synthetic AI-05 tests** (10 PostgreSQL, 6 HTTPS, 3 standalone witness, 4 executor).
 - Source tip CI run `41201461962` was still in progress at the handoff update. Node 22/24 typecheck succeeded; the exact doc-inclusive HEAD must have its own CI evidence.
 - No live native execution, CORE flag change, merge, deploy, or non-AI-05 path edits.
+
+## 2026-10-31 pre-CAS executor request snapshot final source delta
+- Source/test HEAD immediately before this handoff: `a4b81cd13bd9fdceb5e7195f0ede83ad7df3c9bc`; final docs-inclusive SHA must be queried from PR #992.
+- AI-05's source-owned `core-windows-mutation-dispatch.ts` now snapshots original `requestId/capability/fingerprint` and nested owner/device/session/epoch/generation via strict **own enumerable data descriptors** before external CAS awaits. Rejects getter, Proxy, hidden/inherited or extra identity keys before running them; dispatch admission and frozen approved expected scope are checked against that same detached immutable request.
+- Four additional negative cases in `test/ai05-cas-executor-snapshot.test.ts`. **Latest source test count: 27** (10 PostgreSQL, 6 HTTPS, 3 remote witness, 8 executor). Historical 19/23 counters above refer to older exact-SHA snapshots.
+- Source CI [41204241838](https://github.com/Naveax/Nexowire/actions/runs/41204241838): Node22+Node24 SUCCESS, Linux/WSL2/macOS/security SUCCESS; Windows browser-live still in progress at this handoff observation. Node 22 2,768 total / 2,414 PASS / 0 FAIL / 352 SKIP / 2 TODO; all 27 AI-05 source-only negatives observed PASS in Node22/24 logs.
+- `CORE_EXECUTOR_DISPATCH_ENABLED=false`. Draft PR, NO_GO and no physical Windows/OS admission remain.

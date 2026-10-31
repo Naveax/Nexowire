@@ -20,3 +20,10 @@ Follow-up: one Proxy-trap negative regression increases new AI-05 synthetic cove
 
 ## Latest source candidate delta
 The executor canonicalization rejects nested Proxy inputs and frozen accessor-bearing/Proxy approved callback objects with 4 new AI-05 regression cases. **23 authored synthetic tests in total.** Code tip before this documentation commit: `33bb714bc158e118ce363f4e17ed39cb864605a0`, CI run `41201461962` had Node 22/24 typecheck success but full CI was in progress at last inspection. Final exact HEAD must be verified from PR metadata and its own workflow. Independent protected Broker, rollback-resistant CAS custody, OS sandbox and two-PC enrollment remain NOT PROVEN. Draft/production CORE NO_GO persists.
+
+## Latest source evidence / reviewer decision
+- Source tip before final handoff update: `a4b81cd13bd9fdceb5e7195f0ede83ad7df3c9bc`. Latest PR HEAD must be queried from GitHub after this document commit.
+- **27 new synthetic AI-05 tests**: 10 PostgreSQL scope, 6 HTTPS uncertainty, 3 remote witness, 8 executor. All 27 passed on source tip in Node22/Node24 hosted logs; Node22 overall 2,768 tests, 2,414 PASS, 0 FAIL, 352 SKIP, 2 TODO. Four recent cases prevent mutable/or accessor-backed nested Broker scope from substituting the request before the CAS await.
+- Source CI [41204241838](https://github.com/Naveax/Nexowire/actions/runs/41204241838): Node22/24/Linux/WSL2/macOS/Security SUCCESS, Windows browser-live was still running at the latest observation. **Full CI and docs-inclusive exact HEAD need fresh verification.**
+- Prior exact SHA 1b3f78d… had Windows #974 journal worker 30s IPC timeout; handoff routed to coordinator, without touching its code or weakening tests. The later source CI passed the WAL step, but intermittent worker hangs need investigation.
+- **Decision: READY_FOR_SOURCE_REVIEW only where CI confirms; PRODUCTION CORE NO_GO.** Independent CAS anti-rollback custody, signed native Broker OS admission/ACL, sandbox, physical owner enrollment and two-PC restart/revoke acceptance remain NOT PROVEN. CORE default false, no merge or deploy.

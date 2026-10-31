@@ -31,3 +31,10 @@ Source+test tip `33bb714bc158e118ce363f4e17ed39cb864605a0`, CI [41201461962](htt
 - Previous candidate `38d1f8b7282dd4762e9aa27452e74db992eae660`, CI 41201350578, failed TypeScript `TS18048` (optional approved callback); later source tip adds an explicit terminal absence check without weakening negative cases.
 - Updated total AI-05 authored regression suite: **23 tests**, all synthetic. A TypeScript success is not a full Node test suite success, and a Node job success is not an independent Windows/Broker physical acceptance.
 - **Final exact HEAD** is the commit after documentation; look up its run ID and exact node/platform logs, do not inherit prior CI.
+
+## Executor request snapshot regression evidence (latest source)
+- Source/test tip immediately before this handoff: `a4b81cd13bd9fdceb5e7195f0ede83ad7df3c9bc`.
+- CI [41204241838](https://github.com/Naveax/Nexowire/actions/runs/41204241838) on that exact source SHA: Node22 and Node24 typecheck, Node tests and build SUCCESS. Node22 summary: **2,768 total / 2,414 PASS / 0 FAIL / 352 SKIP / 2 TODO**. All **27 AI-05 new tests** were seen green in hosted Node22 and Node24 logs. Linux, WSL2, macOS and security jobs SUCCESS; browser-live was not yet terminal at this observation.
+- Four new cases: (i) originally approved mutable nested owner/session/UUID cannot affect frozen request; (ii) original request or nested owner getters not invoked; (iii) Proxy, symbol, extra key rejected without traps; (iv) standalone approved-comparator expected identity with accessor rejected before any getter read. Test files remain `test/ai05-cas-*.test.ts`.
+- First code candidate `2fcf9670071f8f564f628a869d24a8b12de0b63a` had test-only TS2322 due to literal-narrowed fixture; `a4b81cd13bd9fdceb5e7195f0ede83ad7df3c9bc` widens only the mutable test variable and preserves all negative checks.
+- A new docs-inclusive HEAD requires its own exact-SHA CI, even though it changes no source. No local checkout or physical OS validation occurred.
