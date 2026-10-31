@@ -4,7 +4,7 @@ Changed files: `src/agent/task-os-sandbox-policy.ts`; `native/task-os-sandbox-wi
 - Source/static Windows C tests: 2/2 PASS on Linux Node 22.16.0, not OS proof.
 - New mutation test, full repo typecheck, Windows MSVC, native kernel/physical tests: not locally run; consult new exact-head Actions.
 - Existing #859 CI 40547392793 SUCCESS only applies to original SHA, not this branch.
-- Missing: production OS worker, #03 admission, signed owner/CAS, independent AppContainer/Job handle/disk/network isolation, descendant cleanup and verified revoke.
+- Missing: production OS worker, AI-05 pre-effect executor/CAS admission, AI-04 independent Broker/Job/receipt gate, authenticated owner/device/session identity, independent AppContainer/Job handle/disk/network isolation, descendant cleanup and verified revoke.
 - No other-owner file mutation, merge, deploy, UAC/ACL/service, real Agent or OS policy changes.
 - Child Draft PR URL, final HEAD SHA, exact CI run IDs: read live Github metadata, not an embedded self-referential SHA.
 
@@ -14,3 +14,6 @@ Changed files: `src/agent/task-os-sandbox-policy.ts`; `native/task-os-sandbox-wi
 
 ## 2026-10-31 continuation scope
 Added bounded Linux probe child lifetime and new Windows-only MSVC native regression; local Windows native compile still requires isolated runner. NO_GO persists.
+
+## Correct owner routing
+Per `NEXOWIRE_AI_TAKIM_PLANI_14_GUN.md`, AI-05 owns executor/CAS dispatch; AI-04 owns Broker-side admission/Job; AI-02 owns enrollment/protected Service; AI-03 owns mTLS/verifier; AI-08 independently validates native negatives. Any earlier handoff naming AI-03 as executor or AI-02 as Broker/CAS was erroneous and has been corrected. No out-of-owner code edited.

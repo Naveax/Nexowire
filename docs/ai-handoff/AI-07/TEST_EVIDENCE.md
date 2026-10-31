@@ -19,3 +19,5 @@
 ## This continuation
 - Linux probe source-level regressions now assert bounded poll, WNOHANG and kill of the test-owned child, exit 78 on timeout. Existing native C compilation on CI must reverify the new SHA.
 - Windows-only `test/ai07-sandbox-windows-msvc-p07.test.ts` attempts actual MSVC /W4 /WX build, tests arbitrary command rejection and expects the ordinary runner's AppContainer/Job readback to return 77. On Linux this OS test reports NOT_RUN/unsupported (not PASS); Windows job in current workflow does **not** run npm test, so independent Windows executor must run the explicit test. No claim of actual Windows native build until such a run is observed.
+
+- Handoff ownership map reviewed against the 31 Oct 2026 team plan: docs-only correction, no executable change or native security acceptance. Latest source test22 on `439523c603840de7b8678b047ef06fb140f3970c` logged 2,257 tests (1,964 pass, 0 fail, 291 skipped, 2 TODO). Windows-only native MSVC case was explicitly SKIP on Linux; not physical evidence. CI 41198275210 was still IN_PROGRESS when observed.

@@ -23,3 +23,6 @@
 - Added monotonic bounded readiness and bounded wait/kill of the disposable Linux probe's *own* child, no arbitrary PIDs.
 - Added a Windows-only isolated MSVC build and negative CLI test under test/ai07-sandbox-windows-msvc-p07.test.ts. It is unsupported on Linux, not physical PASS.
 - Existing PR #990 and AI-07 branch kept; all code remains deny-only, no service/Agent/production effects.
+
+## Owner/contract correction
+Current team plan assigns dispatcher/CAS to AI-05, Broker/Job/receipt to AI-04, protected enrollment to AI-02, mTLS to AI-03 and independent native QA to AI-08. The source-only AI-07 executor boundary stays disabled. Updated AI-07 integration request only; no other agents' files touched.

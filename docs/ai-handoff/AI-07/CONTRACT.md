@@ -4,7 +4,7 @@
 - Windows probe is **disposable VM diagnostic**, not a native task executor. Only accepts `--selftest-only`; reads its own effective elevation/AppContainer/IL, Job membership/breakaway flags and PID/creation FILETIME; no process creation, service changes, ACL/token mutation, network or client task input.
 - A positive probe result is local/self readback, not independently protected identity evidence, no root filesystem or WFP/IP/IPC denial proof, no descendant containment, and no revoke drain.
 - Existing Linux namespace/seccomp probe remains selftest-only. Unsupported OS fails closed.
-- Genuine production enabling requires #02/#03 coordination, externally authenticated grants and OS-kernel observer; never replace this contract with mock booleans or stdout.
+- Production enabling requires AI-05's separate executor/CAS admission, AI-04's independent Broker/Job/receipt admission, AI-02 protected enrollment, AI-03 authenticated mTLS identity and AI-08 independent physical negative tests; OS-kernel observer evidence must be real, not mock booleans or stdout.
 
 
 ## 2026-10-31 continuation: hostile JS evidence handling
@@ -22,3 +22,17 @@
 
 ## Bounded Linux diagnostic child lifetime
 The outer parent bounds kernel namespace readiness to 5 seconds and own child reaping to 12 seconds by monotonic clock, then signals SIGKILL only to its exact forked diagnostic child; timeout is exit 78, never success. This is source-only containment of the *probe itself*, not a supported task revoke/descendant runtime.
+
+## Cross-owner entrypoint (AI-07 remains deny-only)
+```ts
+// Implemented in AI-07, NEVER a permit to run:
+executeSandboxRequiredCapability(
+  capability: unknown,
+  commandInput: unknown,
+  sourceOnlyTaskIntent: unknown,
+  untrustedReadback?: unknown,
+): Promise<never>;
+// It throws OsTaskSandboxBlockedError (code OS_TASK_SANDBOX_UNAVAILABLE
+// or OS_TASK_RECONCILIATION_REQUIRED); legacy spawning is forbidden.
+```
+AI-05 must invoke the above **before** shell, process and nested task effects. AI-04 must independently check Broker-side OS/grant/CAS admission. Neither owner should infer permission from AI-07's synthetic probe status. AI-08's intentionally RED #832 cases remain unsatisfied by an API declaration alone.
