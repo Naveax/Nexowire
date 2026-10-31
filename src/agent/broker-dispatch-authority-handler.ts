@@ -220,7 +220,10 @@ export function createBrokerDispatchAuthorityHandler(config:{
         respond(res,204);return;
       }
       if(action==='revoke-and-drain'){
-        if(!await principalStillCurrent()){respond(res,403,{error:'denied'});return}
+        // Owner-signed revoke is a DENY/drain operation, never a new grant.
+        // The original authenticated Broker scope and exact signed owner
+        // approval remain mandatory. Reauth after the body could block
+        // emergency revocation when the credential expires mid-request.
         const parsed=revoke.safeParse(body);
         if(!parsed.success||!scoped(p,parsed.data)){
           respond(res,403,{error:'denied'});return;

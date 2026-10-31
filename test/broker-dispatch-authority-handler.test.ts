@@ -376,7 +376,17 @@ test('dispatch wire adapter enforces identity, protected readback and signed rec
       {code:'BROKER_DISPATCH_REMOTE_REFUSED'});
     assert.equal(backend.revokeCalls,before);
     req.signedOwnerApproval=envelope(ownerKey.privateKey);
-    const result=await remote.revokeAndDrain(req,'2'.repeat(64));
+    // Owner-signed deny/drain must remain possible when the original Broker
+    // credential becomes invalid *after* initial authenticated admission.
+    expireAfterNextValidAuth=true;
+    const result=await (async()=>{
+      try{
+        return await remote.revokeAndDrain(req,'2'.repeat(64));
+      }finally{
+        expireAfterNextValidAuth=false;
+        credentialCurrent=true;
+      }
+    })();
     const proof=JSON.parse(Buffer.from(result.payload,'base64url').toString()) as {drained:boolean};
     assert.equal(proof.drained,true);
     let effects=0;

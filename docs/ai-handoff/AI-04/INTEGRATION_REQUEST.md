@@ -16,12 +16,18 @@
 ## AI-04 handler provider-owned witness ve credential yenilemesi (kaynak düzeyi)
 
 - Handler, `authenticateBroker` principal ve `readProtectedBroker` nesnelerindeki yalnız kendi **data descriptor** alanlarını, prototype ve fazladan alan kontrolüyle snapshot'lar. Accessor, inherited, proxy trap, eksik veya fazladan alanlar fail-closed reddedilir. Bu değişiklik **fiziksel Windows kernel attestation değildir**.
-- HTTPS isteğinin gövdesi okunduktan sonra, release/revoke için tekrar `authenticateBroker` yapılır; begin/commit için protected broker readback sonrası yeniden authenticate edilen principal ilk brokerId/ownerId/deviceId/deviceEpoch/sessionEpoch ile karşılaştırılır. Revoked/UNKNOWN kimlikle CAS mutasyonu çağrılmaz.
+- Yeni begin/commit admission için protected Broker readback sonrasında tekrar `authenticateBroker` yapılır ve immutable owner/device/session principal karşılaştırılır. Release, ilk authenticated Broker principal + exact reservation CAS kontrolüyle; revoke ise buna ek olarak doğrulanmış imzalı owner onayıyla yürür. İptal/temizlik yeni grant kabulü değildir.
 - Mevcut `test/broker-dispatch-authority-handler.test.ts` içerisine readback accessor/inherited/proxy, authenticated principal accessor/inherited ve readback sırasında credential revoke negatifleri eklendi. CI bu yeni HEAD üzerinde doğrulanmadan PASS kabul edilmemelidir.
 - **Koordinatör:** `authenticateBroker` eski boolean/cache yerine canlı/korumalı principal kaynağını okumalı; aynı request için tekrar doğrulanma desteği sağlamalı. Final effect admission için owner+OS atomik linearization yine ayrı P0 ve CORE NO-GO.
 
 ## Düzeltme: eski claim'in release işlemi yeniden owner/grant kabulü değildir
 
-- `release` isteğinin başındaki authenticated Broker principal, exact `dispatchId`, `brokerId`, `request`/scope doğrulaması ve uzak authority'nin **durable immutable reservation** eşleştirmesi korunur. Release sırasında yeniden canlı credential sorgulamak iptal edilmiş grant'i temizleyememe riski taşır, bu yüzden ikinci kontrol yalnızca yeni admission/commit ve revoke işlemlerinde kullanılır.
+- `release` isteğinin başındaki authenticated Broker principal, exact `dispatchId`, `brokerId`, `request`/scope doğrulaması ve uzak authority'nin **durable immutable reservation** eşleştirmesi korunur. Release sırasında yeniden canlı credential sorgulamak iptal edilmiş grant'i temizleyememe riski taşır, bu yüzden ikinci kontrol yalnızca yeni begin/commit admission işlemlerinde kullanılır.
 - Regresyon: İlk TLS/Bearer principal kabul edildikten hemen sonra credential iptal edilirse önceden rezerve edilmiş claim release edilir; aynı revoked credential yeni `begin` açamaz. Test sadece sentetik HTTP+CAS kanıtıdır.
 - **Açık entegrasyon ihtiyacı:** İlk authenticate anından önce credential zaten iptal edildiyse cleanup'a izin verecek ayrılmış protected release/reconciliation principal veya owner-onaylı drain API koordine edilmelidir. Sahte trusted fallback koyulmadı; CORE NO-GO devam eder.
+
+## Owner-signed revoke/drain için canlı credential TOCTOU
+
+- Aynı prensip `revoke-and-drain` için de geçerlidir: ilk TLS/Bearer Broker principal ve immutable owner/device/session kapsamı ile `verifyOwnerRevocation` gerçek owner imzası zorunlu kalır; ancak istek gövdesinden sonra ikinci **canlı grant** kabulü yapılmaz. Arada credential expire/revoke olursa signed owner iptali fail-open bir mutasyon değildir.
+- Mevcut owner signature negatif testi korunur; pozitif revoke aşamasında ilk authenticate'den hemen sonra credential invalid olmasını taklit eden regresyon eklendi. Signed owner kanıtı yoksa revocation CAS çağrısı yine reddedilir.
+- İlk authenticate öncesi iptal edilmiş credential veya revocation sırasında ayrı güvenli yetkili kanal gereksinimi koordinatör kapsamındadır. Doğrulanmış OS SID, dağıtım veya uzun ömürlü token uydurulmadı; CORE production NO-GO.
