@@ -55,3 +55,6 @@ Added disposable Linux native fixture `test/ai07-sandbox-linux-fd-seccomp.test.t
 
 ### Synthetic environment and bounded fixture teardown
 Test-only Linux fixture now also rejects inherited synthetic environment when `clearenv` is deliberately disabled (exit 59), and forcefully reaps only its test-owned exact child on timeout and clock error. No task-scope credential exposure tested. No production worker enable or authorization: NO-GO.
+
+### PID1 early-orphan kernel witness
+Added pre-fork direct-parent pidfd to close the race where a parent died before PID1 installed its kernel parent-death signal. Both pre/post-gate PID1 checks fail closed; unsupported PIDFD and errors deny. Only disposable selftest protected; production NO-GO and independent native OS/Broker/worker evidence still required.

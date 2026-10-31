@@ -73,3 +73,6 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 ## Test-owned environment leak negative and cleanup audit (1 Nov 2026)
 - The disposable Linux FD/seccomp fixture now sets a synthetic child-inherited `NW07_TEST_ONLY_SENTINEL=FAKE_TEST_ONLY`; its forked test child must `clearenv()` before FD/seccomp checks. The deliberately disabled environment clear returns exit `59`. This tests only test-owned userspace environment clearing, **not** Windows/Agent protected credentials or a production identity.
 - Clock failure/timeout paths now use an exact-owned child SIGKILL plus bounded WNOHANG reap helper; uncertainty returns BLOCKED. No outside PID, service or host security setting is modified.
+
+## 2026-11-01 native PID1 pre-prctl parent-death gap
+- A child in CLONE_NEWPID can observe an out-of-namespace parent as PID 0, so `getppid` is not reliable in namespace PID1. The direct diagnostic parent now opens `pidfd_open(getpid(), 0)` **before** forking; namespace PID1 inherits that exact parent handle, installs `PR_SET_PDEATHSIG(SIGKILL)`, then checks the pidfd with nonblocking `poll` both before and after the second-approval pipe gate. A dead/unknown parent fails with 87, unsupported pidfd fails 86, closure failure fails 88. No native task execution enabled.

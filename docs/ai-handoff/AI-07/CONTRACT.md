@@ -72,3 +72,6 @@ The new `ai07-sandbox-linux-fd-seccomp` test exercises disposable Linux child cl
 
 ### Test-only inherited environment negative
 The Linux disposable fixture checks actual inherited environment bytes with a **synthetic sentinel** and forces `clearenv()` before its own seccomp/FD test. A build without clearing must return exit 59. This is no real secret/credential proof and cannot replace protected native child environment generation, owner-scoped OS authorization, or independent readback. Even fixture teardown uses an exact owned PID and finite reap loops.
+
+### Namespace PID1 early-orphan gap: exact kernel pidfd
+The parent opens its own `pidfd_open` *before* the namespace PID1 fork. PID1 installs `PR_SET_PDEATHSIG(SIGKILL)`, checks the inherited pidfd before and after approval, then closes the pidfd before filesystem pivot and complete `close_range`. This closes the pre-prctl parent-death window without relying on `getppid` inside CLONE_NEWPID. A missing syscall or readable/error pidfd rejects the **test-only** probe; this remains an unsigned local observation, not a trusted native launcher/worker grant.

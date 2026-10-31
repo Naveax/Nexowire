@@ -28,3 +28,6 @@ Coordinator/AI-08 can separately run `node --test --import tsx test/ai07-sandbox
 
 ### AI-07 FD/seccomp negative handoff to AI-08/coordinator
 Run the exact-head `test/ai07-sandbox-linux-fd-seccomp.test.ts` on isolated disposable Linux runners, and retain all three variants: protected exit 0, disabled FD closure exit 53, disabled seccomp exit 55. These are narrow real-kernel negative checks; they do **not** establish production user/owner identity, task root containment, inherited Broker handles/credentials, cgroup process tree drain or signed grant admission. Preserve independent AI-04/AI-05 gates, CORE off and Draft/NO-GO.
+
+### AI-08 independent parent-orphan test
+Run disposable Linux test of direct parent death *before* namespace PID1 installs `PR_SET_PDEATHSIG`. Observe inherited exact-parent pidfd becomes POLLIN and the probe returns BLOCKED (87); do not accept getppid() == 0 as an alive parent. Missing kernel pidfd support must remain UNSUPPORTED/BLOCKED. The current pidfd observation is in an unsigned source-only diagnostic and is **not** a protected verifier, cgroup drain proof or native task permit.

@@ -166,6 +166,19 @@ static int reap_disposable_pid1(pid_t pid,int *status,int force_kill) {
   }
 }
 
+/* pidfd_open() is called by the direct diagnostic parent before forking
+ * namespace PID1; the child inherits its exact parent's kernel pidfd.
+ * In a PID namespace getppid() can be 0 for a parent outside that namespace,
+ * so an ordinary parent-PID comparison is not a reliable orphan detector.
+ * A readable/invalid pidfd means the parent already died: fail closed.
+ * This is still an unsigned disposable test process, NOT worker admission. */
+static int direct_parent_pidfd_alive(int pidfd) {
+  if(pidfd<0)return -1;
+  struct pollfd pfd={.fd=pidfd,.events=POLLIN|POLLHUP,.revents=0};
+  int state=poll(&pfd,1,0);
+  return state==0?0:-1;
+}
+
 static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   /* Self-observed namespace inode difference: NOT an independent attester. */
   struct stat user_before, net_before, user_after, net_after;
@@ -200,12 +213,28 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
   if(mkdir(oldroot,0700)<0)return 35;
   int gate[2];
   if(pipe2(gate,O_CLOEXEC)<0)return 63;
+  /* Opening the parent's own pidfd BEFORE fork closes the gap where the
+   * parent dies before namespace PID1 installs PR_SET_PDEATHSIG. The kernel
+   * fd pins identity even across PID namespaces and prevents PID reuse.
+   * If unsupported, do not run the native selftest or claim a permit. */
+#ifdef SYS_pidfd_open
+  int direct_parent_pidfd=(int)syscall(SYS_pidfd_open,getpid(),0);
+  if(direct_parent_pidfd<0) {
+    (void)close(gate[0]);(void)close(gate[1]);
+    return 86;
+  }
+#else
+  (void)close(gate[0]);(void)close(gate[1]);
+  return 86;
+#endif
   pid_t pid=fork();
   if(pid<0) {
+    (void)close(direct_parent_pidfd);
     (void)close(gate[0]);(void)close(gate[1]);
     return 36;
   }
   if(pid>0) {
+    (void)close(direct_parent_pidfd);
     (void)close(gate[0]);
     const char pid_ready='P';
     char pid_approved=0;
@@ -237,8 +266,14 @@ static int kernel_child(const char *root,int ready_fd,int resume_fd) {
    * namespace init must not wait indefinitely on a pipe from a dead parent.
    * This is still unsigned selftest evidence, not production revoke proof. */
   if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);
+  /* A dead parent before prctl does not retroactively generate SIGKILL.
+   * The inherited kernel pidfd detects that pre-prctl death. Repeat after
+   * the gate: if parent dies after prctl the kernel sends SIGKILL instead. */
+  if(direct_parent_pidfd_alive(direct_parent_pidfd)<0)_exit(87);
   char child_approved=0;
   if(read(gate[0],&child_approved,1)!=1 || child_approved!='Y')_exit(61);
+  if(direct_parent_pidfd_alive(direct_parent_pidfd)<0)_exit(87);
+  if(close(direct_parent_pidfd)<0)_exit(88);
   if(close(gate[0])<0)_exit(62);
   if(chdir(root)<0)_exit(39);
   if(syscall(SYS_pivot_root,".",".old")<0)_exit(40);

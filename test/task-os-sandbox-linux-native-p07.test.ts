@@ -49,6 +49,22 @@ test('#07 Linux diagnostic has no arbitrary shell entry point',()=>{
   assert.match(source,/if\(pid==0\) \{[\s\S]*?if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(82\);[\s\S]*?if\(getppid\(\)!=outer_parent_pid\)_exit\(85\);[\s\S]*?if\(setpgid\(0,0\)<0\)_exit\(80\)/);
 
   assert.match(source,/if\(prctl\(PR_SET_PDEATHSIG,SIGKILL\)<0\)_exit\(55\)/);
+  // Namespace PID1 cannot rely on getppid() for an outer namespace parent.
+  // A pre-fork self pidfd, inherited across PID namespaces, must be checked
+  // after PR_SET_PDEATHSIG and again after the gate grant, before pivot_root.
+  assert.match(source,/SYS_pidfd_open/);
+  assert.match(source,/syscall\(SYS_pidfd_open,getpid\(\),0\)/);
+  assert.match(source,/static int direct_parent_pidfd_alive\(int pidfd\)/);
+  assert.match(source,/struct pollfd pfd=\{\.fd=pidfd,\.events=POLLIN\|POLLHUP/);
+  assert.match(source,/if\(direct_parent_pidfd_alive\(direct_parent_pidfd\)<0\)_exit\(87\)/);
+  assert.match(source,/if\(close\(direct_parent_pidfd\)<0\)_exit\(88\)/);
+  assert.ok(source.indexOf('syscall(SYS_pidfd_open,getpid(),0)') <
+    source.indexOf('pid_t pid=fork();'));
+  assert.ok(source.indexOf('if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);') <
+    source.indexOf('if(direct_parent_pidfd_alive(direct_parent_pidfd)<0)_exit(87);'));
+  assert.ok(source.indexOf('if(close(direct_parent_pidfd)<0)_exit(88);') <
+    source.indexOf('if(chdir(root)<0)_exit(39);'));
+
   // Before PID1's private approval read, install its parent-death fence.
   assert.ok(source.indexOf('if(prctl(PR_SET_PDEATHSIG,SIGKILL)<0)_exit(55);') <
     source.indexOf("if(read(gate[0],&child_approved,1)!=1"));

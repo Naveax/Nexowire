@@ -65,3 +65,7 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 
 ### FD/seccomp fixture extra negative and failure-path teardown
 - **Isolated local container** Linux 6.18.57/GCC 14.2, `cc -O2 -Wall -Wextra -Werror`, 4 variants: protected exit `0`, disabled close_range exit `53`, disabled seccomp exit `55`, disabled synthetic environment clearing exit `59`. All four reproduced after changing the fixture to use bounded exact-child SIGKILL/reap even on monotonic-clock failure. Real local kernel FD/seccomp readback and userspace environment test are separate from task/credential production acceptance; new exact-HEAD CI required after commit.
+
+### Early parent-death race mitigation source review
+- Added native probe pre-fork self `pidfd_open`, inherited parent pidfd post-`PR_SET_PDEATHSIG` checks before/after gate and explicit FD cleanup. Local isolated Linux 6.18.57 / GCC 14.2 proof of mechanism: six standalone kernel fixture runs simulated parent death **before** child-installed `PR_SET_PDEATHSIG`; inherited pidfd `poll(POLLIN)` detected it and fixture exited `87` in all 6, with process reaped by a subreaper. This does **not** execute the native namespace selftest in CI or independently attest a task worker.
+- Exact-head native compile and Node source assertion CI remain pending. Protected production descendant cleanup, cgroup v2 and Windows native worker still unavailable.
