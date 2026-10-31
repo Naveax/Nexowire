@@ -101,3 +101,12 @@ saklar ve yalnız yeni başarılı revoke ile temizler. İki sentetik
 negatif test eklendi. Eski SHA'nın 7/7 CI başarı kanıtı yeni SHA
 için geçerli değildir. D1 native-verified migration #996
 koordinatörde, AI-08 P0 ve fiziksel OS kabulü açık; CORE NO-GO.
+
+## Reused native consent TOCTOU korunması
+
+AI-06 provider'ın mevcut onayı yenilemeden kabul etme yoluna
+native readback sonrası oturum/owner/Broker/yerel pending STOP
+yeniden kontrolü eklendi. Dört izole race testi oluşturuldu;
+geçtiği yalnız yeni exact HEAD CI ile kanıtlanabilir. Bu düzeltme
+D1 premature complete P0 ile gerçek native OS effect boundary
+atomikliğini çözmez. CORE NO-GO.

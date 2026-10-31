@@ -141,3 +141,17 @@ fiziksel Windows, gerçek native signer ve prod D1 doğrulanmamıştır.
 İlk eklenen 36 AI-06 sentetik regresyon Node 22 ve 24'te CI
 `41211401246` ile PASS; iki yeni test için exact yeni SHA/CI
 sonucu gelmeden PASS denemez.
+
+## Existing enrollment reuse / async native readback regresyonları
+
+`test/core-console-provider.integration.test.ts` içerisine native
+session readback asenkron devam ederken araya giren dört koşul için
+test eklendi: cihaz offline, Broker readiness kaybı, owner account
+değişimi ve başka Agent'ın kalıcı pending-dispatch işaretleyicisi.
+Reused consent `true` dönmemeli, yeni prompt atılmamalı, native
+effect sayısı sıfır ve CORE aktif olmamalı. Bu yeni 4 testin exact HEAD
+CI sonucunu görmeden PASS iddia edilmez.
+
+Önceki kaynak HEAD `e4e4a653090a03f164035250d76ed4456fce01a5`
+Node24 CI'da 38/38 AI-06 PASS; bu sonuç yeni kaynak commitine
+taşınmaz. Gerçek Windows OS readback/effect kanıtı yoktur.

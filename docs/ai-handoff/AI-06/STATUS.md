@@ -22,3 +22,13 @@ Gecikmiş eski başarılı ACK yeni revoke neslini temizlemez.
 run `41211401246`: **7/7 SUCCESS**, Node22/24 36/36 AI-06 PASS.
 Migration #996 ayrı Draft; protected effect boundary ve AI-08 gate
 olmadan CORE NO-GO sürer.
+
+## Existing enrollment reuse TOCTOU
+
+AI-06 sahibi provider eski kaydedilmiş native consent'i tekrar
+kullanırken taze D1, Broker ve persistent local pending/STOP koşullarını
+doğruluyor. Native currentReadback aralığında değişen owner/ready/
+platform/session veya başka Agent pending işinde consent reuse
+reddedilir. Dört sentetik negatif test eklendi. Yeni exact SHA'nın
+CI sonucu beklenir; migration #996 ve protected OS effect-boundary
+halen koordinatör/AI-03 bağımlılığıdır, CORE NO-GO.

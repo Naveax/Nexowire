@@ -458,7 +458,32 @@ export class WindowsCoreConsoleProvider implements CoreConsoleNativeProvider {
           throw new Error('CORE_DEVICE_NOT_READY');
       }
       if(this.profile.certificate&&this.matches(state)&&!this.revoked&&
-        !(await this.options.store.stopped())&&await this.currentNativeConsent(signal,state))return true;
+        !(await this.options.store.stopped())&&await this.currentNativeConsent(signal,state)){
+        // Existing consent is reusable only after a NEW authority/Broker/local
+        // readback. The independent native call above is asynchronous: owner,
+        // logon, readiness, privilege, STOP or another process' pending work
+        // may have changed before it resolves.
+        const latest=await this.options.authority.call(this.profile,'read',{},signal);
+        const latestBroker=await this.options.broker.probe();
+        const disk=await this.options.store.load();
+        const stopped=await this.options.store.stopped();
+        const blocked=await this.options.store.blocked?.();
+        if(this.closed||this.revoked||signal.aborted||stopped||blocked||
+          !disk?.certificate||disk.pendingRevoke||disk.pendingDispatch||
+          disk.certificate.signatureBase64!==this.profile.certificate.signatureBase64||
+          !this.matches(latest)||latest.devicePlatform!=='win32'||
+          latest.deviceReady!==true||latest.publicKeySpki!==state.publicKeySpki||
+          latest.nativeConsentReceiptId!==state.nativeConsentReceiptId||
+          latest.windowsUserSid!==state.windowsUserSid||
+          latest.windowsSessionId!==state.windowsSessionId||
+          latest.windowsLogonLuid!==state.windowsLogonLuid||
+          latest.windowsLogonSessionEpoch!==state.windowsLogonSessionEpoch||
+          JSON.stringify(this.current(state))!==JSON.stringify(this.current(latest))||
+          latestBroker.reachable!==true||latestBroker.elevated!==true||
+          latestBroker.version!==NEXOWIRE_VERSION)
+          throw new Error('CORE_EXISTING_ENROLLMENT_READBACK_STALE');
+        return true;
+      }
       if(!this.options.native)await executeCoreConsoleNative('probe',{},'',signal);
       // Fence any legacy approval BEFORE issuing a new challenge. The challenge
       // must bind epochs after this monotonic revoke, not before it.

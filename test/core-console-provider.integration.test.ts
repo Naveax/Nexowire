@@ -232,6 +232,34 @@ test('an enrollment retry during idle readiness loss cannot discard the existing
   }finally{runtime?.provider.close();f.db.close();}
 });
 
+for(const race of [
+  {name:'device offline',mutate:(f:ReturnType<typeof fixture>)=>
+    f.db.exec('UPDATE devices SET online=0')},
+  {name:'Broker readiness lost',mutate:(f:ReturnType<typeof fixture>)=>
+    f.db.exec('UPDATE devices SET admin_bridge_ready=0')},
+  {name:'owner account changed',mutate:(f:ReturnType<typeof fixture>)=>
+    f.db.exec("UPDATE devices SET owner_account_id='owner-changed-during-existing-consent'")},
+  {name:'another provider persisted pending dispatch',mutate:(f:ReturnType<typeof fixture>)=>{
+    const profile=f.profile();
+    f.setProfile({...profile,pendingDispatch:{requestId:randomUUID(),fingerprint:'a'.repeat(64)}});
+  }},
+])test('AI-06: existing consent reuse cannot return success after async '+race.name,async()=>{
+  const f=fixture();
+  try{
+    const runtime=await enable(f);
+    let interleaved=false;
+    f.afterLocalReadback(()=>{interleaved=true;race.mutate(f);});
+    await assert.rejects(runtime.controller.enroll(new AbortController().signal),
+      /CORE_EXISTING_ENROLLMENT_READBACK_STALE/,
+      'native proof from before a remote/local mutation cannot reopen consent');
+    assert.equal(interleaved,true,'the local readback race hook must fire');
+    assert.equal(f.consents(),1,'unsafe consent reuse must not prompt a second owner approval');
+    assert.equal(f.effects(),0,'readback-only race cannot dispatch native input');
+    assert.equal((await runtime.controller.status('full')).active,false);
+    runtime.provider.close();
+  }finally{f.db.close();}
+});
+
 test('an enrollment retry with pending work still revokes and drains before any new approval',{timeout:10000},async()=>{
   const f=fixture();let runtime:Awaited<ReturnType<typeof enable>>|undefined;
   let entered!:()=>void,release!:()=>void,revokeStarted!:()=>void;

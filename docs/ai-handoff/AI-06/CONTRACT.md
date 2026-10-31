@@ -143,3 +143,18 @@ Eski/sırasız bir başarılı ACK, daha yeni revokeyi onaylayamaz.
 Bu kontrol yalnız local controller içindir; gerçek native service
 revocation monotonic ledger/effect-boundary readback zorunludur.
 Sentetik `provider.enroll=true` bir OS yetkilendirme kanıtı değildir.
+
+## Önceden onaylanmış enrollment'ın readback sırasında yeniden kullanılması
+
+`WindowsCoreConsoleProvider.enroll()` daha önce saklanmış konsol
+onayını tekrar kullanmadan önce native `currentReadback()` sonrasında
+**yeni D1 owner/device/platform/session/epoch/readiness**, Broker
+sürüm/elevated/reachable ve persisted STOP/block/pendingDispatch
+kontrolü yapar. Eski proof ile araya giren owner re-pair, offline,
+Broker privilege kaybı, session switch veya başka Agent'ın pending
+işlem kaydı `CORE_EXISTING_ENROLLMENT_READBACK_STALE` döndürür.
+Kayıt otomatik silinmez veya yeniden prompt oluşturulmaz.
+
+Bu kontrol JavaScript readback ile native OS effect arasında atomiklik
+kanıtı değildir. Kaynak testleri sentetiktir ve protected owner
+consent/effect-boundary provider hâlâ entegrasyon şartıdır.
