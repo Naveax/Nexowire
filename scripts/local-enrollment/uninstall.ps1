@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 # Separate opt-in service removal. Never reset grants, nonce claims, owner
 # credentials, revocation markers or the existing Agent/Broker installation.
 # Default is read-only. Removing service registration is not CORE approval.
-if(-not [Environment]::OSVersion.Platform.ToString().StartsWith('Win')){
+if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT){
     throw 'WINDOWS_ONLY'
 }
 function Assert-PlainPath([string]$path){
