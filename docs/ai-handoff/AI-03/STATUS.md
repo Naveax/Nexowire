@@ -9,3 +9,5 @@
 - Source ownership: only the 12 explicitly allowed AI-03 source/test paths and `docs/ai-handoff/AI-03/**`. No shared CI, installer, other agents' files or main touched.
 - Next: inspect the new HEAD CI without duplicate dispatch; keep PR Draft for AI-08 independent review and coordinator/AI-02 protected enrollment integration.
 - Local checkout unavailable (GitHub DNS in sandbox); **local repository test exit codes N/A, not PASS**. No physical/Windows CORE acceptance performed.
+
+- Next follow-up: absolute timeout enforcement for fetch/body reads that ignore cancellation and bounded nonawaited stream cancellation. Exact SHA and CI must be read from GitHub after this commit; previous CI cannot be transferred. CORE stays NO_GO.

@@ -202,6 +202,46 @@ test('signed non-200 success responses are terminal and never accepted as verifi
   assert.deepEqual((await callProtectedCoreNativeAuthority({...trust,fetchImpl:ok},wire)).proof,p);
 });
 
+test('native authority deadline is absolute when injected transport, body or cancel ignores abort',async()=>{
+  const p=proofFor(challenge()),request:CoreNativeWireRequest={
+    version:1,operation:'current-readback',nonce:randomUUID(),expected:{receiptId:p.receiptId}};
+  const trust={origin:'https://127.0.0.1:18764',
+    credential:'fixture-valid-bearer-only',pinnedSpkiBase64:pin,timeoutMs:120};
+  const bounded=async(work:Promise<unknown>,expected:RegExp)=>{
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+      await assert.rejects(Promise.race([work,new Promise<never>((_,reject)=>{
+        timer=setTimeout(()=>reject(Error('TEST_NATIVE_AUTHORITY_WATCHDOG_EXPIRED')),900);
+      })]),expected);
+    }finally{if(timer)clearTimeout(timer)}
+  };
+
+  // The first promise ignores both the passed signal and the timeout clock.
+  const ignoredFetch=(async()=>new Promise<Response>(()=>{})) as typeof fetch;
+  await bounded(callProtectedCoreNativeAuthority({...trust,fetchImpl:ignoredFetch},request),
+    /CORE_NATIVE_CALL_ABORTED/);
+
+  // Valid HTTP metadata does not make an unresponsive response body acceptable.
+  const stuckBody=new ReadableStream<Uint8Array>({start(){}});
+  const ignoredBody=(async()=>new Response(stuckBody,{status:200,
+    headers:{'content-type':'application/json'}})) as typeof fetch;
+  await bounded(callProtectedCoreNativeAuthority({...trust,fetchImpl:ignoredBody},request),
+    /CORE_NATIVE_CALL_ABORTED/);
+
+  // Even stream.cancel() can intentionally never resolve. Bounded rejection
+  // must not wait for a remote peer to cooperate with cleanup.
+  let cancelCalled=0;
+  const oversizedBody=new ReadableStream<Uint8Array>({
+    start(c){c.enqueue(new Uint8Array(8193))},
+    cancel(){cancelCalled++;return new Promise<void>(()=>{})},
+  });
+  const ignoredCancel=(async()=>new Response(oversizedBody,{status:200,
+    headers:{'content-type':'application/json'}})) as typeof fetch;
+  await bounded(callProtectedCoreNativeAuthority({...trust,fetchImpl:ignoredCancel},request),
+    /CORE_NATIVE_RESPONSE_TOO_LARGE/);
+  assert.equal(cancelCalled,1);
+});
+
 test('approval response cannot follow a caller owner/session change during transport await',async()=>{
   const c=challenge(),original={...c};
   const forged=proofFor({...c,ownerAccountId:'other-owner-account',grantGeneration:22});

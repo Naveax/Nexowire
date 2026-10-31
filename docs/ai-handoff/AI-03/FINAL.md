@@ -9,3 +9,5 @@
 - Integration remains BLOCKED on AI-02 versioned protected local v2 ES256 issuer/grant readback and current Windows session evidence, protected certificate/credential mapping, independent revoke/restore witness, authenticated Worker or mTLS deployment composition, AI-08 independent security review and two-device physical acceptance.
 - No change to CORE flags/dispatch, Agent/Broker, Windows service, real UAC/ACL/DPAPI/TPM, live devices, production database, workflow, other AI branches or `main`. No merge, deploy or force push.
 - Remaining interfaces documented in `CONTRACT.md` and `INTEGRATION_REQUEST.md`.
+
+- Additional source-only timeout negative: injected fetch never resolves, response body never yields, and an oversized body's cancellation hangs. These must still fail closed by the absolute deadline or size bound, without retry. Verify new exact-head CI separately; no physical acceptance.

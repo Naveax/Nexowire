@@ -21,3 +21,8 @@
 - `npm run typecheck`: NOT RUN locally, exit code N/A.
 - Sandbox has no checked-out dependency tree or working GitHub DNS; do not promote GitHub CI into a local execution claim.
 - Test certificates, local software signer, mock native witness and disposable DB are **not** real Windows UAC, protected CNG/TPM, owner SID/session/LUID kernel readback, rollback-resistant external witness or physical two-PC consent. CORE remains `NO_GO`.
+
+## New adversarial liveness regression (follow-up HEAD not yet CI-verified)
+- Source: `src/protocol/core-native-consent-transport.ts`; test: `test/core-native-consent-transport.test.ts`.
+- Tests an injected fetch that ignores abort and never resolves; an HTTP 200 JSON response with a body that never yields; and an oversized stream whose `cancel()` never resolves. All must fail closed within the configured absolute deadline or byte bound without retries. A separate 900ms test watchdog prevents hanging CI if the safeguard regresses.
+- Prior source SHA `559d0b36330cfc33e9334333960927aef3bbd6de` had CI run [41200058343](https://github.com/Naveax/Nexowire/actions/runs/41200058343) in progress at source inspection; it does **not** prove the new follow-up. The last fully completed CI was `85df4259de234ddcebd8e73277df979d878db921` / run 41198185416 SUCCESS 7/7. Exact new HEAD CI must be checked independently.

@@ -31,3 +31,7 @@ No code in this PR authorizes dispatch, sets CORE active, provisions production 
 
 ## Exact HTTP acknowledgement
 - The common protected authority caller accepts only **HTTP 200**. Other 2xx statuses (201 Created, 202 Accepted, 206 Partial Content) are terminal `CORE_NATIVE_AUTHORITY_UNAVAILABLE`, even when their JSON body carries a syntactically valid signed response. This matches the concrete mTLS adapter's existing 200-only rule and avoids treating partial/async responses as final enrollment or readback authorization.
+
+## Absolute deadline even for noncooperative transports
+- The protected authority caller now races injected fetch and every response-body read against one absolute AbortSignal deadline. Injection code ignoring `AbortSignal` cannot keep a sensitive enrollment call pending indefinitely. A blocked cancel operation for an oversized body is never awaited; terminal UNKNOWN/ABORTED does not authorize replay or retry.
+- The concrete pinned mTLS transport retains its independent timeout and TLS checks. This guard is only defense in depth; it does not turn a mock/custom `fetchImpl` into a trusted client-certificate provider.

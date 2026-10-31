@@ -122,11 +122,22 @@ export async function callProtectedCoreNativeAuthority(
   // server CA/hostname verification *and* the exact server SPKI pin. In particular,
   // an accidental omission must not send a protected bearer to an unpinned host.
   if(typeof fetchImpl!=='function')throw new Error('CORE_NATIVE_PROTECTED_TRANSPORT_REQUIRED');
-  const response=await fetchImpl(url.origin+'/v1/core-native-consent',{
+// AbortSignal alone is advisory: a misbehaving injected transport or body
+  // reader can ignore it. Race both network and stream reads against the same
+  // absolute deadline; failure is terminal, never a retry/positive consent.
+  let rejectOnAbort:()=>void=()=>{};
+  const aborted=new Promise<never>((_resolve,reject)=>{
+    rejectOnAbort=()=>reject(new Error('CORE_NATIVE_CALL_ABORTED'));
+  });
+  abort.addEventListener('abort',rejectOnAbort,{once:true});
+  try{
+    if(abort.aborted)rejectOnAbort();
+    const response=await Promise.race([fetchImpl(url.origin+'/v1/core-native-consent',{
     method:'POST',cache:'no-store',redirect:'error',
     headers:{'content-type':'application/json','authorization':'Bearer '+credential},
     body:JSON.stringify(original),signal:abort,
-  });
+    }),aborted]);
+    if(abort.aborted)throw new Error('CORE_NATIVE_CALL_ABORTED');
   // HTTP 201/202/206 are not the one documented verifier acknowledgement.
   // Even a correctly signed payload must not redefine a 200-only operation.
   if(response.status!==200||!response.ok||response.redirected)
@@ -144,17 +155,25 @@ export async function callProtectedCoreNativeAuthority(
   const chunks:Uint8Array[]=[];let bytes=0;
   try{
     for(;;){
-      const part=await reader.read();
+      const part=await Promise.race([reader.read(),aborted]);
       if(part.done)break;
       bytes+=part.value.byteLength;
-      if(bytes>8192){await reader.cancel();throw new Error('CORE_NATIVE_RESPONSE_TOO_LARGE');}
+      if(bytes>8192){
+        // A hostile stream can also stall in cancel(); do not await cleanup.
+        void reader.cancel().catch(()=>undefined);
+        throw new Error('CORE_NATIVE_RESPONSE_TOO_LARGE');
+      }
       chunks.push(part.value);
     }
-  }finally{reader.releaseLock();}
-  if(abort.aborted)throw new Error('CORE_NATIVE_CALL_ABORTED');
-  const merged=new Uint8Array(bytes);let offset=0;
-  for(const part of chunks){merged.set(part,offset);offset+=part.length;}
-  return parseTrustedCoreNativeResponse(
-    JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(merged)) as unknown,
-    original,pinnedSpkiBase64);
+    }finally{
+      if(abort.aborted)void reader.cancel().catch(()=>undefined);
+      reader.releaseLock();
+    }
+    if(abort.aborted)throw new Error('CORE_NATIVE_CALL_ABORTED');
+    const merged=new Uint8Array(bytes);let offset=0;
+    for(const part of chunks){merged.set(part,offset);offset+=part.length;}
+    return parseTrustedCoreNativeResponse(
+      JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(merged)) as unknown,
+      original,pinnedSpkiBase64);
+  }finally{abort.removeEventListener('abort',rejectOnAbort)}
 }
