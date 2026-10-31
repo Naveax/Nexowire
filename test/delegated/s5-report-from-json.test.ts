@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {summarize,markdown,csv,type Measurement} from '../../scripts/delegated/s5-report-from-json.js';
+const fixture=():Measurement=>({schema:'delegated-s5-samples-v1',kind:'synthetic',startedAtUtc:'2026-10-31T00:00:00Z',endedAtUtc:'2026-10-31T00:01:00Z',environment:'offline fixture',unit:'ms',samples:Array.from({length:100},(_,i)=>({ok:i<90,latency:i+1}))});
+test('nearest rank known 100-sample distribution',()=>{const r=summarize(fixture());assert.deepEqual([r.p50,r.p95,r.p99],[50,95,99]);assert.equal(r.capacity,'UNKNOWN')});
+test('success and failure counts preserved',()=>{const r=summarize(fixture());assert.equal(r.success,90);assert.equal(r.errors,10);assert.equal(r.samples,100)});
+test('empty samples remain unknown',()=>{const f=fixture();f.samples=[];assert.equal(summarize(f).p50,'UNKNOWN')});
+test('null latency excluded without losing outcome',()=>{const f=fixture();f.samples=[{ok:false,latency:null}];const r=summarize(f);assert.equal(r.errors,1);assert.equal(r.latencySamples,0);assert.equal(r.p99,'UNKNOWN')});
+test('small sample warns and zero latency valid',()=>{const f=fixture();f.samples=[{ok:true,latency:0}];assert.match(summarize(f).warning,/INSUFFICIENT/);assert.equal(summarize(f).p99,0)});
+test('reject negative and nonfinite latencies',()=>{for(const n of [-1,NaN,Infinity]){const f=fixture();f.samples[0]!.latency=n;assert.throws(()=>summarize(f))}});
+test('reject unknown unit/schema and reversed time',()=>{const f=fixture();assert.throws(()=>summarize({...f,unit:'s'} as unknown as Measurement));assert.throws(()=>summarize({...f,endedAtUtc:'2025-01-01T00:00:00Z'}));assert.throws(()=>summarize({...f,schema:'other'} as unknown as Measurement))});
+test('markdown preserves context and never declares capacity',()=>{const s=markdown(fixture());for(const value of ['offline fixture','synthetic','2026-10-31T00:00:00Z','UNKNOWN','ms'])assert.ok(s.includes(value))});
+test('CSV quotes commas, quotes and newlines',()=>{const f=fixture();f.environment='a,"b"\nc';assert.ok(csv(f).includes('"a,""b""\nc"'))});
+test('input order and caller arrays unchanged',()=>{const f=fixture();f.samples.reverse();const before=JSON.stringify(f);assert.equal(summarize(f).p95,95);assert.equal(JSON.stringify(f),before)});
