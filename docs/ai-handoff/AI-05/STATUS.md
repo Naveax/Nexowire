@@ -17,8 +17,10 @@
 3. HTTPS grant CAS reserve/revoke/re-pair classifies 408/425/429/5xx as UNKNOWN, not a reliable terminal refusal; no hidden transport retries.
 4. HTTPS request/scope/revoke/re-pair and remote monotonic witness requests reject getter/Proxy/symbol/hidden/extra fields without calling hostile accessors.
 5. Original authority/credential/provider configuration pinned at constructor; no retargeting from a mutable shared settings object.
-6. New synthetic tests: 9 PostgreSQL scope, 6 HTTPS outcome, 3 standalone remote witness, **18 total**.
+6. New synthetic tests: 10 PostgreSQL scope, 6 HTTPS outcome, 3 standalone remote witness, **19 total**.
 
 ## Next gate
 
 Wait for exact HEAD typecheck, Node 22/24 tests, build and the full 7-job CI matrix. Do not re-dispatch same SHA/workflow/input. If CI fails, fix only AI-05-owned files and preserve negative assertions. AI-08 may independently review without changing this source. Coordinator owns shared CI, integration and release. No live Agent, Broker, UAC/ACL or two-PC operation authorized.
+
+2026-10-31: AI-05 PostgreSQL request/scope/receipt Proxy trap denial added. 19 synthetic regressions total; exact final-head CI must be independently verified. CORE remains NO_GO.

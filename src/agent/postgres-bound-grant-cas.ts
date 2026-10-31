@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import {types as nodeTypes} from 'node:util';
 import type {CasRequest,CasReservation,MonotonicTrustRoot}
   from './remote-mutation-cas.js';
 import type {WitnessPgConnection,WitnessPgPool,
@@ -18,7 +19,8 @@ const request=z.object({
  * This does not authenticate the request: external CAS remains authoritative.
  */
 function immutableRequest(candidate:unknown):Readonly<CasRequest>{
-  if(!candidate||typeof candidate!=='object'||Array.isArray(candidate))
+  if(!candidate||typeof candidate!=='object'||Array.isArray(candidate)||
+     nodeTypes.isProxy(candidate))
     reject('BOUND_CAS_REQUEST_INVALID');
   const inspected=candidate as object;
   let descriptors:PropertyDescriptorMap;
@@ -166,7 +168,8 @@ function validScope(scope:AuthenticatedGrantScope,requested:CasRequest):void{
 function immutableScope(
   candidate:unknown,requested:CasRequest,
 ):Readonly<AuthenticatedGrantScope>{
-  if(!candidate||typeof candidate!=='object'||Array.isArray(candidate))
+  if(!candidate||typeof candidate!=='object'||Array.isArray(candidate)||
+     nodeTypes.isProxy(candidate))
     reject('BOUND_CAS_UNVERIFIED_SCOPE');
   // The preceding runtime guard guarantees an object; keep that narrowing
   // explicit for Reflect.ownKeys across the TypeScript compiler matrix.
@@ -209,7 +212,8 @@ function immutableScope(
 function immutableExternalReceipt(
   value:unknown,
 ):Readonly<ExternalGrantCasReceipt>{
-  if(!value||typeof value!=='object'||Array.isArray(value))
+  if(!value||typeof value!=='object'||Array.isArray(value)||
+     nodeTypes.isProxy(value))
     reject('BOUND_CAS_EXTERNAL_PROOF_MISMATCH');
   const inspected=value as object;
   let descriptors:PropertyDescriptorMap;

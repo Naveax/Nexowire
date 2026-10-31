@@ -342,3 +342,41 @@ test('AI-05 external CAS provider cannot be swapped during SQL await',async()=>{
   assert.equal(unauthorizedCalls,0);
   assert.equal(f.evidence.queries.at(-1),'COMMIT');
 });
+
+test('AI-05 Proxy-backed request/scope/receipt rejected without invoking traps',async()=>{
+  let traps=0;
+  const proxy=<T extends object>(value:T):T=>new Proxy(value,{
+    ownKeys(target){traps++;return Reflect.ownKeys(target)},
+    getOwnPropertyDescriptor(target,key){
+      traps++;return Reflect.getOwnPropertyDescriptor(target,key);
+    },
+  });
+  const raw=fixture({resolve:async()=>scope()});
+  await assert.rejects(raw.cas.reserve(proxy(request())),
+    hasCode('BOUND_CAS_REQUEST_INVALID'));
+  assert.equal(raw.evidence.queries.length,0);
+  assert.equal(raw.evidence.externalCalls,0);
+
+  const identified=fixture({resolve:async()=>proxy(scope())});
+  await assert.rejects(identified.cas.reserve(request()),
+    hasCode('BOUND_CAS_UNVERIFIED_SCOPE'));
+  assert.equal(identified.evidence.queries.length,0);
+  assert.equal(identified.evidence.externalCalls,0);
+
+  const proof=fixture({
+    resolve:async()=>scope(),
+    reserve:async(input,bound)=>proxy({
+      authorityId:ids.authority,deviceId:input.deviceId,epoch:input.epoch,
+      requestId:input.requestId,ownerId:bound.ownerId,
+      sessionEpoch:bound.sessionEpoch,grantGeneration:bound.expectedGeneration,
+      fingerprint:input.fingerprint,capability:input.capability,
+      sequence:71,created:true,
+    }),
+  });
+  await assert.rejects(proof.cas.reserve(request()),
+    hasCode('BOUND_CAS_EXTERNAL_PROOF_MISMATCH'));
+  assert.equal(proof.evidence.externalCalls,1);
+  assert.equal(proof.evidence.insert,null);
+  assert.ok(proof.evidence.queries.includes('ROLLBACK'));
+  assert.equal(traps,0);
+});

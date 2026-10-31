@@ -17,3 +17,6 @@ Network uncertainty (timeout, lost ACK, HTTP 408/425/429/5xx, invalid or absent 
 AI-05's approved executor callback must use the exact immutable payload bytes and fingerprint admitted by an independently protected Broker CAS fence. `CORE_EXECUTOR_DISPATCH_ENABLED=false` remains in source; no test fixture or signed JSON receipt enables it. AI-04 owns the separate Broker-side per-effect authorization and signed receipts. AI-07 owns OS worker launch/containment. The coordinator owns `src/agent/native-agent.ts`, `operation-journal.ts`, CI workflow and integration.
 
 A valid `created:false` is **not** new execution permission. After lost ACK / restart / UNKNOWN no second mutation is allowed for the original UUID. No physical Windows/device/kernel authorization is claimed by this source-only PR.
+
+## Proxy trust boundary
+PostgreSQL request, authenticated scope and external receipt reject Proxy-wrapped objects before Reflect descriptor inspection. No hostile Proxy traps are invoked during admission. This is source hardening, not independent native identity evidence.
