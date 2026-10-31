@@ -129,3 +129,106 @@ test('AI-05 authorityId cannot be retargeted after constructor before signed pro
     code('EXTERNAL_REPAIR_PROOF_SCOPE_MISMATCH'));
   assert.equal(requested,3,'no unexpected retry of foreign authority proof');
 });
+
+
+test('AI-05 HTTPS CAS rejects accessor-backed identity and signed approval without invoking getters',async()=>{
+  const cas=client();
+  let getterReads=0,credentialCalls=0;
+  const original=Object.defineProperty({...operation},'requestId',{
+    enumerable:true,configurable:true,
+    get(){getterReads++;return ids.request},
+  });
+  const provider=new HttpsExternalGrantCas({
+    endpoint:'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    authorityId:ids.authority,
+    credentialFor:async()=>{credentialCalls++;return 'untrusted-test-token';},
+  });
+  await assert.rejects(provider.reserveIfCurrent(original,grant),
+    code('EXTERNAL_GRANT_INPUT_INVALID'));
+  const hostileScope=Object.defineProperty({...grant},'ownerId',{
+    enumerable:true,configurable:true,
+    get(){getterReads++;return ids.owner},
+  });
+  await assert.rejects(provider.reserveIfCurrent(operation,hostileScope),
+    code('EXTERNAL_GRANT_SCOPE_INVALID'));
+  for(const [input,invoke,expectedCode] of [
+    [revoke,(value:typeof revoke)=>provider.revokeIfCurrent(value),
+      'EXTERNAL_REVOKE_INPUT_INVALID'],
+    [repair,(value:typeof repair)=>provider.rePairIfCurrent(value),
+      'EXTERNAL_REPAIR_INPUT_INVALID'],
+  ] as const){
+    const hostile=Object.defineProperty({...input},'signedOwnerApproval',{
+      enumerable:true,configurable:true,
+      get(){getterReads++;return 'x'.repeat(64)},
+    });
+    await assert.rejects(invoke(hostile as never),code(expectedCode));
+  }
+  assert.equal(getterReads,0);
+  assert.equal(credentialCalls,0);
+  void cas;
+});
+
+test('AI-05 HTTPS CAS rejects proxy, symbol and hidden identity properties before transport',async()=>{
+  let traps=0,credentials=0;
+  const provider=new HttpsExternalGrantCas({
+    endpoint:'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    authorityId:ids.authority,
+    credentialFor:async()=>{credentials++;return 'untrusted-test-token';},
+  });
+  const proxy=new Proxy({...operation},{
+    getOwnPropertyDescriptor(target,key){
+      traps++;return Reflect.getOwnPropertyDescriptor(target,key);
+    },
+    ownKeys(target){traps++;return Reflect.ownKeys(target)},
+  });
+  const symbol={...operation,[Symbol('hidden')]:ids.owner};
+  const hidden=Object.defineProperty({...operation},'fingerprint',{
+    enumerable:false,configurable:true,value:operation.fingerprint,
+  });
+  for(const value of [proxy,symbol,hidden]){
+    await assert.rejects(provider.reserveIfCurrent(value),
+      code('EXTERNAL_GRANT_INPUT_INVALID'));
+  }
+  assert.equal(traps,0);
+  assert.equal(credentials,0);
+});
+
+test('AI-05 HTTPS CAS sends admitted immutable wire bytes after credential await',async t=>{
+  const original={...operation},scopeInput={...grant};
+  const revocation={...revoke},repairInput={...repair};
+  const resolvers:Array<(token:string)=>void>=[];
+  const seen:Array<{url:string;data:unknown}>=[];
+  t.mock.method(globalThis,'fetch',async (target:URL|Request|string,
+    init?:RequestInit)=>{
+    seen.push({url:String(target),data:JSON.parse(String(init?.body))});
+    return new Response('uncertain external outcome',{status:503});
+  });
+  const provider=new HttpsExternalGrantCas({
+    endpoint:'https://nexowire-cas.invalid/v1/grant-cas/reserve',
+    authorityId:ids.authority,
+    credentialFor:async()=>new Promise<string>(resolve=>{resolvers.push(resolve)}),
+  });
+  const calls=[
+    {pending:provider.reserveIfCurrent(original,scopeInput),
+      code:'EXTERNAL_GRANT_TRANSPORT_UNKNOWN'},
+    {pending:provider.revokeIfCurrent(revocation),
+      code:'EXTERNAL_REVOKE_OUTCOME_UNKNOWN'},
+    {pending:provider.rePairIfCurrent(repairInput),
+      code:'EXTERNAL_REPAIR_OUTCOME_UNKNOWN'},
+  ];
+  assert.equal(resolvers.length,3);
+  original.fingerprint='b'.repeat(64);
+  original.requestId=ids.newEpoch;
+  scopeInput.ownerId=ids.newOwner;
+  scopeInput.expectedGeneration=99;
+  revocation.ownerId=ids.newOwner;
+  revocation.signedOwnerApproval='y'.repeat(64);
+  repairInput.newOwnerId=ids.owner;
+  repairInput.signedOwnerApproval='z'.repeat(64);
+  for(const resolve of resolvers)resolve('valid-only-for-synthetic-test');
+  for(const call of calls)await assert.rejects(call.pending,code(call.code));
+  assert.equal(seen.length,3);
+  assert.deepEqual(seen[0]?.data,{request:operation,scope:grant});
+  assert.deepEqual(seen[1]?.data,revoke);
+  assert.deepEqual(seen[2]?.data,repair);
+});

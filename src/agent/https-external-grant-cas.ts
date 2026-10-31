@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import {types as nodeTypes} from 'node:util';
 import type {CasRequest} from './remote-mutation-cas.js';
 import type {AuthenticatedGrantScope,ExternalGrantCas,
   ExternalGrantCasReceipt,ExternalRevokeRequest,ExternalRevokeReceipt,
@@ -50,6 +51,39 @@ export class ExternalGrantTransportError extends Error {
 const reject=(code:string):never=>{throw new ExternalGrantTransportError(code)};
 
 /**
+ * The authority input consists exclusively of primitive scalar fields.
+ * Reconstruct it from own enumerable data descriptors BEFORE any asynchronous
+ * credential, CAS, or HTTP call. Zod parsing of a borrowed object can execute
+ * a getter; a proxy can execute traps even during descriptor inspection.
+ *
+ * Do not treat this snapshot as authentication: the independently protected
+ * external CAS must still check current owner/device/session and one-use UUID.
+ */
+function plainCasRecordSnapshot(
+  raw:unknown,fields:readonly string[],errorCode:string,
+):Record<string,unknown>{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||nodeTypes.isProxy(raw))
+    return reject(errorCode);
+  const record=raw as object;
+  let descriptors:PropertyDescriptorMap;
+  let keys:PropertyKey[];
+  let prototype:unknown;
+  try{
+    descriptors=Object.getOwnPropertyDescriptors(record);
+    keys=Reflect.ownKeys(record);
+    prototype=Object.getPrototypeOf(record);
+  }catch{return reject(errorCode)}
+  if((prototype!==Object.prototype&&prototype!==null)||
+     keys.length!==fields.length||
+     fields.some(field=>!Object.prototype.hasOwnProperty.call(descriptors,field)||
+       !('value' in descriptors[field]!)||
+       descriptors[field]!.enumerable!==true))
+    return reject(errorCode);
+  return Object.fromEntries(fields.map(field=>[field,descriptors[field]!.value]));
+}
+
+
+/**
  * A server may commit a one-use CAS mutation and still return a timeout,
  * overload response or 5xx. Such HTTP results MUST NOT be interpreted as a
  * definitive refusal that makes an automatic retry safe.
@@ -94,8 +128,15 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
   async reserveIfCurrent(
     input:CasRequest,authorization:AuthenticatedGrantScope,
   ):Promise<ExternalGrantCasReceipt>{
-    const operation=request.parse(input);
-    const bound=scope.parse(authorization);
+    const operation=Object.freeze(request.parse(plainCasRecordSnapshot(
+      input,['deviceId','epoch','requestId','fingerprint','capability'],
+      'EXTERNAL_GRANT_INPUT_INVALID',
+    )));
+    const bound=Object.freeze(scope.parse(plainCasRecordSnapshot(
+      authorization,['ownerId','deviceId','deviceEpoch','sessionEpoch',
+        'expectedGeneration','requiredPrivilege'],
+      'EXTERNAL_GRANT_SCOPE_INVALID',
+    )));
     if(operation.deviceId!==bound.deviceId||
        operation.epoch!==bound.deviceEpoch)
       reject('EXTERNAL_GRANT_SCOPE_INVALID');
@@ -137,7 +178,11 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     return proof;
   }
   async revokeIfCurrent(value:ExternalRevokeRequest):Promise<ExternalRevokeReceipt>{
-    const operation=revokeRequest.parse(value);
+    const operation=Object.freeze(revokeRequest.parse(plainCasRecordSnapshot(
+      value,['deviceId','ownerId','deviceEpoch','sessionEpoch',
+        'expectedGeneration','signedOwnerApproval'],
+      'EXTERNAL_REVOKE_INPUT_INVALID',
+    )));
     let token:string|undefined;
     try{token=await this.config.credentialFor(
       operation.deviceId,operation.deviceEpoch,operation.sessionEpoch)}
@@ -176,7 +221,12 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
     return data;
   }
   async rePairIfCurrent(value:ExternalRePairRequest):Promise<ExternalRePairReceipt>{
-    const operation=repairRequest.parse(value);
+    const operation=Object.freeze(repairRequest.parse(plainCasRecordSnapshot(
+      value,['deviceId','ownerId','deviceEpoch','sessionEpoch',
+        'expectedGeneration','signedOwnerApproval','newOwnerId',
+        'newDeviceEpoch','newSessionEpoch'],
+      'EXTERNAL_REPAIR_INPUT_INVALID',
+    )));
     if(operation.newDeviceEpoch===operation.deviceEpoch||
        operation.newSessionEpoch===operation.sessionEpoch)
       return reject('EXTERNAL_REPAIR_EPOCH_REUSE');
