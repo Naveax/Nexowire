@@ -14,3 +14,6 @@
 
 ## Additional adversarial source tests
 The source/test child `caadd1db53fb4993402a0abd06f3b8f2abb7c883` adds two cases: malicious request getter never invoked and polluted/prototype/symbol request denied. The latest patch also adds a ninth synthetic case: hidden non-enumerable authorization fields on request, authenticated scope and external receipt denied before mutation. The exact final-head CI must be checked separately; do not reuse run 41197201487 from the pre-handoff source SHA.
+
+## HTTPS post-dispatch uncertainty regression
+Added `test/ai05-cas-http-outcome.test.ts` with 2 deterministic tests: synthetic HTTP 408, 425, 429, 500, 503, 504 returned for reserve/revoke/re-pair (18 distinct requests, no internal retry; all denied as UNKNOWN) and explicit 403/409 responses (6 distinct requests, denied as refusal). Source-only fake fetch responses, not a real remote CAS service. CI exit codes for the new SHA are PENDING and must not inherit previous 9-case SHA results.

@@ -22,3 +22,6 @@ AI-04 owns Broker admission, signed effect receipts, Job/kernel readback, and th
 
 ## Original request data provenance
 `CasRequest` is copied from exactly five own enumerable data descriptors (deviceId, epoch, requestId, fingerprint, capability) before provenance, identity or SQL awaits. Inherited fields, symbol keys, unknown extra keys, accessor descriptors and hidden non-enumerable fields fail closed. Authenticated scope and external receipt apply the same own-enumerable-data rule before their first downstream await. This is structural binding only, not signed identity proof.
+
+## HTTPS ambiguous HTTP outcome boundary
+The external CAS HTTP adapter must preserve uncertainty after dispatch. HTTP 408, 425, 429 and any 5xx may mean that a one-use reserve, revoke or re-pair committed before the response was generated. These outcomes map to the operation-specific UNKNOWN/transport-unknown denial code, never to a definitive refusal. The client does not retry internally. Explicit authority 403/409 responses remain refusals only under the independent authority's no-side-effect rejection contract. Neither code is a permit. Transport UNKNOWN requires independent reconciliation before any new mutation.

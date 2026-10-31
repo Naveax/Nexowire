@@ -15,3 +15,5 @@ Next: inspect actual CI logs; fix only AI-05 paths; never relaunch an existing s
 Never turn on CORE_EXECUTOR_DISPATCH_ENABLED or deploy this branch.
 
 2026-10-31 additional hardening: caller-owned CAS request is snapshotted without accessors; hidden/non-enumerable keys on request, scope or receipt are denied. Source/test candidate SHA before this handoff commit: `caadd1db53fb4993402a0abd06f3b8f2abb7c883`. CI run 41197201487 observed in_progress. This document's future HEAD needs fresh exact-SHA CI.
+
+2026-10-31 follow-up: additional AI-05 HTTPS CAS transport uncertainty guard and 2 synthetic HTTP response tests were added. Existing PR #992 stays Draft; exact post-update SHA/CI is live GitHub state. No same-SHA workflow rerun and no real network/OS/CAS mutation.

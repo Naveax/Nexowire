@@ -17,3 +17,6 @@
 
 ## Follow-up delta
 The prior six-test handoff was extended to nine targeted AI-05 synthetic negatives, including original request getter, polluted keys/prototypes and non-enumerable identity/proof fields. Consult current PR HEAD and CI for final verification; local machine/physical acceptance remains unperformed and production stays NO_GO.
+
+## Additional AI-05 HTTP transport hardening
+Three one-use external grant actions (reserve/revoke/re-pair) now keep HTTP 408/425/429/5xx in UNKNOWN state to prevent treating an already-committed mutation as safe to retry. Two negative test cases cover uncertainty vs explicit 403/409 refusal. These are source-only and require exact-HEAD CI and external authority contract verification. Physical/production NO_GO unchanged.

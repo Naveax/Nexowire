@@ -50,6 +50,18 @@ export class ExternalGrantTransportError extends Error {
 const reject=(code:string):never=>{throw new ExternalGrantTransportError(code)};
 
 /**
+ * A server may commit a one-use CAS mutation and still return a timeout,
+ * overload response or 5xx. Such HTTP results MUST NOT be interpreted as a
+ * definitive refusal that makes an automatic retry safe.
+ *
+ * A strict non-ambiguous client error (e.g. 403/409) remains a refusal
+ * under the external authority's documented no-side-effect rejection contract.
+ */
+function httpOutcomeUncertain(status:number):boolean{
+  return status===408||status===425||status===429||status>=500;
+}
+
+/**
  * Production-wire HTTPS adapter for a separately enrolled monotonic CAS.
  *
  * IMPORTANT: This is a real transport/client implementation, NOT a hosted
@@ -97,7 +109,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
         signal:AbortSignal.timeout(this.config.timeoutMs??3500),
       });
     }catch{return reject('EXTERNAL_GRANT_TRANSPORT_UNKNOWN')}
-    if(!response.ok)return reject('EXTERNAL_GRANT_AUTHORITY_REFUSED');
+    if(!response.ok)return reject(httpOutcomeUncertain(response.status)
+      ?'EXTERNAL_GRANT_TRANSPORT_UNKNOWN':'EXTERNAL_GRANT_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
     catch{return reject('EXTERNAL_GRANT_PROOF_INVALID')}
@@ -136,7 +149,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
         signal:AbortSignal.timeout(this.config.timeoutMs??3500),
       });
     }catch{return reject('EXTERNAL_REVOKE_OUTCOME_UNKNOWN')}
-    if(!response.ok)return reject('EXTERNAL_REVOKE_AUTHORITY_REFUSED');
+    if(!response.ok)return reject(httpOutcomeUncertain(response.status)
+      ?'EXTERNAL_REVOKE_OUTCOME_UNKNOWN':'EXTERNAL_REVOKE_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
     catch{return reject('EXTERNAL_REVOKE_PROOF_INVALID')}
@@ -174,7 +188,8 @@ export class HttpsExternalGrantCas implements ExternalGrantCas {
       body:JSON.stringify(operation),
       signal:AbortSignal.timeout(this.config.timeoutMs??3500),
     })}catch{return reject('EXTERNAL_REPAIR_OUTCOME_UNKNOWN')}
-    if(!response.ok)return reject('EXTERNAL_REPAIR_AUTHORITY_REFUSED');
+    if(!response.ok)return reject(httpOutcomeUncertain(response.status)
+      ?'EXTERNAL_REPAIR_OUTCOME_UNKNOWN':'EXTERNAL_REPAIR_AUTHORITY_REFUSED');
     let payload:string;
     try{payload=await response.text()}
     catch{return reject('EXTERNAL_REPAIR_PROOF_INVALID')}
