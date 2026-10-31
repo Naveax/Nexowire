@@ -1,0 +1,60 @@
+# AI-08 | Entegrasyon ve kanıt talepleri (doğrudan değişiklik YOK)
+
+## #03 / #07: gerçek sandbox
+`task-os-sandbox-capability.ts` şu an native sandbox kurmuyor ve Agent dispatch'e entegre değil. #03 sahibi her `shell.exec`, `wsl.exec`, `process.start`, `task.graph.run`, `runbook.run`, `workspace.checks`, `workspace.snapshot` için başlamadan önce doğrulanabilir native provider admission + deny-on-UNKNOWN arayüzü sunmalı; #07 sahibi düşük yetkili token, handle/env inheritance, breakaway+descendant, file/network/IPC ve revoke cleanup ölçümünü vermeli. Bu QA branch'i source değiştirmez.
+
+## #04 / verifier: fiziksel enrollment
+Sentetik imzalı session proof veya loopback TLS sonucu kalıcı/gerçek UAC fiziksel kanıt değildir. Windows service identity, machine-bound DPAPI/TPM, gerçek owner SID, revoke/re-pair, logon/reboot/sleep ve machine pin için bağımsız native readback artefaktları ve iki yetkili cihazda owner-approved acceptance gerekir. CORE production durumunu açık tutmayın.
+
+## WAL / journal
+#974 açısından 1.0.8 kaynak ve canary yayın kanıtı, tüm Windows 10/11 + iki PC + sleep/interruption + 24h koşullarını karşılamaz. Dönüşüm sırasında aynı UNKNOWN/tombstone ve journal içerikleri korunmalı; gerçek SQLite dosyaları veya kullanıcı kimliği QA'ya taşınmamalı.
+
+## #01 / #02 / #04
+CAS tombstone'nin broker restart/failover/lost ACK altında kalıcılığı; privileged receipt native token doğrulaması; D1 claim sonrası platform/owner/readiness TOCTOU; native secure desktop input boundary ve revoke drain: ilgili modül sahipleri fiziksel/staging probe ve exact-SHA evidence sağlamalı. AI-08 yalnız QA/handoff üretir.
+
+## Koordinatör
+Mevcut `npm test` / CI matrisi testleri otomatik keşfetmiyorsa değişikliği yalnız koordinatör üstlenir. AI-08 `.github/workflows/**`, `package*.json` veya `src/**` değiştiremez.
+
+
+## 31 Ekim 2026 bağımsız koordinasyon notu
+AI-08 `9feb149e1b2723bb4609d21e4167824e400e9b85` kaynağında 32 yeni negatif PASS bulunur; bu testler **#984 bazında** yürüdü. AI-01 #986 WAL path/header TOCTOU, AI-03 #988 mTLS response parsing, AI-04 #987 Broker readback snapshot, AI-05 #992 CAS scoped reservation, AI-06 #985 D1 signing-key rotation ve AI-07 #990 sandbox hostile-reflection değişiklikleri kendi Draft HEAD'lerindedir. Bu PR'ların **başarı sonuçları birbirinin combined runtime'ı değildir**. Koordinatör bunları doğru bağımlılık sırasıyla ayrı entegrasyon HEAD'inde birleştirip 32 AI-08 negatif ile Node22/24 + Windows/source CI'ı yeniden çalıştırmalıdır; tarihsel RED kayıtları korunmalıdır.
+
+Son AI-08 ek testleri yalnızca kaynakta DB owner/grant/revoke ve Windows logon scope race'lerini doğrular. D1 claim sonrası gerçek OS effect boundary, signer public-key change (#985), broker native HIGH token readback, gerçek multi-process CAS failover/replay, kernel handle-env-child-network izolasyonu ve rollback/24h fiziksel kabul AI-08 üzerinde **kanıtlanmadı**. Bunlar kaynak sahiplerine ve owner test ortamına açık handoff olarak kalır. Testi skip/gevşetmek bu engelleri kapatmaz.
+
+
+## 31.10.2026 için owner-PR entegrasyon sınırı
+AI-08'nin #984 tabanında çalıştırdığı önceki 32 sentetik negatif, AI-01 #986, AI-03 #988, AI-04 #987, AI-05 #992, AI-06 #985, AI-07 #990 üzerinde sonradan değişen `src/**` ve `native/**` dosyalarını otomatik olarak kapsamaz. Koordinatör bu exact HEAD'leri doğru bağımlılık grafiğiyle **tek yeni isolated integration SHA** üzerinde test etmeli; owner PR'ların aktif `browser-live` run'larına aynı SHA'da duplicate dispatch yapılmamalı. Gerçek owner-approved Windows kernel/session ve iki-PC, 24h sleep/reboot provası ile native sandbox file/network/handle/child/revoke-drain kabulü açık `BLOCKED` kapılarıdır.
+
+
+## P0 handoff: native readback beklerken early complete / terminal-state laundering
+**AI-08 source review, 31.10.2026, base #984**: `src/product/d1-core-console-authority.ts:186-197` native readback'ten önce `reserved -> dispatched` commit ediyor; `:219-224` eşzamanlı `complete(succeeded)` ile `dispatched -> succeeded` olabiliyor; `:166-169,213-217` readback olumsuz dönerse yalnız `dispatched -> unknown` yapıp `succeeded` state'i tombstone edemiyor. Bu bir kaynak düzeyi P0 yarış riskidir; gerçek reproducibility yeni `test/ai08-console-claim.test.ts` CI'sında doğrulanacaktır.
+
+**Beklenen atomik sözleşme:** Native readback **tamamlanıp** bağımsız authority tarafından onaylanıncaya kadar `complete` işlemi **başarı yazamamalı**. Yeni persisted `claiming` / `native_verified` CAS marker veya eşdeğer rollback-independent admission gereklidir; migration `cloudflare/migrations/0019_core_console_authority.sql` ve production `src/product/d1-core-console-authority.ts` **AI-08 yetkisi dışında**. Mevcut ack-loss/replay/UNKNOWN tombstone semantiğini gevşetme. **Sahip:** AI-06 / koordinatör. Yerel QA bug çıktısı kırmızı kalırsa kaydı fail olarak tut; güvenlik kabulü NO_GO.
+
+
+## 1 Kasım | AI-07 protected sandbox adapter - handoff
+
+Bağımsız QA `test/ai08-sandbox-escape.test.ts` kaynak tabanı #984 üzerinde eklenmiştir. Testlerin doğruladığı şey, source-only `prepareSandboxRequiredCapability` / `prepareTaskSandboxWorker` portunun kernel/native permit değil **deny-only** oluşudur. `revokeTaskSandboxAndDrain` sentetik STOP success döndüremez. AI-07 #990, 1 Kasım gözleminde `4a31b5906fd62d7e97d9e1eddbbbcc0749595498` HEAD ve `41212601819` SUCCESS idi, fakat #989 testleri halen #984 bazında; değişiklikleri karıştırma.
+
+**AI-03 / AI-07 / koordinatör dış arayüz ihtiyacı:** Gerçek effect öncesi korumalı OS/sandbox kernel identity readback, parent env/privileged handle deny, guardian/Broker IPC ve network deny, child/grandchild containment, Job breakaway/nested job escape deny, revoke sonrası independently verified drain + external CAS tombstone. Yalnız JS report/signed-looking status veya native diagnostic source bu kanıtın yerini tutmaz. Birleşik exact HEAD üzerinde test, gerçek Windows kernel worker ve izinli fiziksel acceptance olmadan **CORE NO_GO**.
+
+
+## 1 Kasım 2026 | #985 + #996 birleşik P0 kabul kapısı (AI-08)
+
+- **Yetki sınırı:** AI-08 yalnız `test/ai08-console-claim.test.ts` fixture'ını değiştirir. #985 owner runtime ve #996 coordinator SQL dosyaları salt-okunur kalır. En son salt-okunur #985 source HEAD `d9dc636ebbabe7a82a5e34170da5e7517eeb22d4`, [CI #41247107420](https://github.com/Naveax/Nexowire/actions/runs/41247107420) SUCCESS. En son #996 migration HEAD `71286f47b11c6ba76ea59309c5a1aba4c3ea82dd`, [CI #41246389410](https://github.com/Naveax/Nexowire/actions/runs/41246389410) SUCCESS. **Bu ayrı CI sonuçları birleşik test değildir.**
+- **Yeni AI-08 fixture entegrasyonu:** `0014`, `0015`, `0019`, `0020` yanında, mevcutsa resmi `0021_core_console_native_claim_verified.sql` migration'ı **aynı disposable `node:sqlite` test DB'sine** uygulanır. SQL kopyası oluşturulmaz, production migration değiştirilmez. Eski #984 bazında `0021` yoktur; asıl P0 `acceptedEarly=true` testi beklendiği gibi RED kalır.
+- **Yanlış yeşili önleyen ek şart:** Orijinal `complete cannot acknowledge success before native claim readback` testinin `{acceptedEarly:false,stateAfterDeniedReadback:'unknown'}` assertion'ı **aynen korunur**. Bu assertion'dan sonra `HAS_NATIVE_CLAIM_MIGRATION===true` zorunludur. Böylece yeni #985 source tek başına eksik SQL kolonu yüzünden çağrıyı reddetse bile bu hata güvenli entegre acceptance olarak sayılmaz. Migration varlığı tek başına yeterli değildir; orijinal yarış testi ve diğer pozitif/negatifleri de geçmelidir.
+- **Koordinatör için exact SHA işi:** #985 runtime + #996 resmi D1 `0021` migration + #989 tüm QA testlerini doğru dependency sırasıyla **tek integration HEAD** üzerinde birleştirip `npm run typecheck`, `npm test`, `npm run build`, Windows browser-live ve bağımsız D1 negatifleriyle ölç. Post-readback marker'ı yalnız current owner/session/READY + değişmez request bağında CAS set edilebilir; legacy default-0 satırlar `succeeded` olamaz; UNKNOWN/replay terminal kalır.
+- **Ölçüm durumu:** Bu fixture değişikliği için yeni exact SHA CI henüz **NOT_TESTED**. Önceki QA HEAD `bb14213b43b127724875eadd170b2d9f5f9b28d1` [run #41246505285](https://github.com/Naveax/Nexowire/actions/runs/41246505285) Node24 job #124672088208 FAILURE, 2.823 total / 2.466 pass / 1 fail / 354 skipped / 2 TODO, **52/53 AI-08 PASS**; Node22 CANCELLED ama 4/4 yeni D1 negatifleri PASS. Windows browser-live önceki sorguda in_progress. **Geçmiş test sonucu yeni SHA'ya devredilmez.**
+- **Kanıt sınıfı:** `SYNTHETIC_SQLITE`. Gerçek Cloudflare D1 migration deploy'u, korumalı native readback, Windows owner/UAC/DPAPI/TPM, external CAS veya iki fiziksel PC kanıtı değildir. **Draft / CORE production NO-GO**.
+
+
+## 2026-11-01 | AI-08 yeni görev turu: P0 aynı-SHA araştırması ve 6 negatif
+
+- **Kanıt dökümü:** `docs/ai-handoff/AI-08/P0_EVIDENCE.md`. Eski HEAD `acdd659ab8181039f0a92571ab113193eaf4798c`, base `9d0f35607d4cde87bd031e2da77855cfaf570c31`, workflow [#41249373284](https://github.com/Naveax/Nexowire/actions/runs/41249373284) / attempt 1, Node22 job `124679715031` **FAILURE**. `2826 test / 2469 PASS / 1 FAIL / 354 SKIP / 2 TODO`, **55/56 AI-08 PASS**. P0 gerçek `acceptedEarly=true, stateAfterDeniedReadback='succeeded'`; beklenen `false/'unknown'`.
+- **Read-only birleşik denetim:** AI-06 #985 HEAD `e1081fbf8c6471099121bd48c7e4556f2a4fe709` (kaynak marker CAS var, CI #41249331481 son gözlemde in_progress); koordinatör #996 HEAD `71286f47b11c6ba76ea59309c5a1aba4c3ea82dd` (migration #0021, CI #41246389410 SUCCESS). #1007 child HEAD `61e8613e154916e5b260cc99d68aa7dc14495b6a`, eski #985 parent/base `d9dc636ebbabe7a82a5e34170da5e7517eeb22d4`; CI [#41247579710](https://github.com/Naveax/Nexowire/actions/runs/41247579710) **FAILURE**, Node24 job `124674112476`: `2817 total / 2461 PASS / 2 FAIL / 352 SKIP / 2 TODO`. 0021 migrasyon dosyası var ama #1007'deki eski AI-08 fixture yalnız 0014/0015/0019/0020 uygular; iki fail `no such column: native_claim_verified`. Eski early-ACK testi SQL kolon eksikliğinden yanıltıcı PASS olur. **Birleşik P0 kabulü BLOCKED**.
+- **Yeni AI-08 kaynak testi:** `test/ai08-console-claim.test.ts` içine 6 vaka (dispatched→reserved, UNKNOWN→reserved, fingerprint/owner immutable, signed foreign fingerprint, native-readback beklerken revoke, reserve lost ACK) eklendi. **Orijinal P0 test gövdesi ve race latch/expected değiştirilmedi.** Üç doğrudan SQL immutability testi #996 gerçek migration olmadan eski #984 tabanında **RED bekleniyor**; yalnız combined real migration fixture ile PASS sayılsın. Yeni exact-HEAD CI sonuçları **NOT_TESTED**. Toplam AI-08 authored **62 test** (önceki 56 + 6). Native source owner/SQL dosyalarına yazılmadı.
+- **Bir sonraki kabul:** Koordinatör en yeni #985 runtime + #996 gerçek 0021 SQL + #989 güncel AI-08 testlerini **tek bir exact HEAD** üzerinde yürütmeli. Farklı PR run'larının PASS sonuçları aynı-SHA acceptance değildir; CORE kernel, protected Windows consent, revoke/external CAS, 2-PC fiziksel kabulü ayrı **BLOCKED**. `CORE_EXECUTOR_DISPATCH_ENABLED=false`; CORE **NO-GO**.
+- **Komutlar (CI exact HEAD için):** `npm run typecheck`, `node --test --import tsx test/ai08-*.test.ts`, `npm test`, `npm run build`. Yeni testlerin yerel exit code'u **NOT_RUN** (yerel clone yok); GitHub matching workflow sonuçları ayrıca doğrulanacak.
+
+**Coordinator handoff (do not edit #1007 from AI-08):** #1007 child `test/ai08-console-claim.test.ts` fixture'a **gerçek 0021 migration'ı** eklenmeden, güncel #989 test blob'u ve güncel #985 parent SHA birlikte gözden geçirilmeden merge/GO önerilmez. AI-08 bu fixture'ı kendi #989 testinde migration mevcutsa uygular ve erken ACK testi sonrasında 0021 varlığını zorunlu sayar. Yeni immutability testlerinde trigger yokluğu **kırmızı** kalmalı. Tam SQL/Natives için coordinator source review + same-SHA Node22/24 + Windows runner + fiziksel acceptance gereklidir.
