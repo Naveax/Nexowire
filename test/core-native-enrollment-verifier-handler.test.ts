@@ -45,10 +45,10 @@ test('independent native enrollment verifier enforces real TLS transport and sco
   run(['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout','ca.key',
     '-out','ca.crt','-days','1','-subj','/CN=Nexowire Disposable Verifier CA',
     '-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign']);
-  for(const name of ['server','client']){
+  for(const name of ['server','client','server-rotated']){
     await writeFile(path.join(root,name+'.ext'),'basicConstraints=critical,CA:FALSE\n'+
       'keyUsage=critical,digitalSignature\nextendedKeyUsage='+
-      (name==='server'?'serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n':'clientAuth\n'));
+      (name.startsWith('server')?'serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n':'clientAuth\n'));
     run(['req','-new','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes',
       '-keyout',name+'.key','-out',name+'.csr','-subj','/CN=Disposable '+name]);
     run(['x509','-req','-in',name+'.csr','-CA','ca.crt','-CAkey','ca.key','-CAcreateserial',
@@ -152,12 +152,18 @@ test('independent native enrollment verifier enforces real TLS transport and sco
   });
 
   await t.test('mTLS adapter bounds response bytes and absolute time, refuses redirects and never retries',async()=>{
-    let kind:'ok'|'redirect'|'large'|'slow'='ok',requests=0;
+    let kind:'ok'|'redirect'|'large'|'slow'|'bad-type'|'missing-type'|'duplicate-type'='ok',requests=0;
     const serverCert=await readFile(path.join(root,'server.crt'),'utf8');
     const strict=createCoreNativeVerifierServer({keyPem:await readFile(path.join(root,'server.key'),'utf8'),
       certificatePem:serverCert,clientCaPem:ca.toString('utf8'),handler:(_req,res)=>{
         requests++;
         if(kind==='redirect'){res.writeHead(307,{location:'https://foreign.invalid/'});res.end();return}
+        if(kind==='bad-type'){res.writeHead(200,{'content-type':'text/html'});res.end('{}');return}
+        if(kind==='missing-type'){res.end('{}');return}
+        if(kind==='duplicate-type'){
+          res.writeHead(200,{'content-type':['application/json','application/json']});res.end('{}');return;
+        }
+        res.setHeader('content-type','application/json');
         if(kind==='large'){res.end('x'.repeat(32769));return}
         if(kind==='slow'){
           res.writeHead(200);const timer=setInterval(()=>res.write(' '),10);
@@ -176,7 +182,7 @@ test('independent native enrollment verifier enforces real TLS transport and sco
       'content-type':'application/json'},body:'{}'};
     try{
       assert.equal(await (await transport(origin+'/v1/core-native-consent',options)).text(),'{}');
-      for(const mode of ['redirect','large','slow'] as const){
+      for(const mode of ['redirect','large','slow','bad-type','missing-type','duplicate-type'] as const){
         kind=mode;const before=requests;
         await assert.rejects(transport(origin+'/v1/core-native-consent',options),/REQUEST_UNKNOWN/);
         assert.equal(requests,before+1,'one HTTP request, never an automatic retry');
@@ -187,6 +193,44 @@ test('independent native enrollment verifier enforces real TLS transport and sco
         ...options,headers:{...options.headers,host:'foreign.invalid'}}),/REQUEST_INVALID/);
       assert.equal(requests,before,'invalid request never leaves the host');
     }finally{strict.closeAllConnections();await new Promise<void>(r=>strict.close(()=>r()))}
+  });
+
+  await t.test('server certificate rotation requires an explicit new SPKI pin',async()=>{
+    reset();
+    const previousCert=await readFile(path.join(root,'server.crt'),'utf8');
+    const nextCert=await readFile(path.join(root,'server-rotated.crt'),'utf8');
+    const certificatePin=(pem:string)=>createHash('sha256').update(new X509Certificate(pem).publicKey
+      .export({type:'spki',format:'der'})).digest('hex');
+    assert.notEqual(certificatePin(previousCert),certificatePin(nextCert));
+    const strict=createCoreNativeVerifierServer({
+      keyPem:await readFile(path.join(root,'server-rotated.key'),'utf8'),
+      certificatePem:nextCert,clientCaPem:ca.toString('utf8'),handler});
+    await new Promise<void>(r=>strict.listen(0,'127.0.0.1',r));
+    const address=strict.address();assert.ok(address&&typeof address!=='string');
+    const rotatedOrigin='https://127.0.0.1:'+address.port;
+    const common={origin:rotatedOrigin,keyPem:clientKey.toString('utf8'),
+      certificatePem:clientCert.toString('utf8'),serverCaPem:ca.toString('utf8')};
+    const options={method:'POST',redirect:'error' as const,headers:{
+      authorization:'Bearer '+credential,'content-type':'application/json'},
+      body:JSON.stringify(wire('current-readback',readback(p)))};
+    const oldTransport=createCoreNativeMtlsFetch({...common,
+      serverSpkiSha256:certificatePin(previousCert)});
+    const newTransport=createCoreNativeMtlsFetch({...common,
+      serverSpkiSha256:certificatePin(nextCert)});
+    try{
+      const beforeAuth=authentications,beforeReads=reads;
+      await assert.rejects(oldTransport(rotatedOrigin+'/v1/core-native-consent',options),
+        /CORE_MTLS_REQUEST_UNKNOWN/);
+      assert.equal(authentications,beforeAuth,'stale pin cannot reach verifier authentication');
+      assert.equal(reads,beforeReads,'stale pin cannot reach protected ledger');
+      const verifier=new RemoteTrustedNativeCoreEnrollmentVerifier({origin:rotatedOrigin,
+        credential,pinnedSpkiBase64:pin,fetchImpl:newTransport});
+      assert.equal(await verifier.currentReadback(readback(p)),true);
+      await assert.rejects(oldTransport(rotatedOrigin+'/v1/core-native-consent',options),
+        /CORE_MTLS_REQUEST_UNKNOWN/);
+    }finally{
+      strict.closeAllConnections();await new Promise<void>(r=>strict.close(()=>r()));reset();
+    }
   });
 
   await t.test('plaintext, missing client certificate, wrong credentials and role fail before ledger access',async()=>{
