@@ -99,3 +99,13 @@ için bu negatif regresyondan geçemezdi.
 iddia etmez. Bu ayrı bağımsız AI-08 P0 testi (#989, failing QA) ve
 koordinatörün migration/ledger entegrasyonu gelmeden geçmez.
 Yeni AI-06 testi exact HEAD CI tamamlanana kadar PASS sayılmaz.
+
+## Controller local STOP/enroll nesli regresyonları
+
+Yeni `test/ai06-consent-controller-races.test.ts` üç sentetik vaka:
+revoke ACK başarılı / hata durumlarında bekleyen `provider.enroll()`
+true dönse de controller'ı açamama; gerçek bir STOP'tan sonra yapılan
+**yeni explicit** enrollment'ın eski STOP'la karıştırılmaması.
+Üçü de fiziksel Windows/native kayıt değil; yeni exact SHA için CI
+sonucu yokken PASS iddia edilemez. Önceki 31/31 PASS yalnız
+`790e83ba757ecc928b7af1d8fe4ac0cc389587ea` içindir.

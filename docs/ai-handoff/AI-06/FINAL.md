@@ -69,3 +69,11 @@ Yeni sentetik negatif test eklendi. **Kritik P0 hâlâ açık:** erken
 `complete` yanıtını reddeden kalıcı native-verified claim marker,
 koordinatörün migration/ledger değişikliğini gerektirir. AI-08 bağımsız
 negatif test gevşetilmemiştir. Production CORE NO-GO.
+
+## Controller-level revoke/enroll nesil-fence
+
+AI-06 sahipli `src/agent/core-console-admission.ts` kaynak dosyasında
+asenkron `enroll` sırasında gelen `revoke` için nesil kontrolü
+ve `test/ai06-consent-controller-races.test.ts` testleri eklendi.
+Yeni HEAD CI tamamlanmadan yeni testler PASS sayılmaz. Bu, native
+signer/OS approval veya koordinatör migration P0 sorununu çözmez.

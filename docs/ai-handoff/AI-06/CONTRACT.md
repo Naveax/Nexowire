@@ -101,3 +101,15 @@ Duplicate kaybedeni kazananın kaydına dokunamaz.
 `complete` isteğinin native readback tamamlanmadan kabul edilmesini
 önleyemez. Protected/native-verified claim CAS işaretleyicisi ve gerçek
 effect-boundary doğrulaması gelene kadar CORE production NO-GO.
+
+## Üst seviye admission controller revoke sırası
+
+`CoreConsoleAdmission.revoke()` ilk senkron satırda monoton
+`revokeSequence` değerini artırır, STOP'u latch eder ve önceki admission
+`AbortController`'ını iptal eder. `CoreConsoleAdmission.enroll()`,
+`provider.enroll()` asenkron başlamadan önce nesli yakalar ve dönüşte
+karşılaştırır. Araya revoke girdiyse yerel `stopped=false` yapılmaz,
+`CORE_ENROLLMENT_REVOKED_DURING_APPROVAL` hatası üretilir.
+Bir sonraki **yeni** yerel enrollment mevcut revoke neslini yakalayıp
+proven/native approval olmadan yetki üretmeden yürüyebilir. Yalnız sentetik
+mock testinden physical consent kabulü çıkmaz.
