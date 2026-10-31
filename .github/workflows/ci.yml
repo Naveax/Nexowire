@@ -56,7 +56,7 @@ jobs:
       - run: npm run typecheck
       - name: Verify recycled WAL and consecutive journal process restarts
         timeout-minutes: 5
-        run: node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/native-agent-startup-diagnostic.test.ts
+        run: node --test --import tsx --test-concurrency=1 test/qa-journal-wal-recycle-p11.test.ts test/agent-operation-wal-integrity.test.ts test/agent-journal-restart-regression.test.ts test/agent-journal-owner-incarnation.test.ts test/native-agent-startup-diagnostic.test.ts
       - name: Verify update startup acknowledgement and data-preserving rollback
         timeout-minutes: 5
         run: node --test --import tsx --test-concurrency=1 test/live-update-startup-acceptance.test.ts test/windows-launcher-encoding.test.ts
