@@ -49,3 +49,6 @@ Added reproducible `test/ai07-sandbox-linux-parent-death.test.ts`: native Linux 
 
 ### Native test process-cleanup guarantee
 The disposable Linux kernel negative test now avoids unbounded actor `waitpid` and attempts exact-owned PIDFD/fallback cleanup plus subreaper reap on failure paths, marking uncertainty BLOCKED. Still requires exact-head CI and independent worker acceptance.
+
+### Kernel FD/seccomp diagnostic (1 Nov 2026)
+Added disposable Linux native fixture `test/ai07-sandbox-linux-fd-seccomp.test.ts` with independently failing disabled-close_range and disabled-seccomp controls. Local isolated Linux 6.18.57/GCC 14.2 observations: protected exit 0, no-FD-close exit 53, no-seccomp exit 55; Node22 standalone test 1/1 PASS. Exact-head repository CI must still confirm this commit. No real task worker, Windows OS isolation or revoked process tree acceptance; production NO-GO stays.

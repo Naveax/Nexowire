@@ -58,3 +58,7 @@ Added AI-07 test cases with 32768-character single argument, two 20000-character
 
 ### Kernel fixture teardown path QA
 - Locally revised disposable Linux 6.18.57/GCC 14.2 kernel fixture was compiled with `-Werror` for both modes; 3 repeated positive (exit 0, PIDFD+SIGKILL+waitpid verified) and 3 intentionally disabled parent-death negative (exit 55) runs. The owned test/cleanup is bounded. This remains **only** a disposable kernel subprocess lifecycle fixture and cannot authorize native Nexowire task execution.
+
+### Real Linux FD/seccomp kernel negative fixture (1 Nov 2026)
+- **Local isolated container**, Linux `6.18.57 x86_64`, GCC `14.2.0`, `cc -std=c11 -O2 -Wall -Wextra -Werror`: protected `exit 0` with kernel PASS marker explicitly **NOT_NATIVE_WORKER_ACCEPTANCE**; `-DNW07_TEST_DISABLE_FD_CLOSURE` `exit 53`; `-DNW07_TEST_DISABLE_SECCOMP` `exit 55`. The no-seccomp variant must prove socket/openat/getpid are supported by the host; if denied by external policy, return BLOCKED `58`, not a fake PASS. Test-owned direct child is reaped with monotonic bounded waits.
+- Repository command: `node --test --import tsx test/ai07-sandbox-linux-fd-seccomp.test.ts`. Separately tested a standalone copy under Node 22 `--experimental-strip-types --test` with exit 0 (1/1 PASS), **before commit**; exact HEAD CI must establish repository status independently. Only this narrow kernel fixture is real OS evidence: production worker, AppContainer, namespace/cgroup isolation and whole descendant revoke remain NO-GO.

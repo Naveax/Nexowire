@@ -66,3 +66,6 @@ The forked pre-unshare Linux diagnostic child installs `PR_SET_PDEATHSIG(SIGKILL
 
 ### Disposable kernel negative is non-authoritative
 A dedicated, isolated Linux test uses `pidfd_open` plus `PR_SET_CHILD_SUBREAPER` and exact `waitpid` to witness death of its own child following `PR_SET_PDEATHSIG`. An intentionally disabled fence must fail with exit 55; a positive test marker explicitly states `NOT_TASK_WORKER_ACCEPTANCE`. This supplies genuine fixture-level kernel signaling evidence **only**, not a task-capable sandbox, namespace/cgroup containment or an independent signed grant.
+
+### Native kernel FD+seccomp test is not a task launcher
+The new `ai07-sandbox-linux-fd-seccomp` test exercises disposable Linux child close_range (including 0/1/2 and an inherited test FD) and real seccomp errno-denial for socket/openat/getpid, with intentional no-closure and no-seccomp negative variants. It never accepts arbitrary command lines, credentials, external process identifiers or network destinations, and never authorizes `executeTaskWithOsSandbox`. Production still requires protected native identity, filesystem/network/IPC enforcement and cgroup descendant-drain evidence.

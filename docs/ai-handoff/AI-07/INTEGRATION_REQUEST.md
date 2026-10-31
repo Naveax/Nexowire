@@ -25,3 +25,6 @@ AI-08 should verify real `pid_for_children` namespace identity from the kernel o
 
 ### Genuine Linux parent-death test availability
 Coordinator/AI-08 can separately run `node --test --import tsx test/ai07-sandbox-linux-parent-death.test.ts` on disposable Linux kernel with pidfd and subreaper support. Fenced run must exit 0, deliberately disabled fence must exit 55; failure to support these primitives is BLOCKED, not PASS. This does **not** discharge isolated task filesystem/network/cgroup/credential or revoke evidence, or authorize CORE launch.
+
+### AI-07 FD/seccomp negative handoff to AI-08/coordinator
+Run the exact-head `test/ai07-sandbox-linux-fd-seccomp.test.ts` on isolated disposable Linux runners, and retain all three variants: protected exit 0, disabled FD closure exit 53, disabled seccomp exit 55. These are narrow real-kernel negative checks; they do **not** establish production user/owner identity, task root containment, inherited Broker handles/credentials, cgroup process tree drain or signed grant admission. Preserve independent AI-04/AI-05 gates, CORE off and Draft/NO-GO.

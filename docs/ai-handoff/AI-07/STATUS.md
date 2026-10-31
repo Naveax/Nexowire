@@ -65,3 +65,7 @@ Linux diagnostic forced termination no longer abandons direct-child cleanup afte
 
 ## Kernel fixture cleanup hardening (31 Oct 2026)
 - The new disposable parent-death test itself now bounds outer fixture-parent `waitpid` to 3 seconds and fallback cleanup to 3 seconds, then performs PIDFD or exact-owned-child termination and bounded subreaper reaping on every negative/error path. No arbitrary host process IDs are ever signalled. Unreaped exact children produce nonzero BLOCKED status.
+
+## Disposable Linux FD/seccomp kernel negatives (1 Nov 2026)
+- Added `test/ai07-sandbox-linux-fd-seccomp.test.ts` with a test-owned native C fixture. `close_range(0..UINT_MAX)` closes all inherited descriptors (including stdio and a deliberately inherited `/dev/null` handle); narrow BPF seccomp allows only exit/exit_group/rt_sigreturn and requires EPERM on socket, openat and getpid. The process never connects to a network or executes a user task.
+- Two deliberately broken compilation variants independently prove the negative checks reject: FD closure disabled (exit 53) and seccomp disabled (exit 55, only if the host supports harmless baseline syscalls). Unsupported host primitives fail BLOCKED, never simulated PASS.
