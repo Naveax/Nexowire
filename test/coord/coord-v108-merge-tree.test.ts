@@ -149,7 +149,7 @@ test('base SHA drift is rejected before attempting any merge',t=>{
 
 test('absent exact commit object cannot be treated as mergeable',t=>{
   const f=fixture(t);
-  f.snapshot.prs.find(p=>p.number===990)!.head.sha='b'.repeat(40);
+  f.snapshot.prs.find(p=>p.number===1004)!.head.sha='b'.repeat(40);
   const {result,output}=f.execute();
   assert.equal(result.status,2,result.stderr);
   assert.equal(output.status,'BLOCKED');
