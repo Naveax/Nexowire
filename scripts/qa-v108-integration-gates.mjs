@@ -41,6 +41,17 @@ export function evaluateSnapshot(snapshot,{live=false}={}) {
   const nodes=[],findings=[];
   const mainOk=sha40(snapshot?.mainSha);
   if(!mainOk)unique(findings,'MAIN_SHA_INVALID');
+  // GitHub state is not transactional. Refetch the exact HEAD/base at the
+  // end of the read-only scan, and refuse source signoff on moving refs.
+  const recheck=snapshot?.rechecked;
+  const recheckPrs=Array.isArray(recheck?.prs)?new Map(recheck.prs.map(p=>[p?.number,p])):null;
+  if(live){
+    if(!recheckPrs||!sha40(recheck?.mainSha)){
+      unique(findings,'FINAL_HEAD_RECHECK_MISSING');
+    }else if(recheck.mainSha!==snapshot.mainSha){
+      unique(findings,'MAIN_MOVED_DURING_AUDIT');
+    }
+  }
   for(const spec of STACK){
     const errors=[],pr=byId.get(spec.number);
     if(!pr||pr.state!=='open'||!sha40(pr.head?.sha)||!sha40(pr.base?.sha)){
@@ -57,11 +68,24 @@ export function evaluateSnapshot(snapshot,{live=false}={}) {
         unique(errors,'BASE_MAIN_SHA_MISMATCH');
       }
       if(pr.draft!==true)unique(errors,'DRAFT_STATE_CHANGED_REVIEW');
+      if(live){
+        const refreshed=recheckPrs?.get(spec.number);
+        if(!refreshed||refreshed.state!=='open'){
+          unique(errors,'PR_GONE_DURING_AUDIT');
+        }else if(refreshed.head?.sha!==pr.head.sha||
+          refreshed.base?.sha!==pr.base.sha||
+          refreshed.head?.ref!==pr.head.ref||
+          refreshed.base?.ref!==pr.base.ref||
+          refreshed.draft!==pr.draft){
+          unique(errors,'PR_MOVED_DURING_AUDIT');
+        }
+      }
     }
     const inputRuns=Array.isArray(snapshot?.runs?.[spec.number])?snapshot.runs[spec.number]:[];
     const matches=inputRuns.filter(r=>r?.name==='CI'&&
       typeof r.path==='string'&&r.path.startsWith(CI)&&r.head_sha===pr?.head?.sha);
     if(!matches.length)unique(errors,'EXACT_HEAD_CI_MISSING');
+    if(matches.some(r=>active(r.status)))unique(errors,'EXACT_HEAD_CI_ACTIVE');
     if(matches.filter(r=>active(r.status)).length>1)unique(errors,'DUPLICATE_ACTIVE_CI');
     const sorted=[...matches].sort((a,b)=>
       String(b.created_at??'').localeCompare(String(a.created_at??''))||
@@ -147,7 +171,15 @@ async function fetchLiveSnapshot(){
       runs[pr.number].push({...run,jobs:jobs.jobs});
     }
   }
-  return {mainSha:main.sha,prs:selected,runs};
+  // A successful CI for an older PR snapshot must not be promoted when an
+  // agent pushes a new commit while its jobs are being inspected.
+  const finalMain=await fetchJson('/commits/main');
+  const finalPrs=[];
+  for(const pr of selected){
+    finalPrs.push(await fetchJson('/pulls/'+pr.number));
+  }
+  return {mainSha:main.sha,prs:selected,runs,
+    rechecked:{mainSha:finalMain.sha,prs:finalPrs}};
 }
 
 function report(result){
