@@ -17,3 +17,6 @@
 - Next: track exact-head CI, make owner-only CI fixes if necessary, and send evidence/required API handoff to coordinator. Treat CI SKIP/TODO as not physically validated.
 
 Follow-up: one Proxy-trap negative regression increases new AI-05 synthetic coverage to 19 tests. Verify on final PR exact HEAD; production remains NO_GO.
+
+## Latest source candidate delta
+The executor canonicalization rejects nested Proxy inputs and frozen accessor-bearing/Proxy approved callback objects with 4 new AI-05 regression cases. **23 authored synthetic tests in total.** Code tip before this documentation commit: `33bb714bc158e118ce363f4e17ed39cb864605a0`, CI run `41201461962` had Node 22/24 typecheck success but full CI was in progress at last inspection. Final exact HEAD must be verified from PR metadata and its own workflow. Independent protected Broker, rollback-resistant CAS custody, OS sandbox and two-PC enrollment remain NOT PROVEN. Draft/production CORE NO_GO persists.

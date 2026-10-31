@@ -24,3 +24,10 @@ No independently hosted rollback-resistant CAS or production PostgreSQL, real ow
 
 ## PostgreSQL Proxy negative
 The added synthetic test rejects a Proxy original request, authenticated scope and external receipt before any reflection trap is invoked. Request/scope denial occurs before SQL or external CAS; Proxy receipt denial rolls back and inserts no local tombstone. New exact-head CI is not yet proven; no real OS/CAS authority executed.
+
+## Executor canonicalization and callback negative cases
+Source+test tip `33bb714bc158e118ce363f4e17ed39cb864605a0`, CI [41201461962](https://github.com/Naveax/Nexowire/actions/runs/41201461962) in progress at documentation time:
+- `test/ai05-cas-executor-snapshot.test.ts`: 4 source-only tests cover nested input Proxy trap denial, frozen accessor-backed Broker callback rejection without evaluating getters, top-level and nested Proxy callback rejection without trap execution, and positive canonical fingerprint/JSON wire binding under the hard-disabled CORE default.
+- Previous candidate `38d1f8b7282dd4762e9aa27452e74db992eae660`, CI 41201350578, failed TypeScript `TS18048` (optional approved callback); later source tip adds an explicit terminal absence check without weakening negative cases.
+- Updated total AI-05 authored regression suite: **23 tests**, all synthetic. A TypeScript success is not a full Node test suite success, and a Node job success is not an independent Windows/Broker physical acceptance.
+- **Final exact HEAD** is the commit after documentation; look up its run ID and exact node/platform logs, do not inherit prior CI.

@@ -24,3 +24,11 @@
 Wait for exact HEAD typecheck, Node 22/24 tests, build and the full 7-job CI matrix. Do not re-dispatch same SHA/workflow/input. If CI fails, fix only AI-05-owned files and preserve negative assertions. AI-08 may independently review without changing this source. Coordinator owns shared CI, integration and release. No live Agent, Broker, UAC/ACL or two-PC operation authorized.
 
 2026-10-31: AI-05 PostgreSQL request/scope/receipt Proxy trap denial added. 19 synthetic regressions total; exact final-head CI must be independently verified. CORE remains NO_GO.
+
+## 2026-10-31 executor admission source delta
+- Source+tests tip before this handoff commit: `33bb714bc158e118ce363f4e17ed39cb864605a0`; final SHA to be read from Draft PR #992.
+- Added `src/agent/core-windows-mutation-dispatch.ts` and `test/ai05-cas-executor-snapshot.test.ts` to owner-only diff.
+- Reject nested Proxy inputs without invoking traps before calculating canonical Broker payload fingerprint; reject Proxy, accessor-bearing and malformed frozen callback grant records before comparing owner/device/session/UUID.
+- 4 new executor adversarial cases. **Current total: 23 synthetic AI-05 tests** (10 PostgreSQL, 6 HTTPS, 3 standalone witness, 4 executor).
+- Source tip CI run `41201461962` was still in progress at the handoff update. Node 22/24 typecheck succeeded; the exact doc-inclusive HEAD must have its own CI evidence.
+- No live native execution, CORE flag change, merge, deploy, or non-AI-05 path edits.

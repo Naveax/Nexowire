@@ -17,3 +17,6 @@ Each `shell.exec`, subprocess, graph or nested effect needs a verified independe
 ## Physical operator acceptance
 
 Only independently authorized owner-side Windows tests can verify real enrollment, UAC/ACL, signed Broker image, two-PC restart/revocation, protected local record, protected CAS custody and restore resistance. Source CI passing does not replace these gates.
+
+## Executor-approved callback descriptor binding
+When coordinator and AI-04 integrate a real protected Broker callback, send only validated plain frozen `requestId/capability/fingerprint/scope` data with the canonical JSON bytes used by the executor. Accessors, Proxy wrappers, additional fields and nested owner/session substitutions must remain terminal DENY. AI-05's source-level check is not a substitute for independent Broker-side signature and OS admission.

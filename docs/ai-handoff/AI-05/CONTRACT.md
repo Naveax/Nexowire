@@ -20,3 +20,6 @@ A valid `created:false` is **not** new execution permission. After lost ACK / re
 
 ## Proxy trust boundary
 PostgreSQL request, authenticated scope and external receipt reject Proxy-wrapped objects before Reflect descriptor inspection. No hostile Proxy traps are invoked during admission. This is source hardening, not independent native identity evidence.
+
+## Frozen protected Broker callback and canonical input
+Canonicalizing a caller-owned nested Proxy would otherwise invoke `getPrototypeOf`/`ownKeys` traps before final fingerprint validation. The AI-05 executor boundary now refuses Proxy-wrapped nested input without invoking traps. A frozen approved Broker request is not enough if the freeze encloses accessors: exact `requestId`, capability, fingerprint, and nested owner/device/session/epoch/generation/privilege fields must be plain own enumerable data descriptors, with no extra or missing keys. The signed external Broker gate remains separately owned by AI-04. No JSON or frozen JavaScript object is independent physical authorization. `CORE_EXECUTOR_DISPATCH_ENABLED=false` is unchanged.
