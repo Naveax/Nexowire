@@ -161,7 +161,8 @@ test('independent native enrollment verifier enforces real TLS transport and sco
         if(kind==='bad-type'){res.writeHead(200,{'content-type':'text/html'});res.end('{}');return}
         if(kind==='missing-type'){res.end('{}');return}
         if(kind==='duplicate-type'){
-          res.writeHead(200,{'content-type':['application/json','application/json']});res.end('{}');return;
+          res.setHeader('content-type','application/json');
+          res.appendHeader('content-type','application/json');res.end('{}');return;
         }
         res.setHeader('content-type','application/json');
         if(kind==='large'){res.end('x'.repeat(32769));return}
